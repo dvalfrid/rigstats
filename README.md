@@ -1,141 +1,179 @@
-# RigDashboard — Installationsguide
+# RigDashboard Installation Guide
 
-En gaming-stats dashboard optimerad för stående sekundärskärm (450×1920).
-Visar CPU, GPU (AMD RX 9070 XT), RAM, nätverk och disk i realtid.
+A gaming stats dashboard optimized for a vertical secondary display (450x1920).
+Shows CPU, GPU (AMD RX 9070 XT), RAM, network, and disk in real time.
 
-Datornamn, CPU-modell och GPU-modell hämtas automatiskt från systemet vid start.
-Skärmen förhindras från att gå i sleep mode så länge appen körs.
+Computer name, CPU model, and GPU model are detected automatically at startup.
+Display sleep is blocked while the app is running.
 
 ---
 
-## Beroenden
+## Dependencies
 
-| Paket | Version | Roll |
+| Package | Version | Role |
 |---|---|---|
-| `electron` | ^28 | App-ramverk (fönster, IPC, OS-åtkomst) |
-| `electron-builder` | ^24 | Bygger installerbar .exe |
-| `systeminformation` | ^5.22 | CPU/RAM/Disk/Nätverksdata |
-| LibreHardwareMonitor | senaste | GPU-temperatur, GPU-load, fan, power (AMD) |
+| `electron` | ^28 | App framework (windowing, IPC, OS access) |
+| `electron-builder` | ^24 | Builds installable `.exe` packages |
+| `systeminformation` | ^5.22 | CPU/RAM/Disk/Network data |
+| `LibreHardwareMonitor` | latest | GPU temperature, GPU load, fan, power (AMD) |
 
-### LibreHardwareMonitor (krävs för GPU-data)
-`systeminformation` kan inte hämta AMD GPU-sensorer direkt.
-Istället körs LibreHardwareMonitor som en lokal webb-server på `http://localhost:8085`.
+### LibreHardwareMonitor Integration
 
-1. Ladda ner från: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases
-2. Packa upp till valfri mapp, t.ex. `C:\Tools\LibreHardwareMonitor\`
-3. Starta `LibreHardwareMonitor.exe` som **Administratör**
-4. Gå till **Options → Remote Web Server → Run** — aktivera och sätt port `8085`
-5. Bocka i **Options → Run On Windows Startup** om du vill att det startar automatiskt
+LHM is bundled and runs via a scheduled task with highest privileges.
+This means:
 
-Om LHM inte körs visas `--` för GPU-sensorer, men resten av dashboarden fungerar normalt.
+- The dashboard runs as a normal user (no UAC prompt every start)
+- LHM starts at logon and can read sensors with proper permissions
+- The installer uses an existing LHM installation if found, otherwise the bundled version
+- LHM is configured automatically during installation (web server on port `8085`)
+
+You only need to place the files in the right folder **once** before building:
+
+1. Download the latest release (ZIP):
+   <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases>
+2. Create `vendor/lhm/` in the project root
+3. Extract the **entire ZIP contents** into `vendor/lhm/`, like this:
+
+   ```
+   vendor/
+   └── lhm/
+       ├── LibreHardwareMonitor.exe
+       ├── LibreHardwareMonitorLib.dll
+       └── (other files from the ZIP)
+   ```
+
+4. During installation:
+   - The installer first looks for an already installed `LibreHardwareMonitor.exe`
+   - If none is found, it uses the bundled version in `resources/lhm`
+   - Default config (`build/lhm-default/LibreHardwareMonitor.config`) is applied to the selected LHM installation (existing or bundled)
+   - If a config already exists, a backup is saved as `LibreHardwareMonitor.config.backup`
+   - Scheduled task `RigDashboard\\LibreHardwareMonitor` is created/updated with the selected exe path
+   - The task is started once immediately after install
+
+No manual LHM configuration is required.
+
+> **Elevation:** The installer requests admin once. The dashboard app itself then runs without admin prompts.
+
+If `vendor/lhm/` is missing, the app still runs normally, but GPU sensors show `--`.
 
 ---
 
-## Del 1 — Sätt upp projektet
+## Part 1: Project Setup
 
-### Steg 1: Förutsättningar
+### Step 1: Requirements
+
 - **Windows 10/11** (x64)
-- **Node.js LTS** — https://nodejs.org (välj "LTS", kör installern med standardval)
+- **Node.js LTS** — <https://nodejs.org> (choose "LTS" and install with default options)
 
-### Steg 2: Packa upp projektet
-Packa upp ZIP-filen (eller klona repot) till valfri mapp, t.ex.:
+### Step 2: Extract the project
+
+Extract the ZIP (or clone the repo) to any folder, for example:
+
+``` cmd
+C:\Users\YourName\rig-dashboard\
 ```
-C:\Users\DittNamn\rig-dashboard\
-```
 
-### Steg 3: Öppna Terminal i mappen
-Högerklicka på mappen i Utforskaren → "Öppna i Terminal" (eller PowerShell).
+### Step 3: Open a terminal in the project folder
 
-### Steg 4: Installera beroenden
+Right-click the folder in Explorer and choose "Open in Terminal" (or PowerShell).
+
+### Step 4: Install Dependencies
+
 ```powershell
 npm install
 ```
-Laddar ner Electron och systeminformation (~200 MB, tar 1–3 min).
 
-### Steg 5: Starta appen
+Downloads Electron and systeminformation (~200 MB, 1-3 minutes).
+
+### Step 5: Start the app
+
 ```powershell
 npm start
 ```
-Dashboarden öppnas. Om du har en 450×1920-skärm inkopplad placeras fönstret automatiskt på den.
-Är den inte inkopplad används sekundärskärmen som fallback, eller primärskärmen om bara en finns.
+
+The dashboard opens. If a 450x1920 display is connected, the window is placed there automatically.
+If not, it falls back to the secondary display, or the primary display if only one exists.
 
 ---
 
-## Del 2 — Bygga en installerbar .exe
+## Part 2: Build an installable `.exe`
 
 ```powershell
 npm run build
 ```
-Tar 3–5 minuter. Resultatet hamnar i mappen `dist\`:
+
+Takes about 3-5 minutes. Output goes to `dist\`:
+
 ```
 dist\
-  RigDashboard Setup 1.0.0.exe   ← Installerare (NSIS)
-  RigDashboard-portable.exe      ← Kör utan installation
+  RigDashboard Setup 1.0.0.exe   <- Installer (NSIS)
+  RigDashboard-portable.exe      <- Runs without installation
 ```
 
 ```powershell
-# Bygga enbart portable:
+# Build portable only:
 npm run build-portable
 ```
 
-Kör `RigDashboard Setup 1.0.0.exe` och följ guiden.
-Standardinstallation hamnar i:
-```
+Run `RigDashboard Setup 1.0.0.exe` and follow the installer wizard.
+Default install location:
+
+```powershell
 C:\Program Files\RigDashboard\
 ```
 
 ---
 
-## Del 3 — Autostart med Windows
+## Part 3: Windows Auto Start
 
-Aktivera autostart via Task Scheduler:
+Enable auto start using Task Scheduler:
 
-1. Sök efter "Schemaläggaren" i Start
-2. Klicka "Skapa enkel uppgift..."
-3. Utlösare: **Vid inloggning**
-4. Åtgärd: **Starta ett program**
+1. Search for "Task Scheduler" in Start
+2. Click "Create Basic Task..."
+3. Trigger: **At log on**
+4. Action: **Start a program**
 5. Program: `C:\Program Files\RigDashboard\RigDashboard.exe`
-6. Klart — dashboarden startar automatiskt vid nästa inloggning
+6. Done — the dashboard starts automatically on next login
 
-> Glöm inte att också aktivera autostart för **LibreHardwareMonitor** (se ovan).
+> Note: LHM startup is handled by the installer-created scheduled task.
 
 ---
 
-## Filstruktur
+## File Structure
 
 ```
 rig-dashboard/
-├── main.js          ← Electron main-process (fönster, IPC, LHM-parsing, sleep-blockering)
-├── package.json     ← Projektfil + byggkonfiguration
-├── src/
-│   ├── index.html   ← Dashboard UI + JavaScript (renderer-process)
-│   └── preload.js   ← Brygga mellan Electron och renderer (ej aktiv just nu)
-├── assets/
-│   └── icon.ico     ← App-ikon
-└── dist/            ← Byggs av "npm run build" (skapas automatiskt)
+|- main.js          <- Electron main process (window, IPC, LHM parsing, sleep blocking)
+|- package.json     <- Project file + build configuration
+|- src/
+|  |- index.html    <- Dashboard UI + JavaScript (renderer process)
+|  \- preload.js    <- Bridge between Electron and renderer (currently not active)
+|- assets/
+|  \- icon.ico      <- App icon
+\- dist/            <- Generated by "npm run build" (created automatically)
 ```
 
 ---
 
-## Vanliga frågor
+## FAQ
 
-**GPU-data visar "--" hela tiden**
-Kontrollera att LibreHardwareMonitor körs som Administratör och att webb-servern är aktiverad på port 8085.
-Testa i webbläsaren: `http://localhost:8085/data.json` — ska returnera JSON.
+**GPU data always shows `--`**
+Make sure LibreHardwareMonitor is running and the web server is enabled on port `8085`.
+Test in a browser: `http://localhost:8085/data.json` should return JSON.
 
-**Kan jag ändra vilken skärm den visas på?**
-Ja. I `main.js`, funktionen `findDashboardDisplay()`, kan du justera logiken.
-T.ex. byta `displays[1]` till `displays[2]` om du har tre skärmar.
-Dashboarden letar automatiskt efter en skärm med exakt 450×1920 — byt dessa värden om din skärm har annan upplösning.
+**Can I change which display is used?**
+Yes. In `main.js`, adjust logic in `findDashboardDisplay()`.
+For example, change `displays[1]` to `displays[2]` if you have three displays.
+The dashboard currently auto-targets a display with exact resolution `450x1920`.
 
-**Stöds Intel/NVIDIA?**
-Delvis. `systeminformation` hanterar CPU oavsett tillverkare.
-För NVIDIA-GPU fungerar LHM också — byt GPU-sökkriterierna i `parseLHM()` i `main.js` efter dina sensorsnamn.
+**Intel/NVIDIA support?**
+Partially. `systeminformation` handles CPU regardless of vendor.
+For NVIDIA GPUs, LHM works as well. Adjust GPU matching logic in `parseLHM()` in `main.js` to match your sensor naming.
 
-**Hur uppdaterar jag UI:t utan att bygga om?**
-Redigera `src/index.html` och kör `npm start` för att se ändringarna direkt.
-Bygg ny `.exe` med `npm run build` när du är nöjd.
+**How do I update UI without rebuilding?**
+Edit `src/index.html` and run `npm start` to preview changes.
+Build a new `.exe` with `npm run build` when ready.
 
-**Skärmen går fortfarande i sleep**
-Appen blockerar display-sleep via Electrons `powerSaveBlocker` automatiskt vid start.
-Om skärmen ändå sover kan det bero på att skärmen har egna sleep-inställningar (OSD-meny).
+**Display still goes to sleep**
+The app blocks display sleep through Electron `powerSaveBlocker` at startup.
+If sleep still happens, check display-level power settings in the monitor OSD menu.

@@ -30,7 +30,7 @@ html, body {
   color: var(--text);
   font-family: var(--sans);
   user-select: none;
-  -webkit-app-region: drag; /* gör att man kan dra fönstret */
+  -webkit-app-region: drag; /* allows dragging the window */
 }
 
 body::before {
@@ -130,7 +130,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .disk-val{font-family:var(--mono);font-size:24px;color:#fff;}
 .disk-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
 
-/* WARN overlay för AMD-data som saknas */
+/* WARN overlay when AMD data is missing */
 .warn{font-family:var(--mono);font-size:9px;color:var(--amd);opacity:.7;margin-top:4px;}
 </style>
 </head>
@@ -260,14 +260,14 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
       <div><div class="disk-key">WRITE</div><div><span class="disk-val" id="diskWrite">--</span> <span class="disk-unit" id="diskWriteU">MB/s</span></div></div>
     </div>
     <div class="bars" style="margin-top:12px;" id="diskBars">
-      <!-- fylls av JS -->
+      <!-- populated by JS -->
     </div>
     <canvas class="spark" id="diskSpark" height="48"></canvas>
   </div>
 
 </div>
 <script>
-// ── DETEKTERA miljö ──────────────────────────────────────────────
+// ── Detect environment ───────────────────────────────────────────
 let ipcRenderer = null;
 try {
   ipcRenderer = require('electron').ipcRenderer;
@@ -284,7 +284,7 @@ async function updateRigName(){
       rigNameEl.textContent = systemName || 'UNKNOWN RIG';
       return;
     }catch(e){
-      console.error('Kunde inte hamta datornamn:', e);
+      console.error('Could not fetch computer name:', e);
     }
   }
 
@@ -315,7 +315,7 @@ async function updateGpuModel(){
   }
 }
 
-// ── KLOCKA ──────────────────────────────────────────────────────
+// ── Clock ───────────────────────────────────────────────────────
 const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
 function updateClock(){
   const n=new Date(),p=v=>String(v).padStart(2,'0');
@@ -325,7 +325,7 @@ function updateClock(){
 }
 setInterval(updateClock,1000);updateClock();
 
-// ── UPTIME ──────────────────────────────────────────────────────
+// ── Uptime ──────────────────────────────────────────────────────
 let upSec=0;
 setInterval(()=>{
   upSec++;
@@ -350,7 +350,7 @@ function buildCoreBars(n){
 }
 buildCoreBars(8);
 
-// ── HISTORY BUFFERS ──────────────────────────────────────────────
+// ── History buffers ──────────────────────────────────────────────
 const L=80;
 const H={cpu:Array(L).fill(0),gpu:Array(L).fill(0),ram:Array(L).fill(0),net:Array(L).fill(0),disk:Array(L).fill(0)};
 
@@ -371,11 +371,11 @@ function spark(id,data,col){
   ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();
 }
 
-// ── HELPERS ──────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 function bytesToMbps(b){ return (b*8/1e6).toFixed(1); }
 function fmt(v,unit){ return v!=null ? v+unit : '--'+unit; }
 
-// ── DISK BARS (dynamiska) ─────────────────────────────────────────
+// ── Disk bars (dynamic) ──────────────────────────────────────────
 function updateDiskBars(drives){
   const wrap=document.getElementById('diskBars');
   if(!drives||!drives.length) return;
@@ -390,7 +390,7 @@ function updateDiskBars(drives){
   });
 }
 
-// ── UPPDATERA UI med data ─────────────────────────────────────────
+// ── Update UI with data ──────────────────────────────────────────
 function applyStats(s){
   if(!s) return;
 
@@ -425,7 +425,7 @@ function applyStats(s){
   } else {
     H.gpu.push(0);H.gpu.shift();
     document.getElementById('gpuRingTxt').textContent='--%';
-    document.getElementById('gpuWarn').textContent='⚠ AMD GPU-data ej tillgänglig via WMI — se README';
+    document.getElementById('gpuWarn').textContent='AMD GPU data unavailable via WMI. See README.';
   }
   document.getElementById('gpuTemp').textContent=gpu.temp!=null?gpu.temp.toFixed(0)+'°C':'--°C';
   document.getElementById('gpuHotspot').textContent=gpu.hotspot!=null?gpu.hotspot.toFixed(0)+'°C':'--°C';
@@ -449,10 +449,11 @@ function applyStats(s){
   document.getElementById('ramTotal').textContent=' / '+totGB+' GB';
   document.getElementById('ramFree').textContent=freeGB+' GB';
   document.getElementById('ramPct').textContent=ramPct+'%';
+  document.getElementById('ramSpeed').textContent=s.ram.spec || 'RAM';
   document.getElementById('ramBar').style.width=ramPct+'%';
   document.getElementById('ramBarPct').textContent=ramPct+'%';
 
-  // NET — LHM skickar redan Mbps, si skickar bytes/s utan LHM
+  // NET — LHM already returns Mbps, systeminformation returns bytes/s
   const upMbps   = s.lhmConnected ? s.net.up   : s.net.up   * 8 / 1e6;
   const downMbps = s.lhmConnected ? s.net.down : s.net.down * 8 / 1e6;
   const fmtNet=v=>v>=1000?(v/1000).toFixed(2):v.toFixed(1);
@@ -464,7 +465,7 @@ function applyStats(s){
   document.getElementById('netDownU').textContent=unitNet(downMbps);
   document.getElementById('netIface').textContent=s.net.iface||'--';
 
-  // DISK — LHM skickar MB/s direkt
+  // DISK — LHM already returns MB/s
   const readMBs  = s.disk.read;
   const writeMBs = s.disk.write;
   const fmtDisk=v=>v>=1000?(v/1000).toFixed(2):v.toFixed(0);
@@ -484,7 +485,7 @@ function applyStats(s){
   spark('diskSpark',H.disk,'#bf7fff');
 }
 
-// ── SIMULERING (används i webbläsare / om Electron ej tillgänglig) ─
+// ── Simulation (used in browser / when Electron is unavailable) ─
 let cT=35,gT=60,rT=55;
 function simulateTick(){
   cT=Math.max(5,Math.min(97,cT+(Math.random()-.47)*7));
@@ -501,14 +502,14 @@ function simulateTick(){
   });
 }
 
-// ── STARTA ───────────────────────────────────────────────────────
+// ── Start ────────────────────────────────────────────────────────
 async function tick(){
   if(IS_ELECTRON){
     try{
       const stats = await ipcRenderer.invoke('get-stats');
       applyStats(stats);
     }catch(e){
-      console.error('IPC-fel:', e);
+      console.error('IPC error:', e);
       simulateTick();
     }
   } else {

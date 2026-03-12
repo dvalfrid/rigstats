@@ -6,25 +6,27 @@ const si = require('systeminformation');
 let mainWindow;
 let powerBlockerId = null;
 
-// ── Hitta rätt skärm ─────────────────────────────────────────────
+// ── Find the target display ─────────────────────────────────────
 function findDashboardDisplay() {
   const displays = screen.getAllDisplays();
-  console.log('Tillgängliga skärmar:');
+  console.log('Available displays:');
   displays.forEach((d, i) => {
     console.log(`  [${i}] ${d.size.width}x${d.size.height} @ (${d.bounds.x},${d.bounds.y})`);
   });
   const target = displays.find(d => d.size.width === 450 && d.size.height === 1920);
-  if (target) { console.log('✓ Hittade 450×1920-skärm'); return target; }
-  if (displays.length > 1) { console.log('↩ Sekundär skärm som fallback'); return displays[1]; }
+  if (target) { console.log('✓ Found 450x1920 display'); return target; }
+  if (displays.length > 1) { console.log('↩ Using secondary display as fallback'); return displays[1]; }
   return null;
 }
 
 function createWindow() {
   const targetDisplay = findDashboardDisplay();
+  const iconPath = path.join(__dirname, 'assets', 'icon.ico');
   const windowConfig = {
     width: 450, height: 1920,
     frame: false, resizable: false,
     alwaysOnTop: false,
+    icon: iconPath,
     backgroundColor: '#06070a',
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   };
@@ -43,21 +45,23 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.rigdashboard.app');
+  }
   createWindow();
-  // Förhindra att skärmen går i sleep mode
   powerBlockerId = powerSaveBlocker.start('prevent-display-sleep');
-  console.log('✓ Display sleep mode blockerad');
+  console.log('✓ Display sleep mode blocked');
 });
 app.on('window-all-closed', () => {
   if (powerBlockerId !== null) {
     powerSaveBlocker.stop(powerBlockerId);
-    console.log('✓ Display sleep mode blockering slutad');
+    console.log('✓ Display sleep mode block stopped');
   }
   if (process.platform !== 'darwin') app.quit();
 });
 
-// ── Hämta data från LibreHardwareMonitor webb-API ─────────────────
-// LibreHardwareMonitor kör en lokal server på http://localhost:8085
+// ── Fetch data from LibreHardwareMonitor web API ─────────────────
+// LibreHardwareMonitor runs a local server at http://localhost:8085
 async function fetchLHM() {
   try {
     const response = await fetch('http://localhost:8085/data.json', {
@@ -66,12 +70,12 @@ async function fetchLHM() {
     const json = await response.json();
     return parseLHM(json);
   } catch(e) {
-    return null; // LHM inte igång
+    return null; // LHM is not running
   }
 }
 
-// Traversera LHM:s trädstruktur rekursivt
-// parent = närmaste förälders text
+// Recursively walk LHM's tree structure
+// parent = nearest parent label
 function flattenLHM(node, results = [], parent = '') {
   const myText = node.Text || node.text || '';
   const myVal  = node.Value || node.value || '';
@@ -85,7 +89,7 @@ function flattenLHM(node, results = [], parent = '') {
 
 let debugDumped = false;
 
-// Parsa LHM-värden: "56,0 °C" → 56.0, "8,0 %" → 8.0, "3540,0 MB" → 3540.0
+// Parse LHM values: "56,0 °C" -> 56.0, "8,0 %" -> 8.0, "3540,0 MB" -> 3540.0
 function parseVal(str) {
   if (!str || str.trim() === '') return null;
   const clean = str.replace(',', '.').replace(/[^\d.-]/g, '');
@@ -93,7 +97,7 @@ function parseVal(str) {
   return isNaN(v) ? null : v;
 }
 
-// Hitta sensor under en specifik parent-nod, matchat på text
+// Find sensor under a specific parent node, matched by text
 function findUnder(nodes, parentName, textMatch) {
   const match = nodes.find(n =>
     n.parent.toLowerCase().includes(parentName.toLowerCase()) &&
@@ -102,7 +106,7 @@ function findUnder(nodes, parentName, textMatch) {
   return match ? parseVal(match.value) : null;
 }
 
-// Hitta N:te match (för sensorer med samma namn, t.ex. "GPU Core" finns flera gånger)
+// Find Nth match (for sensors with duplicate names, e.g. "GPU Core")
 function findNth(nodes, parentName, textMatch, nth = 0) {
   const matches = nodes.filter(n =>
     n.parent.toLowerCase().includes(parentName.toLowerCase()) &&
@@ -114,22 +118,22 @@ function findNth(nodes, parentName, textMatch, nth = 0) {
 function parseLHM(data) {
   const nodes = flattenLHM(data);
 
-  // ── Hitta RX 9070 XT:s sensorer ─────────────────────────────────
-  // LHM har två GPU-enheter (iGPU + dGPU) med identiska parent-namn.
-  // Vi identifierar RX 9070 XT via att dess "GPU Memory Total" = 16304 MB.
-  // Alla sensorer för dGPU ligger i ett sammanhängande block i nodes[].
-  // Strategi: hitta index för dGPU:s "GPU Memory Total" och leta bakåt/framåt.
+  // ── Find RX 9070 XT sensors ─────────────────────────────────────
+  // LHM has two GPU devices (iGPU + dGPU) with identical parent names.
+  // We identify RX 9070 XT by "GPU Memory Total" ~= 16304 MB.
+  // dGPU sensors are in a contiguous block in nodes[].
+  // Strategy: find dGPU "GPU Memory Total" index and scan around it.
 
   const vramTotalIdx = nodes.findIndex(n =>
     n.text === 'GPU Memory Total' && parseVal(n.value) > 10000
   );
 
-  // Hämta ett fönster av noder runt dGPU:s memory-nod (±30 noder)
+  // Build a window of nodes around dGPU memory node (+/- 30 nodes)
   const gpuBlock = vramTotalIdx >= 0
     ? nodes.slice(Math.max(0, vramTotalIdx - 25), vramTotalIdx + 5)
     : [];
 
-  // Helper: hitta värde i gpuBlock baserat på parent + text
+  // Helper: read value in gpuBlock by parent + text
   function gpuFind(parentMatch, textMatch) {
     const n = gpuBlock.find(n =>
       n.parent === parentMatch && n.text === textMatch
@@ -137,7 +141,7 @@ function parseLHM(data) {
     return n ? parseVal(n.value) : null;
   }
 
-  // Hämta GPU-sensorer från blocket
+  // Read GPU sensors from the block
   const gpuTemp     = gpuFind('Temperatures', 'GPU Core');
   const gpuHotspot  = gpuFind('Temperatures', 'GPU Hot Spot');
   const gpuMemTemp  = gpuFind('Temperatures', 'GPU Memory');
@@ -148,17 +152,17 @@ function parseLHM(data) {
   const vramUsed    = gpuFind('Data', 'GPU Memory Used');
   const vramTotal   = gpuFind('Data', 'GPU Memory Total');
 
-  // ── CPU ──────────────────────────────────────────────────────────
+  // ── CPU ─────────────────────────────────────────────────────────
   const cpuTempNode  = nodes.find(n => n.text === 'Core (Tctl/Tdie)');
   const cpuPowerNode = nodes.find(n => n.parent === 'Powers' && n.text === 'Package');
   const cpuTemp  = cpuTempNode  ? parseVal(cpuTempNode.value)  : null;
   const cpuPower = cpuPowerNode ? parseVal(cpuPowerNode.value) : null;
 
-  // ── DISK — hämta från Throughput-noder ───────────────────────────
-  // Första Throughput Read Rate = NVMe 1 (C:), andra = NVMe 2 (D:)
+  // ── DISK — read from Throughput nodes ───────────────────────────
+  // First Throughput Read Rate = NVMe 1 (C:), second = NVMe 2 (D:)
   const readNodes  = nodes.filter(n => n.parent === 'Throughput' && n.text === 'Read Rate');
   const writeNodes = nodes.filter(n => n.parent === 'Throughput' && n.text === 'Write Rate');
-  // Konvertera "54,9 MB/s" eller "614,2 KB/s" till MB/s
+  // Convert "54,9 MB/s" or "614,2 KB/s" to MB/s
   function toMBs(str) {
     if (!str) return 0;
     const v = parseVal(str);
@@ -173,8 +177,8 @@ function parseLHM(data) {
   const totalRead  = disk1Read + disk2Read;
   const totalWrite = disk1Write + disk2Write;
 
-  // ── NÄTVERK — hämta från Throughput Upload/Download ──────────────
-  // Välj det gränssnitt med mest trafik
+  // ── NETWORK — read from Throughput Upload/Download ─────────────
+  // Pick the interface with the highest traffic
   const uploadNodes   = nodes.filter(n => n.parent === 'Throughput' && n.text === 'Upload Speed');
   const downloadNodes = nodes.filter(n => n.parent === 'Throughput' && n.text === 'Download Speed');
   let bestUp = 0, bestDown = 0;
@@ -184,7 +188,7 @@ function parseLHM(data) {
     if (up + down > bestUp + bestDown) { bestUp = up; bestDown = down; }
   });
 
-  // ── NVMe-temp ─────────────────────────────────────────────────────
+  // ── NVMe temp ────────────────────────────────────────────────────
   const nvmeTempNodes = nodes.filter(n => n.text === 'Composite Temperature');
   const nvme1Temp = nvmeTempNodes[0] ? parseVal(nvmeTempNodes[0].value) : null;
   const nvme2Temp = nvmeTempNodes[1] ? parseVal(nvmeTempNodes[1].value) : null;
@@ -200,19 +204,32 @@ function parseLHM(data) {
   };
 }
 
-// ── IPC: hämta alla stats ─────────────────────────────────────────
+// ── IPC: fetch all stats ──────────────────────────────────────────
 ipcMain.handle('get-stats', async () => {
   try {
-    const [cpuLoad, cpuCurrentSpeed, mem, networkStats, fsSize, lhm] = await Promise.all([
+    const [cpuLoad, cpuCurrentSpeed, mem, networkStats, fsSize, lhm, memLayout] = await Promise.all([
       si.currentLoad(),
       si.cpuCurrentSpeed(),
       si.mem(),
       si.networkStats(),
       si.fsSize(),
-      fetchLHM()
+      fetchLHM(),
+      si.memLayout()
     ]);
 
-    // Disk — använd LHM:s Throughput-data om tillgänglig, annars fsStats
+    // RAM spec (type + speed + module count), e.g. "DDR5 6000 MT/s (2 DIMMs)"
+    const dimms = (memLayout || []).filter(m => (m.size || 0) > 0);
+    const ramTypes = [...new Set(dimms.map(m => m.type).filter(Boolean))];
+    const speedCandidates = dimms
+      .map(m => Number(m.clockSpeed || m.frequency || m.configuredClockSpeed || 0))
+      .filter(v => Number.isFinite(v) && v > 0);
+    const maxSpeed = speedCandidates.length ? Math.max(...speedCandidates) : null;
+
+    let ramSpec = ramTypes.length ? ramTypes.join('/') : 'RAM';
+    if (maxSpeed) ramSpec += ` ${Math.round(maxSpeed)} MT/s`;
+    if (dimms.length) ramSpec += ` (${dimms.length} DIMMs)`;
+
+    // Disk — use LHM Throughput data if available, otherwise fsStats
     let diskRead = lhm?.diskRead ?? 0;
     let diskWrite = lhm?.diskWrite ?? 0;
     if (!lhm) {
@@ -222,7 +239,7 @@ ipcMain.handle('get-stats', async () => {
       } catch(e) {}
     }
 
-    // Nätverk — använd LHM om tillgänglig, annars systeminformation
+    // Network — use LHM if available, otherwise systeminformation
     let netUp   = lhm?.netUp   ?? 0;  // Mbps
     let netDown = lhm?.netDown ?? 0;
     let netIface = '—';
@@ -260,7 +277,8 @@ ipcMain.handle('get-stats', async () => {
       ram: {
         total: mem.total,
         used:  mem.used,
-        free:  mem.free
+        free:  mem.free,
+        spec:  ramSpec
       },
       net: {
         up:    netUp,
@@ -280,7 +298,7 @@ ipcMain.handle('get-stats', async () => {
       lhmConnected: lhm !== null
     };
   } catch (err) {
-    console.error('Stats-fel:', err);
+    console.error('Stats error:', err);
     return null;
   }
 });

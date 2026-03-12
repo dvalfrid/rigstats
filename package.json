@@ -16,13 +16,16 @@
         { "target": "nsis", "arch": ["x64"] },
         { "target": "portable", "arch": ["x64"] }
       ],
-      "icon": "assets/icon.ico"
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
     },
     "portable": {
       "artifactName": "RigDashboard-portable.exe"
@@ -33,7 +36,10 @@
       "assets/**/*",
       "node_modules/**/*"
     ],
-    "extraResources": []
+    "extraResources": [
+      { "from": "vendor/lhm", "to": "lhm", "filter": ["**/*"] },
+      { "from": "build/lhm-default", "to": "lhm/defaults", "filter": ["**/*"] }
+    ]
   },
   "keywords": [],
   "author": "Daniel",
