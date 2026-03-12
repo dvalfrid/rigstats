@@ -98,6 +98,14 @@ If not, it falls back to the secondary display, or the primary display if only o
 
 ## Part 2: Build an installable `.exe`
 
+> **Important (Windows):** Enable **Developer Mode** before building a release with `electron-builder`.
+> This is required so build tools can create symbolic links while extracting signing binaries.
+> If Developer Mode is off, build can fail with errors like: `Cannot create symbolic link`.
+>
+> Path: **Settings -> Privacy & security -> For developers -> Developer Mode**
+>
+> Alternative: run the build terminal as **Administrator**.
+
 ```powershell
 npm run build
 ```
