@@ -48,13 +48,14 @@ body::after {
 .dashboard {
   position:relative;z-index:1;
   display:flex;flex-direction:column;
-  height:100%;gap:1px;background:var(--border);
+  height:100%;gap:0;background:var(--border);
 }
 
 .panel {
   background:var(--panel);padding:22px 24px;
   position:relative;overflow:hidden;flex-shrink:0;
 }
+.panel:not(:last-child){margin-bottom:1px;}
 .panel::after {
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--c,var(--accent)),transparent);
@@ -100,10 +101,10 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .null-val{color:var(--dim) !important;}
 
 /* CPU */
-.panel-cpu{--c:var(--accent);height:344px;}
+.panel-cpu{--c:var(--accent);height:429px;margin-bottom:10px !important;}
 
 /* GPU */
-.panel-gpu{--c:var(--amd);height:350px;}
+.panel-gpu{--c:var(--amd);height:332px;margin-bottom:0 !important;}
 .amd-badge{position:absolute;top:20px;right:20px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--amd);border:1px solid var(--amd);padding:2px 8px;opacity:.7;}
 .ring-wrap{display:flex;align-items:center;gap:16px;margin-top:12px;}
 .ring-svg{width:100px;height:100px;flex-shrink:0;}
@@ -113,28 +114,21 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .ring-sub{font-family:var(--mono);fill:var(--dim);font-size:8px;text-anchor:middle;}
 
 /* RAM */
-.panel-ram{--c:var(--ram);height:248px;}
+.panel-ram{--c:var(--ram);height:295px;}
 
 /* NET */
-.panel-net{--c:var(--grn);height:248px;}
+.panel-net{--c:var(--grn);height:274px;}
 .net-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .net-arrow{font-size:20px;font-weight:700;margin-right:4px;}
 .net-val{font-family:var(--mono);font-size:28px;color:#fff;}
 .net-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
 
 /* DISK */
-.panel-disk{--c:var(--pur);height:248px;}
+.panel-disk{--c:var(--pur);height:274px;}
 .disk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .disk-key{font-family:var(--mono);font-size:9px;color:#6f8db7;}
 .disk-val{font-family:var(--mono);font-size:24px;color:#fff;}
 .disk-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
-
-/* FPS */
-.panel-fps{--c:var(--grn);flex:1;}
-.fps-main{font-size:108px;font-weight:700;letter-spacing:-4px;line-height:1;color:var(--grn);font-family:var(--sans);}
-.fps-subs{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px;}
-.fps-sub-key{font-family:var(--mono);font-size:9px;color:#6f8db7;letter-spacing:1px;}
-.fps-sub-val{font-family:var(--mono);font-size:22px;color:var(--text);}
 
 /* WARN overlay för AMD-data som saknas */
 .warn{font-family:var(--mono);font-size:9px;color:var(--amd);opacity:.7;margin-top:4px;}
@@ -147,7 +141,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <div class="panel panel-header">
     <div class="tl"></div><div class="br"></div>
     <div class="rig-label">// GAMING RIG</div>
-    <div class="rig-name">Novork <span style="color:var(--accent)">ROG GM700TZ</span></div>
+    <div class="rig-name"><span id="rigName">--</span><br><span style="color:var(--accent);font-size:28px;">ROG GM700TZ</span></div>
     <div class="rig-sub">GPU · RX 9070 XT · 16 GB<br>RAM · DDR5</div>
     <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
   </div>
@@ -166,6 +160,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <div class="panel panel-cpu">
     <div class="tl"></div><div class="br"></div>
     <div class="stat-label">CPU LOAD</div>
+    <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="cpuModel">--</div>
     <div><span class="big-num" id="cpuLoad">--</span><span class="big-unit"> %</span></div>
     <div class="meta-row">
       <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
@@ -180,7 +175,8 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <div class="panel panel-gpu">
     <div class="tl"></div><div class="br"></div>
     <div class="amd-badge">AMD</div>
-    <div class="stat-label">GPU · RX 9070 XT</div>
+    <div class="stat-label">GPU LOAD</div>
+    <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="gpuModel">RX 9070 XT</div>
     <div class="ring-wrap">
       <svg class="ring-svg" viewBox="0 0 100 100">
         <circle class="ring-bg" cx="50" cy="50" r="42"/>
@@ -269,20 +265,6 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <canvas class="spark" id="diskSpark" height="48"></canvas>
   </div>
 
-  <!-- FPS -->
-  <div class="panel panel-fps">
-    <div class="tl"></div><div class="br"></div>
-    <div class="stat-label">FRAMERATE</div>
-    <div class="fps-main" id="fpsVal">---</div>
-    <div style="font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:4px;">FPS AVG (simulerat)</div>
-    <div class="fps-subs">
-      <div><div class="fps-sub-key">1% LOW</div><div class="fps-sub-val" id="fps1">--</div></div>
-      <div><div class="fps-sub-key">0.1% LOW</div><div class="fps-sub-val" id="fps01">--</div></div>
-      <div><div class="fps-sub-key">MAX</div><div class="fps-sub-val" id="fpsMax">--</div></div>
-      <div><div class="fps-sub-key">TARGET</div><div class="fps-sub-val">165</div></div>
-    </div>
-  </div>
-
 </div>
 <script>
 // ── DETEKTERA miljö ──────────────────────────────────────────────
@@ -291,6 +273,47 @@ try {
   ipcRenderer = require('electron').ipcRenderer;
 } catch(e) {}
 const IS_ELECTRON = ipcRenderer !== null;
+
+async function updateRigName(){
+  const rigNameEl = document.getElementById('rigName');
+  if(!rigNameEl) return;
+
+  if(IS_ELECTRON){
+    try{
+      const systemName = await ipcRenderer.invoke('get-system-name');
+      rigNameEl.textContent = systemName || 'UNKNOWN RIG';
+      return;
+    }catch(e){
+      console.error('Kunde inte hamta datornamn:', e);
+    }
+  }
+
+  rigNameEl.textContent = 'RIG DASHBOARD';
+}
+
+async function updateCpuModel(){
+  const el = document.getElementById('cpuModel');
+  if(!el) return;
+  if(IS_ELECTRON){
+    try{
+      const model = await ipcRenderer.invoke('get-cpu-info');
+      el.textContent = model || '--';
+      return;
+    }catch(e){}
+  }
+  el.textContent = '--';
+}
+
+async function updateGpuModel(){
+  const el = document.getElementById('gpuModel');
+  if(!el) return;
+  if(IS_ELECTRON){
+    try{
+      const model = await ipcRenderer.invoke('get-gpu-info');
+      if(model) el.textContent = model;
+    }catch(e){}
+  }
+}
 
 // ── KLOCKA ──────────────────────────────────────────────────────
 const DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
@@ -453,15 +476,6 @@ function applyStats(s){
   document.getElementById('diskWriteU').textContent=unitDisk(writeMBs);
   updateDiskBars(s.disk.drives);
 
-  // FPS (simulerat baserat på GPU-load — ersätt med RivaTuner/RTSS-integration)
-  if(gpuLoad!=null){
-    const fps=Math.max(20,Math.round(gpuLoad>90?60+(Math.random()*30):165-(gpuLoad-40)*.8+(Math.random()*8)));
-    document.getElementById('fpsVal').textContent=fps;
-    document.getElementById('fps1').textContent=Math.round(fps*.82);
-    document.getElementById('fps01').textContent=Math.round(fps*.68);
-    document.getElementById('fpsMax').textContent=Math.round(fps*1.12);
-  }
-
   // Sparklines
   spark('cpuSpark',H.cpu,'#00c8ff');
   spark('gpuSpark',H.gpu,'#ff3a1f');
@@ -503,6 +517,9 @@ async function tick(){
 }
 
 setInterval(tick,1000);
+updateRigName();
+updateCpuModel();
+updateGpuModel();
 tick();
 </script>
 </body>

@@ -1,8 +1,10 @@
-const { app, BrowserWindow, screen, ipcMain } = require('electron');
+const { app, BrowserWindow, screen, ipcMain, powerSaveBlocker } = require('electron');
+const os = require('os');
 const path = require('path');
 const si = require('systeminformation');
 
 let mainWindow;
+let powerBlockerId = null;
 
 // ── Hitta rätt skärm ─────────────────────────────────────────────
 function findDashboardDisplay() {
@@ -40,8 +42,19 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.whenReady().then(() => {
+  createWindow();
+  // Förhindra att skärmen går i sleep mode
+  powerBlockerId = powerSaveBlocker.start('prevent-display-sleep');
+  console.log('✓ Display sleep mode blockerad');
+});
+app.on('window-all-closed', () => {
+  if (powerBlockerId !== null) {
+    powerSaveBlocker.stop(powerBlockerId);
+    console.log('✓ Display sleep mode blockering slutad');
+  }
+  if (process.platform !== 'darwin') app.quit();
+});
 
 // ── Hämta data från LibreHardwareMonitor webb-API ─────────────────
 // LibreHardwareMonitor kör en lokal server på http://localhost:8085
@@ -276,3 +289,13 @@ ipcMain.handle('set-autostart', (_, enable) => {
   app.setLoginItemSettings({ openAtLogin: enable, openAsHidden: false, name: 'RigDashboard' });
 });
 ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);
+ipcMain.handle('get-system-name', () => os.hostname());
+ipcMain.handle('get-cpu-info', async () => {
+  const cpu = await si.cpu();
+  return `${cpu.manufacturer} ${cpu.brand}`.trim();
+});
+ipcMain.handle('get-gpu-info', async () => {
+  const gpus = await si.graphics();
+  const gpu = (gpus.controllers || []).find(g => g.vram > 8000) || gpus.controllers?.[0];
+  return gpu ? gpu.model : null;
+});
