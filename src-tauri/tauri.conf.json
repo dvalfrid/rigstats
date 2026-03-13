@@ -1,35 +1,19 @@
 {
-  "$schema": "https://schema.tauri.app/config/1",
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RigStats",
+  "version": "1.0.0",
+  "identifier": "se.codeby.rigstats",
+  "mainBinaryName": "RigStats",
   "build": {
     "beforeDevCommand": "",
     "beforeBuildCommand": "",
-    "devPath": "../frontend",
-    "distDir": "../frontend",
-    "withGlobalTauri": true
+    "frontendDist": "../frontend"
   },
-  "package": {
-    "productName": "RigStats",
-    "version": "1.0.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": true
-    },
-    "bundle": {
-      "active": true,
-      "targets": ["msi", "nsis"],
-      "identifier": "se.codeby.rigstats",
-      "icon": [
-        "../assets/icon.ico",
-        "../assets/tray.png"
-      ]
-    },
+  "app": {
+    "withGlobalTauri": true,
     "security": {
-      "csp": null
-    },
-    "systemTray": {
-      "iconPath": "../assets/tray.png",
-      "iconAsTemplate": false
+      "csp": null,
+      "capabilities": ["main-window", "settings-window"]
     },
     "windows": [
       {
@@ -39,12 +23,22 @@
         "width": 450,
         "height": 1920,
         "resizable": false,
-        "decorations": false,
+        "decorations": true,
         "transparent": true,
         "skipTaskbar": true,
         "visible": true,
-        "focus": true
+        "focus": true,
+        "useHttpsScheme": true
       }
     ]
-  }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "icon": [
+      "../assets/icon.ico",
+      "../assets/tray.png"
+    ]
+  },
+  "plugins": {}
 }

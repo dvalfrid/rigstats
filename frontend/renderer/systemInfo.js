@@ -22,29 +22,54 @@ async function updateRigName() {
 
 async function updateCpuModel() {
   const el = document.getElementById('cpuModel');
+  const badge = document.querySelector('.amd-badge-cpu');
   if (!el) return;
 
   if (IS_DESKTOP) {
     try {
       const model = await backend.invoke('get-cpu-info');
-      el.textContent = model || '--';
-      return;
+      if (model) {
+        el.textContent = model;
+        if (badge) badge.style.display = /amd|ryzen/i.test(model) ? '' : 'none';
+        return;
+      }
     } catch (e) {}
   }
 
   el.textContent = '--';
+  if (badge) badge.style.display = 'none';
 }
 
 async function updateGpuModel() {
   const el = document.getElementById('gpuModel');
+  const badge = document.querySelector('.amd-badge');
   if (!el) return;
 
   if (IS_DESKTOP) {
     try {
       const model = await backend.invoke('get-gpu-info');
-      if (model) el.textContent = model;
+      if (model) {
+        el.textContent = model;
+        if (badge) badge.style.display = /amd|radeon/i.test(model) ? '' : 'none';
+        return;
+      }
     } catch (e) {}
   }
+
+  el.textContent = 'UNKNOWN GPU';
+  if (badge) badge.style.display = 'none';
 }
 
-export { updateRigName, updateCpuModel, updateGpuModel };
+// Show or hide the header logo based on the detected system board brand.
+// Logo is visible by default in HTML; this hides it for non-ROG boards.
+function updateRigLogo(brand) {
+  const logo = document.getElementById('rigLogo');
+  if (!logo) return;
+
+  if (brand !== 'rog') {
+    logo.style.display = 'none';
+  }
+  // brand === 'rog': leave visible (already shown by default in HTML)
+}
+
+export { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo };

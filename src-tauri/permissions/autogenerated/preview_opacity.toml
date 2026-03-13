@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-opacity"
+description = "Enables the preview_opacity command without any pre-configured scope."
+commands.allow = ["preview_opacity"]
+
+[[permission]]
+identifier = "deny-preview-opacity"
+description = "Denies the preview_opacity command without any pre-configured scope."
+commands.deny = ["preview_opacity"]

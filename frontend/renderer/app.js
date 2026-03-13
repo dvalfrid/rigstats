@@ -5,9 +5,9 @@
 // - Protect UI stability with anti-overlap and last-known-good fallback logic.
 
 import { IS_DESKTOP, backend } from './environment.js';
-import { startClock, startUptime } from './clock.js';
+import { startClock, setUptimeFromSeconds } from './clock.js';
 import { createHistory, pushHistory, drawSpark } from './spark.js';
-import { updateRigName, updateCpuModel, updateGpuModel } from './systemInfo.js';
+import { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo } from './systemInfo.js';
 import { initCpuPanel, updateCpuPanel } from './panels/cpu.js';
 import { updateGpuPanel } from './panels/gpu.js';
 import { updateRamPanel } from './panels/ram.js';
@@ -83,6 +83,7 @@ function applyStats(stats) {
   updateRamPanel(stats.ram, history, pushHistory);
   updateNetworkPanel(stats, history, pushHistory);
   updateDiskPanel(stats.disk, history, pushHistory);
+  setUptimeFromSeconds(stats.systemUptimeSecs);
 
   drawSpark('cpuSpark', history.cpu, '#00c8ff');
   drawSpark('gpuSpark', history.gpu, '#ff3a1f');
@@ -126,7 +127,7 @@ function start() {
   initWindowDrag();
   initCpuPanel();
   startClock();
-  startUptime();
+  setUptimeFromSeconds(0);
 
   if (IS_DESKTOP) {
     backend.invoke('get-settings').then((s) => {
@@ -134,6 +135,9 @@ function start() {
       applyModelName(s.modelName);
       applyProfile(s.dashboardProfile);
     });
+    backend.invoke('get-system-brand')
+      .then(updateRigLogo)
+      .catch((e) => console.error('get-system-brand failed:', e));
     backend.on('apply-opacity', (_event, value) => applyOpacity(value));
     backend.on('apply-model-name', (_event, name) => applyModelName(name));
     backend.on('apply-profile', (_event, profile) => applyProfile(profile));

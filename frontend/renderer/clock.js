@@ -1,5 +1,5 @@
-// Local time and session uptime rendering.
-// Runs independently from backend polling so clock remains smooth.
+// Local time and backend-driven uptime rendering.
+// Clock runs locally; uptime is fed from backend stats payload.
 
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
@@ -19,13 +19,10 @@ function startClock() {
   setInterval(updateClock, 1000);
 }
 
-function startUptime() {
-  let upSec = 0;
-  setInterval(() => {
-    upSec++;
-    document.getElementById('uptime').textContent =
-      `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
-  }, 1000);
+function setUptimeFromSeconds(seconds) {
+  const upSec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  document.getElementById('uptime').textContent =
+    `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
 }
 
-export { startClock, startUptime };
+export { startClock, setUptimeFromSeconds };

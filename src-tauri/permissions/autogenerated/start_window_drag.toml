@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-start-window-drag"
+description = "Enables the start_window_drag command without any pre-configured scope."
+commands.allow = ["start_window_drag"]
+
+[[permission]]
+identifier = "deny-start-window-drag"
+description = "Denies the start_window_drag command without any pre-configured scope."
+commands.deny = ["start_window_drag"]

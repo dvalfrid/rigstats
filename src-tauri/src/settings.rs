@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use tauri::Manager;
+
+pub const LEGACY_DEFAULT_MODEL_NAME: &str = "ROG GM700TZ";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,7 +29,7 @@ fn default_opacity() -> f64 {
 }
 
 fn default_model_name() -> String {
-  "ROG GM700TZ".to_string()
+  String::new()
 }
 
 fn default_dashboard_profile() -> String {
@@ -46,10 +49,7 @@ impl Default for Settings {
 
 pub fn settings_path(app: &tauri::AppHandle) -> PathBuf {
   // Store settings in app data so they persist across updates.
-  let app_dir = app
-    .path_resolver()
-    .app_data_dir()
-    .unwrap_or_else(|| PathBuf::from("."));
+  let app_dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
   app_dir.join("rigstats-settings.json")
 }
 

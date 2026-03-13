@@ -1,8 +1,13 @@
 // Environment bridge.
-// Exposes the Tauri backend API to renderer modules.
+// Exposes a single backend surface to renderer modules.
 
-const tauriGlobal = window.__TAURI__ || null;
-const tauriInvoke = tauriGlobal ? (tauriGlobal.invoke || tauriGlobal.tauri?.invoke) : null;
+function getTauriGlobal() {
+  return typeof window !== 'undefined' ? window.__TAURI__ || null : null;
+}
+
+const tauriGlobal = getTauriGlobal();
+const tauriCore = tauriGlobal ? (tauriGlobal.core || tauriGlobal.tauri || tauriGlobal) : null;
+const tauriInvoke = tauriCore ? (tauriCore.invoke || null) : null;
 const tauriListen = tauriGlobal ? tauriGlobal.event?.listen : null;
 
 const IS_TAURI = typeof tauriInvoke === 'function';

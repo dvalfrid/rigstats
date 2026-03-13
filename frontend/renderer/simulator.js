@@ -4,6 +4,7 @@
 let cpuTrend = 35;
 let gpuTrend = 60;
 let ramTrend = 55;
+const simulatorStartMs = Date.now();
 
 function simulateStats() {
   cpuTrend = Math.max(5, Math.min(97, cpuTrend + (Math.random() - 0.47) * 7));
@@ -37,12 +38,14 @@ function simulateStats() {
       total: totalRam,
       used: totalRam * ram / 100,
       free: totalRam * (1 - ram / 100),
-      spec: 'DDR5 6000 MT/s (2 DIMMs)'
+      spec: 'DDR5 6000 MT/s (2 DIMMs)',
+      details: '2x16 GB | Kingston | KF560C36-16'
     },
     net: {
       up: Math.random() * 40e6 + 2e6,
       down: Math.random() * 100e6 + 5e6,
-      iface: 'Ethernet'
+      iface: 'Ethernet',
+      pingMs: 5 + Math.random() * 25
     },
     disk: {
       read: Math.random() * 3e9,
@@ -52,6 +55,7 @@ function simulateStats() {
         { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30 }
       ]
     },
+    systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),
     lhmConnected: false
   };
 }

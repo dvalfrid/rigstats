@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-system-name"
+description = "Enables the get_system_name command without any pre-configured scope."
+commands.allow = ["get_system_name"]
+
+[[permission]]
+identifier = "deny-get-system-name"
+description = "Denies the get_system_name command without any pre-configured scope."
+commands.deny = ["get_system_name"]

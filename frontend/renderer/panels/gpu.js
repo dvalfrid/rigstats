@@ -15,7 +15,7 @@ function updateGpuPanel(gpu, history, pushHistory) {
   } else {
     pushHistory(history.gpu, 0);
     document.getElementById('gpuRingTxt').textContent = '--%';
-    document.getElementById('gpuWarn').textContent = 'AMD GPU data unavailable via WMI. See README.';
+    document.getElementById('gpuWarn').textContent = 'LibreHardwareMonitor not running — GPU metrics unavailable.';
   }
 
   document.getElementById('gpuTemp').textContent = gpu.temp != null ? `${gpu.temp.toFixed(0)}°C` : '--°C';

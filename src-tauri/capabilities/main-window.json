@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window",
+  "description": "Capability for the main dashboard window.",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "allow-get-settings",
+    "allow-start-window-drag",
+    "allow-get-system-name",
+    "allow-get-system-brand",
+    "allow-get-cpu-info",
+    "allow-get-gpu-info",
+    "allow-get-stats"
+  ]
+}

@@ -15,6 +15,9 @@ function updateNetworkPanel(stats, history, pushHistory) {
   document.getElementById('netDown').textContent = fmt(downMbps);
   document.getElementById('netDownU').textContent = unit(downMbps);
   document.getElementById('netIface').textContent = stats.net.iface || '--';
+  document.getElementById('netPing').textContent = Number.isFinite(stats.net.pingMs)
+    ? `${Math.round(stats.net.pingMs)} ms`
+    : '-- ms';
 }
 
 export { updateNetworkPanel };
