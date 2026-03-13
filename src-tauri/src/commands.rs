@@ -86,6 +86,8 @@ pub fn save_settings(
   #[allow(non_snake_case)] modelName: Option<String>,
   dashboard_profile: Option<String>,
   #[allow(non_snake_case)] dashboardProfile: Option<String>,
+  always_on_top: Option<bool>,
+  #[allow(non_snake_case)] alwaysOnTop: Option<bool>,
 ) -> Result<(), String> {
   // Clamp opacity to a valid CSS alpha range before persistence.
   let mut settings = state.settings.lock().unwrap();
@@ -98,11 +100,18 @@ pub fn save_settings(
     .or(dashboardProfile)
     .unwrap_or_else(|| settings.dashboard_profile.clone());
   let applied_profile = normalize_profile(&requested_profile);
+  let applied_always_on_top = always_on_top
+    .or(alwaysOnTop)
+    .unwrap_or(settings.always_on_top);
   if let Some(main) = app.get_window("main") {
     let _ = pick_target_monitor(&main, &applied_profile);
+    main
+      .set_always_on_top(applied_always_on_top)
+      .map_err(|e| e.to_string())?;
   }
 
   settings.dashboard_profile = applied_profile.clone();
+  settings.always_on_top = applied_always_on_top;
   persist_settings(&app, &settings)?;
 
   if let Some(main) = app.get_window("main") {

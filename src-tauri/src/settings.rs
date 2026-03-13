@@ -8,19 +8,38 @@ use std::path::PathBuf;
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
   /// Panel alpha in the range [0.0, 1.0].
+  #[serde(default = "default_opacity")]
   pub opacity: f64,
   /// User-defined model label shown in the header panel.
+  #[serde(default = "default_model_name")]
   pub model_name: String,
   /// Active dashboard size profile.
+  #[serde(default = "default_dashboard_profile")]
   pub dashboard_profile: String,
+  /// Keep the dashboard window above other windows.
+  #[serde(default)]
+  pub always_on_top: bool,
+}
+
+fn default_opacity() -> f64 {
+  0.55
+}
+
+fn default_model_name() -> String {
+  "ROG GM700TZ".to_string()
+}
+
+fn default_dashboard_profile() -> String {
+  "portrait-xl".to_string()
 }
 
 impl Default for Settings {
   fn default() -> Self {
     Self {
-      opacity: 0.55,
-      model_name: "ROG GM700TZ".to_string(),
-      dashboard_profile: "portrait-xl".to_string(),
+      opacity: default_opacity(),
+      model_name: default_model_name(),
+      dashboard_profile: default_dashboard_profile(),
+      always_on_top: false,
     }
   }
 }

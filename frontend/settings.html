@@ -103,6 +103,28 @@ select:focus { border-color: #00c8ff; }
   display: flex;
   gap: 8px;
 }
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #141820;
+  border: 1px solid #1e2a40;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 16px;
+}
+.toggle-label {
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #fff;
+}
+.toggle-input {
+  width: 16px;
+  height: 16px;
+  accent-color: #00c8ff;
+  cursor: pointer;
+}
 button {
   flex: 1;
   padding: 7px 0;
@@ -153,6 +175,12 @@ button {
   <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
 </select>
 
+<div class="section-label">Window</div>
+<label class="toggle-row" for="alwaysOnTopInput">
+  <span class="toggle-label">Always On Top</span>
+  <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
+</label>
+
 <div class="btn-row">
   <button class="btn-save" id="btnSave">Save</button>
   <button class="btn-cancel" id="btnCancel">Cancel</button>
@@ -171,8 +199,9 @@ const slider = document.getElementById('slider');
 const val = document.getElementById('val');
 const modelNameInput = document.getElementById('modelNameInput');
 const profileSelect = document.getElementById('profileSelect');
+const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
 const statusEl = document.getElementById('status');
-let original = { opacity: 0.55, modelName: '', dashboardProfile: 'portrait-xl' };
+let original = { opacity: 0.55, modelName: '', dashboardProfile: 'portrait-xl', alwaysOnTop: false };
 let isSaving = false;
 
 function setStatus(message, type = '') {
@@ -189,13 +218,15 @@ backend.invoke('get-settings').then(s => {
   original = {
     opacity: s.opacity ?? 0.55,
     modelName: s.modelName ?? '',
-    dashboardProfile: s.dashboardProfile ?? 'portrait-xl'
+    dashboardProfile: s.dashboardProfile ?? 'portrait-xl',
+    alwaysOnTop: s.alwaysOnTop ?? false
   };
   const pct = Math.round(original.opacity * 100);
   slider.value = pct;
   val.textContent = pct + '%';
   modelNameInput.value = original.modelName;
   profileSelect.value = original.dashboardProfile;
+  alwaysOnTopInput.checked = original.alwaysOnTop;
 });
 }
 
@@ -213,17 +244,19 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const opacity = parseInt(slider.value, 10) / 100;
   const modelName = modelNameInput.value.trim();
   const dashboardProfile = profileSelect.value;
+  const alwaysOnTop = alwaysOnTopInput.checked;
   let saveOk = false;
 
   try {
     await backend.invoke('save-settings', {
       opacity,
       modelName,
-      dashboardProfile
+      dashboardProfile,
+      alwaysOnTop
     });
 
     // If a late cancel/escape handler fires, keep the saved value.
-    original = { opacity, modelName, dashboardProfile };
+    original = { opacity, modelName, dashboardProfile, alwaysOnTop };
     setStatus('Saved', 'status-ok');
     saveOk = true;
   } catch (err) {

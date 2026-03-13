@@ -36,6 +36,7 @@ fn main() {
       let app_handle = app.handle();
       let settings = load_settings(&app_handle);
       let startup_profile = settings.dashboard_profile.clone();
+      let startup_always_on_top = settings.always_on_top;
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
@@ -50,6 +51,7 @@ fn main() {
       if let Some(main) = app.get_window("main") {
         // Place the dashboard on the preferred portrait monitor if present.
         let _ = pick_target_monitor(&main, &startup_profile);
+        let _ = main.set_always_on_top(startup_always_on_top);
       }
 
       Ok(())
