@@ -4,12 +4,15 @@
   "description": "Gaming rig stats dashboard for secondary display",
   "scripts": {
     "start": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri dev",
-    "build": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build"
+    "build": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
+    "test": "vitest run",
+    "verify": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && vitest run"
   },
   "keywords": [],
   "author": "Daniel",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0"
+    "@tauri-apps/cli": "^2.0.0",
+    "vitest": "^2.1.9"
   }
 }

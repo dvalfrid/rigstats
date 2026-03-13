@@ -229,9 +229,9 @@ fn map_memory_type(code: u16) -> Option<&'static str> {
 #[cfg(windows)]
 fn classify_board_brand(manufacturer: &str) -> &'static str {
   let lower = manufacturer.to_ascii_lowercase();
-  if lower.contains("asus") || lower.contains("rog") {
+  if lower.contains("asus") || lower.contains("rog") || lower.contains("republic of gamers") {
     "rog"
-  } else if lower.contains("msi") {
+  } else if lower.contains("msi") || lower.contains("micro-star") || lower.contains("micro star") {
     "msi"
   } else if lower.contains("gigabyte") {
     "gigabyte"
@@ -938,5 +938,31 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
     if let WindowEvent::Focused(false) = event {
       let _ = win.close();
     }
+  }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+  use super::classify_board_brand;
+
+  #[test]
+  fn classify_board_brand_recognizes_rog_aliases() {
+    assert_eq!(classify_board_brand("ASUSTeK COMPUTER INC."), "rog");
+    assert_eq!(classify_board_brand("Republic of Gamers"), "rog");
+  }
+
+  #[test]
+  fn classify_board_brand_recognizes_msi() {
+    assert_eq!(classify_board_brand("Micro-Star International Co., Ltd"), "msi");
+  }
+
+  #[test]
+  fn classify_board_brand_recognizes_gigabyte() {
+    assert_eq!(classify_board_brand("Gigabyte Technology Co., Ltd."), "gigabyte");
+  }
+
+  #[test]
+  fn classify_board_brand_falls_back_to_other() {
+    assert_eq!(classify_board_brand("Some Unknown Vendor"), "other");
   }
 }

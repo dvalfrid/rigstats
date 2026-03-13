@@ -2,6 +2,7 @@
 // These functions populate static header labels (rig name, CPU model, GPU model).
 
 import { IS_DESKTOP, backend } from './environment.js';
+import { resolveVendorBadge, resolveRigLogo } from './vendorBranding.js';
 
 function getForcedModel(kind) {
   const key = kind === 'cpu' ? 'rigstats.testCpuModel' : 'rigstats.testGpuModel';
@@ -11,20 +12,6 @@ function getForcedModel(kind) {
   } catch (_e) {
     return null;
   }
-}
-
-function resolveVendorBadge(model, kind) {
-  const text = (model || '').toLowerCase();
-  if (text.includes('nvidia') || text.includes('geforce') || text.includes('rtx') || text.includes('gtx')) {
-    return { src: './assets/nvidia.png', alt: `${kind} NVIDIA` };
-  }
-  if (text.includes('intel') || text.includes('core i') || text.includes('arc')) {
-    return { src: './assets/intel.png', alt: `${kind} Intel` };
-  }
-  if (text.includes('amd') || text.includes('ryzen') || text.includes('radeon')) {
-    return { src: './assets/AMD-Radeon-Ryzen-Symbol.png', alt: `${kind} AMD` };
-  }
-  return null;
 }
 
 function applyVendorBadge(badgeEl, model, kind) {
@@ -116,31 +103,15 @@ function updateRigLogo(brand) {
   const logo = document.getElementById('rigLogo');
   if (!logo) return;
 
-  const key = String(brand || '').toLowerCase();
-  if (key === 'rog') {
-    logo.src = './assets/ROG_logo_red.png';
-    logo.alt = 'ROG';
-    logo.style.display = '';
-    return;
-  }
-
-  if (key === 'msi') {
-    logo.src = './assets/msi.png';
-    logo.alt = 'MSI';
-    logo.style.display = '';
-    return;
-  }
-
-  if (key === 'gigabyte') {
-    logo.src = './assets/gigabyte.png';
-    logo.alt = 'Gigabyte';
-    logo.style.display = '';
-    return;
-  }
-
-  if (key !== 'rog' && key !== 'msi' && key !== 'gigabyte') {
+  const logoInfo = resolveRigLogo(brand);
+  if (!logoInfo) {
     logo.style.display = 'none';
+    return;
   }
+
+  logo.src = logoInfo.src;
+  logo.alt = logoInfo.alt;
+  logo.style.display = '';
 }
 
 export { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo };

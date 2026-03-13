@@ -21,6 +21,26 @@ Display sleep is blocked while the app is running.
 
 ## Dependencies
 
+## CI and Merge Safety
+
+This repository has a Verify workflow at .github/workflows/verify.yml.
+It runs on Windows for push and pull_request and executes:
+
+- cargo test
+- cargo check
+- vitest (frontend unit tests)
+
+To make this required before merge, enable branch protection in GitHub:
+
+1. Open repository Settings -> Branches
+2. Add a branch protection rule for main
+3. Enable Require a pull request before merging
+4. Enable Require status checks to pass before merging
+5. Select the status check named Verify (Windows)
+6. Save the rule
+
+After this, PRs cannot be merged unless Verify passes.
+
 ### LibreHardwareMonitor Integration
 
 LHM is bundled and runs via a scheduled task with highest privileges.
