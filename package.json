@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Gaming rig stats dashboard for secondary display",
   "scripts": {
+    "prepare:lhm": "powershell -ExecutionPolicy Bypass -File build/prepare-lhm.ps1",
     "start": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri dev",
-    "build": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
+    "build": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
     "test": "vitest run",
     "verify": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && vitest run"
   },

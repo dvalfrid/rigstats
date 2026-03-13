@@ -2,6 +2,7 @@ node_modules/
 dist/
 vendor/
 .env
+cargo-check-out.txt
 
 # Rust build output
 src-tauri/target/

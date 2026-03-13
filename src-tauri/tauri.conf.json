@@ -38,7 +38,11 @@
     "icon": [
       "../assets/icon.ico",
       "../assets/tray.png"
-    ]
+    ],
+    "resources": {
+      "../vendor/lhm/": "lhm/",
+      "../build/lhm-default/": "lhm/defaults/"
+    }
   },
   "plugins": {}
 }
