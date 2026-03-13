@@ -169,7 +169,7 @@ Enable auto start using Task Scheduler:
 
 ```
 rig-dashboard/
-|- src/
+|- frontend/
 |  |- index.html          <- Dashboard UI
 |  |- settings.html       <- Settings window
 |  |- assets/             <- Runtime image assets used by the renderer
@@ -205,7 +205,7 @@ rig-dashboard/
 - `stats.rs`
   - Shared payload structs (`StatsPayload`, panel models) and `AppState`.
 
-### Renderer (`src/renderer`)
+### Renderer (`frontend/renderer`)
 
 - `app.js`
   - Runtime orchestrator: polling loop, payload validation, panel updates.
@@ -256,7 +256,7 @@ The Rust backend via `sysinfo` handles CPU regardless of vendor.
 For NVIDIA GPUs, LHM works as well. Adjust the GPU sensor matching logic in `main.rs` to match your sensor naming.
 
 **How do I update the UI without rebuilding?**
-Edit files under `src/` and run `npm start` to preview changes.
+Edit files under `frontend/` and run `npm start` to preview changes.
 Build a new installer with `npm run build` when ready.
 
 **Display still goes to sleep**
