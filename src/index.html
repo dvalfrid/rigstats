@@ -8,9 +8,9 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #06070a;
-  --panel: #0b0d12;
-  --border: #161c2a;
+  --bg: rgba(6,7,10,0);
+  --panel: rgba(11,13,18,0.82);
+  --border: rgba(22,28,42,0.6);
   --accent:  #00c8ff;
   --amd:     #ff3a1f;
   --ram:     #ffb300;
@@ -102,6 +102,16 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 
 /* CPU */
 .panel-cpu{--c:var(--accent);height:429px;margin-bottom:10px !important;}
+.panel-cpu #cpuCores{
+  max-height:150px;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:4px;
+  -webkit-app-region:no-drag;
+}
+.panel-cpu #cpuCores::-webkit-scrollbar{width:6px;}
+.panel-cpu #cpuCores::-webkit-scrollbar-track{background:rgba(255,255,255,.04);border-radius:4px;}
+.panel-cpu #cpuCores::-webkit-scrollbar-thumb{background:rgba(0,200,255,.45);border-radius:4px;}
 
 /* GPU */
 .panel-gpu{--c:var(--amd);height:332px;margin-bottom:0 !important;}

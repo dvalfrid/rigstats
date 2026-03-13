@@ -33,8 +33,8 @@ function createMainWindow(BrowserWindow, screen, options = {}) {
     resizable: false,
     alwaysOnTop: false,
     skipTaskbar: true,
+    transparent: true,
     icon: iconPath,
-    backgroundColor: '#06070a',
     webPreferences: { nodeIntegration: true, contextIsolation: false }
   };
 

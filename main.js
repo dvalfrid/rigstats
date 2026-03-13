@@ -43,8 +43,8 @@ app.whenReady().then(() => {
 
   registerIpcHandlers(ipcMain, app, os, si, getStats);
 
-  powerBlockerId = powerSaveBlocker.start('prevent-display-sleep');
-  console.log('✓ Display sleep mode blocked');
+  powerBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  console.log('✓ App suspension blocked (display sleep allowed)');
 });
 
 app.on('before-quit', () => {
@@ -54,7 +54,7 @@ app.on('before-quit', () => {
 app.on('window-all-closed', () => {
   if (powerBlockerId !== null) {
     powerSaveBlocker.stop(powerBlockerId);
-    console.log('✓ Display sleep mode block stopped');
+    console.log('✓ App suspension block stopped');
   }
   if (process.platform !== 'darwin') app.quit();
 });
