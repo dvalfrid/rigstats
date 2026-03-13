@@ -8,7 +8,7 @@ function registerIpcHandlers(ipcMain, app, os, si, getStats) {
   ipcMain.handle('get-stats', getStats);
 
   ipcMain.handle('set-autostart', (_, enable) => {
-    app.setLoginItemSettings({ openAtLogin: enable, openAsHidden: false, name: 'RigDashboard' });
+    app.setLoginItemSettings({ openAtLogin: enable, openAsHidden: false, name: 'RigStats' });
   });
 
   ipcMain.handle('get-autostart', () => app.getLoginItemSettings().openAtLogin);

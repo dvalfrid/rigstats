@@ -9,8 +9,8 @@
     "build-portable": "electron-builder --win portable --x64"
   },
   "build": {
-    "appId": "com.rigdashboard.app",
-    "productName": "RigDashboard",
+    "appId": "se.codeby.rigstats",
+    "productName": "RigStats",
     "win": {
       "target": [
         { "target": "nsis", "arch": ["x64"] },
@@ -28,7 +28,7 @@
       "include": "build/installer.nsh"
     },
     "portable": {
-      "artifactName": "RigDashboard-portable.exe"
+      "artifactName": "RigStats-portable.exe"
     },
     "files": [
       "main.js",

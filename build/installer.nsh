@@ -25,13 +25,13 @@
 
   ; Create or update scheduled task for LibreHardwareMonitor at user logon.
   ; /IT keeps it interactive in user session, /RL HIGHEST grants elevated access.
-  nsExec::ExecToLog 'schtasks /Create /TN "RigDashboard\\LibreHardwareMonitor" /TR "$0" /SC ONLOGON /RL HIGHEST /F /IT'
+  nsExec::ExecToLog 'schtasks /Create /TN "RigStats\\LibreHardwareMonitor" /TR "$0" /SC ONLOGON /RL HIGHEST /F /IT'
 
   ; Start the task once directly after install so sensors are available immediately.
-  nsExec::ExecToLog 'schtasks /Run /TN "RigDashboard\\LibreHardwareMonitor"'
+  nsExec::ExecToLog 'schtasks /Run /TN "RigStats\\LibreHardwareMonitor"'
 !macroend
 
 !macro customUnInstall
   ; Remove scheduled task created during installation.
-  nsExec::ExecToLog 'schtasks /Delete /TN "RigDashboard\\LibreHardwareMonitor" /F'
+  nsExec::ExecToLog 'schtasks /Delete /TN "RigStats\\LibreHardwareMonitor" /F'
 !macroend

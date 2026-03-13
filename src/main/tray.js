@@ -17,7 +17,7 @@ function createTray(Tray, Menu, nativeImage, options = {}) {
   }
 
   const tray = new Tray(trayImage.isEmpty() ? iconPath : trayImage);
-  tray.setToolTip('RigDashboard');
+  tray.setToolTip('RigStats');
 
   const showWindow = () => {
     const mainWindow = typeof getMainWindow === 'function' ? getMainWindow() : null;
@@ -34,7 +34,7 @@ function createTray(Tray, Menu, nativeImage, options = {}) {
   };
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Show RigDashboard', click: showWindow },
+    { label: 'Show RigStats', click: showWindow },
     {
       label: 'Quit',
       click: () => {

@@ -2,6 +2,8 @@ const { app, BrowserWindow, screen, ipcMain, powerSaveBlocker, Tray, Menu, nativ
 const os = require('os');
 const si = require('systeminformation');
 
+app.name = 'RigStats';
+
 const { createMainWindow } = require('./src/main/window');
 const { createTray } = require('./src/main/tray');
 const { getStats } = require('./src/main/stats');
@@ -30,7 +32,7 @@ function buildMainWindow() {
 
 app.whenReady().then(() => {
   if (process.platform === 'win32') {
-    app.setAppUserModelId('com.rigdashboard.app');
+    app.setAppUserModelId('se.codeby.rigstats');
   }
 
   tray = createTray(Tray, Menu, nativeImage, {
