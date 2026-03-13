@@ -6,6 +6,7 @@ The repository includes `.github/workflows/verify.yml`.
 
 It runs on Windows for push and pull requests and executes:
 
+- `npm run prepare:lhm` (pinned LHM download if needed)
 - `cargo test`
 - `cargo check`
 - `vitest run`

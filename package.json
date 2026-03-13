@@ -7,7 +7,7 @@
     "start": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri dev",
     "build": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
     "test": "vitest run",
-    "verify": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && vitest run"
+    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && vitest run"
   },
   "keywords": [],
   "author": "Daniel",
