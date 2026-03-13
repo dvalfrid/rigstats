@@ -38,7 +38,7 @@ function createTray(Tray, Menu, nativeImage, options = {}) {
     { label: 'Show RigStats', click: showWindow },
     { type: 'separator' },
     {
-      label: 'Opacity\u2026',
+      label: 'Settings',
       click: () => {
         if (typeof onOpenSettings === 'function') onOpenSettings(tray.getBounds());
       }

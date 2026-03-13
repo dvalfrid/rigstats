@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 
-const DEFAULTS = { opacity: 0.55 };
+const DEFAULTS = { opacity: 0.55, modelName: 'ROG GM700TZ' };
 
 function getSettingsPath(app) {
   return path.join(app.getPath('userData'), 'rigstats-settings.json');

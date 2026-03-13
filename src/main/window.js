@@ -72,7 +72,7 @@ function createSettingsWindow(BrowserWindow, trayBounds) {
   const { screen } = require('electron');
   const { workArea } = screen.getPrimaryDisplay();
   const winW = 300;
-  const winH = 120;
+  const winH = 260;
 
   let x = workArea.x + workArea.width - winW - 16;
   let y = workArea.y + workArea.height - winH - 16;

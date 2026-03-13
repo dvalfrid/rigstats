@@ -20,6 +20,14 @@ body {
   text-transform: uppercase;
   margin-bottom: 14px;
 }
+.section-label {
+  font-family: monospace;
+  font-size: 9px;
+  color: #6f8db7;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
 .row {
   display: flex;
   align-items: center;
@@ -55,15 +63,52 @@ input[type=range]::-webkit-slider-thumb {
 .labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: 6px;
+  margin-bottom: 16px;
   font-size: 9px;
   color: #6f8db7;
   letter-spacing: 1px;
 }
+input[type=text] {
+  width: 100%;
+  background: #141820;
+  border: 1px solid #1e2a40;
+  border-radius: 4px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 6px 8px;
+  outline: none;
+  margin-bottom: 16px;
+  user-select: text;
+  -webkit-app-region: no-drag;
+}
+input[type=text]:focus { border-color: #00c8ff; }
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+button {
+  flex: 1;
+  padding: 7px 0;
+  border: none;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.btn-save { background: #00c8ff; color: #000; font-weight: 700; }
+.btn-save:hover { background: #33d4ff; }
+.btn-cancel { background: #1e2a40; color: #b8cce8; }
+.btn-cancel:hover { background: #263450; }
 </style>
 </head>
 <body>
-<div class="title">// Opacity</div>
+<div class="title">// Config</div>
+
+<div class="section-label">Opacity</div>
 <div class="row">
   <input type="range" id="slider" min="0" max="100" value="55" step="1">
   <span class="value" id="val">55%</span>
@@ -72,25 +117,54 @@ input[type=range]::-webkit-slider-thumb {
   <span>TRANSPARENT</span>
   <span>SOLID</span>
 </div>
+
+<div class="section-label">Model Name</div>
+<input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
+
+<div class="btn-row">
+  <button class="btn-save" id="btnSave">Save</button>
+  <button class="btn-cancel" id="btnCancel">Cancel</button>
+</div>
+
 <script>
 const { ipcRenderer } = require('electron');
 const slider = document.getElementById('slider');
 const val = document.getElementById('val');
+const modelNameInput = document.getElementById('modelNameInput');
+let original = { opacity: 0.55, modelName: '' };
 
-ipcRenderer.invoke('get-opacity').then(v => {
-  const pct = Math.round(v * 100);
+ipcRenderer.invoke('get-settings').then(s => {
+  original = { opacity: s.opacity ?? 0.55, modelName: s.modelName ?? '' };
+  const pct = Math.round(original.opacity * 100);
   slider.value = pct;
   val.textContent = pct + '%';
+  modelNameInput.value = original.modelName;
 });
 
 slider.addEventListener('input', () => {
   const pct = parseInt(slider.value, 10);
   val.textContent = pct + '%';
-  ipcRenderer.send('set-opacity', pct / 100);
+  ipcRenderer.send('preview-opacity', pct / 100);
+});
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  ipcRenderer.send('save-settings', {
+    opacity: parseInt(slider.value, 10) / 100,
+    modelName: modelNameInput.value.trim()
+  });
+  window.close();
+});
+
+document.getElementById('btnCancel').addEventListener('click', () => {
+  ipcRenderer.send('preview-opacity', original.opacity);
+  window.close();
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') window.close();
+  if (e.key === 'Escape') {
+    ipcRenderer.send('preview-opacity', original.opacity);
+    window.close();
+  }
 });
 </script>
 </body>

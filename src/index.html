@@ -67,7 +67,9 @@ body::after {
 /* HEADER */
 .panel-header{height:148px;--c:var(--accent);}
 .rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;}
+.rig-header-row{display:flex;align-items:center;justify-content:space-between;}
 .rig-name{font-size:44px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
+.rig-logo{height:120px;width:auto;object-fit:contain;opacity:0.85;flex-shrink:0;}
 .rig-sub{font-family:var(--mono);font-size:10px;color:#6f8db7;line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
@@ -101,7 +103,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .null-val{color:var(--dim) !important;}
 
 /* CPU */
-.panel-cpu{--c:var(--accent);height:429px;margin-bottom:10px !important;}
+.panel-cpu{--c:var(--accent);height:429px;}
 .panel-cpu #cpuCores{
   max-height:150px;
   overflow-y:auto;
@@ -151,7 +153,10 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <div class="panel panel-header">
     <div class="tl"></div><div class="br"></div>
     <div class="rig-label">// GAMING RIG</div>
-    <div class="rig-name"><span id="rigName">--</span><br><span style="color:var(--accent);font-size:28px;">ROG GM700TZ</span></div>
+    <div class="rig-header-row">
+      <div class="rig-name"><span id="rigName">--</span><br><span id="modelName" style="color:var(--accent);font-size:28px;">ROG GM700TZ</span></div>
+      <img class="rig-logo" src="../assets/ROG logo_red.png" alt="ROG">
+    </div>
     <div class="rig-sub">GPU · RX 9070 XT · 16 GB<br>RAM · DDR5</div>
     <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
   </div>

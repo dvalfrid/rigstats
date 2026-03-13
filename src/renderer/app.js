@@ -17,6 +17,11 @@ function applyOpacity(value) {
   root.setProperty('--border', `rgba(22,28,42,${Math.max(0, v - 0.2).toFixed(2)})`);
 }
 
+function applyModelName(name) {
+  const el = document.getElementById('modelName');
+  if (el && name) el.textContent = name;
+}
+
 const history = createHistory(80);
 
 function applyStats(stats) {
@@ -55,8 +60,12 @@ function start() {
   startUptime();
 
   if (IS_ELECTRON) {
-    ipcRenderer.invoke('get-opacity').then((v) => applyOpacity(v));
+    ipcRenderer.invoke('get-settings').then((s) => {
+      applyOpacity(s.opacity);
+      applyModelName(s.modelName);
+    });
     ipcRenderer.on('apply-opacity', (_event, value) => applyOpacity(value));
+    ipcRenderer.on('apply-model-name', (_event, name) => applyModelName(name));
   }
 
   updateRigName();

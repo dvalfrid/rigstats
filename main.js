@@ -58,12 +58,20 @@ app.whenReady().then(() => {
 
   registerIpcHandlers(ipcMain, app, os, si, getStats);
 
-  ipcMain.handle('get-opacity', () => currentSettings.opacity);
-  ipcMain.on('set-opacity', (_, value) => {
-    currentSettings.opacity = value;
-    saveSettings(app, currentSettings);
+  ipcMain.handle('get-settings', () => ({ ...currentSettings }));
+
+  ipcMain.on('preview-opacity', (_, value) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('apply-opacity', value);
+    }
+  });
+
+  ipcMain.on('save-settings', (_, data) => {
+    currentSettings = { ...currentSettings, ...data };
+    saveSettings(app, currentSettings);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('apply-opacity', currentSettings.opacity);
+      mainWindow.webContents.send('apply-model-name', currentSettings.modelName);
     }
   });
 
