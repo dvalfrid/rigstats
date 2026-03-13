@@ -4,6 +4,8 @@
 //! - Initialize shared application state.
 //! - Wire command handlers from the commands module.
 
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 mod commands;
 mod lhm;
 mod settings;
