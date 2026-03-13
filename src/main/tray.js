@@ -4,7 +4,8 @@ const path = require('path');
 function createTray(Tray, Menu, nativeImage, options = {}) {
   const {
     getMainWindow,
-    onQuit
+    onQuit,
+    onOpenSettings
   } = options;
 
   const trayPngPath = path.join(__dirname, '..', '..', 'assets', 'tray.png');
@@ -35,6 +36,14 @@ function createTray(Tray, Menu, nativeImage, options = {}) {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show RigStats', click: showWindow },
+    { type: 'separator' },
+    {
+      label: 'Opacity\u2026',
+      click: () => {
+        if (typeof onOpenSettings === 'function') onOpenSettings(tray.getBounds());
+      }
+    },
+    { type: 'separator' },
     {
       label: 'Quit',
       click: () => {

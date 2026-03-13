@@ -68,7 +68,44 @@ function createMainWindow(BrowserWindow, screen, options = {}) {
   return mainWindow;
 }
 
+function createSettingsWindow(BrowserWindow, trayBounds) {
+  const { screen } = require('electron');
+  const { workArea } = screen.getPrimaryDisplay();
+  const winW = 300;
+  const winH = 120;
+
+  let x = workArea.x + workArea.width - winW - 16;
+  let y = workArea.y + workArea.height - winH - 16;
+
+  if (trayBounds && trayBounds.width > 0) {
+    x = Math.round(trayBounds.x + trayBounds.width / 2 - winW / 2);
+    y = Math.round(trayBounds.y - winH - 6);
+  }
+
+  x = Math.max(workArea.x, Math.min(workArea.x + workArea.width - winW, x));
+  y = Math.max(workArea.y, Math.min(workArea.y + workArea.height - winH, y));
+
+  const win = new BrowserWindow({
+    width: winW,
+    height: winH,
+    x,
+    y,
+    frame: false,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    backgroundColor: '#0b0d12',
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  });
+
+  win.loadFile(path.join(__dirname, '..', 'settings.html'));
+  win.on('blur', () => win.close());
+
+  return win;
+}
+
 module.exports = {
   createMainWindow,
+  createSettingsWindow,
   findDashboardDisplay
 };

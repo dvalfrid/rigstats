@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #0b0d12;
+  color: #b8cce8;
+  font-family: 'Segoe UI', sans-serif;
+  padding: 16px 20px 14px;
+  border: 1px solid #1e2a40;
+  user-select: none;
+}
+.title {
+  font-family: monospace;
+  font-size: 10px;
+  color: #00c8ff;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+input[type=range] {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: #1e2a40;
+  border-radius: 2px;
+  cursor: pointer;
+  outline: none;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #00c8ff;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0,200,255,0.6);
+}
+.value {
+  font-family: monospace;
+  font-size: 13px;
+  color: #fff;
+  width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 9px;
+  color: #6f8db7;
+  letter-spacing: 1px;
+}
+</style>
+</head>
+<body>
+<div class="title">// Opacity</div>
+<div class="row">
+  <input type="range" id="slider" min="0" max="100" value="55" step="1">
+  <span class="value" id="val">55%</span>
+</div>
+<div class="labels">
+  <span>TRANSPARENT</span>
+  <span>SOLID</span>
+</div>
+<script>
+const { ipcRenderer } = require('electron');
+const slider = document.getElementById('slider');
+const val = document.getElementById('val');
+
+ipcRenderer.invoke('get-opacity').then(v => {
+  const pct = Math.round(v * 100);
+  slider.value = pct;
+  val.textContent = pct + '%';
+});
+
+slider.addEventListener('input', () => {
+  const pct = parseInt(slider.value, 10);
+  val.textContent = pct + '%';
+  ipcRenderer.send('set-opacity', pct / 100);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') window.close();
+});
+</script>
+</body>
+</html>

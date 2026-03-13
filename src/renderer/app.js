@@ -9,6 +9,14 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { simulateStats } from './simulator.js';
 
+function applyOpacity(value) {
+  const parsed = parseFloat(value);
+  const v = Math.min(1, Math.max(0, isNaN(parsed) ? 0.55 : parsed));
+  const root = document.documentElement.style;
+  root.setProperty('--panel', `rgba(11,13,18,${v.toFixed(2)})`);
+  root.setProperty('--border', `rgba(22,28,42,${Math.max(0, v - 0.2).toFixed(2)})`);
+}
+
 const history = createHistory(80);
 
 function applyStats(stats) {
@@ -45,6 +53,11 @@ function start() {
   initCpuPanel();
   startClock();
   startUptime();
+
+  if (IS_ELECTRON) {
+    ipcRenderer.invoke('get-opacity').then((v) => applyOpacity(v));
+    ipcRenderer.on('apply-opacity', (_event, value) => applyOpacity(value));
+  }
 
   updateRigName();
   updateCpuModel();
