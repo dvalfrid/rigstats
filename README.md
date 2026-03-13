@@ -290,3 +290,8 @@ Build a new installer with `npm run build` when ready.
 **Display still goes to sleep**
 Display sleep blocking is not currently implemented in the app.
 Configure Windows power settings (or monitor OSD settings) if you need the display to stay awake.
+
+## License
+
+This project is licensed under the MIT License.
+See the LICENSE file for details.
