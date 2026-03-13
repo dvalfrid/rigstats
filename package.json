@@ -2,56 +2,14 @@
   "name": "rig-dashboard",
   "version": "1.0.0",
   "description": "Gaming rig stats dashboard for secondary display",
-  "main": "main.js",
   "scripts": {
     "start": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri dev",
-    "build": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
-    "build-portable": "electron-builder --win portable --x64",
-    "start:electron": "electron .",
-    "build:electron": "electron-builder --win --x64"
-  },
-  "build": {
-    "appId": "se.codeby.rigstats",
-    "productName": "RigStats",
-    "win": {
-      "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
-      ],
-      "icon": "assets/icon.ico",
-      "requestedExecutionLevel": "asInvoker"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "include": "build/installer.nsh"
-    },
-    "portable": {
-      "artifactName": "RigStats-portable.exe"
-    },
-    "files": [
-      "main.js",
-      "src/**/*",
-      "assets/**/*",
-      "node_modules/**/*"
-    ],
-    "extraResources": [
-      { "from": "vendor/lhm", "to": "lhm", "filter": ["**/*"] },
-      { "from": "build/lhm-default", "to": "lhm/defaults", "filter": ["**/*"] }
-    ]
+    "build": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build"
   },
   "keywords": [],
   "author": "Daniel",
   "license": "MIT",
   "devDependencies": {
-    "@tauri-apps/cli": "^1.6.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.0.0"
-  },
-  "dependencies": {
-    "systeminformation": "^5.22.0"
+    "@tauri-apps/cli": "^1.6.0"
   }
 }

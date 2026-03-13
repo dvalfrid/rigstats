@@ -14,6 +14,7 @@ mod stats;
 use commands::{
   close_window, ensure_settings_window, get_cpu_info, get_gpu_info, get_settings, get_stats,
   get_system_name, on_window_event, pick_target_monitor, preview_opacity, save_settings,
+  start_window_drag,
 };
 use settings::load_settings;
 use stats::AppState;
@@ -34,6 +35,7 @@ fn main() {
     .setup(|app| {
       let app_handle = app.handle();
       let settings = load_settings(&app_handle);
+      let startup_profile = settings.dashboard_profile.clone();
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
@@ -47,7 +49,7 @@ fn main() {
 
       if let Some(main) = app.get_window("main") {
         // Place the dashboard on the preferred portrait monitor if present.
-        pick_target_monitor(&main);
+        let _ = pick_target_monitor(&main, &startup_profile);
       }
 
       Ok(())
@@ -57,6 +59,7 @@ fn main() {
       preview_opacity,
       save_settings,
       close_window,
+      start_window_drag,
       get_system_name,
       get_cpu_info,
       get_gpu_info,

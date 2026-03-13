@@ -103,6 +103,26 @@ Tauri compiles the Rust backend and opens the dashboard window.
 If a 450×1920 display is connected, the window is placed there automatically.
 If not, it falls back to the secondary display, or the primary display if only one exists.
 
+### Display Profiles
+
+RigStats now supports 4 built-in dashboard size profiles:
+
+1. `portrait-xl` -> `450x1920` (default)
+2. `portrait-slim` -> `480x1920`
+3. `portrait-hd` -> `720x1280`
+4. `portrait-wxga` -> `800x1280`
+
+How profile selection works:
+
+- On startup, the app loads your saved profile from settings.
+- The backend resizes the main window to that profile size.
+- Monitor targeting prefers an exact resolution match for the selected profile.
+- If no exact match exists, the selected profile is still kept and only the size is applied.
+- In that case, the window can be moved manually to any monitor.
+
+You can change profile manually in the **Settings** window using the **Display Profile** dropdown.
+The selected profile is persisted and applied on next start.
+
 ---
 
 ## Part 2: Build an installable `.exe`
@@ -153,7 +173,6 @@ rig-dashboard/
 |  |- index.html          <- Dashboard UI
 |  |- settings.html       <- Settings window
 |  |- assets/             <- Runtime image assets used by the renderer
-|  |- preload.js          <- Legacy Electron preload bridge
 |  \- renderer/           <- JS modules (panels, app logic)
 |- src-tauri/
 |  |- src/main.rs         <- Rust backend (commands, tray, system stats)
@@ -192,7 +211,7 @@ rig-dashboard/
   - Runtime orchestrator: polling loop, payload validation, panel updates.
   - Contains anti-flicker logic (`isTicking`, `lastValidStats`).
 - `environment.js`
-  - Backend abstraction layer for Tauri/Electron command/event naming differences.
+  - Thin Tauri backend bridge for command invocation and event subscription.
 - `systemInfo.js`
   - One-shot static identity labels (host, CPU model, GPU model).
 - `clock.js`
@@ -227,7 +246,10 @@ Test in a browser: `http://localhost:8085/data.json` should return JSON.
 
 **Can I change which display is used?**
 Yes. In `src-tauri/src/commands.rs`, adjust the display-detection logic in `pick_target_monitor()`.
-The dashboard auto-targets a display with exact resolution `450×1920`.
+The dashboard targets the selected profile resolution first, then falls back gracefully.
+
+**Can I switch dashboard size manually?**
+Yes. Open **Settings** and select a value in **Display Profile**. Save to apply immediately and persist.
 
 **Intel/NVIDIA support?**
 The Rust backend via `sysinfo` handles CPU regardless of vendor.

@@ -11,6 +11,8 @@ pub struct Settings {
   pub opacity: f64,
   /// User-defined model label shown in the header panel.
   pub model_name: String,
+  /// Active dashboard size profile.
+  pub dashboard_profile: String,
 }
 
 impl Default for Settings {
@@ -18,6 +20,7 @@ impl Default for Settings {
     Self {
       opacity: 0.55,
       model_name: "ROG GM700TZ".to_string(),
+      dashboard_profile: "portrait-xl".to_string(),
     }
   }
 }

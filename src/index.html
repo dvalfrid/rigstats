@@ -21,17 +21,22 @@
   --text:    #b8cce8;
   --mono: 'Share Tech Mono', monospace;
   --sans: 'Rajdhani', sans-serif;
+  --viewport-w: 450px;
+  --viewport-h: 1920px;
+  --dashboard-scale: 1;
 }
 
 html, body {
-  width: 450px;
-  height: 1920px;
+  width: var(--viewport-w);
+  height: var(--viewport-h);
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
   user-select: none;
-  -webkit-app-region: drag; /* allows dragging the window */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 
 body::before {
@@ -49,7 +54,11 @@ body::after {
 .dashboard {
   position:relative;z-index:1;
   display:flex;flex-direction:column;
-  height:100%;gap:0;background:var(--border);
+  width:450px;
+  height:1920px;
+  gap:0;background:var(--border);
+  transform: scale(var(--dashboard-scale));
+  transform-origin: top center;
 }
 
 .panel {
@@ -67,6 +76,7 @@ body::after {
 
 /* HEADER */
 .panel-header{height:200px;--c:var(--accent);}
+.panel-header[data-tauri-drag-region]{cursor:move;}
 .rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
 .rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .rig-name{font-size:44px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
@@ -152,7 +162,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 <div class="dashboard">
 
   <!-- HEADER -->
-  <div class="panel panel-header">
+  <div class="panel panel-header" data-tauri-drag-region>
     <div class="tl"></div><div class="br"></div>
     <div class="rig-header-row">
       <div>

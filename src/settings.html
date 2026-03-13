@@ -85,6 +85,20 @@ input[type=text] {
   -webkit-app-region: no-drag;
 }
 input[type=text]:focus { border-color: #00c8ff; }
+select {
+  width: 100%;
+  background: #141820;
+  border: 1px solid #1e2a40;
+  border-radius: 4px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 7px 8px;
+  outline: none;
+  margin-bottom: 16px;
+  -webkit-app-region: no-drag;
+}
+select:focus { border-color: #00c8ff; }
 .btn-row {
   display: flex;
   gap: 8px;
@@ -104,6 +118,15 @@ button {
 .btn-save:hover { background: #33d4ff; }
 .btn-cancel { background: #1e2a40; color: #b8cce8; }
 .btn-cancel:hover { background: #263450; }
+.status {
+  margin-top: 8px;
+  font-family: monospace;
+  font-size: 10px;
+  letter-spacing: 1px;
+  min-height: 14px;
+}
+.status-ok { color: #39ff88; }
+.status-err { color: #ff6b6b; }
 </style>
 </head>
 <body>
@@ -122,47 +145,57 @@ button {
 <div class="section-label">Model Name</div>
 <input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
 
+<div class="section-label">Display Profile</div>
+<select id="profileSelect">
+  <option value="portrait-xl">Portrait XL (450x1920)</option>
+  <option value="portrait-slim">Portrait Slim (480x1920)</option>
+  <option value="portrait-hd">Portrait HD (720x1280)</option>
+  <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
+</select>
+
 <div class="btn-row">
   <button class="btn-save" id="btnSave">Save</button>
   <button class="btn-cancel" id="btnCancel">Cancel</button>
 </div>
+<div id="status" class="status"></div>
 
 <script>
-function resolveBackend() {
-  try {
-    if (window.require) {
-      const ipcRenderer = window.require('electron').ipcRenderer;
-      return {
-        invoke: (channel, payload = {}) => ipcRenderer.invoke(channel, payload)
-      };
-    }
-  } catch (_e) {}
-
-  const tauriGlobal = window.__TAURI__ || null;
-  const tauriInvoke = tauriGlobal ? (tauriGlobal.invoke || tauriGlobal.tauri?.invoke) : null;
-  if (typeof tauriInvoke === 'function') {
-    return {
+const tauriGlobal = window.__TAURI__ || null;
+const tauriInvoke = tauriGlobal ? (tauriGlobal.invoke || tauriGlobal.tauri?.invoke) : null;
+const backend = typeof tauriInvoke === 'function'
+  ? {
       invoke: (channel, payload = {}) => tauriInvoke(String(channel).replace(/-/g, '_'), payload)
-    };
-  }
-
-  return null;
-}
-
-const backend = resolveBackend();
+    }
+  : null;
 const slider = document.getElementById('slider');
 const val = document.getElementById('val');
 const modelNameInput = document.getElementById('modelNameInput');
-let original = { opacity: 0.55, modelName: '' };
+const profileSelect = document.getElementById('profileSelect');
+const statusEl = document.getElementById('status');
+let original = { opacity: 0.55, modelName: '', dashboardProfile: 'portrait-xl' };
 let isSaving = false;
+
+function setStatus(message, type = '') {
+  statusEl.textContent = message;
+  statusEl.className = `status ${type}`.trim();
+}
+
+if (!backend) {
+  setStatus('Tauri backend unavailable.', 'status-err');
+}
 
 if (backend) {
 backend.invoke('get-settings').then(s => {
-  original = { opacity: s.opacity ?? 0.55, modelName: s.modelName ?? '' };
+  original = {
+    opacity: s.opacity ?? 0.55,
+    modelName: s.modelName ?? '',
+    dashboardProfile: s.dashboardProfile ?? 'portrait-xl'
+  };
   const pct = Math.round(original.opacity * 100);
   slider.value = pct;
   val.textContent = pct + '%';
   modelNameInput.value = original.modelName;
+  profileSelect.value = original.dashboardProfile;
 });
 }
 
@@ -176,21 +209,31 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   if (!backend || isSaving) return;
 
   isSaving = true;
+  setStatus('Saving...');
   const opacity = parseInt(slider.value, 10) / 100;
   const modelName = modelNameInput.value.trim();
+  const dashboardProfile = profileSelect.value;
+  let saveOk = false;
 
   try {
     await backend.invoke('save-settings', {
       opacity,
-      model_name: modelName
+      modelName,
+      dashboardProfile
     });
 
     // If a late cancel/escape handler fires, keep the saved value.
-    original = { opacity, modelName };
+    original = { opacity, modelName, dashboardProfile };
+    setStatus('Saved', 'status-ok');
+    saveOk = true;
   } catch (err) {
     console.error('save-settings failed:', err);
+    setStatus('Save failed. Please try again.', 'status-err');
   } finally {
-    await backend.invoke('close-window');
+    isSaving = false;
+    if (saveOk) {
+      await backend.invoke('close-window');
+    }
   }
 });
 

@@ -15,6 +15,13 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { simulateStats } from './simulator.js';
 
+const PROFILE_SIZE = {
+  'portrait-xl': { width: 450, height: 1920 },
+  'portrait-slim': { width: 480, height: 1920 },
+  'portrait-hd': { width: 720, height: 1280 },
+  'portrait-wxga': { width: 800, height: 1280 }
+};
+
 function applyOpacity(value) {
   // Opacity is applied via CSS variables to keep styling centralized.
   const parsed = parseFloat(value);
@@ -27,6 +34,32 @@ function applyOpacity(value) {
 function applyModelName(name) {
   const el = document.getElementById('modelName');
   if (el && name) el.textContent = name;
+}
+
+function applyProfile(profileName) {
+  const key = PROFILE_SIZE[profileName] ? profileName : 'portrait-xl';
+  const profile = PROFILE_SIZE[key];
+  const scale = Math.min(profile.width / 450, profile.height / 1920);
+
+  const root = document.documentElement;
+  root.dataset.profile = key;
+  root.style.setProperty('--viewport-w', `${profile.width}px`);
+  root.style.setProperty('--viewport-h', `${profile.height}px`);
+  root.style.setProperty('--dashboard-scale', String(scale));
+}
+
+function initWindowDrag() {
+  if (!IS_DESKTOP) return;
+
+  const header = document.querySelector('.panel-header');
+  if (!header) return;
+
+  header.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    backend.invoke('start-window-drag').catch((error) => {
+      console.error('Failed to start window drag:', error);
+    });
+  });
 }
 
 const history = createHistory(80);
@@ -89,6 +122,8 @@ async function tick() {
 }
 
 function start() {
+  applyProfile('portrait-xl');
+  initWindowDrag();
   initCpuPanel();
   startClock();
   startUptime();
@@ -97,9 +132,11 @@ function start() {
     backend.invoke('get-settings').then((s) => {
       applyOpacity(s.opacity);
       applyModelName(s.modelName);
+      applyProfile(s.dashboardProfile);
     });
     backend.on('apply-opacity', (_event, value) => applyOpacity(value));
     backend.on('apply-model-name', (_event, name) => applyModelName(name));
+    backend.on('apply-profile', (_event, profile) => applyProfile(profile));
   }
 
   updateRigName();

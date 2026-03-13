@@ -13,20 +13,53 @@ use serde::Deserialize;
 use std::time::Instant;
 use tauri::{GlobalWindowEvent, Manager, Position, Size, WindowBuilder, WindowEvent};
 
-pub fn pick_target_monitor(window: &tauri::Window) {
-  // Prefer the dedicated 450x1920 panel; otherwise use the secondary monitor.
-  if let Ok(monitors) = window.available_monitors() {
-    let target = monitors
-      .iter()
-      .find(|m| m.size().width == 450 && m.size().height == 1920)
-      .or_else(|| monitors.get(1))
-      .cloned();
-
-    if let Some(monitor) = target {
-      let _ = window.set_position(Position::Physical(*monitor.position()));
-      let _ = window.set_size(Size::Physical(*monitor.size()));
+fn normalize_profile(profile: &str) -> String {
+  match profile {
+    "portrait-xl" | "portrait-slim" | "portrait-hd" | "portrait-wxga" => {
+      profile.to_string()
     }
+    _ => "portrait-xl".to_string(),
   }
+}
+
+fn profile_dimensions(profile: &str) -> (u32, u32) {
+  match normalize_profile(profile).as_str() {
+    "portrait-slim" => (480, 1920),
+    "portrait-hd" => (720, 1280),
+    "portrait-wxga" => (800, 1280),
+    _ => (450, 1920),
+  }
+}
+
+pub fn pick_target_monitor(window: &tauri::Window, profile: &str) -> bool {
+  let (target_w, target_h) = profile_dimensions(profile);
+
+  // Prefer exact match. If none exists, keep current position and let user place manually.
+  if let Ok(monitors) = window.available_monitors() {
+    let exact_monitor = monitors
+      .iter()
+      .find(|m| m.size().width == target_w && m.size().height == target_h)
+      .cloned();
+    let has_exact_match = exact_monitor.is_some();
+
+    if let Some(monitor) = exact_monitor {
+      let _ = window.set_position(Position::Physical(*monitor.position()));
+      let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+        width: target_w,
+        height: target_h,
+      }));
+    } else {
+      // No exact monitor profile match: keep current screen/position and only resize.
+      let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
+        width: target_w,
+        height: target_h,
+      }));
+    }
+
+    return has_exact_match;
+  }
+
+  false
 }
 
 #[tauri::command]
@@ -51,6 +84,8 @@ pub fn save_settings(
   opacity: f64,
   model_name: Option<String>,
   #[allow(non_snake_case)] modelName: Option<String>,
+  dashboard_profile: Option<String>,
+  #[allow(non_snake_case)] dashboardProfile: Option<String>,
 ) -> Result<(), String> {
   // Clamp opacity to a valid CSS alpha range before persistence.
   let mut settings = state.settings.lock().unwrap();
@@ -59,6 +94,15 @@ pub fn save_settings(
   // Accept both snake_case and camelCase payload keys from the renderer.
   let incoming_name = model_name.or(modelName).unwrap_or_else(|| settings.model_name.clone());
   settings.model_name = incoming_name;
+  let requested_profile = dashboard_profile
+    .or(dashboardProfile)
+    .unwrap_or_else(|| settings.dashboard_profile.clone());
+  let applied_profile = normalize_profile(&requested_profile);
+  if let Some(main) = app.get_window("main") {
+    let _ = pick_target_monitor(&main, &applied_profile);
+  }
+
+  settings.dashboard_profile = applied_profile.clone();
   persist_settings(&app, &settings)?;
 
   if let Some(main) = app.get_window("main") {
@@ -68,6 +112,9 @@ pub fn save_settings(
     main
       .emit("apply-model-name", settings.model_name.clone())
       .map_err(|e| e.to_string())?;
+    main
+      .emit("apply-profile", applied_profile.clone())
+      .map_err(|e| e.to_string())?;
   }
 
   Ok(())
@@ -76,6 +123,11 @@ pub fn save_settings(
 #[tauri::command]
 pub fn close_window(window: tauri::Window) -> Result<(), String> {
   window.close().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn start_window_drag(window: tauri::Window) -> Result<(), String> {
+  window.start_dragging().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -271,7 +323,7 @@ pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
   let main_size = main.outer_size().map_err(|e| e.to_string())?;
 
   let width = 300.0;
-  let height = 260.0;
+  let height = 320.0;
   let x = main_pos.x as f64 + main_size.width as f64 - width - 16.0;
   let y = main_pos.y as f64 + 16.0;
 
