@@ -1,10 +1,18 @@
 # RigStats (rig-dashboard)
 
-A gaming stats dashboard optimized for a vertical secondary display (450×1920).
-Shows CPU, GPU (AMD RX 9070 XT), RAM, network, and disk in real time.
-
-Computer name, CPU model, and GPU model are detected automatically at startup.
-Display sleep is blocked while the app is running.
+<table>
+  <tr>
+    <td valign="top">
+      <p>A gaming stats dashboard optimized for a vertical secondary display (450×1920).</p>
+      <p>Shows CPU, GPU, RAM, network, and disk in real time.</p>
+      <p>Computer name, CPU model, and GPU model are detected automatically at startup.</p>
+      <p>Display sleep is not currently blocked by the app.</p>
+    </td>
+    <td valign="top" align="right">
+      <img src="assets/demo_1.png" alt="RigStats Demo" width="180">
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -12,9 +20,9 @@ Display sleep is blocked while the app is running.
 
 | Component | Role |
 |---|---|
-| **Tauri v1** | App framework (native window, IPC, system tray) |
+| **Tauri v2** | App framework (native window, IPC, system tray) |
 | **Rust / sysinfo** | CPU, RAM, disk, network data |
-| **LibreHardwareMonitor** | GPU temperature, load, fan speed, power (AMD) |
+| **LibreHardwareMonitor** | GPU/CPU sensors, disk/network throughput |
 | **HTML / CSS / JS** | Dashboard UI (renderer) |
 
 ---
@@ -70,7 +78,7 @@ You only need to place the files in the right folder **once** before building:
    - The installer first looks for an already installed `LibreHardwareMonitor.exe`
    - If none is found, it uses the bundled version in `resources/lhm`
    - Default config (`build/lhm-default/LibreHardwareMonitor.config`) is applied to the selected LHM installation (existing or bundled)
-   - If a config already exists, a backup is saved as `LibreHardwareMonitor.config.backup`
+  - If a config already exists, a backup is saved as `LibreHardwareMonitor.config.backup`
   - Scheduled task `RigStats\\LibreHardwareMonitor` is created/updated with the selected exe path
    - The task is started once immediately after install
 
@@ -253,8 +261,8 @@ rig-dashboard/
   - Rejects malformed transient samples instead of repainting panels with invalid values.
 - Prevent overlapping poll ticks:
   - Avoids out-of-order response races that can make bars jump backwards.
-- Use `src` as Tauri web root:
-  - Minimizes dev-time reload noise from unrelated file changes outside the renderer root.
+- Use `frontend` as Tauri web root:
+  - Keeps renderer assets and HTML in a single runtime root and simplifies packaging.
 
 ---
 
@@ -273,12 +281,12 @@ Yes. Open **Settings** and select a value in **Display Profile**. Save to apply 
 
 **Intel/NVIDIA support?**
 The Rust backend via `sysinfo` handles CPU regardless of vendor.
-For NVIDIA GPUs, LHM works as well. Adjust the GPU sensor matching logic in `main.rs` to match your sensor naming.
+For NVIDIA GPUs, LHM works as well. Adjust GPU sensor matching in `src-tauri/src/lhm.rs` if your sensor labels differ.
 
 **How do I update the UI without rebuilding?**
 Edit files under `frontend/` and run `npm start` to preview changes.
 Build a new installer with `npm run build` when ready.
 
 **Display still goes to sleep**
-The app calls the Windows `SetThreadExecutionState` API at startup to block display sleep.
-If sleep still happens, check display-level power settings in the monitor OSD menu.
+Display sleep blocking is not currently implemented in the app.
+Configure Windows power settings (or monitor OSD settings) if you need the display to stay awake.
