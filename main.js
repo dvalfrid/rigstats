@@ -1,3 +1,7 @@
+// Legacy Electron entrypoint.
+// The active desktop runtime is Tauri, but this file is kept for compatibility
+// and historical reference during migration.
+
 const { app, BrowserWindow, screen, ipcMain, powerSaveBlocker, Tray, Menu, nativeImage } = require('electron');
 const os = require('os');
 const si = require('systeminformation');

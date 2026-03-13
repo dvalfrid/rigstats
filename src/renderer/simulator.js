@@ -1,3 +1,6 @@
+// Synthetic stats generator for non-desktop/browser preview mode.
+// Keeps values in realistic ranges so panel layout and animations are testable.
+
 let cpuTrend = 35;
 let gpuTrend = 60;
 let ramTrend = 55;

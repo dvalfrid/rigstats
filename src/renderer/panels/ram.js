@@ -1,3 +1,6 @@
+// RAM panel renderer.
+// Converts byte values from backend into human-readable GB values.
+
 function updateRamPanel(ram, history, pushHistory) {
   const ramPct = Math.round(ram.used / ram.total * 100);
   const usedGB = (ram.used / 1073741824).toFixed(1);

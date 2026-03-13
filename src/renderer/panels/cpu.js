@@ -1,6 +1,10 @@
+// CPU panel renderer.
+// Handles headline metrics and per-core progress bars.
+
 let numCores = 8;
 
 function buildCoreBars(count) {
+  // Rebuild bars only when core count changes.
   numCores = count;
   const wrap = document.getElementById('cpuCores');
   wrap.innerHTML = '';

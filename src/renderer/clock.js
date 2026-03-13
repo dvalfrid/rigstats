@@ -1,3 +1,6 @@
+// Local time and session uptime rendering.
+// Runs independently from backend polling so clock remains smooth.
+
 const DAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
 
 function pad(v) {

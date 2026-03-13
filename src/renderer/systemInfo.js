@@ -1,12 +1,15 @@
-import { IS_ELECTRON, ipcRenderer } from './environment.js';
+// One-time system identity fetchers.
+// These functions populate static header labels (rig name, CPU model, GPU model).
+
+import { IS_DESKTOP, backend } from './environment.js';
 
 async function updateRigName() {
   const rigNameEl = document.getElementById('rigName');
   if (!rigNameEl) return;
 
-  if (IS_ELECTRON) {
+  if (IS_DESKTOP) {
     try {
-      const systemName = await ipcRenderer.invoke('get-system-name');
+      const systemName = await backend.invoke('get-system-name');
       rigNameEl.textContent = systemName || 'UNKNOWN RIG';
       return;
     } catch (e) {
@@ -21,9 +24,9 @@ async function updateCpuModel() {
   const el = document.getElementById('cpuModel');
   if (!el) return;
 
-  if (IS_ELECTRON) {
+  if (IS_DESKTOP) {
     try {
-      const model = await ipcRenderer.invoke('get-cpu-info');
+      const model = await backend.invoke('get-cpu-info');
       el.textContent = model || '--';
       return;
     } catch (e) {}
@@ -36,9 +39,9 @@ async function updateGpuModel() {
   const el = document.getElementById('gpuModel');
   if (!el) return;
 
-  if (IS_ELECTRON) {
+  if (IS_DESKTOP) {
     try {
-      const model = await ipcRenderer.invoke('get-gpu-info');
+      const model = await backend.invoke('get-gpu-info');
       if (model) el.textContent = model;
     } catch (e) {}
   }

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devPath": "../src",
+    "distDir": "../src",
+    "withGlobalTauri": true
+  },
+  "package": {
+    "productName": "RigStats",
+    "version": "1.0.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": true
+    },
+    "bundle": {
+      "active": true,
+      "targets": ["msi", "nsis"],
+      "identifier": "se.codeby.rigstats",
+      "icon": [
+        "../assets/icon.ico",
+        "../assets/tray.png"
+      ]
+    },
+    "security": {
+      "csp": null
+    },
+    "systemTray": {
+      "iconPath": "../assets/tray.png",
+      "iconAsTemplate": false
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "RigStats",
+        "url": "index.html",
+        "width": 450,
+        "height": 1920,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "skipTaskbar": true,
+        "visible": true,
+        "focus": true
+      }
+    ]
+  }
+}

@@ -127,43 +127,83 @@ button {
 </div>
 
 <script>
-const { ipcRenderer } = require('electron');
+function resolveBackend() {
+  try {
+    if (window.require) {
+      const ipcRenderer = window.require('electron').ipcRenderer;
+      return {
+        invoke: (channel, payload = {}) => ipcRenderer.invoke(channel, payload)
+      };
+    }
+  } catch (_e) {}
+
+  const tauriGlobal = window.__TAURI__ || null;
+  const tauriInvoke = tauriGlobal ? (tauriGlobal.invoke || tauriGlobal.tauri?.invoke) : null;
+  if (typeof tauriInvoke === 'function') {
+    return {
+      invoke: (channel, payload = {}) => tauriInvoke(String(channel).replace(/-/g, '_'), payload)
+    };
+  }
+
+  return null;
+}
+
+const backend = resolveBackend();
 const slider = document.getElementById('slider');
 const val = document.getElementById('val');
 const modelNameInput = document.getElementById('modelNameInput');
 let original = { opacity: 0.55, modelName: '' };
+let isSaving = false;
 
-ipcRenderer.invoke('get-settings').then(s => {
+if (backend) {
+backend.invoke('get-settings').then(s => {
   original = { opacity: s.opacity ?? 0.55, modelName: s.modelName ?? '' };
   const pct = Math.round(original.opacity * 100);
   slider.value = pct;
   val.textContent = pct + '%';
   modelNameInput.value = original.modelName;
 });
+}
 
 slider.addEventListener('input', () => {
   const pct = parseInt(slider.value, 10);
   val.textContent = pct + '%';
-  ipcRenderer.send('preview-opacity', pct / 100);
+  if (backend) backend.invoke('preview-opacity', { value: pct / 100 });
 });
 
-document.getElementById('btnSave').addEventListener('click', () => {
-  ipcRenderer.send('save-settings', {
-    opacity: parseInt(slider.value, 10) / 100,
-    modelName: modelNameInput.value.trim()
-  });
-  window.close();
+document.getElementById('btnSave').addEventListener('click', async () => {
+  if (!backend || isSaving) return;
+
+  isSaving = true;
+  const opacity = parseInt(slider.value, 10) / 100;
+  const modelName = modelNameInput.value.trim();
+
+  try {
+    await backend.invoke('save-settings', {
+      opacity,
+      model_name: modelName
+    });
+
+    // If a late cancel/escape handler fires, keep the saved value.
+    original = { opacity, modelName };
+  } catch (err) {
+    console.error('save-settings failed:', err);
+  } finally {
+    await backend.invoke('close-window');
+  }
 });
 
-document.getElementById('btnCancel').addEventListener('click', () => {
-  ipcRenderer.send('preview-opacity', original.opacity);
-  window.close();
+document.getElementById('btnCancel').addEventListener('click', async () => {
+  if (!backend || isSaving) return;
+  await backend.invoke('preview-opacity', { value: original.opacity });
+  await backend.invoke('close-window');
 });
 
-document.addEventListener('keydown', e => {
+document.addEventListener('keydown', async e => {
   if (e.key === 'Escape') {
-    ipcRenderer.send('preview-opacity', original.opacity);
-    window.close();
+    if (!backend || isSaving) return;
+    await backend.invoke('preview-opacity', { value: original.opacity });
+    await backend.invoke('close-window');
   }
 });
 </script>

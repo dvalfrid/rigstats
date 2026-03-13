@@ -1,4 +1,10 @@
-import { IS_ELECTRON, ipcRenderer } from './environment.js';
+// Dashboard runtime orchestrator.
+// Responsibilities:
+// - Poll backend stats on an interval.
+// - Validate and apply payloads to panel modules.
+// - Protect UI stability with anti-overlap and last-known-good fallback logic.
+
+import { IS_DESKTOP, backend } from './environment.js';
 import { startClock, startUptime } from './clock.js';
 import { createHistory, pushHistory, drawSpark } from './spark.js';
 import { updateRigName, updateCpuModel, updateGpuModel } from './systemInfo.js';
@@ -10,6 +16,7 @@ import { updateDiskPanel } from './panels/disk.js';
 import { simulateStats } from './simulator.js';
 
 function applyOpacity(value) {
+  // Opacity is applied via CSS variables to keep styling centralized.
   const parsed = parseFloat(value);
   const v = Math.min(1, Math.max(0, isNaN(parsed) ? 0.55 : parsed));
   const root = document.documentElement.style;
@@ -23,6 +30,17 @@ function applyModelName(name) {
 }
 
 const history = createHistory(80);
+let isTicking = false;
+let lastValidStats = null;
+
+function isValidStatsPayload(stats) {
+  // Defensive validation: reject transient empty payloads that would reset UI.
+  if (!stats || !stats.cpu || !stats.ram || !stats.net || !stats.disk) return false;
+  if (!Array.isArray(stats.cpu.cores) || stats.cpu.cores.length === 0) return false;
+  if (!Number.isFinite(stats.ram.total) || stats.ram.total <= 0) return false;
+  if (!Number.isFinite(stats.ram.used) || stats.ram.used < 0) return false;
+  return true;
+}
 
 function applyStats(stats) {
   if (!stats) return;
@@ -41,17 +59,33 @@ function applyStats(stats) {
 }
 
 async function tick() {
-  if (IS_ELECTRON) {
+  // Skip if previous sample is still in flight to avoid out-of-order updates.
+  if (isTicking) return;
+  isTicking = true;
+
+  if (IS_DESKTOP) {
     try {
-      const stats = await ipcRenderer.invoke('get-stats');
-      applyStats(stats);
-      return;
+      const stats = await backend.invoke('get-stats');
+      if (isValidStatsPayload(stats)) {
+        lastValidStats = stats;
+        applyStats(stats);
+      } else if (lastValidStats) {
+        // Reuse last valid sample to avoid visual reset/blink.
+        applyStats(lastValidStats);
+      }
     } catch (e) {
-      console.error('IPC error:', e);
+      console.error('Backend error:', e);
+      if (lastValidStats) applyStats(lastValidStats);
+    } finally {
+      isTicking = false;
     }
+
+    // In desktop mode, keep last rendered values on transient backend errors.
+    return;
   }
 
   applyStats(simulateStats());
+  isTicking = false;
 }
 
 function start() {
@@ -59,13 +93,13 @@ function start() {
   startClock();
   startUptime();
 
-  if (IS_ELECTRON) {
-    ipcRenderer.invoke('get-settings').then((s) => {
+  if (IS_DESKTOP) {
+    backend.invoke('get-settings').then((s) => {
       applyOpacity(s.opacity);
       applyModelName(s.modelName);
     });
-    ipcRenderer.on('apply-opacity', (_event, value) => applyOpacity(value));
-    ipcRenderer.on('apply-model-name', (_event, name) => applyModelName(name));
+    backend.on('apply-opacity', (_event, value) => applyOpacity(value));
+    backend.on('apply-model-name', (_event, name) => applyModelName(name));
   }
 
   updateRigName();

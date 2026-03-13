@@ -1,3 +1,6 @@
+// Disk panel renderer.
+// Displays throughput plus compact utilization bars for up to three drives.
+
 function updateDiskBars(drives) {
   const wrap = document.getElementById('diskBars');
   if (!drives || !drives.length) return;

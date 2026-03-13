@@ -2,3 +2,5 @@ node_modules/
 dist/
 vendor/
 .env
+src-tauri/target/
+src-tauri/target-check/

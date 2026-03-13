@@ -1,3 +1,6 @@
+// Sparkline utilities.
+// Maintains fixed-length metric history arrays and draws lightweight canvas charts.
+
 function createHistory(length = 80) {
   return {
     cpu: Array(length).fill(0),

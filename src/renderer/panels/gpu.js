@@ -1,3 +1,6 @@
+// GPU panel renderer.
+// Updates ring gauge, bars, and thermals from normalized backend fields.
+
 function updateGpuPanel(gpu, history, pushHistory) {
   const gpuLoad = gpu.load ?? null;
   const circumference = 263.9;
