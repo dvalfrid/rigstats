@@ -1,9 +1,13 @@
 // GPU panel renderer.
 // Updates ring gauge, bars, and thermals from normalized backend fields.
 
+import { resolveTempColor } from '../tempColors.js';
+
 function updateGpuPanel(gpu, history, pushHistory) {
   const gpuLoad = gpu.load ?? null;
   const circumference = 263.9;
+  const gpuTempEl = document.getElementById('gpuTemp');
+  const gpuHotspotEl = document.getElementById('gpuHotspot');
 
   if (gpuLoad != null) {
     pushHistory(history.gpu, gpuLoad);
@@ -18,8 +22,10 @@ function updateGpuPanel(gpu, history, pushHistory) {
     document.getElementById('gpuWarn').textContent = 'LibreHardwareMonitor not running — GPU metrics unavailable.';
   }
 
-  document.getElementById('gpuTemp').textContent = gpu.temp != null ? `${gpu.temp.toFixed(0)}°C` : '--°C';
-  document.getElementById('gpuHotspot').textContent = gpu.hotspot != null ? `${gpu.hotspot.toFixed(0)}°C` : '--°C';
+  gpuTempEl.textContent = gpu.temp != null ? `${gpu.temp.toFixed(0)}°C` : '--°C';
+  gpuHotspotEl.textContent = gpu.hotspot != null ? `${gpu.hotspot.toFixed(0)}°C` : '--°C';
+  gpuTempEl.style.color = resolveTempColor(gpu.temp, 70, 82);
+  gpuHotspotEl.style.color = resolveTempColor(gpu.hotspot, 90, 100);
   document.getElementById('gpuFreq').textContent = gpu.freq != null ? `${gpu.freq.toFixed(0)} MHz` : '-- MHz';
 
   const vramUsedGB = gpu.vramUsed != null ? (gpu.vramUsed / 1024).toFixed(1) : null;

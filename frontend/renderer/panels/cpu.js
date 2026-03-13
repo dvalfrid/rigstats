@@ -1,6 +1,8 @@
 // CPU panel renderer.
 // Handles headline metrics and per-core progress bars.
 
+import { resolveTempColor } from '../tempColors.js';
+
 let numCores = 8;
 
 function buildCoreBars(count) {
@@ -25,9 +27,11 @@ function initCpuPanel() {
 function updateCpuPanel(cpu, history, pushHistory) {
   const load = cpu.load;
   pushHistory(history.cpu, load);
+  const cpuTempEl = document.getElementById('cpuTemp');
 
   document.getElementById('cpuLoad').textContent = load;
-  document.getElementById('cpuTemp').textContent = cpu.temp > 0 ? `${cpu.temp.toFixed(0)}°C` : '--°C';
+  cpuTempEl.textContent = cpu.temp > 0 ? `${cpu.temp.toFixed(0)}°C` : '--°C';
+  cpuTempEl.style.color = resolveTempColor(cpu.temp, 70, 85);
   document.getElementById('cpuFreq').textContent = cpu.freq ? `${cpu.freq.toFixed(2)} GHz` : '-- GHz';
   document.getElementById('cpuPower').textContent = cpu.power ? `${cpu.power.toFixed(0)} W` : '-- W';
 
