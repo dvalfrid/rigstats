@@ -65,11 +65,11 @@ body::after {
 .br{bottom:6px;right:6px;border-bottom:1px solid var(--c,var(--accent));border-right:1px solid var(--c,var(--accent));}
 
 /* HEADER */
-.panel-header{height:148px;--c:var(--accent);}
-.rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;}
-.rig-header-row{display:flex;align-items:center;justify-content:space-between;}
+.panel-header{height:200px;--c:var(--accent);}
+.rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
+.rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .rig-name{font-size:44px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
-.rig-logo{height:120px;width:auto;object-fit:contain;opacity:0.85;flex-shrink:0;}
+.rig-logo{height:165px;width:auto;object-fit:contain;opacity:0.85;flex-shrink:0;}
 .rig-sub{font-family:var(--mono);font-size:10px;color:#6f8db7;line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
@@ -104,6 +104,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 
 /* CPU */
 .panel-cpu{--c:var(--accent);height:429px;}
+.amd-badge-cpu{position:absolute;top:16px;right:16px;width:96px;height:auto;object-fit:contain;opacity:.9;pointer-events:none;}
 .panel-cpu #cpuCores{
   max-height:150px;
   overflow-y:auto;
@@ -117,7 +118,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 
 /* GPU */
 .panel-gpu{--c:var(--amd);height:332px;margin-bottom:0 !important;}
-.amd-badge{position:absolute;top:20px;right:20px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:2px;color:var(--amd);border:1px solid var(--amd);padding:2px 8px;opacity:.7;}
+.amd-badge{position:absolute;top:16px;right:16px;width:96px;height:auto;object-fit:contain;opacity:.9;pointer-events:none;}
 .ring-wrap{display:flex;align-items:center;gap:16px;margin-top:12px;}
 .ring-svg{width:100px;height:100px;flex-shrink:0;}
 .ring-bg{fill:none;stroke:rgba(255,255,255,.04);stroke-width:7;}
@@ -152,13 +153,14 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <!-- HEADER -->
   <div class="panel panel-header">
     <div class="tl"></div><div class="br"></div>
-    <div class="rig-label">// GAMING RIG</div>
     <div class="rig-header-row">
-      <div class="rig-name"><span id="rigName">--</span><br><span id="modelName" style="color:var(--accent);font-size:28px;">ROG GM700TZ</span></div>
+      <div>
+        <div class="rig-label">// GAMING RIG</div>
+        <div class="rig-name"><span id="rigName">--</span><br><span id="modelName" style="color:var(--accent);font-size:28px;">ROG GM700TZ</span></div>
+        <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+      </div>
       <img class="rig-logo" src="../assets/ROG logo_red.png" alt="ROG">
     </div>
-    <div class="rig-sub">GPU · RX 9070 XT · 16 GB<br>RAM · DDR5</div>
-    <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
   </div>
 
   <!-- CLOCK -->
@@ -174,6 +176,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <!-- CPU -->
   <div class="panel panel-cpu">
     <div class="tl"></div><div class="br"></div>
+    <img class="amd-badge-cpu" src="../assets/AMD-Radeon-Ryzen-Symbol.png" alt="AMD Radeon Ryzen">
     <div class="stat-label">CPU LOAD</div>
     <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="cpuModel">--</div>
     <div><span class="big-num" id="cpuLoad">--</span><span class="big-unit"> %</span></div>
@@ -189,7 +192,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <!-- GPU -->
   <div class="panel panel-gpu">
     <div class="tl"></div><div class="br"></div>
-    <div class="amd-badge">AMD</div>
+    <img class="amd-badge" src="../assets/AMD-Radeon-Ryzen-Symbol.png" alt="AMD Radeon Ryzen">
     <div class="stat-label">GPU LOAD</div>
     <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="gpuModel">RX 9070 XT</div>
     <div class="ring-wrap">
