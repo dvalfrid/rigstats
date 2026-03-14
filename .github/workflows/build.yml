@@ -52,9 +52,3 @@ jobs:
           path: src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
-      - name: Upload MSI installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: rigstats-msi
-          path: src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: error

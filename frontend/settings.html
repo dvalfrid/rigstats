@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RigStats Settings</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,18 +27,18 @@ body {
   color: var(--text);
   font-family: var(--sans);
   min-height: 100vh;
-  padding: 14px;
+  padding: 18px;
   user-select: none;
 }
 .shell {
   border: 1px solid var(--border);
   background: var(--panel);
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
 }
 .hero {
-  padding: 14px 16px 12px;
+  padding: 18px 20px 14px;
   background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
   border-bottom: 1px solid var(--border);
 }
@@ -46,30 +47,30 @@ body {
   letter-spacing: 3px;
   text-transform: uppercase;
   color: var(--accent);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .subtitle {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 .content {
-  padding: 12px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
 .card {
   background: var(--panel-strong);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 14px;
+  padding: 14px;
 }
 .section-label {
-  font: 10px var(--mono);
+  font: 11px var(--mono);
   color: var(--muted);
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .row {
   display: flex;
@@ -138,9 +139,16 @@ select {
   -webkit-app-region: no-drag;
 }
 select:focus { border-color: rgba(0, 200, 255, 0.45); }
-.btn-row {
+.actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.dialog-actions {
+  padding: 0 16px 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 .toggle-row {
   display: flex;
@@ -164,25 +172,39 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
   cursor: pointer;
 }
 button {
-  flex: 1;
-  padding: 9px 0;
   border: 1px solid var(--border);
   border-radius: 10px;
-  font-family: var(--mono);
-  font-size: 11px;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font: 11px var(--mono);
   letter-spacing: 1px;
-  text-transform: uppercase;
   cursor: pointer;
 }
-.btn-save { background: var(--accent); color: #001018; border-color: transparent; font-weight: 700; }
+button.primary {
+  background: var(--accent);
+  color: #001018;
+  border-color: transparent;
+  font-weight: 700;
+}
+.btn-save {
+  background: var(--accent);
+  color: #001018;
+  border-color: transparent;
+  font-weight: 700;
+}
 .btn-save:hover { background: #33d4ff; }
-.btn-cancel { background: rgba(255,255,255,0.03); color: var(--text); }
+.btn-cancel {
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+}
 .btn-cancel:hover { border-color: rgba(0, 200, 255, 0.45); }
 .status {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1px;
   min-height: 14px;
+  color: var(--muted);
 }
 .status-ok { color: var(--good); }
 .status-err { color: var(--warn); }
@@ -231,12 +253,13 @@ button {
       </label>
     </div>
 
-    <div class="card">
-      <div class="btn-row">
-        <button class="btn-save" id="btnSave">Save</button>
-        <button class="btn-cancel" id="btnCancel">Cancel</button>
-      </div>
-      <div id="status" class="status"></div>
+    <div id="status" class="status"></div>
+  </div>
+
+  <div class="dialog-actions">
+    <div class="actions" style="margin-bottom: 0;">
+      <button class="btn-save" id="btnSave">Save</button>
+      <button class="btn-cancel" id="btnCancel">Cancel</button>
     </div>
   </div>
 </div>

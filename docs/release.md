@@ -27,9 +27,8 @@ It:
 
 - installs dependencies
 - runs `npm run verify`
-- runs the pinned LibreHardwareMonitor prepare step through `npm run build`
 - runs `npm run build`
-- uploads generated NSIS and MSI installers as GitHub Actions artifacts
+- uploads generated NSIS installer as a GitHub Actions artifact
 
 Use it by either:
 
@@ -66,7 +65,7 @@ It runs when a GitHub Release is published and:
 - runs verification
 - downloads and bundles pinned LibreHardwareMonitor via build scripts
 - builds installers
-- uploads `.exe` and `.msi` to that published release
+- uploads `.exe` to that published release
 
 Manual run option:
 

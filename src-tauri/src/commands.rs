@@ -1436,8 +1436,8 @@ pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
     return Ok(());
   }
 
-  let width = 420.0;
-  let height = 560.0;
+  let width = 640.0;
+  let height = 620.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
 
   WebviewWindowBuilder::new(
@@ -1448,7 +1448,7 @@ pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
   .title("Settings")
   .inner_size(width, height)
   .position(x, y)
-  .decorations(false)
+  .decorations(true)
   .resizable(false)
   .always_on_top(true)
   .skip_taskbar(true)
@@ -1580,13 +1580,6 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { api, .. } = event {
       api.prevent_close();
       let _ = win.hide();
-    }
-  }
-
-  if win.label() == "settings" {
-    // Settings behaves like a popover: close when focus is lost.
-    if let WindowEvent::Focused(false) = event {
-      let _ = win.close();
     }
   }
 }

@@ -47,10 +47,10 @@ vendor/
 During installation:
 
 - The installer first looks for an existing `LibreHardwareMonitor.exe`
-- If none is found, it uses the bundled version in `resources/lhm`
+- If none is found, it uses the bundled version in the app's `lhm` folder
 - Default config from `build/lhm-default/LibreHardwareMonitor.config` is applied
 - If a config already exists, it is backed up as `LibreHardwareMonitor.config.backup`
-- Scheduled task `RigStats\LibreHardwareMonitor` is created or updated with the selected exe path
+- Scheduled task `LibreHardwareMonitor` is created or updated with the selected exe path
 - The task is started once immediately after install
 
 If the LHM download fails and `vendor/lhm/` is still missing, `npm run build` will fail instead of producing an installer without bundled sensor support.
@@ -114,8 +114,6 @@ Output goes to:
 src-tauri\target\release\bundle\
   nsis\
     RigStats_1.0.0_x64-setup.exe
-  msi\
-    RigStats_1.0.0_x64_en-US.msi
 ```
 
 Default install location:
