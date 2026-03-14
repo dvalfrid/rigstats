@@ -22,6 +22,9 @@ pub struct Settings {
   /// Keep the dashboard window above other windows.
   #[serde(default)]
   pub always_on_top: bool,
+  /// Ordered list of visible dashboard panels.
+  #[serde(default = "default_visible_panels")]
+  pub visible_panels: Vec<String>,
 }
 
 fn default_opacity() -> f64 {
@@ -36,6 +39,18 @@ fn default_dashboard_profile() -> String {
   "portrait-xl".to_string()
 }
 
+fn default_visible_panels() -> Vec<String> {
+  vec![
+    "header".to_string(),
+    "clock".to_string(),
+    "cpu".to_string(),
+    "gpu".to_string(),
+    "ram".to_string(),
+    "net".to_string(),
+    "disk".to_string(),
+  ]
+}
+
 impl Default for Settings {
   fn default() -> Self {
     Self {
@@ -43,6 +58,7 @@ impl Default for Settings {
       model_name: default_model_name(),
       dashboard_profile: default_dashboard_profile(),
       always_on_top: false,
+      visible_panels: default_visible_panels(),
     }
   }
 }

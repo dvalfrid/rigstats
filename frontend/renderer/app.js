@@ -51,6 +51,24 @@ const PROFILE_SIZE = {
   'portrait-wxga': { width: 800, height: 1280 }
 };
 
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
+
+function normalizeVisiblePanels(value) {
+  const list = Array.isArray(value) ? value : [];
+  const normalized = list
+    .map((v) => String(v).trim().toLowerCase())
+    .filter((v, idx, arr) => v && PANEL_KEYS.includes(v) && arr.indexOf(v) === idx);
+  return normalized.length > 0 ? normalized : [...PANEL_KEYS];
+}
+
+function applyVisiblePanels(visiblePanels) {
+  const allowed = new Set(normalizeVisiblePanels(visiblePanels));
+  document.querySelectorAll('.panel[data-panel]').forEach((panel) => {
+    const key = panel.getAttribute('data-panel');
+    panel.style.display = allowed.has(key) ? '' : 'none';
+  });
+}
+
 function applyOpacity(value) {
   // Opacity is applied via CSS variables to keep styling centralized.
   const parsed = parseFloat(value);
@@ -291,6 +309,7 @@ function start() {
       applyOpacity(s.opacity);
       applyModelName(s.modelName);
       applyProfile(s.dashboardProfile);
+      applyVisiblePanels(s.visiblePanels);
     });
     Promise.all([
       backend.invoke('get-system-brand').catch(() => 'other'),
@@ -304,10 +323,12 @@ function start() {
       backend.on('apply-opacity', (_event, value) => applyOpacity(value)),
       backend.on('apply-model-name', (_event, name) => applyModelName(name)),
       backend.on('apply-profile', (_event, profile) => applyProfile(profile)),
+      backend.on('apply-visible-panels', (_event, panels) => applyVisiblePanels(panels)),
     ]).then((unlisteners) => {
       window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));
     });
   } else {
+    applyVisiblePanels(PANEL_KEYS);
     renderBrandState();
   }
 

@@ -463,6 +463,35 @@ fn normalize_profile(profile: &str) -> String {
   }
 }
 
+fn is_valid_panel_key(value: &str) -> bool {
+  matches!(value, "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk")
+}
+
+fn normalize_visible_panels(values: Vec<String>) -> Vec<String> {
+  let mut out = Vec::new();
+  for value in values {
+    let key = value.trim().to_ascii_lowercase();
+    if key.is_empty() || !is_valid_panel_key(&key) || out.iter().any(|v| v == &key) {
+      continue;
+    }
+    out.push(key);
+  }
+
+  if out.is_empty() {
+    vec![
+      "header".to_string(),
+      "clock".to_string(),
+      "cpu".to_string(),
+      "gpu".to_string(),
+      "ram".to_string(),
+      "net".to_string(),
+      "disk".to_string(),
+    ]
+  } else {
+    out
+  }
+}
+
 fn profile_dimensions(profile: &str) -> (u32, u32) {
   match normalize_profile(profile).as_str() {
     "portrait-slim" => (480, 1920),
@@ -598,6 +627,17 @@ pub fn preview_opacity(app: tauri::AppHandle, value: f64) -> Result<(), String> 
 }
 
 #[tauri::command]
+pub fn preview_visible_panels(app: tauri::AppHandle, panels: Vec<String>) -> Result<(), String> {
+  if let Some(main) = app.get_webview_window("main") {
+    let normalized = normalize_visible_panels(panels);
+    main
+      .emit("apply-visible-panels", normalized)
+      .map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+#[tauri::command]
 pub fn save_settings(
   app: tauri::AppHandle,
   state: tauri::State<AppState>,
@@ -608,6 +648,8 @@ pub fn save_settings(
   #[allow(non_snake_case)] dashboardProfile: Option<String>,
   always_on_top: Option<bool>,
   #[allow(non_snake_case)] alwaysOnTop: Option<bool>,
+  visible_panels: Option<Vec<String>>,
+  #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
 ) -> Result<(), String> {
   // Clamp opacity to a valid CSS alpha range before persistence.
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
@@ -623,6 +665,10 @@ pub fn save_settings(
   let applied_always_on_top = always_on_top
     .or(alwaysOnTop)
     .unwrap_or(settings.always_on_top);
+  let requested_visible_panels = visible_panels
+    .or(visiblePanels)
+    .unwrap_or_else(|| settings.visible_panels.clone());
+  let applied_visible_panels = normalize_visible_panels(requested_visible_panels);
   if let Some(main) = app.get_webview_window("main") {
     let _ = pick_target_monitor(&main, &applied_profile);
     main
@@ -632,6 +678,7 @@ pub fn save_settings(
 
   settings.dashboard_profile = applied_profile.clone();
   settings.always_on_top = applied_always_on_top;
+  settings.visible_panels = applied_visible_panels.clone();
   persist_settings(&app, &settings)?;
 
   if let Some(main) = app.get_webview_window("main") {
@@ -643,6 +690,9 @@ pub fn save_settings(
       .map_err(|e| e.to_string())?;
     main
       .emit("apply-profile", applied_profile.clone())
+      .map_err(|e| e.to_string())?;
+    main
+      .emit("apply-visible-panels", applied_visible_panels)
       .map_err(|e| e.to_string())?;
   }
 

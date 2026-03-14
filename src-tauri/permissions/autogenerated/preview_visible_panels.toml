@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-visible-panels"
+description = "Enables the preview_visible_panels command without any pre-configured scope."
+commands.allow = ["preview_visible_panels"]
+
+[[permission]]
+identifier = "deny-preview-visible-panels"
+description = "Denies the preview_visible_panels command without any pre-configured scope."
+commands.deny = ["preview_visible_panels"]

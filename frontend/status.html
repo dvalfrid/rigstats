@@ -27,80 +27,80 @@ body {
   color: var(--text);
   font-family: var(--sans);
   min-height: 100vh;
-  padding: 18px;
+  padding: 10px;
 }
 .shell {
   border: 1px solid var(--border);
   background: var(--panel);
-  border-radius: 16px;
+  border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
 }
 .hero {
-  padding: 18px 20px 14px;
+  padding: 10px 12px 8px;
   background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
   border-bottom: 1px solid var(--border);
 }
 .kicker {
-  font: 11px var(--mono);
-  letter-spacing: 3px;
+  font: 10px var(--mono);
+  letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--accent);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .hero-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   align-items: flex-start;
 }
 .title {
-  font-size: 34px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1;
 }
 .subtitle {
-  margin-top: 8px;
+  margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 11px;
 }
 .content {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
-  gap: 14px;
-  padding: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
 }
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
 }
 .card {
   background: var(--panel-strong);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 9px;
 }
 .card-title {
-  font: 11px var(--mono);
-  letter-spacing: 2px;
+  font: 10px var(--mono);
+  letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--accent);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 7px;
 }
 .meta-label {
-  font: 10px var(--mono);
+  font: 9px var(--mono);
   letter-spacing: 1px;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .meta-value {
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.35;
   word-break: break-word;
 }
@@ -114,25 +114,25 @@ body {
 }
 .dep-table td {
   border-top: 1px solid rgba(255,255,255,0.06);
-  padding: 9px 0;
+  padding: 6px 0;
   vertical-align: top;
 }
 .dep-table tr:first-child td { border-top: none; }
-.dep-name { font-size: 13px; font-weight: 600; }
-.dep-version { font: 12px var(--mono); color: var(--accent); text-align: right; white-space: nowrap; }
-.dep-note { font-size: 11px; color: var(--muted); padding-top: 3px; }
+.dep-name { font-size: 11px; font-weight: 600; }
+.dep-version { font: 10px var(--mono); color: var(--accent); text-align: right; white-space: nowrap; }
+.dep-note { font-size: 10px; color: var(--muted); padding-top: 2px; }
 .dep-status {
   text-align: right;
   white-space: nowrap;
 }
 .dep-status-badge {
   display: inline-block;
-  min-width: 58px;
+  min-width: 48px;
   text-align: center;
-  padding: 5px 9px;
+  padding: 4px 7px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  font: 11px var(--mono);
+  font: 9px var(--mono);
 }
 .dep-status-badge.ok {
   color: var(--good);
@@ -146,25 +146,25 @@ body {
 }
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   margin-bottom: 10px;
 }
 .dialog-actions {
-  padding: 0 16px 16px;
+  padding: 0 8px 8px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 button {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 9px 12px;
+  border-radius: 8px;
+  padding: 7px 10px;
   background: rgba(255,255,255,0.03);
   color: var(--text);
-  font: 11px var(--mono);
+  font: 10px var(--mono);
   letter-spacing: 1px;
   cursor: pointer;
 }
@@ -176,25 +176,27 @@ button.primary {
 }
 textarea {
   width: 100%;
-  min-height: 250px;
+  height: 160px;
+  min-height: 160px;
   resize: none;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: #05080d;
   color: #d7e6fb;
-  padding: 12px;
-  font: 12px/1.45 var(--mono);
+  padding: 9px;
+  font: 10px/1.4 var(--mono);
+  overflow-y: auto;
 }
 .footer-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 7px;
+  margin-top: 7px;
 }
 .hint {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 9px;
 }
 @media (max-width: 860px) {
   .content { grid-template-columns: 1fr; }
@@ -208,7 +210,7 @@ textarea {
       <div class="kicker">// Status</div>
       <div class="hero-row">
         <div>
-          <div class="title">RigStats <span id="rigstatsVersion">--</span></div>
+          <span id="rigstatsVersion" style="display:none;">--</span>
           <div class="subtitle">Diagnostics, debug log and dependency health.</div>
         </div>
       </div>
@@ -266,7 +268,7 @@ textarea {
     <div class="dialog-actions">
       <div class="actions" style="margin-bottom: 0;">
         <button id="collectDiagBtn" title="Collect hardware info, LHM sensor data, debug log and environment details into a ZIP file for bug reports.">Collect Diagnostics…</button>
-        <span id="diagState" style="font:11px var(--mono);color:var(--muted);align-self:center;"></span>
+        <span id="diagState" style="font:9px var(--mono);color:var(--muted);align-self:center;"></span>
       </div>
       <div class="actions" style="margin-bottom: 0;">
         <button class="primary" id="refreshBtn" title="Reload diagnostics and debug log now. Updates Last Successful Refresh when the call succeeds.">Refresh</button>

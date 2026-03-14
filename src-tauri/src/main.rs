@@ -15,7 +15,7 @@ use commands::{
   append_debug_log, close_window, detect_gpu_vram_total_mb, detect_ping_target, detect_ram_details,
   detect_ram_spec, ensure_about_window, ensure_lhm_running, ensure_settings_window, ensure_status_window, get_about_info, get_cpu_info,
   collect_diagnostics, get_gpu_info, get_settings, get_stats, get_system_brand, get_system_name, log_frontend_error, on_window_event, pick_target_monitor,
-  preview_opacity, probe_wmi_status, reset_debug_log, save_settings, set_last_tray_click_position, start_window_drag, detect_model_name, detect_system_brand,
+  preview_opacity, preview_visible_panels, probe_wmi_status, reset_debug_log, save_settings, set_last_tray_click_position, start_window_drag, detect_model_name, detect_system_brand,
 };
 use settings::{load_settings, persist_settings, LEGACY_DEFAULT_MODEL_NAME};
 use stats::AppState;
@@ -186,6 +186,7 @@ fn main() {
       get_settings,
       get_about_info,
       preview_opacity,
+      preview_visible_panels,
       save_settings,
       close_window,
       start_window_drag,

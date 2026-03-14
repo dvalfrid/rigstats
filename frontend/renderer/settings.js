@@ -5,15 +5,63 @@ const valueLabel = document.getElementById('val');
 const modelNameInput = document.getElementById('modelNameInput');
 const profileSelect = document.getElementById('profileSelect');
 const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
+const panelToggles = document.getElementById('panelToggles');
 const statusEl = document.getElementById('status');
+
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
+const PANEL_LABELS = {
+  header: 'Header',
+  clock: 'Clock',
+  cpu: 'CPU',
+  gpu: 'GPU',
+  ram: 'RAM',
+  net: 'Network',
+  disk: 'Storage',
+};
 
 let original = {
   opacity: 0.55,
   modelName: '',
   dashboardProfile: 'portrait-xl',
   alwaysOnTop: false,
+  visiblePanels: [...PANEL_KEYS],
 };
 let isSaving = false;
+
+function normalizeVisiblePanels(value) {
+  const list = Array.isArray(value) ? value : [];
+  const normalized = list
+    .map((v) => String(v).trim().toLowerCase())
+    .filter((v, idx, arr) => v && PANEL_KEYS.includes(v) && arr.indexOf(v) === idx);
+  return normalized.length > 0 ? normalized : [...PANEL_KEYS];
+}
+
+function renderPanelToggles() {
+  panelToggles.innerHTML = PANEL_KEYS.map((key) => (
+    `<label class="panel-toggle" for="panel-${key}">
+      <input type="checkbox" id="panel-${key}" data-panel-key="${key}">
+      <span>${PANEL_LABELS[key]}</span>
+    </label>`
+  )).join('');
+}
+
+function getSelectedPanels() {
+  return [...panelToggles.querySelectorAll('input[data-panel-key]:checked')]
+    .map((input) => input.dataset.panelKey)
+    .filter(Boolean);
+}
+
+function applyVisiblePanelsToForm(visiblePanels) {
+  const allowed = new Set(normalizeVisiblePanels(visiblePanels));
+  panelToggles.querySelectorAll('input[data-panel-key]').forEach((input) => {
+    input.checked = allowed.has(input.dataset.panelKey);
+  });
+}
+
+async function previewVisiblePanels(visiblePanels) {
+  if (!IS_DESKTOP) return;
+  await backend.invoke('preview-visible-panels', { panels: normalizeVisiblePanels(visiblePanels) });
+}
 
 function setStatus(message, type = '') {
   statusEl.textContent = message;
@@ -26,6 +74,7 @@ function applySettings(settings) {
     modelName: settings.modelName ?? '',
     dashboardProfile: settings.dashboardProfile ?? 'portrait-xl',
     alwaysOnTop: settings.alwaysOnTop ?? false,
+    visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
   };
 
   const percentage = Math.round(original.opacity * 100);
@@ -34,6 +83,7 @@ function applySettings(settings) {
   modelNameInput.value = original.modelName;
   profileSelect.value = original.dashboardProfile;
   alwaysOnTopInput.checked = original.alwaysOnTop;
+  applyVisiblePanelsToForm(original.visiblePanels);
 }
 
 async function loadSettings() {
@@ -52,6 +102,7 @@ async function loadSettings() {
 
 async function closeWithRestore() {
   await backend.invoke('preview-opacity', { value: original.opacity });
+  await previewVisiblePanels(original.visiblePanels);
   await backend.invoke('close-window');
 }
 
@@ -66,6 +117,26 @@ slider.addEventListener('input', () => {
   }
 });
 
+panelToggles.addEventListener('change', async (event) => {
+  const input = event.target;
+  if (!input || input.tagName !== 'INPUT' || input.dataset.panelKey == null) return;
+
+  const selectedPanels = getSelectedPanels();
+  if (selectedPanels.length === 0) {
+    input.checked = true;
+    setStatus('At least one panel must remain visible.', 'status-err');
+    return;
+  }
+
+  try {
+    await previewVisiblePanels(selectedPanels);
+    setStatus('Previewing panel visibility...');
+  } catch (error) {
+    console.error('preview-visible-panels failed:', error);
+    setStatus('Could not preview panel visibility.', 'status-err');
+  }
+});
+
 document.getElementById('btnSave').addEventListener('click', async () => {
   if (!IS_DESKTOP || isSaving) return;
 
@@ -76,6 +147,15 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const modelName = modelNameInput.value.trim();
   const dashboardProfile = profileSelect.value;
   const alwaysOnTop = alwaysOnTopInput.checked;
+  const selectedPanels = getSelectedPanels();
+
+  if (selectedPanels.length === 0) {
+    setStatus('Select at least one panel.', 'status-err');
+    isSaving = false;
+    return;
+  }
+
+  const visiblePanels = normalizeVisiblePanels(selectedPanels);
 
   try {
     await backend.invoke('save-settings', {
@@ -83,9 +163,10 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       modelName,
       dashboardProfile,
       alwaysOnTop,
+      visiblePanels,
     });
 
-    original = { opacity, modelName, dashboardProfile, alwaysOnTop };
+    original = { opacity, modelName, dashboardProfile, alwaysOnTop, visiblePanels };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');
   } catch (error) {
@@ -118,4 +199,5 @@ document.addEventListener('keydown', async (event) => {
   }
 });
 
+renderPanelToggles();
 loadSettings();
