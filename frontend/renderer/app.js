@@ -8,12 +8,21 @@ import { IS_DESKTOP, backend } from './environment.js';
 import { startClock, setUptimeFromSeconds } from './clock.js';
 import { createHistory, pushHistory, drawSpark } from './spark.js';
 import { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo } from './systemInfo.js';
+import { normalizeRigBrand } from './vendorBranding.js';
 import { initCpuPanel, updateCpuPanel } from './panels/cpu.js';
 import { updateGpuPanel } from './panels/gpu.js';
 import { updateRamPanel } from './panels/ram.js';
 import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { simulateStats } from './simulator.js';
+
+const BRAND_PREVIEW_ORDER = ['rog', 'msi', 'alienware', 'razer', 'legion', 'omen', 'predator', 'aorus', 'gigabyte'];
+const BRAND_PREVIEW_ENABLED_KEY = 'rigstats.brandPreviewEnabled';
+const BRAND_PREVIEW_BRAND_KEY = 'rigstats.brandPreviewBrand';
+
+let detectedBrand = 'other';
+let detectedCpuModel = '';
+let brandPreviewEnabled = false;
 
 const PROFILE_SIZE = {
   'portrait-xl': { width: 450, height: 1920 },
@@ -65,6 +74,132 @@ function initWindowDrag() {
 const history = createHistory(80);
 let isTicking = false;
 let lastValidStats = null;
+
+function getStorageValue(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (_e) {
+    return null;
+  }
+}
+
+function setStorageValue(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch (_e) {}
+}
+
+function isBrandPreviewEnabled() {
+  return getStorageValue(BRAND_PREVIEW_ENABLED_KEY) === '1';
+}
+
+function setBrandPreviewEnabled(enabled) {
+  brandPreviewEnabled = !!enabled;
+  setStorageValue(BRAND_PREVIEW_ENABLED_KEY, brandPreviewEnabled ? '1' : '0');
+  renderBrandState();
+}
+
+function getPreviewBrand() {
+  const forced = normalizeRigBrand(getStorageValue(BRAND_PREVIEW_BRAND_KEY));
+  if (forced) return forced;
+  const fromDetected = normalizeRigBrand(detectedBrand);
+  return fromDetected || BRAND_PREVIEW_ORDER[0];
+}
+
+function setPreviewBrand(brand) {
+  const normalized = normalizeRigBrand(brand);
+  if (!normalized) return null;
+  setStorageValue(BRAND_PREVIEW_BRAND_KEY, normalized);
+  renderBrandState();
+  return normalized;
+}
+
+function stepPreviewBrand(delta) {
+  const current = getPreviewBrand();
+  const currentIndex = BRAND_PREVIEW_ORDER.indexOf(current);
+  const start = currentIndex >= 0 ? currentIndex : 0;
+  const nextIndex = (start + delta + BRAND_PREVIEW_ORDER.length) % BRAND_PREVIEW_ORDER.length;
+  return setPreviewBrand(BRAND_PREVIEW_ORDER[nextIndex]);
+}
+
+function applyBrand(brand) {
+  updateRigLogo(brand, detectedCpuModel);
+}
+
+function updateBrandPreviewIndicator(text) {
+  const badge = document.getElementById('rigBrandPreview');
+  if (!badge) return;
+
+  if (!text) {
+    badge.textContent = '';
+    badge.style.display = 'none';
+    return;
+  }
+
+  badge.textContent = text;
+  badge.style.display = '';
+}
+
+function renderBrandState() {
+  if (brandPreviewEnabled) {
+    const brand = getPreviewBrand();
+    applyBrand(brand);
+    updateBrandPreviewIndicator(`PREVIEW ${brand.toUpperCase()}  (Ctrl+Alt+N/P)`);
+    return;
+  }
+
+  applyBrand(detectedBrand);
+  updateBrandPreviewIndicator('');
+}
+
+function setupBrandPreviewControls() {
+  window.rigBrandPreview = {
+    list: () => [...BRAND_PREVIEW_ORDER],
+    current: () => ({
+      enabled: brandPreviewEnabled,
+      brand: brandPreviewEnabled ? getPreviewBrand() : normalizeRigBrand(detectedBrand) || 'other'
+    }),
+    enable: () => setBrandPreviewEnabled(true),
+    disable: () => setBrandPreviewEnabled(false),
+    toggle: () => setBrandPreviewEnabled(!brandPreviewEnabled),
+    next: () => {
+      setBrandPreviewEnabled(true);
+      return stepPreviewBrand(1);
+    },
+    prev: () => {
+      setBrandPreviewEnabled(true);
+      return stepPreviewBrand(-1);
+    },
+    set: (brand) => {
+      setBrandPreviewEnabled(true);
+      return setPreviewBrand(brand);
+    }
+  };
+
+  window.addEventListener('keydown', (event) => {
+    if (!event.ctrlKey || !event.altKey) return;
+    const key = event.key.toLowerCase();
+
+    if (key === 'b') {
+      event.preventDefault();
+      setBrandPreviewEnabled(!brandPreviewEnabled);
+      return;
+    }
+
+    if (key === 'n') {
+      event.preventDefault();
+      setBrandPreviewEnabled(true);
+      stepPreviewBrand(1);
+      return;
+    }
+
+    if (key === 'p') {
+      event.preventDefault();
+      setBrandPreviewEnabled(true);
+      stepPreviewBrand(-1);
+    }
+  });
+}
 
 function isValidStatsPayload(stats) {
   // Defensive validation: reject transient empty payloads that would reset UI.
@@ -125,9 +260,11 @@ async function tick() {
 function start() {
   applyProfile('portrait-xl');
   initWindowDrag();
+  setupBrandPreviewControls();
   initCpuPanel();
   startClock();
   setUptimeFromSeconds(0);
+  brandPreviewEnabled = isBrandPreviewEnabled();
 
   if (IS_DESKTOP) {
     backend.invoke('get-settings').then((s) => {
@@ -135,12 +272,19 @@ function start() {
       applyModelName(s.modelName);
       applyProfile(s.dashboardProfile);
     });
-    backend.invoke('get-system-brand')
-      .then(updateRigLogo)
-      .catch((e) => console.error('get-system-brand failed:', e));
+    Promise.all([
+      backend.invoke('get-system-brand').catch(() => 'other'),
+      backend.invoke('get-cpu-info').catch(() => '')
+    ]).then(([brand, cpu]) => {
+      detectedBrand = brand || 'other';
+      detectedCpuModel = cpu || '';
+      renderBrandState();
+    });
     backend.on('apply-opacity', (_event, value) => applyOpacity(value));
     backend.on('apply-model-name', (_event, name) => applyModelName(name));
     backend.on('apply-profile', (_event, profile) => applyProfile(profile));
+  } else {
+    renderBrandState();
   }
 
   updateRigName();

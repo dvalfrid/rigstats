@@ -695,6 +695,8 @@ struct VideoControllerMemory {
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
 struct ComputerSystem {
+  #[serde(rename = "Manufacturer")]
+  manufacturer: Option<String>,
   #[serde(rename = "Model")]
   model: Option<String>,
 }
@@ -706,6 +708,32 @@ struct ComputerSystemProduct {
   version: Option<String>,
   #[serde(rename = "Name")]
   name: Option<String>,
+}
+
+#[cfg(windows)]
+#[derive(Deserialize, Debug)]
+struct BaseBoardInfo {
+  #[serde(rename = "Manufacturer")]
+  manufacturer: Option<String>,
+  #[serde(rename = "Product")]
+  product: Option<String>,
+}
+
+#[cfg(windows)]
+#[derive(Deserialize, Debug, Default)]
+struct PowerShellBrandInfo {
+  #[serde(rename = "computerSystemManufacturer")]
+  computer_system_manufacturer: Option<String>,
+  #[serde(rename = "computerSystemModel")]
+  computer_system_model: Option<String>,
+  #[serde(rename = "productName")]
+  product_name: Option<String>,
+  #[serde(rename = "productVersion")]
+  product_version: Option<String>,
+  #[serde(rename = "baseBoardManufacturer")]
+  base_board_manufacturer: Option<String>,
+  #[serde(rename = "baseBoardProduct")]
+  base_board_product: Option<String>,
 }
 
 #[cfg(windows)]
@@ -740,18 +768,53 @@ fn map_memory_type(code: u16) -> Option<&'static str> {
 }
 
 #[cfg(windows)]
-fn classify_board_brand(manufacturer: &str) -> &'static str {
-  let lower = manufacturer.to_ascii_lowercase();
-  if lower.contains("asus") || lower.contains("rog") || lower.contains("republic of gamers") {
+fn classify_system_brand(fields: &[&str]) -> &'static str {
+  let normalized: Vec<String> = fields
+    .iter()
+    .map(|value| value.trim().to_ascii_lowercase())
+    .filter(|value| !value.is_empty())
+    .collect();
+
+  let has_any = |needles: &[&str]| {
+    normalized
+      .iter()
+      .any(|value| needles.iter().any(|needle| value.contains(needle)))
+  };
+
+  if has_any(&["alienware"]) {
+    "alienware"
+  } else if has_any(&["razer"]) {
+    "razer"
+  } else if has_any(&["legion"]) {
+    "legion"
+  } else if has_any(&["omen"]) {
+    "omen"
+  } else if has_any(&["predator"]) {
+    "predator"
+  } else if has_any(&["aorus"]) {
+    "aorus"
+  } else if has_any(&["asus", "rog", "republic of gamers"]) {
     "rog"
-  } else if lower.contains("msi") || lower.contains("micro-star") || lower.contains("micro star") {
+  } else if has_any(&["msi", "micro-star", "micro star"]) {
     "msi"
-  } else if lower.contains("gigabyte") {
+  } else if has_any(&["gigabyte"]) {
     "gigabyte"
-  } else if lower.contains("asrock") {
+  } else if has_any(&["asrock"]) {
     "asrock"
-  } else if lower.contains("intel") {
+  } else if has_any(&["corsair"]) {
+    "corsair"
+  } else if has_any(&["nzxt"]) {
+    "nzxt"
+  } else if has_any(&["intel"]) {
     "intel"
+  } else if has_any(&["dell"]) {
+    "dell"
+  } else if has_any(&["lenovo"]) {
+    "lenovo"
+  } else if has_any(&["hewlett-packard", "hp ", " hp", "hp-"]) {
+    "hp"
+  } else if has_any(&["acer"]) {
+    "acer"
   } else {
     "other"
   }
@@ -760,44 +823,79 @@ fn classify_board_brand(manufacturer: &str) -> &'static str {
 pub fn detect_system_brand() -> String {
   #[cfg(windows)]
   {
-    // Try WMI first (no subprocess overhead).
-    // raw_query() lets us specify the class name explicitly in WQL, avoiding
-    // the limitation where the wmi crate derives the class name from the
-    // Rust struct name.
     if let Ok(com) = wmi::COMLibrary::new() {
       if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
-        #[derive(Deserialize)]
-        struct Row {
-          #[serde(rename = "Manufacturer")]
-          manufacturer: Option<String>,
-        }
-        let rows: Vec<Row> = conn
-          .raw_query("SELECT Manufacturer FROM Win32_BaseBoard")
-          .ok()
-          .unwrap_or_default();
-        if let Some(mfr) = rows.iter().filter_map(|r| r.manufacturer.as_deref()).next() {
-          if !mfr.trim().is_empty() {
-            return classify_board_brand(mfr).to_string();
+        let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
+        let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
+        let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
+
+        let mut fields = Vec::new();
+        if let Some(system) = systems.first() {
+          if let Some(value) = system.manufacturer.as_deref() {
+            fields.push(value);
           }
+          if let Some(value) = system.model.as_deref() {
+            fields.push(value);
+          }
+        }
+        if let Some(product) = products.first() {
+          if let Some(value) = product.name.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = product.version.as_deref() {
+            fields.push(value);
+          }
+        }
+        if let Some(board) = boards.first() {
+          if let Some(value) = board.manufacturer.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = board.product.as_deref() {
+            fields.push(value);
+          }
+        }
+
+        if !fields.is_empty() {
+          return classify_system_brand(&fields).to_string();
         }
       }
     }
 
-    // PowerShell fallback — always available on Windows 10/11.
     let output = run_hidden_command(
       "powershell",
       &[
         "-NoProfile",
         "-Command",
-        "Get-CimInstance Win32_BaseBoard | Select-Object -ExpandProperty Manufacturer | Out-String",
+        "$cs = Get-CimInstance Win32_ComputerSystem; $csp = Get-CimInstance Win32_ComputerSystemProduct; $bb = Get-CimInstance Win32_BaseBoard; [pscustomobject]@{ computerSystemManufacturer = $cs.Manufacturer; computerSystemModel = $cs.Model; productName = $csp.Name; productVersion = $csp.Version; baseBoardManufacturer = $bb.Manufacturer; baseBoardProduct = $bb.Product } | ConvertTo-Json -Compress",
       ],
     );
 
     if let Ok(out) = output {
       if out.status.success() {
-        let mfr = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !mfr.is_empty() {
-          return classify_board_brand(&mfr).to_string();
+        let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if let Ok(info) = serde_json::from_str::<PowerShellBrandInfo>(&raw) {
+          let mut fields = Vec::new();
+          if let Some(value) = info.computer_system_manufacturer.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = info.computer_system_model.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = info.product_name.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = info.product_version.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = info.base_board_manufacturer.as_deref() {
+            fields.push(value);
+          }
+          if let Some(value) = info.base_board_product.as_deref() {
+            fields.push(value);
+          }
+          if !fields.is_empty() {
+            return classify_system_brand(&fields).to_string();
+          }
         }
       }
     }
@@ -1581,26 +1679,34 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
 
 #[cfg(all(test, windows))]
 mod tests {
-  use super::classify_board_brand;
+  use super::classify_system_brand;
 
   #[test]
-  fn classify_board_brand_recognizes_rog_aliases() {
-    assert_eq!(classify_board_brand("ASUSTeK COMPUTER INC."), "rog");
-    assert_eq!(classify_board_brand("Republic of Gamers"), "rog");
+  fn classify_system_brand_recognizes_rog_aliases() {
+    assert_eq!(classify_system_brand(&["ASUSTeK COMPUTER INC."]), "rog");
+    assert_eq!(classify_system_brand(&["Republic of Gamers"]), "rog");
   }
 
   #[test]
-  fn classify_board_brand_recognizes_msi() {
-    assert_eq!(classify_board_brand("Micro-Star International Co., Ltd"), "msi");
+  fn classify_system_brand_recognizes_product_lines_before_oem() {
+    assert_eq!(classify_system_brand(&["Dell Inc.", "Alienware Aurora R16"]), "alienware");
+    assert_eq!(classify_system_brand(&["LENOVO", "Legion T7 34IRZ8"]), "legion");
+    assert_eq!(classify_system_brand(&["HP", "OMEN 45L Desktop GT22"]), "omen");
+    assert_eq!(classify_system_brand(&["Acer", "Predator Orion 7000"]), "predator");
+    assert_eq!(classify_system_brand(&["Gigabyte Technology Co., Ltd.", "AORUS MODEL X"]), "aorus");
   }
 
   #[test]
-  fn classify_board_brand_recognizes_gigabyte() {
-    assert_eq!(classify_board_brand("Gigabyte Technology Co., Ltd."), "gigabyte");
+  fn classify_system_brand_recognizes_oem_brands() {
+    assert_eq!(classify_system_brand(&["Micro-Star International Co., Ltd"]), "msi");
+    assert_eq!(classify_system_brand(&["Gigabyte Technology Co., Ltd."]), "gigabyte");
+    assert_eq!(classify_system_brand(&["Razer"]), "razer");
+    assert_eq!(classify_system_brand(&["NZXT"]), "nzxt");
+    assert_eq!(classify_system_brand(&["Corsair"]), "corsair");
   }
 
   #[test]
-  fn classify_board_brand_falls_back_to_other() {
-    assert_eq!(classify_board_brand("Some Unknown Vendor"), "other");
+  fn classify_system_brand_falls_back_to_other() {
+    assert_eq!(classify_system_brand(&["Some Unknown Vendor"]), "other");
   }
 }

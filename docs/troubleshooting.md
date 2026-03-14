@@ -28,6 +28,43 @@ CPU data comes from `sysinfo` regardless of vendor.
 
 For NVIDIA GPUs, LHM works as well. If labels differ on your machine, adjust the GPU sensor matching in `src-tauri/src/lhm.rs`.
 
+## How Do I Inspect Real WMI Strings?
+
+Use PowerShell and capture these values from the actual machine:
+
+```powershell
+Get-CimInstance Win32_ComputerSystem |
+  Select-Object Manufacturer, Model |
+  Format-List
+
+Get-CimInstance Win32_ComputerSystemProduct |
+  Select-Object Name, Version |
+  Format-List
+
+Get-CimInstance Win32_BaseBoard |
+  Select-Object Manufacturer, Product |
+  Format-List
+```
+
+If you want one copy-paste friendly block for support/debugging, run:
+
+```powershell
+$cs = Get-CimInstance Win32_ComputerSystem
+$csp = Get-CimInstance Win32_ComputerSystemProduct
+$bb = Get-CimInstance Win32_BaseBoard
+
+[pscustomobject]@{
+  ComputerSystemManufacturer = $cs.Manufacturer
+  ComputerSystemModel = $cs.Model
+  ProductName = $csp.Name
+  ProductVersion = $csp.Version
+  BaseBoardManufacturer = $bb.Manufacturer
+  BaseBoardProduct = $bb.Product
+} | Format-List
+```
+
+Those six fields are the ones RigStats now uses to classify the system brand, with product-line names like `Alienware`, `Legion`, `OMEN`, `Predator`, and `AORUS` taking priority over the generic OEM name.
+
 ## How Do I Update The UI Without Rebuilding?
 
 Edit files under `frontend/` and run:

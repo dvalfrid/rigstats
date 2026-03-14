@@ -2,7 +2,7 @@
 // These functions populate static header labels (rig name, CPU model, GPU model).
 
 import { IS_DESKTOP, backend } from './environment.js';
-import { resolveVendorBadge, resolveRigLogo } from './vendorBranding.js';
+import { resolveArchLogo, resolveVendorBadge, resolveRigLogo } from './vendorBranding.js';
 
 function getForcedModel(kind) {
   const key = kind === 'cpu' ? 'rigstats.testCpuModel' : 'rigstats.testGpuModel';
@@ -97,21 +97,35 @@ async function updateGpuModel() {
   if (badge) badge.style.display = 'none';
 }
 
-// Show or hide the header logo based on the detected system board brand.
-// Logo is visible by default in HTML; this remaps known board brands.
-function updateRigLogo(brand) {
+// Fallback chain:
+// 1. Recognised brand with logo image.
+// 2. CPU architecture (Intel / AMD) logo derived from CPU model string.
+// 3. Nothing — both elements hidden.
+function updateRigLogo(brand, cpuModel) {
   const logo = document.getElementById('rigLogo');
-  if (!logo) return;
+  const brandText = document.getElementById('rigBrandText');
+  if (!logo || !brandText) return;
 
   const logoInfo = resolveRigLogo(brand);
-  if (!logoInfo) {
-    logo.style.display = 'none';
+  if (logoInfo) {
+    logo.src = logoInfo.src;
+    logo.alt = logoInfo.alt;
+    logo.style.display = '';
+    brandText.style.display = 'none';
     return;
   }
 
-  logo.src = logoInfo.src;
-  logo.alt = logoInfo.alt;
-  logo.style.display = '';
+  const archLogo = resolveArchLogo(cpuModel);
+  if (archLogo) {
+    logo.src = archLogo.src;
+    logo.alt = archLogo.alt;
+    logo.style.display = '';
+    brandText.style.display = 'none';
+    return;
+  }
+
+  logo.style.display = 'none';
+  brandText.style.display = 'none';
 }
 
 export { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo };

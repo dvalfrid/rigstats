@@ -80,7 +80,10 @@ body::after {
 .rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
 .rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .rig-name{font-size:44px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
-.rig-logo{height:165px;width:auto;object-fit:contain;opacity:0.85;flex-shrink:0;}
+.rig-brand-preview{display:none;margin-top:7px;padding:3px 8px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.12);font-family:var(--mono);font-size:10px;letter-spacing:1px;color:#dff7ff;text-transform:uppercase;width:max-content;line-height:1.25;}
+.rig-brand-mark{display:flex;align-items:center;justify-content:center;width:165px;height:165px;flex-shrink:0;}
+.rig-logo{width:165px;height:165px;object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
+.rig-brand-text{display:none;padding:14px 18px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.08);box-shadow:inset 0 0 18px rgba(0,200,255,.08);font-family:var(--mono);font-size:28px;letter-spacing:3px;color:#dff7ff;text-transform:uppercase;text-align:center;line-height:1.15;max-width:165px;}
 .rig-sub{font-family:var(--mono);font-size:10px;color:#6f8db7;line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
@@ -167,10 +170,14 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <div class="rig-header-row">
       <div>
         <div class="rig-label">// GAMING RIG</div>
+        <div id="rigBrandPreview" class="rig-brand-preview"></div>
         <div class="rig-name"><span id="rigName">--</span><br><span id="modelName" style="color:var(--accent);font-size:28px;">--</span></div>
         <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
       </div>
-      <img id="rigLogo" class="rig-logo" src="./assets/ROG_logo_red.png" alt="ROG">
+      <div class="rig-brand-mark" aria-hidden="true">
+        <img id="rigLogo" class="rig-logo" src="./assets/ROG_logo_red.png" alt="ROG">
+        <div id="rigBrandText" class="rig-brand-text"></div>
+      </div>
     </div>
   </div>
 
