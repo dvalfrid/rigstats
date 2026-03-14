@@ -68,6 +68,15 @@ It runs when a GitHub Release is published and:
 - builds installers
 - uploads `.exe` and `.msi` to that published release
 
+Manual run option:
+
+1. Open GitHub -> Actions -> `Release`
+2. Click `Run workflow`
+3. Enter the existing tag (for example `v1.0.0`)
+4. Run
+
+This rebuilds installers for that tag and attaches them to the same release.
+
 ## Commit Style (Important)
 
 For best changelog quality, use Conventional Commits, for example:

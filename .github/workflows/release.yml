@@ -4,6 +4,12 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and attach installers to (for example v1.0.0)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,10 +22,14 @@ jobs:
   release:
     name: Build And Publish Release (Windows)
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -47,7 +57,7 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ env.RELEASE_TAG }}
           fail_on_unmatched_files: true
           files: |
             src-tauri/target/release/bundle/nsis/*.exe
