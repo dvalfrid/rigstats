@@ -1,29 +1,100 @@
 # RigStats (rig-dashboard)
 
-<table>
-  <tr>
-    <td valign="top">
-      <p>A gaming stats dashboard optimized for a vertical secondary display (450×1920).</p>
-      <p>Shows CPU, GPU, RAM, network, and disk in real time.</p>
-      <p>Computer name, CPU model, and GPU model are detected automatically at startup.</p>
-      <p>Display sleep is not currently blocked by the app.</p>
-    </td>
-    <td valign="top" align="right">
-      <img src="assets/demo_1.png" alt="RigStats Demo" width="180">
-    </td>
-  </tr>
-</table>
+- A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
----
+- Shows CPU, GPU, RAM, network, and disk in real time.
+
+- Computer name, CPU model, and GPU model are detected automatically at startup.
 
 ## Overview
 
 RigStats is a Windows desktop dashboard built with Tauri v2. It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
 
+## Screens
+
+### Main Dashboard
+
+![Main Dashboard](assets/demo_1.png)
+
+The main dashboard is designed for a vertical secondary display and keeps the live system view visible at a glance.
+
+It shows:
+
+- CPU load, clocks, temperature and power
+- GPU load, temperature, hotspot, clocks, VRAM and fan data
+- RAM usage and installed memory details
+- Network throughput and ping
+- Disk activity and drive usage
+
+From here you can:
+
+- monitor the machine continuously on a portrait side display
+- keep the app hidden to the tray when not needed
+- open the tray menu for `Settings`, `Status`, and `About`
+
+### Status Dialog
+
+![Status Dialog](assets/status.png)
+
+The Status dialog is the diagnostics view for runtime health and backend troubleshooting.
+
+It shows:
+
+- scheduled task information for LibreHardwareMonitor
+- dependency health for LibreHardwareMonitor, `sysinfo`, and `wmi`
+- the current debug log path
+- the latest debug log output
+- the timestamp for the last successful refresh
+
+From here you can:
+
+- confirm that sensor dependencies are healthy
+- inspect startup/runtime issues without opening external tools
+- copy the visible debug log for troubleshooting
+- refresh diagnostics on demand while the log also auto-updates in the dialog
+
+### About Dialog
+
+![About Dialog](assets/about.png)
+
+The About dialog is the lightweight product-information view.
+
+It shows:
+
+- the current RigStats version
+- the project license name
+- direct links to GitHub and contact
+
+From here you can:
+
+- quickly verify which build/version is running
+- open the repository page
+- contact the maintainer directly
+
+### Settings Dialog
+
+![Settings Dialog](assets/Settings.png)
+
+The Settings dialog controls the dashboard presentation and placement behavior.
+
+It shows:
+
+- opacity slider for transparency control
+- editable model name
+- display profile selector
+- always-on-top toggle
+
+From here you can:
+
+- change the dashboard profile for different portrait displays
+- adjust transparency live before saving
+- override the displayed model name
+- control whether the main dashboard stays on top
+
 ## Stack
 
 | Component | Role |
-|---|---|
+| --- | --- |
 | **Tauri v2** | App framework (native window, IPC, system tray) |
 | **Rust / sysinfo** | CPU, RAM, disk, network data |
 | **LibreHardwareMonitor** | GPU/CPU sensors, disk/network throughput |
@@ -45,7 +116,7 @@ RigStats is a Windows desktop dashboard built with Tauri v2. It targets a vertic
    npm start
    ```
 
-3. Build installers:
+3. Build installer:
 
    ```powershell
    npm run build

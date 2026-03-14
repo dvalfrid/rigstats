@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    name: Build Installers (Windows)
+    name: Build Installer (Windows)
     runs-on: windows-latest
 
     steps:
@@ -42,7 +42,7 @@ jobs:
       - name: Run verification
         run: npm run verify
 
-      - name: Build installers
+      - name: Build installer
         run: npm run build
 
       - name: Upload NSIS installer

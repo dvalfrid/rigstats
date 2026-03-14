@@ -37,7 +37,6 @@ const LICENSE_NAME: &str = "MIT";
 const LHM_VERSION: &str = "v0.9.6";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
-const LICENSE_TEXT: &str = include_str!("../../LICENSE");
 
 #[cfg(windows)]
 const LHM_TASK_NAMES: [&str; 2] = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
@@ -58,8 +57,6 @@ pub struct AboutInfo {
   pub rigstats_version: String,
   pub github_url: String,
   pub license_name: String,
-  pub license_url: String,
-  pub license_text: String,
   pub contact_email: String,
   pub log_path: String,
   pub log_tail: String,
@@ -262,8 +259,6 @@ pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) 
     rigstats_version: env!("CARGO_PKG_VERSION").to_string(),
     github_url: GITHUB_URL.to_string(),
     license_name: LICENSE_NAME.to_string(),
-    license_url: format!("{}/blob/main/LICENSE", GITHUB_URL),
-    license_text: LICENSE_TEXT.to_string(),
     contact_email: CONTACT_EMAIL.to_string(),
     log_path: log_path.display().to_string(),
     log_tail: read_debug_log_tail(&app, 160),

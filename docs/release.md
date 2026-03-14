@@ -35,7 +35,7 @@ Use it by either:
 1. pushing to `main`, or
 2. running it manually from GitHub Actions -> Build -> Run workflow
 
-After completion, download installers from the workflow run's Artifacts section.
+After completion, download the installer from the workflow run's Artifacts section.
 
 ## Automated Changelog + Versioning
 
@@ -74,7 +74,7 @@ Manual run option:
 3. Enter the existing tag (for example `v1.0.0`)
 4. Run
 
-This rebuilds installers for that tag and attaches them to the same release.
+This rebuilds the installer for that tag and attaches it to the same release.
 
 ## Commit Style (Important)
 
@@ -90,7 +90,7 @@ For best changelog quality, use Conventional Commits, for example:
 1. Develop normally and merge PRs to `main`.
 2. Release Please keeps one release PR updated automatically.
 3. When you want to release, merge that release PR.
-4. GitHub will create the new tag/release and the release workflow will attach installers.
+4. GitHub will create the new tag/release and the release workflow will attach the installer.
 
 The bundled LHM version is pinned in `build/prepare-lhm.ps1` (currently `v0.9.6`).
 

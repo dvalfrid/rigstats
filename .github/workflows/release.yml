@@ -51,7 +51,7 @@ jobs:
       - name: Run verification
         run: npm run verify
 
-      - name: Build installers
+      - name: Build installer
         run: npm run build
 
       - name: Publish GitHub release
