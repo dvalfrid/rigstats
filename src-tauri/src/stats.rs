@@ -77,6 +77,8 @@ pub struct StatsPayload {
 }
 
 pub struct AppState {
+  /// Reused HTTP client for LHM polling — avoids allocating a new connection pool every tick.
+  pub lhm_client: reqwest::Client,
   /// Persisted UI preferences mirrored in memory for fast reads.
   pub settings: Mutex<Settings>,
   /// Reused sysinfo collector to avoid reallocating sensors every tick.

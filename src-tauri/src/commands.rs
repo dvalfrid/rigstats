@@ -1350,7 +1350,7 @@ pub fn get_gpu_info() -> Option<String> {
 #[tauri::command]
 pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
-  let lhm_fresh = fetch_lhm().await;
+  let lhm_fresh = fetch_lhm(&state.lhm_client).await;
   let lhm = {
     let mut last_lhm = state.last_lhm.lock().unwrap_or_else(|e| {
       append_debug_log(&app, "stats: last_lhm mutex poisoned; recovering guard");

@@ -300,9 +300,13 @@ function start() {
       detectedCpuModel = cpu || '';
       renderBrandState();
     });
-    backend.on('apply-opacity', (_event, value) => applyOpacity(value));
-    backend.on('apply-model-name', (_event, name) => applyModelName(name));
-    backend.on('apply-profile', (_event, profile) => applyProfile(profile));
+    Promise.all([
+      backend.on('apply-opacity', (_event, value) => applyOpacity(value)),
+      backend.on('apply-model-name', (_event, name) => applyModelName(name)),
+      backend.on('apply-profile', (_event, profile) => applyProfile(profile)),
+    ]).then((unlisteners) => {
+      window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));
+    });
   } else {
     renderBrandState();
   }

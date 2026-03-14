@@ -26,6 +26,7 @@ use tauri::{
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
   AppHandle, Manager, RunEvent,
 };
+use reqwest;
 
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_SETTINGS_ID: &str = "settings";
@@ -146,6 +147,10 @@ fn main() {
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
+        lhm_client: reqwest::Client::builder()
+          .timeout(std::time::Duration::from_millis(800))
+          .build()
+          .unwrap_or_default(),
         settings: Mutex::new(settings),
         system: Mutex::new(system),
         disks: Mutex::new(Disks::new_with_refreshed_list()),

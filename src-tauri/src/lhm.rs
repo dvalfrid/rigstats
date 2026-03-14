@@ -178,13 +178,8 @@ fn parse_lhm(data: &Value) -> LhmData {
   }
 }
 
-pub async fn fetch_lhm() -> Option<LhmData> {
+pub async fn fetch_lhm(client: &reqwest::Client) -> Option<LhmData> {
   // Keep timeout short so stats polling remains responsive even if LHM is down.
-  let client = reqwest::Client::builder()
-    .timeout(std::time::Duration::from_millis(800))
-    .build()
-    .ok()?;
-
   let response = client.get("http://localhost:8085/data.json").send().await.ok()?;
   let json: Value = response.json().await.ok()?;
   Some(parse_lhm(&json))
