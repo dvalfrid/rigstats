@@ -59,6 +59,7 @@ RigStats is a Windows desktop dashboard built with Tauri v2. It targets a vertic
 - [Release And CI](docs/release.md)
 - [Architecture](docs/architecture.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Changelog](CHANGELOG.md)
 
 ## Notes
 

@@ -38,36 +38,50 @@ Use it by either:
 
 After completion, download installers from the workflow run's Artifacts section.
 
-## GitHub Releases
+## Automated Changelog + Versioning
 
-The repository includes `.github/workflows/release.yml`.
+The repository now uses Release Please:
 
-It runs when you push a tag matching `v*`, for example `v1.0.0`.
+- Workflow: `.github/workflows/release-please.yml`
+- Config: `release-please-config.json`
+- Version manifest: `.release-please-manifest.json`
 
-The workflow:
+What it does:
+
+- reads commits on `main`
+- opens/updates a release PR
+- updates `CHANGELOG.md`
+- bumps versions in:
+  - `package.json`
+  - `src-tauri/Cargo.toml`
+  - `src-tauri/tauri.conf.json`
+- when the release PR is merged, it creates tag + GitHub Release automatically
+
+## Release Assets
+
+Installer publishing is handled by `.github/workflows/release.yml`.
+
+It runs when a GitHub Release is published and:
 
 - runs verification
-- downloads and bundles the pinned LibreHardwareMonitor release as part of `npm run build`
-- builds the installers
-- creates a GitHub Release
-- attaches `.exe` and `.msi` files to the release
+- downloads and bundles pinned LibreHardwareMonitor via build scripts
+- builds installers
+- uploads `.exe` and `.msi` to that published release
 
-The bundled LHM version is currently pinned to `v0.9.6` via `build/prepare-lhm.ps1`.
-`vendor/` stays ignored in git, so GitHub builds remain deterministic without checking the binaries into the repository.
+## Commit Style (Important)
 
-Recommended release flow:
+For best changelog quality, use Conventional Commits, for example:
 
-1. Update versions in these files so they all match:
-   - `package.json`
-   - `src-tauri/Cargo.toml`
-   - `src-tauri/tauri.conf.json`
-2. Commit and push to `main`
-3. Create and push a tag:
+- `feat: add manual GPU sensor override`
+- `fix: handle missing LHM network throughput`
+- `docs: update release instructions`
+- `chore: bump vitest`
 
-   ```powershell
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
+## Day-To-Day Process (Simple)
 
-4. Wait for the Release workflow to complete
-5. Edit release notes on GitHub if you want to expand on the generated notes
+1. Develop normally and merge PRs to `main`.
+2. Release Please keeps one release PR updated automatically.
+3. When you want to release, merge that release PR.
+4. GitHub will create the new tag/release and the release workflow will attach installers.
+
+The bundled LHM version is pinned in `build/prepare-lhm.ps1` (currently `v0.9.6`).
