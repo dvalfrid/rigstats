@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## 1.0.0 (2026-03-14)
+
+
+### Miscellaneous Chores
+
+* bootstrap first release ([9b40fc4](https://github.com/dvalfrid/rigstats/commit/9b40fc4a5e893cd57d1d710a2dfb54877b9b99e8))
+
 ## [Unreleased]
 
 ### Added
@@ -29,4 +36,3 @@ This project follows Semantic Versioning:
 ### Removed
 
 - None.
-

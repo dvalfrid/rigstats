@@ -13,7 +13,10 @@
     "withGlobalTauri": true,
     "security": {
       "csp": null,
-      "capabilities": ["main-window", "settings-window"]
+      "capabilities": [
+        "main-window",
+        "settings-window"
+      ]
     },
     "windows": [
       {
@@ -34,7 +37,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
     "icon": [
       "../assets/icon.ico",
       "../assets/tray.png"
