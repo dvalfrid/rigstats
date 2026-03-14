@@ -78,14 +78,6 @@ function isValidStatsPayload(stats) {
 function applyStats(stats) {
   if (!stats) return;
 
-  const lhmStatus = document.getElementById('lhmStatus');
-  if (lhmStatus) {
-    const connected = Boolean(stats.lhmConnected);
-    lhmStatus.textContent = connected ? 'LHM: connected (port 8085)' : 'LHM: not connected';
-    lhmStatus.classList.toggle('online', connected);
-    lhmStatus.classList.toggle('offline', !connected);
-  }
-
   updateCpuPanel(stats.cpu, history, pushHistory);
   updateGpuPanel(stats.gpu, history, pushHistory);
   updateRamPanel(stats.ram, history, pushHistory);

@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "about-window",
+  "description": "Capability for the About window.",
+  "windows": ["about"],
+  "permissions": [
+    "allow-get-about-info",
+    "allow-close-window"
+  ]
+}

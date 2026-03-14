@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>About RigStats</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #090c12;
+  --panel: rgba(16, 22, 34, 0.94);
+  --panel-strong: rgba(10, 16, 28, 0.98);
+  --border: rgba(64, 90, 128, 0.3);
+  --accent: #00c8ff;
+  --good: #39ff88;
+  --warn: #ff8b5b;
+  --text: #d7e6fb;
+  --muted: #89a4ca;
+  --mono: Consolas, "SFMono-Regular", monospace;
+  --sans: "Segoe UI", sans-serif;
+}
+body {
+  background:
+    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  padding: 18px;
+}
+.shell {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+.hero {
+  padding: 18px 20px 14px;
+  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
+  border-bottom: 1px solid var(--border);
+}
+.kicker {
+  font: 11px var(--mono);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.hero-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+.title {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+}
+.subtitle {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.status-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font: 12px var(--mono);
+  white-space: nowrap;
+}
+.status-pill.online { color: var(--good); }
+.status-pill.offline { color: var(--warn); }
+.content {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 14px;
+  padding: 16px;
+}
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+.card-title {
+  font: 11px var(--mono);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.meta-label {
+  font: 10px var(--mono);
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.meta-value {
+  font-size: 14px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.link-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.link-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.link-item {
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.02);
+}
+.link-item:hover { border-color: rgba(0, 200, 255, 0.45); }
+.dep-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dep-table td {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 9px 0;
+  vertical-align: top;
+}
+.dep-table tr:first-child td { border-top: none; }
+.dep-name { font-size: 13px; font-weight: 600; }
+.dep-version { font: 12px var(--mono); color: var(--accent); text-align: right; white-space: nowrap; }
+.dep-note { font-size: 11px; color: var(--muted); padding-top: 3px; }
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.dialog-actions {
+  padding: 0 16px 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  font: 11px var(--mono);
+  letter-spacing: 1px;
+  cursor: pointer;
+}
+button.primary {
+  background: var(--accent);
+  color: #001018;
+  border-color: transparent;
+  font-weight: 700;
+}
+textarea {
+  width: 100%;
+  min-height: 250px;
+  resize: none;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #05080d;
+  color: #d7e6fb;
+  padding: 12px;
+  font: 12px/1.45 var(--mono);
+}
+.footer-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 860px) {
+  .content { grid-template-columns: 1fr; }
+  .hero-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+  <div class="shell">
+    <div class="hero">
+      <div class="kicker">// About</div>
+      <div class="hero-row">
+        <div>
+          <div class="title">RigStats <span id="rigstatsVersion">--</span></div>
+          <div class="subtitle">Links, license and contact details.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="stack">
+        <div class="card">
+          <div class="card-title">App Details</div>
+          <div class="meta-grid">
+            <div>
+              <div class="meta-label">Version</div>
+              <div class="meta-value" id="rigstatsVersionMeta">--</div>
+            </div>
+            <div>
+              <div class="meta-label">License</div>
+              <div class="meta-value" id="licenseName">--</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="card">
+          <div class="card-title">Links</div>
+          <div class="link-list">
+            <div class="link-group">
+              <div class="meta-label">GitHub</div>
+              <a id="githubLink" class="link-item" href="#" target="_blank" rel="noopener noreferrer">--</a>
+            </div>
+            <div class="link-group">
+              <div class="meta-label">Contact</div>
+              <a id="emailLink" class="link-item" href="#">--</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <div class="actions" style="margin-bottom: 0;">
+        <button class="primary" id="refreshBtn" title="Reload app version, license and contact information from the backend.">Refresh</button>
+        <button id="closeBtn" title="Close the About dialog.">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./renderer/about.js"></script>
+</body>
+</html>

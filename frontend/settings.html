@@ -2,29 +2,71 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #090c12;
+  --panel: rgba(16, 22, 34, 0.94);
+  --panel-strong: rgba(10, 16, 28, 0.98);
+  --border: rgba(64, 90, 128, 0.3);
+  --accent: #00c8ff;
+  --good: #39ff88;
+  --warn: #ff6b6b;
+  --text: #d7e6fb;
+  --muted: #89a4ca;
+  --mono: Consolas, "SFMono-Regular", monospace;
+  --sans: "Segoe UI", sans-serif;
+}
 body {
-  background: #0b0d12;
-  color: #b8cce8;
-  font-family: 'Segoe UI', sans-serif;
-  padding: 16px 20px 14px;
-  border: 1px solid #1e2a40;
+  background:
+    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
+    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  padding: 14px;
   user-select: none;
 }
-.title {
-  font-family: monospace;
-  font-size: 10px;
-  color: #00c8ff;
+.shell {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+.hero {
+  padding: 14px 16px 12px;
+  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
+  border-bottom: 1px solid var(--border);
+}
+.kicker {
+  font: 11px var(--mono);
   letter-spacing: 3px;
   text-transform: uppercase;
-  margin-bottom: 14px;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.subtitle {
+  color: var(--muted);
+  font-size: 12px;
+}
+.content {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.card {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
 }
 .section-label {
-  font-family: monospace;
-  font-size: 9px;
-  color: #6f8db7;
+  font: 10px var(--mono);
+  color: var(--muted);
   letter-spacing: 2px;
   text-transform: uppercase;
   margin-bottom: 6px;
@@ -54,9 +96,9 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: 0 0 6px rgba(0,200,255,0.6);
 }
 .value {
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 13px;
-  color: #fff;
+  color: var(--text);
   width: 38px;
   text-align: right;
   flex-shrink: 0;
@@ -65,40 +107,37 @@ input[type=range]::-webkit-slider-thumb {
   display: flex;
   justify-content: space-between;
   margin-top: 6px;
-  margin-bottom: 16px;
   font-size: 9px;
-  color: #6f8db7;
+  color: var(--muted);
   letter-spacing: 1px;
 }
 input[type=text] {
   width: 100%;
   background: #141820;
-  border: 1px solid #1e2a40;
-  border-radius: 4px;
-  color: #fff;
-  font-family: monospace;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
   font-size: 13px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   outline: none;
-  margin-bottom: 16px;
   user-select: text;
   -webkit-app-region: no-drag;
 }
-input[type=text]:focus { border-color: #00c8ff; }
+input[type=text]:focus { border-color: rgba(0, 200, 255, 0.45); }
 select {
   width: 100%;
   background: #141820;
-  border: 1px solid #1e2a40;
-  border-radius: 4px;
-  color: #fff;
-  font-family: monospace;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--mono);
   font-size: 12px;
-  padding: 7px 8px;
+  padding: 8px 10px;
   outline: none;
-  margin-bottom: 16px;
   -webkit-app-region: no-drag;
 }
-select:focus { border-color: #00c8ff; }
+select:focus { border-color: rgba(0, 200, 255, 0.45); }
 .btn-row {
   display: flex;
   gap: 8px;
@@ -108,16 +147,15 @@ select:focus { border-color: #00c8ff; }
   align-items: center;
   justify-content: space-between;
   background: #141820;
-  border: 1px solid #1e2a40;
-  border-radius: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   padding: 8px 10px;
-  margin-bottom: 16px;
 }
 .toggle-label {
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 1px;
-  color: #fff;
+  color: var(--text);
 }
 .toggle-input {
   width: 16px;
@@ -127,65 +165,81 @@ select:focus { border-color: #00c8ff; }
 }
 button {
   flex: 1;
-  padding: 7px 0;
-  border: none;
-  border-radius: 4px;
-  font-family: monospace;
+  padding: 9px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-family: var(--mono);
   font-size: 11px;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
   text-transform: uppercase;
   cursor: pointer;
 }
-.btn-save { background: #00c8ff; color: #000; font-weight: 700; }
+.btn-save { background: var(--accent); color: #001018; border-color: transparent; font-weight: 700; }
 .btn-save:hover { background: #33d4ff; }
-.btn-cancel { background: #1e2a40; color: #b8cce8; }
-.btn-cancel:hover { background: #263450; }
+.btn-cancel { background: rgba(255,255,255,0.03); color: var(--text); }
+.btn-cancel:hover { border-color: rgba(0, 200, 255, 0.45); }
 .status {
-  margin-top: 8px;
-  font-family: monospace;
+  font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 1px;
   min-height: 14px;
 }
-.status-ok { color: #39ff88; }
-.status-err { color: #ff6b6b; }
+.status-ok { color: var(--good); }
+.status-err { color: var(--warn); }
 </style>
 </head>
 <body>
-<div class="title">// Config</div>
+<div class="shell">
+  <div class="hero">
+    <div class="kicker">// Settings</div>
+    <div class="subtitle">Dashboard preferences and window behavior.</div>
+  </div>
 
-<div class="section-label">Opacity</div>
-<div class="row">
-  <input type="range" id="slider" min="0" max="100" value="55" step="1">
-  <span class="value" id="val">55%</span>
+  <div class="content">
+    <div class="card">
+      <div class="section-label">Opacity</div>
+      <div class="row">
+        <input type="range" id="slider" min="0" max="100" value="55" step="1">
+        <span class="value" id="val">55%</span>
+      </div>
+      <div class="labels">
+        <span>TRANSPARENT</span>
+        <span>SOLID</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="section-label">Model Name</div>
+      <input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
+    </div>
+
+    <div class="card">
+      <div class="section-label">Display Profile</div>
+      <select id="profileSelect">
+        <option value="portrait-xl">Portrait XL (450x1920)</option>
+        <option value="portrait-slim">Portrait Slim (480x1920)</option>
+        <option value="portrait-hd">Portrait HD (720x1280)</option>
+        <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="section-label">Window</div>
+      <label class="toggle-row" for="alwaysOnTopInput">
+        <span class="toggle-label">Always On Top</span>
+        <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
+      </label>
+    </div>
+
+    <div class="card">
+      <div class="btn-row">
+        <button class="btn-save" id="btnSave">Save</button>
+        <button class="btn-cancel" id="btnCancel">Cancel</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+  </div>
 </div>
-<div class="labels">
-  <span>TRANSPARENT</span>
-  <span>SOLID</span>
-</div>
-
-<div class="section-label">Model Name</div>
-<input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
-
-<div class="section-label">Display Profile</div>
-<select id="profileSelect">
-  <option value="portrait-xl">Portrait XL (450x1920)</option>
-  <option value="portrait-slim">Portrait Slim (480x1920)</option>
-  <option value="portrait-hd">Portrait HD (720x1280)</option>
-  <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
-</select>
-
-<div class="section-label">Window</div>
-<label class="toggle-row" for="alwaysOnTopInput">
-  <span class="toggle-label">Always On Top</span>
-  <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
-</label>
-
-<div class="btn-row">
-  <button class="btn-save" id="btnSave">Save</button>
-  <button class="btn-cancel" id="btnCancel">Cancel</button>
-</div>
-<div id="status" class="status"></div>
 
 <script type="module" src="./renderer/settings.js"></script>
 </body>

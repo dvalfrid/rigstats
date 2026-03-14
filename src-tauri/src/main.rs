@@ -12,10 +12,10 @@ mod settings;
 mod stats;
 
 use commands::{
-  close_window, detect_gpu_vram_total_mb, detect_ping_target, detect_ram_details,
-  detect_ram_spec, ensure_lhm_running, ensure_settings_window, get_cpu_info,
+  append_debug_log, close_window, detect_gpu_vram_total_mb, detect_ping_target, detect_ram_details,
+  detect_ram_spec, ensure_about_window, ensure_lhm_running, ensure_settings_window, ensure_status_window, get_about_info, get_cpu_info,
   get_gpu_info, get_settings, get_stats, get_system_brand, get_system_name, on_window_event, pick_target_monitor,
-  preview_opacity, save_settings, start_window_drag, detect_model_name, detect_system_brand,
+  preview_opacity, probe_wmi_status, reset_debug_log, save_settings, set_last_tray_click_position, start_window_drag, detect_model_name, detect_system_brand,
 };
 use settings::{load_settings, persist_settings, LEGACY_DEFAULT_MODEL_NAME};
 use stats::AppState;
@@ -29,6 +29,8 @@ use tauri::{
 
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_SETTINGS_ID: &str = "settings";
+const TRAY_ABOUT_ID: &str = "about";
+const TRAY_STATUS_ID: &str = "status";
 const TRAY_QUIT_ID: &str = "quit";
 
 fn focus_main_window(app: &AppHandle) {
@@ -54,6 +56,8 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     .text(TRAY_SHOW_ID, "Show RigStats")
     .separator()
     .text(TRAY_SETTINGS_ID, "Settings")
+    .text(TRAY_STATUS_ID, "Status")
+    .text(TRAY_ABOUT_ID, "About")
     .separator()
     .text(TRAY_QUIT_ID, "Quit")
     .build()?;
@@ -64,12 +68,31 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     .on_menu_event(|app, event| match event.id().as_ref() {
       TRAY_SHOW_ID => focus_main_window(app),
       TRAY_SETTINGS_ID => {
-        let _ = ensure_settings_window(app);
+        append_debug_log(app, "Tray menu: Settings clicked");
+        if let Err(error) = ensure_settings_window(app) {
+          append_debug_log(app, &format!("Settings window failed: {}", error));
+        }
+      }
+      TRAY_STATUS_ID => {
+        append_debug_log(app, "Tray menu: Status clicked");
+        if let Err(error) = ensure_status_window(app) {
+          append_debug_log(app, &format!("Status window failed: {}", error));
+        }
+      }
+      TRAY_ABOUT_ID => {
+        append_debug_log(app, "Tray menu: About clicked");
+        if let Err(error) = ensure_about_window(app) {
+          append_debug_log(app, &format!("About window failed: {}", error));
+        }
       }
       TRAY_QUIT_ID => std::process::exit(0),
       _ => {}
     })
     .on_tray_icon_event(|tray, event| {
+      if let TrayIconEvent::Click { position, .. } = event.clone() {
+        set_last_tray_click_position(position.x, position.y);
+      }
+
       if let TrayIconEvent::Click {
         button: MouseButton::Left,
         button_state: MouseButtonState::Up,
@@ -92,6 +115,9 @@ fn main() {
   tauri::Builder::default()
     .setup(|app| {
       let app_handle = app.handle();
+      reset_debug_log(&app_handle);
+      append_debug_log(&app_handle, "RigStats startup");
+
       let mut settings = load_settings(&app_handle);
       let should_autofill_model = settings.model_name.trim().is_empty()
         || settings.model_name.trim() == LEGACY_DEFAULT_MODEL_NAME;
@@ -103,16 +129,25 @@ fn main() {
       }
       let startup_profile = settings.dashboard_profile.clone();
       let startup_always_on_top = settings.always_on_top;
+      let system = System::new_all();
+      let sysinfo_available = !system.cpus().is_empty() || system.total_memory() > 0;
       let ram_spec = detect_ram_spec();
       let ram_details = detect_ram_details();
       let gpu_vram_total_mb = detect_gpu_vram_total_mb();
       let ping_target = detect_ping_target();
       let system_brand = detect_system_brand();
+      let wmi_available = match probe_wmi_status() {
+        Ok(()) => true,
+        Err(error) => {
+          append_debug_log(&app_handle, &format!("WMI dependency probe failed: {}", error));
+          false
+        }
+      };
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
         settings: Mutex::new(settings),
-        system: Mutex::new(System::new_all()),
+        system: Mutex::new(system),
         disks: Mutex::new(Disks::new_with_refreshed_list()),
         networks: Mutex::new(Networks::new_with_refreshed_list()),
         last_net_sample: Mutex::new(None),
@@ -123,6 +158,8 @@ fn main() {
         gpu_vram_total_mb,
         ping_target,
         system_brand,
+        sysinfo_available,
+        wmi_available,
       });
 
       if let Some(main) = app.get_webview_window("main") {
@@ -142,6 +179,7 @@ fn main() {
     })
     .invoke_handler(tauri::generate_handler![
       get_settings,
+      get_about_info,
       preview_opacity,
       save_settings,
       close_window,

@@ -6,11 +6,13 @@ fn main() {
     tauri_build::Attributes::new().app_manifest(
       tauri_build::AppManifest::new().commands(&[
         "get_settings",
+        "get_about_info",
         "preview_opacity",
         "save_settings",
         "close_window",
         "start_window_drag",
         "get_system_name",
+        "get_system_brand",
         "get_cpu_info",
         "get_gpu_info",
         "get_stats",

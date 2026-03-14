@@ -99,4 +99,8 @@ pub struct AppState {
   pub ping_target: String,
   /// Detected system board brand (e.g. "rog", "msi", "other").
   pub system_brand: String,
+  /// Whether sysinfo returned a usable initial snapshot on startup.
+  pub sysinfo_available: bool,
+  /// Whether a WMI connection could be established on startup.
+  pub wmi_available: bool,
 }

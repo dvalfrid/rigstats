@@ -15,7 +15,9 @@
       "csp": null,
       "capabilities": [
         "main-window",
-        "settings-window"
+        "settings-window",
+        "about-window",
+        "status-window"
       ]
     },
     "windows": [

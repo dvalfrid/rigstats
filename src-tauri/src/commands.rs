@@ -10,6 +10,7 @@ use crate::lhm::fetch_lhm;
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
 use serde::Deserialize;
+use serde::Serialize;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::process::Command;
@@ -28,9 +29,47 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 static LHM_WAS_CONNECTED: AtomicBool = AtomicBool::new(true);
 static LAST_LHM_OFFLINE_LOG_SECS: AtomicU64 = AtomicU64::new(0);
+static LAST_TRAY_CLICK_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+static LAST_TRAY_CLICK_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+const GITHUB_URL: &str = "https://github.com/dvalfrid/rigstats";
+const CONTACT_EMAIL: &str = "daniel@valfridsson.net";
+const LICENSE_NAME: &str = "MIT";
+const LHM_VERSION: &str = "v0.9.6";
+const SYSINFO_VERSION: &str = "0.30";
+const WMI_VERSION: &str = "0.13";
+const LICENSE_TEXT: &str = include_str!("../../LICENSE");
 
 #[cfg(windows)]
 const LHM_TASK_NAMES: [&str; 2] = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AboutDependency {
+  pub name: String,
+  pub version: String,
+  pub note: Option<String>,
+  pub status: String,
+  pub ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AboutInfo {
+  pub rigstats_version: String,
+  pub github_url: String,
+  pub license_name: String,
+  pub license_url: String,
+  pub license_text: String,
+  pub contact_email: String,
+  pub log_path: String,
+  pub log_tail: String,
+  pub lhm_connected: bool,
+  pub lhm_task_name: Option<String>,
+  pub lhm_task_status: Option<String>,
+  pub lhm_task_last_result: Option<String>,
+  pub lhm_task_to_run: Option<String>,
+  pub dependencies: Vec<AboutDependency>,
+}
 
 fn run_hidden_command(program: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
   let mut command = Command::new(program);
@@ -57,7 +96,20 @@ fn debug_log_path(app: &tauri::AppHandle) -> PathBuf {
     .join("rigstats-debug.log")
 }
 
-fn append_debug_log(app: &tauri::AppHandle, message: &str) {
+pub(crate) fn reset_debug_log(app: &tauri::AppHandle) {
+  let path = debug_log_path(app);
+  if let Some(parent) = path.parent() {
+    let _ = create_dir_all(parent);
+  }
+
+  let _ = OpenOptions::new()
+    .create(true)
+    .write(true)
+    .truncate(true)
+    .open(path);
+}
+
+pub(crate) fn append_debug_log(app: &tauri::AppHandle, message: &str) {
   let path = debug_log_path(app);
   if let Some(parent) = path.parent() {
     let _ = create_dir_all(parent);
@@ -65,6 +117,162 @@ fn append_debug_log(app: &tauri::AppHandle, message: &str) {
 
   if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
     let _ = writeln!(file, "[{}] {}", unix_now_secs(), message);
+  }
+}
+
+fn read_debug_log_tail(app: &tauri::AppHandle, line_limit: usize) -> String {
+  let path = debug_log_path(app);
+  let content = std::fs::read_to_string(path).unwrap_or_default();
+  let lines = content.lines().collect::<Vec<_>>();
+  let start = lines.len().saturating_sub(line_limit);
+  lines[start..].join("\n")
+}
+
+fn task_field(output: &str, key: &str) -> Option<String> {
+  output
+    .lines()
+    .find_map(|line| {
+      let trimmed = line.trim();
+      if !trimmed.starts_with(key) {
+        return None;
+      }
+      trimmed
+        .split_once(':')
+        .map(|(_, value)| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    })
+}
+
+fn get_lhm_task_details(app: &tauri::AppHandle) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+  #[cfg(windows)]
+  {
+    for task_name in LHM_TASK_NAMES {
+      match run_hidden_command("schtasks", &["/Query", "/TN", task_name, "/V", "/FO", "LIST"]) {
+        Ok(out) if out.status.success() => {
+          let text = String::from_utf8_lossy(&out.stdout).to_string();
+          return (
+            task_field(&text, "TaskName"),
+            task_field(&text, "Status"),
+            task_field(&text, "Last Result"),
+            task_field(&text, "Task To Run"),
+          );
+        }
+        Ok(_) => continue,
+        Err(error) => {
+          append_debug_log(app, &format!("Failed to inspect LHM task {}: {}", task_name, error));
+        }
+      }
+    }
+  }
+
+  (None, None, None, None)
+}
+
+pub fn probe_wmi_status() -> Result<(), String> {
+  #[cfg(windows)]
+  {
+    let com_probe_result = (|| -> Result<(), String> {
+      let com = wmi::COMLibrary::new().map_err(|error| format!("COM init failed: {}", error))?;
+      let conn = wmi::WMIConnection::new(com.into())
+        .map_err(|error| format!("WMI connection failed: {}", error))?;
+
+      #[derive(Deserialize)]
+      struct ProbeRow {
+        #[serde(rename = "Caption")]
+        caption: Option<String>,
+      }
+
+      let rows: Vec<ProbeRow> = conn
+        .raw_query("SELECT Caption FROM Win32_OperatingSystem")
+        .map_err(|error| format!("WMI query failed: {}", error))?;
+
+      if rows.iter().any(|row| row.caption.as_deref().is_some_and(|value| !value.trim().is_empty())) {
+        Ok(())
+      } else {
+        Err("WMI query returned no usable rows".to_string())
+      }
+    })();
+
+    if com_probe_result.is_ok() {
+      return Ok(());
+    }
+
+    // Fallback: even if COM apartment init fails on this thread, CIM may still be available.
+    let shell_probe = run_hidden_command(
+      "powershell",
+      &[
+        "-NoProfile",
+        "-Command",
+        "(Get-CimInstance Win32_OperatingSystem | Select-Object -First 1 -ExpandProperty Caption) | Out-String",
+      ],
+    );
+
+    if let Ok(out) = shell_probe {
+      if out.status.success() {
+        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !text.is_empty() {
+          return Ok(());
+        }
+      }
+    }
+
+    let com_error = com_probe_result.err().unwrap_or_else(|| "Unknown WMI COM probe failure".to_string());
+    Err(format!("{}; CIM fallback failed", com_error))
+  }
+
+  #[cfg(not(windows))]
+  {
+    Err("WMI is only available on Windows".to_string())
+  }
+}
+
+fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
+  let lhm_ok = can_reach_lhm_endpoint();
+  vec![
+    AboutDependency {
+      name: "LibreHardwareMonitor".to_string(),
+      version: LHM_VERSION.to_string(),
+      note: Some("GPU and sensor telemetry feed".to_string()),
+      status: if lhm_ok { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      ok: lhm_ok,
+    },
+    AboutDependency {
+      name: "sysinfo".to_string(),
+      version: SYSINFO_VERSION.to_string(),
+      note: Some("CPU, RAM, disk, network stats".to_string()),
+      status: if state.sysinfo_available { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      ok: state.sysinfo_available,
+    },
+    AboutDependency {
+      name: "wmi".to_string(),
+      version: WMI_VERSION.to_string(),
+      note: Some("Windows hardware metadata".to_string()),
+      status: if state.wmi_available { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      ok: state.wmi_available,
+    },
+  ]
+}
+
+#[tauri::command]
+pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AboutInfo {
+  let log_path = debug_log_path(&app);
+  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) = get_lhm_task_details(&app);
+
+  AboutInfo {
+    rigstats_version: env!("CARGO_PKG_VERSION").to_string(),
+    github_url: GITHUB_URL.to_string(),
+    license_name: LICENSE_NAME.to_string(),
+    license_url: format!("{}/blob/main/LICENSE", GITHUB_URL),
+    license_text: LICENSE_TEXT.to_string(),
+    contact_email: CONTACT_EMAIL.to_string(),
+    log_path: log_path.display().to_string(),
+    log_tail: read_debug_log_tail(&app, 160),
+    lhm_connected: can_reach_lhm_endpoint(),
+    lhm_task_name,
+    lhm_task_status,
+    lhm_task_last_result,
+    lhm_task_to_run,
+    dependencies: build_about_dependencies(&state),
   }
 }
 
@@ -267,6 +475,79 @@ fn profile_dimensions(profile: &str) -> (u32, u32) {
     "portrait-wxga" => (800, 1280),
     _ => (450, 1920),
   }
+}
+
+pub fn set_last_tray_click_position(x: f64, y: f64) {
+  LAST_TRAY_CLICK_X.store(x.round() as i32, Ordering::Relaxed);
+  LAST_TRAY_CLICK_Y.store(y.round() as i32, Ordering::Relaxed);
+}
+
+fn monitor_work_area(
+  origin_x: i32,
+  origin_y: i32,
+  monitor_w: u32,
+  monitor_h: u32,
+  popup_w: f64,
+  popup_h: f64,
+  preferred_x: i32,
+  preferred_y: i32,
+) -> (f64, f64) {
+  let popup_w_px = popup_w.round() as i32;
+  let popup_h_px = popup_h.round() as i32;
+  let max_x = origin_x + monitor_w as i32 - popup_w_px;
+  let max_y = origin_y + monitor_h as i32 - popup_h_px;
+  let x = preferred_x.clamp(origin_x, max_x);
+  let y = preferred_y.clamp(origin_y, max_y);
+  (x as f64, y as f64)
+}
+
+fn tray_anchor_position(app: &tauri::AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
+  let margin_px = 12i32;
+  let tray_x = LAST_TRAY_CLICK_X.load(Ordering::Relaxed);
+  let tray_y = LAST_TRAY_CLICK_Y.load(Ordering::Relaxed);
+
+  // Preferred path: position relative to the latest tray click on the monitor where that click occurred.
+  if tray_x != i32::MIN && tray_y != i32::MIN {
+    if let Ok(monitors) = app.available_monitors() {
+      if let Some(monitor) = monitors.into_iter().find(|monitor| {
+        let pos = monitor.position();
+        let size = monitor.size();
+        let within_x = tray_x >= pos.x && tray_x < pos.x + size.width as i32;
+        let within_y = tray_y >= pos.y && tray_y < pos.y + size.height as i32;
+        within_x && within_y
+      }) {
+        let pos = monitor.position();
+        let size = monitor.size();
+        let preferred_x = tray_x - width.round() as i32 + 26;
+        let preferred_y = tray_y - height.round() as i32 - margin_px;
+        return Some(monitor_work_area(
+          pos.x,
+          pos.y,
+          size.width,
+          size.height,
+          width,
+          height,
+          preferred_x,
+          preferred_y,
+        ));
+      }
+    }
+  }
+
+  // Fallback path: bottom-right of the primary monitor.
+  let monitor = app.primary_monitor().ok().flatten()?;
+  let origin = monitor.position();
+  let size = monitor.size();
+  Some(monitor_work_area(
+    origin.x,
+    origin.y,
+    size.width,
+    size.height,
+    width,
+    height,
+    origin.x + size.width as i32 - width.round() as i32 - margin_px,
+    origin.y + size.height as i32 - height.round() as i32 - margin_px,
+  ))
 }
 
 pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
@@ -1149,19 +1430,15 @@ pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
   // Keep a single settings window instance; focus existing window if already open.
   if app.get_webview_window("settings").is_some() {
     if let Some(win) = app.get_webview_window("settings") {
+      win.show().map_err(|e| e.to_string())?;
       win.set_focus().map_err(|e| e.to_string())?;
     }
     return Ok(());
   }
 
-  let main = app.get_webview_window("main").ok_or("Main window missing")?;
-  let main_pos = main.outer_position().map_err(|e| e.to_string())?;
-  let main_size = main.outer_size().map_err(|e| e.to_string())?;
-
-  let width = 300.0;
-  let height = 320.0;
-  let x = main_pos.x as f64 + main_size.width as f64 - width - 16.0;
-  let y = main_pos.y as f64 + 16.0;
+  let width = 420.0;
+  let height = 560.0;
+  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
 
   WebviewWindowBuilder::new(
     app,
@@ -1178,6 +1455,122 @@ pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
   .build()
   .map_err(|e| e.to_string())?;
 
+  Ok(())
+}
+
+pub fn ensure_about_window(app: &tauri::AppHandle) -> Result<(), String> {
+  append_debug_log(app, "About window requested from tray/menu");
+
+  if app.get_webview_window("about").is_some() {
+    if let Some(win) = app.get_webview_window("about") {
+      win.show().map_err(|e| {
+        let message = e.to_string();
+        append_debug_log(app, &format!("About window show failed: {}", message));
+        message
+      })?;
+      win.set_focus().map_err(|e| {
+        let message = e.to_string();
+        append_debug_log(app, &format!("About window focus failed: {}", message));
+        message
+      })?;
+      append_debug_log(app, "About window reused successfully");
+    }
+    return Ok(());
+  }
+
+  let mut builder = WebviewWindowBuilder::new(
+    app,
+    "about",
+    WebviewUrl::App("about.html".into()),
+  );
+
+  let width = 640.0;
+  let height = 523.0;
+  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
+
+  builder = builder
+    .title("About RigStats")
+    .inner_size(width, height)
+    .position(x, y)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(true);
+
+  let window = builder.build().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("About window build failed: {}", message));
+    message
+  })?;
+  window.show().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("About window initial show failed: {}", message));
+    message
+  })?;
+  window.set_focus().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("About window initial focus failed: {}", message));
+    message
+  })?;
+  append_debug_log(app, "About window created successfully");
+  Ok(())
+}
+
+pub fn ensure_status_window(app: &tauri::AppHandle) -> Result<(), String> {
+  append_debug_log(app, "Status window requested from tray/menu");
+
+  if app.get_webview_window("status").is_some() {
+    if let Some(win) = app.get_webview_window("status") {
+      win.show().map_err(|e| {
+        let message = e.to_string();
+        append_debug_log(app, &format!("Status window show failed: {}", message));
+        message
+      })?;
+      win.set_focus().map_err(|e| {
+        let message = e.to_string();
+        append_debug_log(app, &format!("Status window focus failed: {}", message));
+        message
+      })?;
+      append_debug_log(app, "Status window reused successfully");
+    }
+    return Ok(());
+  }
+
+  let mut builder = WebviewWindowBuilder::new(
+    app,
+    "status",
+    WebviewUrl::App("status.html".into()),
+  );
+
+  let width = 700.0;
+  let height = 760.0;
+  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
+
+  builder = builder
+    .title("RigStats Status")
+    .inner_size(width, height)
+    .position(x, y)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(true);
+
+  let window = builder.build().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("Status window build failed: {}", message));
+    message
+  })?;
+  window.show().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("Status window initial show failed: {}", message));
+    message
+  })?;
+  window.set_focus().map_err(|e| {
+    let message = e.to_string();
+    append_debug_log(app, &format!("Status window initial focus failed: {}", message));
+    message
+  })?;
+  append_debug_log(app, "Status window created successfully");
   Ok(())
 }
 
