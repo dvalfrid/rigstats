@@ -10,9 +10,246 @@ use crate::lhm::fetch_lhm;
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
 use serde::Deserialize;
+use std::fs::{create_dir_all, OpenOptions};
+use std::io::Write;
 use std::process::Command;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::Duration;
 use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Position, Size, WebviewWindow, WebviewWindowBuilder, WebviewUrl, Window, WindowEvent};
+
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+static LHM_WAS_CONNECTED: AtomicBool = AtomicBool::new(true);
+static LAST_LHM_OFFLINE_LOG_SECS: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(windows)]
+const LHM_TASK_NAMES: [&str; 2] = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+
+fn run_hidden_command(program: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
+  let mut command = Command::new(program);
+  command.args(args);
+  #[cfg(windows)]
+  {
+    command.creation_flags(CREATE_NO_WINDOW);
+  }
+  command.output()
+}
+
+fn unix_now_secs() -> u64 {
+  SystemTime::now()
+    .duration_since(UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0)
+}
+
+fn debug_log_path(app: &tauri::AppHandle) -> PathBuf {
+  app
+    .path()
+    .app_data_dir()
+    .unwrap_or_else(|_| PathBuf::from("."))
+    .join("rigstats-debug.log")
+}
+
+fn append_debug_log(app: &tauri::AppHandle, message: &str) {
+  let path = debug_log_path(app);
+  if let Some(parent) = path.parent() {
+    let _ = create_dir_all(parent);
+  }
+
+  if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+    let _ = writeln!(file, "[{}] {}", unix_now_secs(), message);
+  }
+}
+
+#[cfg(windows)]
+fn can_reach_lhm_endpoint() -> bool {
+  use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+  let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8085);
+  TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
+}
+
+#[cfg(windows)]
+fn candidate_lhm_paths(app: &tauri::AppHandle) -> Vec<PathBuf> {
+  let mut paths = Vec::new();
+
+  if let Ok(resource_dir) = app.path().resource_dir() {
+    paths.push(resource_dir.join("lhm").join("LibreHardwareMonitor.exe"));
+    if let Some(parent) = resource_dir.parent() {
+      paths.push(parent.join("lhm").join("LibreHardwareMonitor.exe"));
+    }
+  }
+
+  if let Ok(current_exe) = std::env::current_exe() {
+    if let Some(exe_dir) = current_exe.parent() {
+      paths.push(exe_dir.join("lhm").join("LibreHardwareMonitor.exe"));
+      paths.push(
+        exe_dir
+          .join("resources")
+          .join("lhm")
+          .join("LibreHardwareMonitor.exe"),
+      );
+    }
+  }
+
+  if let Ok(program_files) = std::env::var("ProgramFiles") {
+    paths.push(
+      PathBuf::from(&program_files)
+        .join("RigStats")
+        .join("lhm")
+        .join("LibreHardwareMonitor.exe"),
+    );
+    paths.push(
+      PathBuf::from(program_files)
+        .join("LibreHardwareMonitor")
+        .join("LibreHardwareMonitor.exe"),
+    );
+  }
+
+  if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
+    paths.push(
+      PathBuf::from(program_files_x86)
+        .join("LibreHardwareMonitor")
+        .join("LibreHardwareMonitor.exe"),
+    );
+  }
+
+  if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+    paths.push(
+      PathBuf::from(local_app_data)
+        .join("Programs")
+        .join("LibreHardwareMonitor")
+        .join("LibreHardwareMonitor.exe"),
+    );
+  }
+
+  paths
+}
+
+#[cfg(windows)]
+fn spawn_lhm(exe_path: &Path) -> std::io::Result<()> {
+  let mut command = Command::new(exe_path);
+  command.creation_flags(CREATE_NO_WINDOW);
+  command.spawn().map(|_| ())
+}
+
+#[cfg(windows)]
+fn try_run_lhm_task(app: &tauri::AppHandle) -> bool {
+  for task_name in LHM_TASK_NAMES {
+    let output = run_hidden_command("schtasks", &["/Run", "/TN", task_name]);
+
+    match output {
+      Ok(out) => {
+        let ok = out.status.success();
+        if ok {
+          append_debug_log(app, &format!("LHM task run command succeeded: {}", task_name));
+          return true;
+        }
+
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        append_debug_log(
+          app,
+          &format!("LHM task run command failed ({}): {}", task_name, stderr),
+        );
+      }
+      Err(e) => {
+        append_debug_log(
+          app,
+          &format!("LHM task run command error ({}): {}", task_name, e),
+        );
+      }
+    }
+  }
+
+  false
+}
+
+#[cfg(windows)]
+fn lhm_task_exists(app: &tauri::AppHandle) -> bool {
+  for task_name in LHM_TASK_NAMES {
+    match run_hidden_command("schtasks", &["/Query", "/TN", task_name]) {
+      Ok(out) => {
+        if out.status.success() {
+          append_debug_log(app, &format!("LHM task exists: {}", task_name));
+          return true;
+        }
+
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        append_debug_log(
+          app,
+          &format!("LHM task query failed ({}): {}", task_name, stderr),
+        );
+      }
+      Err(e) => {
+        append_debug_log(
+          app,
+          &format!("LHM task query error ({}): {}", task_name, e),
+        );
+      }
+    }
+  }
+
+  false
+}
+
+pub fn ensure_lhm_running(app: &tauri::AppHandle) {
+  #[cfg(windows)]
+  {
+    append_debug_log(app, &format!("LHM ensure start (log path: {})", debug_log_path(app).display()));
+
+    if can_reach_lhm_endpoint() {
+      append_debug_log(app, "LHM endpoint already reachable on :8085");
+      return;
+    }
+
+    // Preferred path: run the installer-created scheduled task (no extra UAC prompt).
+    if try_run_lhm_task(app) {
+      std::thread::sleep(Duration::from_millis(1200));
+      if can_reach_lhm_endpoint() {
+        append_debug_log(app, "LHM reachable after task run");
+        return;
+      }
+      append_debug_log(app, "Task run succeeded but endpoint still unavailable");
+    } else if !lhm_task_exists(app) {
+      append_debug_log(app, "LHM task missing. Reinstall RigStats as administrator to recreate task.");
+    }
+
+    let mut elevation_required = false;
+
+    for path in candidate_lhm_paths(app) {
+      if !path.is_file() {
+        append_debug_log(app, &format!("LHM candidate missing: {}", path.display()));
+        continue;
+      }
+
+      append_debug_log(app, &format!("LHM candidate found: {}", path.display()));
+      match spawn_lhm(&path) {
+        Ok(()) => {
+          append_debug_log(app, &format!("LHM spawned from {}", path.display()));
+          return;
+        }
+        Err(e) => {
+          if e.raw_os_error() == Some(740) {
+            elevation_required = true;
+          }
+          append_debug_log(app, &format!("LHM spawn failed from {}: {}", path.display(), e));
+        }
+      }
+    }
+
+    if elevation_required {
+      append_debug_log(app, "Elevation required for direct LHM launch. App will not trigger UAC; using scheduled task only.");
+    }
+
+    append_debug_log(app, "LHM ensure finished without successful spawn");
+  }
+}
 
 fn normalize_profile(profile: &str) -> String {
   match profile {
@@ -271,13 +508,14 @@ pub fn detect_system_brand() -> String {
     }
 
     // PowerShell fallback — always available on Windows 10/11.
-    let output = Command::new("powershell")
-      .args([
+    let output = run_hidden_command(
+      "powershell",
+      &[
         "-NoProfile",
         "-Command",
         "Get-CimInstance Win32_BaseBoard | Select-Object -ExpandProperty Manufacturer | Out-String",
-      ])
-      .output();
+      ],
+    );
 
     if let Ok(out) = output {
       if out.status.success() {
@@ -356,14 +594,15 @@ pub fn detect_model_name() -> Option<String> {
 pub fn detect_ram_spec() -> String {
   #[cfg(windows)]
   fn detect_ram_spec_from_shell() -> Option<String> {
-    let output = Command::new("powershell")
-      .args([
+    let output = run_hidden_command(
+      "powershell",
+      &[
         "-NoProfile",
         "-Command",
         "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $dimms = $m.Count; $speed = ($m | ForEach-Object { if($_.ConfiguredClockSpeed){ $_.ConfiguredClockSpeed } else { $_.Speed } } | Measure-Object -Maximum).Maximum; $typeCode = ($m | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); if(-not $typeCode){ $typeCode = ($m | Select-Object -First 1 -ExpandProperty MemoryType) }; $type = switch([int]$typeCode){ 18 {'DDR'} 20 {'DDR2'} 24 {'DDR3'} 26 {'DDR4'} 34 {'DDR5'} default {''} }; if($type -and $speed){ \"$type $speed MT/s ($dimms DIMMs)\" } elseif($type){ \"$type ($dimms DIMMs)\" } elseif($speed){ \"$speed MT/s ($dimms DIMMs)\" } else { \"RAM ($dimms DIMMs)\" } | Out-String",
-      ])
-      .output()
-      .ok()?;
+      ],
+    )
+    .ok()?;
 
     if !output.status.success() {
       return None;
@@ -445,14 +684,15 @@ pub fn detect_ram_details() -> String {
 
   #[cfg(windows)]
   fn detect_ram_details_from_shell() -> Option<String> {
-    let output = Command::new("powershell")
-      .args([
+    let output = run_hidden_command(
+      "powershell",
+      &[
         "-NoProfile",
         "-Command",
         "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $count = $m.Count; $caps = @($m | ForEach-Object { [math]::Round($_.Capacity / 1GB) }); $layout = if((@($caps | Select-Object -Unique)).Count -eq 1 -and $caps.Count -gt 0) { \"${count}x$($caps[0]) GB\" } else { \"${count} DIMMs\" }; $vendor = ($m | Select-Object -First 1 -ExpandProperty Manufacturer); $part = ($m | Select-Object -First 1 -ExpandProperty PartNumber); \"$layout|$vendor|$part\" | Out-String",
-      ])
-      .output()
-      .ok()?;
+      ],
+    )
+    .ok()?;
 
     if !output.status.success() {
       return None;
@@ -616,14 +856,15 @@ where
 
 #[cfg(windows)]
 fn get_gpu_info_from_shell() -> Option<String> {
-  let output = Command::new("powershell")
-    .args([
+  let output = run_hidden_command(
+    "powershell",
+    &[
       "-NoProfile",
       "-Command",
       "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | Out-String",
-    ])
-    .output()
-    .ok()?;
+    ],
+  )
+  .ok()?;
 
   if !output.status.success() {
     return None;
@@ -667,13 +908,14 @@ fn parse_ping_output_ms(output: &str) -> Option<f64> {
 pub fn detect_ping_target() -> String {
   #[cfg(windows)]
   {
-    let output = Command::new("powershell")
-      .args([
+    let output = run_hidden_command(
+      "powershell",
+      &[
         "-NoProfile",
         "-Command",
         "(Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -and $_.DefaultIPGateway } | ForEach-Object { $_.DefaultIPGateway } | Where-Object { $_ -match '^\\d+\\.\\d+\\.\\d+\\.\\d+$' } | Select-Object -First 1) | Out-String",
-      ])
-      .output();
+      ],
+    );
 
     if let Ok(out) = output {
       if out.status.success() {
@@ -696,10 +938,7 @@ pub fn detect_ping_target() -> String {
 fn sample_ping_ms(target: &str) -> Option<f64> {
   #[cfg(windows)]
   {
-    let output = Command::new("ping")
-      .args(["-n", "1", "-w", "500", target])
-      .output()
-      .ok()?;
+    let output = run_hidden_command("ping", &["-n", "1", "-w", "500", target]).ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     parse_ping_output_ms(&text)
   }
@@ -735,7 +974,7 @@ pub fn get_gpu_info() -> Option<String> {
 }
 
 #[tauri::command]
-pub async fn get_stats(state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
+pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
   let lhm_fresh = fetch_lhm().await;
   let lhm = {
@@ -843,6 +1082,24 @@ pub async fn get_stats(state: tauri::State<'_, AppState>) -> Result<StatsPayload
   } else {
     (0.0, 0.0, best_up, best_down, false)
   };
+
+  if lhm_connected {
+    if !LHM_WAS_CONNECTED.swap(true, Ordering::Relaxed) {
+      append_debug_log(&app, "LHM connection restored (data.json reachable)");
+    }
+  } else {
+    let was_connected = LHM_WAS_CONNECTED.swap(false, Ordering::Relaxed);
+    if was_connected {
+      append_debug_log(&app, "LHM connection lost (data.json unavailable)");
+    }
+
+    let now = unix_now_secs();
+    let last = LAST_LHM_OFFLINE_LOG_SECS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) >= 30 {
+      LAST_LHM_OFFLINE_LOG_SECS.store(now, Ordering::Relaxed);
+      append_debug_log(&app, "LHM still offline after retry window");
+    }
+  }
 
   Ok(StatsPayload {
     cpu: CpuStats {

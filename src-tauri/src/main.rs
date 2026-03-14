@@ -13,7 +13,7 @@ mod stats;
 
 use commands::{
   close_window, detect_gpu_vram_total_mb, detect_ping_target, detect_ram_details,
-  detect_ram_spec, ensure_settings_window, get_cpu_info,
+  detect_ram_spec, ensure_lhm_running, ensure_settings_window, get_cpu_info,
   get_gpu_info, get_settings, get_stats, get_system_brand, get_system_name, on_window_event, pick_target_monitor,
   preview_opacity, save_settings, start_window_drag, detect_model_name, detect_system_brand,
 };
@@ -129,7 +129,12 @@ fn main() {
         // Place the dashboard on the preferred portrait monitor if present.
         let _ = pick_target_monitor(&main, &startup_profile);
         let _ = main.set_always_on_top(startup_always_on_top);
+        let _ = main.show();
+        let _ = main.set_focus();
       }
+
+      // Fallback for cases where installer task did not launch LHM yet.
+      ensure_lhm_running(&app_handle);
 
       create_tray(app)?;
 
