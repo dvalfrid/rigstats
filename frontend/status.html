@@ -153,7 +153,10 @@ body {
 .dialog-actions {
   padding: 0 16px 16px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 button {
   border: 1px solid var(--border);
@@ -261,6 +264,10 @@ textarea {
     </div>
 
     <div class="dialog-actions">
+      <div class="actions" style="margin-bottom: 0;">
+        <button id="collectDiagBtn" title="Collect hardware info, LHM sensor data, debug log and environment details into a ZIP file for bug reports.">Collect Diagnostics…</button>
+        <span id="diagState" style="font:11px var(--mono);color:var(--muted);align-self:center;"></span>
+      </div>
       <div class="actions" style="margin-bottom: 0;">
         <button class="primary" id="refreshBtn" title="Reload diagnostics and debug log now. Updates Last Successful Refresh when the call succeeds.">Refresh</button>
         <button id="closeBtn" title="Close the Status dialog.">Close</button>

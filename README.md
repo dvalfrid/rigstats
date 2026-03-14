@@ -52,6 +52,7 @@ From here you can:
 - inspect startup/runtime issues without opening external tools
 - copy the visible debug log for troubleshooting
 - refresh diagnostics on demand while the log also auto-updates in the dialog
+- export a diagnostics ZIP bundle for bug reports (see [Diagnostics Export](#diagnostics-export))
 
 ### About Dialog
 
@@ -198,6 +199,34 @@ If no brand logo matches, the detected CPU model string is used to show an archi
 
 Other recognized brands (ASRock, Corsair, NZXT, Dell, Lenovo, HP, Acer) fall through to the CPU
 architecture fallback. Fully unknown systems show nothing.
+
+---
+
+## Diagnostics Export
+
+The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a native Windows save dialog and writes a single ZIP file that captures everything needed to investigate hardware compatibility issues, missing sensor support, or unexpected behaviour.
+
+### What Is Collected
+
+| File in ZIP | Contents | Why it is needed |
+| --- | --- | --- |
+| `manifest.json` | Collection timestamp (Unix seconds), RigStats version | Ties the report to a specific build |
+| `debug.log` | Full RigStats debug log from disk | Startup sequence, LHM connectivity, error events |
+| `settings.json` | Persisted user settings (opacity, profile, model name) | Rules out configuration-specific issues |
+| `lhm-data.json` | Raw LHM sensor tree from `localhost:8085/data.json` | **Most important file for adding sensor support** — shows all sensor names and values as LHM reports them on the actual machine |
+| `hardware.json` | WMI/CIM snapshot: OS version, CPU (name, cores, max clock), GPU (name, VRAM, driver), motherboard (manufacturer, model, product, base board), RAM (capacity per stick, speed, type code, manufacturer, part number) | Hardware identification and brand detection |
+| `sched-task.txt` | Raw output of `schtasks /Query /V` for both LHM task names | Diagnose LHM autostart failures |
+| `environment.txt` | `PROCESSOR_ARCHITECTURE`, `COMPUTERNAME`, Windows build and display version | OS-level context for platform-specific bugs |
+| `sysinfo.json` | sysinfo snapshot: CPU brand, core count, memory totals, disk mount points, network interface names, detected RAM spec, ping target | Verify what `sysinfo` sees on the machine |
+
+### What Is Not Collected
+
+- No file paths outside the RigStats data directory
+- No browser history, tokens, or credentials of any kind
+- No data is transmitted anywhere — the ZIP is written only to the location you choose
+- No telemetry is sent automatically at any time
+
+The ZIP is purely a local file that you choose whether to share.
 
 ---
 

@@ -17,6 +17,7 @@ fn main() {
         "get_gpu_info",
         "get_stats",
         "log_frontend_error",
+        "collect_diagnostics",
       ]),
     ),
   )

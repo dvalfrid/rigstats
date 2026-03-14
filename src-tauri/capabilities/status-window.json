@@ -5,6 +5,7 @@
   "windows": ["status"],
   "permissions": [
     "allow-get-about-info",
-    "allow-close-window"
+    "allow-close-window",
+    "allow-collect-diagnostics"
   ]
 }

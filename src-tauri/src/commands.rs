@@ -1703,6 +1703,233 @@ pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
   append_debug_log(&app, &format!("[renderer] {}", sanitized));
 }
 
+// --- Diagnostics helpers --------------------------------------------------- //
+
+fn diag_collect_hardware() -> String {
+  #[cfg(windows)]
+  {
+    let script = concat!(
+      "try{",
+      "$os=Get-CimInstance Win32_OperatingSystem -EA Stop;",
+      "$cpu=Get-CimInstance Win32_Processor -EA Stop;",
+      "$gpu=Get-CimInstance Win32_VideoController -EA Stop;",
+      "$cs=Get-CimInstance Win32_ComputerSystem -EA Stop;",
+      "$csp=Get-CimInstance Win32_ComputerSystemProduct -EA Stop;",
+      "$bb=Get-CimInstance Win32_BaseBoard -EA Stop;",
+      "$mem=Get-CimInstance Win32_PhysicalMemory -EA Stop;",
+      "@{",
+      "os=@{caption=$os.Caption;version=$os.Version;build=$os.BuildNumber;arch=$os.OSArchitecture};",
+      "cpu=@($cpu|%{@{name=$_.Name;cores=$_.NumberOfCores;threads=$_.NumberOfLogicalProcessors;maxMHz=$_.MaxClockSpeed}});",
+      "gpu=@($gpu|%{@{name=$_.Name;ramBytes=$_.AdapterRAM;driver=$_.DriverVersion}});",
+      "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbMfr=$bb.Manufacturer;bbProd=$bb.Product;cspName=$csp.Name;cspVer=$csp.Version};",
+      "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed;typeCode=$_.SMBIOSMemoryType;mfr=$_.Manufacturer;part=$_.PartNumber}})",
+      "}|ConvertTo-Json -Depth 4 -Compress",
+      "}catch{'{ \"error\": \"collection failed\" }'}"
+    );
+    match run_hidden_command("powershell", &["-NoProfile", "-Command", script]) {
+      Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+      Ok(out) => format!("{{\"error\":\"exit {}\"}}", out.status),
+      Err(e) => format!("{{\"error\":\"{}\"}}", e),
+    }
+  }
+  #[cfg(not(windows))]
+  {
+    r#"{"error":"not windows"}"#.to_string()
+  }
+}
+
+fn diag_collect_tasks() -> String {
+  #[cfg(windows)]
+  {
+    let mut out = String::new();
+    for task_name in LHM_TASK_NAMES {
+      out.push_str(&format!("=== {} ===\n", task_name));
+      match run_hidden_command("schtasks", &["/Query", "/TN", task_name, "/V", "/FO", "LIST"]) {
+        Ok(result) => {
+          out.push_str(&String::from_utf8_lossy(&result.stdout));
+          if !result.stderr.is_empty() {
+            out.push_str(&String::from_utf8_lossy(&result.stderr));
+          }
+        }
+        Err(e) => out.push_str(&format!("Error: {}\n", e)),
+      }
+      out.push('\n');
+    }
+    out
+  }
+  #[cfg(not(windows))]
+  {
+    "not windows\n".to_string()
+  }
+}
+
+fn diag_collect_environment() -> String {
+  let mut lines = Vec::<String>::new();
+  for var in &[
+    "OS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
+    "NUMBER_OF_PROCESSORS", "COMPUTERNAME", "SystemRoot", "ProgramFiles",
+  ] {
+    lines.push(format!("{}={}", var, std::env::var(var).unwrap_or_else(|_| "(not set)".to_string())));
+  }
+  lines.push(format!(
+    "hostname={}",
+    hostname::get().ok().and_then(|s| s.into_string().ok()).unwrap_or_else(|| "(unknown)".to_string())
+  ));
+  #[cfg(windows)]
+  {
+    if let Ok(out) = run_hidden_command(
+      "powershell",
+      &[
+        "-NoProfile",
+        "-Command",
+        "Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' | Select-Object CurrentBuild,DisplayVersion,ProductName | ConvertTo-Json -Compress | Out-String",
+      ],
+    ) {
+      if out.status.success() {
+        lines.push(format!("windows-version={}", String::from_utf8_lossy(&out.stdout).trim()));
+      }
+    }
+  }
+  lines.join("\n")
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SysinfoSnapshot {
+  cpu_brand: String,
+  cpu_count: usize,
+  total_memory_mb: u64,
+  used_memory_mb: u64,
+  disk_mount_points: Vec<String>,
+  network_interfaces: Vec<String>,
+  system_brand: String,
+  sysinfo_available: bool,
+  wmi_available: bool,
+  ram_spec: String,
+  ram_details: String,
+  ping_target: String,
+}
+
+fn diag_collect_sysinfo(state: &AppState) -> String {
+  let (cpu_brand, cpu_count, total_memory_mb, used_memory_mb) = {
+    let system = state.system.lock().unwrap_or_else(|e| e.into_inner());
+    let brand = system.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
+    let count = system.cpus().len();
+    let total = system.total_memory() / 1_048_576;
+    let used = system.used_memory() / 1_048_576;
+    (brand, count, total, used)
+  };
+  let disk_mount_points: Vec<String> = {
+    let disks = state.disks.lock().unwrap_or_else(|e| e.into_inner());
+    disks.iter().map(|d| d.mount_point().to_string_lossy().to_string()).collect()
+  };
+  let network_interfaces: Vec<String> = {
+    let networks = state.networks.lock().unwrap_or_else(|e| e.into_inner());
+    networks.iter().map(|(name, _)| name.clone()).collect()
+  };
+  let snap = SysinfoSnapshot {
+    cpu_brand,
+    cpu_count,
+    total_memory_mb,
+    used_memory_mb,
+    disk_mount_points,
+    network_interfaces,
+    system_brand: state.system_brand.clone(),
+    sysinfo_available: state.sysinfo_available,
+    wmi_available: state.wmi_available,
+    ram_spec: state.ram_spec.clone(),
+    ram_details: state.ram_details.clone(),
+    ping_target: state.ping_target.clone(),
+  };
+  serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
+}
+
+/// Opens a native save-file dialog, collects hardware/software diagnostics and
+/// writes everything into a single ZIP that the user can send for bug reports.
+#[tauri::command]
+pub async fn collect_diagnostics(
+  app: tauri::AppHandle,
+  state: tauri::State<'_, AppState>,
+) -> Result<Option<String>, String> {
+  let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+  let default_name = format!("rigstats-diag-{}.zip", ts);
+
+  // Open a native save dialog on an OS thread (Win32 requires STA/message loop).
+  let save_path = tokio::task::spawn_blocking(move || {
+    rfd::FileDialog::new()
+      .set_file_name(&default_name)
+      .add_filter("ZIP Archive", &["zip"])
+      .save_file()
+  })
+  .await
+  .map_err(|e| format!("Dialog spawn error: {}", e))?;
+
+  let Some(path) = save_path else {
+    return Ok(None); // user cancelled
+  };
+
+  // Build manifest entry.
+  let manifest = format!(
+    "{{\"collected_at_unix\":{},\"rigstats_version\":\"{}\"}}",
+    ts,
+    env!("CARGO_PKG_VERSION")
+  );
+
+  // Full debug log from disk.
+  let log_bytes = std::fs::read(debug_log_path(&app)).unwrap_or_else(|_| b"(log not found)".to_vec());
+
+  // Current settings.
+  let settings_json = {
+    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    serde_json::to_string_pretty(&*s).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
+  };
+
+  // Raw LHM sensor tree -- the most important piece for adding new sensor support.
+  let lhm_json = match state
+    .lhm_client
+    .get("http://localhost:8085/data.json")
+    .timeout(Duration::from_secs(3))
+    .send()
+    .await
+  {
+    Ok(resp) => resp.text().await.unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e)),
+    Err(e) => format!("{{\"error\":\"request: {}\"}}", e),
+  };
+
+  // Synchronous collectors (these may run PowerShell / sched queries).
+  let hardware_json = diag_collect_hardware();
+  let tasks_txt = diag_collect_tasks();
+  let env_txt = diag_collect_environment();
+  let sysinfo_json = diag_collect_sysinfo(&state);
+
+  // Write ZIP.
+  let zip_file = std::fs::File::create(&path).map_err(|e| format!("Cannot create zip: {}", e))?;
+  let mut writer = zip::ZipWriter::new(zip_file);
+  let opts = zip::write::SimpleFileOptions::default()
+    .compression_method(zip::CompressionMethod::Deflated);
+
+  let entries: &[(&str, &[u8])] = &[
+    ("manifest.json", manifest.as_bytes()),
+    ("debug.log", &log_bytes),
+    ("settings.json", settings_json.as_bytes()),
+    ("lhm-data.json", lhm_json.as_bytes()),
+    ("hardware.json", hardware_json.as_bytes()),
+    ("sched-task.txt", tasks_txt.as_bytes()),
+    ("environment.txt", env_txt.as_bytes()),
+    ("sysinfo.json", sysinfo_json.as_bytes()),
+  ];
+
+  for (name, data) in entries {
+    writer.start_file(*name, opts).map_err(|e| format!("zip start_file {}: {}", name, e))?;
+    writer.write_all(data).map_err(|e| format!("zip write {}: {}", name, e))?;
+  }
+  writer.finish().map_err(|e| format!("zip finish: {}", e))?;
+
+  append_debug_log(&app, &format!("Diagnostics saved: {}", path.display()));
+  Ok(Some(path.display().to_string()))
+}
+
+
 #[cfg(all(test, windows))]
 mod tests {
   use super::classify_system_brand;

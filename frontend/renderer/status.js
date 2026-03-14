@@ -13,6 +13,8 @@ const ids = {
   refreshBtn: document.getElementById('refreshBtn'),
   copyLogBtn: document.getElementById('copyLogBtn'),
   closeBtn: document.getElementById('closeBtn'),
+  collectDiagBtn: document.getElementById('collectDiagBtn'),
+  diagState: document.getElementById('diagState'),
 };
 
 let currentInfo = null;
@@ -142,6 +144,28 @@ ids.copyLogBtn.addEventListener('click', () => copyText(currentInfo?.logTail || 
 ids.closeBtn.addEventListener('click', async () => {
   if (!IS_DESKTOP) return;
   await backend.invoke('close-window');
+});
+
+ids.collectDiagBtn.addEventListener('click', async () => {
+  if (!IS_DESKTOP) return;
+
+  ids.collectDiagBtn.disabled = true;
+  ids.diagState.textContent = 'Collecting…';
+
+  try {
+    const savedPath = await backend.invoke('collect-diagnostics');
+    if (savedPath == null) {
+      ids.diagState.textContent = 'Cancelled';
+    } else {
+      ids.diagState.textContent = `Saved to: ${savedPath}`;
+    }
+  } catch (error) {
+    console.error('collect-diagnostics failed:', error);
+    ids.diagState.textContent = `Error: ${error?.message ?? error}`;
+  } finally {
+    ids.collectDiagBtn.disabled = false;
+    window.setTimeout(() => { ids.diagState.textContent = ''; }, 6000);
+  }
 });
 
 function startAutoRefresh() {
