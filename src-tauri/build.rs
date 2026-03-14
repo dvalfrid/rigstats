@@ -16,6 +16,7 @@ fn main() {
         "get_cpu_info",
         "get_gpu_info",
         "get_stats",
+        "log_frontend_error",
       ]),
     ),
   )

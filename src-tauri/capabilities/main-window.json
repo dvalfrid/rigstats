@@ -11,6 +11,7 @@
     "allow-get-system-brand",
     "allow-get-cpu-info",
     "allow-get-gpu-info",
-    "allow-get-stats"
+    "allow-get-stats",
+    "allow-log-frontend-error"
   ]
 }

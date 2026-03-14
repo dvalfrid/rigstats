@@ -16,6 +16,26 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { simulateStats } from './simulator.js';
 
+// Route uncaught JS errors and unhandled promise rejections to the backend
+// debug log so they appear in the Status dialog without needing DevTools.
+function logRendererError(message) {
+  if (IS_DESKTOP) {
+    backend.invoke('log-frontend-error', { message }).catch(() => {});
+  }
+}
+
+window.addEventListener('error', (event) => {
+  const msg = `${event.message} (${event.filename}:${event.lineno})`;
+  logRendererError(msg);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason instanceof Error
+    ? `${event.reason.message}`
+    : String(event.reason ?? 'unhandled rejection');
+  logRendererError(reason);
+});
+
 const BRAND_PREVIEW_ORDER = ['rog', 'msi', 'alienware', 'razer', 'legion', 'omen', 'predator', 'aorus', 'gigabyte'];
 const BRAND_PREVIEW_ENABLED_KEY = 'rigstats.brandPreviewEnabled';
 const BRAND_PREVIEW_BRAND_KEY = 'rigstats.brandPreviewBrand';
@@ -243,7 +263,7 @@ async function tick() {
         applyStats(lastValidStats);
       }
     } catch (e) {
-      console.error('Backend error:', e);
+      logRendererError(`get-stats failed: ${e?.message ?? e}`);
       if (lastValidStats) applyStats(lastValidStats);
     } finally {
       isTicking = false;

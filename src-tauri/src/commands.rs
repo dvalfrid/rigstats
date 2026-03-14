@@ -584,7 +584,7 @@ pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
 
 #[tauri::command]
 pub fn get_settings(state: tauri::State<AppState>) -> Settings {
-  state.settings.lock().unwrap().clone()
+  state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 #[tauri::command]
@@ -610,7 +610,7 @@ pub fn save_settings(
   #[allow(non_snake_case)] alwaysOnTop: Option<bool>,
 ) -> Result<(), String> {
   // Clamp opacity to a valid CSS alpha range before persistence.
-  let mut settings = state.settings.lock().unwrap();
+  let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   settings.opacity = opacity.clamp(0.0, 1.0);
 
   // Accept both snake_case and camelCase payload keys from the renderer.
@@ -669,7 +669,7 @@ pub fn get_system_name() -> String {
 
 #[tauri::command]
 pub fn get_cpu_info(state: tauri::State<AppState>) -> String {
-  let mut system = state.system.lock().unwrap();
+  let mut system = state.system.lock().unwrap_or_else(|e| e.into_inner());
   system.refresh_cpu();
   let cpu0 = system.cpus().first();
   cpu0
@@ -1352,7 +1352,10 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
   let lhm_fresh = fetch_lhm().await;
   let lhm = {
-    let mut last_lhm = state.last_lhm.lock().unwrap();
+    let mut last_lhm = state.last_lhm.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: last_lhm mutex poisoned; recovering guard");
+      e.into_inner()
+    });
     if let Some(ref sample) = lhm_fresh {
       *last_lhm = Some(sample.clone());
     }
@@ -1360,7 +1363,10 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
   };
 
   // sysinfo values are refreshed each tick from this shared System instance.
-  let mut system = state.system.lock().unwrap();
+  let mut system = state.system.lock().unwrap_or_else(|e| {
+    append_debug_log(&app, "stats: system mutex poisoned; recovering guard");
+    e.into_inner()
+  });
   system.refresh_cpu();
   system.refresh_memory();
   let system_uptime_secs = sysinfo::System::uptime();
@@ -1387,7 +1393,10 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     .unwrap_or(0.0);
   drop(system);
 
-  let mut disks = state.disks.lock().unwrap();
+  let mut disks = state.disks.lock().unwrap_or_else(|e| {
+    append_debug_log(&app, "stats: disks mutex poisoned; recovering guard");
+    e.into_inner()
+  });
   disks.refresh();
   let mut drives = Vec::new();
   for d in disks.iter() {
@@ -1412,8 +1421,14 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
   drop(disks);
 
   // Network throughput is computed from deltas over elapsed time between samples.
-  let mut networks = state.networks.lock().unwrap();
-  let mut last_sample = state.last_net_sample.lock().unwrap();
+  let mut networks = state.networks.lock().unwrap_or_else(|e| {
+    append_debug_log(&app, "stats: networks mutex poisoned; recovering guard");
+    e.into_inner()
+  });
+  let mut last_sample = state.last_net_sample.lock().unwrap_or_else(|e| {
+    append_debug_log(&app, "stats: last_net_sample mutex poisoned; recovering guard");
+    e.into_inner()
+  });
   let now = Instant::now();
   let elapsed = last_sample
     .map(|t| now.duration_since(t).as_secs_f64())
@@ -1436,7 +1451,10 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
   }
 
   let ping_ms = {
-    let mut cache = state.last_ping_sample.lock().unwrap();
+    let mut cache = state.last_ping_sample.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: last_ping_sample mutex poisoned; recovering guard");
+      e.into_inner()
+    });
     let should_refresh = cache
       .as_ref()
       .map(|(t, _)| now.duration_since(*t).as_secs_f64() >= 5.0)
@@ -1675,6 +1693,14 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
       let _ = win.hide();
     }
   }
+}
+
+/// Receives error reports from the renderer process and writes them to the
+/// debug log so they are visible in the Status dialog without opening DevTools.
+#[tauri::command]
+pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
+  let sanitized = message.chars().take(512).collect::<String>();
+  append_debug_log(&app, &format!("[renderer] {}", sanitized));
 }
 
 #[cfg(all(test, windows))]
