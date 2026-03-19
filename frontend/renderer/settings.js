@@ -63,6 +63,11 @@ async function previewVisiblePanels(visiblePanels) {
   await backend.invoke('preview-visible-panels', { panels: normalizeVisiblePanels(visiblePanels) });
 }
 
+async function previewProfile(profile) {
+  if (!IS_DESKTOP) return;
+  await backend.invoke('preview-profile', { profile });
+}
+
 function setStatus(message, type = '') {
   statusEl.textContent = message;
   statusEl.className = `status ${type}`.trim();
@@ -102,6 +107,7 @@ async function loadSettings() {
 
 async function closeWithRestore() {
   await backend.invoke('preview-opacity', { value: original.opacity });
+  await previewProfile(original.dashboardProfile);
   await previewVisiblePanels(original.visiblePanels);
   await backend.invoke('close-window');
 }
@@ -114,6 +120,17 @@ slider.addEventListener('input', () => {
     backend.invoke('preview-opacity', { value: percentage / 100 }).catch((error) => {
       console.error('preview-opacity failed:', error);
     });
+  }
+});
+
+profileSelect.addEventListener('change', async () => {
+  if (!IS_DESKTOP || isSaving) return;
+  try {
+    await previewProfile(profileSelect.value);
+    setStatus('Previewing display profile...');
+  } catch (error) {
+    console.error('preview-profile failed:', error);
+    setStatus('Could not preview display profile.', 'status-err');
   }
 });
 

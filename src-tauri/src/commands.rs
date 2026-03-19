@@ -456,7 +456,18 @@ pub fn ensure_lhm_running(app: &tauri::AppHandle) {
 
 fn normalize_profile(profile: &str) -> String {
   match profile {
-    "portrait-xl" | "portrait-slim" | "portrait-hd" | "portrait-wxga" => {
+    "portrait-xl"
+    | "portrait-slim"
+    | "portrait-hd"
+    | "portrait-wxga"
+    | "portrait-fhd"
+    | "portrait-wuxga"
+    | "portrait-qhd"
+    | "portrait-hdplus"
+    | "portrait-900x1600"
+    | "portrait-1050x1680"
+    | "portrait-1600x2560"
+    | "portrait-4k" => {
       profile.to_string()
     }
     _ => "portrait-xl".to_string(),
@@ -497,8 +508,32 @@ fn profile_dimensions(profile: &str) -> (u32, u32) {
     "portrait-slim" => (480, 1920),
     "portrait-hd" => (720, 1280),
     "portrait-wxga" => (800, 1280),
+    "portrait-fhd" => (1080, 1920),
+    "portrait-wuxga" => (1200, 1920),
+    "portrait-qhd" => (1440, 2560),
+    "portrait-hdplus" => (768, 1366),
+    "portrait-900x1600" => (900, 1600),
+    "portrait-1050x1680" => (1050, 1680),
+    "portrait-1600x2560" => (1600, 2560),
+    "portrait-4k" => (2160, 3840),
     _ => (450, 1920),
   }
+}
+
+fn is_portrait(width: u32, height: u32) -> bool {
+  height >= width
+}
+
+fn fit_score(monitor_w: u32, monitor_h: u32, target_w: u32, target_h: u32) -> f64 {
+  let monitor_aspect = monitor_w as f64 / monitor_h as f64;
+  let target_aspect = target_w as f64 / target_h as f64;
+  let aspect_cost = (monitor_aspect / target_aspect).ln().abs();
+
+  let monitor_area = (monitor_w as f64) * (monitor_h as f64);
+  let target_area = (target_w as f64) * (target_h as f64);
+  let area_cost = (monitor_area / target_area).ln().abs();
+
+  (0.7 * aspect_cost) + (0.3 * area_cost)
 }
 
 pub fn set_last_tray_click_position(x: f64, y: f64) {
@@ -576,8 +611,9 @@ fn tray_anchor_position(app: &tauri::AppHandle, width: f64, height: f64) -> Opti
 
 pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
   let (target_w, target_h) = profile_dimensions(profile);
+  let target_portrait = is_portrait(target_w, target_h);
 
-  // Prefer exact match. If none exists, keep current position and let user place manually.
+  // Prefer exact resolution match. If none exists, pick the best monitor by orientation + fit score.
   if let Ok(monitors) = window.available_monitors() {
     let exact_monitor = monitors
       .iter()
@@ -585,20 +621,48 @@ pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
       .cloned();
     let has_exact_match = exact_monitor.is_some();
 
-    if let Some(monitor) = exact_monitor {
-      // Dedicated portrait display: run borderless fullscreen to avoid frame artifacts.
+    let best_orientation_match = monitors
+      .iter()
+      .filter(|m| is_portrait(m.size().width, m.size().height) == target_portrait)
+      .min_by(|a, b| {
+        let a_score = fit_score(a.size().width, a.size().height, target_w, target_h);
+        let b_score = fit_score(b.size().width, b.size().height, target_w, target_h);
+        a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
+      })
+      .cloned();
+
+    let best_any_match = monitors
+      .iter()
+      .min_by(|a, b| {
+        let a_score = fit_score(a.size().width, a.size().height, target_w, target_h);
+        let b_score = fit_score(b.size().width, b.size().height, target_w, target_h);
+        a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
+      })
+      .cloned();
+
+    let selected_monitor = exact_monitor
+      .or(best_orientation_match)
+      .or(best_any_match);
+
+    if let Some(monitor) = selected_monitor {
       let _ = window.set_fullscreen(false);
-      let _ = window.set_decorations(false);
       let _ = window.set_position(Position::Physical(*monitor.position()));
+
+      // Keep dashboard borderless in both exact and fallback modes.
+      let _ = window.set_decorations(false);
+
       let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
         width: target_w,
         height: target_h,
       }));
-      let _ = window.set_fullscreen(true);
+
+      if has_exact_match {
+        let _ = window.set_fullscreen(true);
+      }
     } else {
-      // Standalone mode on other displays: use normal framed window behavior.
+      // Keep borderless even when no monitor match was found.
       let _ = window.set_fullscreen(false);
-      let _ = window.set_decorations(true);
+      let _ = window.set_decorations(false);
       let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
         width: target_w,
         height: target_h,
@@ -621,6 +685,25 @@ pub fn preview_opacity(app: tauri::AppHandle, value: f64) -> Result<(), String> 
   if let Some(main) = app.get_webview_window("main") {
     main
       .emit("apply-opacity", value)
+      .map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+#[tauri::command]
+pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), String> {
+  let applied_profile = normalize_profile(&profile);
+  let (target_w, target_h) = profile_dimensions(&applied_profile);
+  if let Some(main) = app.get_webview_window("main") {
+    // Preview should keep the dashboard on its current monitor/position.
+    let _ = main.set_fullscreen(false);
+    let _ = main.set_decorations(false);
+    let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
+      width: target_w,
+      height: target_h,
+    }));
+    main
+      .emit("apply-profile", applied_profile)
       .map_err(|e| e.to_string())?;
   }
   Ok(())

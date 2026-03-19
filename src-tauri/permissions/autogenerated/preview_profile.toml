@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-profile"
+description = "Enables the preview_profile command without any pre-configured scope."
+commands.allow = ["preview_profile"]
+
+[[permission]]
+identifier = "deny-preview-profile"
+description = "Denies the preview_profile command without any pre-configured scope."
+commands.deny = ["preview_profile"]

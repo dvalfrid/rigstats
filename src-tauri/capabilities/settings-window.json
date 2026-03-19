@@ -6,6 +6,7 @@
   "permissions": [
     "allow-get-settings",
     "allow-preview-opacity",
+    "allow-preview-profile",
     "allow-preview-visible-panels",
     "allow-save-settings",
     "allow-close-window"

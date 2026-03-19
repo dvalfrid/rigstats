@@ -8,6 +8,7 @@ fn main() {
         "get_settings",
         "get_about_info",
         "preview_opacity",
+        "preview_profile",
         "preview_visible_panels",
         "save_settings",
         "close_window",

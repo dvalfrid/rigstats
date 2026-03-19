@@ -23,7 +23,28 @@
   --sans: 'Rajdhani', sans-serif;
   --viewport-w: 450px;
   --viewport-h: 1920px;
-  --dashboard-scale: 1;
+  --dashboard-w: 450px;
+  --dashboard-h: 1920px;
+  --panel-gap: 1px;
+  --panel-pad-y: 22px;
+  --panel-pad-x: 24px;
+  --row-header: 196px;
+  --row-clock: 148px;
+  --row-cpu: 420px;
+  --row-gpu: 320px;
+  --row-ram: 275px;
+  --row-net: 260px;
+  --row-disk: 295px;
+  --brand-mark-size: 165px;
+  --rig-name-size: 44px;
+  --model-name-size: 28px;
+  --clock-time-size: 70px;
+  --clock-day-size: 18px;
+  --big-num-size: 78px;
+  --ram-big-num-size: 64px;
+  --panel-model-size: 10px;
+  --ring-size: 100px;
+  --cpu-cores-max-h: 150px;
 }
 
 html, body {
@@ -39,33 +60,41 @@ html, body {
   align-items: flex-start;
 }
 
-body::before {
-  content:'';position:fixed;inset:0;
-  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);
-  pointer-events:none;z-index:999;
-}
-body::after {
-  content:'';position:fixed;inset:0;
-  background-image:linear-gradient(rgba(0,200,255,.018) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(0,200,255,.018) 1px,transparent 1px);
-  background-size:30px 30px;pointer-events:none;z-index:0;
-}
-
 .dashboard {
   position:relative;z-index:1;
-  display:flex;flex-direction:column;
-  width:450px;
-  height:1920px;
-  gap:0;background:var(--border);
-  transform: scale(var(--dashboard-scale));
-  transform-origin: top center;
+  display:grid;
+  width:var(--dashboard-w);
+  height:var(--dashboard-h);
+  grid-template-rows:
+    var(--row-header)
+    var(--row-clock)
+    var(--row-cpu)
+    var(--row-gpu)
+    var(--row-ram)
+    var(--row-net)
+    var(--row-disk);
+  gap:var(--panel-gap);
+  background:var(--border);
+  overflow:hidden;
+}
+
+.dashboard::before {
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.07) 3px,rgba(0,0,0,.07) 4px);
+  pointer-events:none;z-index:2;
+}
+
+.dashboard::after {
+  content:'';position:absolute;inset:0;
+  background-image:linear-gradient(rgba(0,200,255,.018) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(0,200,255,.018) 1px,transparent 1px);
+  background-size:30px 30px;pointer-events:none;z-index:2;
 }
 
 .panel {
-  background:var(--panel);padding:22px 24px;
-  position:relative;overflow:hidden;flex-shrink:0;
+  background:var(--panel);padding:var(--panel-pad-y) var(--panel-pad-x);
+  position:relative;overflow:hidden;flex-shrink:0;z-index:1;
 }
-.panel:not(:last-child){margin-bottom:1px;}
 .panel::after {
   content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,var(--c,var(--accent)),transparent);
@@ -75,30 +104,32 @@ body::after {
 .br{bottom:6px;right:6px;border-bottom:1px solid var(--c,var(--accent));border-right:1px solid var(--c,var(--accent));}
 
 /* HEADER */
-.panel-header{height:200px;--c:var(--accent);}
+.panel-header{--c:var(--accent);}
 .panel-header[data-tauri-drag-region]{cursor:move;}
 .rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
 .rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
-.rig-name{font-size:44px;font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
+.rig-name{font-size:var(--rig-name-size);font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
 .rig-brand-preview{display:none;margin-top:7px;padding:3px 8px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.12);font-family:var(--mono);font-size:10px;letter-spacing:1px;color:#dff7ff;text-transform:uppercase;width:max-content;line-height:1.25;}
-.rig-brand-mark{display:flex;align-items:center;justify-content:center;width:165px;height:165px;flex-shrink:0;}
-.rig-logo{width:165px;height:165px;object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
-.rig-brand-text{display:none;padding:14px 18px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.08);box-shadow:inset 0 0 18px rgba(0,200,255,.08);font-family:var(--mono);font-size:28px;letter-spacing:3px;color:#dff7ff;text-transform:uppercase;text-align:center;line-height:1.15;max-width:165px;}
+.rig-brand-mark{display:flex;align-items:center;justify-content:center;width:var(--brand-mark-size);height:var(--brand-mark-size);flex-shrink:0;}
+.rig-logo{width:var(--brand-mark-size);height:var(--brand-mark-size);object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
+.rig-brand-text{display:none;padding:14px 18px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.08);box-shadow:inset 0 0 18px rgba(0,200,255,.08);font-family:var(--mono);font-size:var(--model-name-size);letter-spacing:3px;color:#dff7ff;text-transform:uppercase;text-align:center;line-height:1.15;max-width:var(--brand-mark-size);}
 .rig-sub{font-family:var(--mono);font-size:10px;color:#6f8db7;line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
 .uptime{font-family:var(--mono);font-size:11px;color:var(--grn);margin-top:10px;}
+#modelName{color:var(--accent);font-size:var(--model-name-size);}
+#cpuModel,#gpuModel{font-size:var(--panel-model-size);}
 
 /* CLOCK */
-.panel-clock{height:152px;--c:var(--grn);}
-.clock-time{font-family:var(--mono);font-size:70px;color:#fff;letter-spacing:2px;line-height:1;}
+.panel-clock{--c:var(--grn);}
+.clock-time{font-family:var(--mono);font-size:var(--clock-time-size);color:#fff;letter-spacing:2px;line-height:1;}
 .clock-sub{display:flex;justify-content:space-between;margin-top:10px;}
-.clock-day{font-size:18px;font-weight:600;color:var(--grn);letter-spacing:3px;}
+.clock-day{font-size:var(--clock-day-size);font-weight:600;color:var(--grn);letter-spacing:3px;}
 .clock-date{font-family:var(--mono);font-size:12px;color:#6f8db7;align-self:flex-end;}
 
 /* SHARED */
 .stat-label{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:#7fa6d8;text-transform:uppercase;margin-bottom:8px;}
-.big-num{font-size:78px;font-weight:700;line-height:1;letter-spacing:-3px;color:var(--c,var(--accent));font-family:var(--sans);}
+.big-num{font-size:var(--big-num-size);font-weight:700;line-height:1;letter-spacing:-3px;color:var(--c,var(--accent));font-family:var(--sans);}
 .big-unit{font-family:var(--mono);font-size:20px;color:#6f8db7;}
 .meta-row{display:flex;gap:20px;margin-top:10px;flex-wrap:wrap;}
 .meta{display:flex;flex-direction:column;gap:2px;}
@@ -117,10 +148,10 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .null-val{color:var(--dim) !important;}
 
 /* CPU */
-.panel-cpu{--c:var(--accent);height:429px;}
+.panel-cpu{--c:var(--accent);}
 .amd-badge-cpu{position:absolute;top:16px;right:16px;width:96px;height:auto;object-fit:contain;opacity:.9;pointer-events:none;}
 .panel-cpu #cpuCores{
-  max-height:150px;
+  max-height:var(--cpu-cores-max-h);
   overflow-y:auto;
   overflow-x:hidden;
   padding-right:4px;
@@ -131,27 +162,28 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .panel-cpu #cpuCores::-webkit-scrollbar-thumb{background:rgba(0,200,255,.45);border-radius:4px;}
 
 /* GPU */
-.panel-gpu{--c:var(--amd);height:332px;margin-bottom:0 !important;}
+.panel-gpu{--c:var(--amd);}
 .amd-badge{position:absolute;top:16px;right:16px;width:96px;height:auto;object-fit:contain;opacity:.9;pointer-events:none;}
 .ring-wrap{display:flex;align-items:center;gap:16px;margin-top:12px;}
-.ring-svg{width:100px;height:100px;flex-shrink:0;}
+.ring-svg{width:var(--ring-size);height:var(--ring-size);flex-shrink:0;}
 .ring-bg{fill:none;stroke:rgba(255,255,255,.04);stroke-width:7;}
 .ring-fill{fill:none;stroke-width:7;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .7s ease;}
 .ring-txt{font-family:var(--sans);font-weight:700;fill:#fff;font-size:18px;text-anchor:middle;dominant-baseline:middle;}
 .ring-sub{font-family:var(--mono);fill:var(--dim);font-size:8px;text-anchor:middle;}
 
 /* RAM */
-.panel-ram{--c:var(--ram);height:295px;}
+.panel-ram{--c:var(--ram);}
+#ramUsed{font-size:var(--ram-big-num-size);}
 
 /* NET */
-.panel-net{--c:var(--grn);height:274px;}
+.panel-net{--c:var(--grn);}
 .net-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .net-arrow{font-size:20px;font-weight:700;margin-right:4px;}
 .net-val{font-family:var(--mono);font-size:28px;color:#fff;}
 .net-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
 
 /* DISK */
-.panel-disk{--c:var(--pur);height:274px;}
+.panel-disk{--c:var(--pur);}
 .disk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .disk-key{font-family:var(--mono);font-size:9px;color:#6f8db7;}
 .disk-val{font-family:var(--mono);font-size:24px;color:#fff;}
@@ -171,7 +203,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
       <div>
         <div class="rig-label">// GAMING RIG</div>
         <div id="rigBrandPreview" class="rig-brand-preview"></div>
-        <div class="rig-name"><span id="rigName">--</span><br><span id="modelName" style="color:var(--accent);font-size:28px;">--</span></div>
+        <div class="rig-name"><span id="rigName">--</span><br><span id="modelName">--</span></div>
         <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
       </div>
       <div class="rig-brand-mark" aria-hidden="true">
@@ -196,7 +228,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <div class="tl"></div><div class="br"></div>
     <img id="cpuVendorBadge" class="amd-badge-cpu" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="CPU Vendor Badge">
     <div class="stat-label">CPU LOAD</div>
-    <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="cpuModel">--</div>
+    <div style="font-family:var(--mono);color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="cpuModel">--</div>
     <div><span class="big-num" id="cpuLoad">--</span><span class="big-unit"> %</span></div>
     <div class="meta-row">
       <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
@@ -212,7 +244,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <div class="tl"></div><div class="br"></div>
     <img id="gpuVendorBadge" class="amd-badge" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="GPU Vendor Badge">
     <div class="stat-label">GPU LOAD</div>
-    <div style="font-family:var(--mono);font-size:10px;color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="gpuModel">--</div>
+    <div style="font-family:var(--mono);color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="gpuModel">--</div>
     <div class="ring-wrap">
       <svg class="ring-svg" viewBox="0 0 100 100">
         <circle class="ring-bg" cx="50" cy="50" r="42"/>
@@ -250,7 +282,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
   <div class="panel panel-ram" data-panel="ram">
     <div class="tl"></div><div class="br"></div>
     <div class="stat-label">RAM USAGE</div>
-    <div><span class="big-num" id="ramUsed" style="font-size:64px">--</span><span class="big-unit" id="ramTotal"> / -- GB</span></div>
+    <div><span class="big-num" id="ramUsed">--</span><span class="big-unit" id="ramTotal"> / -- GB</span></div>
     <div class="meta-row">
       <div class="meta"><div class="meta-key">FREE</div><div class="meta-val" id="ramFree">-- GB</div></div>
       <div class="meta"><div class="meta-key">USED%</div><div class="meta-val" id="ramPct">--%</div></div>
