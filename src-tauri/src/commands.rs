@@ -1,36 +1,23 @@
-//! Tauri command handlers and window event helpers.
+//! Tauri command handlers — the public IPC surface exposed to the renderer.
 //!
 //! Design notes:
 //! - Commands are intentionally thin wrappers around shared state and helpers.
+//! - All non-trivial logic lives in the domain modules (hardware, monitor, etc.).
 //! - Settings updates are emitted to the renderer immediately after persistence.
 //! - Stats collection keeps the last successful LHM sample to avoid UI flicker
 //!   when LibreHardwareMonitor is temporarily unavailable.
 
+use crate::debug::{append_debug_log, read_debug_log_tail};
+use crate::hardware::{detect_gpu_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
+use crate::lhm_process::{can_reach_lhm_endpoint, get_lhm_task_details, track_lhm_connection_state};
+use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
-use serde::Deserialize;
 use serde::Serialize;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::Write;
-use std::process::Command;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Duration;
 use std::time::Instant;
-use std::time::{SystemTime, UNIX_EPOCH};
-use tauri::{Emitter, Manager, Position, Size, WebviewWindow, WebviewWindowBuilder, WebviewUrl, Window, WindowEvent};
+use tauri::{Emitter, Manager, Size, WebviewWindow};
 
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
-
-#[cfg(windows)]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-static LHM_WAS_CONNECTED: AtomicBool = AtomicBool::new(true);
-static LAST_LHM_OFFLINE_LOG_SECS: AtomicU64 = AtomicU64::new(0);
-static LAST_TRAY_CLICK_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
-static LAST_TRAY_CLICK_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
 const GITHUB_URL: &str = "https://github.com/dvalfrid/rigstats";
 const CONTACT_EMAIL: &str = "daniel@valfridsson.net";
 const LICENSE_NAME: &str = "MIT";
@@ -38,8 +25,7 @@ const LHM_VERSION: &str = "v0.9.6";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
 
-#[cfg(windows)]
-const LHM_TASK_NAMES: [&str; 2] = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+// --- About -----------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,161 +52,6 @@ pub struct AboutInfo {
   pub lhm_task_last_result: Option<String>,
   pub lhm_task_to_run: Option<String>,
   pub dependencies: Vec<AboutDependency>,
-}
-
-fn run_hidden_command(program: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
-  let mut command = Command::new(program);
-  command.args(args);
-  #[cfg(windows)]
-  {
-    command.creation_flags(CREATE_NO_WINDOW);
-  }
-  command.output()
-}
-
-fn unix_now_secs() -> u64 {
-  SystemTime::now()
-    .duration_since(UNIX_EPOCH)
-    .map(|d| d.as_secs())
-    .unwrap_or(0)
-}
-
-fn debug_log_path(app: &tauri::AppHandle) -> PathBuf {
-  app
-    .path()
-    .app_data_dir()
-    .unwrap_or_else(|_| PathBuf::from("."))
-    .join("rigstats-debug.log")
-}
-
-pub(crate) fn reset_debug_log(app: &tauri::AppHandle) {
-  let path = debug_log_path(app);
-  if let Some(parent) = path.parent() {
-    let _ = create_dir_all(parent);
-  }
-
-  let _ = OpenOptions::new()
-    .create(true)
-    .write(true)
-    .truncate(true)
-    .open(path);
-}
-
-pub(crate) fn append_debug_log(app: &tauri::AppHandle, message: &str) {
-  let path = debug_log_path(app);
-  if let Some(parent) = path.parent() {
-    let _ = create_dir_all(parent);
-  }
-
-  if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
-    let _ = writeln!(file, "[{}] {}", unix_now_secs(), message);
-  }
-}
-
-fn read_debug_log_tail(app: &tauri::AppHandle, line_limit: usize) -> String {
-  let path = debug_log_path(app);
-  let content = std::fs::read_to_string(path).unwrap_or_default();
-  let lines = content.lines().collect::<Vec<_>>();
-  let start = lines.len().saturating_sub(line_limit);
-  lines[start..].join("\n")
-}
-
-fn task_field(output: &str, key: &str) -> Option<String> {
-  output
-    .lines()
-    .find_map(|line| {
-      let trimmed = line.trim();
-      if !trimmed.starts_with(key) {
-        return None;
-      }
-      trimmed
-        .split_once(':')
-        .map(|(_, value)| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-    })
-}
-
-fn get_lhm_task_details(app: &tauri::AppHandle) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
-  #[cfg(windows)]
-  {
-    for task_name in LHM_TASK_NAMES {
-      match run_hidden_command("schtasks", &["/Query", "/TN", task_name, "/V", "/FO", "LIST"]) {
-        Ok(out) if out.status.success() => {
-          let text = String::from_utf8_lossy(&out.stdout).to_string();
-          return (
-            task_field(&text, "TaskName"),
-            task_field(&text, "Status"),
-            task_field(&text, "Last Result"),
-            task_field(&text, "Task To Run"),
-          );
-        }
-        Ok(_) => continue,
-        Err(error) => {
-          append_debug_log(app, &format!("Failed to inspect LHM task {}: {}", task_name, error));
-        }
-      }
-    }
-  }
-
-  (None, None, None, None)
-}
-
-pub fn probe_wmi_status() -> Result<(), String> {
-  #[cfg(windows)]
-  {
-    let com_probe_result = (|| -> Result<(), String> {
-      let com = wmi::COMLibrary::new().map_err(|error| format!("COM init failed: {}", error))?;
-      let conn = wmi::WMIConnection::new(com.into())
-        .map_err(|error| format!("WMI connection failed: {}", error))?;
-
-      #[derive(Deserialize)]
-      struct ProbeRow {
-        #[serde(rename = "Caption")]
-        caption: Option<String>,
-      }
-
-      let rows: Vec<ProbeRow> = conn
-        .raw_query("SELECT Caption FROM Win32_OperatingSystem")
-        .map_err(|error| format!("WMI query failed: {}", error))?;
-
-      if rows.iter().any(|row| row.caption.as_deref().is_some_and(|value| !value.trim().is_empty())) {
-        Ok(())
-      } else {
-        Err("WMI query returned no usable rows".to_string())
-      }
-    })();
-
-    if com_probe_result.is_ok() {
-      return Ok(());
-    }
-
-    // Fallback: even if COM apartment init fails on this thread, CIM may still be available.
-    let shell_probe = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "(Get-CimInstance Win32_OperatingSystem | Select-Object -First 1 -ExpandProperty Caption) | Out-String",
-      ],
-    );
-
-    if let Ok(out) = shell_probe {
-      if out.status.success() {
-        let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !text.is_empty() {
-          return Ok(());
-        }
-      }
-    }
-
-    let com_error = com_probe_result.err().unwrap_or_else(|| "Unknown WMI COM probe failure".to_string());
-    Err(format!("{}; CIM fallback failed", com_error))
-  }
-
-  #[cfg(not(windows))]
-  {
-    Err("WMI is only available on Windows".to_string())
-  }
 }
 
 fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
@@ -252,8 +83,10 @@ fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
 
 #[tauri::command]
 pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AboutInfo {
+  use crate::debug::debug_log_path;
   let log_path = debug_log_path(&app);
-  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) = get_lhm_task_details(&app);
+  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) =
+    get_lhm_task_details(&app);
 
   AboutInfo {
     rigstats_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -271,409 +104,7 @@ pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) 
   }
 }
 
-#[cfg(windows)]
-fn can_reach_lhm_endpoint() -> bool {
-  use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
-  let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8085);
-  TcpStream::connect_timeout(&address, Duration::from_millis(300)).is_ok()
-}
-
-#[cfg(windows)]
-fn candidate_lhm_paths(app: &tauri::AppHandle) -> Vec<PathBuf> {
-  let mut paths = Vec::new();
-
-  if let Ok(resource_dir) = app.path().resource_dir() {
-    paths.push(resource_dir.join("lhm").join("LibreHardwareMonitor.exe"));
-    if let Some(parent) = resource_dir.parent() {
-      paths.push(parent.join("lhm").join("LibreHardwareMonitor.exe"));
-    }
-  }
-
-  if let Ok(current_exe) = std::env::current_exe() {
-    if let Some(exe_dir) = current_exe.parent() {
-      paths.push(exe_dir.join("lhm").join("LibreHardwareMonitor.exe"));
-      paths.push(
-        exe_dir
-          .join("resources")
-          .join("lhm")
-          .join("LibreHardwareMonitor.exe"),
-      );
-    }
-  }
-
-  if let Ok(program_files) = std::env::var("ProgramFiles") {
-    paths.push(
-      PathBuf::from(&program_files)
-        .join("RigStats")
-        .join("lhm")
-        .join("LibreHardwareMonitor.exe"),
-    );
-    paths.push(
-      PathBuf::from(program_files)
-        .join("LibreHardwareMonitor")
-        .join("LibreHardwareMonitor.exe"),
-    );
-  }
-
-  if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-    paths.push(
-      PathBuf::from(program_files_x86)
-        .join("LibreHardwareMonitor")
-        .join("LibreHardwareMonitor.exe"),
-    );
-  }
-
-  if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-    paths.push(
-      PathBuf::from(local_app_data)
-        .join("Programs")
-        .join("LibreHardwareMonitor")
-        .join("LibreHardwareMonitor.exe"),
-    );
-  }
-
-  paths
-}
-
-#[cfg(windows)]
-fn spawn_lhm(exe_path: &Path) -> std::io::Result<()> {
-  let mut command = Command::new(exe_path);
-  command.creation_flags(CREATE_NO_WINDOW);
-  command.spawn().map(|_| ())
-}
-
-#[cfg(windows)]
-fn try_run_lhm_task(app: &tauri::AppHandle) -> bool {
-  for task_name in LHM_TASK_NAMES {
-    let output = run_hidden_command("schtasks", &["/Run", "/TN", task_name]);
-
-    match output {
-      Ok(out) => {
-        let ok = out.status.success();
-        if ok {
-          append_debug_log(app, &format!("LHM task run command succeeded: {}", task_name));
-          return true;
-        }
-
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        append_debug_log(
-          app,
-          &format!("LHM task run command failed ({}): {}", task_name, stderr),
-        );
-      }
-      Err(e) => {
-        append_debug_log(
-          app,
-          &format!("LHM task run command error ({}): {}", task_name, e),
-        );
-      }
-    }
-  }
-
-  false
-}
-
-#[cfg(windows)]
-fn lhm_task_exists(app: &tauri::AppHandle) -> bool {
-  for task_name in LHM_TASK_NAMES {
-    match run_hidden_command("schtasks", &["/Query", "/TN", task_name]) {
-      Ok(out) => {
-        if out.status.success() {
-          append_debug_log(app, &format!("LHM task exists: {}", task_name));
-          return true;
-        }
-
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        append_debug_log(
-          app,
-          &format!("LHM task query failed ({}): {}", task_name, stderr),
-        );
-      }
-      Err(e) => {
-        append_debug_log(
-          app,
-          &format!("LHM task query error ({}): {}", task_name, e),
-        );
-      }
-    }
-  }
-
-  false
-}
-
-pub fn ensure_lhm_running(app: &tauri::AppHandle) {
-  #[cfg(windows)]
-  {
-    append_debug_log(app, &format!("LHM ensure start (log path: {})", debug_log_path(app).display()));
-
-    if can_reach_lhm_endpoint() {
-      append_debug_log(app, "LHM endpoint already reachable on :8085");
-      return;
-    }
-
-    // Preferred path: run the installer-created scheduled task (no extra UAC prompt).
-    if try_run_lhm_task(app) {
-      std::thread::sleep(Duration::from_millis(1200));
-      if can_reach_lhm_endpoint() {
-        append_debug_log(app, "LHM reachable after task run");
-        return;
-      }
-      append_debug_log(app, "Task run succeeded but endpoint still unavailable");
-    } else if !lhm_task_exists(app) {
-      append_debug_log(app, "LHM task missing. Reinstall RigStats as administrator to recreate task.");
-    }
-
-    let mut elevation_required = false;
-
-    for path in candidate_lhm_paths(app) {
-      if !path.is_file() {
-        append_debug_log(app, &format!("LHM candidate missing: {}", path.display()));
-        continue;
-      }
-
-      append_debug_log(app, &format!("LHM candidate found: {}", path.display()));
-      match spawn_lhm(&path) {
-        Ok(()) => {
-          append_debug_log(app, &format!("LHM spawned from {}", path.display()));
-          return;
-        }
-        Err(e) => {
-          if e.raw_os_error() == Some(740) {
-            elevation_required = true;
-          }
-          append_debug_log(app, &format!("LHM spawn failed from {}: {}", path.display(), e));
-        }
-      }
-    }
-
-    if elevation_required {
-      append_debug_log(app, "Elevation required for direct LHM launch. App will not trigger UAC; using scheduled task only.");
-    }
-
-    append_debug_log(app, "LHM ensure finished without successful spawn");
-  }
-}
-
-fn normalize_profile(profile: &str) -> String {
-  match profile {
-    "portrait-xl"
-    | "portrait-slim"
-    | "portrait-hd"
-    | "portrait-wxga"
-    | "portrait-fhd"
-    | "portrait-wuxga"
-    | "portrait-qhd"
-    | "portrait-hdplus"
-    | "portrait-900x1600"
-    | "portrait-1050x1680"
-    | "portrait-1600x2560"
-    | "portrait-4k" => {
-      profile.to_string()
-    }
-    _ => "portrait-xl".to_string(),
-  }
-}
-
-fn is_valid_panel_key(value: &str) -> bool {
-  matches!(value, "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk")
-}
-
-fn normalize_visible_panels(values: Vec<String>) -> Vec<String> {
-  let mut out = Vec::new();
-  for value in values {
-    let key = value.trim().to_ascii_lowercase();
-    if key.is_empty() || !is_valid_panel_key(&key) || out.iter().any(|v| v == &key) {
-      continue;
-    }
-    out.push(key);
-  }
-
-  if out.is_empty() {
-    vec![
-      "header".to_string(),
-      "clock".to_string(),
-      "cpu".to_string(),
-      "gpu".to_string(),
-      "ram".to_string(),
-      "net".to_string(),
-      "disk".to_string(),
-    ]
-  } else {
-    out
-  }
-}
-
-fn profile_dimensions(profile: &str) -> (u32, u32) {
-  match normalize_profile(profile).as_str() {
-    "portrait-slim" => (480, 1920),
-    "portrait-hd" => (720, 1280),
-    "portrait-wxga" => (800, 1280),
-    "portrait-fhd" => (1080, 1920),
-    "portrait-wuxga" => (1200, 1920),
-    "portrait-qhd" => (1440, 2560),
-    "portrait-hdplus" => (768, 1366),
-    "portrait-900x1600" => (900, 1600),
-    "portrait-1050x1680" => (1050, 1680),
-    "portrait-1600x2560" => (1600, 2560),
-    "portrait-4k" => (2160, 3840),
-    _ => (450, 1920),
-  }
-}
-
-fn is_portrait(width: u32, height: u32) -> bool {
-  height >= width
-}
-
-fn fit_score(monitor_w: u32, monitor_h: u32, target_w: u32, target_h: u32) -> f64 {
-  let monitor_aspect = monitor_w as f64 / monitor_h as f64;
-  let target_aspect = target_w as f64 / target_h as f64;
-  let aspect_cost = (monitor_aspect / target_aspect).ln().abs();
-
-  let monitor_area = (monitor_w as f64) * (monitor_h as f64);
-  let target_area = (target_w as f64) * (target_h as f64);
-  let area_cost = (monitor_area / target_area).ln().abs();
-
-  (0.7 * aspect_cost) + (0.3 * area_cost)
-}
-
-pub fn set_last_tray_click_position(x: f64, y: f64) {
-  LAST_TRAY_CLICK_X.store(x.round() as i32, Ordering::Relaxed);
-  LAST_TRAY_CLICK_Y.store(y.round() as i32, Ordering::Relaxed);
-}
-
-fn monitor_work_area(
-  origin_x: i32,
-  origin_y: i32,
-  monitor_w: u32,
-  monitor_h: u32,
-  popup_w: f64,
-  popup_h: f64,
-  preferred_x: i32,
-  preferred_y: i32,
-) -> (f64, f64) {
-  let popup_w_px = popup_w.round() as i32;
-  let popup_h_px = popup_h.round() as i32;
-  let max_x = origin_x + monitor_w as i32 - popup_w_px;
-  let max_y = origin_y + monitor_h as i32 - popup_h_px;
-  let x = preferred_x.clamp(origin_x, max_x);
-  let y = preferred_y.clamp(origin_y, max_y);
-  (x as f64, y as f64)
-}
-
-fn tray_anchor_position(app: &tauri::AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
-  let margin_px = 12i32;
-  let tray_x = LAST_TRAY_CLICK_X.load(Ordering::Relaxed);
-  let tray_y = LAST_TRAY_CLICK_Y.load(Ordering::Relaxed);
-
-  // Preferred path: position relative to the latest tray click on the monitor where that click occurred.
-  if tray_x != i32::MIN && tray_y != i32::MIN {
-    if let Ok(monitors) = app.available_monitors() {
-      if let Some(monitor) = monitors.into_iter().find(|monitor| {
-        let pos = monitor.position();
-        let size = monitor.size();
-        let within_x = tray_x >= pos.x && tray_x < pos.x + size.width as i32;
-        let within_y = tray_y >= pos.y && tray_y < pos.y + size.height as i32;
-        within_x && within_y
-      }) {
-        let pos = monitor.position();
-        let size = monitor.size();
-        let preferred_x = tray_x - width.round() as i32 + 26;
-        let preferred_y = tray_y - height.round() as i32 - margin_px;
-        return Some(monitor_work_area(
-          pos.x,
-          pos.y,
-          size.width,
-          size.height,
-          width,
-          height,
-          preferred_x,
-          preferred_y,
-        ));
-      }
-    }
-  }
-
-  // Fallback path: bottom-right of the primary monitor.
-  let monitor = app.primary_monitor().ok().flatten()?;
-  let origin = monitor.position();
-  let size = monitor.size();
-  Some(monitor_work_area(
-    origin.x,
-    origin.y,
-    size.width,
-    size.height,
-    width,
-    height,
-    origin.x + size.width as i32 - width.round() as i32 - margin_px,
-    origin.y + size.height as i32 - height.round() as i32 - margin_px,
-  ))
-}
-
-pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
-  let (target_w, target_h) = profile_dimensions(profile);
-  let target_portrait = is_portrait(target_w, target_h);
-
-  // Prefer exact resolution match. If none exists, pick the best monitor by orientation + fit score.
-  if let Ok(monitors) = window.available_monitors() {
-    let exact_monitor = monitors
-      .iter()
-      .find(|m| m.size().width == target_w && m.size().height == target_h)
-      .cloned();
-    let has_exact_match = exact_monitor.is_some();
-
-    let best_orientation_match = monitors
-      .iter()
-      .filter(|m| is_portrait(m.size().width, m.size().height) == target_portrait)
-      .min_by(|a, b| {
-        let a_score = fit_score(a.size().width, a.size().height, target_w, target_h);
-        let b_score = fit_score(b.size().width, b.size().height, target_w, target_h);
-        a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
-      })
-      .cloned();
-
-    let best_any_match = monitors
-      .iter()
-      .min_by(|a, b| {
-        let a_score = fit_score(a.size().width, a.size().height, target_w, target_h);
-        let b_score = fit_score(b.size().width, b.size().height, target_w, target_h);
-        a_score.partial_cmp(&b_score).unwrap_or(std::cmp::Ordering::Equal)
-      })
-      .cloned();
-
-    let selected_monitor = exact_monitor
-      .or(best_orientation_match)
-      .or(best_any_match);
-
-    if let Some(monitor) = selected_monitor {
-      let _ = window.set_fullscreen(false);
-      let _ = window.set_position(Position::Physical(*monitor.position()));
-
-      // Keep dashboard borderless in both exact and fallback modes.
-      let _ = window.set_decorations(false);
-
-      let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
-        width: target_w,
-        height: target_h,
-      }));
-
-      if has_exact_match {
-        let _ = window.set_fullscreen(true);
-      }
-    } else {
-      // Keep borderless even when no monitor match was found.
-      let _ = window.set_fullscreen(false);
-      let _ = window.set_decorations(false);
-      let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
-        width: target_w,
-        height: target_h,
-      }));
-    }
-
-    return has_exact_match;
-  }
-
-  false
-}
+// --- Settings --------------------------------------------------------------
 
 #[tauri::command]
 pub fn get_settings(state: tauri::State<AppState>) -> Settings {
@@ -683,9 +114,7 @@ pub fn get_settings(state: tauri::State<AppState>) -> Settings {
 #[tauri::command]
 pub fn preview_opacity(app: tauri::AppHandle, value: f64) -> Result<(), String> {
   if let Some(main) = app.get_webview_window("main") {
-    main
-      .emit("apply-opacity", value)
-      .map_err(|e| e.to_string())?;
+    main.emit("apply-opacity", value).map_err(|e| e.to_string())?;
   }
   Ok(())
 }
@@ -695,16 +124,13 @@ pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), Str
   let applied_profile = normalize_profile(&profile);
   let (target_w, target_h) = profile_dimensions(&applied_profile);
   if let Some(main) = app.get_webview_window("main") {
-    // Preview should keep the dashboard on its current monitor/position.
     let _ = main.set_fullscreen(false);
     let _ = main.set_decorations(false);
     let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
       width: target_w,
       height: target_h,
     }));
-    main
-      .emit("apply-profile", applied_profile)
-      .map_err(|e| e.to_string())?;
+    main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
   }
   Ok(())
 }
@@ -713,9 +139,7 @@ pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), Str
 pub fn preview_visible_panels(app: tauri::AppHandle, panels: Vec<String>) -> Result<(), String> {
   if let Some(main) = app.get_webview_window("main") {
     let normalized = normalize_visible_panels(panels);
-    main
-      .emit("apply-visible-panels", normalized)
-      .map_err(|e| e.to_string())?;
+    main.emit("apply-visible-panels", normalized).map_err(|e| e.to_string())?;
   }
   Ok(())
 }
@@ -734,29 +158,28 @@ pub fn save_settings(
   visible_panels: Option<Vec<String>>,
   #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
 ) -> Result<(), String> {
-  // Clamp opacity to a valid CSS alpha range before persistence.
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   settings.opacity = opacity.clamp(0.0, 1.0);
 
   // Accept both snake_case and camelCase payload keys from the renderer.
   let incoming_name = model_name.or(modelName).unwrap_or_else(|| settings.model_name.clone());
   settings.model_name = incoming_name;
+
   let requested_profile = dashboard_profile
     .or(dashboardProfile)
     .unwrap_or_else(|| settings.dashboard_profile.clone());
   let applied_profile = normalize_profile(&requested_profile);
-  let applied_always_on_top = always_on_top
-    .or(alwaysOnTop)
-    .unwrap_or(settings.always_on_top);
+
+  let applied_always_on_top = always_on_top.or(alwaysOnTop).unwrap_or(settings.always_on_top);
+
   let requested_visible_panels = visible_panels
     .or(visiblePanels)
     .unwrap_or_else(|| settings.visible_panels.clone());
   let applied_visible_panels = normalize_visible_panels(requested_visible_panels);
+
   if let Some(main) = app.get_webview_window("main") {
     let _ = pick_target_monitor(&main, &applied_profile);
-    main
-      .set_always_on_top(applied_always_on_top)
-      .map_err(|e| e.to_string())?;
+    main.set_always_on_top(applied_always_on_top).map_err(|e| e.to_string())?;
   }
 
   settings.dashboard_profile = applied_profile.clone();
@@ -765,22 +188,16 @@ pub fn save_settings(
   persist_settings(&app, &settings)?;
 
   if let Some(main) = app.get_webview_window("main") {
-    main
-      .emit("apply-opacity", settings.opacity)
-      .map_err(|e| e.to_string())?;
-    main
-      .emit("apply-model-name", settings.model_name.clone())
-      .map_err(|e| e.to_string())?;
-    main
-      .emit("apply-profile", applied_profile.clone())
-      .map_err(|e| e.to_string())?;
-    main
-      .emit("apply-visible-panels", applied_visible_panels)
-      .map_err(|e| e.to_string())?;
+    main.emit("apply-opacity", settings.opacity).map_err(|e| e.to_string())?;
+    main.emit("apply-model-name", settings.model_name.clone()).map_err(|e| e.to_string())?;
+    main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
+    main.emit("apply-visible-panels", applied_visible_panels).map_err(|e| e.to_string())?;
   }
 
   Ok(())
 }
+
+// --- Window utilities ------------------------------------------------------
 
 #[tauri::command]
 pub fn close_window(window: WebviewWindow) -> Result<(), String> {
@@ -792,6 +209,8 @@ pub fn start_window_drag(window: WebviewWindow) -> Result<(), String> {
   window.start_dragging().map_err(|e| e.to_string())
 }
 
+// --- System info -----------------------------------------------------------
+
 #[tauri::command]
 pub fn get_system_name() -> String {
   hostname::get()
@@ -801,687 +220,34 @@ pub fn get_system_name() -> String {
 }
 
 #[tauri::command]
+pub fn get_system_brand(state: tauri::State<AppState>) -> String {
+  state.system_brand.clone()
+}
+
+#[tauri::command]
 pub fn get_cpu_info(state: tauri::State<AppState>) -> String {
   let mut system = state.system.lock().unwrap_or_else(|e| e.into_inner());
   system.refresh_cpu();
-  let cpu0 = system.cpus().first();
-  cpu0
+  system
+    .cpus()
+    .first()
     .map(|c| c.brand().to_string())
     .filter(|s| !s.is_empty())
     .unwrap_or_else(|| "--".to_string())
 }
 
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct VideoControllerName {
-  #[serde(rename = "Name")]
-  name: Option<String>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct VideoControllerMemory {
-  #[serde(rename = "AdapterRAM")]
-  adapter_ram: Option<u64>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct ComputerSystem {
-  #[serde(rename = "Manufacturer")]
-  manufacturer: Option<String>,
-  #[serde(rename = "Model")]
-  model: Option<String>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct ComputerSystemProduct {
-  #[serde(rename = "Version")]
-  version: Option<String>,
-  #[serde(rename = "Name")]
-  name: Option<String>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct BaseBoardInfo {
-  #[serde(rename = "Manufacturer")]
-  manufacturer: Option<String>,
-  #[serde(rename = "Product")]
-  product: Option<String>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug, Default)]
-struct PowerShellBrandInfo {
-  #[serde(rename = "computerSystemManufacturer")]
-  computer_system_manufacturer: Option<String>,
-  #[serde(rename = "computerSystemModel")]
-  computer_system_model: Option<String>,
-  #[serde(rename = "productName")]
-  product_name: Option<String>,
-  #[serde(rename = "productVersion")]
-  product_version: Option<String>,
-  #[serde(rename = "baseBoardManufacturer")]
-  base_board_manufacturer: Option<String>,
-  #[serde(rename = "baseBoardProduct")]
-  base_board_product: Option<String>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
-struct PhysicalMemory {
-  #[serde(rename = "Speed")]
-  speed: Option<u32>,
-  #[serde(rename = "ConfiguredClockSpeed")]
-  configured_clock_speed: Option<u32>,
-  #[serde(rename = "SMBIOSMemoryType")]
-  smbios_memory_type: Option<u16>,
-  #[serde(rename = "MemoryType")]
-  memory_type: Option<u16>,
-  #[serde(rename = "Manufacturer")]
-  manufacturer: Option<String>,
-  #[serde(rename = "PartNumber")]
-  part_number: Option<String>,
-  #[serde(rename = "Capacity")]
-  capacity: Option<u64>,
-}
-
-#[cfg(windows)]
-fn map_memory_type(code: u16) -> Option<&'static str> {
-  match code {
-    18 => Some("DDR"),
-    20 => Some("DDR2"),
-    24 => Some("DDR3"),
-    26 => Some("DDR4"),
-    34 => Some("DDR5"),
-    _ => None,
-  }
-}
-
-#[cfg(windows)]
-fn classify_system_brand(fields: &[&str]) -> &'static str {
-  let normalized: Vec<String> = fields
-    .iter()
-    .map(|value| value.trim().to_ascii_lowercase())
-    .filter(|value| !value.is_empty())
-    .collect();
-
-  let has_any = |needles: &[&str]| {
-    normalized
-      .iter()
-      .any(|value| needles.iter().any(|needle| value.contains(needle)))
-  };
-
-  if has_any(&["alienware"]) {
-    "alienware"
-  } else if has_any(&["razer"]) {
-    "razer"
-  } else if has_any(&["legion"]) {
-    "legion"
-  } else if has_any(&["omen"]) {
-    "omen"
-  } else if has_any(&["predator"]) {
-    "predator"
-  } else if has_any(&["aorus"]) {
-    "aorus"
-  } else if has_any(&["asus", "rog", "republic of gamers"]) {
-    "rog"
-  } else if has_any(&["msi", "micro-star", "micro star"]) {
-    "msi"
-  } else if has_any(&["gigabyte"]) {
-    "gigabyte"
-  } else if has_any(&["asrock"]) {
-    "asrock"
-  } else if has_any(&["corsair"]) {
-    "corsair"
-  } else if has_any(&["nzxt"]) {
-    "nzxt"
-  } else if has_any(&["intel"]) {
-    "intel"
-  } else if has_any(&["dell"]) {
-    "dell"
-  } else if has_any(&["lenovo"]) {
-    "lenovo"
-  } else if has_any(&["hewlett-packard", "hp ", " hp", "hp-"]) {
-    "hp"
-  } else if has_any(&["acer"]) {
-    "acer"
-  } else {
-    "other"
-  }
-}
-
-pub fn detect_system_brand() -> String {
-  #[cfg(windows)]
-  {
-    if let Ok(com) = wmi::COMLibrary::new() {
-      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
-        let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
-        let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
-        let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
-
-        let mut fields = Vec::new();
-        if let Some(system) = systems.first() {
-          if let Some(value) = system.manufacturer.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = system.model.as_deref() {
-            fields.push(value);
-          }
-        }
-        if let Some(product) = products.first() {
-          if let Some(value) = product.name.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = product.version.as_deref() {
-            fields.push(value);
-          }
-        }
-        if let Some(board) = boards.first() {
-          if let Some(value) = board.manufacturer.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = board.product.as_deref() {
-            fields.push(value);
-          }
-        }
-
-        if !fields.is_empty() {
-          return classify_system_brand(&fields).to_string();
-        }
-      }
-    }
-
-    let output = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "$cs = Get-CimInstance Win32_ComputerSystem; $csp = Get-CimInstance Win32_ComputerSystemProduct; $bb = Get-CimInstance Win32_BaseBoard; [pscustomobject]@{ computerSystemManufacturer = $cs.Manufacturer; computerSystemModel = $cs.Model; productName = $csp.Name; productVersion = $csp.Version; baseBoardManufacturer = $bb.Manufacturer; baseBoardProduct = $bb.Product } | ConvertTo-Json -Compress",
-      ],
-    );
-
-    if let Ok(out) = output {
-      if out.status.success() {
-        let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if let Ok(info) = serde_json::from_str::<PowerShellBrandInfo>(&raw) {
-          let mut fields = Vec::new();
-          if let Some(value) = info.computer_system_manufacturer.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = info.computer_system_model.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = info.product_name.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = info.product_version.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = info.base_board_manufacturer.as_deref() {
-            fields.push(value);
-          }
-          if let Some(value) = info.base_board_product.as_deref() {
-            fields.push(value);
-          }
-          if !fields.is_empty() {
-            return classify_system_brand(&fields).to_string();
-          }
-        }
-      }
-    }
-
-    "other".to_string()
-  }
-
-  #[cfg(not(windows))]
-  {
-    "other".to_string()
-  }
-}
-
-#[tauri::command]
-pub fn get_system_brand(state: tauri::State<AppState>) -> String {
-  state.system_brand.clone()
-}
-
-fn normalize_model_name(raw: &str) -> Option<String> {
-  let trimmed = raw.trim();
-  if trimmed.is_empty() {
-    return None;
-  }
-
-  let invalid = ["to be filled by o.e.m.", "system product name", "default string", "unknown"];
-  let lower = trimmed.to_ascii_lowercase();
-  if invalid.iter().any(|x| lower == *x) {
-    return None;
-  }
-
-  Some(trimmed.to_string())
-}
-
-pub fn detect_model_name() -> Option<String> {
-  #[cfg(windows)]
-  {
-    let com = wmi::COMLibrary::new().ok()?;
-    let conn = wmi::WMIConnection::new(com.into()).ok()?;
-
-    let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
-    if let Some(v) = products
-      .iter()
-      .filter_map(|p| p.version.as_deref().and_then(normalize_model_name))
-      .next()
-    {
-      return Some(v);
-    }
-
-    if let Some(v) = products
-      .iter()
-      .filter_map(|p| p.name.as_deref().and_then(normalize_model_name))
-      .next()
-    {
-      return Some(v);
-    }
-
-    let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
-    systems
-      .iter()
-      .filter_map(|s| s.model.as_deref().and_then(normalize_model_name))
-      .next()
-  }
-
-  #[cfg(not(windows))]
-  {
-    None
-  }
-}
-
-pub fn detect_ram_spec() -> String {
-  #[cfg(windows)]
-  fn detect_ram_spec_from_shell() -> Option<String> {
-    let output = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $dimms = $m.Count; $speed = ($m | ForEach-Object { if($_.ConfiguredClockSpeed){ $_.ConfiguredClockSpeed } else { $_.Speed } } | Measure-Object -Maximum).Maximum; $typeCode = ($m | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); if(-not $typeCode){ $typeCode = ($m | Select-Object -First 1 -ExpandProperty MemoryType) }; $type = switch([int]$typeCode){ 18 {'DDR'} 20 {'DDR2'} 24 {'DDR3'} 26 {'DDR4'} 34 {'DDR5'} default {''} }; if($type -and $speed){ \"$type $speed MT/s ($dimms DIMMs)\" } elseif($type){ \"$type ($dimms DIMMs)\" } elseif($speed){ \"$speed MT/s ($dimms DIMMs)\" } else { \"RAM ($dimms DIMMs)\" } | Out-String",
-      ],
-    )
-    .ok()?;
-
-    if !output.status.success() {
-      return None;
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() {
-      None
-    } else {
-      Some(text)
-    }
-  }
-
-  #[cfg(windows)]
-  {
-    let com = match wmi::COMLibrary::new() {
-      Ok(c) => c,
-      Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
-    };
-    let conn = match wmi::WMIConnection::new(com.into()) {
-      Ok(c) => c,
-      Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
-    };
-
-    let sticks: Vec<PhysicalMemory> = match conn.query() {
-      Ok(s) => s,
-      Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
-    };
-
-    if sticks.is_empty() {
-      return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string());
-    }
-
-    let dimms = sticks.len();
-    let max_speed = sticks
-      .iter()
-      .filter_map(|s| s.configured_clock_speed.or(s.speed))
-      .max()
-      .unwrap_or(0);
-    let ram_type = sticks
-      .iter()
-      .find_map(|s| s.smbios_memory_type.or(s.memory_type).and_then(map_memory_type));
-
-    let spec = match (ram_type, max_speed) {
-      (Some(t), s) if s > 0 => format!("{} {} MT/s ({} DIMMs)", t, s, dimms),
-      (Some(t), _) => format!("{} ({} DIMMs)", t, dimms),
-      (None, s) if s > 0 => format!("{} MT/s ({} DIMMs)", s, dimms),
-      _ => format!("RAM ({} DIMMs)", dimms),
-    };
-
-    if spec.starts_with("RAM") {
-      detect_ram_spec_from_shell().unwrap_or(spec)
-    } else {
-      spec
-    }
-  }
-
-  #[cfg(not(windows))]
-  {
-    "RAM".to_string()
-  }
-}
-
-pub fn detect_ram_details() -> String {
-  #[cfg(windows)]
-  fn sanitize_ram_field(raw: &str) -> Option<String> {
-    let value = raw.trim();
-    if value.is_empty() {
-      return None;
-    }
-
-    let lower = value.to_ascii_lowercase();
-    if lower == "unknown" || lower == "to be filled by o.e.m." || lower == "default string" {
-      return None;
-    }
-
-    Some(value.to_string())
-  }
-
-  #[cfg(windows)]
-  fn detect_ram_details_from_shell() -> Option<String> {
-    let output = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $count = $m.Count; $caps = @($m | ForEach-Object { [math]::Round($_.Capacity / 1GB) }); $layout = if((@($caps | Select-Object -Unique)).Count -eq 1 -and $caps.Count -gt 0) { \"${count}x$($caps[0]) GB\" } else { \"${count} DIMMs\" }; $vendor = ($m | Select-Object -First 1 -ExpandProperty Manufacturer); $part = ($m | Select-Object -First 1 -ExpandProperty PartNumber); \"$layout|$vendor|$part\" | Out-String",
-      ],
-    )
-    .ok()?;
-
-    if !output.status.success() {
-      return None;
-    }
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut parts = text
-      .trim()
-      .split('|')
-      .filter_map(sanitize_ram_field)
-      .collect::<Vec<_>>();
-
-    if parts.is_empty() {
-      None
-    } else {
-      // Keep the output compact and predictable.
-      parts.truncate(3);
-      Some(parts.join(" | "))
-    }
-  }
-
-  #[cfg(windows)]
-  {
-    let com = match wmi::COMLibrary::new() {
-      Ok(c) => c,
-      Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
-    };
-    let conn = match wmi::WMIConnection::new(com.into()) {
-      Ok(c) => c,
-      Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
-    };
-
-    let sticks: Vec<PhysicalMemory> = match conn.query() {
-      Ok(s) => s,
-      Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
-    };
-    if sticks.is_empty() {
-      return detect_ram_details_from_shell().unwrap_or_default();
-    }
-
-    let mut pieces = Vec::new();
-
-    let sizes_gb: Vec<u64> = sticks
-      .iter()
-      .filter_map(|s| s.capacity)
-      .map(|bytes| ((bytes as f64) / 1_073_741_824.0).round() as u64)
-      .filter(|gb| *gb > 0)
-      .collect();
-
-    if !sizes_gb.is_empty() {
-      let first = sizes_gb[0];
-      let all_equal = sizes_gb.iter().all(|v| *v == first);
-      if all_equal {
-        pieces.push(format!("{}x{} GB", sizes_gb.len(), first));
-      } else {
-        pieces.push(format!("{} DIMMs", sizes_gb.len()));
-      }
-    } else {
-      pieces.push(format!("{} DIMMs", sticks.len()));
-    }
-
-    let vendor = sticks
-      .iter()
-      .filter_map(|s| s.manufacturer.as_deref())
-      .filter_map(sanitize_ram_field)
-      .next();
-    if let Some(v) = vendor {
-      pieces.push(v);
-    }
-
-    let part = sticks
-      .iter()
-      .filter_map(|s| s.part_number.as_deref())
-      .filter_map(sanitize_ram_field)
-      .next();
-    if let Some(p) = part {
-      pieces.push(p);
-    }
-
-    let details = pieces.join(" | ");
-    if details.trim().is_empty() {
-      detect_ram_details_from_shell().unwrap_or_default()
-    } else {
-      details
-    }
-  }
-
-  #[cfg(not(windows))]
-  {
-    String::new()
-  }
-}
-
-pub fn detect_gpu_vram_total_mb() -> f64 {
-  #[cfg(windows)]
-  {
-    let com = match wmi::COMLibrary::new() {
-      Ok(c) => c,
-      Err(_) => return 16384.0,
-    };
-    let conn = match wmi::WMIConnection::new(com.into()) {
-      Ok(c) => c,
-      Err(_) => return 16384.0,
-    };
-
-    let rows: Vec<VideoControllerMemory> = match conn.query() {
-      Ok(r) => r,
-      Err(_) => return 16384.0,
-    };
-
-    let best = rows.iter().filter_map(|r| r.adapter_ram).max().unwrap_or(0);
-    if best > 0 {
-      (best as f64 / 1_048_576.0).round()
-    } else {
-      16384.0
-    }
-  }
-
-  #[cfg(not(windows))]
-  {
-    16384.0
-  }
-}
-
-#[cfg(windows)]
-fn is_ignored_adapter_name(name: &str) -> bool {
-  let lower = name.to_ascii_lowercase();
-  lower.contains("microsoft basic display")
-    || lower.contains("microsoft basic render")
-    || lower.contains("remote display")
-    || lower.contains("virtual display")
-    || lower.contains("hyper-v")
-}
-
-#[cfg(windows)]
-fn gpu_name_score(name: &str) -> i32 {
-  let lower = name.to_ascii_lowercase();
-  if is_ignored_adapter_name(name) {
-    return -100;
-  }
-  if lower.contains("radeon rx") || lower.contains("geforce") || lower.contains("rtx") || lower.contains("arc") {
-    return 100;
-  }
-  if lower.contains("radeon") || lower.contains("nvidia") || lower.contains("intel") {
-    return 50;
-  }
-  10
-}
-
-#[cfg(windows)]
-fn pick_best_gpu_name<I>(names: I) -> Option<String>
-where
-  I: IntoIterator<Item = String>,
-{
-  names
-    .into_iter()
-    .map(|n| n.trim().to_string())
-    .filter(|n| !n.is_empty())
-    .max_by_key(|n| gpu_name_score(n))
-}
-
-#[cfg(windows)]
-fn get_gpu_info_from_shell() -> Option<String> {
-  let output = run_hidden_command(
-    "powershell",
-    &[
-      "-NoProfile",
-      "-Command",
-      "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | Out-String",
-    ],
-  )
-  .ok()?;
-
-  if !output.status.success() {
-    return None;
-  }
-
-  let text = String::from_utf8_lossy(&output.stdout);
-  let names = text
-    .lines()
-    .map(|line| line.trim().to_string())
-    .filter(|line| !line.is_empty())
-    .collect::<Vec<_>>();
-
-  pick_best_gpu_name(names)
-}
-
-fn parse_ping_output_ms(output: &str) -> Option<f64> {
-  let mut numbers = Vec::new();
-  let mut current = String::new();
-
-  for ch in output.chars() {
-    if ch.is_ascii_digit() {
-      current.push(ch);
-    } else if !current.is_empty() {
-      if let Ok(v) = current.parse::<f64>() {
-        numbers.push(v);
-      }
-      current.clear();
-    }
-  }
-
-  if !current.is_empty() {
-    if let Ok(v) = current.parse::<f64>() {
-      numbers.push(v);
-    }
-  }
-
-  // Windows ping summary ends with average latency in ms.
-  numbers.last().copied()
-}
-
-pub fn detect_ping_target() -> String {
-  #[cfg(windows)]
-  {
-    let output = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "(Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -and $_.DefaultIPGateway } | ForEach-Object { $_.DefaultIPGateway } | Where-Object { $_ -match '^\\d+\\.\\d+\\.\\d+\\.\\d+$' } | Select-Object -First 1) | Out-String",
-      ],
-    );
-
-    if let Ok(out) = output {
-      if out.status.success() {
-        let candidate = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !candidate.is_empty() {
-          return candidate;
-        }
-      }
-    }
-
-    "1.1.1.1".to_string()
-  }
-
-  #[cfg(not(windows))]
-  {
-    "1.1.1.1".to_string()
-  }
-}
-
-fn sample_ping_ms(target: &str) -> Option<f64> {
-  #[cfg(windows)]
-  {
-    let output = run_hidden_command("ping", &["-n", "1", "-w", "500", target]).ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    parse_ping_output_ms(&text)
-  }
-
-  #[cfg(not(windows))]
-  {
-    None
-  }
-}
-
 #[tauri::command]
 pub fn get_gpu_info() -> Option<String> {
-  #[cfg(windows)]
-  {
-    if let Ok(com) = wmi::COMLibrary::new() {
-      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
-        if let Ok(rows) = conn.query::<VideoControllerName>() {
-          let names = rows.into_iter().filter_map(|r| r.name).collect::<Vec<_>>();
-          if let Some(best) = pick_best_gpu_name(names) {
-            return Some(best);
-          }
-        }
-      }
-    }
-
-    return get_gpu_info_from_shell();
-  }
-
-  #[cfg(not(windows))]
-  {
-    None
-  }
+  detect_gpu_name()
 }
 
+// --- Stats -----------------------------------------------------------------
+
 #[tauri::command]
-pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
+pub async fn get_stats(
+  app: tauri::AppHandle,
+  state: tauri::State<'_, AppState>,
+) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
   let lhm_fresh = fetch_lhm(&state.lhm_client).await;
   let lhm = {
@@ -1495,7 +261,6 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     (*last_lhm).clone()
   };
 
-  // sysinfo values are refreshed each tick from this shared System instance.
   let mut system = state.system.lock().unwrap_or_else(|e| {
     append_debug_log(&app, "stats: system mutex poisoned; recovering guard");
     e.into_inner()
@@ -1514,16 +279,8 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     let sum: f32 = system.cpus().iter().map(|c| c.cpu_usage()).sum();
     (sum / system.cpus().len() as f32).round() as u8
   };
-  let cores: Vec<u8> = system
-    .cpus()
-    .iter()
-    .map(|c| c.cpu_usage().round() as u8)
-    .collect();
-  let freq = system
-    .cpus()
-    .first()
-    .map(|c| c.frequency() as f64 / 1000.0)
-    .unwrap_or(0.0);
+  let cores: Vec<u8> = system.cpus().iter().map(|c| c.cpu_usage().round() as u8).collect();
+  let freq = system.cpus().first().map(|c| c.frequency() as f64 / 1000.0).unwrap_or(0.0);
   drop(system);
 
   let mut disks = state.disks.lock().unwrap_or_else(|e| {
@@ -1608,23 +365,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     (0.0, 0.0, best_up, best_down, false)
   };
 
-  if lhm_connected {
-    if !LHM_WAS_CONNECTED.swap(true, Ordering::Relaxed) {
-      append_debug_log(&app, "LHM connection restored (data.json reachable)");
-    }
-  } else {
-    let was_connected = LHM_WAS_CONNECTED.swap(false, Ordering::Relaxed);
-    if was_connected {
-      append_debug_log(&app, "LHM connection lost (data.json unavailable)");
-    }
-
-    let now = unix_now_secs();
-    let last = LAST_LHM_OFFLINE_LOG_SECS.load(Ordering::Relaxed);
-    if now.saturating_sub(last) >= 30 {
-      LAST_LHM_OFFLINE_LOG_SECS.store(now, Ordering::Relaxed);
-      append_debug_log(&app, "LHM still offline after retry window");
-    }
-  }
+  track_lhm_connection_state(&app, lhm_connected);
 
   Ok(StatsPayload {
     cpu: CpuStats {
@@ -1670,429 +411,12 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
   })
 }
 
-pub fn ensure_settings_window(app: &tauri::AppHandle) -> Result<(), String> {
-  // Keep a single settings window instance; focus existing window if already open.
-  if app.get_webview_window("settings").is_some() {
-    if let Some(win) = app.get_webview_window("settings") {
-      win.show().map_err(|e| e.to_string())?;
-      win.set_focus().map_err(|e| e.to_string())?;
-    }
-    return Ok(());
-  }
+// --- Logging ---------------------------------------------------------------
 
-  let width = 640.0;
-  let height = 620.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
-
-  WebviewWindowBuilder::new(
-    app,
-    "settings",
-    WebviewUrl::App("settings.html".into()),
-  )
-  .title("Settings")
-  .inner_size(width, height)
-  .position(x, y)
-  .decorations(true)
-  .resizable(false)
-  .always_on_top(true)
-  .skip_taskbar(true)
-  .build()
-  .map_err(|e| e.to_string())?;
-
-  Ok(())
-}
-
-pub fn ensure_about_window(app: &tauri::AppHandle) -> Result<(), String> {
-  append_debug_log(app, "About window requested from tray/menu");
-
-  if app.get_webview_window("about").is_some() {
-    if let Some(win) = app.get_webview_window("about") {
-      win.show().map_err(|e| {
-        let message = e.to_string();
-        append_debug_log(app, &format!("About window show failed: {}", message));
-        message
-      })?;
-      win.set_focus().map_err(|e| {
-        let message = e.to_string();
-        append_debug_log(app, &format!("About window focus failed: {}", message));
-        message
-      })?;
-      append_debug_log(app, "About window reused successfully");
-    }
-    return Ok(());
-  }
-
-  let mut builder = WebviewWindowBuilder::new(
-    app,
-    "about",
-    WebviewUrl::App("about.html".into()),
-  );
-
-  let width = 640.0;
-  let height = 523.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
-
-  builder = builder
-    .title("About RigStats")
-    .inner_size(width, height)
-    .position(x, y)
-    .resizable(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(true);
-
-  let window = builder.build().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("About window build failed: {}", message));
-    message
-  })?;
-  window.show().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("About window initial show failed: {}", message));
-    message
-  })?;
-  window.set_focus().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("About window initial focus failed: {}", message));
-    message
-  })?;
-  append_debug_log(app, "About window created successfully");
-  Ok(())
-}
-
-pub fn ensure_status_window(app: &tauri::AppHandle) -> Result<(), String> {
-  append_debug_log(app, "Status window requested from tray/menu");
-
-  if app.get_webview_window("status").is_some() {
-    if let Some(win) = app.get_webview_window("status") {
-      win.show().map_err(|e| {
-        let message = e.to_string();
-        append_debug_log(app, &format!("Status window show failed: {}", message));
-        message
-      })?;
-      win.set_focus().map_err(|e| {
-        let message = e.to_string();
-        append_debug_log(app, &format!("Status window focus failed: {}", message));
-        message
-      })?;
-      append_debug_log(app, "Status window reused successfully");
-    }
-    return Ok(());
-  }
-
-  let mut builder = WebviewWindowBuilder::new(
-    app,
-    "status",
-    WebviewUrl::App("status.html".into()),
-  );
-
-  let width = 700.0;
-  let height = 760.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
-
-  builder = builder
-    .title("RigStats Status")
-    .inner_size(width, height)
-    .position(x, y)
-    .resizable(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(true);
-
-  let window = builder.build().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("Status window build failed: {}", message));
-    message
-  })?;
-  window.show().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("Status window initial show failed: {}", message));
-    message
-  })?;
-  window.set_focus().map_err(|e| {
-    let message = e.to_string();
-    append_debug_log(app, &format!("Status window initial focus failed: {}", message));
-    message
-  })?;
-  append_debug_log(app, "Status window created successfully");
-  Ok(())
-}
-
-pub fn on_window_event(win: &Window, event: &WindowEvent) {
-  if win.label() == "main" {
-    // Closing the main window hides to tray instead of terminating the process.
-    if let WindowEvent::CloseRequested { api, .. } = event {
-      api.prevent_close();
-      let _ = win.hide();
-    }
-  }
-}
-
-/// Receives error reports from the renderer process and writes them to the
-/// debug log so they are visible in the Status dialog without opening DevTools.
+/// Receives error reports from the renderer and writes them to the debug log
+/// so they are visible in the Status dialog without opening DevTools.
 #[tauri::command]
 pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
   let sanitized = message.chars().take(512).collect::<String>();
   append_debug_log(&app, &format!("[renderer] {}", sanitized));
-}
-
-// --- Diagnostics helpers --------------------------------------------------- //
-
-fn diag_collect_hardware() -> String {
-  #[cfg(windows)]
-  {
-    let script = concat!(
-      "try{",
-      "$os=Get-CimInstance Win32_OperatingSystem -EA Stop;",
-      "$cpu=Get-CimInstance Win32_Processor -EA Stop;",
-      "$gpu=Get-CimInstance Win32_VideoController -EA Stop;",
-      "$cs=Get-CimInstance Win32_ComputerSystem -EA Stop;",
-      "$csp=Get-CimInstance Win32_ComputerSystemProduct -EA Stop;",
-      "$bb=Get-CimInstance Win32_BaseBoard -EA Stop;",
-      "$mem=Get-CimInstance Win32_PhysicalMemory -EA Stop;",
-      "@{",
-      "os=@{caption=$os.Caption;version=$os.Version;build=$os.BuildNumber;arch=$os.OSArchitecture};",
-      "cpu=@($cpu|%{@{name=$_.Name;cores=$_.NumberOfCores;threads=$_.NumberOfLogicalProcessors;maxMHz=$_.MaxClockSpeed}});",
-      "gpu=@($gpu|%{@{name=$_.Name;ramBytes=$_.AdapterRAM;driver=$_.DriverVersion}});",
-      "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbMfr=$bb.Manufacturer;bbProd=$bb.Product;cspName=$csp.Name;cspVer=$csp.Version};",
-      "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed;typeCode=$_.SMBIOSMemoryType;mfr=$_.Manufacturer;part=$_.PartNumber}})",
-      "}|ConvertTo-Json -Depth 4 -Compress",
-      "}catch{'{ \"error\": \"collection failed\" }'}"
-    );
-    match run_hidden_command("powershell", &["-NoProfile", "-Command", script]) {
-      Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
-      Ok(out) => format!("{{\"error\":\"exit {}\"}}", out.status),
-      Err(e) => format!("{{\"error\":\"{}\"}}", e),
-    }
-  }
-  #[cfg(not(windows))]
-  {
-    r#"{"error":"not windows"}"#.to_string()
-  }
-}
-
-fn diag_collect_tasks() -> String {
-  #[cfg(windows)]
-  {
-    let mut out = String::new();
-    for task_name in LHM_TASK_NAMES {
-      out.push_str(&format!("=== {} ===\n", task_name));
-      match run_hidden_command("schtasks", &["/Query", "/TN", task_name, "/V", "/FO", "LIST"]) {
-        Ok(result) => {
-          out.push_str(&String::from_utf8_lossy(&result.stdout));
-          if !result.stderr.is_empty() {
-            out.push_str(&String::from_utf8_lossy(&result.stderr));
-          }
-        }
-        Err(e) => out.push_str(&format!("Error: {}\n", e)),
-      }
-      out.push('\n');
-    }
-    out
-  }
-  #[cfg(not(windows))]
-  {
-    "not windows\n".to_string()
-  }
-}
-
-fn diag_collect_environment() -> String {
-  let mut lines = Vec::<String>::new();
-  for var in &[
-    "OS", "PROCESSOR_ARCHITECTURE", "PROCESSOR_IDENTIFIER",
-    "NUMBER_OF_PROCESSORS", "COMPUTERNAME", "SystemRoot", "ProgramFiles",
-  ] {
-    lines.push(format!("{}={}", var, std::env::var(var).unwrap_or_else(|_| "(not set)".to_string())));
-  }
-  lines.push(format!(
-    "hostname={}",
-    hostname::get().ok().and_then(|s| s.into_string().ok()).unwrap_or_else(|| "(unknown)".to_string())
-  ));
-  #[cfg(windows)]
-  {
-    if let Ok(out) = run_hidden_command(
-      "powershell",
-      &[
-        "-NoProfile",
-        "-Command",
-        "Get-ItemProperty 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' | Select-Object CurrentBuild,DisplayVersion,ProductName | ConvertTo-Json -Compress | Out-String",
-      ],
-    ) {
-      if out.status.success() {
-        lines.push(format!("windows-version={}", String::from_utf8_lossy(&out.stdout).trim()));
-      }
-    }
-  }
-  lines.join("\n")
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct SysinfoSnapshot {
-  cpu_brand: String,
-  cpu_count: usize,
-  total_memory_mb: u64,
-  used_memory_mb: u64,
-  disk_mount_points: Vec<String>,
-  network_interfaces: Vec<String>,
-  system_brand: String,
-  sysinfo_available: bool,
-  wmi_available: bool,
-  ram_spec: String,
-  ram_details: String,
-  ping_target: String,
-}
-
-fn diag_collect_sysinfo(state: &AppState) -> String {
-  let (cpu_brand, cpu_count, total_memory_mb, used_memory_mb) = {
-    let system = state.system.lock().unwrap_or_else(|e| e.into_inner());
-    let brand = system.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
-    let count = system.cpus().len();
-    let total = system.total_memory() / 1_048_576;
-    let used = system.used_memory() / 1_048_576;
-    (brand, count, total, used)
-  };
-  let disk_mount_points: Vec<String> = {
-    let disks = state.disks.lock().unwrap_or_else(|e| e.into_inner());
-    disks.iter().map(|d| d.mount_point().to_string_lossy().to_string()).collect()
-  };
-  let network_interfaces: Vec<String> = {
-    let networks = state.networks.lock().unwrap_or_else(|e| e.into_inner());
-    networks.iter().map(|(name, _)| name.clone()).collect()
-  };
-  let snap = SysinfoSnapshot {
-    cpu_brand,
-    cpu_count,
-    total_memory_mb,
-    used_memory_mb,
-    disk_mount_points,
-    network_interfaces,
-    system_brand: state.system_brand.clone(),
-    sysinfo_available: state.sysinfo_available,
-    wmi_available: state.wmi_available,
-    ram_spec: state.ram_spec.clone(),
-    ram_details: state.ram_details.clone(),
-    ping_target: state.ping_target.clone(),
-  };
-  serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
-}
-
-/// Opens a native save-file dialog, collects hardware/software diagnostics and
-/// writes everything into a single ZIP that the user can send for bug reports.
-#[tauri::command]
-pub async fn collect_diagnostics(
-  app: tauri::AppHandle,
-  state: tauri::State<'_, AppState>,
-) -> Result<Option<String>, String> {
-  let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-  let default_name = format!("rigstats-diag-{}.zip", ts);
-
-  // Open a native save dialog on an OS thread (Win32 requires STA/message loop).
-  let save_path = tokio::task::spawn_blocking(move || {
-    rfd::FileDialog::new()
-      .set_file_name(&default_name)
-      .add_filter("ZIP Archive", &["zip"])
-      .save_file()
-  })
-  .await
-  .map_err(|e| format!("Dialog spawn error: {}", e))?;
-
-  let Some(path) = save_path else {
-    return Ok(None); // user cancelled
-  };
-
-  // Build manifest entry.
-  let manifest = format!(
-    "{{\"collected_at_unix\":{},\"rigstats_version\":\"{}\"}}",
-    ts,
-    env!("CARGO_PKG_VERSION")
-  );
-
-  // Full debug log from disk.
-  let log_bytes = std::fs::read(debug_log_path(&app)).unwrap_or_else(|_| b"(log not found)".to_vec());
-
-  // Current settings.
-  let settings_json = {
-    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-    serde_json::to_string_pretty(&*s).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
-  };
-
-  // Raw LHM sensor tree -- the most important piece for adding new sensor support.
-  let lhm_json = match state
-    .lhm_client
-    .get("http://localhost:8085/data.json")
-    .timeout(Duration::from_secs(3))
-    .send()
-    .await
-  {
-    Ok(resp) => resp.text().await.unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e)),
-    Err(e) => format!("{{\"error\":\"request: {}\"}}", e),
-  };
-
-  // Synchronous collectors (these may run PowerShell / sched queries).
-  let hardware_json = diag_collect_hardware();
-  let tasks_txt = diag_collect_tasks();
-  let env_txt = diag_collect_environment();
-  let sysinfo_json = diag_collect_sysinfo(&state);
-
-  // Write ZIP.
-  let zip_file = std::fs::File::create(&path).map_err(|e| format!("Cannot create zip: {}", e))?;
-  let mut writer = zip::ZipWriter::new(zip_file);
-  let opts = zip::write::SimpleFileOptions::default()
-    .compression_method(zip::CompressionMethod::Deflated);
-
-  let entries: &[(&str, &[u8])] = &[
-    ("manifest.json", manifest.as_bytes()),
-    ("debug.log", &log_bytes),
-    ("settings.json", settings_json.as_bytes()),
-    ("lhm-data.json", lhm_json.as_bytes()),
-    ("hardware.json", hardware_json.as_bytes()),
-    ("sched-task.txt", tasks_txt.as_bytes()),
-    ("environment.txt", env_txt.as_bytes()),
-    ("sysinfo.json", sysinfo_json.as_bytes()),
-  ];
-
-  for (name, data) in entries {
-    writer.start_file(*name, opts).map_err(|e| format!("zip start_file {}: {}", name, e))?;
-    writer.write_all(data).map_err(|e| format!("zip write {}: {}", name, e))?;
-  }
-  writer.finish().map_err(|e| format!("zip finish: {}", e))?;
-
-  append_debug_log(&app, &format!("Diagnostics saved: {}", path.display()));
-  Ok(Some(path.display().to_string()))
-}
-
-
-#[cfg(all(test, windows))]
-mod tests {
-  use super::classify_system_brand;
-
-  #[test]
-  fn classify_system_brand_recognizes_rog_aliases() {
-    assert_eq!(classify_system_brand(&["ASUSTeK COMPUTER INC."]), "rog");
-    assert_eq!(classify_system_brand(&["Republic of Gamers"]), "rog");
-  }
-
-  #[test]
-  fn classify_system_brand_recognizes_product_lines_before_oem() {
-    assert_eq!(classify_system_brand(&["Dell Inc.", "Alienware Aurora R16"]), "alienware");
-    assert_eq!(classify_system_brand(&["LENOVO", "Legion T7 34IRZ8"]), "legion");
-    assert_eq!(classify_system_brand(&["HP", "OMEN 45L Desktop GT22"]), "omen");
-    assert_eq!(classify_system_brand(&["Acer", "Predator Orion 7000"]), "predator");
-    assert_eq!(classify_system_brand(&["Gigabyte Technology Co., Ltd.", "AORUS MODEL X"]), "aorus");
-  }
-
-  #[test]
-  fn classify_system_brand_recognizes_oem_brands() {
-    assert_eq!(classify_system_brand(&["Micro-Star International Co., Ltd"]), "msi");
-    assert_eq!(classify_system_brand(&["Gigabyte Technology Co., Ltd."]), "gigabyte");
-    assert_eq!(classify_system_brand(&["Razer"]), "razer");
-    assert_eq!(classify_system_brand(&["NZXT"]), "nzxt");
-    assert_eq!(classify_system_brand(&["Corsair"]), "corsair");
-  }
-
-  #[test]
-  fn classify_system_brand_falls_back_to_other() {
-    assert_eq!(classify_system_brand(&["Some Unknown Vendor"]), "other");
-  }
 }
