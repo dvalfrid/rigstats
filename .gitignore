@@ -1,3 +1,6 @@
+# Claude Code local settings (machine-specific)
+.claude/
+
 node_modules/
 dist/
 vendor/
