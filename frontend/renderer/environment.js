@@ -29,6 +29,13 @@ const backend = {
 
     return Promise.resolve(() => {});
   },
+  async openUrl(url) {
+    if (IS_TAURI) {
+      const opener = tauriGlobal?.opener;
+      if (opener?.openUrl) return opener.openUrl(url);
+    }
+    window.open(url, '_blank');
+  },
 };
 
 export { backend, IS_DESKTOP, IS_TAURI };

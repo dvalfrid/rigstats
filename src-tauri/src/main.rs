@@ -18,7 +18,7 @@ mod stats;
 mod windows;
 
 use commands::{
-  close_window, get_about_info, get_cpu_info, get_gpu_info, get_settings, get_stats,
+  close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
   get_system_brand, get_system_name, log_frontend_error, preview_opacity, preview_profile,
   preview_visible_panels, save_settings, start_window_drag,
 };
@@ -131,6 +131,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn main() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_opener::init())
     .setup(|app| {
       let app_handle = app.handle();
       reset_debug_log(&app_handle);
@@ -214,7 +215,8 @@ fn main() {
       get_gpu_info,
       get_stats,
       log_frontend_error,
-      collect_diagnostics
+      collect_diagnostics,
+      get_changelog
     ])
     .on_window_event(|window, event| on_window_event(window, event))
     .build(tauri::generate_context!())

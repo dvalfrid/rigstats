@@ -72,8 +72,11 @@ body {
 .content {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto 1fr;
   gap: 8px;
   padding: 8px;
+  flex: 1;
+  min-height: 0;
 }
 .stack {
   display: flex;
@@ -157,6 +160,65 @@ button.primary {
   border-color: transparent;
   font-weight: 700;
 }
+.cl-card {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cl-scroll {
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #05080d;
+  padding: 9px;
+  overflow-y: auto;
+}
+.cl-version {
+  margin-bottom: 10px;
+}
+.cl-version-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cl-version-tag {
+  font: 700 11px var(--mono);
+  color: var(--accent);
+  text-decoration: none;
+}
+a.cl-version-tag:hover { text-decoration: underline; }
+.cl-version-date {
+  font: 9px var(--mono);
+  color: var(--muted);
+}
+.cl-section-label {
+  font: 9px var(--mono);
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin: 4px 0 2px;
+}
+.cl-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cl-items li {
+  font-size: 10px;
+  color: var(--text);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+  border-left: 2px solid var(--border);
+  line-height: 1.4;
+}
+.cl-items li.feat { border-left-color: var(--good); }
+.cl-items li.fix  { border-left-color: var(--warn); }
 @media (max-width: 860px) {
   .content { grid-template-columns: 1fr; }
   .hero-row { flex-direction: column; }
@@ -197,8 +259,8 @@ button.primary {
           <div class="card-title">Links</div>
           <div class="link-list">
             <div class="link-group">
-              <div class="meta-label">GitHub</div>
-              <a id="githubLink" class="link-item" href="#" target="_blank" rel="noopener noreferrer">--</a>
+              <div class="meta-label">Website</div>
+              <a class="link-item" href="#" id="websiteLink">https://rigstats.app</a>
             </div>
             <div class="link-group">
               <div class="meta-label">Contact</div>
@@ -206,6 +268,10 @@ button.primary {
             </div>
           </div>
         </div>
+      </div>
+      <div class="card cl-card">
+        <div class="card-title">What's New</div>
+        <div class="cl-scroll" id="changelogContent"></div>
       </div>
     </div>
 

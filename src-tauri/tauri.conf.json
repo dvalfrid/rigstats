@@ -54,7 +54,8 @@
     ],
     "resources": {
       "../vendor/lhm/": "lhm/",
-      "../build/lhm-default/": "lhm/defaults/"
+      "../build/lhm-default/": "lhm/defaults/",
+      "../CHANGELOG.md": "CHANGELOG.md"
     }
   },
   "plugins": {}

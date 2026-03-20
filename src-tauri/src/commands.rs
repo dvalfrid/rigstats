@@ -411,6 +411,19 @@ pub async fn get_stats(
   })
 }
 
+// --- Changelog -------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_changelog(app: tauri::AppHandle) -> String {
+  use tauri::Manager;
+  app
+    .path()
+    .resolve("CHANGELOG.md", tauri::path::BaseDirectory::Resource)
+    .ok()
+    .and_then(|p| std::fs::read_to_string(p).ok())
+    .unwrap_or_default()
+}
+
 // --- Logging ---------------------------------------------------------------
 
 /// Receives error reports from the renderer and writes them to the debug log

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-changelog"
+description = "Enables the get_changelog command without any pre-configured scope."
+commands.allow = ["get_changelog"]
+
+[[permission]]
+identifier = "deny-get-changelog"
+description = "Denies the get_changelog command without any pre-configured scope."
+commands.deny = ["get_changelog"]

@@ -23,5 +23,8 @@
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "@tauri-apps/plugin-opener": "^2.5.3"
   }
 }
