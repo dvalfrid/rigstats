@@ -6,6 +6,7 @@ website/images/
 dist/
 vendor/
 .env
+.vscode/
 cargo-check-out.txt
 
 # Rust build output
