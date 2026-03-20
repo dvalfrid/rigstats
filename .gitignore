@@ -2,6 +2,7 @@
 .claude/
 
 node_modules/
+website/images/
 dist/
 vendor/
 .env

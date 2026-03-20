@@ -679,6 +679,31 @@ code {
   .features-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
+.signing-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 28px;
+  align-items: start;
+}
+
+.signing-box {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+}
+.signing-box h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.signing-box > p {
+  font-size: .9rem;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
 @media (max-width: 860px) {
   .hero-inner {
     grid-template-columns: 1fr;
@@ -692,6 +717,7 @@ code {
   .dialogs-grid { grid-template-columns: 1fr; }
   .download-layout { grid-template-columns: 1fr; }
   .support-layout { grid-template-columns: 1fr; }
+  .signing-layout { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
