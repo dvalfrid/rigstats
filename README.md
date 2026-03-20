@@ -64,13 +64,15 @@ It shows:
 
 - the current RIGStats version
 - the project license name
-- direct links to GitHub and contact
+- direct links to the website and contact
+- a scrollable version history (What's New) sourced from the bundled CHANGELOG.md
 
 From here you can:
 
 - quickly verify which build/version is running
-- open the repository page
+- open rigstats.app in the default browser
 - contact the maintainer directly
+- browse recent releases and their changes, with clickable links to the GitHub diff for each version
 
 ### Settings Dialog
 
@@ -240,6 +242,7 @@ The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a n
 | `sched-task.txt` | Raw output of `schtasks /Query /V` for both LHM task names | Diagnose LHM autostart failures |
 | `environment.txt` | `PROCESSOR_ARCHITECTURE`, `COMPUTERNAME`, Windows build and display version | OS-level context for platform-specific bugs |
 | `sysinfo.json` | sysinfo snapshot: CPU brand, core count, memory totals, disk mount points, network interface names, detected RAM spec, ping target | Verify what `sysinfo` sees on the machine |
+| `displays.json` | All connected monitors: name, resolution, position, scale factor, portrait/landscape, fit score for the active profile, and which monitor was selected | Diagnose window placement and wrong-monitor issues |
 
 ### What Is Not Collected
 

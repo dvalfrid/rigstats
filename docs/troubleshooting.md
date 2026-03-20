@@ -75,6 +75,21 @@ Share it by email or attach it to a GitHub issue.
 
 See [Diagnostics Export](../README.md#diagnostics-export) in the README for a full description of what the ZIP contains.
 
+### What To Look For In `displays.json`
+
+The file lists every monitor Windows reports to the app — the same data used by `pick_target_monitor()`.
+
+Each entry shows:
+
+- `widthPx` / `heightPx` — physical pixel resolution
+- `positionX` / `positionY` — position in the virtual desktop coordinate space
+- `scaleFactor` — Windows DPI scaling (e.g. `1.5` = 150 %)
+- `isPortrait` — whether height ≥ width
+- `fitScore` — how well this monitor matches the active profile (lower = better)
+- `selected` — `true` on the monitor that was actually chosen
+
+If the dashboard appears on the wrong monitor, compare the `fitScore` values and check whether the correct monitor has `isPortrait: true` and a lower score than the others.
+
 ### What To Look For In `lhm-data.json`
 
 The file is the raw JSON from `http://localhost:8085/data.json`.

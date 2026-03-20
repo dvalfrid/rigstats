@@ -5,6 +5,7 @@
 //! single ZIP file that users can attach to bug reports.
 
 use crate::debug::{append_debug_log, debug_log_path, run_hidden_command};
+use crate::monitor::{normalize_profile, profile_dimensions};
 use crate::stats::AppState;
 use serde::Serialize;
 use std::io::Write;
@@ -167,6 +168,95 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
   serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
 
+// --- Display topology ------------------------------------------------------
+
+#[derive(Serialize)]
+struct DiagMonitor {
+  name: String,
+  width_px: u32,
+  height_px: u32,
+  position_x: i32,
+  position_y: i32,
+  scale_factor: f64,
+  is_portrait: bool,
+  fit_score: f64,
+  selected: bool,
+}
+
+#[derive(Serialize)]
+struct DiagDisplays {
+  current_profile: String,
+  target_w: u32,
+  target_h: u32,
+  monitors: Vec<DiagMonitor>,
+}
+
+fn fit_score(mw: u32, mh: u32, tw: u32, th: u32) -> f64 {
+  let aspect_cost = ((mw as f64 / mh as f64) / (tw as f64 / th as f64)).ln().abs();
+  let area_cost = ((mw as f64 * mh as f64) / (tw as f64 * th as f64)).ln().abs();
+  (0.7 * aspect_cost) + (0.3 * area_cost)
+}
+
+fn diag_collect_displays(app: &tauri::AppHandle, profile: &str) -> String {
+  use tauri::Manager;
+  let profile = normalize_profile(profile);
+  let (target_w, target_h) = profile_dimensions(&profile);
+
+  let monitors = app
+    .get_webview_window("main")
+    .and_then(|w| w.available_monitors().ok())
+    .unwrap_or_default();
+
+  // Determine which monitor pick_target_monitor would select.
+  let target_portrait = target_h >= target_w;
+  let selected_pos = monitors
+    .iter()
+    .enumerate()
+    .find(|(_, m)| m.size().width == target_w && m.size().height == target_h)
+    .or_else(|| {
+      monitors
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| (m.size().height >= m.size().width) == target_portrait)
+        .min_by(|(_, a), (_, b)| {
+          fit_score(a.size().width, a.size().height, target_w, target_h)
+            .partial_cmp(&fit_score(b.size().width, b.size().height, target_w, target_h))
+            .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    })
+    .or_else(|| {
+      monitors.iter().enumerate().min_by(|(_, a), (_, b)| {
+        fit_score(a.size().width, a.size().height, target_w, target_h)
+          .partial_cmp(&fit_score(b.size().width, b.size().height, target_w, target_h))
+          .unwrap_or(std::cmp::Ordering::Equal)
+      })
+    })
+    .map(|(i, _)| i);
+
+  let diag_monitors: Vec<DiagMonitor> = monitors
+    .iter()
+    .enumerate()
+    .map(|(i, m)| {
+      let w = m.size().width;
+      let h = m.size().height;
+      DiagMonitor {
+        name: m.name().cloned().unwrap_or_default(),
+        width_px: w,
+        height_px: h,
+        position_x: m.position().x,
+        position_y: m.position().y,
+        scale_factor: m.scale_factor(),
+        is_portrait: h >= w,
+        fit_score: (fit_score(w, h, target_w, target_h) * 1000.0).round() / 1000.0,
+        selected: selected_pos == Some(i),
+      }
+    })
+    .collect();
+
+  let payload = DiagDisplays { current_profile: profile, target_w, target_h, monitors: diag_monitors };
+  serde_json::to_string_pretty(&payload).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
+}
+
 // --- Tauri command ---------------------------------------------------------
 
 /// Opens a native save-file dialog, collects hardware/software diagnostics,
@@ -225,6 +315,10 @@ pub async fn collect_diagnostics(
   let tasks_txt = diag_collect_tasks();
   let env_txt = diag_collect_environment();
   let sysinfo_json = diag_collect_sysinfo(&state);
+  let displays_json = {
+    let profile = state.settings.lock().unwrap_or_else(|e| e.into_inner()).dashboard_profile.clone();
+    diag_collect_displays(&app, &profile)
+  };
 
   let zip_file = std::fs::File::create(&path).map_err(|e| format!("Cannot create zip: {}", e))?;
   let mut writer = zip::ZipWriter::new(zip_file);
@@ -240,6 +334,7 @@ pub async fn collect_diagnostics(
     ("sched-task.txt", tasks_txt.as_bytes()),
     ("environment.txt", env_txt.as_bytes()),
     ("sysinfo.json", sysinfo_json.as_bytes()),
+    ("displays.json", displays_json.as_bytes()),
   ];
 
   for (name, data) in entries {
