@@ -50,6 +50,32 @@ fn task_field(output: &str, key: &str) -> Option<String> {
   })
 }
 
+/// Returns a short diagnosis string for the LHM task situation, used by the Status UI.
+/// Possible values: "ok", "access_denied", "missing".
+pub(crate) fn get_lhm_task_diagnosis(_app: &tauri::AppHandle) -> &'static str {
+  #[cfg(windows)]
+  {
+    let mut any_access_denied = false;
+    for task_name in LHM_TASK_NAMES {
+      match run_hidden_command("schtasks", &["/Query", "/TN", task_name]) {
+        Ok(out) if out.status.success() => return "ok",
+        Ok(out) => {
+          let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+          if stderr.contains("nekad") || stderr.contains("denied") || stderr.contains("Access") {
+            any_access_denied = true;
+          }
+        }
+        Err(_) => {}
+      }
+    }
+    if any_access_denied { "access_denied" } else { "missing" }
+  }
+  #[cfg(not(windows))]
+  {
+    "missing"
+  }
+}
+
 /// Queries the Windows Task Scheduler for LHM task metadata.
 /// Returns `(task_name, status, last_result, task_to_run)`.
 pub(crate) fn get_lhm_task_details(
@@ -80,23 +106,63 @@ pub(crate) fn get_lhm_task_details(
 }
 
 #[cfg(windows)]
-fn lhm_task_exists(app: &tauri::AppHandle) -> bool {
-  for task_name in LHM_TASK_NAMES {
-    match run_hidden_command("schtasks", &["/Query", "/TN", task_name]) {
-      Ok(out) => {
-        if out.status.success() {
-          append_debug_log(app, &format!("LHM task exists: {}", task_name));
-          return true;
-        }
-        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-        append_debug_log(app, &format!("LHM task query failed ({}): {}", task_name, stderr));
+enum TaskQueryResult {
+  Found,
+  NotFound,
+  AccessDenied,
+}
+
+#[cfg(windows)]
+fn query_lhm_task(app: &tauri::AppHandle, task_name: &str) -> TaskQueryResult {
+  match run_hidden_command("schtasks", &["/Query", "/TN", task_name]) {
+    Ok(out) => {
+      if out.status.success() {
+        append_debug_log(app, &format!("LHM task found: {}", task_name));
+        return TaskQueryResult::Found;
       }
-      Err(e) => {
-        append_debug_log(app, &format!("LHM task query error ({}): {}", task_name, e));
+      let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+      append_debug_log(app, &format!("LHM task query failed ({}): {}", task_name, stderr));
+      if stderr.contains("nekad") || stderr.contains("denied") || stderr.contains("Access") {
+        TaskQueryResult::AccessDenied
+      } else {
+        TaskQueryResult::NotFound
       }
     }
+    Err(e) => {
+      append_debug_log(app, &format!("LHM task query error ({}): {}", task_name, e));
+      TaskQueryResult::NotFound
+    }
   }
-  false
+}
+
+#[cfg(windows)]
+fn diagnose_lhm_task(app: &tauri::AppHandle) {
+  let mut any_access_denied = false;
+  let mut any_found = false;
+
+  for task_name in LHM_TASK_NAMES {
+    match query_lhm_task(app, task_name) {
+      TaskQueryResult::Found => { any_found = true; }
+      TaskQueryResult::AccessDenied => { any_access_denied = true; }
+      TaskQueryResult::NotFound => {}
+    }
+  }
+
+  if any_found {
+    // Should not reach here — if task was found, try_run_lhm_task would have succeeded.
+    append_debug_log(app, "LHM task exists but could not be started. Check task configuration.");
+  } else if any_access_denied {
+    append_debug_log(
+      app,
+      "LHM task exists but access is denied — task was likely created by a different admin account. \
+       Reinstall RIGStats as administrator to recreate the task with correct permissions.",
+    );
+  } else {
+    append_debug_log(
+      app,
+      "No LHM scheduled task found. Reinstall RIGStats as administrator to create the task.",
+    );
+  }
 }
 
 #[cfg(windows)]
@@ -196,9 +262,9 @@ pub fn ensure_lhm_running(app: &tauri::AppHandle) {
         append_debug_log(app, "LHM reachable after task run");
         return;
       }
-      append_debug_log(app, "Task run succeeded but endpoint still unavailable");
-    } else if !lhm_task_exists(app) {
-      append_debug_log(app, "LHM task missing. Reinstall RIGStats as administrator to recreate task.");
+      append_debug_log(app, "Task run succeeded but endpoint still unavailable after 1.2s — LHM may need more time to start");
+    } else {
+      diagnose_lhm_task(app);
     }
 
     let mut elevation_required = false;

@@ -23,19 +23,29 @@
   Rename "$1\\LibreHardwareMonitor.config" "$1\\LibreHardwareMonitor.config.backup"
   nsExec::ExecToLog 'cmd /C copy /Y "$INSTDIR\lhm\defaults\LibreHardwareMonitor.config" "$1\LibreHardwareMonitor.config"'
 
-  ; Create or update scheduled task for LibreHardwareMonitor at user logon.
-  ; /IT keeps it interactive in user session, /RL HIGHEST grants elevated access.
+  ; Create or update scheduled task for LibreHardwareMonitor at any user logon.
+  ; Uses PowerShell Register-ScheduledTask without -UserId so the trigger fires for
+  ; ALL users (not just the admin who ran the installer). HighestAvailable = admin token
+  ; for admin users, standard token for standard users.
+  nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RIGStats\LibreHardwareMonitor" /F >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RigStats\LibreHardwareMonitor" /F >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "LibreHardwareMonitor" /F >NUL 2>&1'
-  nsExec::ExecToLog 'schtasks /Create /TN "LibreHardwareMonitor" /TR "\"$0\"" /SC ONLOGON /RL HIGHEST /F /IT'
-  Pop $2
 
-  ; Some environments deny HIGHEST at install time. Fallback to LIMITED so task still exists.
-  StrCmp $2 "0" +2 0
-  nsExec::ExecToLog 'schtasks /Create /TN "LibreHardwareMonitor" /TR "\"$0\"" /SC ONLOGON /RL LIMITED /F /IT'
+  FileOpen $3 "$TEMP\create-lhm-task.ps1" w
+  FileWrite $3 "$$a = New-ScheduledTaskAction -Execute $\"$0$\"$\r$\n"
+  FileWrite $3 "$$t = New-ScheduledTaskTrigger -AtLogOn$\r$\n"
+  FileWrite $3 "$$s = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)$\r$\n"
+  FileWrite $3 "$$p = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Highest$\r$\n"
+  FileWrite $3 "Register-ScheduledTask -TaskName 'LibreHardwareMonitor' -Action $$a -Trigger $$t -Settings $$s -Principal $$p -Force$\r$\n"
+  FileClose $3
+  nsExec::ExecToLog 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\create-lhm-task.ps1"'
+  Delete "$TEMP\create-lhm-task.ps1"
 
-  ; Start the task once directly after install so sensors are available immediately.
-  nsExec::ExecToLog 'schtasks /Run /TN "LibreHardwareMonitor"'
+  ; Run LHM directly in the installer's admin context so PawnIO (kernel driver) is
+  ; installed on first use. The user will see a PawnIO prompt and should click Yes.
+  ; Using Exec (non-blocking) so the installer can finish while LHM initialises.
+  DetailPrint "Starting LibreHardwareMonitor — click Yes if asked about PawnIO installation."
+  Exec "$\"$0$\""
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL

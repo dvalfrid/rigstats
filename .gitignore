@@ -8,6 +8,7 @@ vendor/
 .env
 .vscode/
 cargo-check-out.txt
+debugLog/
 
 # Rust build output
 src-tauri/target/

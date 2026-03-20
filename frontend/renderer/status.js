@@ -52,8 +52,13 @@ function setTaskHealth(info) {
   let className = 'health-neutral';
 
   if (!info.lhmTaskName) {
-    label = 'Missing';
-    className = 'health-bad';
+    if (info.lhmTaskDiagnosis === 'access_denied') {
+      label = 'Access denied';
+      className = 'health-bad';
+    } else {
+      label = 'Missing';
+      className = 'health-bad';
+    }
   } else if (info.lhmConnected) {
     label = 'Success';
     className = 'health-good';
@@ -73,9 +78,17 @@ function setTaskHealth(info) {
 
   ids.taskHealth.textContent = label;
   ids.taskHealth.className = `meta-value ${className}`;
-  ids.taskHealth.title = rawResult
+  let tooltip = rawResult
     ? `Derived from Windows Task Scheduler state/result. Raw result: ${info.lhmTaskLastResult}`
     : 'Derived from Windows Task Scheduler state/result.';
+  if (!info.lhmTaskName) {
+    if (info.lhmTaskDiagnosis === 'access_denied') {
+      tooltip = 'The LHM scheduled task exists but cannot be accessed. It was likely created by a different admin account. Reinstall RIGStats as administrator to fix task permissions.';
+    } else {
+      tooltip = 'No LHM scheduled task was found. Reinstall RIGStats as administrator to create the task.';
+    }
+  }
+  ids.taskHealth.title = tooltip;
 }
 
 function renderDependencies(items) {

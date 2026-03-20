@@ -10,7 +10,7 @@
 use crate::debug::{append_debug_log, read_debug_log_tail};
 use crate::hardware::{detect_gpu_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
-use crate::lhm_process::{can_reach_lhm_endpoint, get_lhm_task_details, track_lhm_connection_state};
+use crate::lhm_process::{can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state};
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
@@ -51,6 +51,7 @@ pub struct AboutInfo {
   pub lhm_task_status: Option<String>,
   pub lhm_task_last_result: Option<String>,
   pub lhm_task_to_run: Option<String>,
+  pub lhm_task_diagnosis: String,
   pub dependencies: Vec<AboutDependency>,
 }
 
@@ -100,6 +101,7 @@ pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) 
     lhm_task_status,
     lhm_task_last_result,
     lhm_task_to_run,
+    lhm_task_diagnosis: get_lhm_task_diagnosis(&app).to_string(),
     dependencies: build_about_dependencies(&state),
   }
 }

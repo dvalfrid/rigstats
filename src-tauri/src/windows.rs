@@ -251,11 +251,19 @@ pub fn ensure_status_window(app: &AppHandle) -> Result<(), String> {
 // --- Window event handler --------------------------------------------------
 
 /// Intercepts the main window close event and hides to tray instead of quitting.
+/// Also reapplies decorations=false on move, as Windows can re-enable the title bar
+/// when a window is dragged between monitors with different DPI or configurations.
 pub fn on_window_event(win: &Window, event: &WindowEvent) {
   if win.label() == "main" {
-    if let WindowEvent::CloseRequested { api, .. } = event {
-      api.prevent_close();
-      let _ = win.hide();
+    match event {
+      WindowEvent::CloseRequested { api, .. } => {
+        api.prevent_close();
+        let _ = win.hide();
+      }
+      WindowEvent::Moved(_) => {
+        let _ = win.set_decorations(false);
+      }
+      _ => {}
     }
   }
 }
