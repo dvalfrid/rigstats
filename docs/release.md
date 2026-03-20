@@ -93,20 +93,3 @@ For best changelog quality, use Conventional Commits, for example:
 4. GitHub will create the new tag/release and the release workflow will attach the installer.
 
 The bundled LHM version is pinned in `build/prepare-lhm.ps1` (currently `v0.9.6`).
-
-## First Release (`1.0.0`)
-
-Because this repository has not published its first GitHub release yet, the clean way to bootstrap `1.0.0` is:
-
-1. Push the current automation setup to `main`
-2. Create an empty commit with `Release-As: 1.0.0`
-3. Push that commit to `main`
-4. Wait for Release Please to open the first release PR for `v1.0.0`
-5. Merge that release PR
-
-Example:
-
-```powershell
-git commit --allow-empty -m "chore: bootstrap first release" -m "Release-As: 1.0.0"
-git push
-```

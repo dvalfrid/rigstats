@@ -94,10 +94,13 @@ No framework, no bundler. Pure ES modules. Each HTML page loads its own entry sc
 
 - **`renderer/environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__.core.invoke` / `.event.listen`) and `IS_DESKTOP`. All renderer modules go through this instead of accessing Tauri globals directly.
 - **`renderer/app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode.
-- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
+- **`renderer/systemInfo.js`** — Host name, CPU model, GPU model, and branding/logo wiring.
+- **`renderer/clock.js`** — Local time and uptime rendering.
 - **`renderer/spark.js`** — Sparkline history ring buffer and canvas drawing.
+- **`renderer/tempColors.js`** — Maps temperature values to color thresholds for heat indicators.
 - **`renderer/vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
 - **`renderer/simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
+- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
 - **`renderer/settings.js`** / **`renderer/about.js`** / **`renderer/status.js`** — Entry scripts for the secondary windows.
 
 ### Dashboard profiles

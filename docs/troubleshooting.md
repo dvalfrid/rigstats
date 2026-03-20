@@ -14,7 +14,7 @@ It should return JSON.
 
 ## Can I Change Which Display Is Used?
 
-Yes. Adjust the display targeting logic in `pick_target_monitor()` in `src-tauri/src/commands.rs`.
+Yes. Adjust the display targeting logic in `pick_target_monitor()` in `src-tauri/src/monitor.rs`.
 
 The dashboard first targets the selected profile resolution, then falls back gracefully.
 
@@ -70,22 +70,10 @@ Those six fields are the ones RigStats now uses to classify the system brand, wi
 Use the **Status dialog → Collect Diagnostics…** button.
 
 It opens a native Windows save dialog. Pick a location and a ZIP file is written immediately.
-
-The ZIP contains everything needed to reproduce and fix the problem:
-
-| File | Contains |
-| --- | --- |
-| `lhm-data.json` | The raw LHM sensor tree — all sensor names and values as LHM reports them on your machine. This is the primary input for adding new sensor mappings. |
-| `hardware.json` | OS, CPU, GPU (including driver version), motherboard identity, and RAM module details via WMI/CIM. |
-| `sched-task.txt` | Full output from `schtasks` for both LHM task names. Shows why LHM may not be starting. |
-| `debug.log` | Full RigStats startup/runtime log, not just the tail shown in the dialog. |
-| `sysinfo.json` | What `sysinfo` sees: CPU brand, core count, memory totals, disk mount points, network interfaces. |
-| `environment.txt` | `PROCESSOR_ARCHITECTURE`, Windows build number, and hostname context. |
-| `settings.json` | Current settings (opacity, profile, model name). Rules out config-specific issues. |
-| `manifest.json` | Timestamp and RigStats version. Ties the report to a specific build. |
-
-No data is sent automatically. The file is written only to the path you choose.
+No data is sent automatically — the file is written only to the path you choose.
 Share it by email or attach it to a GitHub issue.
+
+See [Diagnostics Export](../README.md#diagnostics-export) in the README for a full description of what the ZIP contains.
 
 ### What To Look For In `lhm-data.json`
 
