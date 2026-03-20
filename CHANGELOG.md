@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.2.1](https://github.com/dvalfrid/rigstats/compare/v1.2.0...v1.2.1) (2026-03-20)
+
+
+### Bug Fixes
+
+* correct Cargo.toml version to 1.2.0 and add release-please marker ([337fbde](https://github.com/dvalfrid/rigstats/commit/337fbde6761610c8e64539cec4546a02457b53df))
+
 ## [1.2.0](https://github.com/dvalfrid/rigstats/compare/v1.1.0...v1.2.0) (2026-03-19)
 
 
