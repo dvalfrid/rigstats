@@ -167,6 +167,11 @@ Intel Arc GPUs should work but have not been tested.
 
 ![Clock panel](assets/clock-panel.png)
 
+| Metric | Source |
+| --- | --- |
+| Time | sysinfo |
+| Day | sysinfo |
+| Date | sysinfo |
 
 ### System Identity
 

@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RigStats — Real-time Hardware Dashboard</title>
+  <meta name="description" content="Real-time CPU, GPU, RAM, network and disk monitoring for Windows gaming rigs. Optimized for portrait secondary displays.">
+  <meta property="og:title" content="RigStats — Real-time Hardware Dashboard">
+  <meta property="og:description" content="Real-time CPU, GPU, RAM, network and disk monitoring for Windows gaming rigs. Optimized for portrait secondary displays.">
+  <meta property="og:image" content="images/rigStats.png">
+  <link rel="icon" type="image/png" href="images/icon-256.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="container nav-inner">
+    <a href="#" class="nav-logo">
+      <img src="images/icon-256.png" alt="" width="28" height="28">
+      RigStats
+    </a>
+    <ul class="nav-links">
+      <li><a href="#panels">Panels</a></li>
+      <li><a href="#dialogs">Dialogs</a></li>
+      <li><a href="#download">Download</a></li>
+      <li><a href="#support">Support</a></li>
+      <li><a href="https://github.com/dvalfrid/rigstats" class="btn-nav" target="_blank" rel="noopener">GitHub</a></li>
+    </ul>
+  </div>
+</nav>
+
+<main>
+
+  <!-- Hero -->
+  <section class="hero" id="hero">
+    <div class="container hero-inner">
+      <div class="hero-text">
+        <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
+        <h1>Your rig.<br>Always in view.</h1>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, and disk — live, side by side with whatever you're doing.</p>
+        <div class="hero-cta">
+          <a href="#download" class="btn-primary">Download</a>
+          <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="screen-wrap">
+          <img src="images/rigStats.png" alt="RigStats dashboard overview" class="hero-img">
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature highlights -->
+  <section class="features">
+    <div class="container">
+      <ul class="features-grid">
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Portrait-first layout</h3>
+          <p>Designed for 450 × 1920 vertical side displays. Multiple display profiles fit different monitor sizes.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Deep sensor data</h3>
+          <p>LibreHardwareMonitor provides per-core clocks, GPU hot-spot, VRAM and fan RPM — not just OS counters.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Auto-detected hardware</h3>
+          <p>CPU model, GPU name, RAM spec, and system brand logo are all detected at startup with no manual config.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>No telemetry</h3>
+          <p>All data stays on your machine. No accounts, no cloud, no background uploads. Ever.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Panels -->
+  <section class="section" id="panels">
+    <div class="container">
+      <header class="section-head">
+        <h2>Seven Live Panels</h2>
+        <p>Each panel tracks exactly what matters for that component — with sparkline history so you see trends, not just a snapshot.</p>
+      </header>
+
+      <div class="panels-grid">
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/cpu-panel.png" alt="CPU panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>CPU</h3>
+            <p>Total and per-core load with sparklines, current clock frequency, package temperature, and power draw.</p>
+            <ul>
+              <li>Total &amp; per-core load (%)</li>
+              <li>Clock frequency (GHz)</li>
+              <li>Package temperature (°C)</li>
+              <li>Package power (W)</li>
+            </ul>
+            <span class="source-tag">sysinfo · LHM</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/gpu-panel.png" alt="GPU panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>GPU</h3>
+            <p>Core load, temperature, hot-spot reading, core clock, package power, VRAM usage and fan RPM. Works with NVIDIA and AMD discrete GPUs.</p>
+            <ul>
+              <li>Core load (%)</li>
+              <li>Core temperature &amp; hot-spot (°C)</li>
+              <li>Core clock (MHz) &amp; power (W)</li>
+              <li>VRAM used / total (GB)</li>
+              <li>Fan speed (RPM)</li>
+            </ul>
+            <span class="source-tag">LHM</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/ram-panel.png" alt="RAM panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>RAM</h3>
+            <p>Current usage alongside the full memory spec read directly from BIOS — type, speed, and stick identification.</p>
+            <ul>
+              <li>Used / free / total (GB)</li>
+              <li>Memory type (DDR – DDR5)</li>
+              <li>Speed (MHz)</li>
+              <li>Manufacturer &amp; part number</li>
+            </ul>
+            <span class="source-tag">sysinfo · WMI</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/network-panel.png" alt="Network panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>Network</h3>
+            <p>Live upload and download throughput for the best active interface, plus latency measured against the default gateway.</p>
+            <ul>
+              <li>Upload / download (Mbps)</li>
+              <li>Active interface name</li>
+              <li>Ping / latency (ms)</li>
+            </ul>
+            <span class="source-tag">LHM · sysinfo</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/storage-panel.png" alt="Storage panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>Storage</h3>
+            <p>Aggregated read and write throughput across your primary drives, plus per-drive capacity and usage.</p>
+            <ul>
+              <li>Read / write throughput (MB/s)</li>
+              <li>Per-drive capacity &amp; usage</li>
+              <li>Filesystem label</li>
+            </ul>
+            <span class="source-tag">LHM · sysinfo</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/clock-panel.png" alt="Clock panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>Clock</h3>
+            <p>Current time, day, and date displayed cleanly at the top of the dashboard — always visible at a glance.</p>
+            <ul>
+              <li>Time (HH:MM:SS)</li>
+              <li>Day of week &amp; date</li>
+            </ul>
+            <span class="source-tag">sysinfo</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/system-panel.png" alt="System identity panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>System Identity</h3>
+            <p>Rig name, CPU model, and GPU model auto-detected at startup. Recognized gaming OEMs — ROG, MSI, Alienware, Legion, OMEN, Razer, Predator, AORUS — display their brand logo automatically.</p>
+            <ul>
+              <li>Hostname / rig name</li>
+              <li>CPU &amp; GPU model strings</li>
+              <li>System brand logo (auto-detected)</li>
+            </ul>
+            <span class="source-tag">WMI · sysinfo</span>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Dialogs -->
+  <section class="section section-alt" id="dialogs">
+    <div class="container">
+      <header class="section-head">
+        <h2>Three Supporting Dialogs</h2>
+        <p>Accessible from the system tray icon. Each dialog has a single, focused purpose.</p>
+      </header>
+
+      <div class="dialogs-grid">
+
+        <article class="dialog-card">
+          <div class="dialog-img-wrap">
+            <img src="images/settings-dialog.png" alt="Settings dialog screenshot" class="dialog-img">
+          </div>
+          <div class="dialog-body">
+            <h3>Settings</h3>
+            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, and toggle always-on-top mode.</p>
+            <ul>
+              <li>Opacity slider (live preview)</li>
+              <li>Display profile selector</li>
+              <li>Always-on-top toggle</li>
+              <li>Editable model name</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="dialog-card">
+          <div class="dialog-img-wrap">
+            <img src="images/status-dialog.png" alt="Status dialog screenshot" class="dialog-img">
+          </div>
+          <div class="dialog-body">
+            <h3>Status</h3>
+            <p>Runtime health view for every data source. Shows the LibreHardwareMonitor scheduled task state, dependency health indicators, the live debug log, and last successful refresh time.</p>
+            <ul>
+              <li>Dependency health indicators</li>
+              <li>Live debug log viewer</li>
+              <li>Last successful refresh timestamp</li>
+              <li>Diagnostics ZIP export</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="dialog-card">
+          <div class="dialog-img-wrap">
+            <img src="images/about-dialog.png" alt="About dialog screenshot" class="dialog-img">
+          </div>
+          <div class="dialog-body">
+            <h3>About</h3>
+            <p>Product information at a glance. Shows the current version number, license, and direct links to the GitHub repository and the maintainer.</p>
+            <ul>
+              <li>Current version</li>
+              <li>License (MIT)</li>
+              <li>GitHub repository link</li>
+              <li>Contact link</li>
+            </ul>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="section" id="download">
+    <div class="container">
+      <header class="section-head">
+        <h2>Download &amp; Install</h2>
+        <p>A single NSIS installer handles everything — including setting up LibreHardwareMonitor as a Windows scheduled task so sensor data is available immediately at startup.</p>
+      </header>
+
+      <div class="download-layout">
+
+        <div class="download-box">
+          <h3>Requirements</h3>
+          <ul class="req-list">
+            <li>
+              <span class="req-check">✓</span>
+              Windows 10 or 11 (64-bit)
+            </li>
+            <li>
+              <span class="req-check">✓</span>
+              Administrator rights during installation
+            </li>
+            <li>
+              <span class="req-check">✓</span>
+              A secondary portrait display is recommended but not required
+            </li>
+          </ul>
+        </div>
+
+        <div class="download-box">
+          <h3>Installation</h3>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <div>
+                <strong>Download the installer</strong>
+                <p>Grab the latest <code>.exe</code> from the releases page below.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <div>
+                <strong>Run the installer</strong>
+                <p>Accept the UAC prompt — admin rights are needed to register the LibreHardwareMonitor scheduled task.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <div>
+                <strong>Find RigStats in the system tray</strong>
+                <p>The app starts to the tray. Click the icon to open the dashboard or access Settings, Status, and About.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <div class="download-cta">
+          <a href="https://github.com/dvalfrid/rigstats/releases/latest" class="btn-primary btn-large" target="_blank" rel="noopener">
+            Download latest release
+          </a>
+          <p class="download-note">All versions available on the <a href="https://github.com/dvalfrid/rigstats/releases" target="_blank" rel="noopener">GitHub Releases page</a>.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Support -->
+  <section class="section section-alt" id="support">
+    <div class="container">
+      <header class="section-head">
+        <h2>Having a Problem?</h2>
+        <p>RigStats has a built-in diagnostics export that captures everything needed to investigate sensor or hardware compatibility issues.</p>
+      </header>
+
+      <div class="support-layout">
+
+        <div class="support-box">
+          <h3>Export diagnostics</h3>
+          <ol class="steps">
+            <li>
+              <span class="step-num">1</span>
+              <div>
+                <strong>Open the Status dialog</strong>
+                <p>Right-click the tray icon → Status.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">2</span>
+              <div>
+                <strong>Click "Collect Diagnostics…"</strong>
+                <p>A Windows save dialog lets you choose where to store the ZIP archive.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-num">3</span>
+              <div>
+                <strong>Attach the ZIP when reporting</strong>
+                <p>The archive contains the debug log, sensor tree, hardware info, and settings — no personal files or credentials.</p>
+              </div>
+            </li>
+          </ol>
+
+          <div class="diag-table-wrap">
+            <table class="diag-table">
+              <thead>
+                <tr><th>File in ZIP</th><th>Contents</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>debug.log</code></td><td>Full startup and runtime log</td></tr>
+                <tr><td><code>lhm-data.json</code></td><td>Raw LHM sensor tree with all sensor names and live values</td></tr>
+                <tr><td><code>hardware.json</code></td><td>WMI snapshot: OS, CPU, GPU, motherboard, RAM</td></tr>
+                <tr><td><code>settings.json</code></td><td>Current user settings</td></tr>
+                <tr><td><code>sched-task.txt</code></td><td>LibreHardwareMonitor scheduled task state</td></tr>
+                <tr><td><code>sysinfo.json</code></td><td>sysinfo snapshot: CPU, disk, network, RAM</td></tr>
+                <tr><td><code>environment.txt</code></td><td>Windows build, architecture, computer name</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="privacy-note">Nothing is uploaded automatically. The ZIP is a local file — you decide whether to share it.</p>
+        </div>
+
+        <div class="support-box">
+          <h3>Report an issue</h3>
+          <p>Create a GitHub issue and attach the diagnostics ZIP for the fastest resolution.</p>
+          <a href="https://github.com/dvalfrid/rigstats/issues/new" class="channel-card" target="_blank" rel="noopener">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <div>
+              <strong>Create a GitHub Issue</strong>
+              <span>github.com/dvalfrid/rigstats/issues</span>
+            </div>
+            <span class="arrow">→</span>
+          </a>
+
+          <div class="tech-docs-link">
+            <h3>Technical documentation</h3>
+            <p>Architecture notes, setup guide, release process, and troubleshooting docs are maintained in the repository.</p>
+            <a href="https://github.com/dvalfrid/rigstats/tree/main/docs" class="btn-outline-sm" target="_blank" rel="noopener">Browse docs on GitHub →</a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="container footer-inner">
+    <div class="footer-brand">
+      <img src="images/icon-256.png" alt="" width="22" height="22">
+      <span>RigStats</span>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="https://github.com/dvalfrid/rigstats" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/dvalfrid/rigstats/releases" target="_blank" rel="noopener">Releases</a>
+      <a href="https://github.com/dvalfrid/rigstats/issues" target="_blank" rel="noopener">Issues</a>
+      <a href="https://github.com/dvalfrid/rigstats/tree/main/docs" target="_blank" rel="noopener">Technical Docs</a>
+    </nav>
+    <p class="footer-copy">MIT License &nbsp;·&nbsp; Built with Tauri &amp; Rust</p>
+  </div>
+</footer>
+
+<script src="script.js"></script>
+</body>
+</html>
