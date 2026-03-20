@@ -94,11 +94,20 @@ fn tray_anchor_position(app: &AppHandle, width: f64, height: f64) -> Option<(f64
 
 /// Opens the Settings window, or focuses it if already open.
 pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
-  if app.get_webview_window("settings").is_some() {
-    if let Some(win) = app.get_webview_window("settings") {
-      win.show().map_err(|e| e.to_string())?;
-      win.set_focus().map_err(|e| e.to_string())?;
-    }
+  append_debug_log(app, "Settings window requested from tray/menu");
+
+  if let Some(win) = app.get_webview_window("settings") {
+    win.show().map_err(|e| {
+      let msg = e.to_string();
+      append_debug_log(app, &format!("Settings window show failed: {}", msg));
+      msg
+    })?;
+    win.set_focus().map_err(|e| {
+      let msg = e.to_string();
+      append_debug_log(app, &format!("Settings window focus failed: {}", msg));
+      msg
+    })?;
+    append_debug_log(app, "Settings window reused successfully");
     return Ok(());
   }
 
@@ -106,7 +115,7 @@ pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
   let height = 620.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
 
-  WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
+  let window = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
     .title("Settings")
     .inner_size(width, height)
     .position(x, y)
@@ -115,8 +124,23 @@ pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
     .always_on_top(true)
     .skip_taskbar(true)
     .build()
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| {
+      let msg = e.to_string();
+      append_debug_log(app, &format!("Settings window build failed: {}", msg));
+      msg
+    })?;
 
+  window.show().map_err(|e| {
+    let msg = e.to_string();
+    append_debug_log(app, &format!("Settings window initial show failed: {}", msg));
+    msg
+  })?;
+  window.set_focus().map_err(|e| {
+    let msg = e.to_string();
+    append_debug_log(app, &format!("Settings window initial focus failed: {}", msg));
+    msg
+  })?;
+  append_debug_log(app, "Settings window created successfully");
   Ok(())
 }
 
