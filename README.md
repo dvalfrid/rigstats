@@ -14,7 +14,7 @@ RigStats is a Windows desktop dashboard built with Tauri v2. It targets a vertic
 
 ### Main Dashboard
 
-![Main Dashboard](assets/demo_1.png)
+![Main Dashboard](assets/rigStats.png)
 
 The main dashboard is designed for a vertical secondary display and keeps the live system view visible at a glance.
 
@@ -34,7 +34,7 @@ From here you can:
 
 ### Status Dialog
 
-![Status Dialog](assets/status.png)
+![Status Dialog](assets/status-dialog.png)
 
 The Status dialog is the diagnostics view for runtime health and backend troubleshooting.
 
@@ -56,7 +56,7 @@ From here you can:
 
 ### About Dialog
 
-![About Dialog](assets/about.png)
+![About Dialog](assets/about-dialog.png)
 
 The About dialog is the lightweight product-information view.
 
@@ -74,7 +74,7 @@ From here you can:
 
 ### Settings Dialog
 
-![Settings Dialog](assets/Settings.png)
+![Settings Dialog](assets/settings-dialog.png)
 
 The Settings dialog controls the dashboard presentation and placement behavior.
 
@@ -100,6 +100,8 @@ WMI provides static metadata at startup.
 
 ### CPU
 
+![CPU panel](assets/cpu-panel.png)
+
 | Metric | Source |
 | --- | --- |
 | Total load (%) | sysinfo |
@@ -112,6 +114,8 @@ WMI provides static metadata at startup.
 > Intel CPUs report temperature in LHM under a different sensor name; no value will appear in the temp field on Intel systems until that mapping is added to `src-tauri/src/lhm.rs`.
 
 ### GPU
+
+![GPU panel](assets/gpu-panel.png)
 
 | Metric | Source |
 | --- | --- |
@@ -128,6 +132,8 @@ Intel Arc GPUs should work but have not been tested.
 
 ### RAM
 
+![RAM panel](assets/ram-panel.png)
+
 | Metric | Source |
 | --- | --- |
 | Used / free / total (GB) | sysinfo |
@@ -136,6 +142,8 @@ Intel Arc GPUs should work but have not been tested.
 | Manufacturer & part number | WMI `Win32_PhysicalMemory` |
 
 ### Storage
+
+![Storage panel](assets/storage-panel.png)
 
 | Metric | Source |
 | --- | --- |
@@ -146,6 +154,8 @@ Intel Arc GPUs should work but have not been tested.
 
 ### Network
 
+![Network panel](assets/network-panel.png)
+
 | Metric | Source |
 | --- | --- |
 | Upload speed (Mbps) | LHM — best active interface |
@@ -153,7 +163,14 @@ Intel Arc GPUs should work but have not been tested.
 | Active interface name | sysinfo |
 | Latency / ping (ms) | Windows `ping` command — default gateway, falls back to `1.1.1.1` |
 
+### Clock
+
+![Clock panel](assets/clock-panel.png)
+
+
 ### System Identity
+
+![System panel](assets/system-panel.png)
 
 | Metadata | Source |
 | --- | --- |
