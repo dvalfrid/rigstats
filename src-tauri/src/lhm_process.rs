@@ -15,7 +15,7 @@ use std::time::Duration;
 use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
-const LHM_TASK_NAMES: [&str; 2] = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+const LHM_TASK_NAMES: [&str; 3] = ["LibreHardwareMonitor", "RIGStats\\LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
 
 /// Tracks whether the last `get_stats` tick had a live LHM connection.
 /// Used to log connect/disconnect transitions exactly once.
@@ -143,6 +143,7 @@ fn candidate_lhm_paths(app: &tauri::AppHandle) -> Vec<PathBuf> {
   }
 
   if let Ok(program_files) = std::env::var("ProgramFiles") {
+    paths.push(PathBuf::from(&program_files).join("RIGStats").join("lhm").join("LibreHardwareMonitor.exe"));
     paths.push(PathBuf::from(&program_files).join("RigStats").join("lhm").join("LibreHardwareMonitor.exe"));
     paths.push(PathBuf::from(program_files).join("LibreHardwareMonitor").join("LibreHardwareMonitor.exe"));
   }
@@ -197,7 +198,7 @@ pub fn ensure_lhm_running(app: &tauri::AppHandle) {
       }
       append_debug_log(app, "Task run succeeded but endpoint still unavailable");
     } else if !lhm_task_exists(app) {
-      append_debug_log(app, "LHM task missing. Reinstall RigStats as administrator to recreate task.");
+      append_debug_log(app, "LHM task missing. Reinstall RIGStats as administrator to recreate task.");
     }
 
     let mut elevation_required = false;

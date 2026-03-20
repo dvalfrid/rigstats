@@ -71,7 +71,7 @@ fn toggle_main_window(app: &AppHandle) {
 
 fn create_tray(app: &tauri::App) -> tauri::Result<()> {
   let tray_menu = MenuBuilder::new(app)
-    .text(TRAY_SHOW_ID, "Show RigStats")
+    .text(TRAY_SHOW_ID, "Show RIGStats")
     .separator()
     .text(TRAY_SETTINGS_ID, "Settings")
     .text(TRAY_STATUS_ID, "Status")
@@ -134,7 +134,7 @@ fn main() {
     .setup(|app| {
       let app_handle = app.handle();
       reset_debug_log(&app_handle);
-      append_debug_log(&app_handle, "RigStats startup");
+      append_debug_log(&app_handle, "RIGStats startup");
 
       let mut settings = load_settings(&app_handle);
       let should_autofill_model = settings.model_name.trim().is_empty()

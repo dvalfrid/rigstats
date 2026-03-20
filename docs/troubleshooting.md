@@ -63,7 +63,7 @@ $bb = Get-CimInstance Win32_BaseBoard
 } | Format-List
 ```
 
-Those six fields are the ones RigStats now uses to classify the system brand, with product-line names like `Alienware`, `Legion`, `OMEN`, `Predator`, and `AORUS` taking priority over the generic OEM name.
+Those six fields are the ones RIGStats now uses to classify the system brand, with product-line names like `Alienware`, `Legion`, `OMEN`, `Predator`, and `AORUS` taking priority over the generic OEM name.
 
 ## How Do I Report A Bug Or Missing Sensor Support?
 

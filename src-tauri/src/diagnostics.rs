@@ -48,7 +48,7 @@ fn diag_collect_hardware() -> String {
 fn diag_collect_tasks() -> String {
   #[cfg(windows)]
   {
-    let task_names = ["LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+    let task_names = ["LibreHardwareMonitor", "RIGStats\\LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
     let mut out = String::new();
     for task_name in task_names {
       out.push_str(&format!("=== {} ===\n", task_name));

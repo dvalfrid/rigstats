@@ -168,7 +168,7 @@ pub fn ensure_about_window(app: &AppHandle) -> Result<(), String> {
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
 
   let window = WebviewWindowBuilder::new(app, "about", WebviewUrl::App("about.html".into()))
-    .title("About RigStats")
+    .title("About RIGStats")
     .inner_size(width, height)
     .position(x, y)
     .resizable(false)
@@ -220,7 +220,7 @@ pub fn ensure_status_window(app: &AppHandle) -> Result<(), String> {
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
 
   let window = WebviewWindowBuilder::new(app, "status", WebviewUrl::App("status.html".into()))
-    .title("RigStats Status")
+    .title("RIGStats Status")
     .inner_size(width, height)
     .position(x, y)
     .resizable(false)

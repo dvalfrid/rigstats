@@ -1,4 +1,4 @@
-# RigStats (rig-dashboard)
+# RIGStats (rig-dashboard)
 
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
@@ -8,7 +8,7 @@
 
 ## Overview
 
-RigStats is a Windows desktop dashboard built with Tauri v2. It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
+RIGStats is a Windows desktop dashboard built with Tauri v2. It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
 
 ## Screens
 
@@ -62,7 +62,7 @@ The About dialog is the lightweight product-information view.
 
 It shows:
 
-- the current RigStats version
+- the current RIGStats version
 - the project license name
 - direct links to GitHub and contact
 
@@ -232,8 +232,8 @@ The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a n
 
 | File in ZIP | Contents | Why it is needed |
 | --- | --- | --- |
-| `manifest.json` | Collection timestamp (Unix seconds), RigStats version | Ties the report to a specific build |
-| `debug.log` | Full RigStats debug log from disk | Startup sequence, LHM connectivity, error events |
+| `manifest.json` | Collection timestamp (Unix seconds), RIGStats version | Ties the report to a specific build |
+| `debug.log` | Full RIGStats debug log from disk | Startup sequence, LHM connectivity, error events |
 | `settings.json` | Persisted user settings (opacity, profile, model name) | Rules out configuration-specific issues |
 | `lhm-data.json` | Raw LHM sensor tree from `localhost:8085/data.json` | **Most important file for adding sensor support** — shows all sensor names and values as LHM reports them on the actual machine |
 | `hardware.json` | WMI/CIM snapshot: OS version, CPU (name, cores, max clock), GPU (name, VRAM, driver), motherboard (manufacturer, model, product, base board), RAM (capacity per stick, speed, type code, manufacturer, part number) | Hardware identification and brand detection |
@@ -243,7 +243,7 @@ The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a n
 
 ### What Is Not Collected
 
-- No file paths outside the RigStats data directory
+- No file paths outside the RIGStats data directory
 - No browser history, tokens, or credentials of any kind
 - No data is transmitted anywhere — the ZIP is written only to the location you choose
 - No telemetry is sent automatically at any time

@@ -113,13 +113,13 @@ Output goes to:
 ```text
 src-tauri\target\release\bundle\
   nsis\
-    RigStats_1.0.0_x64-setup.exe
+    RIGStats_1.0.0_x64-setup.exe
 ```
 
 Default install location:
 
 ```text
-C:\Program Files\RigStats\
+C:\Program Files\RIGStats\
 ```
 
 ## Windows Auto Start
@@ -130,6 +130,6 @@ To auto-start the dashboard itself with Task Scheduler:
 2. Click Create Basic Task
 3. Trigger: At log on
 4. Action: Start a program
-5. Program: `C:\Program Files\RigStats\RigStats.exe`
+5. Program: `C:\Program Files\RIGStats\RIGStats.exe`
 
 LHM startup is handled separately by the installer-created scheduled task.
