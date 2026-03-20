@@ -36,6 +36,27 @@ Run a single Rust test:
 cargo test --manifest-path src-tauri/Cargo.toml classify_system_brand
 ```
 
+## Linting and formatting
+
+```bash
+# Format Rust (modifies files)
+npm run fmt:rs
+
+# Check Rust formatting without modifying (CI)
+npm run fmt:rs:check
+
+# Rust clippy
+npm run clippy
+
+# Lint JavaScript
+npm run lint
+
+# Auto-fix JavaScript
+npm run lint:fix
+```
+
+See [STANDARDS.md](STANDARDS.md) for the full code standards.
+
 ## Architecture Overview
 
 This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardware telemetry on a secondary portrait monitor. It has no bundler/build step for the frontend — vanilla JS ES modules are served directly from `frontend/`.

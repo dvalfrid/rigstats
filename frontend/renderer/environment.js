@@ -28,7 +28,7 @@ const backend = {
     }
 
     return Promise.resolve(() => {});
-  }
+  },
 };
 
 export { backend, IS_DESKTOP, IS_TAURI };

@@ -5,7 +5,7 @@ import {
   TEMP_OK_COLOR,
   TEMP_UNKNOWN_COLOR,
   TEMP_WARM_COLOR,
-  resolveTempColor
+  resolveTempColor,
 } from './tempColors.js';
 
 describe('resolveTempColor', () => {

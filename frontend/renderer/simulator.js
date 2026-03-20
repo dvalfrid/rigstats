@@ -22,7 +22,7 @@ function simulateStats() {
       cores: Array(8).fill(0).map(() => Math.max(2, Math.min(99, cpu + (Math.random() - 0.5) * 35)) | 0),
       temp: 48 + cpu * 0.38,
       freq: 3.2 + cpu * 0.02,
-      power: 35 + cpu * 1.4
+      power: 35 + cpu * 1.4,
     },
     gpu: {
       load: gpu,
@@ -32,31 +32,31 @@ function simulateStats() {
       vramTotal: 16384,
       fanSpeed: gpu > 45 ? (900 + gpu * 22) | 0 : 0,
       power: 30 + gpu * 3.3,
-      freq: 1800 + gpu * 8
+      freq: 1800 + gpu * 8,
     },
     ram: {
       total: totalRam,
       used: totalRam * ram / 100,
       free: totalRam * (1 - ram / 100),
       spec: 'DDR5 6000 MT/s (2 DIMMs)',
-      details: '2x16 GB | Kingston | KF560C36-16'
+      details: '2x16 GB | Kingston | KF560C36-16',
     },
     net: {
       up: Math.random() * 40e6 + 2e6,
       down: Math.random() * 100e6 + 5e6,
       iface: 'Ethernet',
-      pingMs: 5 + Math.random() * 25
+      pingMs: 5 + Math.random() * 25,
     },
     disk: {
       read: Math.random() * 3e9,
       write: Math.random() * 1.5e9,
       drives: [
         { fs: 'C:', size: 1e12, used: 5.5e11, pct: 55 },
-        { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30 }
-      ]
+        { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30 },
+      ],
     },
     systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),
-    lhmConnected: false
+    lhmConnected: false,
   };
 }
 

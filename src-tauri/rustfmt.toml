@@ -1,0 +1,13 @@
+# Matches the 2-space indent style used throughout this project.
+# Run: cargo fmt --manifest-path src-tauri/Cargo.toml
+
+edition = "2021"
+tab_spaces = 2
+max_width = 120
+
+# Group imports: std → external crates → crate-local
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+
+# Keep single-item use statements on one line
+merge_imports = false

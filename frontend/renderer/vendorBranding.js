@@ -17,7 +17,7 @@ const RIG_BRAND_META = {
   dell: { label: 'Dell' },
   lenovo: { label: 'Lenovo' },
   hp: { label: 'HP' },
-  acer: { label: 'Acer' }
+  acer: { label: 'Acer' },
 };
 
 function resolveVendorBadge(model, kind) {

@@ -28,3 +28,17 @@ wmi = "0.13"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+# Correctness
+dbg_macro = "warn"
+todo = "warn"
+# Readability
+clone_on_ref_ptr = "warn"
+redundant_clone = "warn"
+needless_pass_by_value = "warn"
+# Windows-specific: silence false positives for dead_code on cfg-gated items
+

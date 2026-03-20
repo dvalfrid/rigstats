@@ -7,7 +7,7 @@ function createHistory(length = 80) {
     gpu: Array(length).fill(0),
     ram: Array(length).fill(0),
     net: Array(length).fill(0),
-    disk: Array(length).fill(0)
+    disk: Array(length).fill(0),
   };
 }
 
@@ -31,7 +31,7 @@ function drawSpark(id, data, color) {
   const max = Math.max(...data, 1);
   const points = data.map((v, i) => ({
     x: (i / (data.length - 1)) * width,
-    y: height - 0.88 * (v / max) * height - 4
+    y: height - 0.88 * (v / max) * height - 4,
   }));
 
   const gradient = ctx.createLinearGradient(0, 0, 0, height);

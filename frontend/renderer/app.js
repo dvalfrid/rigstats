@@ -56,7 +56,7 @@ const PROFILE_SIZE = {
   'portrait-900x1600': { width: 900, height: 1600 },
   'portrait-1050x1680': { width: 1050, height: 1680 },
   'portrait-1600x2560': { width: 1600, height: 2560 },
-  'portrait-4k': { width: 2160, height: 3840 }
+  'portrait-4k': { width: 2160, height: 3840 },
 };
 
 const BASE_PROFILE_HEIGHT = 1920;
@@ -246,7 +246,7 @@ function setupBrandPreviewControls() {
     list: () => [...BRAND_PREVIEW_ORDER],
     current: () => ({
       enabled: brandPreviewEnabled,
-      brand: brandPreviewEnabled ? getPreviewBrand() : normalizeRigBrand(detectedBrand) || 'other'
+      brand: brandPreviewEnabled ? getPreviewBrand() : normalizeRigBrand(detectedBrand) || 'other',
     }),
     enable: () => setBrandPreviewEnabled(true),
     disable: () => setBrandPreviewEnabled(false),
@@ -262,7 +262,7 @@ function setupBrandPreviewControls() {
     set: (brand) => {
       setBrandPreviewEnabled(true);
       return setPreviewBrand(brand);
-    }
+    },
   };
 
   window.addEventListener('keydown', (event) => {
@@ -364,7 +364,7 @@ function start() {
     });
     Promise.all([
       backend.invoke('get-system-brand').catch(() => 'other'),
-      backend.invoke('get-cpu-info').catch(() => '')
+      backend.invoke('get-cpu-info').catch(() => ''),
     ]).then(([brand, cpu]) => {
       detectedBrand = brand || 'other';
       detectedCpuModel = cpu || '';
