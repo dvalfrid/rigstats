@@ -124,12 +124,8 @@ C:\Program Files\RIGStats\
 
 ## Windows Auto Start
 
-To auto-start the dashboard itself with Task Scheduler:
+Launch at startup is configured directly in the app — no manual steps required.
 
-1. Open Task Scheduler
-2. Click Create Basic Task
-3. Trigger: At log on
-4. Action: Start a program
-5. Program: `C:\Program Files\RIGStats\RIGStats.exe`
+Open the Settings window (right-click the tray icon → Settings) and enable the **Launch at Startup** toggle. The app registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` and keeps the `StartupApproved\Run` entry in sync so the toggle reflects the actual state shown in Windows Settings → Apps → Startup.
 
 LHM startup is handled separately by the installer-created scheduled task.
