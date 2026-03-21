@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.5.0](https://github.com/dvalfrid/rigstats/compare/v1.4.0...v1.5.0) (2026-03-21)
+
+
+### Features
+
+* **diagnostics:** add installer log to diagnostics ZIP and pretty-print all JSON files ([04611e6](https://github.com/dvalfrid/rigstats/commit/04611e6bbfd187763172ff76fdf2d70e58a25bc0))
+
+
+### Bug Fixes
+
+* **hardware:** add PowerShell fallback for model name detection and filter placeholder values ([bf1b5b5](https://github.com/dvalfrid/rigstats/commit/bf1b5b55f516f4bba7f10a87ca8cd4b90b4e96a8))
+* **settings:** auto-detect model name immediately when field is cleared ([3b3e4f8](https://github.com/dvalfrid/rigstats/commit/3b3e4f8e0d679c773d51f05a7675f4817d77a183))
+
 ## [1.4.0](https://github.com/dvalfrid/rigstats/compare/v1.3.1...v1.4.0) (2026-03-21)
 
 
