@@ -9,7 +9,7 @@
 
 use crate::autostart::{is_autostart_registered_with_log, register_autostart, unregister_autostart};
 use crate::debug::{append_debug_log, read_debug_log_tail};
-use crate::hardware::{detect_gpu_name, sample_ping_ms};
+use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
 use crate::lhm_process::{can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state};
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
@@ -173,8 +173,13 @@ pub fn save_settings(
   settings.opacity = opacity.clamp(0.0, 1.0);
 
   // Accept both snake_case and camelCase payload keys from the renderer.
+  // If the name is empty or a known placeholder, auto-detect immediately.
   let incoming_name = model_name.or(modelName).unwrap_or_else(|| settings.model_name.clone());
-  settings.model_name = incoming_name;
+  settings.model_name = if incoming_name.trim().is_empty() || is_placeholder_model_name(incoming_name.trim()) {
+    detect_model_name().unwrap_or(incoming_name)
+  } else {
+    incoming_name
+  };
 
   let requested_profile = dashboard_profile
     .or(dashboardProfile)
