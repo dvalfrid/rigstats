@@ -41,11 +41,13 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.36);
+  min-height: 0;
 }
 .hero {
   padding: 9px 12px 8px;
   background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 .kicker {
   font: 10px var(--mono);
@@ -54,15 +56,20 @@ body {
   color: var(--accent);
   margin-bottom: 3px;
 }
-.subtitle {
-  color: var(--muted);
-  font-size: 11px;
-}
+.subtitle { color: var(--muted); font-size: 11px; }
 .content {
   padding: 8px;
-  display: grid;
-  grid-template-columns: 0.95fr 1.05fr;
+  display: flex;
   gap: 7px;
+  flex: 1;
+  min-height: 0;
+}
+.col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
 }
 .card {
   background: var(--panel-strong);
@@ -70,7 +77,12 @@ body {
   border-radius: 10px;
   padding: 8px 9px;
 }
-.card-span-2 { grid-column: 1 / -1; }
+.panels-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .section-label {
   font: 10px var(--mono);
   color: var(--muted);
@@ -119,7 +131,7 @@ input[type=range]::-webkit-slider-thumb {
   letter-spacing: 1px;
 }
 input[type=text] {
-  width: min(100%, 220px);
+  width: 100%;
   background: #141820;
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -156,6 +168,7 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
   padding: 0 8px 8px;
   display: flex;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 .toggle-row {
   display: flex;
@@ -165,11 +178,6 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
   border: 1px solid var(--border);
   border-radius: 7px;
   padding: 6px 8px;
-}
-.compact-grid {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 6px;
 }
 .toggle-label {
   font-family: var(--mono);
@@ -183,44 +191,50 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
   accent-color: #00c8ff;
   cursor: pointer;
 }
-.panel-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+/* Panel drag-and-drop list */
+.panel-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  min-height: 0;
 }
-.panel-toggle {
-  display: inline-flex;
+.panel-item {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0;
+  gap: 8px;
   background: #141820;
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 5px 6px;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 1px;
-  cursor: pointer;
+  border-radius: 7px;
+  padding: 6px 8px;
   user-select: none;
-  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, margin-top 0.2s ease;
 }
-.panel-toggle:hover { border-color: rgba(0, 200, 255, 0.45); }
-.panel-toggle input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
+.panel-item:not(.dragging):hover { border-color: rgba(0, 200, 255, 0.35); }
+.panel-item.drag-over {
+  border-color: rgba(0, 200, 255, 0.7);
+  background: rgba(0, 200, 255, 0.06);
+  margin-top: 16px;
 }
-.panel-toggle:has(input:checked) {
-  color: #001018;
-  border-color: transparent;
-  background: linear-gradient(180deg, #36d6ff, #00b6e8);
-  box-shadow: 0 0 10px rgba(0, 200, 255, 0.25);
+.panel-item.dragging { visibility: hidden; }
+.panel-drag-handle {
+  cursor: grab;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+  touch-action: none;
+  padding: 0 2px;
 }
-.panel-toggle:has(input:checked):hover {
-  background: linear-gradient(180deg, #66e0ff, #33ccff);
-  box-shadow: 0 0 14px rgba(0, 200, 255, 0.5);
+.panel-drag-handle:active { cursor: grabbing; }
+.panel-item-label {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
 }
+.panel-item.hidden-panel .panel-item-label { color: var(--muted); }
 button {
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -248,27 +262,10 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
   min-height: 12px;
   color: var(--muted);
   padding: 2px 1px;
+  flex-shrink: 0;
 }
 .status-ok { color: var(--good); }
 .status-err { color: var(--warn); }
-
-@media (max-width: 760px) {
-  .content {
-    grid-template-columns: 1fr;
-  }
-  .card-span-2 {
-    grid-column: auto;
-  }
-  .compact-grid {
-    grid-template-columns: 1fr;
-  }
-  .panel-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  input[type=text] {
-    width: 100%;
-  }
-}
 </style>
 </head>
 <body>
@@ -279,60 +276,68 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
   </div>
 
   <div class="content">
-    <div class="card">
-      <div class="section-label">Opacity</div>
-      <div class="row">
-        <input type="range" id="slider" min="0" max="100" value="55" step="1">
-        <span class="value" id="val">55%</span>
+
+    <!-- Left column: sliders, toggles -->
+    <div class="col">
+      <div class="card">
+        <div class="section-label">Opacity</div>
+        <div class="row">
+          <input type="range" id="slider" min="0" max="100" value="55" step="1">
+          <span class="value" id="val">55%</span>
+        </div>
+        <div class="labels">
+          <span>TRANSPARENT</span>
+          <span>SOLID</span>
+        </div>
       </div>
-      <div class="labels">
-        <span>TRANSPARENT</span>
-        <span>SOLID</span>
+
+      <div class="card">
+        <div class="section-label">Model Name</div>
+        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
+      </div>
+
+      <div class="card">
+        <div class="section-label">Display &amp; Window</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <select id="profileSelect">
+            <option value="portrait-xl">Portrait XL (450x1920)</option>
+            <option value="portrait-slim">Portrait Slim (480x1920)</option>
+            <option value="portrait-hd">Portrait HD (720x1280)</option>
+            <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
+            <option value="portrait-fhd">Portrait FHD (1080x1920)</option>
+            <option value="portrait-wuxga">Portrait WUXGA (1200x1920)</option>
+            <option value="portrait-qhd">Portrait QHD (1440x2560)</option>
+            <option value="portrait-hdplus">Portrait HD+ (768x1366)</option>
+            <option value="portrait-900x1600">Portrait 900x1600</option>
+            <option value="portrait-1050x1680">Portrait 1050x1680</option>
+            <option value="portrait-1600x2560">Portrait 1600x2560</option>
+            <option value="portrait-4k">Portrait 4K (2160x3840)</option>
+          </select>
+          <label class="toggle-row" for="alwaysOnTopInput">
+            <span class="toggle-label">Always On Top</span>
+            <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
+          </label>
+          <label class="toggle-row" for="autostartInput">
+            <div>
+              <div class="toggle-label">Launch at Startup</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.5px;margin-top:2px;">Starts at login · LHM connects automatically</div>
+            </div>
+            <input class="toggle-input" type="checkbox" id="autostartInput">
+          </label>
+        </div>
+      </div>
+
+      <div id="status" class="status"></div>
+    </div>
+
+    <!-- Right column: panel order -->
+    <div class="col">
+      <div class="card panels-card">
+        <div class="section-label">Visible Panels · drag to reorder</div>
+        <div id="panelToggles" class="panel-list"></div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="section-label">Model Name</div>
-      <input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
-    </div>
-
-    <div class="card card-span-2">
-      <div class="section-label">Display & Window</div>
-      <div class="compact-grid">
-        <select id="profileSelect">
-          <option value="portrait-xl">Portrait XL (450x1920)</option>
-          <option value="portrait-slim">Portrait Slim (480x1920)</option>
-          <option value="portrait-hd">Portrait HD (720x1280)</option>
-          <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
-          <option value="portrait-fhd">Portrait FHD (1080x1920)</option>
-          <option value="portrait-wuxga">Portrait WUXGA (1200x1920)</option>
-          <option value="portrait-qhd">Portrait QHD (1440x2560)</option>
-          <option value="portrait-hdplus">Portrait HD+ (768x1366)</option>
-          <option value="portrait-900x1600">Portrait 900x1600</option>
-          <option value="portrait-1050x1680">Portrait 1050x1680</option>
-          <option value="portrait-1600x2560">Portrait 1600x2560</option>
-          <option value="portrait-4k">Portrait 4K (2160x3840)</option>
-        </select>
-        <label class="toggle-row" for="alwaysOnTopInput">
-          <span class="toggle-label">Always On Top</span>
-          <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
-        </label>
-        <label class="toggle-row" style="grid-column: 1 / -1;" for="autostartInput">
-          <div>
-            <div class="toggle-label">Launch at Startup</div>
-            <div style="font-family: var(--mono); font-size: 9px; color: var(--muted); letter-spacing: 0.5px; margin-top: 2px;">Starts at login · LHM connects automatically</div>
-          </div>
-          <input class="toggle-input" type="checkbox" id="autostartInput">
-        </label>
-      </div>
-    </div>
-
-    <div class="card card-span-2">
-      <div class="section-label">Visible Panels</div>
-      <div id="panelToggles" class="panel-grid"></div>
-    </div>
-
-    <div id="status" class="status card-span-2"></div>
   </div>
 
   <div class="dialog-actions">

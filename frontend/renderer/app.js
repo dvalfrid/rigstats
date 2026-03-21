@@ -114,10 +114,18 @@ function normalizeVisiblePanels(value) {
 }
 
 function applyVisiblePanels(visiblePanels) {
-  const allowed = new Set(normalizeVisiblePanels(visiblePanels));
-  document.querySelectorAll('.panel[data-panel]').forEach((panel) => {
-    const key = panel.getAttribute('data-panel');
-    panel.style.display = allowed.has(key) ? '' : 'none';
+  const ordered = normalizeVisiblePanels(visiblePanels);
+  const dashboard = document.querySelector('.dashboard');
+  const panelEls = {};
+  document.querySelectorAll('.panel[data-panel]').forEach((p) => {
+    panelEls[p.dataset.panel] = p;
+    p.style.display = 'none';
+  });
+  ordered.forEach((key) => {
+    if (panelEls[key]) {
+      panelEls[key].style.display = '';
+      dashboard.appendChild(panelEls[key]);
+    }
   });
 }
 

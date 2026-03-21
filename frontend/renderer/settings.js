@@ -30,6 +30,14 @@ let original = {
 };
 let isSaving = false;
 
+// Panel ordering state — tracks all panels (visible + hidden) in user-defined order.
+let panelOrder = [...PANEL_KEYS];
+let hiddenPanels = new Set();
+let draggingKey = null;
+let dragGhost = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
+
 function normalizeVisiblePanels(value) {
   const list = Array.isArray(value) ? value : [];
   const normalized = list
@@ -38,26 +46,136 @@ function normalizeVisiblePanels(value) {
   return normalized.length > 0 ? normalized : [...PANEL_KEYS];
 }
 
-function renderPanelToggles() {
-  panelToggles.innerHTML = PANEL_KEYS.map((key) => (
-    `<label class="panel-toggle" for="panel-${key}">
-      <input type="checkbox" id="panel-${key}" data-panel-key="${key}">
-      <span>${PANEL_LABELS[key]}</span>
-    </label>`
-  )).join('');
+function getSelectedPanels() {
+  return panelOrder.filter((k) => !hiddenPanels.has(k));
 }
 
-function getSelectedPanels() {
-  return [...panelToggles.querySelectorAll('input[data-panel-key]:checked')]
-    .map((input) => input.dataset.panelKey)
-    .filter(Boolean);
+function attachPanelItemEvents(item) {
+  const key = item.dataset.panelKey;
+  const handle = item.querySelector('.panel-drag-handle');
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    draggingKey = key;
+    handle.setPointerCapture(e.pointerId);
+
+    const rect = item.getBoundingClientRect();
+    dragOffsetX = e.clientX - rect.left;
+    dragOffsetY = e.clientY - rect.top;
+
+    dragGhost = item.cloneNode(true);
+    item.classList.add('dragging');
+    dragGhost.style.cssText = `
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      width: ${rect.width}px;
+      left: ${rect.left}px;
+      top: ${rect.top}px;
+      opacity: 0.9;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      border-color: rgba(0,200,255,0.6);
+      background: rgba(20,24,32,0.98);
+      border-radius: 7px;
+      transform: rotate(1deg) scale(1.03);
+      transition: none;
+    `;
+    document.body.appendChild(dragGhost);
+  });
+
+  handle.addEventListener('pointermove', (e) => {
+    if (draggingKey !== key) return;
+    if (dragGhost) {
+      dragGhost.style.left = `${e.clientX - dragOffsetX}px`;
+      dragGhost.style.top = `${e.clientY - dragOffsetY}px`;
+    }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const targetItem = el?.closest?.('.panel-item');
+    panelToggles.querySelectorAll('.panel-item').forEach((i) => i.classList.remove('drag-over'));
+    if (targetItem && targetItem !== item) {
+      targetItem.classList.add('drag-over');
+    }
+  });
+
+  const finishDrag = async () => {
+    if (draggingKey !== key) return;
+    draggingKey = null;
+    item.classList.remove('dragging');
+    if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+
+    const target = panelToggles.querySelector('.panel-item.drag-over');
+    panelToggles.querySelectorAll('.panel-item').forEach((i) => i.classList.remove('drag-over'));
+
+    if (target && target !== item) {
+      const srcIdx = panelOrder.indexOf(key);
+      const dstIdx = panelOrder.indexOf(target.dataset.panelKey);
+      if (srcIdx !== -1 && dstIdx !== -1) {
+        panelOrder.splice(srcIdx, 1);
+        panelOrder.splice(dstIdx, 0, key);
+        renderPanelToggles();
+        try {
+          await previewVisiblePanels(getSelectedPanels());
+        } catch (error) {
+          logError('preview-visible-panels', error);
+        }
+      }
+    }
+  };
+
+  handle.addEventListener('pointerup', finishDrag);
+
+  handle.addEventListener('pointercancel', () => {
+    if (draggingKey !== key) return;
+    draggingKey = null;
+    item.classList.remove('dragging');
+    if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+    panelToggles.querySelectorAll('.panel-item').forEach((i) => i.classList.remove('drag-over'));
+  });
+
+  const checkbox = item.querySelector('input[type=checkbox]');
+  checkbox.addEventListener('change', async () => {
+    if (!checkbox.checked) {
+      if (getSelectedPanels().length <= 1) {
+        checkbox.checked = true;
+        setStatus('At least one panel must remain visible.', 'status-err');
+        return;
+      }
+      hiddenPanels.add(key);
+      item.classList.add('hidden-panel');
+    } else {
+      hiddenPanels.delete(key);
+      item.classList.remove('hidden-panel');
+    }
+    try {
+      await previewVisiblePanels(getSelectedPanels());
+      setStatus('Previewing panel visibility...');
+    } catch (error) {
+      logError('preview-visible-panels', error);
+      setStatus('Could not preview panel visibility.', 'status-err');
+    }
+  });
+}
+
+function renderPanelToggles() {
+  panelToggles.innerHTML = panelOrder.map((key) => {
+    const hidden = hiddenPanels.has(key);
+    return `<div class="panel-item${hidden ? ' hidden-panel' : ''}" data-panel-key="${key}">
+      <span class="panel-drag-handle" title="Drag to reorder">≡</span>
+      <span class="panel-item-label">${PANEL_LABELS[key]}</span>
+      <input type="checkbox" class="toggle-input" data-panel-key="${key}"${hidden ? '' : ' checked'}>
+    </div>`;
+  }).join('');
+
+  panelToggles.querySelectorAll('.panel-item').forEach(attachPanelItemEvents);
 }
 
 function applyVisiblePanelsToForm(visiblePanels) {
-  const allowed = new Set(normalizeVisiblePanels(visiblePanels));
-  panelToggles.querySelectorAll('input[data-panel-key]').forEach((input) => {
-    input.checked = allowed.has(input.dataset.panelKey);
-  });
+  const visible = normalizeVisiblePanels(visiblePanels);
+  const hidden = PANEL_KEYS.filter((k) => !visible.includes(k));
+  // Visible panels appear first in their saved order; hidden panels follow.
+  panelOrder = [...visible, ...hidden];
+  hiddenPanels = new Set(hidden);
+  renderPanelToggles();
 }
 
 async function previewVisiblePanels(visiblePanels) {
@@ -122,6 +240,7 @@ async function loadSettings() {
 }
 
 async function closeWithRestore() {
+  if (dragGhost) { dragGhost.remove(); dragGhost = null; }
   await backend.invoke('preview-opacity', { value: original.opacity });
   await previewProfile(original.dashboardProfile);
   await previewVisiblePanels(original.visiblePanels);
@@ -147,26 +266,6 @@ profileSelect.addEventListener('change', async () => {
   } catch (error) {
     logError('preview-profile', error);
     setStatus('Could not preview display profile.', 'status-err');
-  }
-});
-
-panelToggles.addEventListener('change', async (event) => {
-  const input = event.target;
-  if (!input || input.tagName !== 'INPUT' || input.dataset.panelKey == null) return;
-
-  const selectedPanels = getSelectedPanels();
-  if (selectedPanels.length === 0) {
-    input.checked = true;
-    setStatus('At least one panel must remain visible.', 'status-err');
-    return;
-  }
-
-  try {
-    await previewVisiblePanels(selectedPanels);
-    setStatus('Previewing panel visibility...');
-  } catch (error) {
-    logError('preview-visible-panels', error);
-    setStatus('Could not preview panel visibility.', 'status-err');
   }
 });
 
@@ -234,5 +333,4 @@ document.addEventListener('keydown', async (event) => {
   }
 });
 
-renderPanelToggles();
 loadSettings();

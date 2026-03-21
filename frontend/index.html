@@ -62,21 +62,21 @@ html, body {
 
 .dashboard {
   position:relative;z-index:1;
-  display:grid;
+  display:flex;
+  flex-direction:column;
   width:var(--dashboard-w);
-  height:var(--dashboard-h);
-  grid-template-rows:
-    var(--row-header)
-    var(--row-clock)
-    var(--row-cpu)
-    var(--row-gpu)
-    var(--row-ram)
-    var(--row-net)
-    var(--row-disk);
+  min-height:var(--dashboard-h);
   gap:var(--panel-gap);
   background:var(--border);
   overflow:hidden;
 }
+.panel-header { height:var(--row-header); }
+.panel-clock  { height:var(--row-clock); }
+.panel-cpu    { height:var(--row-cpu); }
+.panel-gpu    { height:var(--row-gpu); }
+.panel-ram    { height:var(--row-ram); }
+.panel-net    { height:var(--row-net); }
+.panel-disk   { height:var(--row-disk); }
 
 .dashboard::before {
   content:'';position:absolute;inset:0;

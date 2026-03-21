@@ -44,7 +44,7 @@ rig-dashboard/
 ## Renderer Modules (`frontend/renderer/`)
 
 - **`environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__`) and `IS_DESKTOP`. All renderer modules go through this instead of accessing Tauri globals directly.
-- **`app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode.
+- **`app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode. `applyVisiblePanels` hides/shows panels and reorders them in the DOM to match the saved order.
 - **`systemInfo.js`** — Host name, CPU model, GPU model, and branding/logo wiring.
 - **`clock.js`** — Local time and uptime rendering.
 - **`spark.js`** — Sparkline history ring buffer and canvas drawing.
@@ -52,7 +52,8 @@ rig-dashboard/
 - **`vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
 - **`simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
 - **`panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
-- **`settings.js`** / **`about.js`** / **`status.js`** — Entry scripts for the secondary windows.
+- **`settings.js`** — Settings window entry script. Manages panel visibility and order: `panelOrder` tracks all panels (visible + hidden) in user-defined sequence; `hiddenPanels` is a `Set` of keys the user has unchecked. `renderPanelToggles` re-renders the list from those two structures. Drag-to-reorder uses the Pointer Events API (`pointerdown`/`pointermove`/`pointerup` on each `≡` handle with `setPointerCapture`) and a fixed-position ghost element to work around WebView2's HTML5 drag incompatibility.
+- **`about.js`** / **`status.js`** — Entry scripts for the About and Status secondary windows.
 
 ## Diagnostics Export (`collect_diagnostics`)
 
@@ -87,3 +88,5 @@ It produces a self-contained ZIP for bug reports and sensor-support work.
 - Poll ticks do not overlap, which avoids out-of-order UI updates.
 - `frontend/` is the Tauri web root, keeping runtime assets and HTML together.
 - No bundler or framework — vanilla ES modules are served directly by Tauri's asset server.
+- The dashboard uses CSS flexbox (not grid) so panels can be reordered in the DOM via `appendChild`. Each panel class (`panel-header`, `panel-cpu`, etc.) carries its own fixed height via a CSS variable, decoupling height from DOM position.
+- Drag-to-reorder in the Settings window uses the Pointer Events API with `setPointerCapture` instead of the HTML5 Drag API, which shows a prohibition cursor inside WebView2.
