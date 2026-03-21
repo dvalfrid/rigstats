@@ -38,7 +38,8 @@ rig-dashboard/
 - **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`).
 - **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `on_window_event`, `set_last_tray_click_position`.
 - **`diagnostics.rs`** — `collect_diagnostics` Tauri command and helpers that gather system info into a ZIP archive for bug reports.
-- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels), JSON persistence to Tauri app data dir.
+- **`autostart.rs`** — Per-user Windows autostart via `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`. Uses `winreg` for direct registry access (no subprocesses). Also manages `StartupApproved\Run` to stay in sync with Windows Settings > Apps > Startup.
+- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, autostart enabled, visible panels), JSON persistence to Tauri app data dir.
 
 ## Renderer Modules (`frontend/renderer/`)
 
@@ -62,7 +63,7 @@ It produces a self-contained ZIP for bug reports and sensor-support work.
 
 1. A native Windows save-file dialog is opened on a dedicated OS thread via `rfd::FileDialog` (Win32 requires STA; spawning a blocking task avoids blocking the async runtime).
 2. If the user cancels, the command returns `Ok(None)` and no file is written.
-3. If the user confirms a path, the following data is assembled:
+3. If the user confirms a path, the following data is assembled and written into a single `zip::ZipWriter` with Deflate compression. The path is logged to the debug log and returned to the renderer as `Ok(Some(path))`.
 
 | File in ZIP | Source | Notes |
 | --- | --- | --- |
@@ -74,9 +75,6 @@ It produces a self-contained ZIP for bug reports and sensor-support work.
 | `sched-task.txt` | `diag_collect_tasks()` — `schtasks /Query /V` | Both LHM task names |
 | `environment.txt` | `diag_collect_environment()` — env vars + Windows registry | Arch, build, hostname |
 | `sysinfo.json` | `diag_collect_sysinfo()` — reads shared `AppState` mutexes | CPU brand, RAM totals, mount points, interfaces |
-
-4. All entries are written into a single `zip::ZipWriter` with Deflate compression.
-5. Path is logged to the debug log and returned to the renderer as `Ok(Some(path))`.
 
 ---
 

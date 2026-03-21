@@ -6,6 +6,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod autostart;
 mod commands;
 mod debug;
 mod diagnostics;
@@ -148,6 +149,7 @@ fn main() {
       }
       let startup_profile = settings.dashboard_profile.clone();
       let startup_always_on_top = settings.always_on_top;
+      let startup_autostart_enabled = settings.autostart_enabled;
       let system = System::new_all();
       let sysinfo_available = !system.cpus().is_empty() || system.total_memory() > 0;
       let ram_spec = detect_ram_spec();
@@ -195,6 +197,16 @@ fn main() {
 
       // Fallback for cases where installer task did not launch LHM yet.
       ensure_lhm_running(&app_handle);
+
+      // Re-register only if the Run key is completely absent (e.g. after a
+      // reinstall). If Windows Settings has disabled the entry (StartupApproved
+      // byte = 0x03) we leave it alone — that is the user's intentional choice.
+      if startup_autostart_enabled && !autostart::is_run_key_present() {
+        match autostart::register_autostart() {
+          Ok(()) => append_debug_log(&app_handle, "autostart: re-registered missing entry"),
+          Err(e) => append_debug_log(&app_handle, &format!("autostart: startup re-register failed: {e}")),
+        }
+      }
 
       create_tray(app)?;
 

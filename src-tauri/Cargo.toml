@@ -25,6 +25,7 @@ tauri-plugin-opener = "2.5.3"
 
 [target.'cfg(windows)'.dependencies]
 wmi = "0.13"
+winreg = "0.52"
 
 [features]
 default = ["custom-protocol"]

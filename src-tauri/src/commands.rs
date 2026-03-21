@@ -7,6 +7,7 @@
 //! - Stats collection keeps the last successful LHM sample to avoid UI flicker
 //!   when LibreHardwareMonitor is temporarily unavailable.
 
+use crate::autostart::{is_autostart_registered_with_log, register_autostart, unregister_autostart};
 use crate::debug::{append_debug_log, read_debug_log_tail};
 use crate::hardware::{detect_gpu_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
@@ -109,8 +110,14 @@ pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) 
 // --- Settings --------------------------------------------------------------
 
 #[tauri::command]
-pub fn get_settings(state: tauri::State<AppState>) -> Settings {
-  state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone()
+pub fn get_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> Settings {
+  let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+  // Override autostart_enabled with the live registry state so the toggle
+  // reflects what Windows actually sees (e.g. if the user toggled it off
+  // via Windows Settings > Apps > Startup).
+  settings.autostart_enabled =
+    is_autostart_registered_with_log(|msg| append_debug_log(&app, msg));
+  settings
 }
 
 #[tauri::command]
@@ -159,6 +166,8 @@ pub fn save_settings(
   #[allow(non_snake_case)] alwaysOnTop: Option<bool>,
   visible_panels: Option<Vec<String>>,
   #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
+  autostart_enabled: Option<bool>,
+  #[allow(non_snake_case)] autostartEnabled: Option<bool>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   settings.opacity = opacity.clamp(0.0, 1.0);
@@ -179,6 +188,8 @@ pub fn save_settings(
     .unwrap_or_else(|| settings.visible_panels.clone());
   let applied_visible_panels = normalize_visible_panels(requested_visible_panels);
 
+  let applied_autostart = autostart_enabled.or(autostartEnabled).unwrap_or(settings.autostart_enabled);
+
   if let Some(main) = app.get_webview_window("main") {
     let _ = pick_target_monitor(&main, &applied_profile);
     main.set_always_on_top(applied_always_on_top).map_err(|e| e.to_string())?;
@@ -187,7 +198,24 @@ pub fn save_settings(
   settings.dashboard_profile = applied_profile.clone();
   settings.always_on_top = applied_always_on_top;
   settings.visible_panels = applied_visible_panels.clone();
+  settings.autostart_enabled = applied_autostart;
   persist_settings(&app, &settings)?;
+
+  // Apply autostart after settings are persisted so the preference is always saved
+  // even if the registry operation encounters a transient error.
+  if applied_autostart {
+    if let Err(e) = register_autostart() {
+      append_debug_log(&app, &format!("autostart: register failed: {e}"));
+      return Err(format!("Settings saved but autostart could not be enabled: {e}"));
+    }
+    append_debug_log(&app, "autostart: registered");
+  } else {
+    if let Err(e) = unregister_autostart() {
+      append_debug_log(&app, &format!("autostart: unregister failed: {e}"));
+      return Err(format!("Settings saved but autostart could not be disabled: {e}"));
+    }
+    append_debug_log(&app, "autostart: unregistered");
+  }
 
   if let Some(main) = app.get_webview_window("main") {
     main.emit("apply-opacity", settings.opacity).map_err(|e| e.to_string())?;

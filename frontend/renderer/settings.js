@@ -5,6 +5,7 @@ const valueLabel = document.getElementById('val');
 const modelNameInput = document.getElementById('modelNameInput');
 const profileSelect = document.getElementById('profileSelect');
 const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
+const autostartInput = document.getElementById('autostartInput');
 const panelToggles = document.getElementById('panelToggles');
 const statusEl = document.getElementById('status');
 
@@ -24,6 +25,7 @@ let original = {
   modelName: '',
   dashboardProfile: 'portrait-xl',
   alwaysOnTop: false,
+  autostartEnabled: false,
   visiblePanels: [...PANEL_KEYS],
 };
 let isSaving = false;
@@ -73,12 +75,21 @@ function setStatus(message, type = '') {
   statusEl.className = `status ${type}`.trim();
 }
 
+function logError(context, error) {
+  const message = `[settings] ${context}: ${error}`;
+  console.error(message);
+  if (IS_DESKTOP) {
+    backend.invoke('log-frontend-error', { message }).catch(() => {});
+  }
+}
+
 function applySettings(settings) {
   original = {
     opacity: settings.opacity ?? 0.55,
     modelName: settings.modelName ?? '',
     dashboardProfile: settings.dashboardProfile ?? 'portrait-xl',
     alwaysOnTop: settings.alwaysOnTop ?? false,
+    autostartEnabled: settings.autostartEnabled ?? false,
     visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
   };
 
@@ -88,6 +99,7 @@ function applySettings(settings) {
   modelNameInput.value = original.modelName;
   profileSelect.value = original.dashboardProfile;
   alwaysOnTopInput.checked = original.alwaysOnTop;
+  autostartInput.checked = original.autostartEnabled;
   applyVisiblePanelsToForm(original.visiblePanels);
 }
 
@@ -97,12 +109,16 @@ async function loadSettings() {
     return;
   }
 
+  let settings;
   try {
-    applySettings(await backend.invoke('get-settings'));
+    settings = await backend.invoke('get-settings');
   } catch (error) {
-    console.error('get-settings failed:', error);
+    logError('get-settings', error);
     setStatus('Could not load settings.', 'status-err');
+    return;
   }
+
+  applySettings(settings);
 }
 
 async function closeWithRestore() {
@@ -118,7 +134,7 @@ slider.addEventListener('input', () => {
 
   if (IS_DESKTOP) {
     backend.invoke('preview-opacity', { value: percentage / 100 }).catch((error) => {
-      console.error('preview-opacity failed:', error);
+      logError('preview-opacity', error);
     });
   }
 });
@@ -129,7 +145,7 @@ profileSelect.addEventListener('change', async () => {
     await previewProfile(profileSelect.value);
     setStatus('Previewing display profile...');
   } catch (error) {
-    console.error('preview-profile failed:', error);
+    logError('preview-profile', error);
     setStatus('Could not preview display profile.', 'status-err');
   }
 });
@@ -149,7 +165,7 @@ panelToggles.addEventListener('change', async (event) => {
     await previewVisiblePanels(selectedPanels);
     setStatus('Previewing panel visibility...');
   } catch (error) {
-    console.error('preview-visible-panels failed:', error);
+    logError('preview-visible-panels', error);
     setStatus('Could not preview panel visibility.', 'status-err');
   }
 });
@@ -164,6 +180,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const modelName = modelNameInput.value.trim();
   const dashboardProfile = profileSelect.value;
   const alwaysOnTop = alwaysOnTopInput.checked;
+  const autostartEnabled = autostartInput.checked;
   const selectedPanels = getSelectedPanels();
 
   if (selectedPanels.length === 0) {
@@ -180,15 +197,16 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       modelName,
       dashboardProfile,
       alwaysOnTop,
+      autostartEnabled,
       visiblePanels,
     });
 
-    original = { opacity, modelName, dashboardProfile, alwaysOnTop, visiblePanels };
+    original = { opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');
   } catch (error) {
-    console.error('save-settings failed:', error);
-    setStatus('Save failed. Please try again.', 'status-err');
+    logError('save-settings', error);
+    setStatus(`Save failed: ${error}`, 'status-err');
   } finally {
     isSaving = false;
   }
@@ -200,7 +218,7 @@ document.getElementById('btnCancel').addEventListener('click', async () => {
   try {
     await closeWithRestore();
   } catch (error) {
-    console.error('close-window failed:', error);
+    logError('close-window', error);
     setStatus('Could not close settings.', 'status-err');
   }
 });
@@ -211,7 +229,7 @@ document.addEventListener('keydown', async (event) => {
   try {
     await closeWithRestore();
   } catch (error) {
-    console.error('escape close failed:', error);
+    logError('escape close', error);
     setStatus('Could not close settings.', 'status-err');
   }
 });

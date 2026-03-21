@@ -25,6 +25,9 @@ pub struct Settings {
   /// Ordered list of visible dashboard panels.
   #[serde(default = "default_visible_panels")]
   pub visible_panels: Vec<String>,
+  /// Launch the dashboard automatically when the user logs in.
+  #[serde(default)]
+  pub autostart_enabled: bool,
 }
 
 fn default_opacity() -> f64 {
@@ -59,6 +62,7 @@ impl Default for Settings {
       dashboard_profile: default_dashboard_profile(),
       always_on_top: false,
       visible_panels: default_visible_panels(),
+      autostart_enabled: false,
     }
   }
 }
