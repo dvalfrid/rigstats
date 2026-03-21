@@ -11,6 +11,16 @@ use serde::Serialize;
 use std::io::Write;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+// --- Helpers ---------------------------------------------------------------
+
+/// Re-parses a JSON string and returns it pretty-printed.
+/// Falls back to the original string if it isn't valid JSON.
+fn pretty_json(s: &str) -> String {
+  serde_json::from_str::<serde_json::Value>(s)
+    .and_then(|v| serde_json::to_string_pretty(&v))
+    .unwrap_or_else(|_| s.to_string())
+}
+
 // --- Data collection helpers -----------------------------------------------
 
 fn diag_collect_hardware() -> String {
@@ -31,7 +41,7 @@ fn diag_collect_hardware() -> String {
       "gpu=@($gpu|%{@{name=$_.Name;ramBytes=$_.AdapterRAM;driver=$_.DriverVersion}});",
       "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbMfr=$bb.Manufacturer;bbProd=$bb.Product;cspName=$csp.Name;cspVer=$csp.Version};",
       "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed;typeCode=$_.SMBIOSMemoryType;mfr=$_.Manufacturer;part=$_.PartNumber}})",
-      "}|ConvertTo-Json -Depth 4 -Compress",
+      "}|ConvertTo-Json -Depth 4",
       "}catch{'{ \"error\": \"collection failed\" }'}"
     );
     match run_hidden_command("powershell", &["-NoProfile", "-Command", script]) {
@@ -132,6 +142,11 @@ struct SysinfoSnapshot {
   ram_spec: String,
   ram_details: String,
   ping_target: String,
+}
+
+fn diag_collect_installer_log(app: &tauri::AppHandle) -> Vec<u8> {
+  let path = debug_log_path(app).with_file_name("rigstats-install.log");
+  std::fs::read(path).unwrap_or_else(|_| b"(install log not found)".to_vec())
 }
 
 fn diag_collect_sysinfo(state: &AppState) -> String {
@@ -286,11 +301,11 @@ pub async fn collect_diagnostics(
     return Ok(None); // user cancelled
   };
 
-  let manifest = format!(
-    "{{\"collected_at_unix\":{},\"rigstats_version\":\"{}\"}}",
-    ts,
-    env!("CARGO_PKG_VERSION")
-  );
+  let manifest = serde_json::to_string_pretty(&serde_json::json!({
+    "collected_at_unix": ts,
+    "rigstats_version": env!("CARGO_PKG_VERSION"),
+  }))
+  .unwrap_or_default();
 
   let log_bytes = std::fs::read(debug_log_path(&app)).unwrap_or_else(|_| b"(log not found)".to_vec());
 
@@ -307,14 +322,15 @@ pub async fn collect_diagnostics(
     .send()
     .await
   {
-    Ok(resp) => resp.text().await.unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e)),
+    Ok(resp) => pretty_json(&resp.text().await.unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e))),
     Err(e) => format!("{{\"error\":\"request: {}\"}}", e),
   };
 
-  let hardware_json = diag_collect_hardware();
+  let hardware_json = pretty_json(&diag_collect_hardware());
   let tasks_txt = diag_collect_tasks();
   let env_txt = diag_collect_environment();
   let sysinfo_json = diag_collect_sysinfo(&state);
+  let install_log_bytes = diag_collect_installer_log(&app);
   let displays_json = {
     let profile = state.settings.lock().unwrap_or_else(|e| e.into_inner()).dashboard_profile.clone();
     diag_collect_displays(&app, &profile)
@@ -328,6 +344,7 @@ pub async fn collect_diagnostics(
   let entries: &[(&str, &[u8])] = &[
     ("manifest.json", manifest.as_bytes()),
     ("debug.log", &log_bytes),
+    ("install.log", &install_log_bytes),
     ("settings.json", settings_json.as_bytes()),
     ("lhm-data.json", lhm_json.as_bytes()),
     ("hardware.json", hardware_json.as_bytes()),

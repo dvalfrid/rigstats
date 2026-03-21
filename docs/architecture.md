@@ -75,7 +75,9 @@ It produces a self-contained ZIP for bug reports and sensor-support work.
 | `hardware.json` | `diag_collect_hardware()` — PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM |
 | `sched-task.txt` | `diag_collect_tasks()` — `schtasks /Query /V` | Both LHM task names |
 | `environment.txt` | `diag_collect_environment()` — env vars + Windows registry | Arch, build, hostname |
+| `install.log` | `diag_collect_installer_log()` — reads `rigstats-install.log` from app data dir | Written by the NSIS installer; contains LHM exe path and task registration exit codes |
 | `sysinfo.json` | `diag_collect_sysinfo()` — reads shared `AppState` mutexes | CPU brand, RAM totals, mount points, interfaces |
+| `displays.json` | `diag_collect_displays()` — reads available monitors via Tauri | Each monitor's resolution, position, scale factor, fit score, and which one was selected for the current profile |
 
 ---
 
