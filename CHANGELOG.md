@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.4.0](https://github.com/dvalfrid/rigstats/compare/v1.3.1...v1.4.0) (2026-03-21)
+
+
+### Features
+
+* **autostart:** add launch-at-startup toggle to Settings ([c69057c](https://github.com/dvalfrid/rigstats/commit/c69057cf20402b5c8c1478004a83e28de1ef168c))
+* **ui:** add drag-to-reorder panel ordering ([2fb5f92](https://github.com/dvalfrid/rigstats/commit/2fb5f92ea4ff6d2c9e89ffc6bbddb3ddcfe43339))
+
+
+### Bug Fixes
+
+* **ui:** add consistent hover animations to all dialog buttons and panel toggles ([d203fd0](https://github.com/dvalfrid/rigstats/commit/d203fd01ad5de4889f80f3e1db1431f309fc8d77))
+
 ## [1.3.1](https://github.com/dvalfrid/rigstats/compare/v1.3.0...v1.3.1) (2026-03-20)
 
 
