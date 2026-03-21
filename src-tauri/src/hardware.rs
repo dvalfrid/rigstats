@@ -380,12 +380,23 @@ pub fn detect_system_brand() -> String {
 
 // --- Model name detection --------------------------------------------------
 
+#[cfg(windows)]
+#[derive(Deserialize, Debug, Default)]
+struct ModelNameInfo {
+  #[serde(rename = "cspVersion")]
+  csp_version: Option<String>,
+  #[serde(rename = "cspName")]
+  csp_name: Option<String>,
+  #[serde(rename = "csModel")]
+  cs_model: Option<String>,
+}
+
 fn normalize_model_name(raw: &str) -> Option<String> {
   let trimmed = raw.trim();
   if trimmed.is_empty() {
     return None;
   }
-  let invalid = ["to be filled by o.e.m.", "system product name", "default string", "unknown"];
+  let invalid = ["to be filled by o.e.m.", "system product name", "system version", "default string", "unknown", "none", "n/a", "not applicable"];
   let lower = trimmed.to_ascii_lowercase();
   if invalid.iter().any(|x| lower == *x) {
     return None;
@@ -393,34 +404,63 @@ fn normalize_model_name(raw: &str) -> Option<String> {
   Some(trimmed.to_string())
 }
 
+/// Returns true if the given model name is a known BIOS placeholder that
+/// should be replaced by auto-detection on the next startup.
+pub(crate) fn is_placeholder_model_name(name: &str) -> bool {
+  normalize_model_name(name).is_none()
+}
+
 /// Detects the system model name from WMI `Win32_ComputerSystemProduct`.
+/// Falls back to PowerShell `Get-CimInstance` if WMI is unavailable.
 pub fn detect_model_name() -> Option<String> {
   #[cfg(windows)]
   {
-    let com = wmi::COMLibrary::new().ok()?;
-    let conn = wmi::WMIConnection::new(com.into()).ok()?;
-
-    let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
-    if let Some(v) = products
-      .iter()
-      .filter_map(|p| p.version.as_deref().and_then(normalize_model_name))
-      .next()
-    {
-      return Some(v);
+    if let Ok(com) = wmi::COMLibrary::new() {
+      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
+        let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
+        if let Some(v) = products
+          .iter()
+          .filter_map(|p| p.version.as_deref().and_then(normalize_model_name))
+          .next()
+        {
+          return Some(v);
+        }
+        if let Some(v) = products
+          .iter()
+          .filter_map(|p| p.name.as_deref().and_then(normalize_model_name))
+          .next()
+        {
+          return Some(v);
+        }
+        let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
+        if let Some(v) = systems
+          .iter()
+          .filter_map(|s| s.model.as_deref().and_then(normalize_model_name))
+          .next()
+        {
+          return Some(v);
+        }
+      }
     }
-    if let Some(v) = products
-      .iter()
-      .filter_map(|p| p.name.as_deref().and_then(normalize_model_name))
-      .next()
-    {
-      return Some(v);
-    }
 
-    let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
-    systems
-      .iter()
-      .filter_map(|s| s.model.as_deref().and_then(normalize_model_name))
-      .next()
+    // Fallback: query via PowerShell CIM if WMI is unavailable.
+    let output = run_hidden_command(
+      "powershell",
+      &[
+        "-NoProfile",
+        "-Command",
+        "$csp=Get-CimInstance Win32_ComputerSystemProduct;$cs=Get-CimInstance Win32_ComputerSystem;[pscustomobject]@{cspVersion=$csp.Version;cspName=$csp.Name;csModel=$cs.Model}|ConvertTo-Json -Compress",
+      ],
+    )
+    .ok()?;
+    if !output.status.success() {
+      return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let info = serde_json::from_str::<ModelNameInfo>(&raw).ok()?;
+    if let Some(v) = info.csp_version.as_deref().and_then(normalize_model_name) { return Some(v); }
+    if let Some(v) = info.csp_name.as_deref().and_then(normalize_model_name) { return Some(v); }
+    info.cs_model.as_deref().and_then(normalize_model_name)
   }
 
   #[cfg(not(windows))]

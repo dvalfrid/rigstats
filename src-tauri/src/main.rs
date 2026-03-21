@@ -27,7 +27,7 @@ use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
 use hardware::{
   detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details,
-  detect_ram_spec, detect_system_brand, probe_wmi_status,
+  detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
 use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
@@ -140,7 +140,8 @@ fn main() {
 
       let mut settings = load_settings(&app_handle);
       let should_autofill_model = settings.model_name.trim().is_empty()
-        || settings.model_name.trim() == LEGACY_DEFAULT_MODEL_NAME;
+        || settings.model_name.trim() == LEGACY_DEFAULT_MODEL_NAME
+        || is_placeholder_model_name(settings.model_name.trim());
       if should_autofill_model {
         if let Some(model_name) = detect_model_name() {
           settings.model_name = model_name;
