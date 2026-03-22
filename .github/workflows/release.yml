@@ -54,6 +54,21 @@ jobs:
       - name: Build installer
         run: npm run build
 
+      - name: Sign installer
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://neu.codesigning.azure.net/
+          trusted-signing-account-name: rigstats-signing
+          certificate-profile-name: RIGStats
+          files-folder: src-tauri/target/release/bundle/nsis
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:

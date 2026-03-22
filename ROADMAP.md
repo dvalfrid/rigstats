@@ -69,3 +69,26 @@ with no battery detected.
 - New `BatteryStats` struct in `stats.rs`, included in `StatsPayload`
 - New `panels/battery.js` frontend panel
 - Add `battery` to the valid panel keys list in `monitor.rs` and settings
+
+---
+
+## v2.0 — Auto-update
+
+**Plugin:** `tauri-plugin-updater`
+**Distribution:** GitHub Releases (existing pipeline)
+
+Users currently have to manually download and run a new installer for each release.
+The Tauri v2 updater plugin checks for a new version on launch, prompts the user,
+and installs silently — integrating directly with the existing release-please +
+`release.yml` workflow.
+
+**Blocker:** Windows requires a code-signing certificate to avoid SmartScreen warnings
+on each update. Worth resolving before implementation starts.
+
+**Scope:**
+
+- Add `tauri-plugin-updater` and configure the update endpoint in `tauri.conf.json`
+- Publish a `latest.json` update manifest as a GitHub Release asset in `release.yml`
+- Sign the installer in CI using the code-signing certificate
+- Add an in-app update check on startup with a user prompt (not silent forced updates)
+- Consider Winget publishing as a complementary distribution channel
