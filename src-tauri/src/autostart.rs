@@ -16,8 +16,7 @@ use winreg::{
 };
 
 const RUN_PATH: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-const APPROVED_PATH: &str =
-  r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+const APPROVED_PATH: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 const VALUE_NAME: &str = "RigStats";
 
 fn hkcu() -> RegKey {

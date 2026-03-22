@@ -49,11 +49,7 @@ pub(crate) fn reset_debug_log(app: &tauri::AppHandle) {
   if let Some(parent) = path.parent() {
     let _ = create_dir_all(parent);
   }
-  let _ = OpenOptions::new()
-    .create(true)
-    .write(true)
-    .truncate(true)
-    .open(path);
+  let _ = OpenOptions::new().create(true).write(true).truncate(true).open(path);
 }
 
 pub(crate) fn append_debug_log(app: &tauri::AppHandle, message: &str) {

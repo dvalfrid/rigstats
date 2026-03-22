@@ -57,6 +57,22 @@ npm run lint:fix
 
 See [STANDARDS.md](STANDARDS.md) for the full code standards.
 
+## After making code changes
+
+**Always run the relevant checks before declaring a task complete.** Do not wait to be asked.
+
+| Changed | Run |
+| --- | --- |
+| Any Rust file | `npm run fmt:rs` then `npm run clippy` |
+| Any `.js` file | `npm run lint` |
+| Logic in Rust or JS | `npm test` (or the single-file variant) |
+| Unsure | `npm run verify` (runs everything) |
+
+- `npm run clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
+- `npm run lint` must exit clean — fix all errors and warnings before finishing.
+- If `fmt:rs` modifies files, include those changes in the same commit.
+- If a check fails, fix the issue. Do not skip checks or add `#[allow(...)]` without a clear reason documented in the code.
+
 ## Architecture Overview
 
 This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardware telemetry on a secondary portrait monitor. It has no bundler/build step for the frontend — vanilla JS ES modules are served directly from `frontend/`.

@@ -84,9 +84,9 @@ fn parse_lhm(data: &Value) -> LhmData {
   let mut nodes = Vec::new();
   flatten_lhm(data, &mut nodes, "");
 
-  let vram_total_idx = nodes.iter().position(|n| {
-    n.text == "GPU Memory Total" && parse_val(&n.value).map(|v| v > 10000.0).unwrap_or(false)
-  });
+  let vram_total_idx = nodes
+    .iter()
+    .position(|n| n.text == "GPU Memory Total" && parse_val(&n.value).map(|v| v > 10000.0).unwrap_or(false));
 
   let gpu_block: Vec<FlatNode> = if let Some(idx) = vram_total_idx {
     let start = idx.saturating_sub(25);
@@ -123,8 +123,8 @@ fn parse_lhm(data: &Value) -> LhmData {
     .filter(|n| n.parent == "Throughput" && n.text == "Write Rate")
     .collect();
 
-  let disk1_read = read_nodes.get(0).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
-  let disk1_write = write_nodes.get(0).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
+  let disk1_read = read_nodes.first().map(|n| to_mbs(&n.value)).unwrap_or(0.0);
+  let disk1_write = write_nodes.first().map(|n| to_mbs(&n.value)).unwrap_or(0.0);
   let disk2_read = read_nodes.get(1).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
   let disk2_write = write_nodes.get(1).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
 
@@ -141,20 +141,17 @@ fn parse_lhm(data: &Value) -> LhmData {
   let mut best_down = 0.0;
   for (i, up_node) in upload_nodes.iter().enumerate() {
     let up = to_mbs(&up_node.value) * 8.0;
-    let down = download_nodes
-      .get(i)
-      .map(|n| to_mbs(&n.value) * 8.0)
-      .unwrap_or(0.0);
+    let down = download_nodes.get(i).map(|n| to_mbs(&n.value) * 8.0).unwrap_or(0.0);
     if up + down > best_up + best_down {
       best_up = up;
       best_down = down;
     }
   }
 
-  let cpu_temp = nodes
+  // AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
+  let cpu_temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
     .iter()
-    .find(|n| n.text == "Core (Tctl/Tdie)")
-    .and_then(|n| parse_val(&n.value));
+    .find_map(|&name| nodes.iter().find(|n| n.text == name).and_then(|n| parse_val(&n.value)));
   let cpu_power = nodes
     .iter()
     .find(|n| n.parent == "Powers" && n.text == "Package")
@@ -175,6 +172,298 @@ fn parse_lhm(data: &Value) -> LhmData {
     disk_write: disk1_write + disk2_write,
     net_up: best_up,
     net_down: best_down,
+  }
+}
+
+// --- Tests -----------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+  use super::{flatten_lhm, parse_lhm, parse_val};
+  use serde_json::json;
+
+  // parse_val
+
+  #[test]
+  fn parse_val_parses_plain_number() {
+    assert_eq!(parse_val("42.5"), Some(42.5));
+    assert_eq!(parse_val("0"), Some(0.0));
+  }
+
+  #[test]
+  fn parse_val_strips_unit_suffixes() {
+    assert_eq!(parse_val("65.3 °C"), Some(65.3));
+    assert_eq!(parse_val("1234 MHz"), Some(1234.0));
+    assert_eq!(parse_val("100 %"), Some(100.0));
+    assert_eq!(parse_val("8192 MB"), Some(8192.0));
+  }
+
+  #[test]
+  fn parse_val_handles_locale_comma_as_decimal_separator() {
+    assert_eq!(parse_val("65,3 °C"), Some(65.3));
+    assert_eq!(parse_val("1 234,5 MHz"), Some(1234.5));
+  }
+
+  #[test]
+  fn parse_val_returns_none_for_non_numeric_input() {
+    assert_eq!(parse_val("N/A"), None);
+    assert_eq!(parse_val(""), None);
+    assert_eq!(parse_val("Value"), None);
+  }
+
+  #[test]
+  fn parse_val_handles_negative_numbers() {
+    assert_eq!(parse_val("-5.0"), Some(-5.0));
+  }
+
+  // flatten_lhm
+
+  #[test]
+  fn flatten_lhm_extracts_leaf_with_parent_name() {
+    let tree = json!({
+      "Text": "GPU",
+      "Value": "",
+      "Children": [{
+        "Text": "GPU Core",
+        "Value": "75 %",
+        "Children": []
+      }]
+    });
+    let mut nodes = vec![];
+    flatten_lhm(&tree, &mut nodes, "");
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].text, "GPU Core");
+    assert_eq!(nodes[0].value, "75 %");
+    assert_eq!(nodes[0].parent, "GPU");
+  }
+
+  #[test]
+  fn flatten_lhm_skips_nodes_without_values() {
+    let tree = json!({ "Text": "Container", "Value": "", "Children": [] });
+    let mut nodes = vec![];
+    flatten_lhm(&tree, &mut nodes, "");
+    assert!(nodes.is_empty());
+  }
+
+  #[test]
+  fn flatten_lhm_skips_sentinel_value_string() {
+    // LHM uses the literal string "Value" as a sentinel for missing data.
+    let tree = json!({ "Text": "GPU Core", "Value": "Value", "Children": [] });
+    let mut nodes = vec![];
+    flatten_lhm(&tree, &mut nodes, "");
+    assert!(nodes.is_empty());
+  }
+
+  #[test]
+  fn flatten_lhm_handles_nested_children() {
+    let tree = json!({
+      "Text": "Root",
+      "Value": "",
+      "Children": [{
+        "Text": "Temperatures",
+        "Value": "",
+        "Children": [{
+          "Text": "GPU Core",
+          "Value": "72 °C",
+          "Children": []
+        }]
+      }]
+    });
+    let mut nodes = vec![];
+    flatten_lhm(&tree, &mut nodes, "");
+    assert_eq!(nodes.len(), 1);
+    assert_eq!(nodes[0].parent, "Temperatures");
+    assert_eq!(nodes[0].text, "GPU Core");
+  }
+
+  // parse_lhm
+
+  #[test]
+  fn parse_lhm_extracts_cpu_temp() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "CPU", "Value": "",
+        "Children": [{
+          "Text": "Core (Tctl/Tdie)",
+          "Value": "72 °C",
+          "Children": []
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_temp, Some(72.0));
+  }
+
+  #[test]
+  fn parse_lhm_extracts_intel_cpu_package_temp() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "CPU", "Value": "",
+        "Children": [{
+          "Text": "CPU Package",
+          "Value": "68 °C",
+          "Children": []
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_temp, Some(68.0));
+  }
+
+  #[test]
+  fn parse_lhm_prefers_amd_sensor_over_intel_when_both_present() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [
+        { "Text": "Core (Tctl/Tdie)", "Value": "72 °C", "Children": [] },
+        { "Text": "CPU Package",       "Value": "68 °C", "Children": [] }
+      ]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_temp, Some(72.0));
+  }
+
+  #[test]
+  fn parse_lhm_extracts_cpu_power() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Powers", "Value": "",
+        "Children": [{
+          "Text": "Package",
+          "Value": "125 W",
+          "Children": []
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_power, Some(125.0));
+  }
+
+  #[test]
+  fn parse_lhm_converts_disk_kb_to_mb() {
+    // LHM reports slow disks in KB/s — must be divided by 1024 before display.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Throughput", "Value": "",
+        "Children": [
+          { "Text": "Read Rate",  "Value": "2048 KB", "Children": [] },
+          { "Text": "Write Rate", "Value": "1024 KB", "Children": [] }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert!(
+      (result.disk_read - 2.0).abs() < 1e-9,
+      "2048 KB should be 2.0 MB, got {}",
+      result.disk_read
+    );
+    assert!(
+      (result.disk_write - 1.0).abs() < 1e-9,
+      "1024 KB should be 1.0 MB, got {}",
+      result.disk_write
+    );
+  }
+
+  #[test]
+  fn parse_lhm_converts_disk_gb_to_mb() {
+    // LHM reports fast disks in GB/s — must be multiplied by 1024 before display.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Throughput", "Value": "",
+        "Children": [
+          { "Text": "Read Rate",  "Value": "2 GB", "Children": [] },
+          { "Text": "Write Rate", "Value": "1 GB", "Children": [] }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert!(
+      (result.disk_read - 2048.0).abs() < 1e-9,
+      "2 GB should be 2048.0 MB, got {}",
+      result.disk_read
+    );
+    assert!(
+      (result.disk_write - 1024.0).abs() < 1e-9,
+      "1 GB should be 1024.0 MB, got {}",
+      result.disk_write
+    );
+  }
+
+  #[test]
+  fn parse_lhm_sums_two_disks() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Throughput", "Value": "",
+        "Children": [
+          { "Text": "Read Rate",  "Value": "10",   "Children": [] },
+          { "Text": "Write Rate", "Value": "5",    "Children": [] },
+          { "Text": "Read Rate",  "Value": "20",   "Children": [] },
+          { "Text": "Write Rate", "Value": "15",   "Children": [] }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert!(
+      (result.disk_read - 30.0).abs() < 1e-9,
+      "disk read should sum both drives: {}",
+      result.disk_read
+    );
+    assert!(
+      (result.disk_write - 20.0).abs() < 1e-9,
+      "disk write should sum both drives: {}",
+      result.disk_write
+    );
+  }
+
+  #[test]
+  fn parse_lhm_selects_network_interface_with_most_traffic() {
+    // The interface with the highest combined up+down should win.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Throughput", "Value": "",
+        "Children": [
+          { "Text": "Upload Speed",   "Value": "1",  "Children": [] },
+          { "Text": "Download Speed", "Value": "2",  "Children": [] },
+          { "Text": "Upload Speed",   "Value": "10", "Children": [] },
+          { "Text": "Download Speed", "Value": "20", "Children": [] }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    // Network values are multiplied by 8 (bytes → bits), so 10+20 MB = 240 Mbit
+    assert!(
+      result.net_up > result.net_down * 0.0,
+      "should pick the busier interface"
+    );
+    assert!(
+      (result.net_up - 80.0).abs() < 1e-9,
+      "10 MB * 8 = 80 Mbit/s upload, got {}",
+      result.net_up
+    );
+    assert!(
+      (result.net_down - 160.0).abs() < 1e-9,
+      "20 MB * 8 = 160 Mbit/s download, got {}",
+      result.net_down
+    );
+  }
+
+  #[test]
+  fn parse_lhm_returns_zero_defaults_for_empty_tree() {
+    let data = json!({ "Text": "Root", "Value": "", "Children": [] });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_temp, None);
+    assert_eq!(result.gpu_load, None);
+    assert_eq!(result.disk_read, 0.0);
+    assert_eq!(result.disk_write, 0.0);
+    assert_eq!(result.net_up, 0.0);
+    assert_eq!(result.net_down, 0.0);
   }
 }
 

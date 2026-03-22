@@ -12,7 +12,8 @@
     "fmt:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:rs:check": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml",
-    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo check --manifest-path src-tauri/Cargo.toml && vitest run"
+    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo check --manifest-path src-tauri/Cargo.toml && npm run lint && vitest run",
+    "prepare": "lefthook install"
   },
   "keywords": [],
   "author": "Daniel",
@@ -22,6 +23,7 @@
     "@tauri-apps/cli": "^2.0.0",
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
+    "lefthook": "^2.1.4",
     "vitest": "^2.1.9"
   },
   "dependencies": {

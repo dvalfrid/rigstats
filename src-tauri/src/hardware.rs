@@ -97,8 +97,7 @@ pub fn probe_wmi_status() -> Result<(), String> {
   {
     let com_probe_result = (|| -> Result<(), String> {
       let com = wmi::COMLibrary::new().map_err(|e| format!("COM init failed: {}", e))?;
-      let conn = wmi::WMIConnection::new(com.into())
-        .map_err(|e| format!("WMI connection failed: {}", e))?;
+      let conn = wmi::WMIConnection::new(com).map_err(|e| format!("WMI connection failed: {}", e))?;
 
       #[derive(Deserialize)]
       struct ProbeRow {
@@ -110,7 +109,10 @@ pub fn probe_wmi_status() -> Result<(), String> {
         .raw_query("SELECT Caption FROM Win32_OperatingSystem")
         .map_err(|e| format!("WMI query failed: {}", e))?;
 
-      if rows.iter().any(|r| r.caption.as_deref().is_some_and(|v| !v.trim().is_empty())) {
+      if rows
+        .iter()
+        .any(|r| r.caption.as_deref().is_some_and(|v| !v.trim().is_empty()))
+      {
         Ok(())
       } else {
         Err("WMI query returned no usable rows".to_string())
@@ -223,7 +225,7 @@ pub fn detect_gpu_name() -> Option<String> {
   #[cfg(windows)]
   {
     if let Ok(com) = wmi::COMLibrary::new() {
-      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
+      if let Ok(conn) = wmi::WMIConnection::new(com) {
         if let Ok(rows) = conn.query::<VideoControllerName>() {
           let names = rows.into_iter().filter_map(|r| r.name).collect::<Vec<_>>();
           if let Some(best) = pick_best_gpu_name(names) {
@@ -233,7 +235,7 @@ pub fn detect_gpu_name() -> Option<String> {
       }
     }
 
-    return get_gpu_name_from_shell();
+    get_gpu_name_from_shell()
   }
 
   #[cfg(not(windows))]
@@ -251,7 +253,7 @@ pub fn detect_gpu_vram_total_mb() -> f64 {
       Ok(c) => c,
       Err(_) => return 16384.0,
     };
-    let conn = match wmi::WMIConnection::new(com.into()) {
+    let conn = match wmi::WMIConnection::new(com) {
       Ok(c) => c,
       Err(_) => return 16384.0,
     };
@@ -292,24 +294,43 @@ pub(crate) fn classify_system_brand(fields: &[&str]) -> &'static str {
       .any(|v| needles.iter().any(|needle| v.contains(needle)))
   };
 
-  if has_any(&["alienware"]) { "alienware" }
-  else if has_any(&["razer"]) { "razer" }
-  else if has_any(&["legion"]) { "legion" }
-  else if has_any(&["omen"]) { "omen" }
-  else if has_any(&["predator"]) { "predator" }
-  else if has_any(&["aorus"]) { "aorus" }
-  else if has_any(&["asus", "rog", "republic of gamers"]) { "rog" }
-  else if has_any(&["msi", "micro-star", "micro star"]) { "msi" }
-  else if has_any(&["gigabyte"]) { "gigabyte" }
-  else if has_any(&["asrock"]) { "asrock" }
-  else if has_any(&["corsair"]) { "corsair" }
-  else if has_any(&["nzxt"]) { "nzxt" }
-  else if has_any(&["intel"]) { "intel" }
-  else if has_any(&["dell"]) { "dell" }
-  else if has_any(&["lenovo"]) { "lenovo" }
-  else if has_any(&["hewlett-packard", "hp ", " hp", "hp-"]) { "hp" }
-  else if has_any(&["acer"]) { "acer" }
-  else { "other" }
+  if has_any(&["alienware"]) {
+    "alienware"
+  } else if has_any(&["razer"]) {
+    "razer"
+  } else if has_any(&["legion"]) {
+    "legion"
+  } else if has_any(&["omen"]) {
+    "omen"
+  } else if has_any(&["predator"]) {
+    "predator"
+  } else if has_any(&["aorus"]) {
+    "aorus"
+  } else if has_any(&["asus", "rog", "republic of gamers"]) {
+    "rog"
+  } else if has_any(&["msi", "micro-star", "micro star"]) {
+    "msi"
+  } else if has_any(&["gigabyte"]) {
+    "gigabyte"
+  } else if has_any(&["asrock"]) {
+    "asrock"
+  } else if has_any(&["corsair"]) {
+    "corsair"
+  } else if has_any(&["nzxt"]) {
+    "nzxt"
+  } else if has_any(&["intel"]) {
+    "intel"
+  } else if has_any(&["dell"]) {
+    "dell"
+  } else if has_any(&["lenovo"]) {
+    "lenovo"
+  } else if has_any(&["hewlett-packard", "hp ", " hp", "hp-"]) {
+    "hp"
+  } else if has_any(&["acer"]) {
+    "acer"
+  } else {
+    "other"
+  }
 }
 
 /// Detects the system brand by querying WMI manufacturer/model/board fields.
@@ -317,23 +338,35 @@ pub fn detect_system_brand() -> String {
   #[cfg(windows)]
   {
     if let Ok(com) = wmi::COMLibrary::new() {
-      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
+      if let Ok(conn) = wmi::WMIConnection::new(com) {
         let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
         let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
         let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
 
         let mut fields = Vec::new();
         if let Some(s) = systems.first() {
-          if let Some(v) = s.manufacturer.as_deref() { fields.push(v); }
-          if let Some(v) = s.model.as_deref() { fields.push(v); }
+          if let Some(v) = s.manufacturer.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = s.model.as_deref() {
+            fields.push(v);
+          }
         }
         if let Some(p) = products.first() {
-          if let Some(v) = p.name.as_deref() { fields.push(v); }
-          if let Some(v) = p.version.as_deref() { fields.push(v); }
+          if let Some(v) = p.name.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = p.version.as_deref() {
+            fields.push(v);
+          }
         }
         if let Some(b) = boards.first() {
-          if let Some(v) = b.manufacturer.as_deref() { fields.push(v); }
-          if let Some(v) = b.product.as_deref() { fields.push(v); }
+          if let Some(v) = b.manufacturer.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = b.product.as_deref() {
+            fields.push(v);
+          }
         }
 
         if !fields.is_empty() {
@@ -356,12 +389,24 @@ pub fn detect_system_brand() -> String {
         let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
         if let Ok(info) = serde_json::from_str::<PowerShellBrandInfo>(&raw) {
           let mut fields = Vec::new();
-          if let Some(v) = info.computer_system_manufacturer.as_deref() { fields.push(v); }
-          if let Some(v) = info.computer_system_model.as_deref() { fields.push(v); }
-          if let Some(v) = info.product_name.as_deref() { fields.push(v); }
-          if let Some(v) = info.product_version.as_deref() { fields.push(v); }
-          if let Some(v) = info.base_board_manufacturer.as_deref() { fields.push(v); }
-          if let Some(v) = info.base_board_product.as_deref() { fields.push(v); }
+          if let Some(v) = info.computer_system_manufacturer.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = info.computer_system_model.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = info.product_name.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = info.product_version.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = info.base_board_manufacturer.as_deref() {
+            fields.push(v);
+          }
+          if let Some(v) = info.base_board_product.as_deref() {
+            fields.push(v);
+          }
           if !fields.is_empty() {
             return classify_system_brand(&fields).to_string();
           }
@@ -396,7 +441,16 @@ fn normalize_model_name(raw: &str) -> Option<String> {
   if trimmed.is_empty() {
     return None;
   }
-  let invalid = ["to be filled by o.e.m.", "system product name", "system version", "default string", "unknown", "none", "n/a", "not applicable"];
+  let invalid = [
+    "to be filled by o.e.m.",
+    "system product name",
+    "system version",
+    "default string",
+    "unknown",
+    "none",
+    "n/a",
+    "not applicable",
+  ];
   let lower = trimmed.to_ascii_lowercase();
   if invalid.iter().any(|x| lower == *x) {
     return None;
@@ -416,7 +470,7 @@ pub fn detect_model_name() -> Option<String> {
   #[cfg(windows)]
   {
     if let Ok(com) = wmi::COMLibrary::new() {
-      if let Ok(conn) = wmi::WMIConnection::new(com.into()) {
+      if let Ok(conn) = wmi::WMIConnection::new(com) {
         let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
         if let Some(v) = products
           .iter()
@@ -458,8 +512,12 @@ pub fn detect_model_name() -> Option<String> {
     }
     let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let info = serde_json::from_str::<ModelNameInfo>(&raw).ok()?;
-    if let Some(v) = info.csp_version.as_deref().and_then(normalize_model_name) { return Some(v); }
-    if let Some(v) = info.csp_name.as_deref().and_then(normalize_model_name) { return Some(v); }
+    if let Some(v) = info.csp_version.as_deref().and_then(normalize_model_name) {
+      return Some(v);
+    }
+    if let Some(v) = info.csp_name.as_deref().and_then(normalize_model_name) {
+      return Some(v);
+    }
     info.cs_model.as_deref().and_then(normalize_model_name)
   }
 
@@ -502,7 +560,11 @@ pub fn detect_ram_spec() -> String {
     }
 
     let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if text.is_empty() { None } else { Some(text) }
+    if text.is_empty() {
+      None
+    } else {
+      Some(text)
+    }
   }
 
   #[cfg(windows)]
@@ -511,7 +573,7 @@ pub fn detect_ram_spec() -> String {
       Ok(c) => c,
       Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
     };
-    let conn = match wmi::WMIConnection::new(com.into()) {
+    let conn = match wmi::WMIConnection::new(com) {
       Ok(c) => c,
       Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
     };
@@ -607,7 +669,7 @@ pub fn detect_ram_details() -> String {
       Ok(c) => c,
       Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
     };
-    let conn = match wmi::WMIConnection::new(com.into()) {
+    let conn = match wmi::WMIConnection::new(com) {
       Ok(c) => c,
       Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
     };
@@ -641,10 +703,18 @@ pub fn detect_ram_details() -> String {
       pieces.push(format!("{} DIMMs", sticks.len()));
     }
 
-    if let Some(v) = sticks.iter().filter_map(|s| s.manufacturer.as_deref()).find_map(sanitize_ram_field) {
+    if let Some(v) = sticks
+      .iter()
+      .filter_map(|s| s.manufacturer.as_deref())
+      .find_map(sanitize_ram_field)
+    {
       pieces.push(v);
     }
-    if let Some(p) = sticks.iter().filter_map(|s| s.part_number.as_deref()).find_map(sanitize_ram_field) {
+    if let Some(p) = sticks
+      .iter()
+      .filter_map(|s| s.part_number.as_deref())
+      .find_map(sanitize_ram_field)
+    {
       pieces.push(p);
     }
 
@@ -738,9 +808,101 @@ pub(crate) fn sample_ping_ms(target: &str) -> Option<f64> {
 
 // --- Tests -----------------------------------------------------------------
 
+#[cfg(test)]
+mod cross_platform_tests {
+  use super::{is_placeholder_model_name, normalize_model_name, parse_ping_output_ms};
+
+  #[test]
+  fn normalize_model_name_accepts_real_names() {
+    assert_eq!(normalize_model_name("ROG GM700TZ"), Some("ROG GM700TZ".to_string()));
+    assert_eq!(
+      normalize_model_name("PRIME B650M-A AX6 II"),
+      Some("PRIME B650M-A AX6 II".to_string())
+    );
+  }
+
+  #[test]
+  fn normalize_model_name_trims_whitespace() {
+    assert_eq!(normalize_model_name("  ROG GM700TZ  "), Some("ROG GM700TZ".to_string()));
+  }
+
+  #[test]
+  fn normalize_model_name_rejects_empty_and_whitespace() {
+    assert_eq!(normalize_model_name(""), None);
+    assert_eq!(normalize_model_name("   "), None);
+  }
+
+  #[test]
+  fn normalize_model_name_rejects_all_known_placeholders() {
+    let placeholders = [
+      "To Be Filled By O.E.M.",
+      "System Product Name",
+      "System Version",
+      "Default String",
+      "Unknown",
+      "None",
+      "N/A",
+      "Not Applicable",
+    ];
+    for p in &placeholders {
+      assert_eq!(normalize_model_name(p), None, "expected None for placeholder: {p}");
+    }
+  }
+
+  #[test]
+  fn normalize_model_name_placeholder_check_is_case_insensitive() {
+    assert_eq!(normalize_model_name("SYSTEM VERSION"), None);
+    assert_eq!(normalize_model_name("system version"), None);
+    assert_eq!(normalize_model_name("TO BE FILLED BY O.E.M."), None);
+  }
+
+  #[test]
+  fn is_placeholder_true_for_known_placeholders() {
+    assert!(is_placeholder_model_name("System Version"));
+    assert!(is_placeholder_model_name(""));
+    assert!(is_placeholder_model_name("  "));
+    assert!(is_placeholder_model_name("Unknown"));
+  }
+
+  #[test]
+  fn is_placeholder_false_for_real_model_names() {
+    assert!(!is_placeholder_model_name("ROG GM700TZ"));
+    assert!(!is_placeholder_model_name("PRIME B650M-A AX6 II"));
+  }
+
+  #[test]
+  fn parse_ping_output_ms_extracts_average_from_windows_output() {
+    let output = "Pinging 1.1.1.1 with 32 bytes of data:\r\n\
+      Reply from 1.1.1.1: bytes=32 time=12ms TTL=57\r\n\
+      Ping statistics for 1.1.1.1:\r\n\
+          Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),\r\n\
+      Approximate round trip times in milli-seconds:\r\n\
+          Minimum = 12ms, Maximum = 12ms, Average = 12ms";
+    assert_eq!(parse_ping_output_ms(output), Some(12.0));
+  }
+
+  #[test]
+  fn parse_ping_output_ms_last_number_is_average() {
+    assert_eq!(
+      parse_ping_output_ms("Minimum = 5ms, Maximum = 15ms, Average = 10ms"),
+      Some(10.0)
+    );
+  }
+
+  #[test]
+  fn parse_ping_output_ms_returns_none_for_empty() {
+    assert_eq!(parse_ping_output_ms(""), None);
+  }
+
+  #[test]
+  fn parse_ping_output_ms_returns_none_for_no_numbers() {
+    assert_eq!(parse_ping_output_ms("Request timed out."), None);
+  }
+}
+
 #[cfg(all(test, windows))]
 mod tests {
-  use super::classify_system_brand;
+  use super::{classify_system_brand, gpu_name_score, pick_best_gpu_name};
 
   #[test]
   fn classify_system_brand_recognizes_rog_aliases() {
@@ -750,11 +912,17 @@ mod tests {
 
   #[test]
   fn classify_system_brand_recognizes_product_lines_before_oem() {
-    assert_eq!(classify_system_brand(&["Dell Inc.", "Alienware Aurora R16"]), "alienware");
+    assert_eq!(
+      classify_system_brand(&["Dell Inc.", "Alienware Aurora R16"]),
+      "alienware"
+    );
     assert_eq!(classify_system_brand(&["LENOVO", "Legion T7 34IRZ8"]), "legion");
     assert_eq!(classify_system_brand(&["HP", "OMEN 45L Desktop GT22"]), "omen");
     assert_eq!(classify_system_brand(&["Acer", "Predator Orion 7000"]), "predator");
-    assert_eq!(classify_system_brand(&["Gigabyte Technology Co., Ltd.", "AORUS MODEL X"]), "aorus");
+    assert_eq!(
+      classify_system_brand(&["Gigabyte Technology Co., Ltd.", "AORUS MODEL X"]),
+      "aorus"
+    );
   }
 
   #[test]
@@ -769,5 +937,39 @@ mod tests {
   #[test]
   fn classify_system_brand_falls_back_to_other() {
     assert_eq!(classify_system_brand(&["Some Unknown Vendor"]), "other");
+  }
+
+  #[test]
+  fn gpu_name_score_prefers_discrete_over_integrated() {
+    assert!(gpu_name_score("NVIDIA GeForce RTX 4090") > gpu_name_score("Intel UHD Graphics 770"));
+    assert!(gpu_name_score("AMD Radeon RX 7900 XTX") > gpu_name_score("AMD Radeon Graphics"));
+  }
+
+  #[test]
+  fn gpu_name_score_rejects_virtual_adapters() {
+    assert!(gpu_name_score("Microsoft Basic Display Adapter") < 0);
+    assert!(gpu_name_score("Hyper-V Video") < 0);
+    assert!(gpu_name_score("Microsoft Basic Render Driver") < 0);
+  }
+
+  #[test]
+  fn pick_best_gpu_name_selects_discrete_gpu() {
+    let names = vec![
+      "Intel UHD Graphics 770".to_string(),
+      "NVIDIA GeForce RTX 4090".to_string(),
+    ];
+    assert_eq!(pick_best_gpu_name(names), Some("NVIDIA GeForce RTX 4090".to_string()));
+  }
+
+  #[test]
+  fn pick_best_gpu_name_skips_empty_strings() {
+    let names = vec!["".to_string(), "  ".to_string(), "AMD Radeon RX 7900 XTX".to_string()];
+    assert_eq!(pick_best_gpu_name(names), Some("AMD Radeon RX 7900 XTX".to_string()));
+  }
+
+  #[test]
+  fn pick_best_gpu_name_returns_none_for_empty_list() {
+    let names: Vec<String> = vec![];
+    assert_eq!(pick_best_gpu_name(names), None);
   }
 }

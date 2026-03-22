@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    fmt-rs:
+      glob: "src-tauri/**/*.rs"
+      run: npm run fmt:rs:check
+    clippy:
+      glob: "src-tauri/**/*.rs"
+      run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
+    lint:
+      glob: "frontend/**/*.js"
+      run: npm run lint

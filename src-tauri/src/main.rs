@@ -19,23 +19,19 @@ mod stats;
 mod windows;
 
 use commands::{
-  close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
-  get_system_brand, get_system_name, log_frontend_error, preview_opacity, preview_profile,
-  preview_visible_panels, save_settings, start_window_drag,
+  close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats, get_system_brand,
+  get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_visible_panels, save_settings,
+  start_window_drag,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
 use hardware::{
-  detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details,
-  detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
+  detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details, detect_ram_spec,
+  detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
 use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
-use windows::{
-  ensure_about_window, ensure_settings_window, ensure_status_window, on_window_event,
-  set_last_tray_click_position,
-};
-use settings::{load_settings, persist_settings, LEGACY_DEFAULT_MODEL_NAME};
+use settings::{load_settings, persist_settings};
 use stats::AppState;
 use std::sync::Mutex;
 use sysinfo::{Disks, Networks, System};
@@ -44,7 +40,9 @@ use tauri::{
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
   AppHandle, Manager, RunEvent,
 };
-use reqwest;
+use windows::{
+  ensure_about_window, ensure_settings_window, ensure_status_window, on_window_event, set_last_tray_click_position,
+};
 
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_SETTINGS_ID: &str = "settings";
@@ -118,7 +116,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
         ..
       } = event
       {
-        toggle_main_window(&tray.app_handle());
+        toggle_main_window(tray.app_handle());
       }
     });
 
@@ -135,17 +133,16 @@ fn main() {
     .plugin(tauri_plugin_opener::init())
     .setup(|app| {
       let app_handle = app.handle();
-      reset_debug_log(&app_handle);
-      append_debug_log(&app_handle, "RIGStats startup");
+      reset_debug_log(app_handle);
+      append_debug_log(app_handle, "RIGStats startup");
 
-      let mut settings = load_settings(&app_handle);
-      let should_autofill_model = settings.model_name.trim().is_empty()
-        || settings.model_name.trim() == LEGACY_DEFAULT_MODEL_NAME
-        || is_placeholder_model_name(settings.model_name.trim());
+      let mut settings = load_settings(app_handle);
+      let should_autofill_model =
+        settings.model_name.trim().is_empty() || is_placeholder_model_name(settings.model_name.trim());
       if should_autofill_model {
         if let Some(model_name) = detect_model_name() {
           settings.model_name = model_name;
-          let _ = persist_settings(&app_handle, &settings);
+          let _ = persist_settings(app_handle, &settings);
         }
       }
       let startup_profile = settings.dashboard_profile.clone();
@@ -161,7 +158,7 @@ fn main() {
       let wmi_available = match probe_wmi_status() {
         Ok(()) => true,
         Err(error) => {
-          append_debug_log(&app_handle, &format!("WMI dependency probe failed: {}", error));
+          append_debug_log(app_handle, &format!("WMI dependency probe failed: {}", error));
           false
         }
       };
@@ -197,15 +194,15 @@ fn main() {
       }
 
       // Fallback for cases where installer task did not launch LHM yet.
-      ensure_lhm_running(&app_handle);
+      ensure_lhm_running(app_handle);
 
       // Re-register only if the Run key is completely absent (e.g. after a
       // reinstall). If Windows Settings has disabled the entry (StartupApproved
       // byte = 0x03) we leave it alone — that is the user's intentional choice.
       if startup_autostart_enabled && !autostart::is_run_key_present() {
         match autostart::register_autostart() {
-          Ok(()) => append_debug_log(&app_handle, "autostart: re-registered missing entry"),
-          Err(e) => append_debug_log(&app_handle, &format!("autostart: startup re-register failed: {e}")),
+          Ok(()) => append_debug_log(app_handle, "autostart: re-registered missing entry"),
+          Err(e) => append_debug_log(app_handle, &format!("autostart: startup re-register failed: {e}")),
         }
       }
 
@@ -231,7 +228,7 @@ fn main() {
       collect_diagnostics,
       get_changelog
     ])
-    .on_window_event(|window, event| on_window_event(window, event))
+    .on_window_event(on_window_event)
     .build(tauri::generate_context!())
     .expect("error while running tauri application")
     .run(|_app_handle, event| {

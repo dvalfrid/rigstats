@@ -59,7 +59,11 @@ fn diag_collect_hardware() -> String {
 fn diag_collect_tasks() -> String {
   #[cfg(windows)]
   {
-    let task_names = ["LibreHardwareMonitor", "RIGStats\\LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+    let task_names = [
+      "LibreHardwareMonitor",
+      "RIGStats\\LibreHardwareMonitor",
+      "RigStats\\LibreHardwareMonitor",
+    ];
     let mut out = String::new();
     for task_name in task_names {
       out.push_str(&format!("=== {} ===\n", task_name));
@@ -160,11 +164,14 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
   };
   let disk_mount_points: Vec<String> = {
     let disks = state.disks.lock().unwrap_or_else(|e| e.into_inner());
-    disks.iter().map(|d| d.mount_point().to_string_lossy().to_string()).collect()
+    disks
+      .iter()
+      .map(|d| d.mount_point().to_string_lossy().to_string())
+      .collect()
   };
   let network_interfaces: Vec<String> = {
     let networks = state.networks.lock().unwrap_or_else(|e| e.into_inner());
-    networks.iter().map(|(name, _)| name.clone()).collect()
+    networks.keys().cloned().collect()
   };
   let snap = SysinfoSnapshot {
     cpu_brand,
@@ -268,7 +275,12 @@ fn diag_collect_displays(app: &tauri::AppHandle, profile: &str) -> String {
     })
     .collect();
 
-  let payload = DiagDisplays { current_profile: profile, target_w, target_h, monitors: diag_monitors };
+  let payload = DiagDisplays {
+    current_profile: profile,
+    target_w,
+    target_h,
+    monitors: diag_monitors,
+  };
   serde_json::to_string_pretty(&payload).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
 
@@ -322,7 +334,12 @@ pub async fn collect_diagnostics(
     .send()
     .await
   {
-    Ok(resp) => pretty_json(&resp.text().await.unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e))),
+    Ok(resp) => pretty_json(
+      &resp
+        .text()
+        .await
+        .unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e)),
+    ),
     Err(e) => format!("{{\"error\":\"request: {}\"}}", e),
   };
 
@@ -332,14 +349,18 @@ pub async fn collect_diagnostics(
   let sysinfo_json = diag_collect_sysinfo(&state);
   let install_log_bytes = diag_collect_installer_log(&app);
   let displays_json = {
-    let profile = state.settings.lock().unwrap_or_else(|e| e.into_inner()).dashboard_profile.clone();
+    let profile = state
+      .settings
+      .lock()
+      .unwrap_or_else(|e| e.into_inner())
+      .dashboard_profile
+      .clone();
     diag_collect_displays(&app, &profile)
   };
 
   let zip_file = std::fs::File::create(&path).map_err(|e| format!("Cannot create zip: {}", e))?;
   let mut writer = zip::ZipWriter::new(zip_file);
-  let opts = zip::write::SimpleFileOptions::default()
-    .compression_method(zip::CompressionMethod::Deflated);
+  let opts = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
   let entries: &[(&str, &[u8])] = &[
     ("manifest.json", manifest.as_bytes()),

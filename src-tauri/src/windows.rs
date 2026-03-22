@@ -21,6 +21,7 @@ pub fn set_last_tray_click_position(x: f64, y: f64) {
 // --- Popup positioning -----------------------------------------------------
 
 /// Clamps a popup to stay fully inside the monitor work area.
+#[allow(clippy::too_many_arguments)]
 fn monitor_work_area(
   origin_x: i32,
   origin_y: i32,

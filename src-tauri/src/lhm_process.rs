@@ -15,7 +15,11 @@ use std::time::Duration;
 use std::os::windows::process::CommandExt;
 
 #[cfg(windows)]
-const LHM_TASK_NAMES: [&str; 3] = ["LibreHardwareMonitor", "RIGStats\\LibreHardwareMonitor", "RigStats\\LibreHardwareMonitor"];
+const LHM_TASK_NAMES: [&str; 3] = [
+  "LibreHardwareMonitor",
+  "RIGStats\\LibreHardwareMonitor",
+  "RigStats\\LibreHardwareMonitor",
+];
 
 /// Tracks whether the last `get_stats` tick had a live LHM connection.
 /// Used to log connect/disconnect transitions exactly once.
@@ -68,7 +72,11 @@ pub(crate) fn get_lhm_task_diagnosis(_app: &tauri::AppHandle) -> &'static str {
         Err(_) => {}
       }
     }
-    if any_access_denied { "access_denied" } else { "missing" }
+    if any_access_denied {
+      "access_denied"
+    } else {
+      "missing"
+    }
   }
   #[cfg(not(windows))]
   {
@@ -142,15 +150,22 @@ fn diagnose_lhm_task(app: &tauri::AppHandle) {
 
   for task_name in LHM_TASK_NAMES {
     match query_lhm_task(app, task_name) {
-      TaskQueryResult::Found => { any_found = true; }
-      TaskQueryResult::AccessDenied => { any_access_denied = true; }
+      TaskQueryResult::Found => {
+        any_found = true;
+      }
+      TaskQueryResult::AccessDenied => {
+        any_access_denied = true;
+      }
       TaskQueryResult::NotFound => {}
     }
   }
 
   if any_found {
     // Should not reach here — if task was found, try_run_lhm_task would have succeeded.
-    append_debug_log(app, "LHM task exists but could not be started. Check task configuration.");
+    append_debug_log(
+      app,
+      "LHM task exists but could not be started. Check task configuration.",
+    );
   } else if any_access_denied {
     append_debug_log(
       app,
@@ -209,13 +224,31 @@ fn candidate_lhm_paths(app: &tauri::AppHandle) -> Vec<PathBuf> {
   }
 
   if let Ok(program_files) = std::env::var("ProgramFiles") {
-    paths.push(PathBuf::from(&program_files).join("RIGStats").join("lhm").join("LibreHardwareMonitor.exe"));
-    paths.push(PathBuf::from(&program_files).join("RigStats").join("lhm").join("LibreHardwareMonitor.exe"));
-    paths.push(PathBuf::from(program_files).join("LibreHardwareMonitor").join("LibreHardwareMonitor.exe"));
+    paths.push(
+      PathBuf::from(&program_files)
+        .join("RIGStats")
+        .join("lhm")
+        .join("LibreHardwareMonitor.exe"),
+    );
+    paths.push(
+      PathBuf::from(&program_files)
+        .join("RigStats")
+        .join("lhm")
+        .join("LibreHardwareMonitor.exe"),
+    );
+    paths.push(
+      PathBuf::from(program_files)
+        .join("LibreHardwareMonitor")
+        .join("LibreHardwareMonitor.exe"),
+    );
   }
 
   if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-    paths.push(PathBuf::from(program_files_x86).join("LibreHardwareMonitor").join("LibreHardwareMonitor.exe"));
+    paths.push(
+      PathBuf::from(program_files_x86)
+        .join("LibreHardwareMonitor")
+        .join("LibreHardwareMonitor.exe"),
+    );
   }
 
   if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
@@ -249,7 +282,7 @@ fn spawn_lhm(exe_path: &Path) -> std::io::Result<()> {
 pub fn ensure_lhm_running(app: &tauri::AppHandle) {
   #[cfg(windows)]
   {
-    append_debug_log(app, &format!("LHM ensure start"));
+    append_debug_log(app, "LHM ensure start");
 
     if can_reach_lhm_endpoint() {
       append_debug_log(app, "LHM endpoint already reachable on :8085");
@@ -262,7 +295,10 @@ pub fn ensure_lhm_running(app: &tauri::AppHandle) {
         append_debug_log(app, "LHM reachable after task run");
         return;
       }
-      append_debug_log(app, "Task run succeeded but endpoint still unavailable after 1.2s — LHM may need more time to start");
+      append_debug_log(
+        app,
+        "Task run succeeded but endpoint still unavailable after 1.2s — LHM may need more time to start",
+      );
     } else {
       diagnose_lhm_task(app);
     }

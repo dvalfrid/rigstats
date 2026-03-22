@@ -63,7 +63,7 @@ async function updateCpuModel() {
         applyVendorBadge(badge, model, 'CPU');
         return;
       }
-    } catch (e) {}
+    } catch (_e) {}
   }
 
   el.textContent = '--';
@@ -90,7 +90,7 @@ async function updateGpuModel() {
         applyVendorBadge(badge, model, 'GPU');
         return;
       }
-    } catch (e) {}
+    } catch (_e) {}
   }
 
   el.textContent = 'UNKNOWN GPU';

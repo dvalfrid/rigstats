@@ -3,6 +3,9 @@
 //! Design notes:
 //! - Commands are intentionally thin wrappers around shared state and helpers.
 //! - All non-trivial logic lives in the domain modules (hardware, monitor, etc.).
+// Tauri command handlers take AppHandle/State/WebviewWindow by value as required
+// by the IPC dispatch mechanism; suppressing the clippy lint for this module.
+#![allow(clippy::needless_pass_by_value)]
 //! - Settings updates are emitted to the renderer immediately after persistence.
 //! - Stats collection keeps the last successful LHM sample to avoid UI flicker
 //!   when LibreHardwareMonitor is temporarily unavailable.
@@ -11,7 +14,9 @@ use crate::autostart::{is_autostart_registered_with_log, register_autostart, unr
 use crate::debug::{append_debug_log, read_debug_log_tail};
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
-use crate::lhm_process::{can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state};
+use crate::lhm_process::{
+  can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state,
+};
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
@@ -63,21 +68,33 @@ fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
       name: "LibreHardwareMonitor".to_string(),
       version: LHM_VERSION.to_string(),
       note: Some("GPU and sensor telemetry feed".to_string()),
-      status: if lhm_ok { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      status: if lhm_ok {
+        "SUCCESS".to_string()
+      } else {
+        "FAILED".to_string()
+      },
       ok: lhm_ok,
     },
     AboutDependency {
       name: "sysinfo".to_string(),
       version: SYSINFO_VERSION.to_string(),
       note: Some("CPU, RAM, disk, network stats".to_string()),
-      status: if state.sysinfo_available { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      status: if state.sysinfo_available {
+        "SUCCESS".to_string()
+      } else {
+        "FAILED".to_string()
+      },
       ok: state.sysinfo_available,
     },
     AboutDependency {
       name: "wmi".to_string(),
       version: WMI_VERSION.to_string(),
       note: Some("Windows hardware metadata".to_string()),
-      status: if state.wmi_available { "SUCCESS".to_string() } else { "FAILED".to_string() },
+      status: if state.wmi_available {
+        "SUCCESS".to_string()
+      } else {
+        "FAILED".to_string()
+      },
       ok: state.wmi_available,
     },
   ]
@@ -87,8 +104,7 @@ fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
 pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AboutInfo {
   use crate::debug::debug_log_path;
   let log_path = debug_log_path(&app);
-  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) =
-    get_lhm_task_details(&app);
+  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) = get_lhm_task_details(&app);
 
   AboutInfo {
     rigstats_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -115,8 +131,7 @@ pub fn get_settings(app: tauri::AppHandle, state: tauri::State<AppState>) -> Set
   // Override autostart_enabled with the live registry state so the toggle
   // reflects what Windows actually sees (e.g. if the user toggled it off
   // via Windows Settings > Apps > Startup).
-  settings.autostart_enabled =
-    is_autostart_registered_with_log(|msg| append_debug_log(&app, msg));
+  settings.autostart_enabled = is_autostart_registered_with_log(|msg| append_debug_log(&app, msg));
   settings
 }
 
@@ -148,12 +163,15 @@ pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), Str
 pub fn preview_visible_panels(app: tauri::AppHandle, panels: Vec<String>) -> Result<(), String> {
   if let Some(main) = app.get_webview_window("main") {
     let normalized = normalize_visible_panels(panels);
-    main.emit("apply-visible-panels", normalized).map_err(|e| e.to_string())?;
+    main
+      .emit("apply-visible-panels", normalized)
+      .map_err(|e| e.to_string())?;
   }
   Ok(())
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub fn save_settings(
   app: tauri::AppHandle,
   state: tauri::State<AppState>,
@@ -193,11 +211,15 @@ pub fn save_settings(
     .unwrap_or_else(|| settings.visible_panels.clone());
   let applied_visible_panels = normalize_visible_panels(requested_visible_panels);
 
-  let applied_autostart = autostart_enabled.or(autostartEnabled).unwrap_or(settings.autostart_enabled);
+  let applied_autostart = autostart_enabled
+    .or(autostartEnabled)
+    .unwrap_or(settings.autostart_enabled);
 
   if let Some(main) = app.get_webview_window("main") {
     let _ = pick_target_monitor(&main, &applied_profile);
-    main.set_always_on_top(applied_always_on_top).map_err(|e| e.to_string())?;
+    main
+      .set_always_on_top(applied_always_on_top)
+      .map_err(|e| e.to_string())?;
   }
 
   settings.dashboard_profile = applied_profile.clone();
@@ -223,10 +245,16 @@ pub fn save_settings(
   }
 
   if let Some(main) = app.get_webview_window("main") {
-    main.emit("apply-opacity", settings.opacity).map_err(|e| e.to_string())?;
-    main.emit("apply-model-name", settings.model_name.clone()).map_err(|e| e.to_string())?;
+    main
+      .emit("apply-opacity", settings.opacity)
+      .map_err(|e| e.to_string())?;
+    main
+      .emit("apply-model-name", settings.model_name.clone())
+      .map_err(|e| e.to_string())?;
     main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
-    main.emit("apply-visible-panels", applied_visible_panels).map_err(|e| e.to_string())?;
+    main
+      .emit("apply-visible-panels", applied_visible_panels)
+      .map_err(|e| e.to_string())?;
   }
 
   Ok(())
@@ -279,10 +307,7 @@ pub fn get_gpu_info() -> Option<String> {
 // --- Stats -----------------------------------------------------------------
 
 #[tauri::command]
-pub async fn get_stats(
-  app: tauri::AppHandle,
-  state: tauri::State<'_, AppState>,
-) -> Result<StatsPayload, String> {
+pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
   let lhm_fresh = fetch_lhm(&state.lhm_client).await;
   let lhm = {
@@ -315,7 +340,11 @@ pub async fn get_stats(
     (sum / system.cpus().len() as f32).round() as u8
   };
   let cores: Vec<u8> = system.cpus().iter().map(|c| c.cpu_usage().round() as u8).collect();
-  let freq = system.cpus().first().map(|c| c.frequency() as f64 / 1000.0).unwrap_or(0.0);
+  let freq = system
+    .cpus()
+    .first()
+    .map(|c| c.frequency() as f64 / 1000.0)
+    .unwrap_or(0.0);
   drop(system);
 
   let mut disks = state.disks.lock().unwrap_or_else(|e| {

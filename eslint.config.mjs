@@ -27,7 +27,7 @@ export default [
       'comma-dangle': ['error', 'always-multiline'],
 
       // Quality
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }],
       'no-var': 'error',
       'prefer-const': 'warn',
       'eqeqeq': ['error', 'always', { null: 'ignore' }],

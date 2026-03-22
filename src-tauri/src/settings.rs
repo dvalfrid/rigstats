@@ -5,8 +5,6 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 
-pub const LEGACY_DEFAULT_MODEL_NAME: &str = "ROG GM700TZ";
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {

@@ -14,17 +14,8 @@ use tauri::{Position, Size, WebviewWindow};
 /// any unrecognised input. Keeps both backend and frontend in sync on valid keys.
 pub(crate) fn normalize_profile(profile: &str) -> String {
   match profile {
-    "portrait-xl"
-    | "portrait-slim"
-    | "portrait-hd"
-    | "portrait-wxga"
-    | "portrait-fhd"
-    | "portrait-wuxga"
-    | "portrait-qhd"
-    | "portrait-hdplus"
-    | "portrait-900x1600"
-    | "portrait-1050x1680"
-    | "portrait-1600x2560"
+    "portrait-xl" | "portrait-slim" | "portrait-hd" | "portrait-wxga" | "portrait-fhd" | "portrait-wuxga"
+    | "portrait-qhd" | "portrait-hdplus" | "portrait-900x1600" | "portrait-1050x1680" | "portrait-1600x2560"
     | "portrait-4k" => profile.to_string(),
     _ => "portrait-xl".to_string(),
   }
@@ -99,6 +90,110 @@ fn fit_score(monitor_w: u32, monitor_h: u32, target_w: u32, target_h: u32) -> f6
   let area_cost = (monitor_area / target_area).ln().abs();
 
   (0.7 * aspect_cost) + (0.3 * area_cost)
+}
+
+// --- Tests -----------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+  use super::{fit_score, normalize_profile, normalize_visible_panels, profile_dimensions};
+
+  #[test]
+  fn normalize_profile_passes_through_all_valid_names() {
+    let valid = [
+      "portrait-xl",
+      "portrait-slim",
+      "portrait-hd",
+      "portrait-wxga",
+      "portrait-fhd",
+      "portrait-wuxga",
+      "portrait-qhd",
+      "portrait-hdplus",
+      "portrait-900x1600",
+      "portrait-1050x1680",
+      "portrait-1600x2560",
+      "portrait-4k",
+    ];
+    for name in &valid {
+      assert_eq!(normalize_profile(name), *name, "should pass through: {name}");
+    }
+  }
+
+  #[test]
+  fn normalize_profile_falls_back_to_xl_for_unknown() {
+    assert_eq!(normalize_profile(""), "portrait-xl");
+    assert_eq!(normalize_profile("landscape-hd"), "portrait-xl");
+    assert_eq!(normalize_profile("portrait-xl-extra"), "portrait-xl");
+  }
+
+  #[test]
+  fn profile_dimensions_returns_correct_pixel_sizes() {
+    assert_eq!(profile_dimensions("portrait-xl"), (450, 1920));
+    assert_eq!(profile_dimensions("portrait-4k"), (2160, 3840));
+    assert_eq!(profile_dimensions("portrait-hd"), (720, 1280));
+    assert_eq!(profile_dimensions("portrait-fhd"), (1080, 1920));
+  }
+
+  #[test]
+  fn profile_dimensions_falls_back_for_unknown_profile() {
+    assert_eq!(profile_dimensions("bogus"), (450, 1920));
+  }
+
+  #[test]
+  fn normalize_visible_panels_accepts_valid_keys() {
+    let result = normalize_visible_panels(vec!["cpu".to_string(), "gpu".to_string(), "ram".to_string()]);
+    assert_eq!(result, vec!["cpu", "gpu", "ram"]);
+  }
+
+  #[test]
+  fn normalize_visible_panels_strips_invalid_keys() {
+    let result = normalize_visible_panels(vec!["cpu".to_string(), "bogus".to_string(), "gpu".to_string()]);
+    assert_eq!(result, vec!["cpu", "gpu"]);
+  }
+
+  #[test]
+  fn normalize_visible_panels_deduplicates() {
+    let result = normalize_visible_panels(vec!["cpu".to_string(), "gpu".to_string(), "cpu".to_string()]);
+    assert_eq!(result, vec!["cpu", "gpu"]);
+  }
+
+  #[test]
+  fn normalize_visible_panels_normalizes_case_and_whitespace() {
+    let result = normalize_visible_panels(vec!["  CPU  ".to_string(), "GPU".to_string()]);
+    assert_eq!(result, vec!["cpu", "gpu"]);
+  }
+
+  #[test]
+  fn normalize_visible_panels_returns_all_panels_when_input_is_empty() {
+    let result = normalize_visible_panels(vec![]);
+    assert_eq!(result, vec!["header", "clock", "cpu", "gpu", "ram", "net", "disk"]);
+  }
+
+  #[test]
+  fn normalize_visible_panels_returns_all_panels_when_all_keys_are_invalid() {
+    let result = normalize_visible_panels(vec!["bogus".to_string(), "fake".to_string()]);
+    assert_eq!(result, vec!["header", "clock", "cpu", "gpu", "ram", "net", "disk"]);
+  }
+
+  #[test]
+  fn fit_score_perfect_match_scores_zero() {
+    let score = fit_score(450, 1920, 450, 1920);
+    assert!(score < 1e-10, "perfect match should score ~0.0, got {score}");
+  }
+
+  #[test]
+  fn fit_score_landscape_monitor_scores_worse_than_portrait_for_portrait_target() {
+    let portrait_score = fit_score(720, 1280, 450, 1920);
+    let landscape_score = fit_score(1920, 1080, 450, 1920);
+    assert!(portrait_score < landscape_score);
+  }
+
+  #[test]
+  fn fit_score_closer_size_scores_better() {
+    let close = fit_score(450, 1920, 480, 1920);
+    let far = fit_score(450, 1920, 2160, 3840);
+    assert!(close < far);
+  }
 }
 
 /// Moves and resizes `window` to the monitor that best fits `profile`.
