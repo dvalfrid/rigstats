@@ -53,6 +53,9 @@ npm run lint
 
 # Auto-fix JavaScript
 npm run lint:fix
+
+# Lint Markdown
+npm run lint:md
 ```
 
 See [STANDARDS.md](STANDARDS.md) for the full code standards.
@@ -65,8 +68,9 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 | --- | --- |
 | Any Rust file | `npm run fmt:rs` then `npm run clippy` |
 | Any `.js` file | `npm run lint` |
+| Any `.md` file | `npm run lint:md` |
 | Logic in Rust or JS | `npm test` (or the single-file variant) |
-| Unsure | `npm run verify` (runs everything) |
+| Unsure | `npm run verify` (runs everything, including markdown lint) |
 
 - `npm run clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
 - `npm run lint` must exit clean — fix all errors and warnings before finishing.

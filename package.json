@@ -9,10 +9,11 @@
     "test": "vitest run",
     "lint": "eslint frontend/renderer",
     "lint:fix": "eslint frontend/renderer --fix",
+    "lint:md": "markdownlint-cli2 \"*.md\"",
     "fmt:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:rs:check": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml",
-    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo check --manifest-path src-tauri/Cargo.toml && npm run lint && vitest run",
+    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo check --manifest-path src-tauri/Cargo.toml && npm run lint && npm run lint:md && vitest run",
     "prepare": "lefthook install"
   },
   "keywords": [],
@@ -24,6 +25,7 @@
     "eslint": "^9.0.0",
     "globals": "^15.0.0",
     "lefthook": "^2.1.4",
+    "markdownlint-cli2": "^0.21.0",
     "vitest": "^2.1.9"
   },
   "dependencies": {

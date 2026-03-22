@@ -9,3 +9,6 @@ pre-commit:
     lint:
       glob: "frontend/**/*.js"
       run: npm run lint
+    lint-md:
+      glob: "*.md"
+      run: npm run lint:md

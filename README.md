@@ -295,6 +295,7 @@ The ZIP is purely a local file that you choose whether to share.
 - [Architecture](docs/architecture.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Changelog](CHANGELOG.md)
+- [Roadmap](ROADMAP.md)
 
 ## Notes
 
