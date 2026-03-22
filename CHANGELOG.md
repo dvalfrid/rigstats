@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.5.1](https://github.com/dvalfrid/rigstats/compare/v1.5.0...v1.5.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* **lhm:** detect Intel CPU temperature via priority sensor list ([43c58b3](https://github.com/dvalfrid/rigstats/commit/43c58b3d981c381e77bb3600bebd431b05e6c46a))
+
 ## [1.5.0](https://github.com/dvalfrid/rigstats/compare/v1.4.0...v1.5.0) (2026-03-21)
 
 
