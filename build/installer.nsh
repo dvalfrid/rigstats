@@ -1,9 +1,11 @@
 !include "FileFunc.nsh"
 
 !macro NSIS_HOOK_POSTINSTALL
-  ; Open install log in the app data directory so it can be included in diagnostics.
-  CreateDirectory "$APPDATA\se.codeby.rigstats"
-  FileOpen $9 "$APPDATA\se.codeby.rigstats\rigstats-install.log" w
+  ; Open install log in ProgramData — the installer runs elevated (perMachine) so
+  ; $APPDATA resolves to the system account profile, not the user's. $PROGRAMDATA
+  ; is machine-wide and consistent regardless of which account runs the installer.
+  CreateDirectory "$PROGRAMDATA\se.codeby.rigstats"
+  FileOpen $9 "$PROGRAMDATA\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
 
   ; Prefer an existing LibreHardwareMonitor installation if present.

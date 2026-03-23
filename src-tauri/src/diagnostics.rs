@@ -148,8 +148,13 @@ struct SysinfoSnapshot {
   ping_target: String,
 }
 
-fn diag_collect_installer_log(app: &tauri::AppHandle) -> Vec<u8> {
-  let path = debug_log_path(app).with_file_name("rigstats-install.log");
+fn diag_collect_installer_log(_app: &tauri::AppHandle) -> Vec<u8> {
+  // The NSIS installer runs elevated (perMachine), so $APPDATA resolves to the
+  // system account profile, not the user's. Use %PROGRAMDATA% instead — it is
+  // machine-wide and always accessible regardless of which account ran the installer.
+  let path = std::path::PathBuf::from(std::env::var("PROGRAMDATA").unwrap_or_else(|_| "C:\\ProgramData".to_string()))
+    .join("se.codeby.rigstats")
+    .join("rigstats-install.log");
   std::fs::read(path).unwrap_or_else(|_| b"(install log not found)".to_vec())
 }
 
