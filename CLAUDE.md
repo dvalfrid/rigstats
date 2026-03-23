@@ -104,9 +104,10 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`lhm.rs`** — HTTP client that fetches LHM's `/data.json`, flattens the nested sensor tree into `Vec<FlatNode>`, then extracts GPU/CPU/disk/network metrics by parent+text name pairs.
 - **`lhm_process.rs`** — LHM process lifecycle: `ensure_lhm_running` (scheduled task → direct spawn), `can_reach_lhm_endpoint`, `get_lhm_task_details`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
 - **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`).
-- **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `on_window_event`, `set_last_tray_click_position`.
+- **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `ensure_updater_window`, `on_window_event`, `set_last_tray_click_position`.
+- **`updater.rs`** — Auto-update logic: `spawn_background_check` (6-hour loop, first check after 10 s), `check_for_update`, `install_update`, `open_updater_window` commands.
 - **`diagnostics.rs`** — `collect_diagnostics` Tauri command + helpers (`diag_collect_hardware`, `diag_collect_tasks`, etc.) that gather system info into a ZIP archive for bug reports.
-- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels), JSON persistence to Tauri app data dir.
+- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels, `last_seen_version`), JSON persistence to Tauri app data dir.
 
 ### Frontend (`frontend/`)
 
@@ -121,7 +122,7 @@ No framework, no bundler. Pure ES modules. Each HTML page loads its own entry sc
 - **`renderer/vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
 - **`renderer/simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
 - **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
-- **`renderer/settings.js`** / **`renderer/about.js`** / **`renderer/status.js`** — Entry scripts for the secondary windows.
+- **`renderer/settings.js`** / **`renderer/about.js`** / **`renderer/status.js`** / **`renderer/updater.js`** — Entry scripts for the secondary windows. `updater.js` drives the update check, changelog rendering, and install flow.
 
 ### Dashboard profiles
 

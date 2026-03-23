@@ -9,6 +9,7 @@ rig-dashboard/
 |  |- settings.html
 |  |- status.html
 |  |- about.html
+|  |- updater.html
 |  |- assets/
 |  \- renderer/
 |     |- panels/
@@ -36,10 +37,11 @@ rig-dashboard/
 - **`lhm.rs`** — HTTP client that fetches LHM's `/data.json`, flattens the nested sensor tree into `Vec<FlatNode>`, then extracts GPU/CPU/disk/network metrics by parent+text name pairs.
 - **`lhm_process.rs`** — LHM process lifecycle: `ensure_lhm_running` (scheduled task → direct spawn), `can_reach_lhm_endpoint`, `get_lhm_task_details`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
 - **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`).
-- **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `on_window_event`, `set_last_tray_click_position`.
+- **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `ensure_updater_window`, `on_window_event`, `set_last_tray_click_position`.
+- **`updater.rs`** — Auto-update logic: `spawn_background_check` starts a background loop that checks for updates every 6 hours (first check after 10 s); emits `update-available` event to the frontend when a newer version is found. Also exposes `check_for_update`, `install_update`, and `open_updater_window` commands.
 - **`diagnostics.rs`** — `collect_diagnostics` Tauri command and helpers that gather system info into a ZIP archive for bug reports.
 - **`autostart.rs`** — Per-user Windows autostart via `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`. Uses `winreg` for direct registry access (no subprocesses). Also manages `StartupApproved\Run` to stay in sync with Windows Settings > Apps > Startup.
-- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, autostart enabled, visible panels), JSON persistence to Tauri app data dir.
+- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, autostart enabled, visible panels, last seen version), JSON persistence to Tauri app data dir. `last_seen_version` is compared against `CARGO_PKG_VERSION` at startup to detect the first launch after an upgrade.
 
 ## Renderer Modules (`frontend/renderer/`)
 
@@ -53,7 +55,7 @@ rig-dashboard/
 - **`simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
 - **`panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
 - **`settings.js`** — Settings window entry script. Manages panel visibility and order: `panelOrder` tracks all panels (visible + hidden) in user-defined sequence; `hiddenPanels` is a `Set` of keys the user has unchecked. `renderPanelToggles` re-renders the list from those two structures. Drag-to-reorder uses the Pointer Events API (`pointerdown`/`pointermove`/`pointerup` on each `≡` handle with `setPointerCapture`) and a fixed-position ghost element to work around WebView2's HTML5 drag incompatibility.
-- **`about.js`** / **`status.js`** — Entry scripts for the About and Status secondary windows.
+- **`about.js`** / **`status.js`** / **`updater.js`** — Entry scripts for the About, Status, and Updates & Changelog secondary windows. `updater.js` invokes `check-for-update` on load, renders release notes from `latest.json` when an update is available (combined with the bundled CHANGELOG.md for full history), and drives the `install-update` download + progress flow.
 
 ## Diagnostics Export (`collect_diagnostics`)
 

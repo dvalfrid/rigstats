@@ -64,8 +64,30 @@ It runs when a GitHub Release is published and:
 
 - runs verification
 - downloads and bundles pinned LibreHardwareMonitor via build scripts
-- builds installers
-- uploads `.exe` to that published release
+- builds the NSIS installer
+- **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
+- **signs the installer with the Tauri minisign key** (`@tauri-apps/cli signer sign`) — must happen after Azure signing so the signature covers the final PE
+- **generates `latest.json`** — extracts the current version's section from `CHANGELOG.md` and embeds it in the `notes` field; the updater dialog uses this to show release notes before installing
+- uploads the `.exe` and `latest.json` to the published GitHub Release
+
+The `latest.json` endpoint (`https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json`) is polled by `tauri-plugin-updater` on every running instance.
+
+### Signing keys
+
+Two separate signing mechanisms are used:
+
+| Key | Purpose | Where stored |
+| --- | --- | --- |
+| Azure Trusted Signing | Authenticode (SmartScreen trust, Windows installer) | GitHub Actions secrets: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` |
+| Tauri minisign keypair | Update integrity (Tauri updater verifies before install) | GitHub Actions secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
+
+To regenerate the Tauri keypair:
+
+```bash
+npx @tauri-apps/cli signer generate -w ./rigstats-update.key
+```
+
+Copy the printed public key to `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
 
 Manual run option:
 

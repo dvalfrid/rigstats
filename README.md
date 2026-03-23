@@ -30,7 +30,7 @@ From here you can:
 
 - monitor the machine continuously on a portrait side display
 - keep the app hidden to the tray when not needed
-- open the tray menu for `Settings`, `Status`, and `About`
+- open the tray menu for `Settings`, `Status`, `About`, and `Updates & Changelog`
 
 ### Status Dialog
 
@@ -65,14 +65,31 @@ It shows:
 - the current RIGStats version
 - the project license name
 - direct links to the website and contact
-- a scrollable version history (What's New) sourced from the bundled CHANGELOG.md
 
 From here you can:
 
 - quickly verify which build/version is running
 - open rigstats.app in the default browser
 - contact the maintainer directly
-- browse recent releases and their changes, with clickable links to the GitHub diff for each version
+
+### Updates & Changelog Dialog
+
+![Updates & Changelog Dialog](assets/update-dialog.png)
+
+The Updates & Changelog dialog handles update discovery and version history.
+
+It shows:
+
+- available update version alongside the current version (when an update exists)
+- release notes for the new version sourced from GitHub (`latest.json`)
+- full local version history (bundled CHANGELOG.md) below the new version's notes
+- download and installation progress bar
+
+From here you can:
+
+- install the latest version with one click
+- track download progress while the update is fetched
+- browse the complete release history with clickable links to GitHub diffs
 
 ### Settings Dialog
 
@@ -259,7 +276,7 @@ The ZIP is purely a local file that you choose whether to share.
 
 | Component | Role |
 | --- | --- |
-| **Tauri v2** | App framework (native window, IPC, system tray) |
+| **Tauri v2** | App framework (native window, IPC, system tray, auto-update) |
 | **Rust / sysinfo** | CPU, RAM, disk, network data |
 | **LibreHardwareMonitor** | GPU/CPU sensors, disk/network throughput |
 | **HTML / CSS / JS** | Dashboard UI (renderer) |
