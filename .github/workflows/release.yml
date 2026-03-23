@@ -61,7 +61,7 @@ jobs:
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
           endpoint: https://neu.codesigning.azure.net/
-          trusted-signing-account-name: rigstats-signing
+          trusted-signing-account-name: rigstats-codesign
           certificate-profile-name: RIGStats
           files-folder: src-tauri/target/release/bundle/nsis
           files-folder-filter: exe
