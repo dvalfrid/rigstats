@@ -17,7 +17,8 @@
         "main-window",
         "settings-window",
         "about-window",
-        "status-window"
+        "status-window",
+        "updater-window"
       ]
     },
     "windows": [
@@ -33,6 +34,20 @@
         "skipTaskbar": true,
         "visible": false,
         "focus": true,
+        "useHttpsScheme": true
+      },
+      {
+        "label": "updater",
+        "title": "RIGStats Update",
+        "url": "updater.html",
+        "width": 500,
+        "height": 460,
+        "resizable": false,
+        "decorations": true,
+        "transparent": false,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
         "useHttpsScheme": true
       }
     ]
@@ -58,5 +73,12 @@
       "../CHANGELOG.md": "CHANGELOG.md"
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYzOEU1NDhDNTRGMERFMzQKUldRMDN2QlVqRlNPOC94SmZYUElIVTZyKytLaThJZHpKSDhhdEFPSnlHYnM1V1oyMnpWQXRkS20K",
+      "endpoints": [
+        "https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json"
+      ]
+    }
+  }
 }

@@ -4,7 +4,35 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 
 ---
 
-## v1.6 — NVMe / SSD temperatures
+## v1.6 — Auto-update ✓
+
+**Plugin:** `tauri-plugin-updater`
+**Distribution:** GitHub Releases (existing pipeline)
+
+**Implemented.** On startup the app silently checks for updates after a 10-second
+delay. If a newer version is available a badge appears in the dashboard header.
+Clicking the badge (or "Check for Updates" in the tray menu) opens an update
+dialog showing the new version, release notes, and a download progress bar.
+After installation the NSIS installer restarts the app; the About window
+opens automatically on the first launch following an upgrade.
+
+**Setup required (one-time, not yet done):**
+
+1. Generate a signing keypair:
+
+   ```bash
+   npx @tauri-apps/cli signer generate -w ./rigstats-update.key
+   ```
+
+   Copy the printed **public key** to `tauri.conf.json` → `plugins.updater.pubkey`.
+
+2. Add two GitHub Actions secrets:
+   - `TAURI_SIGNING_PRIVATE_KEY` — the base64-encoded private key content
+   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — the key password (empty string if none)
+
+---
+
+## v1.7 — NVMe / SSD temperatures
 
 **Panel:** Disk
 **Data source:** LHM `Temperatures` section per storage device
@@ -21,7 +49,7 @@ temperatures, making this a high-value, low-effort addition.
 
 ---
 
-## v1.7 — Temperature threshold alerts
+## v1.8 — Temperature threshold alerts
 
 **Panel:** Settings (new threshold fields) + tray notifications
 **Data source:** Existing CPU / GPU / disk temp fields
@@ -38,7 +66,7 @@ genuinely useful during gaming or overclocking sessions.
 
 ---
 
-## v1.8 — CPU fan speed
+## v1.9 — CPU fan speed
 
 **Panel:** CPU
 **Data source:** LHM `Fans` section on the CPU device node
@@ -54,7 +82,7 @@ GPU fan RPM is already displayed. Adding CPU fan speed is a trivial backend chan
 
 ---
 
-## v1.9 — Battery panel (laptop support)
+## v2.0 — Battery panel (laptop support)
 
 **Panel:** New `battery` panel
 **Data source:** `sysinfo` battery API
@@ -71,24 +99,3 @@ with no battery detected.
 - Add `battery` to the valid panel keys list in `monitor.rs` and settings
 
 ---
-
-## v2.0 — Auto-update
-
-**Plugin:** `tauri-plugin-updater`
-**Distribution:** GitHub Releases (existing pipeline)
-
-Users currently have to manually download and run a new installer for each release.
-The Tauri v2 updater plugin checks for a new version on launch, prompts the user,
-and installs silently — integrating directly with the existing release-please +
-`release.yml` workflow.
-
-**Blocker:** Windows requires a code-signing certificate to avoid SmartScreen warnings
-on each update. Worth resolving before implementation starts.
-
-**Scope:**
-
-- Add `tauri-plugin-updater` and configure the update endpoint in `tauri.conf.json`
-- Publish a `latest.json` update manifest as a GitHub Release asset in `release.yml`
-- Sign the installer in CI using the code-signing certificate
-- Add an in-app update check on startup with a user prompt (not silent forced updates)
-- Consider Winget publishing as a complementary distribution channel

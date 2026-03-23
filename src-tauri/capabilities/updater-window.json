@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "updater-window",
+  "description": "Capability for the Update dialog window.",
+  "windows": ["updater"],
+  "permissions": [
+    "allow-check-for-update",
+    "allow-install-update",
+    "allow-get-changelog",
+    "allow-close-window",
+    "opener:default"
+  ]
+}

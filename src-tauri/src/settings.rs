@@ -26,6 +26,9 @@ pub struct Settings {
   /// Launch the dashboard automatically when the user logs in.
   #[serde(default)]
   pub autostart_enabled: bool,
+  /// Version seen on last launch, used to detect first run after an update.
+  #[serde(default)]
+  pub last_seen_version: String,
 }
 
 fn default_opacity() -> f64 {
@@ -61,6 +64,7 @@ impl Default for Settings {
       always_on_top: false,
       visible_panels: default_visible_panels(),
       autostart_enabled: false,
+      last_seen_version: String::new(),
     }
   }
 }

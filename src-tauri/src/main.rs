@@ -16,6 +16,7 @@ mod lhm_process;
 mod monitor;
 mod settings;
 mod stats;
+mod updater;
 mod windows;
 
 use commands::{
@@ -40,14 +41,17 @@ use tauri::{
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
   AppHandle, Manager, RunEvent,
 };
+use updater::{check_for_update, install_update, open_updater_window};
 use windows::{
-  ensure_about_window, ensure_settings_window, ensure_status_window, on_window_event, set_last_tray_click_position,
+  ensure_about_window, ensure_settings_window, ensure_status_window, ensure_updater_window, on_window_event,
+  set_last_tray_click_position,
 };
 
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_SETTINGS_ID: &str = "settings";
 const TRAY_ABOUT_ID: &str = "about";
 const TRAY_STATUS_ID: &str = "status";
+const TRAY_UPDATES_ID: &str = "updates";
 const TRAY_QUIT_ID: &str = "quit";
 
 fn focus_main_window(app: &AppHandle) {
@@ -75,6 +79,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     .text(TRAY_SETTINGS_ID, "Settings")
     .text(TRAY_STATUS_ID, "Status")
     .text(TRAY_ABOUT_ID, "About")
+    .text(TRAY_UPDATES_ID, "Check for Updates")
     .separator()
     .text(TRAY_QUIT_ID, "Quit")
     .build()?;
@@ -100,6 +105,12 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
         append_debug_log(app, "Tray menu: About clicked");
         if let Err(error) = ensure_about_window(app) {
           append_debug_log(app, &format!("About window failed: {}", error));
+        }
+      }
+      TRAY_UPDATES_ID => {
+        append_debug_log(app, "Tray menu: Check for Updates clicked");
+        if let Err(e) = ensure_updater_window(app) {
+          append_debug_log(app, &format!("Updater window failed: {}", e));
         }
       }
       TRAY_QUIT_ID => std::process::exit(0),
@@ -130,6 +141,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
 
 fn main() {
   tauri::Builder::default()
+    .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_opener::init())
     .setup(|app| {
       let app_handle = app.handle();
@@ -148,6 +160,13 @@ fn main() {
       let startup_profile = settings.dashboard_profile.clone();
       let startup_always_on_top = settings.always_on_top;
       let startup_autostart_enabled = settings.autostart_enabled;
+      let current_version = env!("CARGO_PKG_VERSION").to_string();
+      let last_seen = settings.last_seen_version.clone();
+      let should_show_changelog = !last_seen.is_empty() && last_seen != current_version;
+      if last_seen != current_version {
+        settings.last_seen_version = current_version;
+        let _ = persist_settings(app_handle, &settings);
+      }
       let system = System::new_all();
       let sysinfo_available = !system.cpus().is_empty() || system.total_memory() > 0;
       let ram_spec = detect_ram_spec();
@@ -191,10 +210,18 @@ fn main() {
         let _ = main.set_always_on_top(startup_always_on_top);
         let _ = main.show();
         let _ = main.set_focus();
+        if should_show_changelog {
+          let app_for_cl = app_handle.clone();
+          tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let _ = ensure_about_window(&app_for_cl);
+          });
+        }
       }
 
       // Fallback for cases where installer task did not launch LHM yet.
       ensure_lhm_running(app_handle);
+      updater::spawn_background_check(app_handle);
 
       // Re-register only if the Run key is completely absent (e.g. after a
       // reinstall). If Windows Settings has disabled the entry (StartupApproved
@@ -226,7 +253,10 @@ fn main() {
       get_stats,
       log_frontend_error,
       collect_diagnostics,
-      get_changelog
+      get_changelog,
+      check_for_update,
+      install_update,
+      open_updater_window
     ])
     .on_window_event(on_window_event)
     .build(tauri::generate_context!())

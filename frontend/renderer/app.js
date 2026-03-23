@@ -383,6 +383,14 @@ function start() {
       backend.on('apply-model-name', (_event, name) => applyModelName(name)),
       backend.on('apply-profile', (_event, profile) => applyProfile(profile)),
       backend.on('apply-visible-panels', (_event, panels) => applyVisiblePanels(panels)),
+      backend.on('update-available', (_event, version) => {
+        const badge = document.getElementById('updateBadge');
+        if (badge) {
+          badge.textContent = `↑ UPDATE  v${version}`;
+          badge.style.display = '';
+          badge.addEventListener('click', () => backend.invoke('open-updater-window').catch(() => {}), { once: true });
+        }
+      }),
     ]).then((unlisteners) => {
       window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));
     });

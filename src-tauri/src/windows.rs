@@ -249,6 +249,42 @@ pub fn ensure_status_window(app: &AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+/// Opens the Updater window, or focuses it if already open.
+pub fn ensure_updater_window(app: &AppHandle) -> Result<(), String> {
+  append_debug_log(app, "Updater window requested");
+
+  if let Some(win) = app.get_webview_window("updater") {
+    win.show().map_err(|e| e.to_string())?;
+    win.set_focus().map_err(|e| e.to_string())?;
+    append_debug_log(app, "Updater window reused successfully");
+    return Ok(());
+  }
+
+  let width = 500.0;
+  let height = 460.0;
+  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((60.0, 60.0));
+
+  let window = WebviewWindowBuilder::new(app, "updater", WebviewUrl::App("updater.html".into()))
+    .title("RIGStats Update")
+    .inner_size(width, height)
+    .position(x, y)
+    .resizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(true)
+    .build()
+    .map_err(|e| {
+      let msg = e.to_string();
+      append_debug_log(app, &format!("Updater window build failed: {}", msg));
+      msg
+    })?;
+
+  window.show().map_err(|e| e.to_string())?;
+  window.set_focus().map_err(|e| e.to_string())?;
+  append_debug_log(app, "Updater window created successfully");
+  Ok(())
+}
+
 // --- Window event handler --------------------------------------------------
 
 /// Intercepts the main window close event and hides to tray instead of quitting.

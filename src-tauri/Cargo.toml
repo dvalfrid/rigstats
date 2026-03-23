@@ -22,6 +22,7 @@ hostname = "0.4"
 zip = "2"
 rfd = "0.14"
 tauri-plugin-opener = "2.5.3"
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 wmi = "0.13"

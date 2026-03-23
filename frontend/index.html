@@ -117,6 +117,8 @@ html, body {
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
 .uptime{font-family:var(--mono);font-size:11px;color:var(--grn);margin-top:10px;}
+.update-badge{margin-top:8px;padding:3px 8px;border:1px solid rgba(57,255,136,.45);background:rgba(57,255,136,.10);font-family:var(--mono);font-size:9px;letter-spacing:2px;color:#39ff88;text-transform:uppercase;width:max-content;cursor:pointer;line-height:1.4;}
+.update-badge:hover{background:rgba(57,255,136,.2);}
 #modelName{color:var(--accent);font-size:var(--model-name-size);}
 #cpuModel,#gpuModel{font-size:var(--panel-model-size);}
 
@@ -205,6 +207,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
         <div id="rigBrandPreview" class="rig-brand-preview"></div>
         <div class="rig-name"><span id="rigName">--</span><br><span id="modelName">--</span></div>
         <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+        <div id="updateBadge" class="update-badge" style="display:none"></div>
       </div>
       <div class="rig-brand-mark" aria-hidden="true">
         <img id="rigLogo" class="rig-logo" src="./assets/ROG_logo_red.png" alt="ROG">
