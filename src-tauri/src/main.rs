@@ -79,7 +79,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     .text(TRAY_SETTINGS_ID, "Settings")
     .text(TRAY_STATUS_ID, "Status")
     .text(TRAY_ABOUT_ID, "About")
-    .text(TRAY_UPDATES_ID, "Check for Updates")
+    .text(TRAY_UPDATES_ID, "Updates & Changelog")
     .separator()
     .text(TRAY_QUIT_ID, "Quit")
     .build()?;

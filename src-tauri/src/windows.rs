@@ -165,7 +165,7 @@ pub fn ensure_about_window(app: &AppHandle) -> Result<(), String> {
   }
 
   let width = 640.0;
-  let height = 523.0;
+  let height = 380.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
 
   let window = WebviewWindowBuilder::new(app, "about", WebviewUrl::App("about.html".into()))
@@ -261,7 +261,7 @@ pub fn ensure_updater_window(app: &AppHandle) -> Result<(), String> {
   }
 
   let width = 500.0;
-  let height = 460.0;
+  let height = 560.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((60.0, 60.0));
 
   let window = WebviewWindowBuilder::new(app, "updater", WebviewUrl::App("updater.html".into()))

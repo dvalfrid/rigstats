@@ -90,9 +90,15 @@ jobs:
           $pubDate  = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ")
           $repoUrl  = "https://github.com/dvalfrid/rigstats"
 
+          # Extract this version's section from CHANGELOG.md for in-app display.
+          $changelogMd = Get-Content "CHANGELOG.md" -Raw
+          $escapedVer  = [regex]::Escape($version)
+          $clMatch     = [regex]::Match($changelogMd, "(?ms)^(## \[$escapedVer\].+?)(?=^## \[|\z)")
+          $notes       = if ($clMatch.Success) { $clMatch.Value.Trim() } else { "See ${repoUrl}/releases/tag/$env:RELEASE_TAG" }
+
           $manifest = [ordered]@{
             version  = $version
-            notes    = "See the full changelog at ${repoUrl}/releases/tag/$env:RELEASE_TAG"
+            notes    = $notes
             pub_date = $pubDate
             platforms = [ordered]@{
               "windows-x86_64" = [ordered]@{

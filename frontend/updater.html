@@ -72,31 +72,70 @@ body {
 }
 .body {
   flex: 1;
-  padding: 12px 14px;
+  padding: 10px 12px 8px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
 }
-.notes-label {
+.cl-label {
   font: 10px var(--mono);
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--accent);
-  margin-bottom: 4px;
 }
-.notes-scroll {
+.cl-scroll {
   flex: 1;
   min-height: 0;
-  background: #05080d;
-  border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 10px;
+  border: 1px solid var(--border);
+  background: #05080d;
+  padding: 9px;
   overflow-y: auto;
-  font: 11px var(--mono);
+}
+.cl-version { margin-bottom: 10px; }
+.cl-version-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cl-version-tag {
+  font: 700 11px var(--mono);
+  color: var(--accent);
+  text-decoration: none;
+}
+a.cl-version-tag:hover { text-decoration: underline; }
+.cl-version-date { font: 9px var(--mono); color: var(--muted); }
+.cl-section-label {
+  font: 9px var(--mono);
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin: 4px 0 2px;
+}
+.cl-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cl-items li {
+  font-size: 10px;
   color: var(--text);
-  line-height: 1.6;
-  white-space: pre-wrap;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.02);
+  border-left: 2px solid var(--border);
+  line-height: 1.4;
+}
+.cl-items li.feat { border-left-color: var(--good); }
+.cl-items li.fix  { border-left-color: var(--warn); }
+.cl-empty {
+  font: 11px var(--mono);
+  color: var(--muted);
+  padding: 6px 0;
 }
 .progress-wrap {
   display: none;
@@ -122,8 +161,15 @@ body {
   width: 0%;
   transition: width 0.3s ease;
 }
+.status-msg {
+  font: 10px var(--mono);
+  color: var(--muted);
+  letter-spacing: 1px;
+  padding: 0 12px 8px;
+  min-height: 18px;
+}
 .actions {
-  padding: 0 14px 12px;
+  padding: 0 12px 10px;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
@@ -149,13 +195,6 @@ button.primary {
 }
 button.primary:hover { background: #66e0ff; border-color: transparent; }
 button.primary:disabled { background: rgba(0,200,255,0.3); }
-.status-msg {
-  font: 10px var(--mono);
-  color: var(--muted);
-  letter-spacing: 1px;
-  padding: 0 14px 10px;
-  min-height: 18px;
-}
 </style>
 </head>
 <body>
@@ -171,10 +210,8 @@ button.primary:disabled { background: rgba(0,200,255,0.3); }
     </div>
 
     <div class="body">
-      <div>
-        <div class="notes-label">What's new</div>
-        <div class="notes-scroll" id="notesContent">Loading…</div>
-      </div>
+      <div class="cl-label">What's New</div>
+      <div class="cl-scroll" id="changelogContent"></div>
       <div class="progress-wrap" id="progressWrap">
         <div class="progress-label" id="progressLabel">DOWNLOADING...</div>
         <div class="progress-track">

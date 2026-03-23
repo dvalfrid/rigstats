@@ -5,7 +5,6 @@
   "windows": ["about"],
   "permissions": [
     "allow-get-about-info",
-    "allow-get-changelog",
     "allow-close-window",
     "opener:default"
   ]

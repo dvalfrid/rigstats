@@ -35,20 +35,6 @@
         "visible": false,
         "focus": true,
         "useHttpsScheme": true
-      },
-      {
-        "label": "updater",
-        "title": "RIGStats Update",
-        "url": "updater.html",
-        "width": 500,
-        "height": 460,
-        "resizable": false,
-        "decorations": true,
-        "transparent": false,
-        "skipTaskbar": true,
-        "visible": false,
-        "focus": false,
-        "useHttpsScheme": true
       }
     ]
   },
