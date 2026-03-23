@@ -8,6 +8,18 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.6.0](https://github.com/dvalfrid/rigstats/compare/v1.5.1...v1.6.0) (2026-03-23)
+
+
+### Features
+
+* **updater:** add auto-update with background check and progress UI ([3114d2d](https://github.com/dvalfrid/rigstats/commit/3114d2d8949f54bb71b52797d0ca61689d032c50))
+
+
+### Bug Fixes
+
+* remove window decorations and force Node 24 in CI ([e2cb4fd](https://github.com/dvalfrid/rigstats/commit/e2cb4fd60e775bfd91dcdf7042f69619248980ee))
+
 ## [1.5.1](https://github.com/dvalfrid/rigstats/compare/v1.5.0...v1.5.1) (2026-03-22)
 
 
