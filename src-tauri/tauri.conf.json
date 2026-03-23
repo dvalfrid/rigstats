@@ -28,7 +28,7 @@
         "width": 450,
         "height": 1920,
         "resizable": false,
-        "decorations": true,
+        "decorations": false,
         "transparent": true,
         "skipTaskbar": true,
         "visible": false,
