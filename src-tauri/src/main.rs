@@ -108,7 +108,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
         }
       }
       TRAY_UPDATES_ID => {
-        append_debug_log(app, "Tray menu: Check for Updates clicked");
+        append_debug_log(app, "Tray menu: Updates & Changelog clicked");
         if let Err(e) = ensure_updater_window(app) {
           append_debug_log(app, &format!("Updater window failed: {}", e));
         }

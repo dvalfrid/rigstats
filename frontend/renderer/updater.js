@@ -11,6 +11,7 @@ const ids = {
   statusMsg: document.getElementById('statusMsg'),
   updateBtn: document.getElementById('updateBtn'),
   laterBtn: document.getElementById('laterBtn'),
+  versionRow: document.getElementById('versionRow'),
 };
 
 let isInstalling = false;
@@ -132,6 +133,7 @@ async function loadUpdateInfo() {
     if (!info) {
       // No update — show bundled changelog so the window is still useful.
       ids.heroTitle.textContent = 'Up to Date';
+      ids.versionRow.style.display = 'none';
       ids.updateBtn.disabled = true;
       setStatus('You are running the latest version.');
       const md = await backend.invoke('get-changelog').catch(() => '');
@@ -140,8 +142,10 @@ async function loadUpdateInfo() {
     }
     ids.currentVersion.textContent = `v${info.currentVersion}`;
     ids.newVersion.textContent = `v${info.version}`;
-    // info.body comes from latest.json and contains the new version's changelog.
-    renderNotes(info.body);
+    // Combine new version's changelog (from latest.json) with bundled history.
+    const localMd = await backend.invoke('get-changelog').catch(() => '');
+    const combined = info.body ? `${info.body}\n\n${localMd}` : localMd;
+    renderNotes(combined);
   } catch (err) {
     ids.updateBtn.disabled = true;
     setStatus(`Error: ${err}`);
