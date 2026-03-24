@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.9.0](https://github.com/dvalfrid/rigstats/compare/v1.8.1...v1.9.0) (2026-03-24)
+
+
+### Features
+
+* add DDR5/DDR4 DIMM temperature to RAM panel ([4d65740](https://github.com/dvalfrid/rigstats/commit/4d657401a57272814ba4c486fc89021606954e96))
+* temperature threshold alerts with configurable thresholds and notifications ([6cac71e](https://github.com/dvalfrid/rigstats/commit/6cac71e1ac6a63b44a572781ccf1e3fd9dcaf327))
+
+
+### Bug Fixes
+
+* show disk temp when WMI model map is empty; expand diagnostics ([61dbf3f](https://github.com/dvalfrid/rigstats/commit/61dbf3f76c0392cb5c98cc89470b42b108f241f9))
+
 ## [1.8.1](https://github.com/dvalfrid/rigstats/compare/v1.8.0...v1.8.1) (2026-03-24)
 
 
