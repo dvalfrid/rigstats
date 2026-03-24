@@ -82,6 +82,53 @@ GPU fan RPM is already displayed. Adding CPU fan speed is a trivial backend chan
 
 ---
 
+## Motherboard panel (fans, temps, voltages)
+
+**Panel:** New `motherboard` panel
+**Data source:** LHM Super I/O chip node (e.g. Nuvoton NCT6799D, ITE IT87xx, Winbond W836xx)
+
+Shows the sensors exposed by the motherboard's Super I/O chip: fan speeds, board
+temperatures, and key voltage rails. Useful for monitoring system cooling without
+needing to open the BIOS.
+
+**Available sensor data (verified on ASUS PRIME B650M-A AX6 II / NCT6799D):**
+
+- **Fans:** up to 7 channels in RPM; fan #7 on that board runs at ~2650 RPM (CPU
+  cooler pump) while chassis fans sit around 900 RPM. Channels reporting 0 RPM are
+  hidden automatically.
+- **Fan control:** duty cycle % per channel (31–100 %). Show alongside RPM or omit
+  to keep the panel compact.
+- **Temperatures:** 6 unnamed slots (`Temperature #1–#6`). LHM does not label these
+  — the mapping to VRM, chipset, or PCH depends on board firmware. Show as T1–T6
+  and filter out sensors stuck at implausibly low values (< 5 °C sentinel).
+- **Voltages:** named rails worth surfacing: `Vcore`, `+3.3V`, `AVCC`,
+  `CPU Termination`. The remaining `Voltage #N` slots are unmapped and should be
+  hidden by default or behind a toggle.
+
+**Design constraints:**
+
+The Super I/O node sits under the board name in the LHM tree, identified by a
+`/lpc/` SensorId prefix. Because different chip models (NCT, ITE, Winbond) share
+the same `parent == "Fans"` / `parent == "Temperatures"` structure under their
+respective device node, extraction is done by SensorId prefix rather than chip name
+— the same approach used for disk temperatures.
+
+Portrait space is a concern: a naive list of 7 fans + 6 temps + 4 voltages = 17
+rows. Consider grouping into two or three rows per category using the same compact
+`bar-row` layout as the disk panel, and limiting fans to the top 5 active channels
+(highest RPM first).
+
+**Scope:**
+
+- Add `/lpc/` extraction to `lhm.rs`: `mb_fans: Vec<(String, f64)>`,
+  `mb_temps: Vec<f64>` (filtered, unnamed), `mb_voltages: Vec<(String, f64)>`
+  (named rails only) to `LhmData`
+- Propagate through a new `MotherboardStats` struct in `stats.rs` → `StatsPayload`
+- New `panels/motherboard.js` frontend panel with compact multi-column layout
+- Add `motherboard` to valid panel keys in `monitor.rs` and settings visibility list
+
+---
+
 ## Battery panel (laptop support)
 
 **Panel:** New `battery` panel

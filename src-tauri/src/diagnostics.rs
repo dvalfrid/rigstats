@@ -35,12 +35,14 @@ fn diag_collect_hardware() -> String {
       "$csp=Get-CimInstance Win32_ComputerSystemProduct -EA Stop;",
       "$bb=Get-CimInstance Win32_BaseBoard -EA Stop;",
       "$mem=Get-CimInstance Win32_PhysicalMemory -EA Stop;",
+      "$disk=Get-CimInstance Win32_DiskDrive -EA Stop;",
       "@{",
       "os=@{caption=$os.Caption;version=$os.Version;build=$os.BuildNumber;arch=$os.OSArchitecture};",
       "cpu=@($cpu|%{@{name=$_.Name;cores=$_.NumberOfCores;threads=$_.NumberOfLogicalProcessors;maxMHz=$_.MaxClockSpeed}});",
       "gpu=@($gpu|%{@{name=$_.Name;ramBytes=$_.AdapterRAM;driver=$_.DriverVersion}});",
       "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbMfr=$bb.Manufacturer;bbProd=$bb.Product;cspName=$csp.Name;cspVer=$csp.Version};",
-      "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed;typeCode=$_.SMBIOSMemoryType;mfr=$_.Manufacturer;part=$_.PartNumber}})",
+      "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed;typeCode=$_.SMBIOSMemoryType;mfr=$_.Manufacturer;part=$_.PartNumber}});",
+      "disk=@($disk|%{@{deviceId=$_.DeviceID;model=$_.Model;mediaType=$_.MediaType;sizeBytes=$_.Size;interfaceType=$_.InterfaceType}})",
       "}|ConvertTo-Json -Depth 4",
       "}catch{'{ \"error\": \"collection failed\" }'}"
     );
@@ -139,6 +141,8 @@ struct SysinfoSnapshot {
   total_memory_mb: u64,
   used_memory_mb: u64,
   disk_mount_points: Vec<String>,
+  /// WMI drive-letter → model-name map; empty means WMI join failed.
+  disk_model_map: std::collections::HashMap<String, String>,
   network_interfaces: Vec<String>,
   system_brand: String,
   sysinfo_available: bool,
@@ -184,6 +188,7 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
     total_memory_mb,
     used_memory_mb,
     disk_mount_points,
+    disk_model_map: state.disk_model_map.clone(),
     network_interfaces,
     system_brand: state.system_brand.clone(),
     sysinfo_available: state.sysinfo_available,
@@ -362,6 +367,16 @@ pub async fn collect_diagnostics(
       .clone();
     diag_collect_displays(&app, &profile)
   };
+  // Parsed LHM snapshot: shows exactly what values the app derived from the sensor
+  // tree (disk_temps, cpu_temp, gpu_temp, ram_temp, etc.). Faster to read than the
+  // raw tree and directly pinpoints sensor extraction failures.
+  let lhm_parsed_json = {
+    let guard = state.last_lhm.lock().unwrap_or_else(|e| e.into_inner());
+    match &*guard {
+      Some(data) => serde_json::to_string_pretty(data).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e)),
+      None => "{\"error\":\"no LHM sample available\"}".to_string(),
+    }
+  };
 
   let zip_file = std::fs::File::create(&path).map_err(|e| format!("Cannot create zip: {}", e))?;
   let mut writer = zip::ZipWriter::new(zip_file);
@@ -373,6 +388,7 @@ pub async fn collect_diagnostics(
     ("install.log", &install_log_bytes),
     ("settings.json", settings_json.as_bytes()),
     ("lhm-data.json", lhm_json.as_bytes()),
+    ("lhm-parsed.json", lhm_parsed_json.as_bytes()),
     ("hardware.json", hardware_json.as_bytes()),
     ("sched-task.txt", tasks_txt.as_bytes()),
     ("environment.txt", env_txt.as_bytes()),

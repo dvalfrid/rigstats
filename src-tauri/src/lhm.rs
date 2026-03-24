@@ -17,7 +17,7 @@ pub struct FlatNode {
   pub sensor_id: String,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct LhmData {
   pub gpu_load: Option<f64>,
   pub gpu_temp: Option<f64>,

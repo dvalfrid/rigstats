@@ -193,6 +193,13 @@ fn main() {
       let ram_details = detect_ram_details();
       let gpu_vram_total_mb = detect_gpu_vram_total_mb();
       let disk_model_map = detect_disk_model_map();
+      if disk_model_map.is_empty() {
+        append_debug_log(app_handle, "disk_model_map: empty (WMI join returned no results)");
+      } else {
+        for (letter, model) in &disk_model_map {
+          append_debug_log(app_handle, &format!("disk_model_map: {} => {}", letter, model));
+        }
+      }
       let ping_target = detect_ping_target();
       let system_brand = detect_system_brand();
       let wmi_available = match probe_wmi_status() {

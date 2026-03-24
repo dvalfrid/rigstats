@@ -839,10 +839,16 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
         // This is robust against drive-letter reordering and USB drives appearing
         // in the sysinfo list without a corresponding LHM temperature entry.
         if let Some(ref l) = lhm {
-          for drive in &mut drives {
+          for (i, drive) in drives.iter_mut().enumerate() {
             let drive_key = drive.fs.trim_end_matches(['\\', '/']).to_string();
             if let Some(wmi_model) = state.disk_model_map.get(&drive_key) {
               drive.temp = lhm_temp_for_model(wmi_model, &l.disk_temps);
+            }
+            // Fallback: WMI has no record for this drive letter (map empty or drive
+            // absent). Assign by position so temperatures still surface when the
+            // WMI association query fails.
+            if drive.temp.is_none() && !state.disk_model_map.contains_key(&drive_key) {
+              drive.temp = l.disk_temps.get(i).map(|(_, t)| *t);
             }
           }
         }
