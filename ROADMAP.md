@@ -19,20 +19,24 @@ first launch following an upgrade.
 
 ---
 
-## NVMe / SSD temperatures
+## NVMe / SSD temperatures ✓
 
 **Panel:** Disk
 **Data source:** LHM `Temperatures` section per storage device
 
-LHM already exposes per-drive temperature sensors. The disk panel currently shows
-throughput and usage but no thermal data. NVMe drives throttle silently at high
-temperatures, making this a high-value, low-effort addition.
+**Implemented.** Each drive in the disk panel now shows a live temperature reading
+in °C, color-coded by `resolveTempColor` (warm at 55 °C, hot at 70 °C).
 
-**Scope:**
+LHM sensor identification uses the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`
+prefixes) rather than sensor names, so motherboard and RAM thermal sensors are never
+mixed in with disk readings. Warning Composite and Critical Composite threshold
+sensors are excluded; the highest real temperature per device is shown.
 
-- Parse `Temperatures` nodes per disk device in `lhm.rs`, add `disk_temps: Vec<(String, f64)>` to `LhmData`
-- Propagate through `DiskStats` / `StatsPayload`
-- Render a °C indicator per drive in `panels/disk.js` with `resolveTempColor` highlighting
+Drive-letter-to-model mapping is resolved at startup via a WMI three-table join
+(`Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`),
+with a PowerShell CIM fallback. Temperatures are matched by model name (case-insensitive
+substring match), so inserting a USB drive never shifts temperatures to the wrong
+drive.
 
 ---
 

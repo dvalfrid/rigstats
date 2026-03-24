@@ -10,6 +10,11 @@ pub struct FlatNode {
   pub text: String,
   pub value: String,
   pub parent: String,
+  /// One level above `parent` — used to recover the device name for grouped sensors.
+  pub grandparent: String,
+  /// LHM sensor ID (e.g. `/nvme/0/temperature/0`) — used to distinguish disk sensors
+  /// from identically-named sensors on other hardware (motherboard, RAM, etc.).
+  pub sensor_id: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -28,6 +33,8 @@ pub struct LhmData {
   pub disk_write: f64,
   pub net_up: f64,
   pub net_down: f64,
+  /// Per-device disk temperatures: `(device_name, temp_celsius)`, in LHM device order.
+  pub disk_temps: Vec<(String, f64)>,
 }
 
 fn parse_val(str_val: &str) -> Option<f64> {
@@ -43,7 +50,7 @@ fn parse_val(str_val: &str) -> Option<f64> {
   filtered.parse::<f64>().ok()
 }
 
-fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str) {
+fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str, grandparent: &str) {
   // Recursively flatten the tree so sensor lookups become linear scans.
   let text = value
     .get("Text")
@@ -59,11 +66,20 @@ fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str) {
     .unwrap_or("")
     .to_string();
 
+  let sensor_id = value
+    .get("SensorId")
+    .or_else(|| value.get("sensorId"))
+    .and_then(Value::as_str)
+    .unwrap_or("")
+    .to_string();
+
   if !node_val.is_empty() && node_val != "Value" {
     results.push(FlatNode {
       text: text.clone(),
       value: node_val,
       parent: parent.to_string(),
+      grandparent: grandparent.to_string(),
+      sensor_id,
     });
   }
 
@@ -73,8 +89,9 @@ fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str) {
     .and_then(Value::as_array)
   {
     let next_parent = if text.is_empty() { parent } else { &text };
+    let next_grandparent = if text.is_empty() { grandparent } else { parent };
     for child in children {
-      flatten_lhm(child, results, next_parent);
+      flatten_lhm(child, results, next_parent, next_grandparent);
     }
   }
 }
@@ -82,7 +99,7 @@ fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str) {
 fn parse_lhm(data: &Value) -> LhmData {
   // Parse once, then derive all dashboard fields from the flattened sensor list.
   let mut nodes = Vec::new();
-  flatten_lhm(data, &mut nodes, "");
+  flatten_lhm(data, &mut nodes, "", "");
 
   let vram_total_idx = nodes
     .iter()
@@ -148,6 +165,32 @@ fn parse_lhm(data: &Value) -> LhmData {
     }
   }
 
+  // Disk temperature sensors: identified by SensorId prefix (/nvme/, /hdd/, /ata/).
+  // This avoids false positives from motherboard chips and RAM modules.
+  // "Warning Composite" and "Critical Composite" are NVMe thresholds, not readings — excluded.
+  // With those removed, max() naturally selects "Composite" (the authoritative NVMe reading).
+  // LHM reports 0 as a sentinel for unsupported sensors — skip those too.
+  let mut disk_temps: Vec<(String, f64)> = Vec::new();
+  for n in nodes.iter().filter(|n| {
+    n.parent == "Temperatures"
+      && (n.sensor_id.starts_with("/nvme/")
+        || n.sensor_id.starts_with("/hdd/")
+        || n.sensor_id.starts_with("/ata/")
+        || n.sensor_id.starts_with("/scsi/"))
+      && !n.text.contains("Warning")
+      && !n.text.contains("Critical")
+  }) {
+    if let Some(t) = parse_val(&n.value).filter(|&v| v > 0.0) {
+      if let Some(existing) = disk_temps.iter_mut().find(|(name, _)| name == &n.grandparent) {
+        if t > existing.1 {
+          existing.1 = t;
+        }
+      } else if !n.grandparent.is_empty() {
+        disk_temps.push((n.grandparent.clone(), t));
+      }
+    }
+  }
+
   // AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
   let cpu_temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
     .iter()
@@ -172,6 +215,7 @@ fn parse_lhm(data: &Value) -> LhmData {
     disk_write: disk1_write + disk2_write,
     net_up: best_up,
     net_down: best_down,
+    disk_temps,
   }
 }
 
@@ -230,7 +274,7 @@ mod tests {
       }]
     });
     let mut nodes = vec![];
-    flatten_lhm(&tree, &mut nodes, "");
+    flatten_lhm(&tree, &mut nodes, "", "");
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].text, "GPU Core");
     assert_eq!(nodes[0].value, "75 %");
@@ -241,7 +285,7 @@ mod tests {
   fn flatten_lhm_skips_nodes_without_values() {
     let tree = json!({ "Text": "Container", "Value": "", "Children": [] });
     let mut nodes = vec![];
-    flatten_lhm(&tree, &mut nodes, "");
+    flatten_lhm(&tree, &mut nodes, "", "");
     assert!(nodes.is_empty());
   }
 
@@ -250,7 +294,7 @@ mod tests {
     // LHM uses the literal string "Value" as a sentinel for missing data.
     let tree = json!({ "Text": "GPU Core", "Value": "Value", "Children": [] });
     let mut nodes = vec![];
-    flatten_lhm(&tree, &mut nodes, "");
+    flatten_lhm(&tree, &mut nodes, "", "");
     assert!(nodes.is_empty());
   }
 
@@ -270,7 +314,7 @@ mod tests {
       }]
     });
     let mut nodes = vec![];
-    flatten_lhm(&tree, &mut nodes, "");
+    flatten_lhm(&tree, &mut nodes, "", "");
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0].parent, "Temperatures");
     assert_eq!(nodes[0].text, "GPU Core");
@@ -455,6 +499,54 @@ mod tests {
   }
 
   #[test]
+  fn parse_lhm_extracts_disk_temperatures() {
+    // Only /nvme/, /hdd/, /ata/ SensorIds are included.
+    // Warning/Critical threshold sensors are excluded even though they share SensorId prefix.
+    // Motherboard sensors (/lpc/...) are excluded regardless of text.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Samsung SSD 980 PRO", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "Composite",           "Value": "44 °C", "SensorId": "/nvme/0/temperature/0", "Children": [] },
+            { "Text": "Temperature 1",        "Value": "42 °C", "SensorId": "/nvme/0/temperature/1", "Children": [] },
+            { "Text": "Temperature 2",        "Value": "38 °C", "SensorId": "/nvme/0/temperature/2", "Children": [] },
+            { "Text": "Warning Composite",    "Value": "75 °C", "SensorId": "/nvme/0/temperature/3", "Children": [] },
+            { "Text": "Critical Composite",   "Value": "85 °C", "SensorId": "/nvme/0/temperature/4", "Children": [] }
+          ]
+        }]
+      }, {
+        "Text": "WD Blue", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [{
+            "Text": "Temperature",
+            "Value": "35 °C",
+            "SensorId": "/hdd/0/temperature/0",
+            "Children": []
+          }]
+        }]
+      }, {
+        "Text": "Nuvoton NCT6799D", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "Temperature #1", "Value": "37 °C", "SensorId": "/lpc/nct6799d/0/temperature/1", "Children": [] }
+          ]
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.disk_temps.len(), 2, "motherboard sensor must be excluded");
+    assert_eq!(result.disk_temps[0].0, "Samsung SSD 980 PRO");
+    assert_eq!(result.disk_temps[0].1, 44.0, "Composite wins (highest real sensor)");
+    assert_eq!(result.disk_temps[1].0, "WD Blue");
+    assert_eq!(result.disk_temps[1].1, 35.0);
+  }
+
+  #[test]
   fn parse_lhm_returns_zero_defaults_for_empty_tree() {
     let data = json!({ "Text": "Root", "Value": "", "Children": [] });
     let result = parse_lhm(&data);
@@ -464,6 +556,7 @@ mod tests {
     assert_eq!(result.disk_write, 0.0);
     assert_eq!(result.net_up, 0.0);
     assert_eq!(result.net_down, 0.0);
+    assert!(result.disk_temps.is_empty());
   }
 }
 

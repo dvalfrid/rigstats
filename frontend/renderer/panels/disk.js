@@ -1,5 +1,7 @@
 // Disk panel renderer.
-// Displays throughput plus compact utilization bars for up to three drives.
+// Displays throughput plus compact utilization bars (with temp) for up to three drives.
+
+import { resolveTempColor } from '../tempColors.js';
 
 function updateDiskBars(drives) {
   const wrap = document.getElementById('diskBars');
@@ -8,10 +10,13 @@ function updateDiskBars(drives) {
   wrap.innerHTML = '';
   drives.slice(0, 3).forEach((d) => {
     const label = d.fs.replace(/\/dev\//, '').substring(0, 4);
+    const tempText = d.temp != null ? `${d.temp.toFixed(0)}°C` : '--°C';
+    const tempColor = d.temp != null ? resolveTempColor(d.temp, 55, 70) : '#6f8db7';
     wrap.innerHTML += `<div class="bar-row">
-      <div class="bar-lbl" style="width:28px;font-size:8px">${label}</div>
+      <div class="bar-lbl" style="width:36px;font-size:14px">${label}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${d.pct}%;--c:var(--pur)"></div></div>
-      <div class="bar-pct">${d.pct}%</div>
+      <div class="bar-pct" style="font-size:14px;width:40px">${d.pct}%</div>
+      <div style="font-family:var(--mono);font-size:14px;color:${tempColor};width:44px;text-align:right">${tempText}</div>
     </div>`;
   });
 }

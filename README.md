@@ -2,7 +2,7 @@
 
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
-- Shows CPU, GPU, RAM, network, and disk in real time.
+- Shows CPU, GPU, RAM, network, disk, and NVMe/SSD temperatures in real time.
 
 - Computer name, CPU model, and GPU model are detected automatically at startup.
 
@@ -24,7 +24,7 @@ It shows:
 - GPU load, temperature, hotspot, clocks, VRAM and fan data
 - RAM usage and installed memory details
 - Network throughput and ping
-- Disk activity and drive usage
+- Disk activity, drive usage, and NVMe/SSD temperatures
 
 From here you can:
 
@@ -170,6 +170,7 @@ Intel Arc GPUs should work but have not been tested.
 | Write throughput (MB/s) | LHM — aggregated across up to 2 drives |
 | Per-drive capacity and usage | sysinfo |
 | Filesystem label | sysinfo |
+| Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`), matched to drive letter via WMI at startup |
 
 ### Network
 

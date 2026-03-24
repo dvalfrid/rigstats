@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RIGStats — Real-time Hardware Dashboard for Windows</title>
-  <meta name="description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network and disk stats on a portrait secondary display. Built with Tauri and Rust.">
+  <meta name="description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network, disk and NVMe/SSD temperatures on a portrait secondary display. Built with Tauri and Rust.">
   <link rel="canonical" href="https://rigstats.app/">
 
   <!-- Open Graph -->
@@ -12,7 +12,7 @@
   <meta property="og:url" content="https://rigstats.app/">
   <meta property="og:site_name" content="RIGStats">
   <meta property="og:title" content="RIGStats — Real-time Hardware Dashboard for Windows">
-  <meta property="og:description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network and disk stats on a portrait secondary display. Built with Tauri and Rust.">
+  <meta property="og:description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network, disk and NVMe/SSD temperatures on a portrait secondary display. Built with Tauri and Rust.">
   <meta property="og:image" content="https://rigstats.app/images/rigStats.png">
   <meta property="og:image:width" content="450">
   <meta property="og:image:height" content="800">
@@ -20,7 +20,7 @@
   <!-- Twitter / X card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="RIGStats — Real-time Hardware Dashboard for Windows">
-  <meta name="twitter:description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network and disk stats on a portrait secondary display.">
+  <meta name="twitter:description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network, disk and NVMe/SSD temperatures on a portrait secondary display.">
   <meta name="twitter:image" content="https://rigstats.app/images/rigStats.png">
 
   <!-- Structured data -->
@@ -29,7 +29,7 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "RIGStats",
-    "description": "Free open-source hardware monitor for Windows gaming PCs. Displays live CPU, GPU, RAM, network and disk stats on a portrait secondary display.",
+    "description": "Free open-source hardware monitor for Windows gaming PCs. Displays live CPU, GPU, RAM, network, disk and NVMe/SSD temperatures on a portrait secondary display.",
     "url": "https://rigstats.app/",
     "downloadUrl": "https://github.com/dvalfrid/rigstats/releases/latest",
     "applicationCategory": "UtilitiesApplication",
@@ -80,7 +80,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, and disk — live, side by side with whatever you're doing.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, and NVMe/SSD temperatures — live, side by side with whatever you're doing.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -211,11 +211,12 @@
           </div>
           <div class="panel-body">
             <h3>Storage</h3>
-            <p>Aggregated read and write throughput across your primary drives, plus per-drive capacity and usage.</p>
+            <p>Aggregated read and write throughput across your primary drives, plus per-drive capacity, usage, and live NVMe/SSD temperature.</p>
             <ul>
               <li>Read / write throughput (MB/s)</li>
               <li>Per-drive capacity &amp; usage</li>
               <li>Filesystem label</li>
+              <li>Drive temperature (°C)</li>
             </ul>
             <span class="source-tag">LHM · sysinfo</span>
           </div>

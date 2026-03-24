@@ -27,8 +27,8 @@ use commands::{
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
 use hardware::{
-  detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details, detect_ram_spec,
-  detect_system_brand, is_placeholder_model_name, probe_wmi_status,
+  detect_disk_model_map, detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details,
+  detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
 use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
@@ -172,6 +172,7 @@ fn main() {
       let ram_spec = detect_ram_spec();
       let ram_details = detect_ram_details();
       let gpu_vram_total_mb = detect_gpu_vram_total_mb();
+      let disk_model_map = detect_disk_model_map();
       let ping_target = detect_ping_target();
       let system_brand = detect_system_brand();
       let wmi_available = match probe_wmi_status() {
@@ -184,6 +185,7 @@ fn main() {
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
+        disk_model_map,
         lhm_client: reqwest::Client::builder()
           .timeout(std::time::Duration::from_millis(800))
           .build()

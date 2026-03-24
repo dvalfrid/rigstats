@@ -900,6 +900,178 @@ mod cross_platform_tests {
   }
 }
 
+// --- Disk letter → model map -----------------------------------------------
+
+/// Returns a map from drive letter (e.g. `"C:"`) to physical disk model name
+/// (e.g. `"Samsung SSD 980 PRO"`).  Used to match LHM temperature readings to
+/// sysinfo volumes without relying on fragile index ordering.
+///
+/// Queries three WMI association tables and joins them in memory:
+///   Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition
+///
+/// Falls back to a PowerShell CIM command on any WMI failure.
+/// Returns an empty map when both paths fail so callers degrade gracefully.
+pub fn detect_disk_model_map() -> std::collections::HashMap<String, String> {
+  #[cfg(windows)]
+  {
+    // --- WMI path -----------------------------------------------------------
+    if let Some(map) = try_disk_model_map_via_wmi() {
+      if !map.is_empty() {
+        return map;
+      }
+    }
+
+    // --- PowerShell fallback ------------------------------------------------
+    try_disk_model_map_via_shell().unwrap_or_default()
+  }
+
+  #[cfg(not(windows))]
+  {
+    std::collections::HashMap::new()
+  }
+}
+
+#[cfg(windows)]
+fn try_disk_model_map_via_wmi() -> Option<std::collections::HashMap<String, String>> {
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct DiskDriveRow {
+    #[serde(rename = "DeviceID")]
+    device_id: Option<String>,
+    #[serde(rename = "Model")]
+    model: Option<String>,
+  }
+
+  // WMI association rows return references as plain strings (the WMI object path).
+  // We only need the two DeviceID values embedded in those paths, so we store
+  // them as strings and parse out the IDs afterwards.
+  #[derive(Deserialize)]
+  struct DiskToPartRow {
+    #[serde(rename = "Antecedent")]
+    antecedent: Option<String>, // Win32_DiskDrive path
+    #[serde(rename = "Dependent")]
+    dependent: Option<String>, // Win32_DiskPartition path
+  }
+
+  #[derive(Deserialize)]
+  struct PartToLogicalRow {
+    #[serde(rename = "Antecedent")]
+    antecedent: Option<String>, // Win32_DiskPartition path
+    #[serde(rename = "Dependent")]
+    dependent: Option<String>, // Win32_LogicalDisk path (contains drive letter)
+  }
+
+  // Extract the bare DeviceID value from a WMI object path string like:
+  //   \\HOST\root\cimv2:Win32_DiskDrive.DeviceID="\\\\.\\PHYSICALDRIVE0"
+  // Returns the value between the outer quotes, or None.
+  fn extract_device_id(path: &str) -> Option<String> {
+    let eq = path.find(".DeviceID=")?;
+    let after = &path[eq + ".DeviceID=".len()..];
+    // Value may be quoted or unquoted.
+    let value = if after.starts_with('"') {
+      after
+        .trim_start_matches('"')
+        .trim_end_matches('"')
+        .replace("\\\\", "\\")
+    } else {
+      after.trim_end_matches('"').to_string()
+    };
+    Some(value)
+  }
+
+  let com = wmi::COMLibrary::new().ok()?;
+  let conn = wmi::WMIConnection::new(com).ok()?;
+
+  let drives: Vec<DiskDriveRow> = conn.raw_query("SELECT DeviceID, Model FROM Win32_DiskDrive").ok()?;
+  let mut disk_id_to_model: std::collections::HashMap<String, String> = drives
+    .into_iter()
+    .filter_map(|r| Some((r.device_id?.trim().to_string(), r.model?.trim().to_string())))
+    .collect();
+
+  let disk_to_part: Vec<DiskToPartRow> = conn
+    .raw_query("SELECT Antecedent, Dependent FROM Win32_DiskDriveToDiskPartition")
+    .ok()?;
+  // partition_id → disk_model
+  let mut part_to_model: std::collections::HashMap<String, String> = disk_to_part
+    .into_iter()
+    .filter_map(|r| {
+      let disk_path = r.antecedent?;
+      let part_path = r.dependent?;
+      let disk_id = extract_device_id(&disk_path)?;
+      let part_id = extract_device_id(&part_path)?;
+      let model = disk_id_to_model.remove(&disk_id)?;
+      Some((part_id, model))
+    })
+    .collect();
+
+  let part_to_logical: Vec<PartToLogicalRow> = conn
+    .raw_query("SELECT Antecedent, Dependent FROM Win32_LogicalDiskToPartition")
+    .ok()?;
+  let map: std::collections::HashMap<String, String> = part_to_logical
+    .into_iter()
+    .filter_map(|r| {
+      let part_path = r.antecedent?;
+      let logical_path = r.dependent?;
+      let part_id = extract_device_id(&part_path)?;
+      let drive_letter = extract_device_id(&logical_path)?;
+      let model = part_to_model.remove(&part_id)?;
+      Some((drive_letter, model))
+    })
+    .collect();
+
+  Some(map)
+}
+
+#[cfg(windows)]
+fn try_disk_model_map_via_shell() -> Option<std::collections::HashMap<String, String>> {
+  // Builds the same three-table join via CIM cmdlets and outputs compact JSON:
+  // [{"letter":"C:","model":"Samsung SSD 980 PRO"},...]
+  let output = run_hidden_command(
+    "powershell",
+    &[
+      "-NoProfile",
+      "-Command",
+      concat!(
+        "$m=@{};",
+        "Get-CimInstance Win32_DiskDrive|ForEach-Object{$m[$_.DeviceID]=$_.Model};",
+        "$pd=@{};",
+        "Get-CimInstance Win32_DiskDriveToDiskPartition|ForEach-Object{$pd[$_.Dependent.DeviceID]=$m[$_.Antecedent.DeviceID]};",
+        "$out=@();",
+        "Get-CimInstance Win32_LogicalDiskToPartition|ForEach-Object{",
+        "  $model=$pd[$_.Antecedent.DeviceID];",
+        "  if($model){$out+=[PSCustomObject]@{letter=$_.Dependent.DeviceID;model=$model}}",
+        "};",
+        "@($out)|ConvertTo-Json -Compress"
+      ),
+    ],
+  )
+  .ok()?;
+
+  if !output.status.success() {
+    return None;
+  }
+
+  #[derive(serde::Deserialize)]
+  struct Entry {
+    letter: String,
+    model: String,
+  }
+
+  let text = String::from_utf8_lossy(&output.stdout);
+  let trimmed = text.trim();
+  if trimmed.is_empty() || trimmed == "null" {
+    return None;
+  }
+  let entries: Vec<Entry> = serde_json::from_str(trimmed).ok()?;
+  Some(
+    entries
+      .into_iter()
+      .map(|e| (e.letter.trim().to_string(), e.model.trim().to_string()))
+      .collect(),
+  )
+}
+
 #[cfg(all(test, windows))]
 mod tests {
   use super::{classify_system_brand, gpu_name_score, pick_best_gpu_name};

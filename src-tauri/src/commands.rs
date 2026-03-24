@@ -306,6 +306,24 @@ pub fn get_gpu_info() -> Option<String> {
 
 // --- Stats -----------------------------------------------------------------
 
+/// Finds the LHM temperature entry whose device name best matches `wmi_model`.
+/// Matching is case-insensitive and uses substring containment so minor
+/// differences in suffix (e.g. " NVMe", extra whitespace) are tolerated.
+fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f64> {
+  let needle = wmi_model.trim().to_lowercase();
+  if needle.is_empty() {
+    return None;
+  }
+  disk_temps.iter().find_map(|(lhm_name, temp)| {
+    let haystack = lhm_name.trim().to_lowercase();
+    if haystack == needle || haystack.contains(&needle) || needle.contains(&haystack) {
+      Some(*temp)
+    } else {
+      None
+    }
+  })
+}
+
 #[tauri::command]
 pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
@@ -370,6 +388,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       size: total_space,
       used: used_space,
       pct,
+      temp: None, // filled in below once LHM data is available
     });
   }
   drop(disks);
@@ -468,7 +487,20 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     disk: DiskStats {
       read: disk_read,
       write: disk_write,
-      drives,
+      drives: {
+        // Match LHM temperatures to sysinfo volumes by physical disk model name.
+        // This is robust against drive-letter reordering and USB drives appearing
+        // in the sysinfo list without a corresponding LHM temperature entry.
+        if let Some(ref l) = lhm {
+          for drive in &mut drives {
+            let drive_key = drive.fs.trim_end_matches(['\\', '/']).to_string();
+            if let Some(wmi_model) = state.disk_model_map.get(&drive_key) {
+              drive.temp = lhm_temp_for_model(wmi_model, &l.disk_temps);
+            }
+          }
+        }
+        drives
+      },
     },
     system_uptime_secs,
     lhm_connected,

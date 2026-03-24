@@ -51,8 +51,8 @@ function simulateStats() {
       read: Math.random() * 3e9,
       write: Math.random() * 1.5e9,
       drives: [
-        { fs: 'C:', size: 1e12, used: 5.5e11, pct: 55 },
-        { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30 },
+        { fs: 'C:', size: 1e12, used: 5.5e11, pct: 55, temp: 42 + Math.random() * 10 },
+        { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30, temp: 35 + Math.random() * 8 },
       ],
     },
     systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),

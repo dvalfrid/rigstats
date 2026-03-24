@@ -55,6 +55,8 @@ pub struct DiskDrive {
   pub size: u64,
   pub used: u64,
   pub pct: u8,
+  /// Temperature matched from LHM via disk model name; `None` when unavailable.
+  pub temp: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +79,10 @@ pub struct StatsPayload {
 }
 
 pub struct AppState {
+  /// Maps drive letter (e.g. `"C:"`) to physical disk model name detected at startup.
+  /// Used at each tick to match LHM temperature readings to sysinfo volumes by name
+  /// instead of by index, so inserting a USB drive never shifts other drives' temps.
+  pub disk_model_map: std::collections::HashMap<String, String>,
   /// Reused HTTP client for LHM polling — avoids allocating a new connection pool every tick.
   pub lhm_client: reqwest::Client,
   /// Persisted UI preferences mirrored in memory for fast reads.
