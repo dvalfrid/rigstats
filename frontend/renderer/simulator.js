@@ -40,6 +40,7 @@ function simulateStats() {
       free: totalRam * (1 - ram / 100),
       spec: 'DDR5 6000 MT/s (2 DIMMs)',
       details: '2x16 GB | Kingston | KF560C36-16',
+      temp: 35 + ram * 0.15,
     },
     net: {
       up: Math.random() * 40e6 + 2e6,

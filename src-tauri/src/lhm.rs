@@ -29,6 +29,7 @@ pub struct LhmData {
   pub vram_total: Option<f64>,
   pub cpu_temp: Option<f64>,
   pub cpu_power: Option<f64>,
+  pub ram_temp: Option<f64>,
   pub disk_read: f64,
   pub disk_write: f64,
   pub net_up: f64,
@@ -200,6 +201,18 @@ fn parse_lhm(data: &Value) -> LhmData {
     .find(|n| n.parent == "Powers" && n.text == "Package")
     .and_then(|n| parse_val(&n.value));
 
+  // DDR5 (and some DDR4) DIMM temperature sensors: the real reading is always
+  // /temperature/0 per slot. /temperature/1-5 are resolution and threshold values
+  // (Low Limit, High Limit, Critical Low, Critical High) — those are excluded.
+  // Take the highest reading across all populated slots as the representative RAM temperature.
+  let ram_temp = nodes
+    .iter()
+    .filter(|n| {
+      n.parent == "Temperatures" && n.sensor_id.ends_with("/temperature/0") && n.sensor_id.starts_with("/memory/dimm/")
+    })
+    .filter_map(|n| parse_val(&n.value).filter(|&v| v > 0.0))
+    .reduce(f64::max);
+
   LhmData {
     gpu_load: gpu_find("Load", "GPU Core"),
     gpu_temp: gpu_find("Temperatures", "GPU Core"),
@@ -211,6 +224,7 @@ fn parse_lhm(data: &Value) -> LhmData {
     vram_total: gpu_find("Data", "GPU Memory Total"),
     cpu_temp,
     cpu_power,
+    ram_temp,
     disk_read: disk1_read + disk2_read,
     disk_write: disk1_write + disk2_write,
     net_up: best_up,
@@ -547,11 +561,72 @@ mod tests {
   }
 
   #[test]
+  fn parse_lhm_extracts_ram_temperature() {
+    // Only /memory/dimm/N/temperature/0 sensors are real readings.
+    // /temperature/1 is resolution; /temperature/2-5 are Low/High/CriticalLow/CriticalHigh limits.
+    // The highest reading across all populated DIMM slots is returned.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Team Group Inc - UD5-6000 (#1)", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "DIMM #1",                       "Value": "38 °C", "SensorId": "/memory/dimm/1/temperature/0", "Children": [] },
+            { "Text": "Temperature Sensor Resolution",  "Value": "0,3 °C","SensorId": "/memory/dimm/1/temperature/1", "Children": [] },
+            { "Text": "Thermal Sensor Low Limit",       "Value": "0 °C",  "SensorId": "/memory/dimm/1/temperature/2", "Children": [] },
+            { "Text": "Thermal Sensor High Limit",      "Value": "55 °C", "SensorId": "/memory/dimm/1/temperature/3", "Children": [] },
+            { "Text": "Thermal Sensor Critical Low",    "Value": "0 °C",  "SensorId": "/memory/dimm/1/temperature/4", "Children": [] },
+            { "Text": "Thermal Sensor Critical High",   "Value": "85 °C", "SensorId": "/memory/dimm/1/temperature/5", "Children": [] }
+          ]
+        }]
+      }, {
+        "Text": "Team Group Inc - UD5-6000 (#3)", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "DIMM #3",                       "Value": "36 °C", "SensorId": "/memory/dimm/3/temperature/0", "Children": [] },
+            { "Text": "Thermal Sensor Critical High",   "Value": "85 °C", "SensorId": "/memory/dimm/3/temperature/5", "Children": [] }
+          ]
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(
+      result.ram_temp,
+      Some(38.0),
+      "max of DIMM #1 (38) and DIMM #3 (36) should be 38"
+    );
+  }
+
+  #[test]
+  fn parse_lhm_ram_temperature_none_when_no_dimm_sensors() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Generic DDR4 (#0)", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "Thermal Sensor High Limit", "Value": "60 °C", "SensorId": "/memory/dimm/0/temperature/3", "Children": [] }
+          ]
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(
+      result.ram_temp, None,
+      "only threshold sensors present — no real reading"
+    );
+  }
+
+  #[test]
   fn parse_lhm_returns_zero_defaults_for_empty_tree() {
     let data = json!({ "Text": "Root", "Value": "", "Children": [] });
     let result = parse_lhm(&data);
     assert_eq!(result.cpu_temp, None);
     assert_eq!(result.gpu_load, None);
+    assert_eq!(result.ram_temp, None);
     assert_eq!(result.disk_read, 0.0);
     assert_eq!(result.disk_write, 0.0);
     assert_eq!(result.net_up, 0.0);

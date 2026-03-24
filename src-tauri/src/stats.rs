@@ -38,6 +38,7 @@ pub struct RamStats {
   pub free: u64,
   pub spec: String,
   pub details: String,
+  pub temp: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

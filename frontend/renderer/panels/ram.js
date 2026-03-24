@@ -1,6 +1,8 @@
 // RAM panel renderer.
 // Converts byte values from backend into human-readable GB values.
 
+import { resolveTempColor } from '../tempColors.js';
+
 function parseRamType(spec, details) {
   const match = (spec || '').match(/(DDR\d*)/i);
   if (match) return match[1].toUpperCase();
@@ -62,7 +64,9 @@ function updateRamPanel(ram, history, pushHistory) {
   document.getElementById('ramUsed').textContent = usedGB;
   document.getElementById('ramTotal').textContent = ` / ${totalGB} GB`;
   document.getElementById('ramFree').textContent = `${freeGB} GB`;
-  document.getElementById('ramPct').textContent = `${ramPct}%`;
+  const ramTempEl = document.getElementById('ramTemp');
+  ramTempEl.textContent = ram.temp > 0 ? `${ram.temp.toFixed(0)}°C` : '--°C';
+  ramTempEl.style.color = ram.temp > 0 ? resolveTempColor(ram.temp, 70, 85) : '';
   document.getElementById('ramSpeed').textContent = parseRamSpeed(ram.spec, ram.details);
   document.getElementById('ramType').textContent = parseRamType(ram.spec, ram.details);
   document.getElementById('ramDimms').textContent = parseRamDimms(ram.spec, ram.details);

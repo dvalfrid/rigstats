@@ -477,6 +477,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       free,
       spec: state.ram_spec.clone(),
       details: state.ram_details.clone(),
+      temp: lhm.as_ref().and_then(|l| l.ram_temp),
     },
     net: NetStats {
       up: net_up,

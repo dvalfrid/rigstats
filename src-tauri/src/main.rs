@@ -216,7 +216,7 @@ fn main() {
           let app_for_cl = app_handle.clone();
           tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            let _ = ensure_about_window(&app_for_cl);
+            let _ = ensure_updater_window(&app_for_cl);
           });
         }
       }
