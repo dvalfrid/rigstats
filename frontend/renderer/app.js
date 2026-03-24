@@ -400,7 +400,7 @@ function start() {
         if (badge) {
           badge.textContent = `↑ UPDATE  v${version}`;
           badge.style.display = '';
-          badge.addEventListener('click', () => backend.invoke('open-updater-window').catch(() => {}), { once: true });
+          badge.addEventListener('click', () => backend.invoke('open-updater-window').catch(() => {}));
         }
       }),
     ]).then((unlisteners) => {

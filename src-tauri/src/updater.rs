@@ -102,7 +102,16 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
         );
       },
       move || {
-        append_debug_log(&app_for_log, "install_update: download complete, launching installer");
+        // Stop LHM before the NSIS installer runs so it can overwrite LHM
+        // files without "file in use" conflicts. Without this, the installer
+        // prompts "ignore" for every locked file, leaves the old process
+        // running, and the new install starts a second LHM instance.
+        #[cfg(windows)]
+        {
+          use crate::debug::run_hidden_command;
+          let _ = run_hidden_command("taskkill", &["/IM", "LibreHardwareMonitor.exe", "/F"]);
+        }
+        append_debug_log(&app_for_log, "install_update: LHM stopped, launching installer");
         // Notify the frontend before the process exits so the user knows to
         // look for a Windows UAC prompt (required for perMachine NSIS install).
         let _ = app_for_log.emit("update-download-complete", ());
