@@ -9,6 +9,7 @@
     "allow-preview-profile",
     "allow-preview-visible-panels",
     "allow-save-settings",
+    "allow-test-temp-alert",
     "allow-close-window"
   ]
 }

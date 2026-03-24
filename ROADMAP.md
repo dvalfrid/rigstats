@@ -40,20 +40,29 @@ drive.
 
 ---
 
-## Temperature threshold alerts
+## Temperature threshold alerts ✓
 
 **Panel:** Settings (new threshold fields) + tray notifications
-**Data source:** Existing CPU / GPU / disk temp fields
+**Data source:** Existing CPU / GPU / RAM / disk temp fields
 
-The dashboard is currently fully passive. A configurable alert system that fires a
-Windows tray notification when a component exceeds its threshold would make the app
-genuinely useful during gaming or overclocking sessions.
+**Implemented.** A configurable alert system fires a Windows tray notification when
+a component exceeds its threshold, making the app useful during gaming or overclocking.
 
-**Scope:**
+Eight optional `Option<u8>` fields added to `Settings` (serialised as camelCase JSON):
+`warningCpuTemp`, `warningGpuTemp`, `warningRamTemp`, `warningDiskTemp`,
+`criticalCpuTemp`, `criticalGpuTemp`, `criticalRamTemp`, `criticalDiskTemp`.
 
-- New optional fields in `Settings`: `alert_cpu_temp`, `alert_gpu_temp`, `alert_disk_temp` (all `Option<u8>`)
-- Per-tick comparison in `commands.rs`; fire notification via `tauri-plugin-notification` with a cooldown (e.g. 60 s) to avoid spam
-- Threshold sliders / inputs in the Settings window
+Per-tick comparison runs in `commands.rs` inside `get_stats()` after the
+`StatsPayload` is assembled. Warning and Critical are checked independently —
+each has its own 60-second cooldown key (e.g. `"cpu_warning"` vs `"cpu_critical"`)
+stored in `AppState.last_alert`. Disk alerts fire on the hottest drive's temperature.
+Notifications are sent via `tauri-plugin-notification`; errors are silently discarded
+so a failed toast never disrupts the stats tick.
+
+The Settings window has a compact "Temp Alerts" card with number inputs for all
+eight thresholds. Blank = disabled (maps to `None`). Yellow column headers for
+Warning, red for Critical. Window height bumped from 620 → 700 px to accommodate
+the new card.
 
 ---
 

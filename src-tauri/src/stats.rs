@@ -2,6 +2,7 @@
 //! This module contains payload structures and mutable app state containers.
 
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Instant;
 use sysinfo::{Disks, Networks, System};
@@ -112,4 +113,7 @@ pub struct AppState {
   pub sysinfo_available: bool,
   /// Whether a WMI connection could be established on startup.
   pub wmi_available: bool,
+  /// Per-component alert cooldown tracker. Key: "<component>_<level>" (e.g. "cpu_warning").
+  /// Stores the `Instant` of the last fired notification to enforce the 60-second cooldown.
+  pub last_alert: Mutex<HashMap<String, Instant>>,
 }

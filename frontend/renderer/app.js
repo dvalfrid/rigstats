@@ -43,6 +43,7 @@ const BRAND_PREVIEW_BRAND_KEY = 'rigstats.brandPreviewBrand';
 let detectedBrand = 'other';
 let detectedCpuModel = '';
 let brandPreviewEnabled = false;
+let thresholds = {};
 
 const PROFILE_SIZE = {
   'portrait-xl': { width: 450, height: 1920 },
@@ -307,14 +308,23 @@ function isValidStatsPayload(stats) {
   return true;
 }
 
+function applyThresholds(s) {
+  thresholds = {
+    cpu:  { warn: s.warningCpuTemp  ?? null, crit: s.criticalCpuTemp  ?? null },
+    gpu:  { warn: s.warningGpuTemp  ?? null, crit: s.criticalGpuTemp  ?? null },
+    ram:  { warn: s.warningRamTemp  ?? null, crit: s.criticalRamTemp  ?? null },
+    disk: { warn: s.warningDiskTemp ?? null, crit: s.criticalDiskTemp ?? null },
+  };
+}
+
 function applyStats(stats) {
   if (!stats) return;
 
-  updateCpuPanel(stats.cpu, history, pushHistory);
-  updateGpuPanel(stats.gpu, history, pushHistory);
-  updateRamPanel(stats.ram, history, pushHistory);
+  updateCpuPanel(stats.cpu, history, pushHistory, thresholds.cpu);
+  updateGpuPanel(stats.gpu, history, pushHistory, thresholds.gpu);
+  updateRamPanel(stats.ram, history, pushHistory, thresholds.ram);
   updateNetworkPanel(stats, history, pushHistory);
-  updateDiskPanel(stats.disk, history, pushHistory);
+  updateDiskPanel(stats.disk, history, pushHistory, thresholds.disk);
   setUptimeFromSeconds(stats.systemUptimeSecs);
 
   drawSpark('cpuSpark', history.cpu, '#00c8ff');
@@ -369,6 +379,7 @@ function start() {
       applyModelName(s.modelName);
       applyProfile(s.dashboardProfile);
       applyVisiblePanels(s.visiblePanels);
+      applyThresholds(s);
     });
     Promise.all([
       backend.invoke('get-system-brand').catch(() => 'other'),
@@ -383,6 +394,7 @@ function start() {
       backend.on('apply-model-name', (_event, name) => applyModelName(name)),
       backend.on('apply-profile', (_event, profile) => applyProfile(profile)),
       backend.on('apply-visible-panels', (_event, panels) => applyVisiblePanels(panels)),
+      backend.on('apply-thresholds', (_event, t) => applyThresholds(t)),
       backend.on('update-available', (_event, version) => {
         const badge = document.getElementById('updateBadge');
         if (badge) {

@@ -22,7 +22,7 @@ mod windows;
 use commands::{
   close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats, get_system_brand,
   get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_visible_panels, save_settings,
-  start_window_drag,
+  start_window_drag, test_temp_alert,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -34,6 +34,7 @@ use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
 use settings::{load_settings, persist_settings};
 use stats::AppState;
+use std::collections::HashMap;
 use std::sync::Mutex;
 use sysinfo::{Disks, Networks, System};
 use tauri::{
@@ -46,6 +47,21 @@ use windows::{
   ensure_about_window, ensure_settings_window, ensure_status_window, ensure_updater_window, on_window_event,
   set_last_tray_click_position,
 };
+
+/// Registers the app's AppUserModelID in HKCU so that Windows toast notifications
+/// display "RIGStats" as the source instead of the parent process (e.g. PowerShell).
+/// The NSIS installer creates a Start-menu shortcut that carries the same AUMID,
+/// so in production builds this registry entry is redundant but harmless.
+#[cfg(windows)]
+fn register_notification_app_id() {
+  use winreg::enums::{HKEY_CURRENT_USER, KEY_WRITE};
+  use winreg::RegKey;
+  let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+  let key_path = r"Software\Classes\AppUserModelId\se.codeby.rigstats";
+  if let Ok((key, _)) = hkcu.create_subkey_with_flags(key_path, KEY_WRITE) {
+    let _ = key.set_value("DisplayName", &"RIGStats");
+  }
+}
 
 const TRAY_SHOW_ID: &str = "show";
 const TRAY_SETTINGS_ID: &str = "settings";
@@ -140,7 +156,11 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
 }
 
 fn main() {
+  #[cfg(windows)]
+  register_notification_app_id();
+
   tauri::Builder::default()
+    .plugin(tauri_plugin_notification::init())
     .plugin(tauri_plugin_updater::Builder::new().build())
     .plugin(tauri_plugin_opener::init())
     .setup(|app| {
@@ -204,6 +224,7 @@ fn main() {
         system_brand,
         sysinfo_available,
         wmi_available,
+        last_alert: Mutex::new(HashMap::new()),
       });
 
       if let Some(main) = app.get_webview_window("main") {
@@ -254,6 +275,7 @@ fn main() {
       get_gpu_info,
       get_stats,
       log_frontend_error,
+      test_temp_alert,
       collect_diagnostics,
       get_changelog,
       check_for_update,

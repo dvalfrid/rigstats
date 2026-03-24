@@ -53,7 +53,7 @@ function parseRamDetails(details) {
   };
 }
 
-function updateRamPanel(ram, history, pushHistory) {
+function updateRamPanel(ram, history, pushHistory, thresholds = {}) {
   const ramPct = Math.round(ram.used / ram.total * 100);
   const usedGB = (ram.used / 1073741824).toFixed(1);
   const totalGB = Math.round(ram.total / 1073741824);
@@ -66,7 +66,7 @@ function updateRamPanel(ram, history, pushHistory) {
   document.getElementById('ramFree').textContent = `${freeGB} GB`;
   const ramTempEl = document.getElementById('ramTemp');
   ramTempEl.textContent = ram.temp > 0 ? `${ram.temp.toFixed(0)}°C` : '--°C';
-  ramTempEl.style.color = ram.temp > 0 ? resolveTempColor(ram.temp, 70, 85) : '';
+  ramTempEl.style.color = ram.temp > 0 ? resolveTempColor(ram.temp, thresholds.warn ?? 70, thresholds.crit ?? 85) : '';
   document.getElementById('ramSpeed').textContent = parseRamSpeed(ram.spec, ram.details);
   document.getElementById('ramType').textContent = parseRamType(ram.spec, ram.details);
   document.getElementById('ramDimms').textContent = parseRamDimms(ram.spec, ram.details);

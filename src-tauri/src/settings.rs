@@ -29,6 +29,48 @@ pub struct Settings {
   /// Version seen on last launch, used to detect first run after an update.
   #[serde(default)]
   pub last_seen_version: String,
+  /// Warning temperature threshold for CPU in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub warning_cpu_temp: Option<u8>,
+  /// Warning temperature threshold for GPU in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub warning_gpu_temp: Option<u8>,
+  /// Warning temperature threshold for RAM in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub warning_ram_temp: Option<u8>,
+  /// Warning temperature threshold for disk in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub warning_disk_temp: Option<u8>,
+  /// Critical temperature threshold for CPU in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub critical_cpu_temp: Option<u8>,
+  /// Critical temperature threshold for GPU in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub critical_gpu_temp: Option<u8>,
+  /// Critical temperature threshold for RAM in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub critical_ram_temp: Option<u8>,
+  /// Critical temperature threshold for disk in °C. `None` = alert disabled.
+  #[serde(default)]
+  pub critical_disk_temp: Option<u8>,
+  /// Minimum seconds between repeated notifications for the same component+level.
+  /// Floored at 60 s on save to prevent notification spam.
+  #[serde(default = "default_alert_cooldown_secs")]
+  pub alert_cooldown_secs: u64,
+  /// Whether to send notifications when a WARNING threshold is crossed.
+  #[serde(default = "default_true")]
+  pub notify_on_warn: bool,
+  /// Whether to send notifications when a CRITICAL threshold is crossed.
+  #[serde(default = "default_true")]
+  pub notify_on_crit: bool,
+}
+
+fn default_alert_cooldown_secs() -> u64 {
+  60
+}
+
+fn default_true() -> bool {
+  true
 }
 
 fn default_opacity() -> f64 {
@@ -65,6 +107,17 @@ impl Default for Settings {
       visible_panels: default_visible_panels(),
       autostart_enabled: false,
       last_seen_version: String::new(),
+      warning_cpu_temp: Some(80),
+      warning_gpu_temp: Some(80),
+      warning_ram_temp: Some(50),
+      warning_disk_temp: Some(55),
+      critical_cpu_temp: Some(90),
+      critical_gpu_temp: Some(90),
+      critical_ram_temp: Some(65),
+      critical_disk_temp: Some(70),
+      alert_cooldown_secs: default_alert_cooldown_secs(),
+      notify_on_warn: true,
+      notify_on_crit: true,
     }
   }
 }

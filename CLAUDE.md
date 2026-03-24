@@ -107,21 +107,21 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `ensure_updater_window`, `on_window_event`, `set_last_tray_click_position`.
 - **`updater.rs`** — Auto-update logic: `spawn_background_check` (6-hour loop, first check after 10 s), `check_for_update`, `install_update`, `open_updater_window` commands.
 - **`diagnostics.rs`** — `collect_diagnostics` Tauri command + helpers (`diag_collect_hardware`, `diag_collect_tasks`, etc.) that gather system info into a ZIP archive for bug reports.
-- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels, `last_seen_version`), JSON persistence to Tauri app data dir.
+- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels, `last_seen_version`, eight optional temperature thresholds for CPU/GPU/RAM/Disk warn+crit, `alert_cooldown_secs`, `notify_on_warn`, `notify_on_crit`), JSON persistence to Tauri app data dir. All threshold fields use `#[serde(default)]` for backwards-compatible schema evolution.
 
 ### Frontend (`frontend/`)
 
 No framework, no bundler. Pure ES modules. Each HTML page loads its own entry script.
 
 - **`renderer/environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__.core.invoke` / `.event.listen`) and `IS_DESKTOP`. All renderer modules go through this instead of accessing Tauri globals directly.
-- **`renderer/app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode.
+- **`renderer/app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode. `applyThresholds(s)` builds per-component `{ warn, crit }` objects and stores them in the module-level `thresholds` variable; called at startup and on every `apply-thresholds` event so panel colours update instantly after saving settings.
 - **`renderer/systemInfo.js`** — Host name, CPU model, GPU model, and branding/logo wiring.
 - **`renderer/clock.js`** — Local time and uptime rendering.
 - **`renderer/spark.js`** — Sparkline history ring buffer and canvas drawing.
 - **`renderer/tempColors.js`** — Maps temperature values to color thresholds for heat indicators.
 - **`renderer/vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
 - **`renderer/simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
-- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory)` function.
+- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`. Each exports an `update*Panel(stats, history, pushHistory, thresholds)` function. `thresholds` carries `{ warn, crit }` for temperature colour mapping; defaults apply in browser/simulator mode.
 - **`renderer/settings.js`** / **`renderer/about.js`** / **`renderer/status.js`** / **`renderer/updater.js`** — Entry scripts for the secondary windows. `updater.js` drives the update check, changelog rendering, and install flow.
 
 ### Dashboard profiles

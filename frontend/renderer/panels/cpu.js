@@ -24,7 +24,7 @@ function initCpuPanel() {
   buildCoreBars(8);
 }
 
-function updateCpuPanel(cpu, history, pushHistory) {
+function updateCpuPanel(cpu, history, pushHistory, thresholds = {}) {
   const load = cpu.load;
   const circumference = 263.9;
   pushHistory(history.cpu, load);
@@ -33,7 +33,7 @@ function updateCpuPanel(cpu, history, pushHistory) {
   document.getElementById('cpuRingTxt').textContent = `${load}%`;
   document.getElementById('cpuRing').style.strokeDashoffset = circumference * (1 - load / 100);
   cpuTempEl.textContent = cpu.temp > 0 ? `${cpu.temp.toFixed(0)}°C` : '--°C';
-  cpuTempEl.style.color = resolveTempColor(cpu.temp, 70, 85);
+  cpuTempEl.style.color = resolveTempColor(cpu.temp, thresholds.warn ?? 70, thresholds.crit ?? 85);
   document.getElementById('cpuFreq').textContent = cpu.freq ? `${cpu.freq.toFixed(2)} GHz` : '-- GHz';
   document.getElementById('cpuPower').textContent = cpu.power ? `${cpu.power.toFixed(0)} W` : '-- W';
 

@@ -21,8 +21,9 @@ use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_mo
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
 use serde::Serialize;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, Size, WebviewWindow};
+use tauri_plugin_notification::NotificationExt;
 
 const GITHUB_URL: &str = "https://github.com/dvalfrid/rigstats";
 const CONTACT_EMAIL: &str = "daniel@valfridsson.net";
@@ -186,6 +187,17 @@ pub fn save_settings(
   #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
   autostart_enabled: Option<bool>,
   #[allow(non_snake_case)] autostartEnabled: Option<bool>,
+  #[allow(non_snake_case)] warningCpuTemp: Option<u8>,
+  #[allow(non_snake_case)] warningGpuTemp: Option<u8>,
+  #[allow(non_snake_case)] warningRamTemp: Option<u8>,
+  #[allow(non_snake_case)] warningDiskTemp: Option<u8>,
+  #[allow(non_snake_case)] criticalCpuTemp: Option<u8>,
+  #[allow(non_snake_case)] criticalGpuTemp: Option<u8>,
+  #[allow(non_snake_case)] criticalRamTemp: Option<u8>,
+  #[allow(non_snake_case)] criticalDiskTemp: Option<u8>,
+  #[allow(non_snake_case)] alertCooldownSecs: Option<u64>,
+  #[allow(non_snake_case)] notifyOnWarn: Option<bool>,
+  #[allow(non_snake_case)] notifyOnCrit: Option<bool>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   settings.opacity = opacity.clamp(0.0, 1.0);
@@ -226,6 +238,43 @@ pub fn save_settings(
   settings.always_on_top = applied_always_on_top;
   settings.visible_panels = applied_visible_panels.clone();
   settings.autostart_enabled = applied_autostart;
+
+  // Temperature alert thresholds: JS always sends all 8 fields; null = disable.
+  // Reject any pair where warning >= critical — both thresholds are only written
+  // when they are internally consistent.
+  let pairs: &[(&str, Option<u8>, Option<u8>)] = &[
+    ("CPU", warningCpuTemp, criticalCpuTemp),
+    ("GPU", warningGpuTemp, criticalGpuTemp),
+    ("RAM", warningRamTemp, criticalRamTemp),
+    ("Disk", warningDiskTemp, criticalDiskTemp),
+  ];
+  for &(name, warn, crit) in pairs {
+    if let (Some(w), Some(c)) = (warn, crit) {
+      if w >= c {
+        return Err(format!(
+          "{name}: warning threshold ({w}°C) must be below critical ({c}°C)"
+        ));
+      }
+    }
+  }
+  settings.warning_cpu_temp = warningCpuTemp;
+  settings.warning_gpu_temp = warningGpuTemp;
+  settings.warning_ram_temp = warningRamTemp;
+  settings.warning_disk_temp = warningDiskTemp;
+  settings.critical_cpu_temp = criticalCpuTemp;
+  settings.critical_gpu_temp = criticalGpuTemp;
+  settings.critical_ram_temp = criticalRamTemp;
+  settings.critical_disk_temp = criticalDiskTemp;
+  if let Some(secs) = alertCooldownSecs {
+    settings.alert_cooldown_secs = secs.max(60);
+  }
+  if let Some(v) = notifyOnWarn {
+    settings.notify_on_warn = v;
+  }
+  if let Some(v) = notifyOnCrit {
+    settings.notify_on_crit = v;
+  }
+
   persist_settings(&app, &settings)?;
 
   // Apply autostart after settings are persisted so the preference is always saved
@@ -255,9 +304,60 @@ pub fn save_settings(
     main
       .emit("apply-visible-panels", applied_visible_panels)
       .map_err(|e| e.to_string())?;
+    main
+      .emit("apply-thresholds", TempThresholdPayload::from(&*settings))
+      .map_err(|e| e.to_string())?;
   }
 
   Ok(())
+}
+
+/// Thin serialisable snapshot of all temperature alert thresholds, emitted to
+/// the renderer after `save_settings` so panel colours update immediately.
+/// `notify_on_warn`/`notify_on_crit` are intentionally excluded: those flags
+/// control whether the backend fires a notification and are irrelevant to the
+/// frontend's colour rendering logic.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TempThresholdPayload {
+  pub warning_cpu_temp: Option<u8>,
+  pub warning_gpu_temp: Option<u8>,
+  pub warning_ram_temp: Option<u8>,
+  pub warning_disk_temp: Option<u8>,
+  pub critical_cpu_temp: Option<u8>,
+  pub critical_gpu_temp: Option<u8>,
+  pub critical_ram_temp: Option<u8>,
+  pub critical_disk_temp: Option<u8>,
+  pub alert_cooldown_secs: u64,
+}
+
+impl From<&Settings> for TempThresholdPayload {
+  fn from(s: &Settings) -> Self {
+    Self {
+      warning_cpu_temp: s.warning_cpu_temp,
+      warning_gpu_temp: s.warning_gpu_temp,
+      warning_ram_temp: s.warning_ram_temp,
+      warning_disk_temp: s.warning_disk_temp,
+      critical_cpu_temp: s.critical_cpu_temp,
+      critical_gpu_temp: s.critical_gpu_temp,
+      critical_ram_temp: s.critical_ram_temp,
+      critical_disk_temp: s.critical_disk_temp,
+      alert_cooldown_secs: s.alert_cooldown_secs,
+    }
+  }
+}
+
+// --- Alerts ----------------------------------------------------------------
+
+#[tauri::command]
+pub fn test_temp_alert(app: tauri::AppHandle) -> Result<(), String> {
+  app
+    .notification()
+    .builder()
+    .title("RIGStats — Test Notification")
+    .body("Temperature alerts are working correctly.")
+    .show()
+    .map_err(|e| e.to_string())
 }
 
 // --- Window utilities ------------------------------------------------------
@@ -305,6 +405,252 @@ pub fn get_gpu_info() -> Option<String> {
 }
 
 // --- Stats -----------------------------------------------------------------
+
+/// A threshold breach detected by `pending_alerts`. Carries enough information
+/// for `fire_alert_if_due` to send the notification; cooldown is checked there.
+struct PendingAlert {
+  component: &'static str,
+  level: &'static str,
+  temp: f64,
+  threshold: u8,
+}
+
+/// Pushes a `PendingAlert` when `enabled`, `threshold` is set, and `temp`
+/// meets or exceeds it.
+fn push_if_breached(
+  out: &mut Vec<PendingAlert>,
+  enabled: bool,
+  component: &'static str,
+  level: &'static str,
+  temp: f64,
+  threshold: Option<u8>,
+) {
+  if enabled {
+    if let Some(t) = threshold {
+      if temp >= t as f64 {
+        out.push(PendingAlert {
+          component,
+          level,
+          temp,
+          threshold: t,
+        });
+      }
+    }
+  }
+}
+
+/// Pure function: returns all threshold breaches for the given temperature
+/// readings and settings. Does not touch cooldown state or fire notifications,
+/// making it fully unit-testable without a Tauri context.
+/// `max_disk_temp` is the pre-computed maximum temperature across all drives.
+fn pending_alerts(
+  cpu_temp: Option<f64>,
+  gpu_temp: Option<f64>,
+  ram_temp: Option<f64>,
+  max_disk_temp: Option<f64>,
+  settings: &crate::settings::Settings,
+) -> Vec<PendingAlert> {
+  type Row = (&'static str, Option<f64>, Option<u8>, Option<u8>);
+  let rows: &[Row] = &[
+    ("CPU", cpu_temp, settings.warning_cpu_temp, settings.critical_cpu_temp),
+    ("GPU", gpu_temp, settings.warning_gpu_temp, settings.critical_gpu_temp),
+    ("RAM", ram_temp, settings.warning_ram_temp, settings.critical_ram_temp),
+    (
+      "Disk",
+      max_disk_temp,
+      settings.warning_disk_temp,
+      settings.critical_disk_temp,
+    ),
+  ];
+  let mut out = Vec::new();
+  for &(label, temp_opt, warn, crit) in rows {
+    if let Some(temp) = temp_opt {
+      push_if_breached(&mut out, settings.notify_on_warn, label, "WARNING", temp, warn);
+      push_if_breached(&mut out, settings.notify_on_crit, label, "CRITICAL", temp, crit);
+    }
+  }
+  out
+}
+
+/// Fires a tray notification for a temperature threshold breach, subject to a
+/// per-component+level cooldown. The cooldown key is derived from `component`
+/// and `level`. Notification errors are written to the debug log so they are
+/// visible in the Status window but never propagate to the stats tick.
+fn fire_alert_if_due(
+  app: &tauri::AppHandle,
+  last_alert: &mut std::collections::HashMap<String, Instant>,
+  component: &str,
+  level: &str,
+  temp: f64,
+  threshold: u8,
+  cooldown_secs: u64,
+) {
+  let key = format!("{}_{}", component.to_lowercase(), level.to_lowercase());
+  let cooldown = Duration::from_secs(cooldown_secs);
+  let now = Instant::now();
+  let due = match last_alert.get(&key) {
+    None => true,
+    Some(&last) => now.duration_since(last) >= cooldown,
+  };
+  if due {
+    let title = format!("{} Temp {} — {}°C", component, level, temp.round() as u8);
+    let body = format!("Threshold: {}°C", threshold);
+    if let Err(e) = app.notification().builder().title(&title).body(&body).show() {
+      append_debug_log(
+        app,
+        &format!("notification: failed to show alert ({component} {level}): {e}"),
+      );
+    }
+    last_alert.insert(key, now);
+  }
+}
+
+/// Checks all temperature readings in `payload` against the configured thresholds
+/// and fires notifications as needed. Warning and critical are independent — both
+/// can fire with their own cooldown clocks. The `notify_on_warn` / `notify_on_crit`
+/// flags let users suppress a whole alert level without clearing their thresholds.
+fn check_temp_alerts(
+  app: &tauri::AppHandle,
+  payload: &StatsPayload,
+  settings: &crate::settings::Settings,
+  last_alert: &mut std::collections::HashMap<String, Instant>,
+  cooldown_secs: u64,
+) {
+  // Disk: alert on the hottest drive only — per-drive alerting is not supported.
+  let max_disk = payload
+    .disk
+    .drives
+    .iter()
+    .filter_map(|d| d.temp)
+    .fold(f64::NEG_INFINITY, f64::max);
+  let max_disk_temp = (max_disk > f64::NEG_INFINITY).then_some(max_disk);
+
+  for alert in pending_alerts(
+    payload.cpu.temp,
+    payload.gpu.temp,
+    payload.ram.temp,
+    max_disk_temp,
+    settings,
+  ) {
+    fire_alert_if_due(
+      app,
+      last_alert,
+      alert.component,
+      alert.level,
+      alert.temp,
+      alert.threshold,
+      cooldown_secs,
+    );
+  }
+}
+
+#[cfg(test)]
+mod alert_tests {
+  use super::*;
+  use crate::settings::Settings;
+
+  /// Builds a minimal `Settings` with the same warn/crit applied to all four
+  /// components. Keeps tests concise while covering all code paths.
+  fn settings_with(warn: Option<u8>, crit: Option<u8>, notify_warn: bool, notify_crit: bool) -> Settings {
+    Settings {
+      warning_cpu_temp: warn,
+      warning_gpu_temp: warn,
+      warning_ram_temp: warn,
+      warning_disk_temp: warn,
+      critical_cpu_temp: crit,
+      critical_gpu_temp: crit,
+      critical_ram_temp: crit,
+      critical_disk_temp: crit,
+      notify_on_warn: notify_warn,
+      notify_on_crit: notify_crit,
+      ..Settings::default()
+    }
+  }
+
+  #[test]
+  fn no_temp_produces_no_alerts() {
+    let s = settings_with(Some(80), Some(90), true, true);
+    assert!(pending_alerts(None, None, None, None, &s).is_empty());
+  }
+
+  #[test]
+  fn temp_below_warn_produces_no_alerts() {
+    let s = settings_with(Some(80), Some(90), true, true);
+    let alerts = pending_alerts(Some(79.9), Some(79.9), Some(79.9), Some(79.9), &s);
+    assert!(alerts.is_empty());
+  }
+
+  #[test]
+  fn temp_at_warn_threshold_fires_warning() {
+    let s = settings_with(Some(80), Some(90), true, true);
+    let alerts = pending_alerts(Some(80.0), None, None, None, &s);
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0].component, "CPU");
+    assert_eq!(alerts[0].level, "WARNING");
+    assert_eq!(alerts[0].threshold, 80);
+  }
+
+  #[test]
+  fn temp_above_crit_fires_both_levels() {
+    let s = settings_with(Some(80), Some(90), true, true);
+    let alerts = pending_alerts(Some(95.0), None, None, None, &s);
+    assert_eq!(alerts.len(), 2);
+    let levels: Vec<_> = alerts.iter().map(|a| a.level).collect();
+    assert!(levels.contains(&"WARNING"));
+    assert!(levels.contains(&"CRITICAL"));
+  }
+
+  #[test]
+  fn notify_warn_disabled_suppresses_warning_only() {
+    let s = settings_with(Some(80), Some(90), false, true);
+    // Above warn but below crit — nothing fires.
+    assert!(pending_alerts(Some(85.0), None, None, None, &s).is_empty());
+    // Above crit — only critical fires.
+    let alerts = pending_alerts(Some(95.0), None, None, None, &s);
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0].level, "CRITICAL");
+  }
+
+  #[test]
+  fn notify_crit_disabled_suppresses_critical_only() {
+    let s = settings_with(Some(80), Some(90), true, false);
+    let alerts = pending_alerts(Some(95.0), None, None, None, &s);
+    assert_eq!(alerts.len(), 1);
+    assert_eq!(alerts[0].level, "WARNING");
+  }
+
+  #[test]
+  fn thresholds_none_produces_no_alerts() {
+    let s = settings_with(None, None, true, true);
+    assert!(pending_alerts(Some(999.0), Some(999.0), Some(999.0), Some(999.0), &s).is_empty());
+  }
+
+  #[test]
+  fn all_four_components_fire_independently() {
+    let s = settings_with(Some(80), Some(90), true, true);
+    // Each component at 85 °C: above warn (80), below crit (90) → one WARNING each.
+    let alerts = pending_alerts(Some(85.0), Some(85.0), Some(85.0), Some(85.0), &s);
+    assert_eq!(alerts.len(), 4);
+    let components: Vec<_> = alerts.iter().map(|a| a.component).collect();
+    assert!(components.contains(&"CPU"));
+    assert!(components.contains(&"GPU"));
+    assert!(components.contains(&"RAM"));
+    assert!(components.contains(&"Disk"));
+    assert!(alerts.iter().all(|a| a.level == "WARNING"));
+  }
+
+  #[test]
+  fn disk_temp_none_produces_no_alert() {
+    let s = settings_with(Some(55), Some(70), true, true);
+    assert!(pending_alerts(None, None, None, None, &s).is_empty());
+  }
+
+  #[test]
+  fn both_notify_disabled_produces_no_alerts() {
+    let s = settings_with(Some(80), Some(90), false, false);
+    assert!(pending_alerts(Some(999.0), Some(999.0), Some(999.0), Some(999.0), &s).is_empty());
+  }
+}
 
 /// Finds the LHM temperature entry whose device name best matches `wmi_model`.
 /// Matching is case-insensitive and uses substring containment so minor
@@ -450,7 +796,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
 
   track_lhm_connection_state(&app, lhm_connected);
 
-  Ok(StatsPayload {
+  let payload = StatsPayload {
     cpu: CpuStats {
       load: avg_load,
       cores,
@@ -505,7 +851,25 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     },
     system_uptime_secs,
     lhm_connected,
-  })
+  };
+
+  // Check temperature thresholds and fire tray notifications as needed.
+  {
+    let settings_snap = state.settings.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut alert_map = state.last_alert.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: last_alert mutex poisoned; recovering guard");
+      e.into_inner()
+    });
+    check_temp_alerts(
+      &app,
+      &payload,
+      &settings_snap,
+      &mut alert_map,
+      settings_snap.alert_cooldown_secs,
+    );
+  }
+
+  Ok(payload)
 }
 
 // --- Changelog -------------------------------------------------------------

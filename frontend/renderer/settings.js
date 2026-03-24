@@ -8,6 +8,18 @@ const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
 const autostartInput = document.getElementById('autostartInput');
 const panelToggles = document.getElementById('panelToggles');
 const statusEl = document.getElementById('status');
+const btnTestAlert = document.getElementById('btnTestAlert');
+const alertCooldownInput = document.getElementById('alertCooldownInput');
+const warnCpuTempInput = document.getElementById('warnCpuTempInput');
+const critCpuTempInput = document.getElementById('critCpuTempInput');
+const warnGpuTempInput = document.getElementById('warnGpuTempInput');
+const critGpuTempInput = document.getElementById('critGpuTempInput');
+const warnRamTempInput = document.getElementById('warnRamTempInput');
+const critRamTempInput = document.getElementById('critRamTempInput');
+const warnDiskTempInput = document.getElementById('warnDiskTempInput');
+const critDiskTempInput = document.getElementById('critDiskTempInput');
+const notifyOnWarnInput = document.getElementById('notifyOnWarnInput');
+const notifyOnCritInput = document.getElementById('notifyOnCritInput');
 
 const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
 const PANEL_LABELS = {
@@ -27,6 +39,17 @@ let original = {
   alwaysOnTop: false,
   autostartEnabled: false,
   visiblePanels: [...PANEL_KEYS],
+  warningCpuTemp: null,
+  warningGpuTemp: null,
+  warningRamTemp: null,
+  warningDiskTemp: null,
+  criticalCpuTemp: null,
+  criticalGpuTemp: null,
+  criticalRamTemp: null,
+  criticalDiskTemp: null,
+  alertCooldownSecs: 60,
+  notifyOnWarn: true,
+  notifyOnCrit: true,
 };
 let isSaving = false;
 
@@ -37,6 +60,17 @@ let draggingKey = null;
 let dragGhost = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
+
+/** Reads a temp input; returns an integer 1–255 or null (blank = disabled). */
+function readTempInput(el) {
+  const v = parseInt(el.value, 10);
+  return (!Number.isNaN(v) && v >= 1 && v <= 255) ? v : null;
+}
+
+/** Writes a saved threshold value back into a number input. */
+function setTempInput(el, value) {
+  el.value = (value != null) ? String(value) : '';
+}
 
 function normalizeVisiblePanels(value) {
   const list = Array.isArray(value) ? value : [];
@@ -209,6 +243,17 @@ function applySettings(settings) {
     alwaysOnTop: settings.alwaysOnTop ?? false,
     autostartEnabled: settings.autostartEnabled ?? false,
     visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
+    warningCpuTemp: settings.warningCpuTemp ?? null,
+    warningGpuTemp: settings.warningGpuTemp ?? null,
+    warningRamTemp: settings.warningRamTemp ?? null,
+    warningDiskTemp: settings.warningDiskTemp ?? null,
+    criticalCpuTemp: settings.criticalCpuTemp ?? null,
+    criticalGpuTemp: settings.criticalGpuTemp ?? null,
+    criticalRamTemp: settings.criticalRamTemp ?? null,
+    criticalDiskTemp: settings.criticalDiskTemp ?? null,
+    alertCooldownSecs: settings.alertCooldownSecs ?? 60,
+    notifyOnWarn: settings.notifyOnWarn ?? true,
+    notifyOnCrit: settings.notifyOnCrit ?? true,
   };
 
   const percentage = Math.round(original.opacity * 100);
@@ -219,6 +264,18 @@ function applySettings(settings) {
   alwaysOnTopInput.checked = original.alwaysOnTop;
   autostartInput.checked = original.autostartEnabled;
   applyVisiblePanelsToForm(original.visiblePanels);
+
+  setTempInput(warnCpuTempInput, original.warningCpuTemp);
+  setTempInput(critCpuTempInput, original.criticalCpuTemp);
+  setTempInput(warnGpuTempInput, original.warningGpuTemp);
+  setTempInput(critGpuTempInput, original.criticalGpuTemp);
+  setTempInput(warnRamTempInput, original.warningRamTemp);
+  setTempInput(critRamTempInput, original.criticalRamTemp);
+  setTempInput(warnDiskTempInput, original.warningDiskTemp);
+  setTempInput(critDiskTempInput, original.criticalDiskTemp);
+  alertCooldownInput.value = original.alertCooldownSecs;
+  notifyOnWarnInput.checked = original.notifyOnWarn;
+  notifyOnCritInput.checked = original.notifyOnCrit;
 }
 
 async function loadSettings() {
@@ -282,6 +339,18 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const autostartEnabled = autostartInput.checked;
   const selectedPanels = getSelectedPanels();
 
+  const warningCpuTemp = readTempInput(warnCpuTempInput);
+  const criticalCpuTemp = readTempInput(critCpuTempInput);
+  const warningGpuTemp = readTempInput(warnGpuTempInput);
+  const criticalGpuTemp = readTempInput(critGpuTempInput);
+  const warningRamTemp = readTempInput(warnRamTempInput);
+  const criticalRamTemp = readTempInput(critRamTempInput);
+  const warningDiskTemp = readTempInput(warnDiskTempInput);
+  const criticalDiskTemp = readTempInput(critDiskTempInput);
+  const alertCooldownSecs = Math.max(60, parseInt(alertCooldownInput.value, 10) || 60);
+  const notifyOnWarn = notifyOnWarnInput.checked;
+  const notifyOnCrit = notifyOnCritInput.checked;
+
   if (selectedPanels.length === 0) {
     setStatus('Select at least one panel.', 'status-err');
     isSaving = false;
@@ -298,9 +367,25 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       alwaysOnTop,
       autostartEnabled,
       visiblePanels,
+      warningCpuTemp,
+      criticalCpuTemp,
+      warningGpuTemp,
+      criticalGpuTemp,
+      warningRamTemp,
+      criticalRamTemp,
+      warningDiskTemp,
+      criticalDiskTemp,
+      alertCooldownSecs,
+      notifyOnWarn,
+      notifyOnCrit,
     });
 
-    original = { opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels };
+    original = {
+      opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels,
+      warningCpuTemp, criticalCpuTemp, warningGpuTemp, criticalGpuTemp,
+      warningRamTemp, criticalRamTemp, warningDiskTemp, criticalDiskTemp,
+      alertCooldownSecs, notifyOnWarn, notifyOnCrit,
+    };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');
   } catch (error) {
@@ -330,6 +415,17 @@ document.addEventListener('keydown', async (event) => {
   } catch (error) {
     logError('escape close', error);
     setStatus('Could not close settings.', 'status-err');
+  }
+});
+
+btnTestAlert.addEventListener('click', async () => {
+  if (!IS_DESKTOP) return;
+  try {
+    await backend.invoke('test-temp-alert');
+    setStatus('Test notification sent.', 'status-ok');
+  } catch (error) {
+    logError('test-temp-alert', error);
+    setStatus('Notification failed — check OS settings.', 'status-err');
   }
 });
 

@@ -113,7 +113,7 @@ pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
   }
 
   let width = 640.0;
-  let height = 620.0;
+  let height = 700.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
 
   let window = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))

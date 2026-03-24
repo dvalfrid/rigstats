@@ -3,7 +3,7 @@
 
 import { resolveTempColor } from '../tempColors.js';
 
-function updateGpuPanel(gpu, history, pushHistory) {
+function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
   const gpuLoad = gpu.load ?? null;
   const circumference = 263.9;
   const gpuTempEl = document.getElementById('gpuTemp');
@@ -24,7 +24,9 @@ function updateGpuPanel(gpu, history, pushHistory) {
 
   gpuTempEl.textContent = gpu.temp != null ? `${gpu.temp.toFixed(0)}°C` : '--°C';
   gpuHotspotEl.textContent = gpu.hotspot != null ? `${gpu.hotspot.toFixed(0)}°C` : '--°C';
-  gpuTempEl.style.color = resolveTempColor(gpu.temp, 70, 82);
+  gpuTempEl.style.color = resolveTempColor(gpu.temp, thresholds.warn ?? 70, thresholds.crit ?? 82);
+  // Hotspot thresholds are hardcoded (90/100°C) — GPU hotspot is not user-configurable
+  // because its safe range differs from core temp and no separate setting exists.
   gpuHotspotEl.style.color = resolveTempColor(gpu.hotspot, 90, 100);
   document.getElementById('gpuFreq').textContent = gpu.freq != null ? `${gpu.freq.toFixed(0)} MHz` : '-- MHz';
 

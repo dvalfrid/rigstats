@@ -144,6 +144,43 @@ input[type=text] {
   -webkit-app-region: no-drag;
 }
 input[type=text]:focus { border-color: rgba(0, 200, 255, 0.45); }
+input[type=number] {
+  width: 54px;
+  background: #141820;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 6px;
+  outline: none;
+  -webkit-app-region: no-drag;
+  user-select: text;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type=number]:focus { border-color: rgba(0, 200, 255, 0.45); }
+.alert-grid {
+  display: grid;
+  grid-template-columns: 1fr 54px 54px;
+  align-items: center;
+  gap: 5px 6px;
+}
+.alert-col-header {
+  font: 9px var(--mono);
+  letter-spacing: 1px;
+  text-align: center;
+  padding-bottom: 2px;
+}
+.alert-col-header.warn { color: #ffd44d; }
+.alert-col-header.crit { color: #ff5f5f; }
+.alert-row-label {
+  font: 10px var(--mono);
+  letter-spacing: 1px;
+  color: var(--text);
+}
 select {
   width: 100%;
   background: #141820;
@@ -327,7 +364,41 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
         </div>
       </div>
 
-      <div id="status" class="status"></div>
+      <div class="card" style="flex:1;display:flex;flex-direction:column;">
+        <div class="section-label">Temp Alerts</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span style="font:10px var(--mono);letter-spacing:1px;color:var(--muted);">Cooldown</span>
+          <input type="number" id="alertCooldownInput" min="60" max="3600" step="30" style="width:60px;">
+          <span style="font:9px var(--mono);color:var(--muted);">s</span>
+          <button id="btnTestAlert" style="margin-left:auto;">TEST</button>
+        </div>
+        <div class="alert-grid">
+          <div style="font:9px var(--mono);color:var(--muted);letter-spacing:1px;padding-bottom:2px;">°C · blank = off</div>
+          <div class="alert-col-header warn">WARN</div>
+          <div class="alert-col-header crit">CRIT</div>
+
+          <div class="alert-row-label" style="color:var(--muted);">Notify</div>
+          <input type="checkbox" id="notifyOnWarnInput" checked style="width:14px;height:14px;accent-color:#ffd44d;cursor:pointer;justify-self:center;">
+          <input type="checkbox" id="notifyOnCritInput" checked style="width:14px;height:14px;accent-color:#ff5f5f;cursor:pointer;justify-self:center;">
+
+          <div class="alert-row-label">CPU</div>
+          <input type="number" id="warnCpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" id="critCpuTempInput" min="1" max="255" placeholder="—">
+
+          <div class="alert-row-label">GPU</div>
+          <input type="number" id="warnGpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" id="critGpuTempInput" min="1" max="255" placeholder="—">
+
+          <div class="alert-row-label">RAM</div>
+          <input type="number" id="warnRamTempInput" min="1" max="255" placeholder="—">
+          <input type="number" id="critRamTempInput" min="1" max="255" placeholder="—">
+
+          <div class="alert-row-label">Disk</div>
+          <input type="number" id="warnDiskTempInput" min="1" max="255" placeholder="—">
+          <input type="number" id="critDiskTempInput" min="1" max="255" placeholder="—">
+        </div>
+        <div id="status" class="status" style="margin-top:auto;padding-top:6px;"></div>
+      </div>
     </div>
 
     <!-- Right column: panel order -->
