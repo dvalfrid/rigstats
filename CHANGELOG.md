@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.8.1](https://github.com/dvalfrid/rigstats/compare/v1.8.0...v1.8.1) (2026-03-24)
+
+
+### Bug Fixes
+
+* repair updater — missing event permission blocked install ([d96795f](https://github.com/dvalfrid/rigstats/commit/d96795f05b0b65f71c6262d71a2ec2b1314cb44a))
+
 ## [1.8.0](https://github.com/dvalfrid/rigstats/compare/v1.7.1...v1.8.0) (2026-03-24)
 
 
