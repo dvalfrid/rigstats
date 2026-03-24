@@ -61,7 +61,7 @@ const PROFILE_SIZE = {
 
 const BASE_PROFILE_HEIGHT = 1920;
 const BASE_PROFILE_WIDTH = 450;
-const BASE_ROW_HEIGHTS = [196, 148, 420, 320, 275, 260, 295];
+const BASE_ROW_HEIGHTS = [196, 148, 420, 320, 315, 260, 295];
 
 function setPxVar(style, name, value) {
   style.setProperty(name, `${Math.max(1, Math.round(value))}px`);

@@ -32,7 +32,7 @@
   --row-clock: 148px;
   --row-cpu: 420px;
   --row-gpu: 320px;
-  --row-ram: 275px;
+  --row-ram: 315px;
   --row-net: 260px;
   --row-disk: 295px;
   --brand-mark-size: 165px;
@@ -42,7 +42,8 @@
   --clock-day-size: 18px;
   --big-num-size: 78px;
   --ram-big-num-size: 64px;
-  --panel-model-size: 10px;
+  --font-ui: 14px;
+  --font-sub: 12px;
   --ring-size: 100px;
   --cpu-cores-max-h: 150px;
 }
@@ -106,45 +107,45 @@ html, body {
 /* HEADER */
 .panel-header{--c:var(--accent);}
 .panel-header[data-tauri-drag-region]{cursor:move;}
-.rig-label{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
+.rig-label{font-family:var(--mono);font-size:var(--font-ui);color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
 .rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
 .rig-name{font-size:var(--rig-name-size);font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
-.rig-brand-preview{display:none;margin-top:7px;padding:3px 8px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.12);font-family:var(--mono);font-size:10px;letter-spacing:1px;color:#dff7ff;text-transform:uppercase;width:max-content;line-height:1.25;}
+.rig-brand-preview{display:none;margin-top:7px;padding:3px 8px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.12);font-family:var(--mono);font-size:var(--font-ui);letter-spacing:1px;color:#dff7ff;text-transform:uppercase;width:max-content;line-height:1.25;}
 .rig-brand-mark{display:flex;align-items:center;justify-content:center;width:var(--brand-mark-size);height:var(--brand-mark-size);flex-shrink:0;}
 .rig-logo{width:var(--brand-mark-size);height:var(--brand-mark-size);object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
 .rig-brand-text{display:none;padding:14px 18px;border:1px solid rgba(0,200,255,.35);background:rgba(0,200,255,.08);box-shadow:inset 0 0 18px rgba(0,200,255,.08);font-family:var(--mono);font-size:var(--model-name-size);letter-spacing:3px;color:#dff7ff;text-transform:uppercase;text-align:center;line-height:1.15;max-width:var(--brand-mark-size);}
-.rig-sub{font-family:var(--mono);font-size:10px;color:#6f8db7;line-height:1.9;}
+.rig-sub{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;box-shadow:none;}}
-.uptime{font-family:var(--mono);font-size:11px;color:var(--grn);margin-top:10px;}
-.update-badge{margin-top:8px;padding:3px 8px;border:1px solid rgba(57,255,136,.45);background:rgba(57,255,136,.10);font-family:var(--mono);font-size:9px;letter-spacing:2px;color:#39ff88;text-transform:uppercase;width:max-content;cursor:pointer;line-height:1.4;}
+.uptime{font-family:var(--mono);font-size:var(--font-ui);color:var(--grn);margin-top:10px;}
+.update-badge{margin-top:8px;padding:3px 8px;border:1px solid rgba(57,255,136,.45);background:rgba(57,255,136,.10);font-family:var(--mono);font-size:var(--font-ui);letter-spacing:2px;color:#39ff88;text-transform:uppercase;width:max-content;cursor:pointer;line-height:1.4;}
 .update-badge:hover{background:rgba(57,255,136,.2);}
 #modelName{color:var(--accent);font-size:var(--model-name-size);}
-#cpuModel,#gpuModel{font-size:var(--panel-model-size);}
+#cpuModel,#gpuModel{font-size:var(--font-sub);}
 
 /* CLOCK */
 .panel-clock{--c:var(--grn);}
 .clock-time{font-family:var(--mono);font-size:var(--clock-time-size);color:#fff;letter-spacing:2px;line-height:1;}
 .clock-sub{display:flex;justify-content:space-between;margin-top:10px;}
 .clock-day{font-size:var(--clock-day-size);font-weight:600;color:var(--grn);letter-spacing:3px;}
-.clock-date{font-family:var(--mono);font-size:12px;color:#6f8db7;align-self:flex-end;}
+.clock-date{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;align-self:flex-end;}
 
 /* SHARED */
-.stat-label{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:#7fa6d8;text-transform:uppercase;margin-bottom:8px;}
+.stat-label{font-family:var(--mono);font-size:var(--font-ui);letter-spacing:3px;color:#7fa6d8;text-transform:uppercase;margin-bottom:8px;}
 .big-num{font-size:var(--big-num-size);font-weight:700;line-height:1;letter-spacing:-3px;color:var(--c,var(--accent));font-family:var(--sans);}
 .big-unit{font-family:var(--mono);font-size:20px;color:#6f8db7;}
 .meta-row{display:flex;gap:20px;margin-top:10px;flex-wrap:wrap;}
 .meta{display:flex;flex-direction:column;gap:2px;}
-.meta-key{font-family:var(--mono);font-size:9px;color:#6f8db7;letter-spacing:1px;}
-.meta-val{font-family:var(--mono);font-size:14px;color:var(--text);}
+.meta-key{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;letter-spacing:1px;}
+.meta-val{font-family:var(--mono);font-size:var(--font-ui);color:var(--text);}
 .bars{display:flex;flex-direction:column;gap:6px;margin-top:12px;}
 .bar-row{display:flex;align-items:center;gap:8px;}
-.bar-lbl{font-family:var(--mono);font-size:9px;color:#6f8db7;width:26px;text-align:right;}
+.bar-lbl{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;width:26px;text-align:right;}
 .bar-track{flex:1;height:5px;background:rgba(255,255,255,.04);border-radius:3px;overflow:hidden;}
 .bar-fill{height:100%;border-radius:3px;background:var(--c,var(--accent));position:relative;transition:width .7s ease;}
 .bar-fill::after{content:'';position:absolute;right:0;top:0;bottom:0;width:5px;background:#fff;opacity:.5;border-radius:3px;filter:blur(2px);}
-.bar-pct{font-family:var(--mono);font-size:9px;color:#6f8db7;width:28px;}
-canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
+.bar-pct{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;width:28px;}
+canvas.spark{width:100%;height:48px;display:block;margin-top:12px;margin-bottom:4px;}
 
 /* NULL state */
 .null-val{color:var(--dim) !important;}
@@ -171,7 +172,7 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .ring-bg{fill:none;stroke:rgba(255,255,255,.04);stroke-width:7;}
 .ring-fill{fill:none;stroke-width:7;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .7s ease;}
 .ring-txt{font-family:var(--sans);font-weight:700;fill:#fff;font-size:18px;text-anchor:middle;dominant-baseline:middle;}
-.ring-sub{font-family:var(--mono);fill:var(--dim);font-size:8px;text-anchor:middle;}
+.ring-sub{font-family:var(--mono);fill:var(--dim);font-size:10px;text-anchor:middle;}
 
 /* RAM */
 .panel-ram{--c:var(--ram);}
@@ -182,17 +183,17 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
 .net-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
 .net-arrow{font-size:20px;font-weight:700;margin-right:4px;}
 .net-val{font-family:var(--mono);font-size:28px;color:#fff;}
-.net-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
+.net-unit{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;}
 
 /* DISK */
 .panel-disk{--c:var(--pur);}
 .disk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;}
-.disk-key{font-family:var(--mono);font-size:9px;color:#6f8db7;}
+.disk-key{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;}
 .disk-val{font-family:var(--mono);font-size:24px;color:#fff;}
-.disk-unit{font-family:var(--mono);font-size:11px;color:#6f8db7;}
+.disk-unit{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;}
 
 /* WARN overlay when AMD data is missing */
-.warn{font-family:var(--mono);font-size:9px;color:var(--amd);opacity:.7;margin-top:4px;}
+.warn{font-family:var(--mono);font-size:var(--font-ui);color:var(--amd);opacity:.7;margin-top:4px;}
 </style>
 </head>
 <body>
@@ -232,11 +233,19 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <img id="cpuVendorBadge" class="amd-badge-cpu" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="CPU Vendor Badge">
     <div class="stat-label">CPU LOAD</div>
     <div style="font-family:var(--mono);color:#7fa6d8;letter-spacing:1px;margin-bottom:6px;" id="cpuModel">--</div>
-    <div><span class="big-num" id="cpuLoad">--</span><span class="big-unit"> %</span></div>
-    <div class="meta-row">
-      <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
-      <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="cpuFreq">-- GHz</div></div>
-      <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="cpuPower">-- W</div></div>
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-fill" id="cpuRing" cx="50" cy="50" r="42"
+          stroke="var(--accent)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+        <text class="ring-txt" x="50" y="47" id="cpuRingTxt">--%</text>
+        <text class="ring-sub" x="50" y="61">CPU</text>
+      </svg>
+      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+        <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
+        <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="cpuFreq">-- GHz</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="cpuPower">-- W</div></div>
+      </div>
     </div>
     <div class="bars" id="cpuCores"></div>
     <canvas class="spark" id="cpuSpark" height="48"></canvas>
@@ -256,13 +265,13 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
         <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
         <text class="ring-sub" x="50" y="61">GPU</text>
       </svg>
-      <div class="meta-row" style="margin-top:0;gap:14px;">
+      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
         <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
         <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
-        <div class="meta"><div class="meta-key">VRAM</div><div class="meta-val" id="gpuVram">-- GB</div></div>
-        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
-        <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
         <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
+        <div class="meta"><div class="meta-key">VRAM</div><div class="meta-val" id="gpuVram">-- GB</div></div>
+        <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
       </div>
     </div>
     <div class="bars" style="margin-top:14px;">
@@ -286,18 +295,14 @@ canvas.spark{width:100%;height:48px;display:block;margin-top:12px;}
     <div class="tl"></div><div class="br"></div>
     <div class="stat-label">RAM USAGE</div>
     <div><span class="big-num" id="ramUsed">--</span><span class="big-unit" id="ramTotal"> / -- GB</span></div>
-    <div class="meta-row">
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px;margin-top:10px;">
       <div class="meta"><div class="meta-key">FREE</div><div class="meta-val" id="ramFree">-- GB</div></div>
       <div class="meta"><div class="meta-key">USED%</div><div class="meta-val" id="ramPct">--%</div></div>
       <div class="meta"><div class="meta-key">SPEED</div><div class="meta-val" id="ramSpeed">--</div></div>
-    </div>
-    <div class="meta-row" style="margin-top:8px;">
-      <div class="meta"><div class="meta-key">TYPE</div><div class="meta-val" id="ramType" style="font-size:11px;">--</div></div>
-      <div class="meta"><div class="meta-key">DIMMS</div><div class="meta-val" id="ramDimms" style="font-size:11px;">--</div></div>
-      <div class="meta"><div class="meta-key">VENDOR</div><div class="meta-val" id="ramVendor" style="font-size:11px;max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
-    </div>
-    <div class="meta-row" style="margin-top:8px;">
-      <div class="meta"><div class="meta-key">PART</div><div class="meta-val" id="ramPart" style="font-size:11px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+      <div class="meta"><div class="meta-key">TYPE</div><div class="meta-val" id="ramType">--</div></div>
+      <div class="meta"><div class="meta-key">PART</div><div class="meta-val" id="ramPart" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+      <div class="meta"><div class="meta-key">DIMMS</div><div class="meta-val" id="ramDimms">--</div></div>
+      <div class="meta" style="grid-column:span 2;"><div class="meta-key">VENDOR</div><div class="meta-val" id="ramVendor" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
     </div>
     <div class="bars">
       <div class="bar-row">
