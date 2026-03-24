@@ -64,12 +64,29 @@ pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, Stri
 
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<(), String> {
-  let updater = app.updater().map_err(|e| e.to_string())?;
-  let Some(update) = updater.check().await.map_err(|e| e.to_string())? else {
-    return Ok(());
+  append_debug_log(&app, "install_update: checking for update");
+  let updater = app.updater().map_err(|e| {
+    let msg = format!("install_update: updater init failed: {}", e);
+    append_debug_log(&app, &msg);
+    e.to_string()
+  })?;
+
+  let update = updater.check().await.map_err(|e| {
+    let msg = format!("install_update: check failed: {}", e);
+    append_debug_log(&app, &msg);
+    e.to_string()
+  })?;
+
+  let Some(update) = update else {
+    let msg = "install_update: no update found (version is current)";
+    append_debug_log(&app, msg);
+    return Err("No update is available. You may already be on the latest version.".to_string());
   };
 
+  append_debug_log(&app, &format!("install_update: downloading v{}", update.version));
+
   let app_for_progress = app.clone();
+  let app_for_log = app.clone();
   let mut downloaded = 0usize;
 
   update
@@ -84,10 +101,19 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
           }),
         );
       },
-      || {},
+      move || {
+        append_debug_log(&app_for_log, "install_update: download complete, launching installer");
+        // Notify the frontend before the process exits so the user knows to
+        // look for a Windows UAC prompt (required for perMachine NSIS install).
+        let _ = app_for_log.emit("update-download-complete", ());
+      },
     )
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| {
+      let msg = format!("install_update: download_and_install failed: {}", e);
+      append_debug_log(&app, &msg);
+      e.to_string()
+    })
 }
 
 #[tauri::command]

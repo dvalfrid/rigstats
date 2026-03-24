@@ -164,17 +164,30 @@ async function startUpdate() {
 
   if (!IS_DESKTOP) return;
 
-  const unlistenProgress = await backend.on('update-progress', (_event, data) => {
-    if (data.total) {
-      const pct = Math.round((data.downloaded / data.total) * 100);
-      showProgress(pct, `DOWNLOADING  ${pct}%`);
-    } else {
-      showProgress(100, 'DOWNLOADING...');
-    }
-  });
+  let unlistenProgress = () => {};
+  let unlistenDownloadComplete = () => {};
 
   try {
+    [unlistenProgress, unlistenDownloadComplete] = await Promise.all([
+      backend.on('update-progress', (_event, data) => {
+        if (data.total) {
+          const pct = Math.round((data.downloaded / data.total) * 100);
+          showProgress(pct, `DOWNLOADING  ${pct}%`);
+        } else {
+          showProgress(100, 'DOWNLOADING...');
+        }
+      }),
+      backend.on('update-download-complete', () => {
+        // The installer is about to be launched. On Windows the app will exit
+        // after ShellExecuteW — tell the user to approve the UAC prompt.
+        showProgress(100, 'LAUNCHING INSTALLER...');
+        ids.heroTitle.textContent = 'Installing…';
+        setStatus('Installer launched — if prompted, approve the administrator (UAC) request on your screen. The app will restart.');
+      }),
+    ]);
+
     await backend.invoke('install-update');
+    // Normally the process exits before this line is reached (std::process::exit).
     showProgress(100, 'INSTALLING...');
     ids.heroTitle.textContent = 'Installing…';
     setStatus('Installing update. The app will restart automatically.');
@@ -187,6 +200,7 @@ async function startUpdate() {
     setStatus(`Install failed: ${err}`);
   } finally {
     unlistenProgress();
+    unlistenDownloadComplete();
   }
 }
 

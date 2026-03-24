@@ -4,6 +4,7 @@
   "description": "Capability for the Update dialog window.",
   "windows": ["updater"],
   "permissions": [
+    "core:event:default",
     "allow-check-for-update",
     "allow-install-update",
     "allow-get-changelog",
