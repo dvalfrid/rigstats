@@ -8,6 +8,18 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.8.0](https://github.com/dvalfrid/rigstats/compare/v1.7.1...v1.8.0) (2026-03-24)
+
+
+### Features
+
+* add NVMe/SSD temperature display to disk panel ([8ab3187](https://github.com/dvalfrid/rigstats/commit/8ab3187ca2e264901ecf5fa580b66aa2678f6934))
+
+
+### Bug Fixes
+
+* write install.log to ProgramData instead of AppData ([eb968ac](https://github.com/dvalfrid/rigstats/commit/eb968acc80d1698ea9e8b03926c89004a40206fd))
+
 ## [1.7.1](https://github.com/dvalfrid/rigstats/compare/v1.7.0...v1.7.1) (2026-03-23)
 
 
