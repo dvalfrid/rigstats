@@ -21,7 +21,7 @@ function drawSpark(id, data, color) {
   if (!el) return;
 
   const width = el.offsetWidth || 402;
-  const height = 48;
+  const height = el.offsetHeight || 48;
   el.width = width;
   el.height = height;
 

@@ -22,7 +22,7 @@ mod windows;
 use commands::{
   close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats, get_system_brand,
   get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_visible_panels, save_settings,
-  start_window_drag, test_temp_alert,
+  set_main_height, start_window_drag, test_temp_alert,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -287,7 +287,8 @@ fn main() {
       get_changelog,
       check_for_update,
       install_update,
-      open_updater_window
+      open_updater_window,
+      set_main_height
     ])
     .on_window_event(on_window_event)
     .build(tauri::generate_context!())

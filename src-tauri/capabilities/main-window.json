@@ -13,6 +13,7 @@
     "allow-get-gpu-info",
     "allow-get-stats",
     "allow-log-frontend-error",
-    "allow-open-updater-window"
+    "allow-open-updater-window",
+    "allow-set-main-height"
   ]
 }

@@ -172,6 +172,18 @@ pub fn preview_visible_panels(app: tauri::AppHandle, panels: Vec<String>) -> Res
 }
 
 #[tauri::command]
+pub fn set_main_height(app: tauri::AppHandle, width: f64, height: f64) -> Result<(), String> {
+  if let Some(main) = app.get_webview_window("main") {
+    let _ = main.set_fullscreen(false);
+    let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
+      width: width as u32,
+      height: height as u32,
+    }));
+  }
+  Ok(())
+}
+
+#[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn save_settings(
   app: tauri::AppHandle,

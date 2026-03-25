@@ -13,10 +13,10 @@ function updateDiskBars(drives, thresholds = {}) {
     const tempText = d.temp != null ? `${d.temp.toFixed(0)}°C` : '--°C';
     const tempColor = d.temp != null ? resolveTempColor(d.temp, thresholds.warn ?? 55, thresholds.crit ?? 70) : '#6f8db7';
     wrap.innerHTML += `<div class="bar-row">
-      <div class="bar-lbl" style="width:36px;font-size:14px">${label}</div>
+      <div class="bar-lbl" style="width:36px">${label}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${d.pct}%;--c:var(--pur)"></div></div>
-      <div class="bar-pct" style="font-size:14px;width:40px">${d.pct}%</div>
-      <div style="font-family:var(--mono);font-size:14px;color:${tempColor};width:44px;text-align:right">${tempText}</div>
+      <div class="bar-pct" style="width:40px">${d.pct}%</div>
+      <div style="font-family:var(--mono);font-size:var(--font-ui);color:${tempColor};width:44px;text-align:right">${tempText}</div>
     </div>`;
   });
 }

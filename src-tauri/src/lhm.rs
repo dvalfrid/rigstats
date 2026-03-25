@@ -102,9 +102,22 @@ fn parse_lhm(data: &Value) -> LhmData {
   let mut nodes = Vec::new();
   flatten_lhm(data, &mut nodes, "", "");
 
+  // Locate the discrete GPU block by anchoring on the "GPU Memory Total" sensor
+  // with the highest reported value. This handles two distinct multi-GPU cases:
+  //   • Intel iGPU + NVIDIA dGPU: Intel reports "D3D Shared Memory Total", not
+  //     "GPU Memory Total", so the text match alone excludes it.
+  //   • AMD iGPU + AMD dGPU: both report "GPU Memory Total", but the iGPU has
+  //     far less VRAM than the discrete card — picking the maximum selects the dGPU.
   let vram_total_idx = nodes
     .iter()
-    .position(|n| n.text == "GPU Memory Total" && parse_val(&n.value).map(|v| v > 10000.0).unwrap_or(false));
+    .enumerate()
+    .filter(|(_, n)| n.text == "GPU Memory Total")
+    .max_by(|(_, a), (_, b)| {
+      let av = parse_val(&a.value).unwrap_or(0.0);
+      let bv = parse_val(&b.value).unwrap_or(0.0);
+      av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
+    })
+    .map(|(idx, _)| idx);
 
   let gpu_block: Vec<FlatNode> = if let Some(idx) = vram_total_idx {
     let start = idx.saturating_sub(25);

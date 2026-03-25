@@ -48,6 +48,7 @@ let thresholds = {};
 const PROFILE_SIZE = {
   'portrait-xl': { width: 450, height: 1920 },
   'portrait-slim': { width: 480, height: 1920 },
+  'portrait-fhd-side': { width: 253, height: 1080 },
   'portrait-hd': { width: 720, height: 1280 },
   'portrait-wxga': { width: 800, height: 1280 },
   'portrait-fhd': { width: 1080, height: 1920 },
@@ -72,7 +73,7 @@ function applyProfileMetrics(profile) {
   const root = document.documentElement.style;
   const heightScale = profile.height / BASE_PROFILE_HEIGHT;
   const widthScale = profile.width / BASE_PROFILE_WIDTH;
-  const contentScale = Math.max(0.62, Math.min(1.35, Math.min(heightScale, widthScale)));
+  const contentScale = Math.max(0.50, Math.min(1.35, Math.min(heightScale, widthScale)));
   const gap = Math.max(1, Math.round(heightScale));
   const availableHeight = profile.height - (gap * (BASE_ROW_HEIGHTS.length - 1));
 
@@ -91,7 +92,7 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--dashboard-h', profile.height);
   setPxVar(root, '--panel-gap', gap);
   setPxVar(root, '--panel-pad-y', 22 * contentScale);
-  setPxVar(root, '--panel-pad-x', 24 * Math.min(1.2, Math.max(0.85, widthScale)));
+  setPxVar(root, '--panel-pad-x', 24 * Math.min(1.2, Math.max(0.55, widthScale)));
   setPxVar(root, '--brand-mark-size', 165 * contentScale);
   setPxVar(root, '--rig-name-size', 44 * contentScale);
   setPxVar(root, '--model-name-size', 28 * contentScale);
@@ -102,9 +103,20 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--panel-model-size', 10 * contentScale);
   setPxVar(root, '--ring-size', 100 * contentScale);
   setPxVar(root, '--cpu-cores-max-h', 150 * heightScale);
+  setPxVar(root, '--badge-size', 96 * contentScale);
+  setPxVar(root, '--spark-h', 48 * heightScale);
+  setPxVar(root, '--big-unit-size', 20 * contentScale);
+  setPxVar(root, '--net-val-size', 28 * contentScale);
+  setPxVar(root, '--disk-val-size', 24 * contentScale);
+  setPxVar(root, '--font-ui', 14 * contentScale);
+  setPxVar(root, '--font-sub', 12 * contentScale);
+  setPxVar(root, '--gap-inner', 12 * contentScale);
+  setPxVar(root, '--gap-inner-sm', 10 * contentScale);
 }
 
 const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
+
+let currentProfile = PROFILE_SIZE['portrait-xl'];
 
 function normalizeVisiblePanels(value) {
   const list = Array.isArray(value) ? value : [];
@@ -128,6 +140,30 @@ function applyVisiblePanels(visiblePanels) {
       dashboard.appendChild(panelEls[key]);
     }
   });
+
+  // Shrink viewport and window to the height of the visible panels.
+  // Mirror applyProfileMetrics exactly so heights match the CSS variables.
+  const heightScale = currentProfile.height / BASE_PROFILE_HEIGHT;
+  const gap = Math.max(1, Math.round(heightScale));
+  const availableH = currentProfile.height - gap * (PANEL_KEYS.length - 1);
+  const panelH = {};
+  let rem = availableH;
+  PANEL_KEYS.forEach((key, i) => {
+    const h = i === PANEL_KEYS.length - 1 ? rem : Math.round(BASE_ROW_HEIGHTS[i] * heightScale);
+    panelH[key] = Math.max(1, h);
+    rem -= panelH[key];
+  });
+  let totalH = 0;
+  ordered.forEach((key, i) => {
+    totalH += (panelH[key] ?? 0) + (i > 0 ? gap : 0);
+  });
+  const root = document.documentElement.style;
+  root.setProperty('--viewport-h', `${totalH}px`);
+  root.setProperty('--dashboard-h', `${totalH}px`);
+
+  if (IS_DESKTOP) {
+    backend.invoke('set-main-height', { width: currentProfile.width, height: totalH }).catch(() => {});
+  }
 }
 
 function applyOpacity(value) {
@@ -147,6 +183,7 @@ function applyModelName(name) {
 function applyProfile(profileName) {
   const key = PROFILE_SIZE[profileName] ? profileName : 'portrait-xl';
   const profile = PROFILE_SIZE[key];
+  currentProfile = profile;
 
   const root = document.documentElement;
   root.dataset.profile = key;

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-main-height"
+description = "Enables the set_main_height command without any pre-configured scope."
+commands.allow = ["set_main_height"]
+
+[[permission]]
+identifier = "deny-set-main-height"
+description = "Denies the set_main_height command without any pre-configured scope."
+commands.deny = ["set_main_height"]
