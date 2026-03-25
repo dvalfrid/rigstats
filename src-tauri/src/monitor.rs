@@ -6,7 +6,7 @@
 //! - Monitor selection: pick the best available monitor for a given profile.
 //! - Panel visibility normalisation shared by preview and save_settings paths.
 
-use tauri::{Position, Size, WebviewWindow};
+use tauri::{PhysicalPosition, Position, Size, WebviewWindow};
 
 // --- Profile normalisation -------------------------------------------------
 
@@ -246,24 +246,40 @@ pub fn pick_target_monitor(window: &WebviewWindow, profile: &str) -> bool {
     let selected_monitor = exact_monitor.or(best_orientation_match).or(best_any_match);
 
     if let Some(monitor) = selected_monitor {
-      let _ = window.set_fullscreen(false);
-      let _ = window.set_position(Position::Physical(*monitor.position()));
-      let _ = window.set_decorations(false);
       let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
         width: target_w,
         height: target_h,
       }));
+      let _ = window.set_decorations(false);
 
-      if has_exact_match {
-        let _ = window.set_fullscreen(true);
-      }
+      // Tauri borderless windows on Windows keep WS_THICKFRAME for resize handles.
+      // This creates an invisible border: set_position places the outer rect at the
+      // target but the visible content starts inset by the border width, leaving a
+      // gap at the screen edge. Compute inset = inner - outer and subtract it so
+      // the visible content lands exactly on the monitor origin.
+      let target = *monitor.position();
+      let inset_x = window
+        .inner_position()
+        .ok()
+        .zip(window.outer_position().ok())
+        .map(|(inner, outer)| inner.x - outer.x)
+        .unwrap_or(0);
+      let inset_y = window
+        .inner_position()
+        .ok()
+        .zip(window.outer_position().ok())
+        .map(|(inner, outer)| inner.y - outer.y)
+        .unwrap_or(0);
+      let _ = window.set_position(Position::Physical(PhysicalPosition {
+        x: target.x - inset_x,
+        y: target.y - inset_y,
+      }));
     } else {
-      let _ = window.set_fullscreen(false);
-      let _ = window.set_decorations(false);
       let _ = window.set_size(Size::Physical(tauri::PhysicalSize {
         width: target_w,
         height: target_h,
       }));
+      let _ = window.set_decorations(false);
     }
 
     return has_exact_match;

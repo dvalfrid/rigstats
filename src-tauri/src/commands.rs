@@ -149,12 +149,13 @@ pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), Str
   let applied_profile = normalize_profile(&profile);
   let (target_w, target_h) = profile_dimensions(&applied_profile);
   if let Some(main) = app.get_webview_window("main") {
-    let _ = main.set_fullscreen(false);
-    let _ = main.set_decorations(false);
     let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
       width: target_w,
       height: target_h,
     }));
+    // set_decorations must come after set_size: on Windows, SetWindowPos can
+    // restore the WS_CAPTION/WS_THICKFRAME styles, so we always enforce it last.
+    let _ = main.set_decorations(false);
     main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
   }
   Ok(())
@@ -178,6 +179,9 @@ pub fn set_main_height(app: tauri::AppHandle, width: f64, height: f64) -> Result
       width: width as u32,
       height: height as u32,
     }));
+    // Enforce no decorations after every resize — Windows may restore WS_CAPTION
+    // via SetWindowPos when the window size changes.
+    let _ = main.set_decorations(false);
   }
   Ok(())
 }
@@ -239,7 +243,13 @@ pub fn save_settings(
     .unwrap_or(settings.autostart_enabled);
 
   if let Some(main) = app.get_webview_window("main") {
-    let _ = pick_target_monitor(&main, &applied_profile);
+    // Only reposition/resize when the profile actually changes. Calling
+    // pick_target_monitor unconditionally re-applies set_position on every Save,
+    // which causes a ~3 px shift because the monitor's reported physical origin
+    // differs slightly from where Windows placed the window at startup.
+    if applied_profile != settings.dashboard_profile {
+      let _ = pick_target_monitor(&main, &applied_profile);
+    }
     main
       .set_always_on_top(applied_always_on_top)
       .map_err(|e| e.to_string())?;

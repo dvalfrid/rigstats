@@ -216,10 +216,13 @@ fn parse_lhm(data: &Value) -> LhmData {
         .find(|n| n.parent == "Temperatures" && n.text == name)
         .and_then(|n| parse_val(&n.value))
     });
-  let cpu_power = nodes
-    .iter()
-    .find(|n| n.parent == "Powers" && n.text == "CPU Package")
-    .and_then(|n| parse_val(&n.value));
+  // Intel names the package power sensor "CPU Package"; AMD names it "Package".
+  let cpu_power = ["CPU Package", "Package"].iter().find_map(|&name| {
+    nodes
+      .iter()
+      .find(|n| n.parent == "Powers" && n.text == name)
+      .and_then(|n| parse_val(&n.value))
+  });
 
   // DDR5 (and some DDR4) DIMM temperature sensors: the real reading is always
   // /temperature/0 per slot. /temperature/1-5 are resolution and threshold values
@@ -444,20 +447,31 @@ mod tests {
   }
 
   #[test]
-  fn parse_lhm_extracts_cpu_power() {
+  fn parse_lhm_extracts_cpu_power_intel() {
+    // Intel LHM sensor name: "CPU Package"
     let data = json!({
       "Text": "Root", "Value": "",
       "Children": [{
         "Text": "Powers", "Value": "",
-        "Children": [{
-          "Text": "CPU Package",
-          "Value": "125 W",
-          "Children": []
-        }]
+        "Children": [{ "Text": "CPU Package", "Value": "125 W", "Children": [] }]
       }]
     });
     let result = parse_lhm(&data);
     assert_eq!(result.cpu_power, Some(125.0));
+  }
+
+  #[test]
+  fn parse_lhm_extracts_cpu_power_amd() {
+    // AMD LHM sensor name: "Package"
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Powers", "Value": "",
+        "Children": [{ "Text": "Package", "Value": "95 W", "Children": [] }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_power, Some(95.0));
   }
 
   #[test]
