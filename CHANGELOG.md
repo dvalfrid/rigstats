@@ -8,6 +8,15 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.9.3](https://github.com/dvalfrid/rigstats/compare/v1.9.2...v1.9.3) (2026-03-25)
+
+
+### Bug Fixes
+
+* correct CPU temp and power sensor matching for Intel CPUs ([e53ae79](https://github.com/dvalfrid/rigstats/commit/e53ae797e2ad27d50464bb29251d7e181a874380))
+* remove set_fullscreen(false) from set_main_height to prevent window shift on save ([10d602e](https://github.com/dvalfrid/rigstats/commit/10d602ed1f737d1562b9f7f98cb8a884534399d8))
+* stable window placement and correct CPU sensor parsing ([1501395](https://github.com/dvalfrid/rigstats/commit/1501395dfd726fbfb4c2ff1d0fb2036c2c0812ab))
+
 ## [1.9.2](https://github.com/dvalfrid/rigstats/compare/v1.9.1...v1.9.2) (2026-03-25)
 
 
