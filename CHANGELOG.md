@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.9.2](https://github.com/dvalfrid/rigstats/compare/v1.9.1...v1.9.2) (2026-03-25)
+
+
+### Bug Fixes
+
+* FHD Sidebar profile, GPU dGPU fix, panel-hide window resize ([2b72c27](https://github.com/dvalfrid/rigstats/commit/2b72c2792ee8ff60bf1501ea1b7562428e8b6b20))
+
 ## [1.9.1](https://github.com/dvalfrid/rigstats/compare/v1.9.0...v1.9.1) (2026-03-24)
 
 
