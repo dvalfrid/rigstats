@@ -49,6 +49,8 @@ const PROFILE_SIZE = {
   'portrait-xl': { width: 450, height: 1920 },
   'portrait-slim': { width: 480, height: 1920 },
   'portrait-fhd-side': { width: 253, height: 1080 },
+  'portrait-qhd-side': { width: 338, height: 1440 },
+  'portrait-4k-side': { width: 506, height: 2160 },
   'portrait-hd': { width: 720, height: 1280 },
   'portrait-wxga': { width: 800, height: 1280 },
   'portrait-fhd': { width: 1080, height: 1920 },

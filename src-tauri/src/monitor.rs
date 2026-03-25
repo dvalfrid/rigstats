@@ -16,7 +16,7 @@ pub(crate) fn normalize_profile(profile: &str) -> String {
   match profile {
     "portrait-xl" | "portrait-slim" | "portrait-hd" | "portrait-wxga" | "portrait-fhd" | "portrait-wuxga"
     | "portrait-qhd" | "portrait-hdplus" | "portrait-900x1600" | "portrait-1050x1680" | "portrait-1600x2560"
-    | "portrait-4k" | "portrait-fhd-side" => profile.to_string(),
+    | "portrait-4k" | "portrait-fhd-side" | "portrait-qhd-side" | "portrait-4k-side" => profile.to_string(),
     _ => "portrait-xl".to_string(),
   }
 }
@@ -26,6 +26,8 @@ pub(crate) fn profile_dimensions(profile: &str) -> (u32, u32) {
   match normalize_profile(profile).as_str() {
     "portrait-slim" => (480, 1920),
     "portrait-fhd-side" => (253, 1080),
+    "portrait-qhd-side" => (338, 1440),
+    "portrait-4k-side" => (506, 2160),
     "portrait-hd" => (720, 1280),
     "portrait-wxga" => (800, 1280),
     "portrait-fhd" => (1080, 1920),
@@ -115,6 +117,8 @@ mod tests {
       "portrait-1600x2560",
       "portrait-4k",
       "portrait-fhd-side",
+      "portrait-qhd-side",
+      "portrait-4k-side",
     ];
     for name in &valid {
       assert_eq!(normalize_profile(name), *name, "should pass through: {name}");
@@ -135,6 +139,8 @@ mod tests {
     assert_eq!(profile_dimensions("portrait-hd"), (720, 1280));
     assert_eq!(profile_dimensions("portrait-fhd"), (1080, 1920));
     assert_eq!(profile_dimensions("portrait-fhd-side"), (253, 1080));
+    assert_eq!(profile_dimensions("portrait-qhd-side"), (338, 1440));
+    assert_eq!(profile_dimensions("portrait-4k-side"), (506, 2160));
   }
 
   #[test]

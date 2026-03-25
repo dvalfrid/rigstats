@@ -206,12 +206,19 @@ fn parse_lhm(data: &Value) -> LhmData {
   }
 
   // AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
+  // All three sensor names also appear under "Powers" (e.g. Intel "CPU Package" is both a temp
+  // and a power sensor). Restricting to parent == "Temperatures" prevents picking up the wrong one.
   let cpu_temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
     .iter()
-    .find_map(|&name| nodes.iter().find(|n| n.text == name).and_then(|n| parse_val(&n.value)));
+    .find_map(|&name| {
+      nodes
+        .iter()
+        .find(|n| n.parent == "Temperatures" && n.text == name)
+        .and_then(|n| parse_val(&n.value))
+    });
   let cpu_power = nodes
     .iter()
-    .find(|n| n.parent == "Powers" && n.text == "Package")
+    .find(|n| n.parent == "Powers" && n.text == "CPU Package")
     .and_then(|n| parse_val(&n.value));
 
   // DDR5 (and some DDR4) DIMM temperature sensors: the real reading is always
@@ -354,11 +361,14 @@ mod tests {
     let data = json!({
       "Text": "Root", "Value": "",
       "Children": [{
-        "Text": "CPU", "Value": "",
+        "Text": "AMD Ryzen 9 7950X", "Value": "",
         "Children": [{
-          "Text": "Core (Tctl/Tdie)",
-          "Value": "72 °C",
-          "Children": []
+          "Text": "Temperatures", "Value": "",
+          "Children": [{
+            "Text": "Core (Tctl/Tdie)",
+            "Value": "72 °C",
+            "Children": []
+          }]
         }]
       }]
     });
@@ -371,11 +381,14 @@ mod tests {
     let data = json!({
       "Text": "Root", "Value": "",
       "Children": [{
-        "Text": "CPU", "Value": "",
+        "Text": "Intel Core i9-13900K", "Value": "",
         "Children": [{
-          "Text": "CPU Package",
-          "Value": "68 °C",
-          "Children": []
+          "Text": "Temperatures", "Value": "",
+          "Children": [{
+            "Text": "CPU Package",
+            "Value": "68 °C",
+            "Children": []
+          }]
         }]
       }]
     });
@@ -384,12 +397,46 @@ mod tests {
   }
 
   #[test]
+  fn parse_lhm_cpu_package_power_sensor_does_not_bleed_into_cpu_temp() {
+    // Intel CPUs expose "CPU Package" under both Temperatures and Powers.
+    // The temperature lookup must select the one under Temperatures, not Powers.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Intel Core i9-13900K", "Value": "",
+        "Children": [
+          {
+            "Text": "Powers", "Value": "",
+            "Children": [{
+              "Text": "CPU Package", "Value": "95 W", "Children": []
+            }]
+          },
+          {
+            "Text": "Temperatures", "Value": "",
+            "Children": [{
+              "Text": "CPU Package", "Value": "68 °C", "Children": []
+            }]
+          }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.cpu_temp, Some(68.0), "temp must come from Temperatures section");
+    assert_eq!(result.cpu_power, Some(95.0), "power must come from Powers section");
+  }
+
+  #[test]
   fn parse_lhm_prefers_amd_sensor_over_intel_when_both_present() {
     let data = json!({
       "Text": "Root", "Value": "",
       "Children": [
-        { "Text": "Core (Tctl/Tdie)", "Value": "72 °C", "Children": [] },
-        { "Text": "CPU Package",       "Value": "68 °C", "Children": [] }
+        {
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "Core (Tctl/Tdie)", "Value": "72 °C", "Children": [] },
+            { "Text": "CPU Package",       "Value": "68 °C", "Children": [] }
+          ]
+        }
       ]
     });
     let result = parse_lhm(&data);
@@ -403,7 +450,7 @@ mod tests {
       "Children": [{
         "Text": "Powers", "Value": "",
         "Children": [{
-          "Text": "Package",
+          "Text": "CPU Package",
           "Value": "125 W",
           "Children": []
         }]

@@ -186,6 +186,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 /* RAM */
 .panel-ram{--c:var(--ram);}
 #ramUsed{font-size:var(--ram-big-num-size);}
+:is(html[data-profile="portrait-fhd-side"],html[data-profile="portrait-qhd-side"]) .ram-meta-2{display:none;}
 
 /* NET */
 .panel-net{--c:var(--grn);}
@@ -314,9 +315,9 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
         <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="ramTemp">--°C</div></div>
         <div class="meta"><div class="meta-key">SPEED</div><div class="meta-val" id="ramSpeed">--</div></div>
         <div class="meta"><div class="meta-key">TYPE</div><div class="meta-val" id="ramType">--</div></div>
-        <div class="meta"><div class="meta-key">PART</div><div class="meta-val" id="ramPart" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
-        <div class="meta"><div class="meta-key">DIMMS</div><div class="meta-val" id="ramDimms">--</div></div>
-        <div class="meta" style="grid-column:span 2;"><div class="meta-key">VENDOR</div><div class="meta-val" id="ramVendor" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+        <div class="meta ram-meta-2"><div class="meta-key">PART</div><div class="meta-val" id="ramPart" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+        <div class="meta ram-meta-2"><div class="meta-key">DIMMS</div><div class="meta-val" id="ramDimms">--</div></div>
+        <div class="meta ram-meta-2" style="grid-column:span 2;"><div class="meta-key">VENDOR</div><div class="meta-val" id="ramVendor" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
       </div>
     </div>
     <div class="bars">
