@@ -593,9 +593,13 @@ pub fn detect_ram_spec() -> String {
       .filter_map(|s| s.configured_clock_speed.or(s.speed))
       .max()
       .unwrap_or(0);
-    let ram_type = sticks
-      .iter()
-      .find_map(|s| s.smbios_memory_type.or(s.memory_type).and_then(map_memory_type));
+    // SMBIOSMemoryType returns 0 on many DDR5 boards (a known BIOS quirk).
+    // Try it first, but fall through to MemoryType if it doesn't map.
+    let ram_type = sticks.iter().find_map(|s| {
+      s.smbios_memory_type
+        .and_then(map_memory_type)
+        .or_else(|| s.memory_type.and_then(map_memory_type))
+    });
 
     let spec = match (ram_type, max_speed) {
       (Some(t), s) if s > 0 => format!("{} {} MT/s ({} DIMMs)", t, s, dimms),

@@ -134,7 +134,7 @@ Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`.
 
 ### LHM integration
 
-LibreHardwareMonitor runs as a Windows scheduled task (installed by the NSIS installer as admin). It exposes a local HTTP server on port 8085. The Rust backend polls `/data.json` every tick with an 800 ms timeout. On failure it falls back to the last successful sample. GPU data is located by finding the `GPU Memory Total` sensor (>10,000 MB) and searching a window of ±25 nodes around it.
+LibreHardwareMonitor runs as a Windows scheduled task (installed by the NSIS installer as admin). It exposes a local HTTP server on port 8085. The Rust backend polls `/data.json` every tick with an 800 ms timeout. On failure it falls back to the last successful sample. GPU data is located by finding the `GPU Memory Total` sensor with the highest value (handles iGPU+dGPU configs), then collecting all sensors whose `grandparent` matches the anchor node's `grandparent` (the GPU device name). A fixed ±25 window was dropped because GPUs like the RTX 4090 expose 19+ D3D load sensors that pushed temperature/clock/power sensors outside any reasonable window.
 
 ### Settings persistence
 

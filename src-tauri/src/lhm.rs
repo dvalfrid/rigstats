@@ -119,10 +119,16 @@ fn parse_lhm(data: &Value) -> LhmData {
     })
     .map(|(idx, _)| idx);
 
-  let gpu_block: Vec<FlatNode> = if let Some(idx) = vram_total_idx {
-    let start = idx.saturating_sub(25);
-    let end = (idx + 5).min(nodes.len());
-    nodes[start..end].to_vec()
+  // Identify the GPU device by the grandparent of the anchor node, then collect
+  // all sensors that belong to the same device.  A fixed window was fragile: GPUs
+  // with many D3D load sensors (e.g. RTX 4090 reports 19) push temperature, clock
+  // and power sensors far enough that they fell outside the old ±25 limit.
+  let gpu_device: Option<String> = vram_total_idx
+    .and_then(|idx| nodes.get(idx))
+    .map(|n| n.grandparent.clone());
+
+  let gpu_block: Vec<&FlatNode> = if let Some(ref dev) = gpu_device {
+    nodes.iter().filter(|n| &n.grandparent == dev).collect()
   } else {
     vec![]
   };
@@ -190,7 +196,8 @@ fn parse_lhm(data: &Value) -> LhmData {
       && (n.sensor_id.starts_with("/nvme/")
         || n.sensor_id.starts_with("/hdd/")
         || n.sensor_id.starts_with("/ata/")
-        || n.sensor_id.starts_with("/scsi/"))
+        || n.sensor_id.starts_with("/scsi/")
+        || n.sensor_id.starts_with("/ssd/"))
       && !n.text.contains("Warning")
       && !n.text.contains("Critical")
   }) {
@@ -242,7 +249,10 @@ fn parse_lhm(data: &Value) -> LhmData {
     gpu_hotspot: gpu_find("Temperatures", "GPU Hot Spot"),
     gpu_freq: gpu_find("Clocks", "GPU Core"),
     gpu_power: gpu_find("Powers", "GPU Package"),
-    gpu_fan: gpu_find("Fans", "GPU Fan"),
+    gpu_fan: gpu_block
+      .iter()
+      .find(|n| n.parent == "Fans" && n.text.starts_with("GPU Fan"))
+      .and_then(|n| parse_val(&n.value)),
     vram_used: gpu_find("Data", "GPU Memory Used"),
     vram_total: gpu_find("Data", "GPU Memory Total"),
     cpu_temp,
@@ -692,6 +702,72 @@ mod tests {
       result.ram_temp, None,
       "only threshold sensors present — no real reading"
     );
+  }
+
+  #[test]
+  fn parse_lhm_includes_ssd_sensor_id_prefix_in_disk_temps() {
+    // SATA SSDs reported by LHM use /ssd/ SensorId prefix, not /nvme/ or /hdd/.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "WDC WDS500G2B0A-00SM50", "Value": "",
+        "Children": [{
+          "Text": "Temperatures", "Value": "",
+          "Children": [
+            { "Text": "Temperature", "Value": "32 °C", "SensorId": "/ssd/0/temperature/0", "Children": [] }
+          ]
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.disk_temps.len(), 1, "/ssd/ prefix must be included");
+    assert_eq!(result.disk_temps[0].0, "WDC WDS500G2B0A-00SM50");
+    assert_eq!(result.disk_temps[0].1, 32.0);
+  }
+
+  #[test]
+  fn parse_lhm_gpu_block_uses_grandparent_not_window() {
+    // An RTX 4090 reports 19 D3D load sensors between its temperature/clock/power
+    // sensors and the GPU Memory Total anchor. A fixed ±25 window would miss them;
+    // grandparent-based matching must capture all GPU sensors regardless of count.
+    let mut load_children: Vec<serde_json::Value> = (0..19)
+      .map(|i| json!({ "Text": format!("D3D Engine {i}"), "Value": "0 %", "Children": [] }))
+      .collect();
+    load_children.insert(0, json!({ "Text": "GPU Core", "Value": "10 %", "Children": [] }));
+
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "NVIDIA GeForce RTX 4090", "Value": "",
+        "Children": [
+          { "Text": "Powers", "Value": "",
+            "Children": [{ "Text": "GPU Package", "Value": "150 W", "Children": [] }] },
+          { "Text": "Clocks", "Value": "",
+            "Children": [{ "Text": "GPU Core", "Value": "2520 MHz", "Children": [] }] },
+          { "Text": "Temperatures", "Value": "",
+            "Children": [{ "Text": "GPU Core", "Value": "72 °C", "Children": [] }] },
+          { "Text": "Load", "Value": "", "Children": load_children },
+          { "Text": "Fans", "Value": "",
+            "Children": [{ "Text": "GPU Fan 1", "Value": "1200 RPM", "Children": [] }] },
+          { "Text": "Data", "Value": "",
+            "Children": [
+              { "Text": "GPU Memory Used",  "Value": "4096 MB", "Children": [] },
+              { "Text": "GPU Memory Total", "Value": "24576 MB", "Children": [] }
+            ]
+          }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(
+      result.gpu_temp,
+      Some(72.0),
+      "temp must be found despite many load sensors"
+    );
+    assert_eq!(result.gpu_freq, Some(2520.0), "clock must be found");
+    assert_eq!(result.gpu_power, Some(150.0), "power must be found");
+    assert_eq!(result.gpu_fan, Some(1200.0), "fan with suffix '1' must be found");
+    assert_eq!(result.gpu_load, Some(10.0), "GPU Core load must still work");
   }
 
   #[test]
