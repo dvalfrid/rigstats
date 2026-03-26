@@ -14,6 +14,7 @@ import { updateGpuPanel } from './panels/gpu.js';
 import { updateRamPanel } from './panels/ram.js';
 import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
+import { updateMotherboardPanel } from './panels/motherboard.js';
 import { simulateStats } from './simulator.js';
 
 // Route uncaught JS errors and unhandled promise rejections to the backend
@@ -65,7 +66,7 @@ const PROFILE_SIZE = {
 
 const BASE_PROFILE_HEIGHT = 1920;
 const BASE_PROFILE_WIDTH = 450;
-const BASE_ROW_HEIGHTS = [196, 148, 420, 320, 315, 260, 295];
+const BASE_ROW_HEIGHTS = [196, 148, 420, 320, 315, 260, 295, 260];
 
 function setPxVar(style, name, value) {
   style.setProperty(name, `${Math.max(1, Math.round(value))}px`);
@@ -81,10 +82,10 @@ function applyProfileMetrics(profile) {
 
   let remaining = availableHeight;
   BASE_ROW_HEIGHTS.forEach((baseHeight, index) => {
-    const rowName = ['--row-header', '--row-clock', '--row-cpu', '--row-gpu', '--row-ram', '--row-net', '--row-disk'][index];
-    const raw = index === BASE_ROW_HEIGHTS.length - 1
-      ? remaining
-      : Math.round(baseHeight * heightScale);
+    const rowName = ['--row-header', '--row-clock', '--row-cpu', '--row-gpu', '--row-ram', '--row-net', '--row-disk', '--row-mb'][index];
+    // Index 6 (disk) absorbs rounding remainder so the 7 default panels fill the
+    // screen exactly. Panels added beyond the original 7 use their scaled height directly.
+    const raw = index === 6 ? remaining : Math.round(baseHeight * heightScale);
     const applied = Math.max(1, raw);
     remaining -= applied;
     root.setProperty(rowName, `${applied}px`);
@@ -116,7 +117,7 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--gap-inner-sm', 10 * contentScale);
 }
 
-const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard'];
 
 let currentProfile = PROFILE_SIZE['portrait-xl'];
 
@@ -151,7 +152,7 @@ function applyVisiblePanels(visiblePanels) {
   const panelH = {};
   let rem = availableH;
   PANEL_KEYS.forEach((key, i) => {
-    const h = i === PANEL_KEYS.length - 1 ? rem : Math.round(BASE_ROW_HEIGHTS[i] * heightScale);
+    const h = i === 6 ? rem : Math.round(BASE_ROW_HEIGHTS[i] * heightScale);
     panelH[key] = Math.max(1, h);
     rem -= panelH[key];
   });
@@ -364,6 +365,7 @@ function applyStats(stats) {
   updateRamPanel(stats.ram, history, pushHistory, thresholds.ram);
   updateNetworkPanel(stats, history, pushHistory);
   updateDiskPanel(stats.disk, history, pushHistory, thresholds.disk);
+  updateMotherboardPanel(stats.motherboard ?? {});
   setUptimeFromSeconds(stats.systemUptimeSecs);
 
   drawSpark('cpuSpark', history.cpu, '#00c8ff');

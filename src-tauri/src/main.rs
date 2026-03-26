@@ -27,8 +27,8 @@ use commands::{
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
 use hardware::{
-  detect_disk_model_map, detect_gpu_vram_total_mb, detect_model_name, detect_ping_target, detect_ram_details,
-  detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
+  detect_disk_model_map, detect_gpu_vram_total_mb, detect_model_name, detect_motherboard_name, detect_ping_target,
+  detect_ram_details, detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
 use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
@@ -202,6 +202,7 @@ fn main() {
       }
       let ping_target = detect_ping_target();
       let system_brand = detect_system_brand();
+      let mb_name = detect_motherboard_name();
       let wmi_available = match probe_wmi_status() {
         Ok(()) => true,
         Err(error) => {
@@ -229,6 +230,7 @@ fn main() {
         gpu_vram_total_mb,
         ping_target,
         system_brand,
+        mb_name,
         sysinfo_available,
         wmi_available,
         last_alert: Mutex::new(HashMap::new()),

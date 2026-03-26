@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RIGStats — Real-time Hardware Dashboard for Windows</title>
-  <meta name="description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network, disk and NVMe/SSD temperatures on a portrait secondary display. Built with Tauri and Rust.">
+  <meta name="description" content="Free open-source hardware monitor for Windows gaming PCs. Live CPU, GPU, RAM, network, disk, NVMe/SSD temperatures and motherboard sensors on a portrait secondary display. Built with Tauri and Rust.">
   <link rel="canonical" href="https://rigstats.app/">
 
   <!-- Open Graph -->
@@ -80,7 +80,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, and NVMe/SSD temperatures — live, side by side with whatever you're doing.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, and motherboard sensors — live, side by side with whatever you're doing.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -136,7 +136,7 @@
   <section class="section" id="panels">
     <div class="container">
       <header class="section-head">
-        <h2>Seven Live Panels</h2>
+        <h2>Eight Live Panels</h2>
         <p>Each panel tracks exactly what matters for that component — with sparkline history so you see trends, not just a snapshot.</p>
       </header>
 
@@ -225,6 +225,23 @@
               <li>Drive temperature (°C)</li>
             </ul>
             <span class="source-tag">LHM · sysinfo</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/motherboard-panel.png" alt="Motherboard panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>Motherboard</h3>
+            <p>Super I/O chip sensors for the full board — all active fan channels, board temperatures, and key voltage rails. Board name and chip model auto-detected at startup. Optional panel, enabled in Settings.</p>
+            <ul>
+              <li>Fan channels (RPM) — all active, sorted by speed</li>
+              <li>Board temperatures (°C) — unnamed slots shown as T1–T6</li>
+              <li>Voltage rails — Vcore, AVCC, +3.3V, CPU Termination, and more</li>
+              <li>Motherboard name &amp; Super I/O chip model</li>
+            </ul>
+            <span class="source-tag">LHM · WMI</span>
           </div>
         </article>
 

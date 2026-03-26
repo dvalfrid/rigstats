@@ -49,7 +49,10 @@ fn is_portrait(width: u32, height: u32) -> bool {
 // --- Panel visibility normalisation ----------------------------------------
 
 fn is_valid_panel_key(value: &str) -> bool {
-  matches!(value, "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk")
+  matches!(
+    value,
+    "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk" | "motherboard"
+  )
 }
 
 /// Validates and deduplicates a list of panel keys.

@@ -85,6 +85,7 @@ html, body {
 .panel-ram    { height:var(--row-ram); }
 .panel-net    { height:var(--row-net); }
 .panel-disk   { height:var(--row-disk); }
+.panel-mb     { height:var(--row-mb); }
 
 .dashboard::before {
   content:'';position:absolute;inset:0;
@@ -152,7 +153,7 @@ html, body {
 .bar-fill{height:100%;border-radius:3px;background:var(--c,var(--accent));position:relative;transition:width .7s ease;}
 .bar-fill::after{content:'';position:absolute;right:0;top:0;bottom:0;width:5px;background:#fff;opacity:.5;border-radius:3px;filter:blur(2px);}
 .bar-pct{font-family:var(--mono);font-size:var(--font-ui);color:#6f8db7;width:28px;}
-.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk{display:flex;flex-direction:column;}
+.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb{display:flex;flex-direction:column;}
 .panel-content{flex:1;overflow:hidden;min-height:0;}
 canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin-top:var(--gap-inner-sm);}
 
@@ -204,6 +205,22 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 
 /* WARN overlay when AMD data is missing */
 .warn{font-family:var(--mono);font-size:var(--font-ui);color:var(--amd);opacity:.7;margin-top:4px;}
+
+/* MOTHERBOARD */
+.panel-mb{--c:#4a9e6b;}
+.mb-scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:#2a3a5a transparent;}
+.mb-scroll::-webkit-scrollbar{width:3px;}
+.mb-scroll::-webkit-scrollbar-thumb{background:#2a3a5a;border-radius:2px;}
+.mb-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;}
+.mb-col-label{font-family:var(--mono);font-size:var(--font-ui);color:#4a9e6b;letter-spacing:1px;margin-bottom:4px;}
+/* 8ch label column matches the shortLabel() maxLen=8 cap; font-family must be
+   var(--mono) on the row itself so the ch unit is computed with the monospace font. */
+.mb-row{display:grid;grid-template-columns:8ch 1fr;gap:0 4px;align-items:center;margin-bottom:2px;font-family:var(--mono);}
+.mb-row-lbl{font-size:var(--font-ui);color:#6f8db7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mb-row-val{font-family:var(--mono);font-size:var(--font-ui);color:#fff;text-align:right;}
+.mb-col-center{display:flex;flex-direction:column;align-items:center;}
+.mb-col-center-inner{width:fit-content;}
+.mb-row-c{display:flex;gap:10px;align-items:center;margin-bottom:2px;}
 </style>
 </head>
 <body>
@@ -367,6 +384,35 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
       <!-- populated by JS -->
     </div>
     <canvas class="spark" id="diskSpark" height="48"></canvas>
+  </div>
+
+
+  <!-- MOTHERBOARD -->
+  <div class="panel panel-mb" data-panel="motherboard">
+    <div class="tl"></div><div class="br"></div>
+    <div class="panel-content">
+      <div class="stat-label">MOTHERBOARD</div>
+      <div style="font-family:var(--mono);font-size:var(--font-ui);color:#7fa6d8;letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbBoard"></div>
+      <div style="font-family:var(--mono);font-size:var(--font-sub);color:#6f8db7;letter-spacing:1px;margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbChip"></div>
+      <div class="mb-scroll">
+        <div class="mb-three-col">
+          <div>
+            <div class="mb-col-label">FANS</div>
+            <div id="mbFans"><!-- populated by JS --></div>
+          </div>
+          <div class="mb-col-center">
+            <div class="mb-col-center-inner">
+              <div class="mb-col-label">TEMPS</div>
+              <div id="mbTemps"><!-- populated by JS --></div>
+            </div>
+          </div>
+          <div>
+            <div class="mb-col-label">VOLTAGES</div>
+            <div id="mbVoltages"><!-- populated by JS --></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>

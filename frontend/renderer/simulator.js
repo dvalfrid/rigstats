@@ -56,6 +56,36 @@ function simulateStats() {
         { fs: 'D:', size: 4e12, used: 1.2e12, pct: 30, temp: 35 + Math.random() * 8 },
       ],
     },
+    motherboard: {
+      board: 'ASUS PRIME B650M-A AX6 II',
+      chip: 'Nuvoton NCT6799D',
+      // 6 active fan channels sorted descending by RPM (mirrors real NCT6799D layout)
+      fans: [
+        ['Fan #7', 2100 + Math.random() * 200 | 0],
+        ['Fan #5', 980 + Math.random() * 100 | 0],
+        ['Fan #3', 970 + Math.random() * 80 | 0],
+        ['Fan #2', 960 + Math.random() * 80 | 0],
+        ['Fan #4', 950 + Math.random() * 80 | 0],
+        ['Fan #1', 910 + Math.random() * 80 | 0],
+      ],
+      // 6 temperature slots; "Temperature #N" are unnamed LPC channels
+      temps: [
+        ['CPU Core', 38 + Math.random() * 8],
+        ['Temperature #1', 32 + Math.random() * 5],
+        ['Temperature #2', 26 + Math.random() * 4],
+        ['Temperature #3', 24 + Math.random() * 4],
+        ['Temperature #4', 22 + Math.random() * 3],
+        ['Temperature #5', 19 + Math.random() * 3],
+      ],
+      // Named voltage rails only (generic "Voltage #N" slots excluded by backend)
+      voltages: [
+        ['Vcore', 1.10 + Math.random() * 0.05],
+        ['AVCC', 3.37 + Math.random() * 0.02],
+        ['+3.3V', 3.35 + Math.random() * 0.02],
+        ['+3V Stan', 3.37 + Math.random() * 0.02],
+        ['CPU Term', 1.80 + Math.random() * 0.02],
+      ],
+    },
     systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),
     lhmConnected: false,
   };

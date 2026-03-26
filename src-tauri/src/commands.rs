@@ -19,7 +19,9 @@ use crate::lhm_process::{
 };
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
-use crate::stats::{AppState, CpuStats, DiskDrive, DiskStats, GpuStats, NetStats, RamStats, StatsPayload};
+use crate::stats::{
+  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats, RamStats, StatsPayload,
+};
 use serde::Serialize;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, Size, WebviewWindow};
@@ -872,6 +874,13 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
         }
         drives
       },
+    },
+    motherboard: MotherboardStats {
+      fans: lhm.as_ref().map(|l| l.mb_fans.clone()).unwrap_or_default(),
+      temps: lhm.as_ref().map(|l| l.mb_temps.clone()).unwrap_or_default(),
+      voltages: lhm.as_ref().map(|l| l.mb_voltages.clone()).unwrap_or_default(),
+      chip: lhm.as_ref().and_then(|l| l.mb_chip.clone()),
+      board: state.mb_name.clone(),
     },
     system_uptime_secs,
     lhm_connected,

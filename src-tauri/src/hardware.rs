@@ -414,6 +414,79 @@ pub fn detect_system_brand() -> String {
   }
 }
 
+// --- Motherboard name detection --------------------------------------------
+
+/// Normalises common OEM board manufacturer strings to a short display name.
+/// Returns the trimmed input unchanged for vendors not explicitly listed.
+#[cfg(windows)]
+fn normalize_manufacturer(raw: &str) -> String {
+  let lower = raw.trim().to_ascii_lowercase();
+  if lower.contains("asustek") || lower.contains("asus") {
+    "ASUS".to_string()
+  } else if lower.contains("micro-star") || lower.contains("micro star") || lower == "msi" {
+    "MSI".to_string()
+  } else if lower.contains("gigabyte") {
+    "Gigabyte".to_string()
+  } else if lower.contains("asrock") {
+    "ASRock".to_string()
+  } else if lower.contains("evga") {
+    "EVGA".to_string()
+  } else {
+    raw.trim().to_string()
+  }
+}
+
+/// Detects the motherboard name as "Manufacturer Product" (e.g. "ASUS PRIME B650M-A AX6 II").
+/// Returns `None` when WMI is unavailable or the board fields are BIOS placeholders.
+/// Falls back to PowerShell `Get-CimInstance` if WMI fails.
+pub fn detect_motherboard_name() -> Option<String> {
+  #[cfg(windows)]
+  {
+    if let Ok(com) = wmi::COMLibrary::new() {
+      if let Ok(conn) = wmi::WMIConnection::new(com) {
+        let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
+        if let Some(b) = boards.first() {
+          let product = b.product.as_deref().and_then(normalize_model_name)?;
+          let mfr = normalize_manufacturer(b.manufacturer.as_deref().unwrap_or(""));
+          return Some(if mfr.is_empty() {
+            product
+          } else {
+            format!("{mfr} {product}")
+          });
+        }
+      }
+    }
+
+    // Fallback: query via PowerShell CIM if WMI is unavailable.
+    let output = run_hidden_command(
+      "powershell",
+      &[
+        "-NoProfile",
+        "-Command",
+        "$bb=Get-CimInstance Win32_BaseBoard;[pscustomobject]@{Manufacturer=$bb.Manufacturer;Product=$bb.Product}|ConvertTo-Json -Compress",
+      ],
+    )
+    .ok()?;
+    if !output.status.success() {
+      return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let b = serde_json::from_str::<BaseBoardInfo>(&raw).ok()?;
+    let product = b.product.as_deref().and_then(normalize_model_name)?;
+    let mfr = normalize_manufacturer(b.manufacturer.as_deref().unwrap_or(""));
+    Some(if mfr.is_empty() {
+      product
+    } else {
+      format!("{mfr} {product}")
+    })
+  }
+
+  #[cfg(not(windows))]
+  {
+    None
+  }
+}
+
 // --- Model name detection --------------------------------------------------
 
 #[cfg(windows)]
@@ -901,6 +974,49 @@ mod cross_platform_tests {
   #[test]
   fn parse_ping_output_ms_returns_none_for_no_numbers() {
     assert_eq!(parse_ping_output_ms("Request timed out."), None);
+  }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+  use super::normalize_manufacturer;
+
+  #[test]
+  fn normalize_manufacturer_maps_asustek_variants() {
+    assert_eq!(normalize_manufacturer("ASUSTeK COMPUTER INC."), "ASUS");
+    assert_eq!(normalize_manufacturer("ASUS"), "ASUS");
+    assert_eq!(normalize_manufacturer("  ASUSTeK  "), "ASUS");
+  }
+
+  #[test]
+  fn normalize_manufacturer_maps_msi_variants() {
+    assert_eq!(normalize_manufacturer("Micro-Star International Co., Ltd."), "MSI");
+    assert_eq!(normalize_manufacturer("Micro Star International"), "MSI");
+    assert_eq!(normalize_manufacturer("MSI"), "MSI");
+  }
+
+  #[test]
+  fn normalize_manufacturer_maps_gigabyte() {
+    assert_eq!(normalize_manufacturer("Gigabyte Technology Co., Ltd."), "Gigabyte");
+    assert_eq!(normalize_manufacturer("GIGABYTE"), "Gigabyte");
+  }
+
+  #[test]
+  fn normalize_manufacturer_maps_asrock() {
+    assert_eq!(normalize_manufacturer("ASRock Incorporation"), "ASRock");
+    assert_eq!(normalize_manufacturer("asrock"), "ASRock");
+  }
+
+  #[test]
+  fn normalize_manufacturer_maps_evga() {
+    assert_eq!(normalize_manufacturer("EVGA"), "EVGA");
+    assert_eq!(normalize_manufacturer("evga"), "EVGA");
+  }
+
+  #[test]
+  fn normalize_manufacturer_passes_through_unknown_trimmed() {
+    assert_eq!(normalize_manufacturer("  SuperMicro  "), "SuperMicro");
+    assert_eq!(normalize_manufacturer("Biostar"), "Biostar");
   }
 }
 

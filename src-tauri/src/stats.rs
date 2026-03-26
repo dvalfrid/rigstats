@@ -69,6 +69,20 @@ pub struct DiskStats {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct MotherboardStats {
+  /// Active fan channels: `[label, rpm]`, sorted descending by RPM.
+  pub fans: Vec<(String, f64)>,
+  /// Temperature readings ≥ 5 °C from the Super I/O chip.
+  pub temps: Vec<(String, f64)>,
+  /// Named voltage rails (generic "Voltage #N" slots excluded).
+  pub voltages: Vec<(String, f64)>,
+  /// Super I/O chip name, e.g. "Nuvoton NCT6799D". `None` on laptops or when LHM is not running.
+  pub chip: Option<String>,
+  /// Motherboard name, e.g. "ASUS PRIME B650M-A AX6 II". `None` when WMI detection failed.
+  pub board: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StatsPayload {
   pub cpu: CpuStats,
@@ -76,6 +90,7 @@ pub struct StatsPayload {
   pub ram: RamStats,
   pub net: NetStats,
   pub disk: DiskStats,
+  pub motherboard: MotherboardStats,
   pub system_uptime_secs: u64,
   pub lhm_connected: bool,
 }
@@ -110,6 +125,8 @@ pub struct AppState {
   pub ping_target: String,
   /// Detected system board brand (e.g. "rog", "msi", "other").
   pub system_brand: String,
+  /// Motherboard name detected at startup (e.g. "ASUS PRIME B650M-A AX6 II").
+  pub mb_name: Option<String>,
   /// Whether sysinfo returned a usable initial snapshot on startup.
   pub sysinfo_available: bool,
   /// Whether a WMI connection could be established on startup.

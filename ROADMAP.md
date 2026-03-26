@@ -66,66 +66,47 @@ the new card.
 
 ---
 
-## CPU fan speed
+## CPU fan speed — investigated, skipped
 
 **Panel:** CPU
-**Data source:** LHM `Fans` section on the CPU device node
 
-GPU fan RPM is already displayed. Adding CPU fan speed is a trivial backend change
-(one extra field in `LhmData`) mirrored in the CPU panel.
-
-**Scope:**
-
-- Extract `parent == "Fans"` CPU fan node in `lhm.rs`, add `cpu_fan: Option<f64>` to `LhmData`
-- Propagate through `CpuStats`
-- Render alongside existing CPU metrics in `panels/cpu.js`
+After investigation across real user LHM data: CPU cooler fans are wired to the
+motherboard Super I/O chip and appear as generic `Fan #N` channels alongside all
+other chassis fans. LHM provides no signal that identifies which channel is the CPU
+cooler. A highest-RPM heuristic was considered but rejected as unreliable (pump
+heads, high-RPM case fans, and AIO radiator fans all exceed chassis fan RPM on some
+builds). CPU cooler fan speed is instead available in the **Motherboard panel**
+alongside all other fan channels.
 
 ---
 
-## Motherboard panel (fans, temps, voltages)
+## Motherboard panel ✓
 
 **Panel:** New `motherboard` panel
-**Data source:** LHM Super I/O chip node (e.g. Nuvoton NCT6799D, ITE IT87xx, Winbond W836xx)
+**Data source:** LHM Super I/O chip node (`/lpc/` SensorId prefix) + WMI `Win32_BaseBoard`
 
-Shows the sensors exposed by the motherboard's Super I/O chip: fan speeds, board
-temperatures, and key voltage rails. Useful for monitoring system cooling without
-needing to open the BIOS.
+**Implemented.** An optional panel showing the sensors exposed by the motherboard's
+Super I/O chip (Nuvoton NCT6799D, ITE IT87xx, Winbond W836xx, etc.) alongside the
+detected board name. Useful for monitoring system cooling and voltage rails without
+opening the BIOS.
 
-**Available sensor data (verified on ASUS PRIME B650M-A AX6 II / NCT6799D):**
+The panel is opt-in (off by default) and enabled via Settings → panel toggles.
 
-- **Fans:** up to 7 channels in RPM; fan #7 on that board runs at ~2650 RPM (CPU
-  cooler pump) while chassis fans sit around 900 RPM. Channels reporting 0 RPM are
-  hidden automatically.
-- **Fan control:** duty cycle % per channel (31–100 %). Show alongside RPM or omit
-  to keep the panel compact.
-- **Temperatures:** 6 unnamed slots (`Temperature #1–#6`). LHM does not label these
-  — the mapping to VRM, chipset, or PCH depends on board firmware. Show as T1–T6
-  and filter out sensors stuck at implausibly low values (< 5 °C sentinel).
-- **Voltages:** named rails worth surfacing: `Vcore`, `+3.3V`, `AVCC`,
-  `CPU Termination`. The remaining `Voltage #N` slots are unmapped and should be
-  hidden by default or behind a toggle.
+**What is shown:**
 
-**Design constraints:**
+- **Board name** (e.g. "ASUS PRIME B650M-A AX6 II") — detected at startup via WMI
+  `Win32_BaseBoard`; manufacturer normalized (ASUSTeK → ASUS, Micro-Star → MSI, etc.)
+- **Super I/O chip name** (e.g. "Nuvoton NCT6799D") — the `grandparent` of the first
+  `/lpc/` sensor node
+- **Fans:** all active channels in RPM, sorted descending; 0-RPM channels hidden
+- **Temperatures:** readings ≥ 5 °C (LHM sentinel value filtered); unnamed channels
+  displayed as T1–T6, named channels (e.g. "CPU Core") shown as-is
+- **Voltages:** named rails only (`Vcore`, `AVCC`, `+3.3V`, `CPU Termination`, etc.);
+  generic `Voltage #N` unmapped slots excluded
 
-The Super I/O node sits under the board name in the LHM tree, identified by a
-`/lpc/` SensorId prefix. Because different chip models (NCT, ITE, Winbond) share
-the same `parent == "Fans"` / `parent == "Temperatures"` structure under their
-respective device node, extraction is done by SensorId prefix rather than chip name
-— the same approach used for disk temperatures.
-
-Portrait space is a concern: a naive list of 7 fans + 6 temps + 4 voltages = 17
-rows. Consider grouping into two or three rows per category using the same compact
-`bar-row` layout as the disk panel, and limiting fans to the top 5 active channels
-(highest RPM first).
-
-**Scope:**
-
-- Add `/lpc/` extraction to `lhm.rs`: `mb_fans: Vec<(String, f64)>`,
-  `mb_temps: Vec<f64>` (filtered, unnamed), `mb_voltages: Vec<(String, f64)>`
-  (named rails only) to `LhmData`
-- Propagate through a new `MotherboardStats` struct in `stats.rs` → `StatsPayload`
-- New `panels/motherboard.js` frontend panel with compact multi-column layout
-- Add `motherboard` to valid panel keys in `monitor.rs` and settings visibility list
+**Extraction strategy:** `/lpc/` SensorId prefix is chip-agnostic and works across
+all Super I/O models without hardcoding chip names or sensor indices. The same
+approach is used for disk temperature matching.
 
 ---
 

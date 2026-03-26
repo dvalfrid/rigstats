@@ -30,6 +30,19 @@ pub struct LhmData {
   pub cpu_temp: Option<f64>,
   pub cpu_power: Option<f64>,
   pub ram_temp: Option<f64>,
+  /// Active motherboard fan channels: `(label, rpm)`, sorted descending by RPM, capped at 5.
+  /// Channels reporting 0 RPM are excluded (LHM sentinel for disconnected/inactive headers).
+  /// Extracted from `/lpc/` sensors so any Super I/O chip variant is covered without naming it.
+  pub mb_fans: Vec<(String, f64)>,
+  /// Motherboard temperature sensors from the Super I/O chip.
+  /// Values < 5 °C are filtered out — LHM uses near-zero as a sentinel for unconfigured slots.
+  pub mb_temps: Vec<(String, f64)>,
+  /// Named voltage rails from the Super I/O chip.
+  /// Generic "Voltage #N" slots (unmapped hardware pins) are excluded.
+  pub mb_voltages: Vec<(String, f64)>,
+  /// Super I/O chip name (e.g. "Nuvoton NCT6799D"), taken from the grandparent of the first
+  /// `/lpc/` sensor. `None` when no LPC sensors are present (laptops, LHM not running).
+  pub mb_chip: Option<String>,
   pub disk_read: f64,
   pub disk_write: f64,
   pub net_up: f64,
@@ -241,6 +254,40 @@ fn parse_lhm(data: &Value) -> LhmData {
     .filter_map(|n| parse_val(&n.value).filter(|&v| v > 0.0))
     .reduce(f64::max);
 
+  // Motherboard Super I/O fans: all /lpc/ fan sensors with RPM > 0, sorted descending.
+  // Super I/O chips expose at most 7 channels; the panel scrolls, so no artificial cap needed.
+  let mut mb_fans: Vec<(String, f64)> = nodes
+    .iter()
+    .filter(|n| n.parent == "Fans" && n.sensor_id.starts_with("/lpc/"))
+    .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.0)?)))
+    .collect();
+  mb_fans.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+  // Motherboard temperature sensors.
+  // Values < 5 °C are LHM sentinels for unconfigured/absent sensors — skip them.
+  let mb_temps: Vec<(String, f64)> = nodes
+    .iter()
+    .filter(|n| n.parent == "Temperatures" && n.sensor_id.starts_with("/lpc/"))
+    .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v >= 5.0)?)))
+    .collect();
+
+  // Named voltage rails from the Super I/O chip.
+  // Generic "Voltage #N" entries are unmapped hardware pins — hide them.
+  let mb_voltages: Vec<(String, f64)> = nodes
+    .iter()
+    .filter(|n| {
+      n.sensor_id.starts_with("/lpc/") && n.sensor_id.contains("/voltage/") && !n.text.starts_with("Voltage #")
+    })
+    .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.1)?)))
+    .collect();
+
+  // Chip name: grandparent of any /lpc/ sensor is the Super I/O device name.
+  let mb_chip = nodes
+    .iter()
+    .find(|n| n.sensor_id.starts_with("/lpc/"))
+    .map(|n| n.grandparent.clone())
+    .filter(|s| !s.is_empty());
+
   LhmData {
     gpu_load: gpu_find("Load", "GPU Core"),
     gpu_temp: gpu_find("Temperatures", "GPU Core"),
@@ -261,6 +308,10 @@ fn parse_lhm(data: &Value) -> LhmData {
     net_up: best_up,
     net_down: best_down,
     disk_temps,
+    mb_fans,
+    mb_temps,
+    mb_voltages,
+    mb_chip,
   }
 }
 
@@ -786,6 +837,139 @@ mod tests {
     assert_eq!(result.net_up, 0.0);
     assert_eq!(result.net_down, 0.0);
     assert!(result.disk_temps.is_empty());
+    assert!(result.mb_fans.is_empty());
+    assert!(result.mb_temps.is_empty());
+    assert!(result.mb_voltages.is_empty());
+  }
+
+  // --- Motherboard (LPC) sensor extraction -----------------------------------
+
+  fn lpc_tree() -> serde_json::Value {
+    // Mirrors the structure observed in real diagnostic dumps (NCT6799D / NCT6798D).
+    json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Nuvoton NCT6799D", "Value": "",
+        "Children": [
+          {
+            "Text": "Fans", "Value": "",
+            "Children": [
+              { "Text": "Fan #1", "Value": "882 RPM",  "SensorId": "/lpc/nct6799d/0/fan/0", "Children": [] },
+              { "Text": "Fan #2", "Value": "968 RPM",  "SensorId": "/lpc/nct6799d/0/fan/1", "Children": [] },
+              { "Text": "Fan #6", "Value": "0 RPM",    "SensorId": "/lpc/nct6799d/0/fan/5", "Children": [] },
+              { "Text": "Fan #7", "Value": "2652 RPM", "SensorId": "/lpc/nct6799d/0/fan/6", "Children": [] }
+            ]
+          },
+          {
+            "Text": "Temperatures", "Value": "",
+            "Children": [
+              { "Text": "Temperature #1", "Value": "35,5 °C", "SensorId": "/lpc/nct6799d/0/temperature/1", "Children": [] },
+              { "Text": "Temperature #2", "Value": "30 °C",   "SensorId": "/lpc/nct6799d/0/temperature/2", "Children": [] },
+              { "Text": "Temperature #3", "Value": "2 °C",    "SensorId": "/lpc/nct6799d/0/temperature/3", "Children": [] }
+            ]
+          },
+          {
+            "Text": "Voltages", "Value": "",
+            "Children": [
+              { "Text": "Vcore",      "Value": "1,048 V", "SensorId": "/lpc/nct6799d/0/voltage/0", "Children": [] },
+              { "Text": "AVCC",       "Value": "3,376 V", "SensorId": "/lpc/nct6799d/0/voltage/2", "Children": [] },
+              { "Text": "+3.3V",      "Value": "3,328 V", "SensorId": "/lpc/nct6799d/0/voltage/3", "Children": [] },
+              { "Text": "Voltage #5", "Value": "1,016 V", "SensorId": "/lpc/nct6799d/0/voltage/4", "Children": [] }
+            ]
+          }
+        ]
+      }]
+    })
+  }
+
+  #[test]
+  fn parse_lhm_extracts_mb_fans_sorted_descending_zero_excluded() {
+    let result = parse_lhm(&lpc_tree());
+    // Fan #6 (0 RPM) must be excluded; remainder sorted descending.
+    assert_eq!(result.mb_fans.len(), 3);
+    assert_eq!(result.mb_fans[0].0, "Fan #7");
+    assert!((result.mb_fans[0].1 - 2652.0).abs() < 1e-9);
+    assert_eq!(result.mb_fans[1].0, "Fan #2");
+    assert_eq!(result.mb_fans[2].0, "Fan #1");
+  }
+
+  #[test]
+  fn parse_lhm_mb_fans_all_active_returned_sorted_descending() {
+    let fans: Vec<serde_json::Value> = (1..=7)
+      .map(|i| {
+        json!({
+          "Text": format!("Fan #{i}"),
+          "Value": format!("{} RPM", i * 100),
+          "SensorId": format!("/lpc/nct6799d/0/fan/{}", i - 1),
+          "Children": []
+        })
+      })
+      .collect();
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "Nuvoton NCT6799D", "Value": "",
+        "Children": [{ "Text": "Fans", "Value": "", "Children": fans }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.mb_fans.len(), 7, "all active fan channels are returned");
+    assert_eq!(result.mb_fans[0].0, "Fan #7", "highest RPM first");
+    assert_eq!(result.mb_fans[6].0, "Fan #1", "lowest RPM last");
+  }
+
+  #[test]
+  fn parse_lhm_extracts_mb_temps_filters_sentinel_below_5c() {
+    let result = parse_lhm(&lpc_tree());
+    // Temperature #3 = 2 °C must be filtered out.
+    assert_eq!(result.mb_temps.len(), 2);
+    assert_eq!(result.mb_temps[0].0, "Temperature #1");
+    assert!((result.mb_temps[0].1 - 35.5).abs() < 0.01);
+    assert_eq!(result.mb_temps[1].0, "Temperature #2");
+    assert!((result.mb_temps[1].1 - 30.0).abs() < 0.01);
+  }
+
+  #[test]
+  fn parse_lhm_extracts_mb_named_voltages_only() {
+    let result = parse_lhm(&lpc_tree());
+    // "Voltage #5" must be excluded; three named rails remain.
+    assert_eq!(result.mb_voltages.len(), 3);
+    let names: Vec<&str> = result.mb_voltages.iter().map(|(n, _)| n.as_str()).collect();
+    assert!(names.contains(&"Vcore"));
+    assert!(names.contains(&"AVCC"));
+    assert!(names.contains(&"+3.3V"));
+    assert!(!names.contains(&"Voltage #5"), "generic slots must be excluded");
+  }
+
+  #[test]
+  fn parse_lhm_mb_sensors_not_confused_with_disk_or_gpu_sensors() {
+    // GPU and disk sensors must not bleed into motherboard extraction.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [
+        {
+          "Text": "NVIDIA GeForce RTX 4090", "Value": "",
+          "Children": [{
+            "Text": "Fans", "Value": "",
+            "Children": [
+              { "Text": "GPU Fan 1", "Value": "1200 RPM", "SensorId": "/gpu-nvidia/0/fan/1", "Children": [] }
+            ]
+          }]
+        },
+        {
+          "Text": "Nuvoton NCT6799D", "Value": "",
+          "Children": [{
+            "Text": "Fans", "Value": "",
+            "Children": [
+              { "Text": "Fan #7", "Value": "2652 RPM", "SensorId": "/lpc/nct6799d/0/fan/6", "Children": [] }
+            ]
+          }]
+        }
+      ]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.mb_fans.len(), 1, "only /lpc/ fan should be included");
+    assert_eq!(result.mb_fans[0].0, "Fan #7");
   }
 }
 

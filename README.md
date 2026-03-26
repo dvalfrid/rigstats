@@ -2,9 +2,9 @@
 
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
-- Shows CPU, GPU, RAM, network, disk, and NVMe/SSD temperatures in real time.
+- Shows CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, and motherboard sensors in real time.
 
-- Computer name, CPU model, and GPU model are detected automatically at startup.
+- Computer name, CPU model, GPU model, and motherboard name are detected automatically at startup.
 
 ## Overview
 
@@ -25,6 +25,7 @@ It shows:
 - RAM usage and installed memory details
 - Network throughput and ping
 - Disk activity, drive usage, and NVMe/SSD temperatures
+- Motherboard sensors: fan speeds, board temperatures, and voltage rails (opt-in panel)
 
 From here you can:
 

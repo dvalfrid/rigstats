@@ -21,7 +21,7 @@ const critDiskTempInput = document.getElementById('critDiskTempInput');
 const notifyOnWarnInput = document.getElementById('notifyOnWarnInput');
 const notifyOnCritInput = document.getElementById('notifyOnCritInput');
 
-const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk'];
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard'];
 const PANEL_LABELS = {
   header: 'Header',
   clock: 'Clock',
@@ -30,6 +30,7 @@ const PANEL_LABELS = {
   ram: 'RAM',
   net: 'Network',
   disk: 'Storage',
+  motherboard: 'Motherboard',
 };
 
 let original = {
