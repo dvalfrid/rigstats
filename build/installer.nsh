@@ -1,5 +1,19 @@
 !include "FileFunc.nsh"
 
+!macro NSIS_HOOK_PREINSTALL
+  ; Stop LibreHardwareMonitor before files are extracted.
+  ; During an update LHM is already running and holds its DLLs (Aga.Controls.dll
+  ; etc.) open — without this step the installer fails with "Error opening file
+  ; for writing" on every update.
+  ; All commands redirect to NUL so they fail silently on a fresh install where
+  ; LHM is not running yet.
+  nsExec::ExecToLog 'cmd /C schtasks /End /TN "RIGStats\LibreHardwareMonitor" >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C schtasks /End /TN "RigStats\LibreHardwareMonitor" >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C schtasks /End /TN "LibreHardwareMonitor" >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C taskkill /F /IM LibreHardwareMonitor.exe >NUL 2>&1'
+  Sleep 1500
+!macroend
+
 !macro NSIS_HOOK_POSTINSTALL
   ; Open install log in ProgramData — the installer runs elevated (perMachine) so
   ; $APPDATA resolves to the system account profile, not the user's. $PROGRAMDATA
