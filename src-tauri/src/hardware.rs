@@ -245,35 +245,26 @@ pub fn detect_gpu_name() -> Option<String> {
 }
 
 /// Detects the total VRAM in MB for the primary GPU.
-/// Falls back to 16 384 MB (16 GB) when WMI is unavailable.
-pub fn detect_gpu_vram_total_mb() -> f64 {
+/// Returns `None` when WMI is unavailable or reports no usable value.
+/// LHM live data (`vram_total` in `LhmData`) is the preferred source; this is
+/// only used as a startup fallback before the first LHM tick arrives.
+pub fn detect_gpu_vram_total_mb() -> Option<f64> {
   #[cfg(windows)]
   {
-    let com = match wmi::COMLibrary::new() {
-      Ok(c) => c,
-      Err(_) => return 16384.0,
-    };
-    let conn = match wmi::WMIConnection::new(com) {
-      Ok(c) => c,
-      Err(_) => return 16384.0,
-    };
-
-    let rows: Vec<VideoControllerMemory> = match conn.query() {
-      Ok(r) => r,
-      Err(_) => return 16384.0,
-    };
-
+    let com = wmi::COMLibrary::new().ok()?;
+    let conn = wmi::WMIConnection::new(com).ok()?;
+    let rows: Vec<VideoControllerMemory> = conn.query().ok()?;
     let best = rows.iter().filter_map(|r| r.adapter_ram).max().unwrap_or(0);
     if best > 0 {
-      (best as f64 / 1_048_576.0).round()
+      Some((best as f64 / 1_048_576.0).round())
     } else {
-      16384.0
+      None
     }
   }
 
   #[cfg(not(windows))]
   {
-    16384.0
+    None
   }
 }
 
@@ -531,12 +522,21 @@ pub fn detect_model_name() -> Option<String> {
 
 #[cfg(windows)]
 fn map_memory_type(code: u16) -> Option<&'static str> {
+  // Codes apply to both Win32_PhysicalMemory.MemoryType and .SMBIOSMemoryType.
+  // SMBIOSMemoryType follows the SMBIOS spec; MemoryType uses WMI-specific values
+  // that mostly overlap for DDR3+.  Both sources are tried in order, so this
+  // single table must work for both.  LPDDR variants only appear in SMBIOSMemoryType.
   match code {
-    18 => Some("DDR"),
-    20 => Some("DDR2"),
-    24 => Some("DDR3"),
-    26 => Some("DDR4"),
-    34 => Some("DDR5"),
+    18 => Some("DDR"),    // MemoryType=18 (WMI), SMBIOSMemoryType overlaps are rare
+    20 => Some("DDR2"),   // MemoryType=20 (WMI DDR2 FB-DIMM, close enough)
+    24 => Some("DDR3"),   // MemoryType=24 / SMBIOSMemoryType=24
+    26 => Some("DDR4"),   // MemoryType=26 / SMBIOSMemoryType=26
+    27 => Some("LPDDR"),  // SMBIOSMemoryType=27
+    28 => Some("LPDDR2"), // SMBIOSMemoryType=28
+    29 => Some("LPDDR3"), // SMBIOSMemoryType=29
+    30 => Some("LPDDR4"), // SMBIOSMemoryType=30
+    34 => Some("DDR5"),   // MemoryType=34 / SMBIOSMemoryType=34
+    35 => Some("LPDDR5"), // SMBIOSMemoryType=35
     _ => None,
   }
 }

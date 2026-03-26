@@ -27,7 +27,7 @@ pub struct GpuStats {
   pub hotspot: Option<f64>,
   pub freq: Option<f64>,
   pub vram_used: Option<f64>,
-  pub vram_total: f64,
+  pub vram_total: Option<f64>,
   pub fan_speed: Option<f64>,
   pub power: Option<f64>,
 }
@@ -104,7 +104,8 @@ pub struct AppState {
   /// Best-effort RAM module details (e.g. 2x16 GB | Vendor | Part).
   pub ram_details: String,
   /// Best-effort VRAM total fallback in MB when live LHM data is unavailable.
-  pub gpu_vram_total_mb: f64,
+  /// `None` when WMI detection failed at startup.
+  pub gpu_vram_total_mb: Option<f64>,
   /// Preferred ping target (default gateway if available, otherwise public fallback).
   pub ping_target: String,
   /// Detected system board brand (e.g. "rog", "msi", "other").

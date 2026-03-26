@@ -31,12 +31,12 @@ function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
   document.getElementById('gpuFreq').textContent = gpu.freq != null ? `${gpu.freq.toFixed(0)} MHz` : '-- MHz';
 
   const vramUsedGB = gpu.vramUsed != null ? (gpu.vramUsed / 1024).toFixed(1) : null;
-  const vramTotalGB = (gpu.vramTotal / 1024).toFixed(0);
-  document.getElementById('gpuVram').textContent = vramUsedGB
-    ? `${vramUsedGB} / ${vramTotalGB} GB`
-    : `-- / ${vramTotalGB} GB`;
+  const vramTotalGB = gpu.vramTotal != null ? (gpu.vramTotal / 1024).toFixed(0) : null;
+  document.getElementById('gpuVram').textContent = vramUsedGB != null
+    ? `${vramUsedGB} / ${vramTotalGB ?? '--'} GB`
+    : `-- / ${vramTotalGB ?? '--'} GB`;
 
-  const vramPct = vramUsedGB ? Math.round(vramUsedGB / vramTotalGB * 100) : 0;
+  const vramPct = (vramUsedGB != null && vramTotalGB != null) ? Math.round(vramUsedGB / vramTotalGB * 100) : 0;
   document.getElementById('vramBar').style.width = `${vramPct}%`;
   document.getElementById('vramBarPct').textContent = vramPct ? `${vramPct}%` : '--%';
 

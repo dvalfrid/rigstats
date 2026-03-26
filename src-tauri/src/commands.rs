@@ -831,10 +831,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       hotspot: lhm.as_ref().and_then(|l| l.gpu_hotspot),
       freq: lhm.as_ref().and_then(|l| l.gpu_freq),
       vram_used: lhm.as_ref().and_then(|l| l.vram_used),
-      vram_total: lhm
-        .as_ref()
-        .and_then(|l| l.vram_total)
-        .unwrap_or(state.gpu_vram_total_mb),
+      vram_total: lhm.as_ref().and_then(|l| l.vram_total).or(state.gpu_vram_total_mb),
       fan_speed: lhm.as_ref().and_then(|l| l.gpu_fan),
       power: lhm.as_ref().and_then(|l| l.gpu_power),
     },

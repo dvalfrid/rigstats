@@ -160,10 +160,8 @@ fn parse_lhm(data: &Value) -> LhmData {
     .filter(|n| n.parent == "Throughput" && n.text == "Write Rate")
     .collect();
 
-  let disk1_read = read_nodes.first().map(|n| to_mbs(&n.value)).unwrap_or(0.0);
-  let disk1_write = write_nodes.first().map(|n| to_mbs(&n.value)).unwrap_or(0.0);
-  let disk2_read = read_nodes.get(1).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
-  let disk2_write = write_nodes.get(1).map(|n| to_mbs(&n.value)).unwrap_or(0.0);
+  let disk_read_total: f64 = read_nodes.iter().map(|n| to_mbs(&n.value)).sum();
+  let disk_write_total: f64 = write_nodes.iter().map(|n| to_mbs(&n.value)).sum();
 
   let upload_nodes: Vec<&FlatNode> = nodes
     .iter()
@@ -258,8 +256,8 @@ fn parse_lhm(data: &Value) -> LhmData {
     cpu_temp,
     cpu_power,
     ram_temp,
-    disk_read: disk1_read + disk2_read,
-    disk_write: disk1_write + disk2_write,
+    disk_read: disk_read_total,
+    disk_write: disk_write_total,
     net_up: best_up,
     net_down: best_down,
     disk_temps,
