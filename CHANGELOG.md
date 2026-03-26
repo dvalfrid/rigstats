@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.10.0](https://github.com/dvalfrid/rigstats/compare/v1.9.3...v1.10.0) (2026-03-26)
+
+
+### Features
+
+* cycle disk drives in pages of three when more than three are present ([f1c55d5](https://github.com/dvalfrid/rigstats/commit/f1c55d5181f1545daf6e9758301ccf58f49c8459))
+
+
+### Bug Fixes
+
+* GPU sensors, SATA SSD temps, and DDR5 RAM type detection ([9c4b4de](https://github.com/dvalfrid/rigstats/commit/9c4b4de3996571154ba29dda9a92dc1725e4c502))
+* sum all disk throughput, LPDDR types, VRAM fallback as Option ([a8028f0](https://github.com/dvalfrid/rigstats/commit/a8028f07399b63d6cc82ba63887928fe4bafbf41))
+
 ## [1.9.3](https://github.com/dvalfrid/rigstats/compare/v1.9.2...v1.9.3) (2026-03-25)
 
 
