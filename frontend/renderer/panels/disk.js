@@ -1,17 +1,50 @@
 // Disk panel renderer.
 // Displays throughput plus compact utilization bars (with temp) for up to three drives.
+// When more than three drives are present the bars cycle through pages automatically,
+// advancing one page every PAGE_TICKS seconds.
 
 import { resolveTempColor } from '../tempColors.js';
+
+const PAGE_SIZE = 3;
+const PAGE_TICKS = 5;
+
+let diskPage = 0;
+let diskTicksSincePage = 0;
+let lastDriveCount = 0;
 
 function updateDiskBars(drives, thresholds = {}) {
   const wrap = document.getElementById('diskBars');
   if (!drives || !drives.length) return;
 
+  const totalPages = Math.ceil(drives.length / PAGE_SIZE);
+
+  // Reset to first page when the drive list changes length.
+  if (drives.length !== lastDriveCount) {
+    lastDriveCount = drives.length;
+    diskPage = 0;
+    diskTicksSincePage = 0;
+  }
+
+  // Advance page on a timer when there are multiple pages.
+  if (totalPages > 1) {
+    diskTicksSincePage++;
+    if (diskTicksSincePage >= PAGE_TICKS) {
+      diskTicksSincePage = 0;
+      diskPage = (diskPage + 1) % totalPages;
+    }
+  }
+
+  const pageStart = diskPage * PAGE_SIZE;
+  const pageDrives = drives.slice(pageStart, pageStart + PAGE_SIZE);
+
   wrap.innerHTML = '';
-  drives.slice(0, 3).forEach((d) => {
+  pageDrives.forEach((d) => {
     const label = d.fs.replace(/\/dev\//, '').substring(0, 4);
     const tempText = d.temp != null ? `${d.temp.toFixed(0)}°C` : '--°C';
-    const tempColor = d.temp != null ? resolveTempColor(d.temp, thresholds.warn ?? 55, thresholds.crit ?? 70) : '#6f8db7';
+    const tempColor =
+      d.temp != null
+        ? resolveTempColor(d.temp, thresholds.warn ?? 55, thresholds.crit ?? 70)
+        : '#6f8db7';
     wrap.innerHTML += `<div class="bar-row">
       <div class="bar-lbl" style="width:36px">${label}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${d.pct}%;--c:var(--pur)"></div></div>
@@ -19,6 +52,14 @@ function updateDiskBars(drives, thresholds = {}) {
       <div style="font-family:var(--mono);font-size:var(--font-ui);color:${tempColor};width:44px;text-align:right">${tempText}</div>
     </div>`;
   });
+
+  if (totalPages > 1) {
+    const dots = Array.from(
+      { length: totalPages },
+      (_, i) => `<span style="color:${i === diskPage ? '#fff' : '#3a4a6a'}">●</span>`,
+    ).join(' ');
+    wrap.innerHTML += `<div style="text-align:center;margin-top:2px;font-size:7px">${dots}</div>`;
+  }
 }
 
 function updateDiskPanel(disk, history, pushHistory, thresholds = {}) {
