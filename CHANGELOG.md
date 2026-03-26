@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.10.1](https://github.com/dvalfrid/rigstats/compare/v1.10.0...v1.10.1) (2026-03-26)
+
+
+### Bug Fixes
+
+* stop LHM before file extraction to prevent locked DLL errors on update ([a6ca37e](https://github.com/dvalfrid/rigstats/commit/a6ca37e9a7366398de26182245d272d832025c40))
+
 ## [1.10.0](https://github.com/dvalfrid/rigstats/compare/v1.9.3...v1.10.0) (2026-03-26)
 
 
