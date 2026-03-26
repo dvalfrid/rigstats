@@ -1078,7 +1078,45 @@ fn try_disk_model_map_via_shell() -> Option<std::collections::HashMap<String, St
 
 #[cfg(all(test, windows))]
 mod tests {
-  use super::{classify_system_brand, gpu_name_score, pick_best_gpu_name};
+  use super::{classify_system_brand, gpu_name_score, map_memory_type, pick_best_gpu_name};
+
+  // map_memory_type
+
+  #[test]
+  fn map_memory_type_returns_correct_labels_for_all_ddr_codes() {
+    // Codes that must map correctly for desktop/server RAM.
+    assert_eq!(map_memory_type(18), Some("DDR"));
+    assert_eq!(map_memory_type(20), Some("DDR2"));
+    assert_eq!(map_memory_type(24), Some("DDR3"));
+    assert_eq!(map_memory_type(26), Some("DDR4"));
+    assert_eq!(map_memory_type(34), Some("DDR5"));
+  }
+
+  #[test]
+  fn map_memory_type_returns_correct_labels_for_lpddr_smbios_codes() {
+    // LPDDR variants are reported via SMBIOSMemoryType on laptops.
+    // These codes were missing before the fix and caused "RAM" to be shown.
+    assert_eq!(map_memory_type(27), Some("LPDDR"));
+    assert_eq!(map_memory_type(28), Some("LPDDR2"));
+    assert_eq!(map_memory_type(29), Some("LPDDR3"));
+    assert_eq!(map_memory_type(30), Some("LPDDR4"));
+    assert_eq!(map_memory_type(35), Some("LPDDR5"));
+  }
+
+  #[test]
+  fn map_memory_type_returns_none_for_zero_so_smbios_fallback_works() {
+    // Many DDR5 boards report SMBIOSMemoryType = 0 (unknown).
+    // Returning None here allows the caller to fall through to MemoryType,
+    // which typically carries the correct code.  A non-None result would
+    // suppress the fallback and leave the type field empty.
+    assert_eq!(map_memory_type(0), None, "code 0 must not map to a label");
+  }
+
+  #[test]
+  fn map_memory_type_returns_none_for_unknown_codes() {
+    assert_eq!(map_memory_type(1), None);
+    assert_eq!(map_memory_type(255), None);
+  }
 
   #[test]
   fn classify_system_brand_recognizes_rog_aliases() {

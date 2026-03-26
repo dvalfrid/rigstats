@@ -535,28 +535,34 @@ mod tests {
   }
 
   #[test]
-  fn parse_lhm_sums_two_disks() {
+  fn parse_lhm_sums_all_disk_throughput() {
+    // Previously only the first two Read Rate / Write Rate nodes were summed.
+    // This test uses four drives to catch a regression back to that limit.
     let data = json!({
       "Text": "Root", "Value": "",
       "Children": [{
         "Text": "Throughput", "Value": "",
         "Children": [
-          { "Text": "Read Rate",  "Value": "10",   "Children": [] },
-          { "Text": "Write Rate", "Value": "5",    "Children": [] },
-          { "Text": "Read Rate",  "Value": "20",   "Children": [] },
-          { "Text": "Write Rate", "Value": "15",   "Children": [] }
+          { "Text": "Read Rate",  "Value": "10", "Children": [] },
+          { "Text": "Write Rate", "Value": "5",  "Children": [] },
+          { "Text": "Read Rate",  "Value": "20", "Children": [] },
+          { "Text": "Write Rate", "Value": "15", "Children": [] },
+          { "Text": "Read Rate",  "Value": "30", "Children": [] },
+          { "Text": "Write Rate", "Value": "5",  "Children": [] },
+          { "Text": "Read Rate",  "Value": "40", "Children": [] },
+          { "Text": "Write Rate", "Value": "5",  "Children": [] }
         ]
       }]
     });
     let result = parse_lhm(&data);
     assert!(
-      (result.disk_read - 30.0).abs() < 1e-9,
-      "disk read should sum both drives: {}",
+      (result.disk_read - 100.0).abs() < 1e-9,
+      "disk read should sum all four drives (10+20+30+40=100), got {}",
       result.disk_read
     );
     assert!(
-      (result.disk_write - 20.0).abs() < 1e-9,
-      "disk write should sum both drives: {}",
+      (result.disk_write - 30.0).abs() < 1e-9,
+      "disk write should sum all four drives (5+15+5+5=30), got {}",
       result.disk_write
     );
   }
