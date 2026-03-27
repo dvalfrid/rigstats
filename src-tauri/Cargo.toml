@@ -1,6 +1,6 @@
 [package]
 name = "rigstats"
-version = "1.10.1" # x-release-please-version
+version = "1.11.0" # x-release-please-version
 description = "RIGStats dashboard"
 authors = ["Daniel Valfridsson"]
 license = "MIT"
