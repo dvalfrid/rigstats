@@ -130,8 +130,8 @@ WMI provides static metadata at startup.
 | Package temperature (°C) | LHM — AMD: `Core (Tctl/Tdie)` |
 | Package power (W) | LHM — `Package` power sensor |
 
-> CPU temperature currently uses the AMD sensor label `Core (Tctl/Tdie)`.
-> Intel CPUs report temperature in LHM under a different sensor name; no value will appear in the temp field on Intel systems until that mapping is added to `src-tauri/src/lhm.rs`.
+> CPU temperature is matched by sensor name: `Core (Tctl/Tdie)` for AMD Ryzen, `CPU Package` or `Core Average` for Intel.
+> The AMD label is preferred when both are present (dual-CPU edge case).
 
 ### GPU
 
@@ -167,11 +167,25 @@ Intel Arc GPUs should work but have not been tested.
 
 | Metric | Source |
 | --- | --- |
-| Read throughput (MB/s) | LHM — aggregated across up to 2 drives |
-| Write throughput (MB/s) | LHM — aggregated across up to 2 drives |
+| Read throughput (MB/s) | LHM — aggregated across all drives |
+| Write throughput (MB/s) | LHM — aggregated across all drives |
 | Per-drive capacity and usage | sysinfo |
 | Filesystem label | sysinfo |
-| Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`), matched to drive letter via WMI at startup |
+| Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`), matched to drive letter via WMI at startup |
+
+### Motherboard
+
+<img src="assets/motherboard-panel.png" width="200" alt="Motherboard panel">
+
+| Metric | Source |
+| --- | --- |
+| Board name | WMI `Win32_BaseBoard` — manufacturer normalized (ASUSTeK → ASUS, Micro-Star → MSI, etc.) |
+| Super I/O chip name | LHM — grandparent of the first `/lpc/` sensor node |
+| Fan speeds (RPM) | LHM — all active `/lpc/` fan channels, sorted descending; 0-RPM channels hidden |
+| Temperatures (°C) | LHM — all `/lpc/` temperature sensors ≥ 5 °C |
+| Voltage rails (V) | LHM — named `/lpc/` voltage rails only; generic `Voltage #N` slots excluded |
+
+The motherboard panel is opt-in and can be enabled in Settings → Panels. Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and other Super I/O controllers.
 
 ### Network
 
