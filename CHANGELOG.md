@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.11.0](https://github.com/dvalfrid/rigstats/compare/v1.10.1...v1.11.0) (2026-03-27)
+
+
+### Features
+
+* add Motherboard panel with fans, temps, and voltage rails ([819176e](https://github.com/dvalfrid/rigstats/commit/819176ecffec83945b05a0e28bebdd7fa695eba6))
+* redesign dialogs with Windows 11 dark-mode aesthetic ([9a1aa2a](https://github.com/dvalfrid/rigstats/commit/9a1aa2a062bbe666e85bc5103dac940c019f8b21))
+
 ## [1.10.1](https://github.com/dvalfrid/rigstats/compare/v1.10.0...v1.10.1) (2026-03-26)
 
 
