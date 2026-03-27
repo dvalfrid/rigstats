@@ -14,7 +14,7 @@ RIGStats is a Windows desktop dashboard built with Tauri v2. It targets a vertic
 
 ### Main Dashboard
 
-![Main Dashboard](assets/rigStats.png)
+<img src="assets/rigStats.png" width="260" alt="Main Dashboard">
 
 The main dashboard is designed for a vertical secondary display and keeps the live system view visible at a glance.
 
@@ -35,7 +35,7 @@ From here you can:
 
 ### Status Dialog
 
-![Status Dialog](assets/status-dialog.png)
+<img src="assets/status-dialog.png" width="480" alt="Status Dialog">
 
 The Status dialog is the diagnostics view for runtime health and backend troubleshooting.
 
@@ -57,7 +57,7 @@ From here you can:
 
 ### About Dialog
 
-![About Dialog](assets/about-dialog.png)
+<img src="assets/about-dialog.png" width="480" alt="About Dialog">
 
 The About dialog is the lightweight product-information view.
 
@@ -75,7 +75,7 @@ From here you can:
 
 ### Updates & Changelog Dialog
 
-![Updates & Changelog Dialog](assets/update-dialog.png)
+<img src="assets/update-dialog.png" width="480" alt="Updates &amp; Changelog Dialog">
 
 The Updates & Changelog dialog handles update discovery and version history.
 
@@ -94,7 +94,7 @@ From here you can:
 
 ### Settings Dialog
 
-![Settings Dialog](assets/settings-dialog.png)
+<img src="assets/settings-dialog.png" width="480" alt="Settings Dialog">
 
 The Settings dialog controls the dashboard presentation and placement behavior.
 
@@ -120,7 +120,7 @@ WMI provides static metadata at startup.
 
 ### CPU
 
-![CPU panel](assets/cpu-panel.png)
+<img src="assets/cpu-panel.png" width="200" alt="CPU panel">
 
 | Metric | Source |
 | --- | --- |
@@ -135,7 +135,7 @@ WMI provides static metadata at startup.
 
 ### GPU
 
-![GPU panel](assets/gpu-panel.png)
+<img src="assets/gpu-panel.png" width="200" alt="GPU panel">
 
 | Metric | Source |
 | --- | --- |
@@ -152,7 +152,7 @@ Intel Arc GPUs should work but have not been tested.
 
 ### RAM
 
-![RAM panel](assets/ram-panel.png)
+<img src="assets/ram-panel.png" width="200" alt="RAM panel">
 
 | Metric | Source |
 | --- | --- |
@@ -163,7 +163,7 @@ Intel Arc GPUs should work but have not been tested.
 
 ### Storage
 
-![Storage panel](assets/storage-panel.png)
+<img src="assets/storage-panel.png" width="200" alt="Storage panel">
 
 | Metric | Source |
 | --- | --- |
@@ -175,7 +175,7 @@ Intel Arc GPUs should work but have not been tested.
 
 ### Network
 
-![Network panel](assets/network-panel.png)
+<img src="assets/network-panel.png" width="200" alt="Network panel">
 
 | Metric | Source |
 | --- | --- |
@@ -186,7 +186,7 @@ Intel Arc GPUs should work but have not been tested.
 
 ### Clock
 
-![Clock panel](assets/clock-panel.png)
+<img src="assets/clock-panel.png" width="200" alt="Clock panel">
 
 | Metric | Source |
 | --- | --- |
@@ -196,7 +196,7 @@ Intel Arc GPUs should work but have not been tested.
 
 ### System Identity
 
-![System panel](assets/system-panel.png)
+<img src="assets/system-panel.png" width="200" alt="System panel">
 
 | Metadata | Source |
 | --- | --- |
