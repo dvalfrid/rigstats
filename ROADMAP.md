@@ -110,6 +110,40 @@ approach is used for disk temperature matching.
 
 ---
 
+## Stream Deck integration
+
+**Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
+
+Lets streamers and content creators display live hardware stats — CPU load, GPU
+temp, VRAM, fan RPM — directly on Stream Deck keys. No Elgato software, no
+separate plugin, no HTTP server: RIGStats owns the device entirely.
+
+**Architecture:**
+
+The `elgato-streamdeck` crate wraps `hidapi` and communicates directly with the
+USB HID interface. RIGStats detects connected Stream Deck devices on startup,
+renders metric values as button images, and pushes them to the device on every
+stats tick alongside the normal dashboard update.
+
+**Trade-off:** because HID devices can only be held by one process at a time,
+the official Elgato Stream Deck software must not be running simultaneously.
+Users who rely on Elgato's software for other profiles/macros cannot use both
+at once. This should be clearly communicated at setup time.
+
+**Scope:**
+
+- Add `elgato-streamdeck` (+ `hidapi`) to `Cargo.toml`
+- Detect connected Stream Deck devices at startup; store handle in `AppState`
+- New `streamdeck.rs` module: `render_key(metric, value, unit) → image`,
+  `push_stats(device, &StatsPayload, layout)` called from the stats tick
+- Per-key layout configured in Settings: pick metric (CPU load/temp/power,
+  GPU load/temp/VRAM, RAM used, disk read/write, ping) and colour thresholds
+- Brightness and layout persisted in `Settings`
+- Stream Deck integration is opt-in (off by default); auto-disabled when no
+  device is detected so the crate has zero overhead on systems without one
+
+---
+
 ## Battery panel (laptop support)
 
 **Panel:** New `battery` panel
