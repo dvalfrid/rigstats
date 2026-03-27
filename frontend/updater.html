@@ -5,67 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RIGStats Update</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link rel="stylesheet" href="./dialog.css">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #090c12;
-  --panel: rgba(16, 22, 34, 0.94);
-  --panel-strong: rgba(10, 16, 28, 0.98);
-  --border: rgba(64, 90, 128, 0.3);
-  --accent: #00c8ff;
-  --good: #39ff88;
-  --warn: #ff8b5b;
-  --text: #d7e6fb;
-  --muted: #89a4ca;
-  --mono: Consolas, "SFMono-Regular", monospace;
-  --sans: "Segoe UI", sans-serif;
-}
-body {
-  background:
-    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
-  color: var(--text);
-  font-family: var(--sans);
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-.shell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  overflow: hidden;
-}
-.hero {
-  padding: 14px 16px 12px;
-  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
-  border-bottom: 1px solid var(--border);
-}
-.kicker {
-  font: 10px var(--mono);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
-}
-.title {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1;
-}
+/* ── Updater-specific layout ────────────────────────────────────────────── */
 .version-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
-  font: 12px var(--mono);
-  color: var(--muted);
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
 }
 .version-new {
   color: var(--good);
   font-weight: 700;
 }
+
 .body {
   flex: 1;
   padding: 10px 12px 8px;
@@ -75,18 +30,17 @@ body {
   min-height: 0;
 }
 .cl-label {
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
 }
 .cl-scroll {
   flex: 1;
   min-height: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: #05080d;
-  padding: 9px;
+  background: var(--bg);
+  padding: 10px;
   overflow-y: auto;
 }
 .cl-version { margin-bottom: 10px; }
@@ -97,16 +51,15 @@ body {
   margin-bottom: 6px;
 }
 .cl-version-tag {
-  font: 700 11px var(--mono);
+  font: 700 12px var(--mono);
   color: var(--accent);
   text-decoration: none;
 }
 a.cl-version-tag:hover { text-decoration: underline; }
-.cl-version-date { font: 9px var(--mono); color: var(--muted); }
+.cl-version-date { font: 10px var(--mono); color: var(--text-2); }
 .cl-section-label {
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  color: var(--muted);
+  font-size: 10px;
+  color: var(--text-3);
   margin: 4px 0 2px;
 }
 .cl-items {
@@ -118,21 +71,23 @@ a.cl-version-tag:hover { text-decoration: underline; }
   gap: 2px;
 }
 .cl-items li {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text);
-  padding: 3px 6px;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.02);
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  background: rgba(255,255,255,0.03);
   border-left: 2px solid var(--border);
   line-height: 1.4;
 }
 .cl-items li.feat { border-left-color: var(--good); }
 .cl-items li.fix  { border-left-color: var(--warn); }
 .cl-empty {
-  font: 11px var(--mono);
-  color: var(--muted);
+  font-size: 12px;
+  color: var(--text-2);
   padding: 6px 0;
 }
+
+/* Progress */
 .progress-wrap {
   display: none;
   flex-direction: column;
@@ -140,64 +95,35 @@ a.cl-version-tag:hover { text-decoration: underline; }
 }
 .progress-wrap.visible { display: flex; }
 .progress-label {
-  font: 10px var(--mono);
-  color: var(--muted);
-  letter-spacing: 1px;
+  font-size: 11px;
+  color: var(--text-2);
 }
 .progress-track {
-  height: 5px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 3px;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
   overflow: hidden;
 }
 .progress-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 3px;
+  border-radius: 2px;
   width: 0%;
   transition: width 0.3s ease;
 }
+
 .status-msg {
-  font: 10px var(--mono);
-  color: var(--muted);
-  letter-spacing: 1px;
+  font-size: 11px;
+  color: var(--text-2);
   padding: 0 12px 8px;
   min-height: 18px;
 }
-.actions {
-  padding: 0 12px 10px;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 14px;
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-button:hover { border-color: rgba(0, 200, 255, 0.45); }
-button:disabled { opacity: 0.45; cursor: default; }
-button.primary {
-  background: var(--accent);
-  color: #001018;
-  border-color: transparent;
-  font-weight: 700;
-}
-button.primary:hover { background: #66e0ff; border-color: transparent; }
-button.primary:disabled { background: rgba(0,200,255,0.3); }
 </style>
 </head>
 <body>
   <div class="shell">
     <div class="hero">
-      <div class="kicker">// RIGStats Updater</div>
-      <div class="title" id="heroTitle">Update Available</div>
+      <div class="dialog-title" id="heroTitle">Update Available</div>
       <div class="version-row" id="versionRow">
         <span id="currentVersion">--</span>
         <span>→</span>
@@ -209,7 +135,7 @@ button.primary:disabled { background: rgba(0,200,255,0.3); }
       <div class="cl-label">What's New</div>
       <div class="cl-scroll" id="changelogContent"></div>
       <div class="progress-wrap" id="progressWrap">
-        <div class="progress-label" id="progressLabel">DOWNLOADING...</div>
+        <div class="progress-label" id="progressLabel">Downloading…</div>
         <div class="progress-track">
           <div class="progress-fill" id="progressFill"></div>
         </div>
@@ -218,9 +144,9 @@ button.primary:disabled { background: rgba(0,200,255,0.3); }
 
     <div class="status-msg" id="statusMsg"></div>
 
-    <div class="actions">
-      <button id="updateBtn" class="primary">Update Now</button>
-      <button id="laterBtn">Later</button>
+    <div class="dialog-actions">
+      <button id="updateBtn" class="btn-primary">Update Now</button>
+      <button id="laterBtn">Close</button>
     </div>
   </div>
 

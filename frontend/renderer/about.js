@@ -1,7 +1,6 @@
 import { backend, IS_DESKTOP } from './environment.js';
 
 const ids = {
-  rigstatsVersion: document.getElementById('rigstatsVersion'),
   rigstatsVersionMeta: document.getElementById('rigstatsVersionMeta'),
   licenseName: document.getElementById('licenseName'),
   websiteLink: document.getElementById('websiteLink'),
@@ -11,7 +10,6 @@ const ids = {
 };
 
 function render(info) {
-  ids.rigstatsVersion.textContent = info.rigstatsVersion;
   ids.rigstatsVersionMeta.textContent = info.rigstatsVersion;
   ids.licenseName.textContent = info.licenseName;
   ids.emailLink.href = `mailto:${info.contactEmail}`;

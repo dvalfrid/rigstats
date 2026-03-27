@@ -5,220 +5,122 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RIGStats Status</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link rel="stylesheet" href="./dialog.css">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #090c12;
-  --panel: rgba(16, 22, 34, 0.94);
-  --panel-strong: rgba(10, 16, 28, 0.98);
-  --border: rgba(64, 90, 128, 0.3);
-  --accent: #00c8ff;
-  --good: #39ff88;
-  --warn: #ff8b5b;
-  --text: #d7e6fb;
-  --muted: #89a4ca;
-  --mono: Consolas, "SFMono-Regular", monospace;
-  --sans: "Segoe UI", sans-serif;
-}
-body {
-  background:
-    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
-  color: var(--text);
-  font-family: var(--sans);
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-.shell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  overflow: hidden;
-}
-.hero {
-  padding: 10px 12px 8px;
-  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
-  border-bottom: 1px solid var(--border);
-}
-.kicker {
-  font: 10px var(--mono);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-.hero-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: flex-start;
-}
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-}
-.subtitle {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-}
+/* ── Status-specific layout ─────────────────────────────────────────────── */
 .content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
 }
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.card {
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 9px;
-}
-.card-title {
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
+  gap: 10px;
+  min-height: 0;
 }
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
+  gap: 8px;
 }
-.meta-label {
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  color: var(--muted);
-  margin-bottom: 2px;
-}
-.meta-value {
-  font-size: 12px;
-  line-height: 1.35;
-  word-break: break-word;
-}
-.meta-value.health-good { color: var(--good); }
-.meta-value.health-warn { color: var(--warn); }
-.meta-value.health-bad { color: #ff6b6b; }
-.meta-value.health-neutral { color: var(--muted); }
+
+/* Dependency table */
 .dep-table {
   width: 100%;
   border-collapse: collapse;
 }
 .dep-table td {
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding: 6px 0;
-  vertical-align: top;
+  border-top: 1px solid var(--border);
+  padding: 7px 0;
+  vertical-align: middle;
 }
 .dep-table tr:first-child td { border-top: none; }
-.dep-name { font-size: 11px; font-weight: 600; }
-.dep-version { font: 10px var(--mono); color: var(--accent); text-align: right; white-space: nowrap; }
-.dep-note { font-size: 10px; color: var(--muted); padding-top: 2px; }
-.dep-status {
-  text-align: right;
-  white-space: nowrap;
-}
+.dep-name    { font-size: 12px; font-weight: 600; }
+.dep-version { font: 11px var(--mono); color: var(--text-2); text-align: right; white-space: nowrap; padding-right: 8px; }
+.dep-note    { font-size: 11px; color: var(--text-2); padding-top: 1px; }
+.dep-status  { text-align: right; white-space: nowrap; }
 .dep-status-badge {
   display: inline-block;
-  min-width: 48px;
+  min-width: 44px;
   text-align: center;
-  padding: 4px 7px;
+  padding: 3px 7px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  font: 9px var(--mono);
+  font-size: 10px;
+  font-weight: 600;
 }
 .dep-status-badge.ok {
   color: var(--good);
-  border-color: rgba(57, 255, 136, 0.28);
-  background: rgba(57, 255, 136, 0.08);
+  border-color: rgba(108,203,95,0.3);
+  background: rgba(108,203,95,0.08);
 }
 .dep-status-badge.fail {
-  color: #ff6b6b;
-  border-color: rgba(255, 107, 107, 0.28);
-  background: rgba(255, 107, 107, 0.08);
+  color: var(--bad);
+  border-color: rgba(255,100,100,0.3);
+  background: rgba(255,100,100,0.08);
 }
-.actions {
+
+/* Debug log textarea */
+.log-card {
+  flex: 1;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
+  flex-direction: column;
+  min-height: 0;
 }
-.dialog-actions {
-  margin-top: auto;
-  padding: 0 8px 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 10px;
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-button:hover { border-color: rgba(0, 200, 255, 0.45); }
-button.primary {
-  background: var(--accent);
-  color: #001018;
-  border-color: transparent;
-  font-weight: 700;
-}
-button.primary:hover { background: #66e0ff; border-color: transparent; box-shadow: 0 0 12px rgba(0, 200, 255, 0.5); }
 textarea {
-  width: 100%;
-  height: 160px;
-  min-height: 160px;
+  flex: 1;
+  min-height: 120px;
   resize: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: #05080d;
-  color: #d7e6fb;
-  padding: 9px;
-  font: 10px/1.4 var(--mono);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px;
+  font: 11px/1.45 var(--mono);
   overflow-y: auto;
+  user-select: text;
+  -webkit-app-region: no-drag;
 }
-.footer-row {
+.log-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 7px;
-  margin-top: 7px;
+  margin-top: 6px;
+  flex-shrink: 0;
 }
 .hint {
-  color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
+  color: var(--text-3);
 }
+
+/* Left col: diag actions */
+.diag-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.diag-state {
+  font-size: 11px;
+  color: var(--text-2);
+}
+
 @media (max-width: 860px) {
   .content { grid-template-columns: 1fr; }
-  .hero-row { flex-direction: column; }
 }
 </style>
 </head>
 <body>
   <div class="shell">
     <div class="hero">
-      <div class="kicker">// Status</div>
-      <div class="hero-row">
-        <div>
-          <span id="rigstatsVersion" style="display:none;">--</span>
-          <div class="subtitle">Diagnostics, debug log and dependency health.</div>
-        </div>
-      </div>
+      <span id="rigstatsVersion" style="display:none;">--</span>
+      <div class="dialog-title">Status</div>
+      <div class="dialog-subtitle">Diagnostics, debug log and dependency health.</div>
     </div>
 
     <div class="content">
@@ -256,27 +158,25 @@ textarea {
       </div>
 
       <div class="stack">
-        <div class="card">
-          <div class="card-title">Debug Log</div>
-          <div class="actions">
-            <button id="copyLogBtn" title="Copy the visible debug log text to the clipboard.">Copy Log</button>
-          </div>
+        <div class="card log-card">
+          <div class="card-title" style="margin-bottom:6px;">Debug Log</div>
+          <button id="copyLogBtn" title="Copy the visible debug log text to the clipboard." style="margin-bottom:8px;align-self:flex-start;">Copy Log</button>
           <textarea id="logTail" readonly></textarea>
-          <div class="footer-row">
-            <div class="hint">Showing the latest log lines from RIGStats backend diagnostics.</div>
+          <div class="log-footer">
+            <div class="hint">Showing latest log lines from RIGStats backend diagnostics.</div>
             <div id="copyState" class="hint"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="dialog-actions">
-      <div class="actions" style="margin-bottom: 0;">
+    <div class="dialog-actions" style="justify-content:space-between;">
+      <div class="diag-actions">
         <button id="collectDiagBtn" title="Collect hardware info, LHM sensor data, debug log and environment details into a ZIP file for bug reports.">Collect Diagnostics…</button>
-        <span id="diagState" style="font:9px var(--mono);color:var(--muted);align-self:center;"></span>
+        <span id="diagState" class="diag-state"></span>
       </div>
-      <div class="actions" style="margin-bottom: 0;">
-        <button class="primary" id="refreshBtn" title="Reload diagnostics and debug log now. Updates Last Successful Refresh when the call succeeds.">Refresh</button>
+      <div style="display:flex;gap:6px;">
+        <button class="btn-primary" id="refreshBtn" title="Reload diagnostics and debug log now.">Refresh</button>
         <button id="closeBtn" title="Close the Status dialog.">Close</button>
       </div>
     </div>

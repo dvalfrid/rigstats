@@ -5,105 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>About RIGStats</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link rel="stylesheet" href="./dialog.css">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #090c12;
-  --panel: rgba(16, 22, 34, 0.94);
-  --panel-strong: rgba(10, 16, 28, 0.98);
-  --border: rgba(64, 90, 128, 0.3);
-  --accent: #00c8ff;
-  --good: #39ff88;
-  --warn: #ff8b5b;
-  --text: #d7e6fb;
-  --muted: #89a4ca;
-  --mono: Consolas, "SFMono-Regular", monospace;
-  --sans: "Segoe UI", sans-serif;
-}
-body {
-  background:
-    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
-  color: var(--text);
-  font-family: var(--sans);
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-.shell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  overflow: hidden;
-}
-.hero {
-  padding: 10px 12px 8px;
-  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
-  border-bottom: 1px solid var(--border);
-}
-.kicker {
-  font: 10px var(--mono);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 4px;
-}
-.hero-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: flex-start;
-}
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  line-height: 1;
-}
-.subtitle {
-  margin-top: 4px;
-  color: var(--muted);
-  font-size: 11px;
-}
+/* ── About-specific layout ──────────────────────────────────────────────── */
 .content {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 8px;
+  gap: 10px;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
 }
 .stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.card {
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 9px;
-}
-.card-title {
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 6px;
+  gap: 10px;
 }
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 7px;
+  gap: 8px;
 }
-.meta-label {
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  color: var(--muted);
+.hero-title {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
   margin-bottom: 2px;
-}
-.meta-value {
-  font-size: 12px;
-  line-height: 1.35;
-  word-break: break-word;
 }
 .link-list {
   display: flex;
@@ -119,59 +47,24 @@ body {
   color: var(--text);
   text-decoration: none;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 8px;
-  font: 10px var(--mono);
-  background: rgba(255,255,255,0.02);
-}
-.link-item:hover { border-color: rgba(0, 200, 255, 0.45); }
-.actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.dialog-actions {
-  margin-top: auto;
-  padding: 0 8px 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 7px 10px;
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  font-size: 12px;
+  background: var(--bg);
+  display: block;
+  transition: border-color 0.1s;
 }
-button:hover { border-color: rgba(0, 200, 255, 0.45); }
-button.primary {
-  background: var(--accent);
-  color: #001018;
-  border-color: transparent;
-  font-weight: 700;
-}
-button.primary:hover { background: #66e0ff; border-color: transparent; box-shadow: 0 0 12px rgba(0, 200, 255, 0.5); }
+.link-item:hover { border-color: var(--border-hi); }
 @media (max-width: 860px) {
   .content { grid-template-columns: 1fr; }
-  .hero-row { flex-direction: column; }
 }
 </style>
 </head>
 <body>
   <div class="shell">
     <div class="hero">
-      <div class="kicker">// About</div>
-      <div class="hero-row">
-        <div>
-          <div class="title">RIGStats <span id="rigstatsVersion">--</span></div>
-          <div class="subtitle">Links, license and contact details.</div>
-        </div>
-      </div>
+      <div class="hero-title">RIGStats</div>
+      <div class="dialog-subtitle">Links, license and contact details.</div>
     </div>
 
     <div class="content">
@@ -209,10 +102,8 @@ button.primary:hover { background: #66e0ff; border-color: transparent; box-shado
     </div>
 
     <div class="dialog-actions">
-      <div class="actions" style="margin-bottom: 0;">
-        <button class="primary" id="refreshBtn" title="Reload app version, license and contact information from the backend.">Refresh</button>
-        <button id="closeBtn" title="Close the About dialog.">Close</button>
-      </div>
+      <button class="btn-primary" id="refreshBtn" title="Reload app version, license and contact information from the backend.">Refresh</button>
+      <button id="closeBtn" title="Close the About dialog.">Close</button>
     </div>
   </div>
 

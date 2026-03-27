@@ -5,58 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RIGStats Settings</title>
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link rel="stylesheet" href="./dialog.css">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #090c12;
-  --panel: rgba(16, 22, 34, 0.94);
-  --panel-strong: rgba(10, 16, 28, 0.98);
-  --border: rgba(64, 90, 128, 0.3);
-  --accent: #00c8ff;
-  --good: #39ff88;
-  --warn: #ff6b6b;
-  --text: #d7e6fb;
-  --muted: #89a4ca;
-  --mono: Consolas, "SFMono-Regular", monospace;
-  --sans: "Segoe UI", sans-serif;
-}
-body {
-  background:
-    radial-gradient(circle at top right, rgba(0, 200, 255, 0.14), transparent 24%),
-    linear-gradient(180deg, #0b111c 0%, #070a11 100%);
-  color: var(--text);
-  font-family: var(--sans);
-  height: 100vh;
-  user-select: none;
-  display: flex;
-  flex-direction: column;
-}
-.shell {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  overflow: hidden;
-  min-height: 0;
-}
-.hero {
-  padding: 9px 12px 8px;
-  background: linear-gradient(135deg, rgba(0, 200, 255, 0.16), rgba(7, 12, 20, 0.1));
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-.kicker {
-  font: 10px var(--mono);
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 3px;
-}
-.subtitle { color: var(--muted); font-size: 11px; }
+/* ── Settings-specific layout ───────────────────────────────────────────── */
 .content {
-  padding: 8px;
+  padding: 10px;
   display: flex;
-  gap: 7px;
+  gap: 8px;
   flex: 1;
   min-height: 0;
 }
@@ -64,167 +19,81 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   min-width: 0;
 }
-.card {
-  background: var(--panel-strong);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 9px;
-}
-.panels-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-.section-label {
-  font: 10px var(--mono);
-  color: var(--muted);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-.row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+
+/* Range slider */
 input[type=range] {
   flex: 1;
   -webkit-appearance: none;
   appearance: none;
   height: 3px;
-  background: #1e2a40;
+  background: rgba(255,255,255,0.15);
   border-radius: 2px;
   cursor: pointer;
   outline: none;
 }
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: #00c8ff;
+  background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 4px rgba(0,200,255,0.6);
 }
-.value {
-  font-family: var(--mono);
-  font-size: 11px;
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.slider-val {
+  font-size: 12px;
   color: var(--text);
   width: 34px;
   text-align: right;
   flex-shrink: 0;
 }
-.labels {
+.slider-labels {
   display: flex;
   justify-content: space-between;
   margin-top: 4px;
-  font-size: 8px;
-  color: var(--muted);
-  letter-spacing: 1px;
+  font-size: 10px;
+  color: var(--text-3);
 }
-input[type=text] {
-  width: 100%;
-  background: #141820;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 6px 8px;
-  outline: none;
-  user-select: text;
-  -webkit-app-region: no-drag;
-}
-input[type=text]:focus { border-color: rgba(0, 200, 255, 0.45); }
-input[type=number] {
-  width: 54px;
-  background: #141820;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 5px 6px;
-  outline: none;
-  -webkit-app-region: no-drag;
-  user-select: text;
-  text-align: center;
-  -moz-appearance: textfield;
-}
-input[type=number]::-webkit-inner-spin-button,
-input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
-input[type=number]:focus { border-color: rgba(0, 200, 255, 0.45); }
+
+/* Alert grid */
 .alert-grid {
   display: grid;
-  grid-template-columns: 1fr 54px 54px;
+  grid-template-columns: 1fr 48px 48px;
   align-items: center;
-  gap: 5px 6px;
+  gap: 4px 5px;
 }
 .alert-col-header {
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  text-align: center;
-  padding-bottom: 2px;
-}
-.alert-col-header.warn { color: #ffd44d; }
-.alert-col-header.crit { color: #ff5f5f; }
-.alert-row-label {
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  color: var(--text);
-}
-select {
-  width: 100%;
-  background: #141820;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 6px 8px;
-  outline: none;
-  -webkit-app-region: no-drag;
-}
-select:focus { border-color: rgba(0, 200, 255, 0.45); }
-.actions {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-.dialog-actions {
-  margin-top: auto;
-  padding: 0 8px 8px;
-  display: flex;
-  justify-content: flex-end;
-  flex-shrink: 0;
-}
-.toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: #141820;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 8px;
-}
-.toggle-label {
-  font-family: var(--mono);
   font-size: 10px;
-  letter-spacing: 1px;
+  font-weight: 600;
+  text-align: center;
+  padding-bottom: 1px;
+}
+.alert-col-header.warn { color: var(--warn); }
+.alert-col-header.crit { color: var(--bad); }
+.alert-row-label {
+  font-size: 12px;
   color: var(--text);
 }
-.toggle-input {
-  width: 14px;
-  height: 14px;
-  accent-color: #00c8ff;
-  cursor: pointer;
+input[type=number].alert-num {
+  width: 48px;
+  font-family: var(--mono);
+  padding: 4px 4px;
 }
+
 /* Panel drag-and-drop list */
+.panels-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
 .panel-list {
   flex: 1;
   display: flex;
@@ -237,23 +106,23 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #141820;
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  padding: 7px 8px;
   user-select: none;
-  transition: border-color 0.15s, background 0.15s, margin-top 0.2s ease;
+  transition: border-color 0.12s, background 0.12s, margin-top 0.2s ease;
 }
-.panel-item:not(.dragging):hover { border-color: rgba(0, 200, 255, 0.35); }
+.panel-item:not(.dragging):hover { border-color: var(--border-hi); }
 .panel-item.drag-over {
-  border-color: rgba(0, 200, 255, 0.7);
-  background: rgba(0, 200, 255, 0.06);
+  border-color: var(--accent);
+  background: rgba(96,205,255,0.06);
   margin-top: 16px;
 }
 .panel-item.dragging { visibility: hidden; }
 .panel-drag-handle {
   cursor: grab;
-  color: var(--muted);
+  color: var(--text-3);
   font-size: 14px;
   line-height: 1;
   flex-shrink: 0;
@@ -263,91 +132,52 @@ select:focus { border-color: rgba(0, 200, 255, 0.45); }
 .panel-drag-handle:active { cursor: grabbing; }
 .panel-item-label {
   flex: 1;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 1px;
+  font-size: 12px;
 }
-.panel-item.hidden-panel .panel-item-label { color: var(--muted); }
-button {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 10px;
-  background: rgba(255,255,255,0.03);
-  color: var(--text);
-  font: 10px var(--mono);
-  letter-spacing: 1px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-}
-button:hover { border-color: rgba(0, 200, 255, 0.45); }
-.btn-save {
-  background: var(--accent);
-  color: #001018;
-  border-color: transparent;
-  font-weight: 700;
-}
-.btn-save:hover { background: #66e0ff; border-color: transparent; box-shadow: 0 0 12px rgba(0, 200, 255, 0.5); }
-.btn-cancel { background: rgba(255,255,255,0.03); color: var(--text); }
+.panel-item.hidden-panel .panel-item-label { color: var(--text-2); }
+
+/* Status bar (class names must match setStatus() in settings.js) */
 .status {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 1px;
-  min-height: 12px;
-  color: var(--muted);
+  font-size: 11px;
+  color: var(--text-2);
+  min-height: 14px;
   padding: 2px 1px;
   flex-shrink: 0;
 }
-.status-ok { color: var(--good); }
-.status-err { color: var(--warn); }
+.status-ok  { color: var(--good); }
+.status-err { color: var(--bad); }
 </style>
 </head>
 <body>
 <div class="shell">
   <div class="hero">
-    <div class="kicker">// Settings</div>
-    <div class="subtitle">Dashboard preferences and window behavior.</div>
+    <div class="dialog-title">Settings</div>
+    <div class="dialog-subtitle">Dashboard preferences and window behavior.</div>
   </div>
 
   <div class="content">
 
-    <!-- Left column: sliders, toggles -->
+    <!-- Left column: display/window, temperature alerts -->
     <div class="col">
-      <div class="card">
-        <div class="section-label">Opacity</div>
-        <div class="row">
-          <input type="range" id="slider" min="0" max="100" value="55" step="1">
-          <span class="value" id="val">55%</span>
-        </div>
-        <div class="labels">
-          <span>TRANSPARENT</span>
-          <span>SOLID</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="section-label">Model Name</div>
-        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false">
-      </div>
-
       <div class="card">
         <div class="section-label">Display &amp; Window</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <select id="profileSelect">
-            <option value="portrait-xl">Portrait XL (450x1920)</option>
-            <option value="portrait-slim">Portrait Slim (480x1920)</option>
-            <option value="portrait-fhd-side">FHD Sidebar (253x1080)</option>
-            <option value="portrait-qhd-side">QHD Sidebar (338x1440)</option>
-            <option value="portrait-4k-side">4K Sidebar (506x2160)</option>
-            <option value="portrait-hd">Portrait HD (720x1280)</option>
-            <option value="portrait-wxga">Portrait WXGA (800x1280)</option>
-            <option value="portrait-fhd">Portrait FHD (1080x1920)</option>
-            <option value="portrait-wuxga">Portrait WUXGA (1200x1920)</option>
-            <option value="portrait-qhd">Portrait QHD (1440x2560)</option>
-            <option value="portrait-hdplus">Portrait HD+ (768x1366)</option>
-            <option value="portrait-900x1600">Portrait 900x1600</option>
-            <option value="portrait-1050x1680">Portrait 1050x1680</option>
-            <option value="portrait-1600x2560">Portrait 1600x2560</option>
-            <option value="portrait-4k">Portrait 4K (2160x3840)</option>
+            <option value="portrait-xl">Portrait XL (450×1920)</option>
+            <option value="portrait-slim">Portrait Slim (480×1920)</option>
+            <option value="portrait-fhd-side">FHD Sidebar (253×1080)</option>
+            <option value="portrait-qhd-side">QHD Sidebar (338×1440)</option>
+            <option value="portrait-4k-side">4K Sidebar (506×2160)</option>
+            <option value="portrait-hd">Portrait HD (720×1280)</option>
+            <option value="portrait-wxga">Portrait WXGA (800×1280)</option>
+            <option value="portrait-fhd">Portrait FHD (1080×1920)</option>
+            <option value="portrait-wuxga">Portrait WUXGA (1200×1920)</option>
+            <option value="portrait-qhd">Portrait QHD (1440×2560)</option>
+            <option value="portrait-hdplus">Portrait HD+ (768×1366)</option>
+            <option value="portrait-900x1600">Portrait 900×1600</option>
+            <option value="portrait-1050x1680">Portrait 1050×1680</option>
+            <option value="portrait-1600x2560">Portrait 1600×2560</option>
+            <option value="portrait-4k">Portrait 4K (2160×3840)</option>
           </select>
           <label class="toggle-row" for="alwaysOnTopInput">
             <span class="toggle-label">Always On Top</span>
@@ -356,7 +186,7 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
           <label class="toggle-row" for="autostartInput">
             <div>
               <div class="toggle-label">Launch at Startup</div>
-              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);letter-spacing:0.5px;margin-top:2px;">Starts at login · LHM connects automatically</div>
+              <div class="toggle-sublabel">Starts at login · LHM connects automatically</div>
             </div>
             <input class="toggle-input" type="checkbox" id="autostartInput">
           </label>
@@ -364,46 +194,63 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
       </div>
 
       <div class="card" style="flex:1;display:flex;flex-direction:column;">
-        <div class="section-label">Temp Alerts</div>
+        <div class="section-label">Temperature Alerts</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-          <span style="font:10px var(--mono);letter-spacing:1px;color:var(--muted);">Cooldown</span>
+          <span style="font-size:12px;color:var(--text-2);">Cooldown</span>
           <input type="number" id="alertCooldownInput" min="60" max="3600" step="30" style="width:60px;">
-          <span style="font:9px var(--mono);color:var(--muted);">s</span>
-          <button id="btnTestAlert" style="margin-left:auto;">TEST</button>
+          <span style="font-size:11px;color:var(--text-2);">s</span>
+          <button id="btnTestAlert" style="margin-left:auto;">Test Alert</button>
         </div>
         <div class="alert-grid">
-          <div style="font:9px var(--mono);color:var(--muted);letter-spacing:1px;padding-bottom:2px;">°C · blank = off</div>
-          <div class="alert-col-header warn">WARN</div>
-          <div class="alert-col-header crit">CRIT</div>
+          <div style="font-size:11px;color:var(--text-2);">°C — blank to disable</div>
+          <div class="alert-col-header warn">Warn</div>
+          <div class="alert-col-header crit">Crit</div>
 
-          <div class="alert-row-label" style="color:var(--muted);">Notify</div>
-          <input type="checkbox" id="notifyOnWarnInput" checked style="width:14px;height:14px;accent-color:#ffd44d;cursor:pointer;justify-self:center;">
-          <input type="checkbox" id="notifyOnCritInput" checked style="width:14px;height:14px;accent-color:#ff5f5f;cursor:pointer;justify-self:center;">
+          <div class="alert-row-label" style="color:var(--text-2);">Notify</div>
+          <input type="checkbox" id="notifyOnWarnInput" checked class="toggle-input" style="justify-self:center;">
+          <input type="checkbox" id="notifyOnCritInput" checked class="toggle-input" style="justify-self:center;">
 
           <div class="alert-row-label">CPU</div>
-          <input type="number" id="warnCpuTempInput" min="1" max="255" placeholder="—">
-          <input type="number" id="critCpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="warnCpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="critCpuTempInput" min="1" max="255" placeholder="—">
 
           <div class="alert-row-label">GPU</div>
-          <input type="number" id="warnGpuTempInput" min="1" max="255" placeholder="—">
-          <input type="number" id="critGpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="warnGpuTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="critGpuTempInput" min="1" max="255" placeholder="—">
 
           <div class="alert-row-label">RAM</div>
-          <input type="number" id="warnRamTempInput" min="1" max="255" placeholder="—">
-          <input type="number" id="critRamTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="warnRamTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="critRamTempInput" min="1" max="255" placeholder="—">
 
           <div class="alert-row-label">Disk</div>
-          <input type="number" id="warnDiskTempInput" min="1" max="255" placeholder="—">
-          <input type="number" id="critDiskTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="warnDiskTempInput" min="1" max="255" placeholder="—">
+          <input type="number" class="alert-num" id="critDiskTempInput" min="1" max="255" placeholder="—">
         </div>
         <div id="status" class="status" style="margin-top:auto;padding-top:6px;"></div>
       </div>
     </div>
 
-    <!-- Right column: panel order -->
+    <!-- Right column: opacity, model name, panel order -->
     <div class="col">
+      <div class="card">
+        <div class="section-label">Opacity</div>
+        <div class="slider-row">
+          <input type="range" id="slider" min="0" max="100" value="55" step="1">
+          <span class="slider-val" id="val">55%</span>
+        </div>
+        <div class="slider-labels">
+          <span>Transparent</span>
+          <span>Solid</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Model Name</div>
+        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false" style="width:100%;">
+      </div>
+
       <div class="card panels-card">
-        <div class="section-label">Visible Panels · drag to reorder</div>
+        <div class="section-label">Panels — drag to reorder</div>
         <div id="panelToggles" class="panel-list"></div>
       </div>
     </div>
@@ -411,10 +258,8 @@ button:hover { border-color: rgba(0, 200, 255, 0.45); }
   </div>
 
   <div class="dialog-actions">
-    <div class="actions" style="margin-bottom: 0;">
-      <button class="btn-save" id="btnSave">Save</button>
-      <button class="btn-cancel" id="btnCancel">Cancel</button>
-    </div>
+    <button class="btn-primary" id="btnSave">Save</button>
+    <button id="btnCancel">Cancel</button>
   </div>
 </div>
 

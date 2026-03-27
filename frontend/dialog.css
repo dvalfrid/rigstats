@@ -1,0 +1,243 @@
+/* Shared Windows 11 dark-mode design tokens and base dialog components.
+   Linked from: settings.html, about.html, status.html, updater.html */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Design tokens ─────────────────────────────────────────────────────── */
+:root {
+  /* Surfaces (Mica-inspired neutral dark) */
+  --bg:        #202020;
+  --surface:   #2b2b2b;
+  --surface-2: #383838;
+
+  /* Borders */
+  --border:       rgba(255,255,255,0.083);
+  --border-hi:    rgba(255,255,255,0.18);
+  --border-focus: rgba(96,205,255,0.6);
+
+  /* Accent — Win11 default blue */
+  --accent:      #60cdff;
+  --accent-text: #001b2e;
+
+  /* Status colors */
+  --good: #6ccb5f;
+  --warn: #ffd44d;
+  --bad:  #ff6464;
+
+  /* Typography */
+  --text:   rgba(255,255,255,0.886);
+  --text-2: rgba(255,255,255,0.544);
+  --text-3: rgba(255,255,255,0.363);
+
+  /* Fonts */
+  --sans: "Segoe UI Variable Display", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: Consolas, "SFMono-Regular", monospace;
+
+  /* Shape */
+  --radius:    4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────── */
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 13px;
+  height: 100vh;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ── Title / hero bar ───────────────────────────────────────────────────── */
+.hero {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.dialog-title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.dialog-subtitle {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 8px;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+button {
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+button:hover   { background: rgba(255,255,255,0.07); }
+button:active  { background: rgba(255,255,255,0.04); }
+button:disabled { opacity: 0.4; cursor: default; }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+  font-weight: 600;
+}
+.btn-primary:hover  { background: #8ed9ff; border-color: transparent; }
+.btn-primary:active { background: #4ab8f5; border-color: transparent; }
+.btn-primary:disabled { background: rgba(96,205,255,0.35); color: rgba(0,27,46,0.55); }
+
+/* ── Form controls ──────────────────────────────────────────────────────── */
+input[type=text],
+input[type=number],
+select {
+  background: var(--bg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 6px 8px;
+  outline: none;
+  -webkit-app-region: no-drag;
+  user-select: text;
+  transition: border-color 0.1s;
+}
+input[type=text]:focus,
+input[type=number]:focus,
+select:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 1px var(--border-focus);
+}
+select { width: 100%; cursor: pointer; }
+
+input[type=number] {
+  text-align: center;
+  -moz-appearance: textfield;
+}
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+/* ── Pill toggle switch ─────────────────────────────────────────────────── */
+.toggle-input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 40px;
+  height: 20px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.18);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.toggle-input::after {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  top: 2px;
+  left: 2px;
+  transition: left 0.15s;
+  pointer-events: none;
+}
+.toggle-input:checked {
+  background: var(--accent);
+  border-color: transparent;
+}
+.toggle-input:checked::after { left: 22px; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  cursor: pointer;
+  gap: 10px;
+}
+.toggle-row:hover { border-color: var(--border-hi); }
+
+.toggle-label {
+  font-size: 12px;
+  color: var(--text);
+}
+.toggle-sublabel {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+
+/* ── Meta grid (label + value pairs) ───────────────────────────────────── */
+.meta-label {
+  font-size: 11px;
+  color: var(--text-2);
+  margin-bottom: 2px;
+}
+.meta-value {
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.meta-value.health-good    { color: var(--good); }
+.meta-value.health-warn    { color: var(--warn); }
+.meta-value.health-bad     { color: var(--bad); }
+.meta-value.health-neutral { color: var(--text-2); }
+
+/* ── Dialog footer ──────────────────────────────────────────────────────── */
+.dialog-actions {
+  padding: 8px 12px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
