@@ -29,6 +29,7 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "@tauri-apps/plugin-opener": "^2.5.3"
+    "@tauri-apps/plugin-opener": "^2.5.3",
+    "cargo": "^0.8.0"
   }
 }

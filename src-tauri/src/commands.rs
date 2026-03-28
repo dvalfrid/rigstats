@@ -902,6 +902,15 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     );
   }
 
+  // Cache the completed payload for the Stream Deck background thread.
+  {
+    let mut last = state.last_stats.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: last_stats mutex poisoned; recovering guard");
+      e.into_inner()
+    });
+    *last = Some(payload.clone());
+  }
+
   Ok(payload)
 }
 

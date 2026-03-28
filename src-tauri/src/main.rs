@@ -16,6 +16,7 @@ mod lhm_process;
 mod monitor;
 mod settings;
 mod stats;
+mod streamdeck;
 mod updater;
 mod windows;
 
@@ -234,6 +235,7 @@ fn main() {
         sysinfo_available,
         wmi_available,
         last_alert: Mutex::new(HashMap::new()),
+        last_stats: Mutex::new(None),
       });
 
       if let Some(main) = app.get_webview_window("main") {
@@ -254,6 +256,7 @@ fn main() {
       // Fallback for cases where installer task did not launch LHM yet.
       ensure_lhm_running(app_handle);
       updater::spawn_background_check(app_handle);
+      streamdeck::spawn_streamdeck_loop(app_handle);
 
       // Re-register only if the Run key is completely absent (e.g. after a
       // reinstall). If Windows Settings has disabled the entry (StartupApproved

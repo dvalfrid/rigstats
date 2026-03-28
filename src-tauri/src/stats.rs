@@ -134,4 +134,8 @@ pub struct AppState {
   /// Per-component alert cooldown tracker. Key: "<component>_<level>" (e.g. "cpu_warning").
   /// Stores the `Instant` of the last fired notification to enforce the 60-second cooldown.
   pub last_alert: Mutex<HashMap<String, Instant>>,
+  /// Most recent completed stats snapshot, written by `get_stats` on every tick.
+  /// Read by the Stream Deck background thread so it can render keys without
+  /// duplicating sensor-collection work.
+  pub last_stats: Mutex<Option<StatsPayload>>,
 }

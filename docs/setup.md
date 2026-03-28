@@ -86,6 +86,7 @@ Built-in profiles:
 2. `portrait-slim` -> `480x1920`
 3. `portrait-hd` -> `720x1280`
 4. `portrait-wxga` -> `800x1280`
+5. Elgato Stream Deck XL -> 32 keys, 4 rows × 8 columns (automatic, see below)
 
 How it works:
 
@@ -129,3 +130,49 @@ Launch at startup is configured directly in the app — no manual steps required
 Open the Settings window (right-click the tray icon → Settings) and enable the **Launch at Startup** toggle. The app registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` and keeps the `StartupApproved\Run` entry in sync so the toggle reflects the actual state shown in Windows Settings → Apps → Startup.
 
 LHM startup is handled separately by the installer-created scheduled task.
+
+## Stream Deck XL Integration
+
+RIGStats automatically renders live hardware telemetry on an Elgato Stream Deck XL
+(32-key model, 4 rows × 8 columns) when one is connected.
+
+### How it works
+
+- A background thread starts at launch and scans for a Stream Deck XL via USB HID.
+- Once connected, all 32 keys update once per second with the same data shown in the
+  main dashboard window.
+- If the device is disconnected, the thread retries every 5 seconds.
+- No configuration is required — plug in the Stream Deck XL and it is detected automatically.
+
+### Key layout
+
+```text
+Row 0:  [CPU]  [LOAD%] [TEMP]  [FREQ]   [GPU]  [LOAD%] [TEMP]  [VRAM]
+Row 1:  [PWR]  [CORES] [----]  [----]   [PWR]  [FAN]   [HTSPOT][----]
+Row 2:  [RAM]  [USED%] [GB]    [TEMP]   [NET]  [UP]    [DOWN]  [PING]
+Row 3:  [DISK] [READ]  [WRITE] [Drive0] [Drive1][MB]   [FAN]   [TEMP]
+```
+
+Temperature values are colour-coded on each key:
+
+| Colour | Meaning |
+| --- | --- |
+| White / light blue | Normal |
+| Amber | Warm (≥ 75 °C) |
+| Red | Critical (≥ 90 °C) |
+
+### Requirements
+
+- Elgato Stream Deck XL (32-key model)
+- The Elgato Stream Deck software must **not** be running — it holds exclusive HID access.
+  Quit it before starting RIGStats.
+
+### Troubleshooting
+
+Check the debug log (tray icon → Status) for `streamdeck:` entries:
+
+| Message | Cause |
+| --- | --- |
+| `no Stream Deck XL detected` | Device not connected or Elgato software is running |
+| `connected (serial …)` | Successfully connected |
+| `render error: key N: …` | USB write failed — unplug and replug the device |
