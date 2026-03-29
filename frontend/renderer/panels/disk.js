@@ -68,7 +68,8 @@ function updateDiskPanel(disk, history, pushHistory, thresholds = {}) {
   const fmt = (v) => (v >= 1000 ? (v / 1000).toFixed(2) : v.toFixed(0));
   const unit = (v) => (v >= 1000 ? 'GB/s' : 'MB/s');
 
-  pushHistory(history.disk, readMBs);
+  pushHistory(history.diskRead, readMBs);
+  pushHistory(history.diskWrite, writeMBs);
 
   document.getElementById('diskRead').textContent = fmt(readMBs);
   document.getElementById('diskReadU').textContent = unit(readMBs);

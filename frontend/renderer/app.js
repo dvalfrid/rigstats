@@ -372,7 +372,7 @@ function applyStats(stats) {
   drawSpark('gpuSpark', history.gpu, '#ff3a1f');
   drawSpark('ramSpark', history.ram, '#ffb300');
   drawDoubleSpark('netSpark', history.netDown, '#00c8ff', history.netUp, '#39ff88');
-  drawSpark('diskSpark', history.disk, '#bf7fff');
+  drawDoubleSpark('diskSpark', history.diskRead, '#bf7fff', history.diskWrite, '#ff7fbf');
 }
 
 async function tick() {
