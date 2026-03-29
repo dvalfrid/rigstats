@@ -191,6 +191,8 @@ fn main() {
       let sysinfo_available = !system.cpus().is_empty() || system.total_memory() > 0;
       let ram_spec = detect_ram_spec();
       let ram_details = detect_ram_details();
+      append_debug_log(app_handle, &format!("ram_spec: {:?}", ram_spec));
+      append_debug_log(app_handle, &format!("ram_details: {:?}", ram_details));
       let gpu_vram_total_mb = detect_gpu_vram_total_mb();
       let disk_model_map = detect_disk_model_map();
       if disk_model_map.is_empty() {

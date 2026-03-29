@@ -149,6 +149,9 @@ struct SysinfoSnapshot {
   wmi_available: bool,
   ram_spec: String,
   ram_details: String,
+  /// Raw output of the same PowerShell command used by detect_ram_spec at startup.
+  /// "null" means the command returned empty output or failed.
+  ram_spec_probe: String,
   ping_target: String,
 }
 
@@ -182,6 +185,38 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
     let networks = state.networks.lock().unwrap_or_else(|e| e.into_inner());
     networks.keys().cloned().collect()
   };
+  // Re-run the same PowerShell command used by detect_ram_spec at startup so we
+  // can see what it actually returns, independent of timing or WMI crate issues.
+  let ram_spec_probe = {
+    #[cfg(windows)]
+    {
+      use crate::debug::run_hidden_command;
+      let result = run_hidden_command(
+        "powershell",
+        &[
+          "-NoProfile",
+          "-Command",
+          "$m=Get-CimInstance Win32_PhysicalMemory;if(-not $m){'(null)'} else { $m|ForEach-Object{\"speed=$($_.Speed) configured=$($_.ConfiguredClockSpeed) smbios=$($_.SMBIOSMemoryType) memtype=$($_.MemoryType)\"}|Out-String }",
+        ],
+      );
+      match result {
+        Ok(out) if out.status.success() => {
+          let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+          if s.is_empty() {
+            "(empty output)".to_string()
+          } else {
+            s
+          }
+        }
+        Ok(out) => format!("(exit {})", out.status),
+        Err(e) => format!("(error: {})", e),
+      }
+    }
+    #[cfg(not(windows))]
+    {
+      "(not windows)".to_string()
+    }
+  };
   let snap = SysinfoSnapshot {
     cpu_brand,
     cpu_count,
@@ -195,6 +230,7 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
     wmi_available: state.wmi_available,
     ram_spec: state.ram_spec.clone(),
     ram_details: state.ram_details.clone(),
+    ram_spec_probe,
     ping_target: state.ping_target.clone(),
   };
   serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
