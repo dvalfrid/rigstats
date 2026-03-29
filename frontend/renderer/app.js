@@ -6,7 +6,7 @@
 
 import { IS_DESKTOP, backend } from './environment.js';
 import { startClock, setUptimeFromSeconds } from './clock.js';
-import { createHistory, pushHistory, drawSpark } from './spark.js';
+import { createHistory, pushHistory, drawSpark, drawDoubleSpark } from './spark.js';
 import { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo } from './systemInfo.js';
 import { normalizeRigBrand } from './vendorBranding.js';
 import { initCpuPanel, updateCpuPanel } from './panels/cpu.js';
@@ -371,7 +371,7 @@ function applyStats(stats) {
   drawSpark('cpuSpark', history.cpu, '#00c8ff');
   drawSpark('gpuSpark', history.gpu, '#ff3a1f');
   drawSpark('ramSpark', history.ram, '#ffb300');
-  drawSpark('netSpark', history.net, '#39ff88');
+  drawDoubleSpark('netSpark', history.netDown, '#00c8ff', history.netUp, '#39ff88');
   drawSpark('diskSpark', history.disk, '#bf7fff');
 }
 

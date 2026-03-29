@@ -8,7 +8,8 @@ function updateNetworkPanel(stats, history, pushHistory) {
   const fmt = (v) => (v >= 1000 ? (v / 1000).toFixed(2) : v.toFixed(1));
   const unit = (v) => (v >= 1000 ? 'Gbps' : 'Mbps');
 
-  pushHistory(history.net, downMbps);
+  pushHistory(history.netDown, downMbps);
+  pushHistory(history.netUp, upMbps);
 
   document.getElementById('netUp').textContent = fmt(upMbps);
   document.getElementById('netUpU').textContent = unit(upMbps);
