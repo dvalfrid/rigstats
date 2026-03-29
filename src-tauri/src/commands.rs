@@ -811,11 +811,16 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     }
   };
 
-  let (disk_read, disk_write, net_up, net_down, lhm_connected) = if let Some(ref l) = lhm {
-    (l.disk_read, l.disk_write, l.net_up, l.net_down, true)
+  // Network is always sourced from sysinfo — it reads the same OS counters as
+  // Task Manager and reliably tracks the active interface by traffic volume.
+  // LHM's network sensors track adapters by GUID and can latch onto the wrong
+  // interface (VPNs, Hyper-V bridges, etc.), producing near-zero readings.
+  let (disk_read, disk_write, lhm_connected) = if let Some(ref l) = lhm {
+    (l.disk_read, l.disk_write, true)
   } else {
-    (0.0, 0.0, best_up, best_down, false)
+    (0.0, 0.0, false)
   };
+  let (net_up, net_down) = (best_up, best_down);
 
   track_lhm_connection_state(&app, lhm_connected);
 
