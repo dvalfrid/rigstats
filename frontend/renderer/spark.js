@@ -8,7 +8,8 @@ function createHistory(length = 80) {
     ram: Array(length).fill(0),
     netDown: Array(length).fill(0),
     netUp: Array(length).fill(0),
-    disk: Array(length).fill(0),
+    diskRead: Array(length).fill(0),
+    diskWrite: Array(length).fill(0),
   };
 }
 
