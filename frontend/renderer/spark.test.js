@@ -8,14 +8,19 @@ describe('createHistory', () => {
     expect(h.cpu).toHaveLength(10);
     expect(h.gpu).toHaveLength(10);
     expect(h.ram).toHaveLength(10);
-    expect(h.net).toHaveLength(10);
-    expect(h.disk).toHaveLength(10);
+    expect(h.netDown).toHaveLength(10);
+    expect(h.netUp).toHaveLength(10);
+    expect(h.diskRead).toHaveLength(10);
+    expect(h.diskWrite).toHaveLength(10);
   });
 
   it('fills all entries with zero', () => {
     const h = createHistory(5);
     expect(h.cpu.every((v) => v === 0)).toBe(true);
-    expect(h.disk.every((v) => v === 0)).toBe(true);
+    expect(h.diskRead.every((v) => v === 0)).toBe(true);
+    expect(h.diskWrite.every((v) => v === 0)).toBe(true);
+    expect(h.netDown.every((v) => v === 0)).toBe(true);
+    expect(h.netUp.every((v) => v === 0)).toBe(true);
   });
 
   it('defaults to length 80', () => {
