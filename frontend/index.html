@@ -129,6 +129,7 @@ html, body {
 .update-badge{margin-top:var(--gap-inner-sm);padding:3px 8px;border:1px solid rgba(57,255,136,.45);background:rgba(57,255,136,.10);font-family:var(--mono);font-size:var(--font-ui);letter-spacing:2px;color:#39ff88;text-transform:uppercase;width:max-content;cursor:pointer;line-height:1.4;}
 .update-badge:hover{background:rgba(57,255,136,.2);}
 #modelName{color:var(--accent);font-size:var(--model-name-size);}
+#rigName{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 #cpuModel,#gpuModel{font-size:var(--font-sub);}
 
 /* CLOCK */
@@ -230,10 +231,10 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
   <div class="panel panel-header" data-panel="header" data-tauri-drag-region>
     <div class="tl"></div><div class="br"></div>
     <div class="rig-header-row">
-      <div>
+      <div style="min-width:0;overflow:hidden;">
         <div class="rig-label">// GAMING RIG</div>
         <div id="rigBrandPreview" class="rig-brand-preview"></div>
-        <div class="rig-name"><span id="rigName">--</span><br><span id="modelName">--</span></div>
+        <div class="rig-name"><span id="rigName">--</span><span id="modelName">--</span></div>
         <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
         <div id="updateBadge" class="update-badge" style="display:none"></div>
       </div>

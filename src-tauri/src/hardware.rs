@@ -505,6 +505,11 @@ fn normalize_model_name(raw: &str) -> Option<String> {
   if trimmed.is_empty() {
     return None;
   }
+  // Reject bare version numbers like "1.05", "2.0", "10.1" — these are
+  // firmware/BIOS version strings, not meaningful model names (e.g. Razer Blade).
+  if trimmed.chars().all(|c| c.is_ascii_digit() || c == '.') {
+    return None;
+  }
   let invalid = [
     "to be filled by o.e.m.",
     "system product name",
@@ -907,6 +912,17 @@ mod cross_platform_tests {
   fn normalize_model_name_rejects_empty_and_whitespace() {
     assert_eq!(normalize_model_name(""), None);
     assert_eq!(normalize_model_name("   "), None);
+  }
+
+  #[test]
+  fn normalize_model_name_rejects_bare_version_numbers() {
+    assert_eq!(normalize_model_name("1.05"), None);
+    assert_eq!(normalize_model_name("2.0"), None);
+    assert_eq!(normalize_model_name("10.1"), None);
+    assert_eq!(normalize_model_name("1.2.3"), None);
+    // Real model names that contain digits must not be rejected
+    assert!(normalize_model_name("Blade 15").is_some());
+    assert!(normalize_model_name("ROG GM700TZ").is_some());
   }
 
   #[test]
