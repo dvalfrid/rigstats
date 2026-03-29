@@ -150,7 +150,9 @@ struct SysinfoSnapshot {
   ram_spec: String,
   ram_details: String,
   /// Raw output of the same PowerShell command used by detect_ram_spec at startup.
-  /// "null" means the command returned empty output or failed.
+  /// When the probe fails or returns no data, this contains a human-readable
+  /// marker such as "(null)", "(empty output)", "(exit ...)", "(error: ...)",
+  /// or "(not windows)".
   ram_spec_probe: String,
   ping_target: String,
 }
@@ -190,7 +192,6 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
   let ram_spec_probe = {
     #[cfg(windows)]
     {
-      use crate::debug::run_hidden_command;
       let result = run_hidden_command(
         "powershell",
         &[
