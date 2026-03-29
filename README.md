@@ -167,8 +167,8 @@ Intel Arc GPUs should work but have not been tested.
 
 | Metric | Source |
 | --- | --- |
-| Read throughput (MB/s) | LHM — aggregated across all drives |
-| Write throughput (MB/s) | LHM — aggregated across all drives |
+| Read throughput (MB/s) | LHM — aggregated across all drives; shown as purple series in sparkline |
+| Write throughput (MB/s) | LHM — aggregated across all drives; shown as pink series in sparkline |
 | Per-drive capacity and usage | sysinfo |
 | Filesystem label | sysinfo |
 | Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`), matched to drive letter via WMI at startup |
@@ -193,8 +193,8 @@ The motherboard panel is opt-in and can be enabled in Settings → Panels. Works
 
 | Metric | Source |
 | --- | --- |
-| Upload speed (Mbps) | LHM — best active interface |
-| Download speed (Mbps) | LHM — best active interface |
+| Upload speed (Mbps) | sysinfo — best active interface by traffic volume |
+| Download speed (Mbps) | sysinfo — best active interface by traffic volume |
 | Active interface name | sysinfo |
 | Latency / ping (ms) | Windows `ping` command — default gateway, falls back to `1.1.1.1` |
 
@@ -214,7 +214,7 @@ The motherboard panel is opt-in and can be enabled in Settings → Panels. Works
 
 | Metadata | Source |
 | --- | --- |
-| Computer / rig name | `hostname` crate |
+| Computer / rig name | `hostname` crate — truncated with ellipsis if too long |
 | CPU model string | sysinfo |
 | GPU model string | WMI `Win32_VideoController`, falls back to LHM tree |
 | System brand / logo | WMI `Win32_ComputerSystem`, `Win32_ComputerSystemProduct`, `Win32_BaseBoard` |
