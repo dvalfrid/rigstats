@@ -26,10 +26,13 @@ pub struct GpuStats {
   pub temp: Option<f64>,
   pub hotspot: Option<f64>,
   pub freq: Option<f64>,
+  pub mem_freq: Option<f64>,
   pub vram_used: Option<f64>,
   pub vram_total: Option<f64>,
   pub fan_speed: Option<f64>,
   pub power: Option<f64>,
+  pub d3d_3d: Option<f64>,
+  pub d3d_vdec: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

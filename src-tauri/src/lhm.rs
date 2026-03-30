@@ -23,10 +23,13 @@ pub struct LhmData {
   pub gpu_temp: Option<f64>,
   pub gpu_hotspot: Option<f64>,
   pub gpu_freq: Option<f64>,
+  pub gpu_mem_freq: Option<f64>,
   pub gpu_power: Option<f64>,
   pub gpu_fan: Option<f64>,
   pub vram_used: Option<f64>,
   pub vram_total: Option<f64>,
+  pub gpu_d3d_3d: Option<f64>,
+  pub gpu_d3d_vdec: Option<f64>,
   pub cpu_temp: Option<f64>,
   pub cpu_power: Option<f64>,
   pub ram_temp: Option<f64>,
@@ -293,6 +296,7 @@ fn parse_lhm(data: &Value) -> LhmData {
     gpu_temp: gpu_find("Temperatures", "GPU Core"),
     gpu_hotspot: gpu_find("Temperatures", "GPU Hot Spot"),
     gpu_freq: gpu_find("Clocks", "GPU Core"),
+    gpu_mem_freq: gpu_find("Clocks", "GPU Memory"),
     gpu_power: gpu_find("Powers", "GPU Package"),
     gpu_fan: gpu_block
       .iter()
@@ -300,6 +304,8 @@ fn parse_lhm(data: &Value) -> LhmData {
       .and_then(|n| parse_val(&n.value)),
     vram_used: gpu_find("Data", "GPU Memory Used"),
     vram_total: gpu_find("Data", "GPU Memory Total"),
+    gpu_d3d_3d: gpu_find("Load", "D3D 3D"),
+    gpu_d3d_vdec: gpu_find("Load", "D3D Video Decode"),
     cpu_temp,
     cpu_power,
     ram_temp,
@@ -826,11 +832,73 @@ mod tests {
   }
 
   #[test]
+  fn parse_lhm_extracts_gpu_memory_clock() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "NVIDIA GeForce RTX 4090", "Value": "",
+        "Children": [
+          { "Text": "Clocks", "Value": "",
+            "Children": [
+              { "Text": "GPU Core",   "Value": "2520 MHz", "Children": [] },
+              { "Text": "GPU Memory", "Value": "10501 MHz", "Children": [] }
+            ]
+          },
+          { "Text": "Data", "Value": "",
+            "Children": [
+              { "Text": "GPU Memory Used",  "Value": "4096 MB", "Children": [] },
+              { "Text": "GPU Memory Total", "Value": "24576 MB", "Children": [] }
+            ]
+          }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.gpu_freq, Some(2520.0));
+    assert_eq!(result.gpu_mem_freq, Some(10501.0));
+  }
+
+  #[test]
+  fn parse_lhm_extracts_gpu_d3d_sensors() {
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "NVIDIA GeForce RTX 4090", "Value": "",
+        "Children": [
+          { "Text": "Load", "Value": "",
+            "Children": [
+              { "Text": "GPU Core",          "Value": "75 %",  "Children": [] },
+              { "Text": "D3D 3D",            "Value": "68 %",  "Children": [] },
+              { "Text": "D3D Copy",          "Value": "2 %",   "Children": [] },
+              { "Text": "D3D Video Decode",  "Value": "12 %",  "Children": [] }
+            ]
+          },
+          { "Text": "Data", "Value": "",
+            "Children": [
+              { "Text": "GPU Memory Used",  "Value": "4096 MB", "Children": [] },
+              { "Text": "GPU Memory Total", "Value": "24576 MB", "Children": [] }
+            ]
+          }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.gpu_load, Some(75.0));
+    assert_eq!(result.gpu_d3d_3d, Some(68.0));
+    assert_eq!(result.gpu_d3d_vdec, Some(12.0));
+    // D3D Copy is intentionally not extracted — only 3D and Video Decode are surfaced.
+    assert_eq!(result.gpu_mem_freq, None, "mem clock absent from tree → None");
+  }
+
+  #[test]
   fn parse_lhm_returns_zero_defaults_for_empty_tree() {
     let data = json!({ "Text": "Root", "Value": "", "Children": [] });
     let result = parse_lhm(&data);
     assert_eq!(result.cpu_temp, None);
     assert_eq!(result.gpu_load, None);
+    assert_eq!(result.gpu_mem_freq, None);
+    assert_eq!(result.gpu_d3d_3d, None);
+    assert_eq!(result.gpu_d3d_vdec, None);
     assert_eq!(result.ram_temp, None);
     assert_eq!(result.disk_read, 0.0);
     assert_eq!(result.disk_write, 0.0);

@@ -299,9 +299,9 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
         <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
           <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
           <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
-          <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
+          <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
           <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
-          <div class="meta"><div class="meta-key">VRAM</div><div class="meta-val" id="gpuVram">-- GB</div></div>
+          <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
           <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
         </div>
       </div>
@@ -317,8 +317,20 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
         <div class="bar-track"><div class="bar-fill" id="vramBar" style="width:0%;background:rgba(255,58,31,.5)"></div></div>
         <div class="bar-pct" id="vramBarPct">--%</div>
       </div>
+      <span id="gpuVram" style="display:none"></span>
+      <div class="bar-row" id="gpuD3dRow" style="display:none">
+        <div class="bar-lbl">3D</div>
+        <div class="bar-track"><div class="bar-fill" id="d3d3dBar" style="width:0%"></div></div>
+        <div class="bar-pct" id="d3d3dPct">--%</div>
+      </div>
+      <div class="bar-row" id="gpuVdecRow" style="display:none">
+        <div class="bar-lbl">VDEC</div>
+        <div class="bar-track"><div class="bar-fill" id="d3dVdecBar" style="width:0%"></div></div>
+        <div class="bar-pct" id="d3dVdecPct">--%</div>
+      </div>
     </div>
     <div class="warn" id="gpuWarn" style="flex-shrink:0"></div>
+    <span id="gpuVram" style="display:none" aria-hidden="true"></span>
     <canvas class="spark" id="gpuSpark" height="48"></canvas>
   </div>
 
