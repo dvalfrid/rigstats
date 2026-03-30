@@ -22,24 +22,55 @@ pub struct UpdateInfo {
 }
 
 const CHECK_INTERVAL_SECS: u64 = 6 * 60 * 60; // 6 hours
+                                              // When the release manifest is not yet available (GitHub release published but
+                                              // latest.json not yet uploaded), retry with a short interval before giving up
+                                              // for the regular 6-hour cycle.
+const MANIFEST_RETRY_SECS: u64 = 5 * 60; // 5 minutes
+const MANIFEST_RETRY_MAX: u32 = 6; // up to 30 minutes of retries
+
+/// Returns true when the error string indicates the update manifest has not
+/// been uploaded yet — a transient state during a GitHub release rollout.
+fn is_manifest_not_ready(err: &str) -> bool {
+  err.contains("valid JSON") || err.contains("Could not fetch")
+}
 
 /// Spawns a background task that checks for updates on startup and then every
 /// 6 hours of active runtime. Using a short loop interval means the check also
 /// fires within a few hours after the computer wakes from sleep.
+///
+/// If the release manifest is temporarily unavailable (release published before
+/// the JSON artifact is uploaded), the check is retried every 5 minutes for up
+/// to 30 minutes before falling back to the normal 6-hour schedule.
 pub fn spawn_background_check(app: &AppHandle) {
   let app = app.clone();
   tauri::async_runtime::spawn(async move {
     // Short initial delay so startup is not slowed down.
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
     loop {
-      match check_update_inner(&app).await {
-        Ok(Some(ref info)) => {
-          append_debug_log(&app, &format!("Update available: v{}", info.version));
-          let _ = app.emit("update-available", &info.version);
-        }
-        Ok(None) => {}
-        Err(ref e) => {
-          append_debug_log(&app, &format!("Update check failed: {}", e));
+      let mut retries = 0u32;
+      loop {
+        match check_update_inner(&app).await {
+          Ok(Some(ref info)) => {
+            append_debug_log(&app, &format!("Update available: v{}", info.version));
+            let _ = app.emit("update-available", &info.version);
+            break;
+          }
+          Ok(None) => break,
+          Err(ref e) if is_manifest_not_ready(e) && retries < MANIFEST_RETRY_MAX => {
+            retries += 1;
+            append_debug_log(
+              &app,
+              &format!(
+                "Update manifest not ready (attempt {}/{}), retrying in 5 min",
+                retries, MANIFEST_RETRY_MAX
+              ),
+            );
+            tokio::time::sleep(std::time::Duration::from_secs(MANIFEST_RETRY_SECS)).await;
+          }
+          Err(ref e) => {
+            append_debug_log(&app, &format!("Update check failed: {}", e));
+            break;
+          }
         }
       }
       tokio::time::sleep(std::time::Duration::from_secs(CHECK_INTERVAL_SECS)).await;

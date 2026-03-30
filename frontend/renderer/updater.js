@@ -15,6 +15,7 @@ const ids = {
 };
 
 let isInstalling = false;
+let isRetryMode = false;
 
 function setStatus(msg) {
   ids.statusMsg.textContent = msg;
@@ -121,6 +122,12 @@ function renderNotes(body) {
 }
 
 async function loadUpdateInfo() {
+  isRetryMode = false;
+  ids.updateBtn.textContent = 'Update Now';
+  ids.updateBtn.disabled = true;
+  ids.versionRow.style.display = '';
+  setStatus('');
+
   if (!IS_DESKTOP) {
     ids.heroTitle.textContent = 'Browser mode';
     ids.updateBtn.disabled = true;
@@ -142,13 +149,24 @@ async function loadUpdateInfo() {
     }
     ids.currentVersion.textContent = `v${info.currentVersion}`;
     ids.newVersion.textContent = `v${info.version}`;
+    ids.updateBtn.disabled = false;
     // Combine new version's changelog (from latest.json) with bundled history.
     const localMd = await backend.invoke('get-changelog').catch(() => '');
     const combined = info.body ? `${info.body}\n\n${localMd}` : localMd;
     renderNotes(combined);
   } catch (err) {
-    ids.updateBtn.disabled = true;
-    setStatus(`Error: ${err}`);
+    const msg = String(err);
+    if (msg.includes('valid JSON') || msg.includes('Could not fetch')) {
+      ids.heroTitle.textContent = 'Release Pending';
+      ids.versionRow.style.display = 'none';
+      setStatus('The release is still being uploaded to GitHub. Try again in a few minutes.');
+      isRetryMode = true;
+      ids.updateBtn.textContent = 'Retry';
+      ids.updateBtn.disabled = false;
+    } else {
+      ids.updateBtn.disabled = true;
+      setStatus(`Error: ${err}`);
+    }
     renderNotes(null);
   }
 }
@@ -204,7 +222,13 @@ async function startUpdate() {
   }
 }
 
-ids.updateBtn.addEventListener('click', startUpdate);
+ids.updateBtn.addEventListener('click', () => {
+  if (isRetryMode) {
+    loadUpdateInfo();
+    return;
+  }
+  startUpdate();
+});
 ids.laterBtn.addEventListener('click', async () => {
   if (!IS_DESKTOP) return;
   await backend.invoke('close-window');
