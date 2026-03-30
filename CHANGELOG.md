@@ -8,6 +8,21 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.12.0](https://github.com/dvalfrid/rigstats/compare/v1.11.0...v1.12.0) (2026-03-30)
+
+
+### Features
+
+* retry WMI hardware detection after startup if fields are missing ([72392ba](https://github.com/dvalfrid/rigstats/commit/72392ba49b8d05c14eb18aee7666fb9e044246f9))
+* show read and write separately in storage sparkline ([f17140c](https://github.com/dvalfrid/rigstats/commit/f17140cbab2dcdce96d36bfd542a5d767ae4df1a))
+
+
+### Bug Fixes
+
+* show both upload and download in network sparkline with correct colours ([181c06b](https://github.com/dvalfrid/rigstats/commit/181c06bc5dfb4e44d76f47b2d27186cfa149bf97))
+* truncate long rig name and reject version strings as model name ([edcea41](https://github.com/dvalfrid/rigstats/commit/edcea41878997386893525b6eb24ca224467753b))
+* update spark tests to reflect renamed history series ([6a33251](https://github.com/dvalfrid/rigstats/commit/6a33251e538257db82c8454a76c520e70237e0ee))
+
 ## [1.11.0](https://github.com/dvalfrid/rigstats/compare/v1.10.1...v1.11.0) (2026-03-27)
 
 
