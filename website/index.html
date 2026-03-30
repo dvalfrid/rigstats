@@ -106,7 +106,7 @@
         <li class="feature-card">
           <div class="feature-dot"></div>
           <h3>Deep sensor data</h3>
-          <p>LibreHardwareMonitor provides per-core clocks, GPU hot-spot, VRAM and fan RPM — not just OS counters.</p>
+          <p>LibreHardwareMonitor provides per-core clocks, GPU hot-spot, memory clock, VRAM, fan RPM, and D3D engine workloads — not just OS counters.</p>
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
@@ -165,13 +165,14 @@
           </div>
           <div class="panel-body">
             <h3>GPU</h3>
-            <p>Core load, temperature, hot-spot reading, core clock, package power, VRAM usage and fan RPM. Works with NVIDIA and AMD discrete GPUs.</p>
+            <p>Core load, temperatures, clocks, power, VRAM, and fan RPM. D3D engine workload breakdown shows when the GPU is rendering 3D or decoding video. Works with NVIDIA and AMD discrete GPUs.</p>
             <ul>
               <li>Core load (%)</li>
               <li>Core temperature &amp; hot-spot (°C)</li>
-              <li>Core clock (MHz) &amp; power (W)</li>
+              <li>Core clock &amp; memory clock (MHz)</li>
+              <li>Package power (W) &amp; fan speed (RPM)</li>
               <li>VRAM used / total (GB)</li>
-              <li>Fan speed (RPM)</li>
+              <li>D3D 3D &amp; Video Decode load (when active)</li>
             </ul>
             <span class="source-tag">LHM</span>
           </div>

@@ -33,6 +33,9 @@ function simulateStats() {
       fanSpeed: gpu > 45 ? (900 + gpu * 22) | 0 : 0,
       power: 30 + gpu * 3.3,
       freq: 1800 + gpu * 8,
+      memFreq: 1200 + gpu * 3,
+      d3d3d: gpu > 20 ? gpu - 5 + (Math.random() - 0.5) * 10 : null,
+      d3dVdec: null,
     },
     ram: {
       total: totalRam,

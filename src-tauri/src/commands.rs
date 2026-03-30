@@ -837,6 +837,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       temp: lhm.as_ref().and_then(|l| l.gpu_temp),
       hotspot: lhm.as_ref().and_then(|l| l.gpu_hotspot),
       freq: lhm.as_ref().and_then(|l| l.gpu_freq),
+      mem_freq: lhm.as_ref().and_then(|l| l.gpu_mem_freq),
       vram_used: lhm.as_ref().and_then(|l| l.vram_used),
       vram_total: lhm
         .as_ref()
@@ -844,6 +845,8 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
         .or(*state.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner())),
       fan_speed: lhm.as_ref().and_then(|l| l.gpu_fan),
       power: lhm.as_ref().and_then(|l| l.gpu_power),
+      d3d_3d: lhm.as_ref().and_then(|l| l.gpu_d3d_3d),
+      d3d_vdec: lhm.as_ref().and_then(|l| l.gpu_d3d_vdec),
     },
     ram: RamStats {
       total,
