@@ -99,7 +99,8 @@ pub struct AppState {
   /// Maps drive letter (e.g. `"C:"`) to physical disk model name detected at startup.
   /// Used at each tick to match LHM temperature readings to sysinfo volumes by name
   /// instead of by index, so inserting a USB drive never shifts other drives' temps.
-  pub disk_model_map: std::collections::HashMap<String, String>,
+  /// Wrapped in Mutex so the WMI retry task can refresh it if the initial detection failed.
+  pub disk_model_map: Mutex<std::collections::HashMap<String, String>>,
   /// Reused HTTP client for LHM polling — avoids allocating a new connection pool every tick.
   pub lhm_client: reqwest::Client,
   /// Persisted UI preferences mirrored in memory for fast reads.
@@ -115,18 +116,23 @@ pub struct AppState {
   /// Last successful LHM snapshot used when live HTTP polling fails transiently.
   pub last_lhm: Mutex<Option<LhmData>>,
   /// Best-effort RAM descriptor detected on startup (e.g. DDR5 6000 MT/s).
-  pub ram_spec: String,
+  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
+  pub ram_spec: Mutex<String>,
   /// Best-effort RAM module details (e.g. 2x16 GB | Vendor | Part).
-  pub ram_details: String,
+  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
+  pub ram_details: Mutex<String>,
   /// Best-effort VRAM total fallback in MB when live LHM data is unavailable.
   /// `None` when WMI detection failed at startup.
-  pub gpu_vram_total_mb: Option<f64>,
+  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
+  pub gpu_vram_total_mb: Mutex<Option<f64>>,
   /// Preferred ping target (default gateway if available, otherwise public fallback).
   pub ping_target: String,
   /// Detected system board brand (e.g. "rog", "msi", "other").
-  pub system_brand: String,
+  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
+  pub system_brand: Mutex<String>,
   /// Motherboard name detected at startup (e.g. "ASUS PRIME B650M-A AX6 II").
-  pub mb_name: Option<String>,
+  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
+  pub mb_name: Mutex<Option<String>>,
   /// Whether sysinfo returned a usable initial snapshot on startup.
   pub sysinfo_available: bool,
   /// Whether a WMI connection could be established on startup.

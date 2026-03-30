@@ -407,7 +407,7 @@ pub fn get_system_name() -> String {
 
 #[tauri::command]
 pub fn get_system_brand(state: tauri::State<AppState>) -> String {
-  state.system_brand.clone()
+  state.system_brand.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 #[tauri::command]
@@ -838,7 +838,10 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       hotspot: lhm.as_ref().and_then(|l| l.gpu_hotspot),
       freq: lhm.as_ref().and_then(|l| l.gpu_freq),
       vram_used: lhm.as_ref().and_then(|l| l.vram_used),
-      vram_total: lhm.as_ref().and_then(|l| l.vram_total).or(state.gpu_vram_total_mb),
+      vram_total: lhm
+        .as_ref()
+        .and_then(|l| l.vram_total)
+        .or(*state.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner())),
       fan_speed: lhm.as_ref().and_then(|l| l.gpu_fan),
       power: lhm.as_ref().and_then(|l| l.gpu_power),
     },
@@ -846,8 +849,8 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       total,
       used,
       free,
-      spec: state.ram_spec.clone(),
-      details: state.ram_details.clone(),
+      spec: state.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+      details: state.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
       temp: lhm.as_ref().and_then(|l| l.ram_temp),
     },
     net: NetStats {
@@ -864,15 +867,16 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
         // This is robust against drive-letter reordering and USB drives appearing
         // in the sysinfo list without a corresponding LHM temperature entry.
         if let Some(ref l) = lhm {
+          let disk_model_map = state.disk_model_map.lock().unwrap_or_else(|e| e.into_inner());
           for (i, drive) in drives.iter_mut().enumerate() {
             let drive_key = drive.fs.trim_end_matches(['\\', '/']).to_string();
-            if let Some(wmi_model) = state.disk_model_map.get(&drive_key) {
+            if let Some(wmi_model) = disk_model_map.get(&drive_key) {
               drive.temp = lhm_temp_for_model(wmi_model, &l.disk_temps);
             }
             // Fallback: WMI has no record for this drive letter (map empty or drive
             // absent). Assign by position so temperatures still surface when the
             // WMI association query fails.
-            if drive.temp.is_none() && !state.disk_model_map.contains_key(&drive_key) {
+            if drive.temp.is_none() && !disk_model_map.contains_key(&drive_key) {
               drive.temp = l.disk_temps.get(i).map(|(_, t)| *t);
             }
           }
@@ -885,7 +889,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       temps: lhm.as_ref().map(|l| l.mb_temps.clone()).unwrap_or_default(),
       voltages: lhm.as_ref().map(|l| l.mb_voltages.clone()).unwrap_or_default(),
       chip: lhm.as_ref().and_then(|l| l.mb_chip.clone()),
-      board: state.mb_name.clone(),
+      board: state.mb_name.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     },
     system_uptime_secs,
     lhm_connected,

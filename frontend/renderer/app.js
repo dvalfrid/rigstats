@@ -444,6 +444,22 @@ function start() {
           badge.addEventListener('click', () => backend.invoke('open-updater-window').catch(() => {}));
         }
       }),
+      // Fired by the WMI retry task when previously-missing fields are populated
+      // (e.g. RAM spec, motherboard name). Re-fetch static labels so they update
+      // without a page reload.
+      backend.on('hardware-refreshed', () => {
+        updateRigName();
+        updateCpuModel();
+        updateGpuModel();
+        Promise.all([
+          backend.invoke('get-system-brand').catch(() => 'other'),
+          backend.invoke('get-cpu-info').catch(() => ''),
+        ]).then(([brand, cpu]) => {
+          detectedBrand = brand || 'other';
+          detectedCpuModel = cpu || '';
+          renderBrandState();
+        });
+      }),
     ]).then((unlisteners) => {
       window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));
     });
