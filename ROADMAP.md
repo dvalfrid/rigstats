@@ -110,6 +110,217 @@ approach is used for disk temperature matching.
 
 ---
 
+## Extended GPU panel
+
+**Panel:** GPU
+**Data source:** LHM sensors already fetched each tick
+
+The GPU panel currently shows load, temperature, VRAM used/total, and core clock.
+LHM exposes several additional metrics that are already present in the flat sensor
+tree but not yet surfaced in the UI.
+
+**What to add:**
+
+- **Hotspot temperature** — junction/hotspot reading (AMD `GPU Hot Spot`, NVIDIA
+  `GPU Hot Spot Temperature`) alongside the existing package temp
+- **Power draw vs. power limit** — actual GPU power (W) and the board power limit
+  so users can see how close to the limit the card is running
+- **Memory controller load %** — separate from shader load; indicates VRAM
+  bandwidth pressure
+- **Memory clock** — VRAM frequency, useful when debugging memory throttling
+
+**Scope:**
+
+- Extend `LhmData` / `GpuStats` structs with the new fields (`Option<f32>` to
+  handle cards that do not expose every sensor)
+- Update `lhm.rs` GPU extraction to collect the additional sensor types
+- Expand `panels/gpu.js` to render the new rows; hide rows whose value is `null`
+
+---
+
+## Customisable themes / accent colours
+
+**Panel:** Settings (new Appearance card) + CSS custom properties across all panels
+
+The dashboard currently uses a fixed colour palette (white text, cyan accents, red
+critical). Users with RGB rigs or strong aesthetic preferences regularly ask for
+colour customisation on similar apps.
+
+**Architecture:**
+
+All panel colours are expressed as CSS custom properties on `:root`
+(`--accent`, `--warn`, `--crit`, `--text-muted`, `--bg-card`, etc.). The Settings
+window exposes a small "Appearance" card with a preset picker (Dark Cyan ✓,
+Amber, Green, Purple, Slate) and optionally a single accent colour picker. The
+chosen theme key is persisted in `Settings`; on startup and on `apply-settings`
+the renderer applies the matching CSS variable overrides.
+
+**Scope:**
+
+- Audit all hardcoded colour values in `frontend/` and replace with CSS custom
+  properties
+- Define 4–5 built-in theme presets as JS objects
+- Add theme selector to the Settings window
+- Persist selected theme key in `Settings` struct (String, default `"dark-cyan"`)
+- Emit `apply-theme` event from backend on settings save; handle in `app.js`
+
+---
+
+## Process monitor panel
+
+**Panel:** New `process` panel (opt-in)
+**Data source:** `sysinfo::Process` — CPU %, memory used, name
+
+Shows the top processes by resource usage so users can instantly see which game,
+encoder, or background service is consuming their hardware — a miniature Task
+Manager always visible on the portrait monitor.
+
+**What to show:**
+
+- Top 5–8 processes sorted by CPU % (configurable: CPU / RAM / GPU)
+- Columns: process name (truncated), CPU %, RAM (MB/GB)
+- Optional GPU column via LHM per-process sensor if available
+- Auto-refreshes each tick; processes with 0 % CPU for 3+ ticks fade out
+
+**Scope:**
+
+- Collect process list in `commands.rs` / new `processes.rs` using
+  `sysinfo::System::processes()`; sort and truncate to top N before serialising
+- New `ProcessEntry` struct in `stats.rs`; `StatsPayload.top_processes: Vec<ProcessEntry>`
+- New `panels/process.js` frontend panel
+- Add `process` to the valid panel keys list in `monitor.rs` and settings
+
+---
+
+## Landscape monitor support
+
+**Panel:** All panels + profile system
+**Data source:** No new data required
+
+The app currently assumes a portrait secondary monitor. Users with a landscape
+secondary display (or a wide ultrawide primary they want to dedicate a strip of)
+have no way to use the app today. Landscape profiles would also unlock tabletop
+or wall-mounted dashboard builds where the monitor is rotated horizontally.
+
+**Architecture:**
+
+Profiles are extended with an orientation field. Landscape profiles use a
+horizontal flow layout: panels are arranged left-to-right in columns rather than
+stacking top-to-bottom. CSS custom properties (`--layout-direction`,
+`--panel-width`, `--panel-height`) drive the layout so the same panel JS modules
+work unmodified. A new set of landscape profile names is added alongside the
+existing portrait ones.
+
+**New landscape profiles (examples):**
+
+| Key | Dimensions |
+| --- | --- |
+| `landscape-fhd` | 1920×1080 |
+| `landscape-hd` | 1280×720 |
+| `landscape-4k` | 3840×2160 |
+| `landscape-wxga` | 1280×800 |
+| `landscape-strip` | 1920×360 (ultra-wide status bar) |
+
+**Scope:**
+
+- Extend `profile_dimensions` and `normalize_profile` in `monitor.rs` to accept
+  `landscape-*` keys and return appropriate dimensions
+- Add an orientation field to the profile lookup so `pick_target_monitor` can
+  choose the best landscape display when multiple monitors are connected
+- New `landscape.css` (or `orientation-landscape` CSS class on `<body>`) that
+  switches `--layout-direction` from `column` to `row` and adjusts panel sizing
+- `applyProfile()` in `app.js` sets the orientation class based on profile key
+  prefix; panel modules require no changes
+- Settings profile picker groups profiles under "Portrait" / "Landscape" headings
+
+---
+
+## Battery panel (laptop support)
+
+**Panel:** New `battery` panel
+**Data source:** `sysinfo` battery API
+
+Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, charge
+rate (W), and estimated time remaining. Panel is hidden automatically on systems
+with no battery detected.
+
+**Scope:**
+
+- Query `sysinfo::Battery` on startup; store in `AppState` if present
+- New `BatteryStats` struct in `stats.rs`, included in `StatsPayload`
+- New `panels/battery.js` frontend panel
+- Add `battery` to the valid panel keys list in `monitor.rs` and settings
+
+---
+
+## Overlay mode (single-monitor support)
+
+**Panel:** Main window (new window mode)
+**Data source:** Existing stats tick — no backend changes required
+
+The app is currently designed exclusively for a secondary portrait monitor. Users
+without a second screen regularly ask for a way to show a compact stats overlay
+in a corner of their primary display during gaming — a use case served by tools
+like MSI Afterburner's OSD or RTSS.
+
+**Architecture:**
+
+A new "Overlay" profile type that renders a compact, always-on-top, semi-transparent
+floating widget instead of a full portrait panel. The widget snaps to one of the
+four screen corners (configurable in Settings). It reuses the existing panel
+modules but with a condensed single-column layout (`overlay-compact` CSS class).
+`set_decorations(false)` + `always_on_top` + a click-through flag
+(`set_ignore_cursor_events(true)` while not in settings mode) let the overlay
+stay visible without interfering with the game.
+
+**Scope:**
+
+- Add `overlay` as a special profile key; `profile_dimensions` returns a small
+  fixed size (e.g. 260×420)
+- New corner-snap setting (`top-left`, `top-right`, `bottom-left`, `bottom-right`)
+  persisted in `Settings`
+- `pick_target_monitor` places the window at the selected corner of the primary
+  monitor when overlay mode is active
+- `set_ignore_cursor_events(true)` called after window creation in overlay mode;
+  toggled off temporarily when the user moves the mouse to the widget area so
+  they can interact with it (hover-to-unlock pattern)
+- Compact CSS layout for overlay panels; shared panel JS modules render a
+  subset of metrics to fit the smaller footprint
+- Settings window gets an "Overlay mode" toggle with corner selector
+
+---
+
+## Stats logging / data export
+
+**Panel:** Settings (new Logging card) + tray menu shortcut
+**Data source:** Existing `StatsPayload` — no new sensors required
+
+Lets overclockers and benchmark enthusiasts record hardware metrics over time and
+analyse them after a gaming session or stress test. A common request on monitoring
+tools: "I want to see what my GPU temperature peaked at during that boss fight."
+
+**Architecture:**
+
+Logging runs as an opt-in background task inside the Rust backend. When enabled,
+each `get_stats()` tick appends a CSV row to a rolling log file in the Tauri app
+data directory (`rigstats-log-YYYY-MM-DD.csv`). Log files roll daily and are
+automatically pruned after a configurable retention period (default 7 days).
+
+**What is logged (one row per tick):**
+
+`timestamp_unix, cpu_load, cpu_temp, cpu_freq_mhz, gpu_load, gpu_temp, gpu_vram_used_mb, ram_used_gb, disk_read_kbs, disk_write_kbs, net_up_kbs, net_down_kbs, ping_ms`
+
+**Scope:**
+
+- New `logging.rs` module: `append_stats_row(&StatsPayload, path)`, `prune_old_logs(dir, days)`
+- `AppState` gains `logging_enabled: bool` and current log file handle
+- Settings window: "Stats Logging" card with on/off toggle, retention selector
+  (1 / 7 / 30 days), and an "Open log folder" button
+- Tray menu: "Start/Stop logging" shortcut for quick toggle without opening Settings
+- Persist `logging_enabled` and `log_retention_days` in `Settings` struct
+
+---
+
 ## Stream Deck integration
 
 **Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
@@ -141,23 +352,5 @@ at once. This should be clearly communicated at setup time.
 - Brightness and layout persisted in `Settings`
 - Stream Deck integration is opt-in (off by default); auto-disabled when no
   device is detected so the crate has zero overhead on systems without one
-
----
-
-## Battery panel (laptop support)
-
-**Panel:** New `battery` panel
-**Data source:** `sysinfo` battery API
-
-Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, charge
-rate (W), and estimated time remaining. Panel is hidden automatically on systems
-with no battery detected.
-
-**Scope:**
-
-- Query `sysinfo::Battery` on startup; store in `AppState` if present
-- New `BatteryStats` struct in `stats.rs`, included in `StatsPayload`
-- New `panels/battery.js` frontend panel
-- Add `battery` to the valid panel keys list in `monitor.rs` and settings
 
 ---
