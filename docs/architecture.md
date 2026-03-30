@@ -29,7 +29,7 @@ rig-dashboard/
 
 ## Backend Modules (`src-tauri/src/`)
 
-- **`main.rs`** — Tauri builder, tray icon, lifecycle. Initializes `AppState` at startup (one-time hardware detection via WMI/sysinfo), picks the best monitor for the profile, starts LHM.
+- **`main.rs`** — Tauri builder, tray icon, lifecycle. Initializes `AppState` at startup (hardware detection via WMI/sysinfo), picks the best monitor for the profile, starts LHM. Spawns `spawn_wmi_retry` — a background task that re-runs WMI detection for any fields that returned fallback values at startup (e.g. because WMI was not yet ready). Retries up to 3 times with 30 s / 60 s / 120 s delays; emits `hardware-refreshed` to the renderer when a field is successfully resolved so static labels update without a page reload.
 - **`stats.rs`** — `AppState` struct (shared mutable state behind `Mutex`), all serializable payload structs (`StatsPayload`, `CpuStats`, etc.).
 - **`commands.rs`** — Thin `#[tauri::command]` handlers only. Each handler delegates to a domain module; no business logic lives here.
 - **`debug.rs`** — `append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`. No dependencies on other crate modules — safe to import from anywhere.

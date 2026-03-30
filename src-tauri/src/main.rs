@@ -40,13 +40,163 @@ use sysinfo::{Disks, Networks, System};
 use tauri::{
   menu::MenuBuilder,
   tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-  AppHandle, Manager, RunEvent,
+  AppHandle, Emitter, Manager, RunEvent,
 };
 use updater::{check_for_update, install_update, open_updater_window};
 use windows::{
   ensure_about_window, ensure_settings_window, ensure_status_window, ensure_updater_window, on_window_event,
   set_last_tray_click_position,
 };
+
+/// Spawns a background task that retries WMI-dependent hardware detection for any
+/// fields that were not populated at startup (e.g. because WMI was not yet ready).
+///
+/// Attempts up to 3 times with exponential back-off (30 s, 60 s, 120 s). Each
+/// successful re-detection updates the shared `AppState` in-place and emits a
+/// `hardware-refreshed` event to the renderer so it can update static labels
+/// (RAM spec, model name, motherboard, etc.) without a full page reload.
+///
+/// A field is considered "missing" when it still holds its known fallback/default
+/// value — the same check used to decide whether autofill was needed at startup.
+fn spawn_wmi_retry(app: tauri::AppHandle) {
+  tauri::async_runtime::spawn(async move {
+    // Hold a single long-lived state reference for the entire task lifetime.
+    // MutexGuards are dropped explicitly via intermediate `let` bindings so
+    // the borrow checker sees them release before the block ends.
+    let state = app.state::<AppState>();
+    let delays_secs = [30u64, 60, 120];
+
+    for (attempt, &delay) in delays_secs.iter().enumerate() {
+      tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
+
+      // Snapshot which fields still need a retry. Each guard is stored in its
+      // own `let` binding so it drops before `needs_*` is evaluated.
+      let needs_ram_spec = {
+        let v = state.ram_spec.lock().unwrap_or_else(|e| e.into_inner());
+        v.starts_with("RAM")
+      };
+      let needs_ram_details = {
+        let v = state.ram_details.lock().unwrap_or_else(|e| e.into_inner());
+        v.is_empty()
+      };
+      let needs_disk_map = {
+        let v = state.disk_model_map.lock().unwrap_or_else(|e| e.into_inner());
+        v.is_empty()
+      };
+      let needs_mb_name = {
+        let v = state.mb_name.lock().unwrap_or_else(|e| e.into_inner());
+        v.is_none()
+      };
+      let needs_gpu_vram = {
+        let v = state.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner());
+        v.is_none()
+      };
+      // system_brand falls back to "other" when WMI is unavailable. Retry on
+      // "other" so brands (ROG, MSI, Razer, etc.) surface after WMI recovers.
+      // Worst case: a genuinely-unknown system is re-detected as "other" again.
+      let needs_system_brand = {
+        let v = state.system_brand.lock().unwrap_or_else(|e| e.into_inner());
+        v.as_str() == "other"
+      };
+
+      let any_missing =
+        needs_ram_spec || needs_ram_details || needs_disk_map || needs_mb_name || needs_gpu_vram || needs_system_brand;
+      if !any_missing {
+        append_debug_log(
+          &app,
+          &format!("wmi_retry: all fields populated, skipping attempt {}", attempt + 1),
+        );
+        return;
+      }
+
+      append_debug_log(
+        &app,
+        &format!(
+          "wmi_retry: attempt {} — ram_spec={} ram_details={} disk_map={} mb_name={} gpu_vram={} brand={}",
+          attempt + 1,
+          if needs_ram_spec { "missing" } else { "ok" },
+          if needs_ram_details { "missing" } else { "ok" },
+          if needs_disk_map { "missing" } else { "ok" },
+          if needs_mb_name { "missing" } else { "ok" },
+          if needs_gpu_vram { "missing" } else { "ok" },
+          if needs_system_brand { "missing" } else { "ok" },
+        ),
+      );
+
+      let mut refreshed = false;
+
+      if needs_ram_spec {
+        let new_spec = hardware::detect_ram_spec();
+        if !new_spec.starts_with("RAM") {
+          append_debug_log(&app, &format!("wmi_retry: ram_spec resolved to {:?}", new_spec));
+          *state.ram_spec.lock().unwrap_or_else(|e| e.into_inner()) = new_spec;
+          refreshed = true;
+        }
+      }
+
+      if needs_ram_details {
+        let new_details = hardware::detect_ram_details();
+        if !new_details.is_empty() {
+          append_debug_log(&app, &format!("wmi_retry: ram_details resolved to {:?}", new_details));
+          *state.ram_details.lock().unwrap_or_else(|e| e.into_inner()) = new_details;
+          refreshed = true;
+        }
+      }
+
+      if needs_disk_map {
+        let new_map = hardware::detect_disk_model_map();
+        if !new_map.is_empty() {
+          append_debug_log(
+            &app,
+            &format!("wmi_retry: disk_model_map resolved ({} entries)", new_map.len()),
+          );
+          *state.disk_model_map.lock().unwrap_or_else(|e| e.into_inner()) = new_map;
+          refreshed = true;
+        }
+      }
+
+      if needs_mb_name {
+        let new_mb = hardware::detect_motherboard_name();
+        if new_mb.is_some() {
+          append_debug_log(&app, &format!("wmi_retry: mb_name resolved to {:?}", new_mb));
+          *state.mb_name.lock().unwrap_or_else(|e| e.into_inner()) = new_mb;
+          refreshed = true;
+        }
+      }
+
+      if needs_gpu_vram {
+        let new_vram = hardware::detect_gpu_vram_total_mb();
+        if new_vram.is_some() {
+          append_debug_log(
+            &app,
+            &format!("wmi_retry: gpu_vram_total_mb resolved to {:?}", new_vram),
+          );
+          *state.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner()) = new_vram;
+          refreshed = true;
+        }
+      }
+
+      if needs_system_brand {
+        let new_brand = hardware::detect_system_brand();
+        if new_brand != "other" {
+          append_debug_log(&app, &format!("wmi_retry: system_brand resolved to {:?}", new_brand));
+          *state.system_brand.lock().unwrap_or_else(|e| e.into_inner()) = new_brand;
+          refreshed = true;
+        }
+      }
+
+      if refreshed {
+        // Notify the renderer so static labels (RAM spec, board name, etc.) update
+        // without requiring a full page reload.
+        if let Err(e) = app.emit("hardware-refreshed", ()) {
+          append_debug_log(&app, &format!("wmi_retry: emit hardware-refreshed failed: {}", e));
+        }
+      }
+    }
+
+    append_debug_log(&app, "wmi_retry: all attempts exhausted");
+  });
+}
 
 /// Registers the app's AppUserModelID in HKCU so that Windows toast notifications
 /// display "RIGStats" as the source instead of the parent process (e.g. PowerShell).
@@ -215,7 +365,7 @@ fn main() {
 
       // Shared state is stored behind Mutex because commands run concurrently.
       app.manage(AppState {
-        disk_model_map,
+        disk_model_map: Mutex::new(disk_model_map),
         lhm_client: reqwest::Client::builder()
           .timeout(std::time::Duration::from_millis(800))
           .build()
@@ -227,12 +377,12 @@ fn main() {
         last_net_sample: Mutex::new(None),
         last_ping_sample: Mutex::new(None),
         last_lhm: Mutex::new(None),
-        ram_spec,
-        ram_details,
-        gpu_vram_total_mb,
+        ram_spec: Mutex::new(ram_spec),
+        ram_details: Mutex::new(ram_details),
+        gpu_vram_total_mb: Mutex::new(gpu_vram_total_mb),
         ping_target,
-        system_brand,
-        mb_name,
+        system_brand: Mutex::new(system_brand),
+        mb_name: Mutex::new(mb_name),
         sysinfo_available,
         wmi_available,
         last_alert: Mutex::new(HashMap::new()),
@@ -255,6 +405,7 @@ fn main() {
 
       // Fallback for cases where installer task did not launch LHM yet.
       ensure_lhm_running(app_handle);
+      spawn_wmi_retry(app_handle.clone());
       updater::spawn_background_check(app_handle);
 
       // Re-register only if the Run key is completely absent (e.g. after a
