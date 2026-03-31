@@ -8,6 +8,18 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.13.0](https://github.com/dvalfrid/rigstats/compare/v1.12.0...v1.13.0) (2026-03-31)
+
+
+### Features
+
+* extend GPU panel with memory clock and D3D workload bars ([1f67a11](https://github.com/dvalfrid/rigstats/commit/1f67a11a14592f5249f8139f6e0daecd102ae367))
+
+
+### Bug Fixes
+
+* handle GitHub release manifest race condition gracefully ([d1a15a1](https://github.com/dvalfrid/rigstats/commit/d1a15a1c3af8f5d1c40ea2d8b395a2e797b437de))
+
 ## [1.12.0](https://github.com/dvalfrid/rigstats/compare/v1.11.0...v1.12.0) (2026-03-30)
 
 
