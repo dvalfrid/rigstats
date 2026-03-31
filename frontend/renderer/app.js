@@ -203,6 +203,7 @@ function initWindowDrag() {
 
   header.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return;
+    if (event.target.closest('#updateBadge')) return;
     backend.invoke('start-window-drag').catch((error) => {
       console.error('Failed to start window drag:', error);
     });
