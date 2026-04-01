@@ -109,7 +109,7 @@ input[type=number].alert-num {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 7px 8px;
+  padding: 5px 8px;
   user-select: none;
   transition: border-color 0.12s, background 0.12s, margin-top 0.2s ease;
 }
@@ -157,8 +157,13 @@ input[type=number].alert-num {
 
   <div class="content">
 
-    <!-- Left column: display/window, temperature alerts -->
+    <!-- Left column: model name, display/window, temperature alerts -->
     <div class="col">
+      <div class="card">
+        <div class="section-label">Model Name</div>
+        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false" style="width:100%;">
+      </div>
+
       <div class="card">
         <div class="section-label">Display &amp; Window</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
@@ -245,8 +250,15 @@ input[type=number].alert-num {
       </div>
 
       <div class="card">
-        <div class="section-label">Model Name</div>
-        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false" style="width:100%;">
+        <div class="section-label">Appearance</div>
+        <label style="font-size:12px;color:var(--text-2);display:block;margin-bottom:4px;">Theme</label>
+        <select id="themeSelect">
+          <option value="dark-cyan">Dark Cyan (default)</option>
+          <option value="amber">Amber</option>
+          <option value="green">Green</option>
+          <option value="purple">Purple</option>
+          <option value="slate">Slate</option>
+        </select>
       </div>
 
       <div class="card panels-card">

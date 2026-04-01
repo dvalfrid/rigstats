@@ -16,6 +16,7 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { updateMotherboardPanel } from './panels/motherboard.js';
 import { simulateStats } from './simulator.js';
+import { applyTheme } from './themes.js';
 
 // Route uncaught JS errors and unhandled promise rejections to the backend
 // debug log so they appear in the Status dialog without needing DevTools.
@@ -167,6 +168,10 @@ function applyVisiblePanels(visiblePanels) {
   if (IS_DESKTOP) {
     backend.invoke('set-main-height', { width: currentProfile.width, height: totalH }).catch(() => {});
   }
+}
+
+function getCssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
 function applyOpacity(value) {
@@ -369,11 +374,11 @@ function applyStats(stats) {
   updateMotherboardPanel(stats.motherboard ?? {});
   setUptimeFromSeconds(stats.systemUptimeSecs);
 
-  drawSpark('cpuSpark', history.cpu, '#00c8ff');
-  drawSpark('gpuSpark', history.gpu, '#ff3a1f');
-  drawSpark('ramSpark', history.ram, '#ffb300');
-  drawDoubleSpark('netSpark', history.netDown, '#00c8ff', history.netUp, '#39ff88');
-  drawDoubleSpark('diskSpark', history.diskRead, '#bf7fff', history.diskWrite, '#ff7fbf');
+  drawSpark('cpuSpark', history.cpu, getCssVar('--accent'));
+  drawSpark('gpuSpark', history.gpu, getCssVar('--amd'));
+  drawSpark('ramSpark', history.ram, getCssVar('--ram'));
+  drawDoubleSpark('netSpark', history.netDown, getCssVar('--accent'), history.netUp, getCssVar('--grn'));
+  drawDoubleSpark('diskSpark', history.diskRead, getCssVar('--pur'), history.diskWrite, getCssVar('--disk-write'));
 }
 
 async function tick() {
@@ -422,6 +427,7 @@ function start() {
       applyProfile(s.dashboardProfile);
       applyVisiblePanels(s.visiblePanels);
       applyThresholds(s);
+      applyTheme(s.theme ?? 'dark-cyan');
     });
     Promise.all([
       backend.invoke('get-system-brand').catch(() => 'other'),
@@ -437,6 +443,7 @@ function start() {
       backend.on('apply-profile', (_event, profile) => applyProfile(profile)),
       backend.on('apply-visible-panels', (_event, panels) => applyVisiblePanels(panels)),
       backend.on('apply-thresholds', (_event, t) => applyThresholds(t)),
+      backend.on('apply-theme', (_event, key) => applyTheme(key)),
       backend.on('update-available', (_event, version) => {
         const badge = document.getElementById('updateBadge');
         if (badge) {

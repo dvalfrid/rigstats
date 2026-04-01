@@ -110,7 +110,7 @@ approach is used for disk temperature matching.
 
 ---
 
-## Extended GPU panel
+## Extended GPU panel ✓
 
 **Panel:** GPU
 **Data source:** LHM sensors already fetched each tick
@@ -138,31 +138,35 @@ tree but not yet surfaced in the UI.
 
 ---
 
-## Customisable themes / accent colours
+## Customisable themes / accent colours ✓
 
 **Panel:** Settings (new Appearance card) + CSS custom properties across all panels
 
-The dashboard currently uses a fixed colour palette (white text, cyan accents, red
-critical). Users with RGB rigs or strong aesthetic preferences regularly ask for
-colour customisation on similar apps.
+**Implemented.** All accent colours are expressed as CSS custom properties driven
+by a single theme key. The Settings window exposes an "Appearance" card with five
+built-in presets; the selection previews live and is persisted across restarts.
 
-**Architecture:**
+Five presets: Dark Cyan (default), Amber, Green, Purple, Slate. Each preset
+derives the full accent palette — borders, backgrounds, scrollbar tints, grid
+overlay — plus tonal variants for section headers (`--stat-label`), meta-key
+labels (`--text-muted`), and motherboard column headers (`--mb-accent`) using
+HSL hue extraction, so all text stays tonally consistent with the active theme
+without sharing the exact accent colour.
 
-All panel colours are expressed as CSS custom properties on `:root`
-(`--accent`, `--warn`, `--crit`, `--text-muted`, `--bg-card`, etc.). The Settings
-window exposes a small "Appearance" card with a preset picker (Dark Cyan ✓,
-Amber, Green, Purple, Slate) and optionally a single accent colour picker. The
-chosen theme key is persisted in `Settings`; on startup and on `apply-settings`
-the renderer applies the matching CSS variable overrides.
+**What was done:**
 
-**Scope:**
-
-- Audit all hardcoded colour values in `frontend/` and replace with CSS custom
-  properties
-- Define 4–5 built-in theme presets as JS objects
-- Add theme selector to the Settings window
-- Persist selected theme key in `Settings` struct (String, default `"dark-cyan"`)
-- Emit `apply-theme` event from backend on settings save; handle in `app.js`
+- Audited and replaced all hardcoded colour values in `frontend/` with CSS custom
+  properties (`--accent`, `--accent-border`, `--accent-bg`, `--accent-bg-thin`,
+  `--accent-scrollbar`, `--accent-grid`, `--stat-label`, `--text-muted`, `--mb-accent`)
+- `renderer/themes.js` — pure colour-conversion helpers (`hexToRgba`, `hexToHsl`,
+  `hslToHex`) and `applyTheme(key)` that sets all CSS variables in one call
+- Appearance card added to the Settings window; live preview via `preview-theme`
+  Tauri command; restores original on cancel
+- Theme key persisted in `Settings` struct (`String`, default `"dark-cyan"`,
+  `#[serde(default)]` for backwards-compatible JSON evolution)
+- `apply-theme` event emitted to the main window after `save_settings`
+- `renderer/themes.test.js` — 16 tests covering preset enumeration, hex↔HSL
+  round-trip accuracy, and derived-colour saturation invariants
 
 ---
 

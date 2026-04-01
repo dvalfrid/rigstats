@@ -20,6 +20,7 @@ const warnDiskTempInput = document.getElementById('warnDiskTempInput');
 const critDiskTempInput = document.getElementById('critDiskTempInput');
 const notifyOnWarnInput = document.getElementById('notifyOnWarnInput');
 const notifyOnCritInput = document.getElementById('notifyOnCritInput');
+const themeSelect = document.getElementById('themeSelect');
 
 const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard'];
 const PANEL_LABELS = {
@@ -51,6 +52,7 @@ let original = {
   alertCooldownSecs: 60,
   notifyOnWarn: true,
   notifyOnCrit: true,
+  theme: 'dark-cyan',
 };
 let isSaving = false;
 
@@ -255,6 +257,7 @@ function applySettings(settings) {
     alertCooldownSecs: settings.alertCooldownSecs ?? 60,
     notifyOnWarn: settings.notifyOnWarn ?? true,
     notifyOnCrit: settings.notifyOnCrit ?? true,
+    theme: settings.theme ?? 'dark-cyan',
   };
 
   const percentage = Math.round(original.opacity * 100);
@@ -277,6 +280,7 @@ function applySettings(settings) {
   alertCooldownInput.value = original.alertCooldownSecs;
   notifyOnWarnInput.checked = original.notifyOnWarn;
   notifyOnCritInput.checked = original.notifyOnCrit;
+  themeSelect.value = original.theme;
 }
 
 async function loadSettings() {
@@ -302,8 +306,18 @@ async function closeWithRestore() {
   await backend.invoke('preview-opacity', { value: original.opacity });
   await previewProfile(original.dashboardProfile);
   await previewVisiblePanels(original.visiblePanels);
+  await backend.invoke('preview-theme', { theme: original.theme });
   await backend.invoke('close-window');
 }
+
+themeSelect.addEventListener('change', async () => {
+  if (!IS_DESKTOP) return;
+  try {
+    await backend.invoke('preview-theme', { theme: themeSelect.value });
+  } catch (error) {
+    logError('preview-theme', error);
+  }
+});
 
 slider.addEventListener('input', () => {
   const percentage = parseInt(slider.value, 10);
@@ -351,6 +365,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const alertCooldownSecs = Math.max(60, parseInt(alertCooldownInput.value, 10) || 60);
   const notifyOnWarn = notifyOnWarnInput.checked;
   const notifyOnCrit = notifyOnCritInput.checked;
+  const theme = themeSelect.value;
 
   if (selectedPanels.length === 0) {
     setStatus('Select at least one panel.', 'status-err');
@@ -379,13 +394,14 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       alertCooldownSecs,
       notifyOnWarn,
       notifyOnCrit,
+      theme,
     });
 
     original = {
       opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels,
       warningCpuTemp, criticalCpuTemp, warningGpuTemp, criticalGpuTemp,
       warningRamTemp, criticalRamTemp, warningDiskTemp, criticalDiskTemp,
-      alertCooldownSecs, notifyOnWarn, notifyOnCrit,
+      alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
     };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');

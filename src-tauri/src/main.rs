@@ -21,8 +21,8 @@ mod windows;
 
 use commands::{
   close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats, get_system_brand,
-  get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_visible_panels, save_settings,
-  set_main_height, start_window_drag, test_temp_alert,
+  get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_theme, preview_visible_panels,
+  save_settings, set_main_height, start_window_drag, test_temp_alert,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -427,6 +427,7 @@ fn main() {
       get_about_info,
       preview_opacity,
       preview_profile,
+      preview_theme,
       preview_visible_panels,
       save_settings,
       close_window,
