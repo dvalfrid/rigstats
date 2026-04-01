@@ -72,6 +72,19 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 | Logic in Rust or JS | `npm test` (or the single-file variant) |
 | Unsure | `npm run verify` (runs everything, including markdown lint) |
 
+## Documentation and website updates
+
+**Every feature change must also update all three of these — do not wait to be asked:**
+
+| What changed | Where to update |
+| --- | --- |
+| New panel, data field, or backend module | `docs/architecture.md` — backend modules + renderer modules sections |
+| New panel or user-visible feature | `website/index.html` — panel count in `<h2>`, panel card in `.panels-grid`, hero description if relevant |
+| Feature complete or scope change | `ROADMAP.md` — mark ✓ and add implementation summary |
+| New behaviour or architectural rule | `CLAUDE.md` — Architecture Overview section |
+
+These four files must be consistent with the code at all times. Check all four before declaring a task done.
+
 - `npm run clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
 - `npm run lint` must exit clean — fix all errors and warnings before finishing.
 - If `fmt:rs` modifies files, include those changes in the same commit.
@@ -121,7 +134,7 @@ No framework, no bundler. Pure ES modules. Each HTML page loads its own entry sc
 - **`renderer/tempColors.js`** — Maps temperature values to color thresholds for heat indicators.
 - **`renderer/vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
 - **`renderer/simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
-- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`, `motherboard.js`. Each exports an `update*Panel(stats, ...)` function. `thresholds` carries `{ warn, crit }` for temperature colour mapping; defaults apply in browser/simulator mode. `gpu.js` renders a ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM and GPU load bars, and two optional D3D bars (3D engine, Video Decode) that are hidden via `display:none` when the backend returns `null` for those fields. `disk.js` cycles through pages of three drives every 5 ticks when more than three drives are present; the page resets automatically when the drive count changes. `motherboard.js` renders fans/temps/voltages in a three-column layout; `shortLabel()` maps `"Temperature #N"` → `"TN"` and truncates other labels to fit the `8ch` CSS grid column.
+- **`renderer/panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`, `motherboard.js`, `process.js`. Each exports an `update*Panel(stats, ...)` function. `thresholds` carries `{ warn, crit }` for temperature colour mapping; defaults apply in browser/simulator mode. `gpu.js` renders a ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM and GPU load bars, and two optional D3D bars (3D engine, Video Decode) that are hidden via `display:none` when the backend returns `null` for those fields. `disk.js` cycles through pages of three drives every 5 ticks when more than three drives are present; the page resets automatically when the drive count changes. `motherboard.js` renders fans/temps/voltages in a three-column layout; `shortLabel()` maps `"Temperature #N"` → `"TN"` and truncates other labels to fit the `8ch` CSS grid column. `process.js` renders the top 8 processes from `StatsPayload.top_processes`; process names are HTML-escaped and `.exe` suffix is stripped; `truncateName` and `formatRam` are pure helpers exported for unit tests.
 - **`renderer/settings.js`** / **`renderer/about.js`** / **`renderer/status.js`** / **`renderer/updater.js`** — Entry scripts for the secondary windows. `updater.js` drives the update check, changelog rendering, and install flow.
 
 ### Dashboard profiles
@@ -130,7 +143,7 @@ Profiles are portrait orientations with fixed pixel dimensions (e.g., `portrait-
 
 Valid profiles: `portrait-xl` (450×1920), `portrait-slim` (480×1920), `portrait-hd` (720×1280), `portrait-wxga` (800×1280), `portrait-fhd` (1080×1920), `portrait-wuxga` (1200×1920), `portrait-qhd` (1440×2560), `portrait-hdplus` (768×1366), `portrait-900x1600`, `portrait-1050x1680`, `portrait-1600x2560`, `portrait-4k` (2160×3840), `portrait-fhd-side` (253×1080), `portrait-qhd-side` (338×1440), `portrait-4k-side` (506×2160).
 
-Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`. The `motherboard` panel is opt-in (not included in the default visible set).
+Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`. Both `motherboard` and `process` are opt-in (not included in the default visible set).
 
 ### LHM integration
 

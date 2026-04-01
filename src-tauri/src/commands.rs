@@ -20,7 +20,7 @@ use crate::lhm_process::{
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{
-  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats, RamStats, StatsPayload,
+  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats, ProcessEntry, RamStats, StatsPayload,
 };
 use serde::Serialize;
 use std::time::{Duration, Instant};
@@ -747,6 +747,21 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
     .first()
     .map(|c| c.frequency() as f64 / 1000.0)
     .unwrap_or(0.0);
+
+  system.refresh_processes();
+  let num_cpus = system.cpus().len().max(1) as f32;
+  let mut proc_list: Vec<ProcessEntry> = system
+    .processes()
+    .values()
+    .map(|p| ProcessEntry {
+      name: p.name().to_string(),
+      cpu: p.cpu_usage() / num_cpus,
+      mem_mb: p.memory() / 1_048_576,
+    })
+    .collect();
+  proc_list.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
+  proc_list.truncate(8);
+
   drop(system);
 
   let mut disks = state.disks.lock().unwrap_or_else(|e| {
@@ -909,6 +924,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       chip: lhm.as_ref().and_then(|l| l.mb_chip.clone()),
       board: state.mb_name.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     },
+    top_processes: proc_list,
     system_uptime_secs,
     lhm_connected,
   };

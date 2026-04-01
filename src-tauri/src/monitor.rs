@@ -51,7 +51,7 @@ fn is_portrait(width: u32, height: u32) -> bool {
 fn is_valid_panel_key(value: &str) -> bool {
   matches!(
     value,
-    "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk" | "motherboard"
+    "header" | "clock" | "cpu" | "gpu" | "ram" | "net" | "disk" | "motherboard" | "process"
   )
 }
 
