@@ -1,103 +1,440 @@
 # Architecture
 
+## Contents
+
+- [Overview](#overview)
+- [Data Flow](#data-flow)
+- [File Structure](#file-structure)
+- [Backend Modules](#backend-modules)
+- [Frontend Modules](#frontend-modules)
+- [Dashboard Panels](#dashboard-panels)
+- [Diagnostics Export](#diagnostics-export)
+- [Design Decisions](#design-decisions)
+
+---
+
+## Overview
+
+RIGStats is a Windows-only Tauri v2 desktop app that displays live hardware
+telemetry on a secondary portrait monitor. The frontend is vanilla ES modules
+served directly by Tauri — no bundler or framework. The backend is Rust and
+uses three data sources: LibreHardwareMonitor (GPU/sensor data via HTTP),
+sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
+
+---
+
+## Data Flow
+
+```text
+LibreHardwareMonitor (localhost:8085/data.json)
+    └─► lhm.rs          fetch + flatten JSON tree → LhmData
+
+sysinfo crate           CPU load/freq, RAM, disk, network, processes
+wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
+
+    └─► commands.rs     get_stats() assembles StatsPayload every tick
+            └─► Tauri IPC  invoke("get-stats")
+                    └─► app.js  tick() every 1 s
+                            └─► panel modules update DOM
+```
+
+**Tick rate:** 1 second. LHM is polled with an 800 ms timeout; on failure
+the last successful sample is reused so the UI never resets to `--`.
+
+---
+
 ## File Structure
 
 ```text
 rig-dashboard/
-|- frontend/
-|  |- index.html
-|  |- settings.html
-|  |- status.html
-|  |- about.html
-|  |- updater.html
-|  |- assets/
-|  \- renderer/
-|     |- panels/
-|     \- *.js
-|- src-tauri/
-|  |- src/
-|  |- Cargo.toml
-|  \- tauri.conf.json
-|- assets/
-|- vendor/lhm/
-|- build/
-|  |- installer.nsh
-|  \- lhm-default/
-|- docs/
-\- package.json
+├── frontend/
+│   ├── index.html          Main dashboard
+│   ├── settings.html
+│   ├── status.html
+│   ├── about.html
+│   ├── updater.html
+│   ├── assets/
+│   └── renderer/
+│       ├── panels/         One JS module per panel
+│       └── *.js            Shared utilities and entry scripts
+├── src-tauri/
+│   ├── src/                Rust source (one module per concern)
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── docs/
+├── website/
+├── assets/
+├── vendor/lhm/
+└── build/
+    ├── installer.nsh
+    └── lhm-default/
 ```
 
-## Backend Modules (`src-tauri/src/`)
+---
 
-- **`main.rs`** — Tauri builder, tray icon, lifecycle. Initializes `AppState` at startup (hardware detection via WMI/sysinfo), picks the best monitor for the profile, starts LHM. Spawns `spawn_wmi_retry` — a background task that re-runs WMI detection for any fields that returned fallback values at startup (e.g. because WMI was not yet ready). Retries up to 3 times with 30 s / 60 s / 120 s delays; emits `hardware-refreshed` to the renderer when a field is successfully resolved so static labels update without a page reload.
-- **`stats.rs`** — `AppState` struct (shared mutable state behind `Mutex`), all serializable payload structs (`StatsPayload`, `CpuStats`, `ProcessEntry`, etc.). `ProcessEntry` carries `name`, `cpu` (percentage of total system capacity), and `mem_mb`; `StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU and capped at 8 entries.
-- **`commands.rs`** — Thin `#[tauri::command]` handlers only. Each handler delegates to a domain module; no business logic lives here. `get_stats()` calls `system.refresh_processes()` each tick and collects the top 8 processes sorted by CPU usage into `StatsPayload.top_processes`.
-- **`debug.rs`** — `append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`. No dependencies on other crate modules — safe to import from anywhere.
-- **`hardware.rs`** — WMI structs and all startup hardware detection: `detect_gpu_name`, `detect_gpu_vram_total_mb`, `detect_system_brand`, `classify_system_brand`, `detect_model_name`, `detect_ram_spec`, `detect_ram_details`, `detect_ping_target`, `sample_ping_ms`, `probe_wmi_status`, `detect_disk_model_map`. Each function tries WMI first, falls back to PowerShell CIM. `detect_disk_model_map` builds a `HashMap<drive_letter, model_name>` via a three-table WMI join (`Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`); this mapping is stored in `AppState` at startup so that LHM disk temperatures can be matched by model name rather than index (index-based matching would shift temperatures to wrong drives when a USB drive is inserted).
-- **`lhm.rs`** — HTTP client that fetches LHM's `/data.json`, flattens the nested sensor tree into `Vec<FlatNode>` (each node carries `text`, `value`, `parent`, `grandparent`, and `sensor_id`), then extracts GPU/CPU/disk/network/RAM metrics. GPU block is identified by the `GPU Memory Total` anchor with the highest value (selects dGPU over iGPU); all sensors sharing that anchor's grandparent are collected. Extracted GPU fields: core load, core temp, hotspot, core clock (`gpu_freq`), memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`). Disk temperatures are identified by `SensorId` prefix (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`) rather than by sensor name, preventing motherboard or RAM thermal sensors from leaking into disk readings. Warning Composite and Critical Composite threshold sensors are excluded; the highest real temperature per device is stored as `disk_temps: Vec<(device_name, °C)>` in `LhmData`. RAM temperature uses `SensorId` prefix `/memory/dimm/` with suffix `/temperature/0` — index 0 is the actual reading, while indices 1–5 are resolution and Low/High/CriticalLow/CriticalHigh limits; the max reading across all populated DIMM slots is stored as `ram_temp: Option<f64>` (DDR5 always has sensors; DDR4 coverage varies by module).
-- **`lhm_process.rs`** — LHM process lifecycle: `ensure_lhm_running` (scheduled task → direct spawn), `can_reach_lhm_endpoint`, `get_lhm_task_details`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
-- **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`). Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`. Both `motherboard` and `process` are opt-in.
-- **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `ensure_updater_window`, `on_window_event`, `set_last_tray_click_position`.
-- **`updater.rs`** — Auto-update logic: `spawn_background_check` starts a background loop that checks for updates every 6 hours (first check after 10 s); emits `update-available` event to the frontend when a newer version is found. Also exposes `check_for_update`, `install_update`, and `open_updater_window` commands.
-- **`diagnostics.rs`** — `collect_diagnostics` Tauri command and helpers that gather system info into a ZIP archive for bug reports.
-- **`autostart.rs`** — Per-user Windows autostart via `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`. Uses `winreg` for direct registry access (no subprocesses). Also manages `StartupApproved\Run` to stay in sync with Windows Settings > Apps > Startup.
-- **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, autostart enabled, visible panels, last seen version, eight optional temperature thresholds for CPU/GPU/RAM/Disk, alert cooldown, and `notify_on_warn`/`notify_on_crit` flags), JSON persistence to Tauri app data dir. `last_seen_version` is compared against `CARGO_PKG_VERSION` at startup to detect the first launch after an upgrade. All threshold fields use `#[serde(default)]` so existing settings files without those keys deserialise cleanly.
+## Backend Modules
 
-## Renderer Modules (`frontend/renderer/`)
+### Quick reference
 
-- **`environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__`) and `IS_DESKTOP`. All renderer modules go through this instead of accessing Tauri globals directly.
-- **`app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode. `applyVisiblePanels` hides/shows panels and reorders them in the DOM to match the saved order.
-- **`systemInfo.js`** — Host name, CPU model, GPU model, and branding/logo wiring.
-- **`clock.js`** — Local time and uptime rendering.
-- **`spark.js`** — Sparkline history ring buffer and canvas drawing. `drawSpark` renders a single series; `drawDoubleSpark` renders two series on a shared scale (used by the network and disk panels to display upload/download and read/write simultaneously).
-- **`tempColors.js`** — Maps temperature values to color thresholds for heat indicators.
-- **`vendorBranding.js`** — Pure mapping: brand key → logo asset + label. No DOM access; testable in Node.
-- **`simulator.js`** — Browser-mode fake stats for developing the UI without the Tauri backend.
-- **`panels/`** — One file per panel: `cpu.js`, `gpu.js`, `ram.js`, `network.js`, `disk.js`, `motherboard.js`, `process.js`. Each exports an `update*Panel(stats, ...)` function. `thresholds` carries `{ warn, crit }` values for temperature colour mapping; defaults are applied when the argument is absent so panels work in browser/simulator mode without backend settings. `gpu.js` renders a ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM and GPU load bars, and two optional D3D bars (3D engine, Video Decode) that are toggled via `display:none` when the backend returns `null`. `network.js` tracks upload and download as separate history series (`netUp`/`netDown`) and renders them as a dual-series sparkline (upload=green, download=cyan). `disk.js` tracks read and write as separate history series (`diskRead`/`diskWrite`) and renders them as a dual-series sparkline (read=purple, write=pink); the READ/WRITE labels are coloured to match their respective series. `process.js` renders the top 8 processes from `StatsPayload.top_processes`; `truncateName` strips `.exe` and caps at 16 characters, `formatRam` renders MB or GB; both helpers are exported for unit tests. Process names are HTML-escaped before `innerHTML` insertion to prevent rendering breakage from adversarial process names.
-- **`app.js`** — `applyThresholds(s)` builds per-component `{ warn, crit }` objects from a settings or `TempThresholdPayload` snapshot and stores them in the module-level `thresholds` variable. Called once at startup from the `get-settings` response and then on every `apply-thresholds` event emitted by the backend after `save_settings`. This keeps panel colours in sync without requiring a full settings reload.
-- **`settings.js`** — Settings window entry script. Manages panel visibility and order: `panelOrder` tracks all panels (visible + hidden) in user-defined sequence; `hiddenPanels` is a `Set` of keys the user has unchecked. `renderPanelToggles` re-renders the list from those two structures. Drag-to-reorder uses the Pointer Events API (`pointerdown`/`pointermove`/`pointerup` on each `≡` handle with `setPointerCapture`) and a fixed-position ghost element to work around WebView2's HTML5 drag incompatibility.
-- **`about.js`** / **`status.js`** / **`updater.js`** — Entry scripts for the About, Status, and Updates & Changelog secondary windows. `updater.js` invokes `check-for-update` on load, renders release notes from `latest.json` when an update is available (combined with the bundled CHANGELOG.md for full history), and drives the `install-update` download + progress flow.
+| Module | Responsibility |
+| --- | --- |
+| `main.rs` | Tauri builder, tray, lifecycle, startup orchestration |
+| `stats.rs` | Shared state (`AppState`) and all payload structs |
+| `commands.rs` | `#[tauri::command]` handlers — thin wrappers only |
+| `hardware.rs` | WMI/PowerShell hardware detection at startup |
+| `lhm.rs` | LHM HTTP polling and sensor tree flattening |
+| `lhm_process.rs` | LHM process lifecycle (scheduled task / direct spawn) |
+| `monitor.rs` | Display profiles, monitor selection, panel key validation |
+| `settings.rs` | Settings struct, JSON persistence |
+| `windows.rs` | Secondary window creation and tray-anchored positioning |
+| `updater.rs` | Background update checks and install flow |
+| `autostart.rs` | Windows startup registry management |
+| `diagnostics.rs` | Diagnostics ZIP export |
+| `debug.rs` | Debug log helpers (no deps on other modules) |
 
-## Diagnostics Export (`collect_diagnostics`)
+### Module details
 
-The `collect_diagnostics` Tauri command is invoked from the Status dialog's **Collect Diagnostics…** button.
-It produces a self-contained ZIP for bug reports and sensor-support work.
+#### `main.rs`
+
+Tauri builder, tray icon, and lifecycle. Initializes `AppState` at startup
+(hardware detection via WMI/sysinfo), picks the best monitor for the profile,
+and starts LHM. Spawns two background tasks:
+
+- **`spawn_wmi_retry`** — re-runs WMI detection for any fields that returned
+  fallback values at startup (e.g. WMI not yet ready). Retries up to 3 times
+  at 30 s / 60 s / 120 s; emits `hardware-refreshed` to the renderer when a
+  field is resolved so static labels update without a page reload.
+- **`updater::spawn_background_check`** — checks for updates every 6 hours
+  (first check after 10 s).
+
+#### `stats.rs`
+
+Defines `AppState` (shared mutable state behind `Mutex`) and all serializable
+payload structs sent to the frontend:
+
+| Struct | Contents |
+| --- | --- |
+| `StatsPayload` | Top-level payload returned by `get_stats()` |
+| `CpuStats` | Load, per-core loads, temp, freq, power |
+| `GpuStats` | Load, temps, clocks, VRAM, fan, power, D3D |
+| `RamStats` | Used/free/total, spec string, DIMM temp |
+| `NetStats` | Up/down throughput, interface name, ping |
+| `DiskStats` | Read/write throughput, per-drive entries |
+| `DiskDrive` | Filesystem label, size, used, pct, temp |
+| `MotherboardStats` | Fans, temps, voltages, chip name, board name |
+| `ProcessEntry` | Process name, CPU % of total system, RAM in MB |
+
+`StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU usage
+and capped at 8 entries before serialisation.
+
+#### `commands.rs`
+
+Thin `#[tauri::command]` handlers only — no business logic. Each handler
+delegates to a domain module.
+
+`get_stats()` is the main tick handler. Per call it:
+
+1. Fetches a fresh LHM sample (falls back to last good sample on failure)
+2. Calls `system.refresh_cpu()`, `refresh_memory()`, `refresh_processes()`
+3. Collects disk throughput and drive metadata
+4. Computes network throughput delta over elapsed time
+5. Refreshes ping (cached, re-measured every 5 s)
+6. Assembles `StatsPayload` including top 8 processes sorted by CPU
+7. Checks temperature thresholds and fires tray notifications if due
+
+#### `hardware.rs`
+
+All startup hardware detection. Each function tries WMI first, falls back to
+PowerShell CIM on failure.
+
+| Function | What it detects |
+| --- | --- |
+| `detect_gpu_name` | Primary discrete GPU name |
+| `detect_gpu_vram_total_mb` | VRAM total (MB) |
+| `detect_system_brand` | Brand key: `rog`, `msi`, `alienware`, etc. |
+| `classify_system_brand` | Brand classification logic |
+| `detect_model_name` | System model name |
+| `detect_motherboard_name` | Board manufacturer + product (normalised) |
+| `detect_ram_spec` | Type + speed string, e.g. "DDR5 6000 MT/s" |
+| `detect_ram_details` | Stick count, capacity, vendor, part number |
+| `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
+| `detect_ping_target` | Default gateway or public fallback |
+| `probe_wmi_status` | Checks whether WMI is reachable |
+
+`detect_disk_model_map` builds its map via a three-table WMI join:
+`Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
+Results are stored in `AppState` so LHM temperatures can be matched by model
+name rather than by index (stable when USB drives are inserted/removed).
+
+#### `lhm.rs`
+
+HTTP client that fetches `/data.json` from LHM, flattens the nested sensor tree
+into `Vec<FlatNode>`, and extracts metrics into `LhmData`.
+
+Each `FlatNode` carries: `text`, `value`, `parent`, `grandparent`, `sensor_id`.
+
+**GPU extraction:** Anchored on the `GPU Memory Total` node with the highest
+value (selects dGPU over iGPU on multi-GPU systems). All sensors sharing that
+anchor's `grandparent` (the GPU device name) are collected.
+
+Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
+memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
+(`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`).
+
+**Disk temperatures:** Identified by `SensorId` prefix
+(`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`) — not by sensor name.
+Warning/Critical Composite sensors are excluded. Highest real temp per device
+stored as `disk_temps: Vec<(device_name, °C)>`.
+
+**RAM temperature:** `SensorId` prefix `/memory/dimm/` with suffix
+`/temperature/0`. Index 0 is the actual reading; indices 1–5 are resolution and
+threshold limits and are excluded. Max across all populated DIMM slots stored
+as `ram_temp: Option<f64>`.
+
+**CPU temperature:** Matched by name (`"Core (Tctl/Tdie)"` for AMD,
+`"CPU Package"` / `"Core Average"` for Intel) restricted to
+`parent == "Temperatures"` — prevents the Intel CPU Package *power* sensor
+(same name, different parent) from being picked up.
+
+**Motherboard Super I/O:** `/lpc/` `SensorId` prefix (chip-agnostic — works
+on NCT, ITE, Winbond, etc.). Fans > 0 RPM sorted descending, temps ≥ 5 °C,
+named voltage rails only (generic `Voltage #N` slots excluded > 0.1 V).
+
+#### `monitor.rs`
+
+- `normalize_profile` / `profile_dimensions` — canonical profile name → pixel
+  dimensions
+- `pick_target_monitor` — selects the best available monitor for a profile using
+  an aspect-ratio + area fit score; positions the window borderless using
+  `set_size` + `set_decorations(false)` + `set_position`
+- `normalize_visible_panels` — validates and deduplicates panel key lists
+
+Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`,
+`motherboard`, `process`. Both `motherboard` and `process` are opt-in.
+
+#### `settings.rs`
+
+`Settings` struct persisted as JSON to
+`%APPDATA%\se.codeby.rigstats\rigstats-settings.json`.
+
+All fields use `#[serde(default)]` for backwards-compatible schema evolution —
+new fields deserialise cleanly from older settings files. `last_seen_version`
+is compared against `CARGO_PKG_VERSION` at startup to detect the first launch
+after an upgrade.
+
+#### `windows.rs`
+
+Creates and positions the four secondary windows:
+`ensure_settings_window`, `ensure_about_window`, `ensure_status_window`,
+`ensure_updater_window`. Windows anchor to the last tray icon click position
+via `set_last_tray_click_position`.
+
+#### `updater.rs`
+
+`spawn_background_check` starts a loop that checks GitHub Releases every 6
+hours (first check after 10 s). Emits `update-available` to the frontend when
+a newer version is found. Also exposes `check_for_update`, `install_update`,
+and `open_updater_window` commands.
+
+#### `autostart.rs`
+
+Per-user Windows autostart via
+`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`. Uses `winreg` for direct
+registry access (no subprocesses). Also manages `StartupApproved\Run` to stay
+in sync with Windows Settings → Apps → Startup.
+
+#### `debug.rs`
+
+`append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`.
+No dependencies on other crate modules — safe to import from anywhere.
+
+---
+
+## Frontend Modules
+
+### Quick reference
+
+| Module | Responsibility |
+| --- | --- |
+| `environment.js` | Tauri detection, `backend` wrapper, `IS_DESKTOP` flag |
+| `app.js` | 1 s poll loop, settings/events, panel orchestration |
+| `systemInfo.js` | Hostname, CPU/GPU model strings, brand logo |
+| `clock.js` | Time, day, date, uptime |
+| `spark.js` | Sparkline ring buffer and canvas drawing |
+| `tempColors.js` | Temperature → colour threshold mapping |
+| `vendorBranding.js` | Brand key → logo asset + label (pure, testable) |
+| `simulator.js` | Synthetic stats for browser-mode development |
+| `themes.js` | CSS custom property application for colour themes |
+| `panels/*.js` | One module per panel (see Dashboard Panels) |
+| `settings.js` | Settings window entry script |
+| `about.js` | About window entry script |
+| `status.js` | Status window entry script |
+| `updater.js` | Updates & Changelog window entry script |
+
+### Module details
+
+#### `app.js`
+
+Main dashboard orchestrator:
+
+- Drives the 1 s `tick()` poll loop (skips if previous tick is still in flight)
+- Validates `StatsPayload` before rendering to avoid UI resets on malformed data
+- Calls `applyThresholds(s)` from the `get-settings` response at startup and
+  from every `apply-thresholds` event after `save_settings`
+- `applyVisiblePanels` hides/shows panels and reorders them in the DOM via
+  `appendChild` to match the saved order
+- Resizes the window to the height of the visible panels after each reorder
+
+#### `spark.js`
+
+- `createHistory(n)` — creates a ring buffer of size `n` for all series
+- `drawSpark` — single-series sparkline on a canvas element
+- `drawDoubleSpark` — two series on a shared scale, used by network
+  (upload=green, download=cyan) and disk (read=purple, write=pink)
+
+#### `panels/`
+
+Each panel exports one `update*Panel(stats, ...)` function called from
+`app.js` every tick.
+
+| Panel module | Key behaviour |
+| --- | --- |
+| `cpu.js` | Ring gauge, per-core bar list (scrollable), sparkline |
+| `gpu.js` | Ring gauge, 3×2 metadata grid, VRAM bar, two optional D3D bars hidden when `null` |
+| `ram.js` | Usage bar, spec metadata, DIMM temperature |
+| `network.js` | Upload/download values, dual-series sparkline |
+| `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |
+| `motherboard.js` | Three-column layout: fans / temps / voltages; `shortLabel()` maps `"Temperature #N"` → `"TN"` |
+| `process.js` | Top 8 processes: name (`.exe` stripped, 16 char max), CPU %, RAM. Names are HTML-escaped before `innerHTML` insertion. `truncateName` and `formatRam` exported for unit tests. |
+| `clock.js` | Time, weekday, date |
+
+#### `settings.js`
+
+- `panelOrder` tracks all panels (visible + hidden) in user-defined sequence
+- `hiddenPanels` is a `Set` of unchecked keys
+- Drag-to-reorder uses the Pointer Events API with `setPointerCapture` instead
+  of the HTML5 Drag API (which shows a prohibition cursor inside WebView2)
+
+#### `updater.js`
+
+Invokes `check-for-update` on load, renders release notes from `latest.json`
+combined with the bundled `CHANGELOG.md`, and drives the `install-update`
+download + progress flow.
+
+---
+
+## Dashboard Panels
+
+| Key | Panel name | Default | Data source |
+| --- | --- | --- | --- |
+| `header` | System Identity | ✓ | WMI · sysinfo |
+| `clock` | Clock | ✓ | system time |
+| `cpu` | CPU | ✓ | sysinfo · LHM |
+| `gpu` | GPU | ✓ | LHM |
+| `ram` | RAM | ✓ | sysinfo · WMI · LHM |
+| `net` | Network | ✓ | sysinfo |
+| `disk` | Storage | ✓ | LHM · sysinfo |
+| `motherboard` | Motherboard | opt-in | LHM · WMI |
+| `process` | Processes | opt-in | sysinfo |
+
+Panel visibility and order are saved in `Settings.visible_panels` and
+validated by `normalize_visible_panels` on both frontend and backend.
+
+---
+
+## Diagnostics Export
+
+Invoked from Status dialog → **Collect Diagnostics…**. Opens a native Windows
+save dialog via `rfd::FileDialog` (Win32 requires STA; runs on a dedicated OS
+thread). Produces a self-contained ZIP for bug reports.
 
 ### Collection flow
 
-1. A native Windows save-file dialog is opened on a dedicated OS thread via `rfd::FileDialog` (Win32 requires STA; spawning a blocking task avoids blocking the async runtime).
-2. If the user cancels, the command returns `Ok(None)` and no file is written.
-3. If the user confirms a path, the following data is assembled and written into a single `zip::ZipWriter` with Deflate compression. The path is logged to the debug log and returned to the renderer as `Ok(Some(path))`.
+1. Native save dialog opened on a blocking OS thread
+2. On cancel → `Ok(None)`, no file written
+3. On confirm → assemble and compress the following files, return path to UI
 
-| File in ZIP | Source | Notes |
+### ZIP contents
+
+| File | Source | Notes |
 | --- | --- | --- |
 | `manifest.json` | inline | Unix timestamp + `CARGO_PKG_VERSION` |
-| `debug.log` | `std::fs::read(debug_log_path)` | Full file, not the tail shown in UI |
-| `settings.json` | serde_json of current `Settings` from `AppState` | Read-only snapshot |
+| `debug.log` | `std::fs::read(debug_log_path)` | Full file, not the tail shown in the UI |
+| `settings.json` | serde_json of `AppState.settings` | Read-only snapshot |
 | `lhm-data.json` | `GET localhost:8085/data.json` | 3 s timeout; error payload on failure |
-| `hardware.json` | `diag_collect_hardware()` — PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM |
-| `sched-task.txt` | `diag_collect_tasks()` — `schtasks /Query /V` | Both LHM task names |
-| `environment.txt` | `diag_collect_environment()` — env vars + Windows registry | Arch, build, hostname |
-| `install.log` | `diag_collect_installer_log()` — reads `rigstats-install.log` from app data dir | Written by the NSIS installer; contains LHM exe path and task registration exit codes |
-| `sysinfo.json` | `diag_collect_sysinfo()` — reads shared `AppState` mutexes | CPU brand, RAM totals, mount points, interfaces |
-| `displays.json` | `diag_collect_displays()` — reads available monitors via Tauri | Each monitor's resolution, position, scale factor, fit score, and which one was selected for the current profile |
+| `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM |
+| `sched-task.txt` | `schtasks /Query /V` | Both LHM task names |
+| `environment.txt` | env vars + Windows registry | Arch, build, hostname |
+| `install.log` | `rigstats-install.log` from app data | Written by NSIS installer |
+| `sysinfo.json` | `AppState` mutexes | CPU brand, RAM totals, mount points, interfaces |
+| `displays.json` | Tauri monitor list | Resolution, position, scale, fit score, selected flag |
 
 ---
 
 ## Design Decisions
 
-- Disk temperatures are matched to drive letters by physical disk model name (startup WMI query) rather than by index. Index-based matching would silently assign temperatures to the wrong drives when a USB device is inserted and shifts sysinfo's volume list. Model-name matching is stable regardless of insertion order.
-- LHM disk sensor identification uses the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/` prefixes) instead of sensor text. Filtering by text alone would pick up motherboard chip sensors (e.g. `Temperature #1` on Nuvoton NCT6799D) and RAM DIMM sensors that happen to share the same parent-category name.
-- RAM DIMM temperature identification uses both `SensorId` prefix `/memory/dimm/` and suffix `/temperature/0`. Each DIMM slot exposes 6 temperature-category sensors (actual reading at index 0, resolution at 1, and four threshold limits at 2–5). Filtering to index 0 alone is robust — no text matching needed, no risk of picking up threshold values regardless of locale or LHM version.
-- `main.rs` stays thin and delegates implementation to focused modules.
-- `#[tauri::command]` functions live only in `commands.rs` — domain modules contain no Tauri command annotations.
-- Network throughput (upload/download) is always sourced from sysinfo, not LHM. Sysinfo reads the same OS counters as Task Manager and selects the interface with the highest combined traffic. LHM's network sensors track adapters by GUID and can latch onto the wrong interface (VPNs, Hyper-V bridges), producing near-zero readings.
-- Latest successful LHM sample is kept in memory to avoid UI flicker when LHM times out.
-- Payloads are validated before rendering to avoid repainting with malformed transient data.
-- Poll ticks do not overlap, which avoids out-of-order UI updates.
-- `frontend/` is the Tauri web root, keeping runtime assets and HTML together.
-- No bundler or framework — vanilla ES modules are served directly by Tauri's asset server.
-- The dashboard uses CSS flexbox (not grid) so panels can be reordered in the DOM via `appendChild`. Each panel class (`panel-header`, `panel-cpu`, etc.) carries its own fixed height via a CSS variable, decoupling height from DOM position.
-- Drag-to-reorder in the Settings window uses the Pointer Events API with `setPointerCapture` instead of the HTML5 Drag API, which shows a prohibition cursor inside WebView2.
-- Temperature alerts use a `Mutex<HashMap<String, Instant>>` in `AppState` to track the last fire time per component+level key (e.g. `"cpu_warning"`). Cooldown is enforced entirely in the backend so the frontend never needs to reason about timing. `notify_on_warn`/`notify_on_crit` flags gate whole alert levels independently, allowing colour indicators to remain active while notifications are silenced. Disk alerts fire only on the hottest drive; per-drive alerting is not supported.
-- `TempThresholdPayload` (the `apply-thresholds` event payload) carries only the numeric thresholds, not the notify flags. The frontend uses thresholds exclusively for colour mapping; whether a notification fires is a backend concern.
+### Sensor identification
+
+- **Disk temperatures** are matched to drive letters by physical disk model name
+  (startup WMI query) rather than by index. Index-based matching silently assigns
+  temperatures to the wrong drives when a USB device is inserted.
+- **LHM disk sensors** use the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`,
+  `/scsi/`, `/ssd/` prefixes) instead of sensor text. Text-based filtering picks
+  up motherboard chip sensors and RAM DIMM sensors that share the same
+  parent-category name.
+- **RAM DIMM temperature** uses `SensorId` prefix `/memory/dimm/` with suffix
+  `/temperature/0`. Each DIMM slot exposes 6 temperature-category sensors;
+  index 0 is the actual reading, indices 1–5 are resolution and threshold limits.
+- **CPU temperature** is restricted to `parent == "Temperatures"` to prevent the
+  Intel CPU Package *power* sensor (same name, different parent) from being
+  returned instead of the thermal sensor.
+
+### Data sources
+
+- **Network throughput** always comes from sysinfo, not LHM. Sysinfo reads the
+  same OS counters as Task Manager. LHM tracks adapters by GUID and can latch
+  onto a VPN or Hyper-V bridge, producing near-zero readings.
+- **GPU identification** anchors on the `GPU Memory Total` sensor with the
+  highest value, selecting the dGPU over iGPU on multi-GPU systems without
+  hardcoding device names.
+
+### Frontend architecture
+
+- **No bundler or framework** — vanilla ES modules served directly by Tauri's
+  asset server. `frontend/` is the Tauri web root.
+- **Panel reordering** uses CSS flexbox + DOM `appendChild`, not CSS grid, so
+  panels can be reordered without any layout recalculation.
+- **Drag-to-reorder** in Settings uses the Pointer Events API with
+  `setPointerCapture` instead of the HTML5 Drag API, which shows a prohibition
+  cursor inside WebView2.
+- **Process names** are HTML-escaped before `innerHTML` insertion in
+  `process.js` to prevent rendering breakage from adversarial process names.
+
+### Reliability and correctness
+
+- **LHM fallback** — the last successful sample is kept in memory so the UI
+  never resets to `--` during transient LHM timeouts.
+- **Payload validation** — `isValidStatsPayload` rejects malformed or empty
+  payloads before rendering to avoid visual resets.
+- **No tick overlap** — the tick loop sets `isTicking` before the async call and
+  clears it in `finally`, preventing out-of-order UI updates.
+- **Alert cooldowns** use a `Mutex<HashMap<String, Instant>>` keyed on
+  `"<component>_<level>"`. Warning and critical are independent clocks.
+  `notify_on_warn`/`notify_on_crit` gate whole levels without clearing thresholds
+  so colour indicators remain active while notifications are silenced.
+- **`TempThresholdPayload`** (the `apply-thresholds` event) carries only
+  numeric thresholds, not the notify flags. Whether a notification fires is
+  a backend concern; the frontend uses thresholds only for colour mapping.
+
+### Window placement
+
+- `pick_target_monitor` never calls `set_fullscreen` — borderless positioning
+  via `set_size` + `set_decorations(false)` + `set_position` is sufficient.
+- `set_decorations(false)` is always called *after* `set_size` because
+  Windows `SetWindowPos` can restore `WS_CAPTION`/`WS_THICKFRAME`.
+- `set_position` compensates for the DWM invisible resize border
+  (`inset = inner_position − outer_position`) so content lands flush with the
+  monitor edge.
+- `pick_target_monitor` is called only when the profile *changes* in
+  `save_settings`. Calling it unconditionally causes a ~3 px drift on every
+  save due to the DWM inset compensation.

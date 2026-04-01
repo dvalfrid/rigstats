@@ -27,7 +27,7 @@ first launch following an upgrade.
 **Implemented.** Each drive in the disk panel now shows a live temperature reading
 in °C, color-coded by `resolveTempColor` (warm at 55 °C, hot at 70 °C).
 
-LHM sensor identification uses the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`
+LHM sensor identification uses the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`
 prefixes) rather than sensor names, so motherboard and RAM thermal sensors are never
 mixed in with disk readings. Warning Composite and Critical Composite threshold
 sensors are excluded; the highest real temperature per device is shown.

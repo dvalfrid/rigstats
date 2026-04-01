@@ -38,4 +38,4 @@ function updateProcessPanel(processes) {
     </div>`).join('');
 }
 
-export { updateProcessPanel, truncateName, formatRam };
+export { updateProcessPanel, truncateName, formatRam, escapeHtml };

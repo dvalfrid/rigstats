@@ -708,6 +708,15 @@ fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f
   })
 }
 
+/// Sorts process entries by descending CPU usage and truncates to `limit`.
+/// `NaN` values are treated as equal to preserve deterministic, non-panicking
+/// behavior when platform process counters return invalid samples.
+fn normalize_top_processes(mut entries: Vec<ProcessEntry>, limit: usize) -> Vec<ProcessEntry> {
+  entries.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
+  entries.truncate(limit);
+  entries
+}
+
 #[tauri::command]
 pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
@@ -750,7 +759,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
 
   system.refresh_processes();
   let num_cpus = system.cpus().len().max(1) as f32;
-  let mut proc_list: Vec<ProcessEntry> = system
+  let proc_list_raw: Vec<ProcessEntry> = system
     .processes()
     .values()
     .map(|p| ProcessEntry {
@@ -759,8 +768,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       mem_mb: p.memory() / 1_048_576,
     })
     .collect();
-  proc_list.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
-  proc_list.truncate(8);
+  let proc_list = normalize_top_processes(proc_list_raw, 8);
 
   drop(system);
 
@@ -969,4 +977,91 @@ pub fn get_changelog(app: tauri::AppHandle) -> String {
 pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
   let sanitized = message.chars().take(512).collect::<String>();
   append_debug_log(&app, &format!("[renderer] {}", sanitized));
+}
+
+#[cfg(test)]
+mod stats_helpers_tests {
+  use super::*;
+
+  #[test]
+  fn lhm_temp_for_model_matches_case_insensitive_with_whitespace() {
+    let disk_temps = vec![("  Samsung 990 PRO  ".to_string(), 47.0)];
+    let got = lhm_temp_for_model(" samsung 990 pro ", &disk_temps);
+    assert_eq!(got, Some(47.0));
+  }
+
+  #[test]
+  fn lhm_temp_for_model_matches_substrings_both_directions() {
+    let disk_temps = vec![
+      ("WDC WDS500G2B0A-00SM50".to_string(), 33.0),
+      ("Samsung SSD 980 PRO 1TB".to_string(), 45.0),
+    ];
+
+    // haystack contains needle
+    assert_eq!(lhm_temp_for_model("Samsung SSD 980 PRO", &disk_temps), Some(45.0));
+
+    // needle contains haystack
+    assert_eq!(
+      lhm_temp_for_model("WDC WDS500G2B0A-00SM50 SATA SSD", &disk_temps),
+      Some(33.0)
+    );
+  }
+
+  #[test]
+  fn lhm_temp_for_model_returns_none_for_empty_or_unmatched() {
+    let disk_temps = vec![("Crucial P3 Plus".to_string(), 41.0)];
+    assert_eq!(lhm_temp_for_model("", &disk_temps), None);
+    assert_eq!(lhm_temp_for_model("Some Other Drive", &disk_temps), None);
+  }
+
+  #[test]
+  fn normalize_top_processes_sorts_descending_and_limits() {
+    let entries = vec![
+      ProcessEntry {
+        name: "c".to_string(),
+        cpu: 5.0,
+        mem_mb: 300,
+      },
+      ProcessEntry {
+        name: "a".to_string(),
+        cpu: 42.0,
+        mem_mb: 100,
+      },
+      ProcessEntry {
+        name: "b".to_string(),
+        cpu: 12.0,
+        mem_mb: 200,
+      },
+    ];
+
+    let out = normalize_top_processes(entries, 2);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].name, "a");
+    assert_eq!(out[1].name, "b");
+  }
+
+  #[test]
+  fn normalize_top_processes_handles_nan_cpu_without_panicking() {
+    let entries = vec![
+      ProcessEntry {
+        name: "valid-high".to_string(),
+        cpu: 70.0,
+        mem_mb: 1,
+      },
+      ProcessEntry {
+        name: "nan".to_string(),
+        cpu: f32::NAN,
+        mem_mb: 1,
+      },
+      ProcessEntry {
+        name: "valid-low".to_string(),
+        cpu: 10.0,
+        mem_mb: 1,
+      },
+    ];
+
+    let out = normalize_top_processes(entries, 3);
+    assert_eq!(out.len(), 3);
+    assert_eq!(out[0].name, "valid-high");
+  }
 }
