@@ -8,6 +8,18 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.14.0](https://github.com/dvalfrid/rigstats/compare/v1.13.0...v1.14.0) (2026-04-01)
+
+
+### Features
+
+* add customisable colour themes to the dashboard ([6ecfe9f](https://github.com/dvalfrid/rigstats/commit/6ecfe9f4e253969e5c0581b5b6d9de41d80fbebe))
+
+
+### Bug Fixes
+
+* update badge click blocked by header window-drag mousedown ([523fb94](https://github.com/dvalfrid/rigstats/commit/523fb942c2239dee7c43624ceb822c90b4771614))
+
 ## [1.13.0](https://github.com/dvalfrid/rigstats/compare/v1.12.0...v1.13.0) (2026-03-31)
 
 
