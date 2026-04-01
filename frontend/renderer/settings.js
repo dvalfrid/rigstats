@@ -22,7 +22,7 @@ const notifyOnWarnInput = document.getElementById('notifyOnWarnInput');
 const notifyOnCritInput = document.getElementById('notifyOnCritInput');
 const themeSelect = document.getElementById('themeSelect');
 
-const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard'];
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard', 'process'];
 const PANEL_LABELS = {
   header: 'Header',
   clock: 'Clock',
@@ -32,6 +32,7 @@ const PANEL_LABELS = {
   net: 'Network',
   disk: 'Storage',
   motherboard: 'Motherboard',
+  process: 'Processes',
 };
 
 let original = {

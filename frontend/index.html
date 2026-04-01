@@ -32,6 +32,7 @@
   --disk-write: #ff7fbf;
   --mb-accent:    #3a99b8;
   --mb-scrollbar: #2a3a5a;
+  --proc:         #ff9f2f;
   --mono: 'Share Tech Mono', monospace;
   --sans: 'Rajdhani', sans-serif;
   --viewport-w: 450px;
@@ -167,7 +168,7 @@ html, body {
 .bar-fill{height:100%;border-radius:3px;background:var(--c,var(--accent));position:relative;transition:width .7s ease;}
 .bar-fill::after{content:'';position:absolute;right:0;top:0;bottom:0;width:5px;background:#fff;opacity:.5;border-radius:3px;filter:blur(2px);}
 .bar-pct{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);width:28px;}
-.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb{display:flex;flex-direction:column;}
+.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb,.panel-proc{display:flex;flex-direction:column;}
 .panel-content{flex:1;overflow:hidden;min-height:0;}
 canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin-top:var(--gap-inner-sm);}
 
@@ -235,6 +236,16 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 .mb-col-center{display:flex;flex-direction:column;align-items:center;}
 .mb-col-center-inner{width:fit-content;}
 .mb-row-c{display:flex;gap:10px;align-items:center;margin-bottom:2px;}
+
+/* PROCESS MONITOR */
+.panel-proc{--c:var(--proc);height:var(--row-proc);}
+.proc-header{display:grid;grid-template-columns:1fr 4.5ch 5.5ch;gap:0 8px;font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:4px;}
+.proc-header-cpu{text-align:right;}
+.proc-header-ram{text-align:right;}
+.proc-row{display:grid;grid-template-columns:1fr 4.5ch 5.5ch;gap:0 8px;align-items:center;margin-bottom:3px;font-family:var(--mono);font-size:var(--font-ui);}
+.proc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);}
+.proc-cpu{text-align:right;color:var(--proc);}
+.proc-ram{text-align:right;color:var(--text-muted);}
 </style>
 </head>
 <body>
@@ -439,6 +450,18 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- PROCESS MONITOR -->
+  <div class="panel panel-proc" data-panel="process">
+    <div class="tl"></div><div class="br"></div>
+    <div class="stat-label">PROCESSES</div>
+    <div class="proc-header">
+      <span>NAME</span>
+      <span class="proc-header-cpu">CPU</span>
+      <span class="proc-header-ram">RAM</span>
+    </div>
+    <div id="procList"><!-- populated by JS --></div>
   </div>
 
 </div>

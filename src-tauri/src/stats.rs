@@ -87,6 +87,16 @@ pub struct MotherboardStats {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProcessEntry {
+  pub name: String,
+  /// CPU usage as a percentage of total system capacity (sum of all cores = 100%).
+  pub cpu: f32,
+  /// RAM consumed by this process in megabytes.
+  pub mem_mb: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatsPayload {
   pub cpu: CpuStats,
   pub gpu: GpuStats,
@@ -94,6 +104,7 @@ pub struct StatsPayload {
   pub net: NetStats,
   pub disk: DiskStats,
   pub motherboard: MotherboardStats,
+  pub top_processes: Vec<ProcessEntry>,
   pub system_uptime_secs: u64,
   pub lhm_connected: bool,
 }

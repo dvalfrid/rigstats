@@ -89,6 +89,16 @@ function simulateStats() {
         ['CPU Term', 1.80 + Math.random() * 0.02],
       ],
     },
+    topProcesses: [
+      { name: 'RustRover64.exe', cpu: 12.4 + (Math.random() - 0.5) * 3, memMb: 1842 },
+      { name: 'chrome.exe',      cpu: 8.7  + (Math.random() - 0.5) * 2, memMb: 1024 },
+      { name: 'cs2.exe',         cpu: cpu  + (Math.random() - 0.5) * 5, memMb: 3400 },
+      { name: 'Discord.exe',     cpu: 2.1  + (Math.random() - 0.5) * 1, memMb: 310  },
+      { name: 'nvcontainer.exe', cpu: 1.8  + (Math.random() - 0.5) * 1, memMb: 128  },
+      { name: 'explorer.exe',    cpu: 0.5  + Math.random() * 0.5,       memMb: 96   },
+      { name: 'svchost.exe',     cpu: 0.3  + Math.random() * 0.4,       memMb: 62   },
+      { name: 'Taskmgr.exe',     cpu: 0.1  + Math.random() * 0.2,       memMb: 44   },
+    ],
     systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),
     lhmConnected: false,
   };

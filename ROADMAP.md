@@ -170,29 +170,33 @@ without sharing the exact accent colour.
 
 ---
 
-## Process monitor panel
+## Process monitor panel ✓
 
 **Panel:** New `process` panel (opt-in)
 **Data source:** `sysinfo::Process` — CPU %, memory used, name
 
-Shows the top processes by resource usage so users can instantly see which game,
-encoder, or background service is consuming their hardware — a miniature Task
-Manager always visible on the portrait monitor.
+**Implemented.** An optional panel showing the top 8 processes sorted by CPU
+usage — a miniature Task Manager always visible on the portrait monitor.
+Enabled via Settings → panel toggles.
 
-**What to show:**
+**What is shown:**
 
-- Top 5–8 processes sorted by CPU % (configurable: CPU / RAM / GPU)
-- Columns: process name (truncated), CPU %, RAM (MB/GB)
-- Optional GPU column via LHM per-process sensor if available
-- Auto-refreshes each tick; processes with 0 % CPU for 3+ ticks fade out
+- Top 8 processes sorted by CPU % (descending)
+- Columns: process name (truncated to 16 chars, `.exe` suffix stripped), CPU %
+  of total system capacity, RAM in MB or GB
+- Auto-refreshes on every stats tick (1 s interval)
 
-**Scope:**
+**Implementation:**
 
-- Collect process list in `commands.rs` / new `processes.rs` using
-  `sysinfo::System::processes()`; sort and truncate to top N before serialising
-- New `ProcessEntry` struct in `stats.rs`; `StatsPayload.top_processes: Vec<ProcessEntry>`
-- New `panels/process.js` frontend panel
-- Add `process` to the valid panel keys list in `monitor.rs` and settings
+- `ProcessEntry` struct in `stats.rs`: `name`, `cpu` (% of total system), `mem_mb`
+- `StatsPayload.top_processes: Vec<ProcessEntry>` — sorted and truncated to 8
+  before serialisation in `get_stats()` in `commands.rs`
+- `sysinfo::System::refresh_processes()` called each tick alongside CPU/RAM refresh
+- CPU % = `process.cpu_usage() / num_cpus` so 100 % means fully loaded system
+- `panels/process.js` — pure helper functions `truncateName` and `formatRam` are
+  exported and covered by unit tests; process names are HTML-escaped before
+  insertion into `innerHTML` to prevent XSS from adversarial process names
+- `"process"` added to the valid panel key list in `monitor.rs` and `settings.js`
 
 ---
 

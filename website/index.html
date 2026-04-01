@@ -80,7 +80,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, and motherboard sensors — live, side by side with whatever you're doing.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, and a live process monitor — side by side with whatever you're doing.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -136,7 +136,7 @@
   <section class="section" id="panels">
     <div class="container">
       <header class="section-head">
-        <h2>Eight Live Panels</h2>
+        <h2>Nine Live Panels</h2>
         <p>Each panel tracks exactly what matters for that component — with sparkline history so you see trends, not just a snapshot.</p>
       </header>
 
@@ -243,6 +243,22 @@
               <li>Motherboard name &amp; Super I/O chip model</li>
             </ul>
             <span class="source-tag">LHM · WMI</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/processes-panel.png" alt="Processes panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>Processes</h3>
+            <p>A miniature Task Manager always visible on the portrait display. Shows the top 8 processes sorted by CPU usage so you can instantly see which game, encoder, or background service is consuming your hardware. Optional panel, enabled in Settings.</p>
+            <ul>
+              <li>Top 8 processes by CPU usage</li>
+              <li>Per-process CPU % of total system capacity</li>
+              <li>Per-process RAM usage (MB / GB)</li>
+            </ul>
+            <span class="source-tag">sysinfo</span>
           </div>
         </article>
 
