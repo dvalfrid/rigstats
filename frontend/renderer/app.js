@@ -68,7 +68,6 @@ const PROFILE_SIZE = {
 
 const BASE_PROFILE_HEIGHT = 1920;
 const BASE_PROFILE_WIDTH = 450;
-const BASE_ROW_HEIGHTS = [196, 148, 420, 320, 315, 260, 295, 260, 260];
 
 function setPxVar(style, name, value) {
   style.setProperty(name, `${Math.max(1, Math.round(value))}px`);
@@ -80,17 +79,14 @@ function applyProfileMetrics(profile) {
   const widthScale = profile.width / BASE_PROFILE_WIDTH;
   const contentScale = Math.max(0.50, Math.min(1.35, Math.min(heightScale, widthScale)));
   const gap = Math.max(1, Math.round(heightScale));
-  const availableHeight = profile.height - (gap * (BASE_ROW_HEIGHTS.length - 1));
+  const availableHeight = profile.height - (gap * (PANEL_ROW_CONFIG.length - 1));
 
   let remaining = availableHeight;
-  BASE_ROW_HEIGHTS.forEach((baseHeight, index) => {
-    const rowName = ['--row-header', '--row-clock', '--row-cpu', '--row-gpu', '--row-ram', '--row-net', '--row-disk', '--row-mb', '--row-proc'][index];
-    // Index 6 (disk) absorbs rounding remainder so the 7 default panels fill the
-    // screen exactly. Panels added beyond the original 7 use their scaled height directly.
-    const raw = index === 6 ? remaining : Math.round(baseHeight * heightScale);
+  PANEL_ROW_CONFIG.forEach(({ cssVar, baseHeight, absorbRemainder }) => {
+    const raw = absorbRemainder ? remaining : Math.round(baseHeight * heightScale);
     const applied = Math.max(1, raw);
     remaining -= applied;
-    root.setProperty(rowName, `${applied}px`);
+    root.setProperty(cssVar, `${applied}px`);
   });
 
   setPxVar(root, '--dashboard-w', profile.width);
@@ -119,7 +115,22 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--gap-inner-sm', 10 * contentScale);
 }
 
-const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard', 'process'];
+// Single source of truth for panel order, row CSS variables, and base heights.
+// `absorbRemainder` marks the one panel that soaks up rounding error so all
+// default panels fill the screen exactly regardless of scale factor.
+const PANEL_ROW_CONFIG = [
+  { key: 'header',      cssVar: '--row-header', baseHeight: 196 },
+  { key: 'clock',       cssVar: '--row-clock',  baseHeight: 148 },
+  { key: 'cpu',         cssVar: '--row-cpu',    baseHeight: 420 },
+  { key: 'gpu',         cssVar: '--row-gpu',    baseHeight: 320 },
+  { key: 'ram',         cssVar: '--row-ram',    baseHeight: 315 },
+  { key: 'net',         cssVar: '--row-net',    baseHeight: 260 },
+  { key: 'disk',        cssVar: '--row-disk',   baseHeight: 295, absorbRemainder: true },
+  { key: 'motherboard', cssVar: '--row-mb',     baseHeight: 260 },
+  { key: 'process',     cssVar: '--row-proc',   baseHeight: 260 },
+];
+
+const PANEL_KEYS = PANEL_ROW_CONFIG.map((p) => p.key);
 
 let currentProfile = PROFILE_SIZE['portrait-xl'];
 
@@ -150,11 +161,11 @@ function applyVisiblePanels(visiblePanels) {
   // Mirror applyProfileMetrics exactly so heights match the CSS variables.
   const heightScale = currentProfile.height / BASE_PROFILE_HEIGHT;
   const gap = Math.max(1, Math.round(heightScale));
-  const availableH = currentProfile.height - gap * (PANEL_KEYS.length - 1);
+  const availableH = currentProfile.height - gap * (PANEL_ROW_CONFIG.length - 1);
   const panelH = {};
   let rem = availableH;
-  PANEL_KEYS.forEach((key, i) => {
-    const h = i === 6 ? rem : Math.round(BASE_ROW_HEIGHTS[i] * heightScale);
+  PANEL_ROW_CONFIG.forEach(({ key, baseHeight, absorbRemainder }) => {
+    const h = absorbRemainder ? rem : Math.round(baseHeight * heightScale);
     panelH[key] = Math.max(1, h);
     rem -= panelH[key];
   });

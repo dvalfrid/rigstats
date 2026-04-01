@@ -6,7 +6,7 @@
 
 use crate::debug::{append_debug_log, debug_log_path, run_hidden_command};
 use crate::monitor::{normalize_profile, profile_dimensions};
-use crate::stats::AppState;
+use crate::stats::{AppState, HardwareInfo};
 use serde::Serialize;
 use std::io::Write;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -167,7 +167,7 @@ fn diag_collect_installer_log(_app: &tauri::AppHandle) -> Vec<u8> {
   std::fs::read(path).unwrap_or_else(|_| b"(install log not found)".to_vec())
 }
 
-fn diag_collect_sysinfo(state: &AppState) -> String {
+fn diag_collect_sysinfo(state: &AppState, hw: &HardwareInfo) -> String {
   let (cpu_brand, cpu_count, total_memory_mb, used_memory_mb) = {
     let system = state.system.lock().unwrap_or_else(|e| e.into_inner());
     let brand = system.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
@@ -224,15 +224,15 @@ fn diag_collect_sysinfo(state: &AppState) -> String {
     total_memory_mb,
     used_memory_mb,
     disk_mount_points,
-    disk_model_map: state.disk_model_map.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    disk_model_map: hw.disk_model_map.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     network_interfaces,
-    system_brand: state.system_brand.lock().unwrap_or_else(|e| e.into_inner()).clone(),
-    sysinfo_available: state.sysinfo_available,
-    wmi_available: state.wmi_available,
-    ram_spec: state.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
-    ram_details: state.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    system_brand: hw.system_brand.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    sysinfo_available: hw.sysinfo_available,
+    wmi_available: hw.wmi_available,
+    ram_spec: hw.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+    ram_details: hw.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     ram_spec_probe,
-    ping_target: state.ping_target.clone(),
+    ping_target: hw.ping_target.clone(),
   };
   serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
@@ -339,6 +339,7 @@ fn diag_collect_displays(app: &tauri::AppHandle, profile: &str) -> String {
 pub async fn collect_diagnostics(
   app: tauri::AppHandle,
   state: tauri::State<'_, AppState>,
+  hw: tauri::State<'_, HardwareInfo>,
 ) -> Result<Option<String>, String> {
   let ts = SystemTime::now()
     .duration_since(UNIX_EPOCH)
@@ -393,7 +394,7 @@ pub async fn collect_diagnostics(
   let hardware_json = pretty_json(&diag_collect_hardware());
   let tasks_txt = diag_collect_tasks();
   let env_txt = diag_collect_environment();
-  let sysinfo_json = diag_collect_sysinfo(&state);
+  let sysinfo_json = diag_collect_sysinfo(&state, &hw);
   let install_log_bytes = diag_collect_installer_log(&app);
   let displays_json = {
     let profile = state

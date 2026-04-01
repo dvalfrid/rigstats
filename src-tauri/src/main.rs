@@ -33,7 +33,7 @@ use hardware::{
 use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
 use settings::{load_settings, persist_settings};
-use stats::AppState;
+use stats::{AppState, HardwareInfo};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use sysinfo::{Disks, Networks, System};
@@ -63,7 +63,7 @@ fn spawn_wmi_retry(app: tauri::AppHandle) {
     // Hold a single long-lived state reference for the entire task lifetime.
     // MutexGuards are dropped explicitly via intermediate `let` bindings so
     // the borrow checker sees them release before the block ends.
-    let state = app.state::<AppState>();
+    let state = app.state::<HardwareInfo>();
     let delays_secs = [30u64, 60, 120];
 
     for (attempt, &delay) in delays_secs.iter().enumerate() {
@@ -363,9 +363,21 @@ fn main() {
         }
       };
 
-      // Shared state is stored behind Mutex because commands run concurrently.
-      app.manage(AppState {
+      // Hardware metadata — startup-detected, some fields refreshable by spawn_wmi_retry.
+      app.manage(HardwareInfo {
         disk_model_map: Mutex::new(disk_model_map),
+        ram_spec: Mutex::new(ram_spec),
+        ram_details: Mutex::new(ram_details),
+        gpu_vram_total_mb: Mutex::new(gpu_vram_total_mb),
+        ping_target,
+        system_brand: Mutex::new(system_brand),
+        mb_name: Mutex::new(mb_name),
+        sysinfo_available,
+        wmi_available,
+      });
+
+      // Per-tick runtime state — mutated on every stats poll.
+      app.manage(AppState {
         lhm_client: reqwest::Client::builder()
           .timeout(std::time::Duration::from_millis(800))
           .build()
@@ -377,14 +389,6 @@ fn main() {
         last_net_sample: Mutex::new(None),
         last_ping_sample: Mutex::new(None),
         last_lhm: Mutex::new(None),
-        ram_spec: Mutex::new(ram_spec),
-        ram_details: Mutex::new(ram_details),
-        gpu_vram_total_mb: Mutex::new(gpu_vram_total_mb),
-        ping_target,
-        system_brand: Mutex::new(system_brand),
-        mb_name: Mutex::new(mb_name),
-        sysinfo_available,
-        wmi_available,
         last_alert: Mutex::new(HashMap::new()),
       });
 

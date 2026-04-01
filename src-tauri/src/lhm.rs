@@ -113,18 +113,47 @@ fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str, grandpa
   }
 }
 
-fn parse_lhm(data: &Value) -> LhmData {
-  // Parse once, then derive all dashboard fields from the flattened sensor list.
-  let mut nodes = Vec::new();
-  flatten_lhm(data, &mut nodes, "", "");
+// --- Helpers ---------------------------------------------------------------
 
+/// Converts an LHM throughput value string to MB/s, handling KB and GB suffixes.
+fn to_mbs(raw: &str) -> f64 {
+  let v = parse_val(raw).unwrap_or(0.0);
+  if raw.contains("KB") {
+    v / 1024.0
+  } else if raw.contains("GB") {
+    v * 1024.0
+  } else {
+    v
+  }
+}
+
+struct GpuData {
+  load: Option<f64>,
+  temp: Option<f64>,
+  hotspot: Option<f64>,
+  freq: Option<f64>,
+  mem_freq: Option<f64>,
+  power: Option<f64>,
+  fan: Option<f64>,
+  vram_used: Option<f64>,
+  vram_total: Option<f64>,
+  d3d_3d: Option<f64>,
+  d3d_vdec: Option<f64>,
+}
+
+/// Extracts all GPU metrics from the sensor list.
+///
+/// Anchors on the "GPU Memory Total" sensor with the highest value to identify
+/// the discrete GPU in iGPU+dGPU configurations, then collects all sensors
+/// sharing the same grandparent (device name).
+fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
   // Locate the discrete GPU block by anchoring on the "GPU Memory Total" sensor
   // with the highest reported value. This handles two distinct multi-GPU cases:
   //   • Intel iGPU + NVIDIA dGPU: Intel reports "D3D Shared Memory Total", not
   //     "GPU Memory Total", so the text match alone excludes it.
   //   • AMD iGPU + AMD dGPU: both report "GPU Memory Total", but the iGPU has
   //     far less VRAM than the discrete card — picking the maximum selects the dGPU.
-  let vram_total_idx = nodes
+  let gpu_device: Option<String> = nodes
     .iter()
     .enumerate()
     .filter(|(_, n)| n.text == "GPU Memory Total")
@@ -133,78 +162,90 @@ fn parse_lhm(data: &Value) -> LhmData {
       let bv = parse_val(&b.value).unwrap_or(0.0);
       av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
     })
-    .map(|(idx, _)| idx);
+    .map(|(_, n)| n.grandparent.clone());
 
   // Identify the GPU device by the grandparent of the anchor node, then collect
-  // all sensors that belong to the same device.  A fixed window was fragile: GPUs
+  // all sensors that belong to the same device. A fixed window was fragile: GPUs
   // with many D3D load sensors (e.g. RTX 4090 reports 19) push temperature, clock
   // and power sensors far enough that they fell outside the old ±25 limit.
-  let gpu_device: Option<String> = vram_total_idx
-    .and_then(|idx| nodes.get(idx))
-    .map(|n| n.grandparent.clone());
-
   let gpu_block: Vec<&FlatNode> = if let Some(ref dev) = gpu_device {
     nodes.iter().filter(|n| &n.grandparent == dev).collect()
   } else {
     vec![]
   };
 
-  let gpu_find = |parent: &str, text: &str| {
+  let find = |parent: &str, text: &str| {
     gpu_block
       .iter()
       .find(|n| n.parent == parent && n.text == text)
       .and_then(|n| parse_val(&n.value))
   };
 
-  let to_mbs = |raw: &str| -> f64 {
-    let v = parse_val(raw).unwrap_or(0.0);
-    if raw.contains("KB") {
-      v / 1024.0
-    } else if raw.contains("GB") {
-      v * 1024.0
-    } else {
-      v
-    }
-  };
+  GpuData {
+    load: find("Load", "GPU Core"),
+    temp: find("Temperatures", "GPU Core"),
+    hotspot: find("Temperatures", "GPU Hot Spot"),
+    freq: find("Clocks", "GPU Core"),
+    mem_freq: find("Clocks", "GPU Memory"),
+    power: find("Powers", "GPU Package"),
+    fan: gpu_block
+      .iter()
+      .find(|n| n.parent == "Fans" && n.text.starts_with("GPU Fan"))
+      .and_then(|n| parse_val(&n.value)),
+    vram_used: find("Data", "GPU Memory Used"),
+    vram_total: find("Data", "GPU Memory Total"),
+    d3d_3d: find("Load", "D3D 3D"),
+    d3d_vdec: find("Load", "D3D Video Decode"),
+  }
+}
 
-  let read_nodes: Vec<&FlatNode> = nodes
+/// Returns total disk read and write throughput in MB/s across all drives.
+fn extract_disk_throughput(nodes: &[FlatNode]) -> (f64, f64) {
+  let read = nodes
     .iter()
     .filter(|n| n.parent == "Throughput" && n.text == "Read Rate")
-    .collect();
-  let write_nodes: Vec<&FlatNode> = nodes
+    .map(|n| to_mbs(&n.value))
+    .sum();
+  let write = nodes
     .iter()
     .filter(|n| n.parent == "Throughput" && n.text == "Write Rate")
-    .collect();
+    .map(|n| to_mbs(&n.value))
+    .sum();
+  (read, write)
+}
 
-  let disk_read_total: f64 = read_nodes.iter().map(|n| to_mbs(&n.value)).sum();
-  let disk_write_total: f64 = write_nodes.iter().map(|n| to_mbs(&n.value)).sum();
-
-  let upload_nodes: Vec<&FlatNode> = nodes
+/// Returns the busiest network interface's upload and download speed in Mbit/s.
+fn extract_network(nodes: &[FlatNode]) -> (f64, f64) {
+  let uploads: Vec<&FlatNode> = nodes
     .iter()
     .filter(|n| n.parent == "Throughput" && n.text == "Upload Speed")
     .collect();
-  let download_nodes: Vec<&FlatNode> = nodes
+  let downloads: Vec<&FlatNode> = nodes
     .iter()
     .filter(|n| n.parent == "Throughput" && n.text == "Download Speed")
     .collect();
 
   let mut best_up = 0.0;
   let mut best_down = 0.0;
-  for (i, up_node) in upload_nodes.iter().enumerate() {
+  for (i, up_node) in uploads.iter().enumerate() {
     let up = to_mbs(&up_node.value) * 8.0;
-    let down = download_nodes.get(i).map(|n| to_mbs(&n.value) * 8.0).unwrap_or(0.0);
+    let down = downloads.get(i).map(|n| to_mbs(&n.value) * 8.0).unwrap_or(0.0);
     if up + down > best_up + best_down {
       best_up = up;
       best_down = down;
     }
   }
+  (best_up, best_down)
+}
 
-  // Disk temperature sensors: identified by SensorId prefix (/nvme/, /hdd/, /ata/, /scsi/, /ssd/).
-  // This avoids false positives from motherboard chips and RAM modules.
-  // "Warning Composite" and "Critical Composite" are NVMe thresholds, not readings — excluded.
-  // With those removed, max() naturally selects "Composite" (the authoritative NVMe reading).
-  // LHM reports 0 as a sentinel for unsupported sensors — skip those too.
-  let mut disk_temps: Vec<(String, f64)> = Vec::new();
+/// Returns per-device disk temperatures: `(device_name, temp_celsius)`.
+///
+/// Sensors are identified by SensorId prefix (/nvme/, /hdd/, /ata/, /scsi/, /ssd/).
+/// "Warning Composite" and "Critical Composite" are NVMe thresholds, not readings — excluded.
+/// LHM reports 0 as a sentinel for unsupported sensors — those are skipped too.
+/// Multiple temperature entries for the same device are collapsed to the highest value.
+fn extract_disk_temps(nodes: &[FlatNode]) -> Vec<(String, f64)> {
+  let mut temps: Vec<(String, f64)> = Vec::new();
   for n in nodes.iter().filter(|n| {
     n.parent == "Temperatures"
       && (n.sensor_id.starts_with("/nvme/")
@@ -216,20 +257,25 @@ fn parse_lhm(data: &Value) -> LhmData {
       && !n.text.contains("Critical")
   }) {
     if let Some(t) = parse_val(&n.value).filter(|&v| v > 0.0) {
-      if let Some(existing) = disk_temps.iter_mut().find(|(name, _)| name == &n.grandparent) {
+      if let Some(existing) = temps.iter_mut().find(|(name, _)| name == &n.grandparent) {
         if t > existing.1 {
           existing.1 = t;
         }
       } else if !n.grandparent.is_empty() {
-        disk_temps.push((n.grandparent.clone(), t));
+        temps.push((n.grandparent.clone(), t));
       }
     }
   }
+  temps
+}
 
-  // AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
-  // All three sensor names also appear under "Powers" (e.g. Intel "CPU Package" is both a temp
-  // and a power sensor). Restricting to parent == "Temperatures" prevents picking up the wrong one.
-  let cpu_temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
+/// Returns `(cpu_temp, cpu_power)`.
+///
+/// AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
+/// All three sensor names also appear under "Powers", so temp lookup is restricted to
+/// parent == "Temperatures" to avoid the Intel "CPU Package" power sensor.
+fn extract_cpu(nodes: &[FlatNode]) -> (Option<f64>, Option<f64>) {
+  let temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
     .iter()
     .find_map(|&name| {
       nodes
@@ -238,45 +284,58 @@ fn parse_lhm(data: &Value) -> LhmData {
         .and_then(|n| parse_val(&n.value))
     });
   // Intel names the package power sensor "CPU Package"; AMD names it "Package".
-  let cpu_power = ["CPU Package", "Package"].iter().find_map(|&name| {
+  let power = ["CPU Package", "Package"].iter().find_map(|&name| {
     nodes
       .iter()
       .find(|n| n.parent == "Powers" && n.text == name)
       .and_then(|n| parse_val(&n.value))
   });
+  (temp, power)
+}
 
-  // DDR5 (and some DDR4) DIMM temperature sensors: the real reading is always
-  // /temperature/0 per slot. /temperature/1-5 are resolution and threshold values
-  // (Low Limit, High Limit, Critical Low, Critical High) — those are excluded.
-  // Take the highest reading across all populated slots as the representative RAM temperature.
-  let ram_temp = nodes
+/// Returns the highest DIMM temperature across all populated slots, or `None`.
+///
+/// DDR5 (and some DDR4) DIMM sensors: the real reading is always /temperature/0
+/// per slot. Indices 1–5 are resolution and threshold values — excluded.
+fn extract_ram_temp(nodes: &[FlatNode]) -> Option<f64> {
+  nodes
     .iter()
     .filter(|n| {
-      n.parent == "Temperatures" && n.sensor_id.ends_with("/temperature/0") && n.sensor_id.starts_with("/memory/dimm/")
+      n.parent == "Temperatures" && n.sensor_id.starts_with("/memory/dimm/") && n.sensor_id.ends_with("/temperature/0")
     })
     .filter_map(|n| parse_val(&n.value).filter(|&v| v > 0.0))
-    .reduce(f64::max);
+    .reduce(f64::max)
+}
 
-  // Motherboard Super I/O fans: all /lpc/ fan sensors with RPM > 0, sorted descending.
-  // Super I/O chips expose at most 7 channels; the panel scrolls, so no artificial cap needed.
-  let mut mb_fans: Vec<(String, f64)> = nodes
+struct MbData {
+  fans: Vec<(String, f64)>,
+  temps: Vec<(String, f64)>,
+  voltages: Vec<(String, f64)>,
+  chip: Option<String>,
+}
+
+/// Extracts Super I/O motherboard metrics (fans, temps, voltages, chip name).
+///
+/// All sensors are identified by the /lpc/ SensorId prefix, which is chip-agnostic
+/// and covers NCT, ITE, Winbond, and other Super I/O variants.
+fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
+  // Fans: RPM > 0 required (0 is the LHM sentinel for disconnected headers), sorted descending.
+  let mut fans: Vec<(String, f64)> = nodes
     .iter()
     .filter(|n| n.parent == "Fans" && n.sensor_id.starts_with("/lpc/"))
     .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.0)?)))
     .collect();
-  mb_fans.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+  fans.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-  // Motherboard temperature sensors.
-  // Values < 5 °C are LHM sentinels for unconfigured/absent sensors — skip them.
-  let mb_temps: Vec<(String, f64)> = nodes
+  // Temperatures: values < 5 °C are LHM sentinels for unconfigured/absent sensors.
+  let temps: Vec<(String, f64)> = nodes
     .iter()
     .filter(|n| n.parent == "Temperatures" && n.sensor_id.starts_with("/lpc/"))
     .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v >= 5.0)?)))
     .collect();
 
-  // Named voltage rails from the Super I/O chip.
-  // Generic "Voltage #N" entries are unmapped hardware pins — hide them.
-  let mb_voltages: Vec<(String, f64)> = nodes
+  // Voltages: named rails only — generic "Voltage #N" entries are unmapped hardware pins.
+  let voltages: Vec<(String, f64)> = nodes
     .iter()
     .filter(|n| {
       n.sensor_id.starts_with("/lpc/") && n.sensor_id.contains("/voltage/") && !n.text.starts_with("Voltage #")
@@ -284,40 +343,59 @@ fn parse_lhm(data: &Value) -> LhmData {
     .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.1)?)))
     .collect();
 
-  // Chip name: grandparent of any /lpc/ sensor is the Super I/O device name.
-  let mb_chip = nodes
+  // Chip name is the grandparent of any /lpc/ sensor (the Super I/O device node).
+  let chip = nodes
     .iter()
     .find(|n| n.sensor_id.starts_with("/lpc/"))
     .map(|n| n.grandparent.clone())
     .filter(|s| !s.is_empty());
 
+  MbData {
+    fans,
+    temps,
+    voltages,
+    chip,
+  }
+}
+
+// --- Top-level parser ------------------------------------------------------
+
+fn parse_lhm(data: &Value) -> LhmData {
+  let mut nodes = Vec::new();
+  flatten_lhm(data, &mut nodes, "", "");
+
+  let gpu = extract_gpu(&nodes);
+  let (disk_read, disk_write) = extract_disk_throughput(&nodes);
+  let (net_up, net_down) = extract_network(&nodes);
+  let disk_temps = extract_disk_temps(&nodes);
+  let (cpu_temp, cpu_power) = extract_cpu(&nodes);
+  let ram_temp = extract_ram_temp(&nodes);
+  let mb = extract_motherboard(&nodes);
+
   LhmData {
-    gpu_load: gpu_find("Load", "GPU Core"),
-    gpu_temp: gpu_find("Temperatures", "GPU Core"),
-    gpu_hotspot: gpu_find("Temperatures", "GPU Hot Spot"),
-    gpu_freq: gpu_find("Clocks", "GPU Core"),
-    gpu_mem_freq: gpu_find("Clocks", "GPU Memory"),
-    gpu_power: gpu_find("Powers", "GPU Package"),
-    gpu_fan: gpu_block
-      .iter()
-      .find(|n| n.parent == "Fans" && n.text.starts_with("GPU Fan"))
-      .and_then(|n| parse_val(&n.value)),
-    vram_used: gpu_find("Data", "GPU Memory Used"),
-    vram_total: gpu_find("Data", "GPU Memory Total"),
-    gpu_d3d_3d: gpu_find("Load", "D3D 3D"),
-    gpu_d3d_vdec: gpu_find("Load", "D3D Video Decode"),
+    gpu_load: gpu.load,
+    gpu_temp: gpu.temp,
+    gpu_hotspot: gpu.hotspot,
+    gpu_freq: gpu.freq,
+    gpu_mem_freq: gpu.mem_freq,
+    gpu_power: gpu.power,
+    gpu_fan: gpu.fan,
+    vram_used: gpu.vram_used,
+    vram_total: gpu.vram_total,
+    gpu_d3d_3d: gpu.d3d_3d,
+    gpu_d3d_vdec: gpu.d3d_vdec,
     cpu_temp,
     cpu_power,
     ram_temp,
-    disk_read: disk_read_total,
-    disk_write: disk_write_total,
-    net_up: best_up,
-    net_down: best_down,
+    disk_read,
+    disk_write,
+    net_up,
+    net_down,
     disk_temps,
-    mb_fans,
-    mb_temps,
-    mb_voltages,
-    mb_chip,
+    mb_fans: mb.fans,
+    mb_temps: mb.temps,
+    mb_voltages: mb.voltages,
+    mb_chip: mb.chip,
   }
 }
 
