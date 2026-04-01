@@ -63,6 +63,9 @@ pub struct Settings {
   /// Whether to send notifications when a CRITICAL threshold is crossed.
   #[serde(default = "default_true")]
   pub notify_on_crit: bool,
+  /// Active colour theme key (e.g. `"dark-cyan"`).
+  #[serde(default = "default_theme")]
+  pub theme: String,
 }
 
 fn default_alert_cooldown_secs() -> u64 {
@@ -71,6 +74,10 @@ fn default_alert_cooldown_secs() -> u64 {
 
 fn default_true() -> bool {
   true
+}
+
+fn default_theme() -> String {
+  "dark-cyan".to_string()
 }
 
 fn default_opacity() -> f64 {
@@ -118,6 +125,7 @@ impl Default for Settings {
       alert_cooldown_secs: default_alert_cooldown_secs(),
       notify_on_warn: true,
       notify_on_crit: true,
+      theme: default_theme(),
     }
   }
 }

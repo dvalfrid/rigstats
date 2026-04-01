@@ -215,6 +215,7 @@ pub fn save_settings(
   #[allow(non_snake_case)] alertCooldownSecs: Option<u64>,
   #[allow(non_snake_case)] notifyOnWarn: Option<bool>,
   #[allow(non_snake_case)] notifyOnCrit: Option<bool>,
+  theme: Option<String>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   settings.opacity = opacity.clamp(0.0, 1.0);
@@ -297,6 +298,9 @@ pub fn save_settings(
   if let Some(v) = notifyOnCrit {
     settings.notify_on_crit = v;
   }
+  if let Some(t) = theme {
+    settings.theme = t;
+  }
 
   persist_settings(&app, &settings)?;
 
@@ -330,8 +334,19 @@ pub fn save_settings(
     main
       .emit("apply-thresholds", TempThresholdPayload::from(&*settings))
       .map_err(|e| e.to_string())?;
+    main
+      .emit("apply-theme", settings.theme.clone())
+      .map_err(|e| e.to_string())?;
   }
 
+  Ok(())
+}
+
+#[tauri::command]
+pub fn preview_theme(app: tauri::AppHandle, theme: String) -> Result<(), String> {
+  if let Some(main) = app.get_webview_window("main") {
+    main.emit("apply-theme", theme).map_err(|e| e.to_string())?;
+  }
   Ok(())
 }
 
