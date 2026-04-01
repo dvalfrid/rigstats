@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { truncateName, formatRam } from './process.js';
+import { escapeHtml, truncateName, formatRam } from './process.js';
+
+describe('escapeHtml', () => {
+  it('escapes HTML-significant characters', () => {
+    const raw = '<img src="x" onerror="alert(1)">&"';
+    expect(escapeHtml(raw)).toBe('&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;&amp;&quot;');
+  });
+
+  it('leaves plain text unchanged', () => {
+    expect(escapeHtml('Discord')).toBe('Discord');
+  });
+});
 
 describe('truncateName', () => {
   it('strips .exe suffix', () => {

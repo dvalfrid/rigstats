@@ -199,7 +199,7 @@ fn parse_lhm(data: &Value) -> LhmData {
     }
   }
 
-  // Disk temperature sensors: identified by SensorId prefix (/nvme/, /hdd/, /ata/).
+  // Disk temperature sensors: identified by SensorId prefix (/nvme/, /hdd/, /ata/, /scsi/, /ssd/).
   // This avoids false positives from motherboard chips and RAM modules.
   // "Warning Composite" and "Critical Composite" are NVMe thresholds, not readings — excluded.
   // With those removed, max() naturally selects "Composite" (the authoritative NVMe reading).
@@ -659,7 +659,7 @@ mod tests {
 
   #[test]
   fn parse_lhm_extracts_disk_temperatures() {
-    // Only /nvme/, /hdd/, /ata/ SensorIds are included.
+    // Only /nvme/, /hdd/, /ata/, /scsi/, /ssd/ SensorIds are included.
     // Warning/Critical threshold sensors are excluded even though they share SensorId prefix.
     // Motherboard sensors (/lpc/...) are excluded regardless of text.
     let data = json!({
