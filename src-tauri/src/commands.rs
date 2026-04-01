@@ -20,7 +20,8 @@ use crate::lhm_process::{
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, Settings};
 use crate::stats::{
-  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats, ProcessEntry, RamStats, StatsPayload,
+  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats, ProcessEntry, RamStats,
+  StatsPayload,
 };
 use serde::Serialize;
 use std::time::{Duration, Instant};
@@ -64,7 +65,7 @@ pub struct AboutInfo {
   pub dependencies: Vec<AboutDependency>,
 }
 
-fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
+fn build_about_dependencies(hw: &HardwareInfo) -> Vec<AboutDependency> {
   let lhm_ok = can_reach_lhm_endpoint();
   vec![
     AboutDependency {
@@ -82,29 +83,29 @@ fn build_about_dependencies(state: &AppState) -> Vec<AboutDependency> {
       name: "sysinfo".to_string(),
       version: SYSINFO_VERSION.to_string(),
       note: Some("CPU, RAM, disk, network stats".to_string()),
-      status: if state.sysinfo_available {
+      status: if hw.sysinfo_available {
         "SUCCESS".to_string()
       } else {
         "FAILED".to_string()
       },
-      ok: state.sysinfo_available,
+      ok: hw.sysinfo_available,
     },
     AboutDependency {
       name: "wmi".to_string(),
       version: WMI_VERSION.to_string(),
       note: Some("Windows hardware metadata".to_string()),
-      status: if state.wmi_available {
+      status: if hw.wmi_available {
         "SUCCESS".to_string()
       } else {
         "FAILED".to_string()
       },
-      ok: state.wmi_available,
+      ok: hw.wmi_available,
     },
   ]
 }
 
 #[tauri::command]
-pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> AboutInfo {
+pub fn get_about_info(app: tauri::AppHandle, hw: tauri::State<'_, HardwareInfo>) -> AboutInfo {
   use crate::debug::debug_log_path;
   let log_path = debug_log_path(&app);
   let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) = get_lhm_task_details(&app);
@@ -122,7 +123,7 @@ pub fn get_about_info(app: tauri::AppHandle, state: tauri::State<'_, AppState>) 
     lhm_task_last_result,
     lhm_task_to_run,
     lhm_task_diagnosis: get_lhm_task_diagnosis(&app).to_string(),
-    dependencies: build_about_dependencies(&state),
+    dependencies: build_about_dependencies(&hw),
   }
 }
 
@@ -421,8 +422,8 @@ pub fn get_system_name() -> String {
 }
 
 #[tauri::command]
-pub fn get_system_brand(state: tauri::State<AppState>) -> String {
-  state.system_brand.lock().unwrap_or_else(|e| e.into_inner()).clone()
+pub fn get_system_brand(hw: tauri::State<HardwareInfo>) -> String {
+  hw.system_brand.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
 #[tauri::command]
@@ -718,7 +719,11 @@ fn normalize_top_processes(mut entries: Vec<ProcessEntry>, limit: usize) -> Vec<
 }
 
 #[tauri::command]
-pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>) -> Result<StatsPayload, String> {
+pub async fn get_stats(
+  app: tauri::AppHandle,
+  state: tauri::State<'_, AppState>,
+  hw: tauri::State<'_, HardwareInfo>,
+) -> Result<StatsPayload, String> {
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
   let lhm_fresh = fetch_lhm(&state.lhm_client).await;
   let lhm = {
@@ -841,7 +846,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       .unwrap_or(true);
 
     if should_refresh {
-      let measured = sample_ping_ms(&state.ping_target);
+      let measured = sample_ping_ms(&hw.ping_target);
       *cache = Some((now, measured));
       measured
     } else {
@@ -880,7 +885,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       vram_total: lhm
         .as_ref()
         .and_then(|l| l.vram_total)
-        .or(*state.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner())),
+        .or(*hw.gpu_vram_total_mb.lock().unwrap_or_else(|e| e.into_inner())),
       fan_speed: lhm.as_ref().and_then(|l| l.gpu_fan),
       power: lhm.as_ref().and_then(|l| l.gpu_power),
       d3d_3d: lhm.as_ref().and_then(|l| l.gpu_d3d_3d),
@@ -890,8 +895,8 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       total,
       used,
       free,
-      spec: state.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
-      details: state.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+      spec: hw.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+      details: hw.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
       temp: lhm.as_ref().and_then(|l| l.ram_temp),
     },
     net: NetStats {
@@ -908,7 +913,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
         // This is robust against drive-letter reordering and USB drives appearing
         // in the sysinfo list without a corresponding LHM temperature entry.
         if let Some(ref l) = lhm {
-          let disk_model_map = state.disk_model_map.lock().unwrap_or_else(|e| e.into_inner());
+          let disk_model_map = hw.disk_model_map.lock().unwrap_or_else(|e| e.into_inner());
           for (i, drive) in drives.iter_mut().enumerate() {
             let drive_key = drive.fs.trim_end_matches(['\\', '/']).to_string();
             if let Some(wmi_model) = disk_model_map.get(&drive_key) {
@@ -930,7 +935,7 @@ pub async fn get_stats(app: tauri::AppHandle, state: tauri::State<'_, AppState>)
       temps: lhm.as_ref().map(|l| l.mb_temps.clone()).unwrap_or_default(),
       voltages: lhm.as_ref().map(|l| l.mb_voltages.clone()).unwrap_or_default(),
       chip: lhm.as_ref().and_then(|l| l.mb_chip.clone()),
-      board: state.mb_name.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+      board: hw.mb_name.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     },
     top_processes: proc_list,
     system_uptime_secs,

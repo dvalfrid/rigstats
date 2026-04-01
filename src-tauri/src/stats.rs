@@ -109,12 +109,37 @@ pub struct StatsPayload {
   pub lhm_connected: bool,
 }
 
-pub struct AppState {
+/// Hardware metadata detected at startup and optionally refreshed by the WMI retry task.
+///
+/// Fields that could not be populated at startup (e.g. because WMI was not yet ready)
+/// are wrapped in `Mutex` so `spawn_wmi_retry` can update them without requiring a restart.
+/// Truly immutable fields (`ping_target`, `sysinfo_available`, `wmi_available`) need no lock.
+pub struct HardwareInfo {
   /// Maps drive letter (e.g. `"C:"`) to physical disk model name detected at startup.
   /// Used at each tick to match LHM temperature readings to sysinfo volumes by name
   /// instead of by index, so inserting a USB drive never shifts other drives' temps.
-  /// Wrapped in Mutex so the WMI retry task can refresh it if the initial detection failed.
-  pub disk_model_map: Mutex<std::collections::HashMap<String, String>>,
+  pub disk_model_map: Mutex<HashMap<String, String>>,
+  /// Best-effort RAM descriptor (e.g. "DDR5 6000 MT/s").
+  pub ram_spec: Mutex<String>,
+  /// Best-effort RAM module details (e.g. "2x16 GB | Vendor | Part").
+  pub ram_details: Mutex<String>,
+  /// Best-effort VRAM total fallback in MB when live LHM data is unavailable.
+  /// `None` when WMI detection failed at startup.
+  pub gpu_vram_total_mb: Mutex<Option<f64>>,
+  /// Detected system board brand (e.g. "rog", "msi", "other").
+  pub system_brand: Mutex<String>,
+  /// Motherboard name (e.g. "ASUS PRIME B650M-A AX6 II"). `None` when WMI detection failed.
+  pub mb_name: Mutex<Option<String>>,
+  /// Preferred ping target (default gateway if available, otherwise public fallback).
+  pub ping_target: String,
+  /// Whether sysinfo returned a usable initial snapshot on startup.
+  pub sysinfo_available: bool,
+  /// Whether a WMI connection could be established on startup.
+  pub wmi_available: bool,
+}
+
+/// Per-tick runtime state shared across Tauri command handlers.
+pub struct AppState {
   /// Reused HTTP client for LHM polling — avoids allocating a new connection pool every tick.
   pub lhm_client: reqwest::Client,
   /// Persisted UI preferences mirrored in memory for fast reads.
@@ -129,28 +154,6 @@ pub struct AppState {
   pub last_ping_sample: Mutex<Option<(Instant, Option<f64>)>>,
   /// Last successful LHM snapshot used when live HTTP polling fails transiently.
   pub last_lhm: Mutex<Option<LhmData>>,
-  /// Best-effort RAM descriptor detected on startup (e.g. DDR5 6000 MT/s).
-  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
-  pub ram_spec: Mutex<String>,
-  /// Best-effort RAM module details (e.g. 2x16 GB | Vendor | Part).
-  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
-  pub ram_details: Mutex<String>,
-  /// Best-effort VRAM total fallback in MB when live LHM data is unavailable.
-  /// `None` when WMI detection failed at startup.
-  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
-  pub gpu_vram_total_mb: Mutex<Option<f64>>,
-  /// Preferred ping target (default gateway if available, otherwise public fallback).
-  pub ping_target: String,
-  /// Detected system board brand (e.g. "rog", "msi", "other").
-  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
-  pub system_brand: Mutex<String>,
-  /// Motherboard name detected at startup (e.g. "ASUS PRIME B650M-A AX6 II").
-  /// Wrapped in Mutex so the WMI retry task can update it after WMI becomes available.
-  pub mb_name: Mutex<Option<String>>,
-  /// Whether sysinfo returned a usable initial snapshot on startup.
-  pub sysinfo_available: bool,
-  /// Whether a WMI connection could be established on startup.
-  pub wmi_available: bool,
   /// Per-component alert cooldown tracker. Key: "<component>_<level>" (e.g. "cpu_warning").
   /// Stores the `Instant` of the last fired notification to enforce the 60-second cooldown.
   pub last_alert: Mutex<HashMap<String, Instant>>,
