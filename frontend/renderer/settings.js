@@ -42,14 +42,7 @@ let original = {
   alwaysOnTop: false,
   autostartEnabled: false,
   visiblePanels: [...PANEL_KEYS],
-  warningCpuTemp: null,
-  warningGpuTemp: null,
-  warningRamTemp: null,
-  warningDiskTemp: null,
-  criticalCpuTemp: null,
-  criticalGpuTemp: null,
-  criticalRamTemp: null,
-  criticalDiskTemp: null,
+  thresholds: { cpu: {}, gpu: {}, ram: {}, disk: {} },
   alertCooldownSecs: 60,
   notifyOnWarn: true,
   notifyOnCrit: true,
@@ -240,6 +233,7 @@ function logError(context, error) {
 }
 
 function applySettings(settings) {
+  const t = settings.thresholds ?? {};
   original = {
     opacity: settings.opacity ?? 0.55,
     modelName: settings.modelName ?? '',
@@ -247,14 +241,12 @@ function applySettings(settings) {
     alwaysOnTop: settings.alwaysOnTop ?? false,
     autostartEnabled: settings.autostartEnabled ?? false,
     visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
-    warningCpuTemp: settings.warningCpuTemp ?? null,
-    warningGpuTemp: settings.warningGpuTemp ?? null,
-    warningRamTemp: settings.warningRamTemp ?? null,
-    warningDiskTemp: settings.warningDiskTemp ?? null,
-    criticalCpuTemp: settings.criticalCpuTemp ?? null,
-    criticalGpuTemp: settings.criticalGpuTemp ?? null,
-    criticalRamTemp: settings.criticalRamTemp ?? null,
-    criticalDiskTemp: settings.criticalDiskTemp ?? null,
+    thresholds: {
+      cpu:  { warn: t.cpu?.warn  ?? null, crit: t.cpu?.crit  ?? null },
+      gpu:  { warn: t.gpu?.warn  ?? null, crit: t.gpu?.crit  ?? null },
+      ram:  { warn: t.ram?.warn  ?? null, crit: t.ram?.crit  ?? null },
+      disk: { warn: t.disk?.warn ?? null, crit: t.disk?.crit ?? null },
+    },
     alertCooldownSecs: settings.alertCooldownSecs ?? 60,
     notifyOnWarn: settings.notifyOnWarn ?? true,
     notifyOnCrit: settings.notifyOnCrit ?? true,
@@ -270,14 +262,14 @@ function applySettings(settings) {
   autostartInput.checked = original.autostartEnabled;
   applyVisiblePanelsToForm(original.visiblePanels);
 
-  setTempInput(warnCpuTempInput, original.warningCpuTemp);
-  setTempInput(critCpuTempInput, original.criticalCpuTemp);
-  setTempInput(warnGpuTempInput, original.warningGpuTemp);
-  setTempInput(critGpuTempInput, original.criticalGpuTemp);
-  setTempInput(warnRamTempInput, original.warningRamTemp);
-  setTempInput(critRamTempInput, original.criticalRamTemp);
-  setTempInput(warnDiskTempInput, original.warningDiskTemp);
-  setTempInput(critDiskTempInput, original.criticalDiskTemp);
+  setTempInput(warnCpuTempInput,  original.thresholds.cpu.warn);
+  setTempInput(critCpuTempInput,  original.thresholds.cpu.crit);
+  setTempInput(warnGpuTempInput,  original.thresholds.gpu.warn);
+  setTempInput(critGpuTempInput,  original.thresholds.gpu.crit);
+  setTempInput(warnRamTempInput,  original.thresholds.ram.warn);
+  setTempInput(critRamTempInput,  original.thresholds.ram.crit);
+  setTempInput(warnDiskTempInput, original.thresholds.disk.warn);
+  setTempInput(critDiskTempInput, original.thresholds.disk.crit);
   alertCooldownInput.value = original.alertCooldownSecs;
   notifyOnWarnInput.checked = original.notifyOnWarn;
   notifyOnCritInput.checked = original.notifyOnCrit;
@@ -355,14 +347,12 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const autostartEnabled = autostartInput.checked;
   const selectedPanels = getSelectedPanels();
 
-  const warningCpuTemp = readTempInput(warnCpuTempInput);
-  const criticalCpuTemp = readTempInput(critCpuTempInput);
-  const warningGpuTemp = readTempInput(warnGpuTempInput);
-  const criticalGpuTemp = readTempInput(critGpuTempInput);
-  const warningRamTemp = readTempInput(warnRamTempInput);
-  const criticalRamTemp = readTempInput(critRamTempInput);
-  const warningDiskTemp = readTempInput(warnDiskTempInput);
-  const criticalDiskTemp = readTempInput(critDiskTempInput);
+  const thresholds = {
+    cpu:  { warn: readTempInput(warnCpuTempInput),  crit: readTempInput(critCpuTempInput) },
+    gpu:  { warn: readTempInput(warnGpuTempInput),  crit: readTempInput(critGpuTempInput) },
+    ram:  { warn: readTempInput(warnRamTempInput),  crit: readTempInput(critRamTempInput) },
+    disk: { warn: readTempInput(warnDiskTempInput), crit: readTempInput(critDiskTempInput) },
+  };
   const alertCooldownSecs = Math.max(60, parseInt(alertCooldownInput.value, 10) || 60);
   const notifyOnWarn = notifyOnWarnInput.checked;
   const notifyOnCrit = notifyOnCritInput.checked;
@@ -384,14 +374,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       alwaysOnTop,
       autostartEnabled,
       visiblePanels,
-      warningCpuTemp,
-      criticalCpuTemp,
-      warningGpuTemp,
-      criticalGpuTemp,
-      warningRamTemp,
-      criticalRamTemp,
-      warningDiskTemp,
-      criticalDiskTemp,
+      thresholds,
       alertCooldownSecs,
       notifyOnWarn,
       notifyOnCrit,
@@ -400,9 +383,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
 
     original = {
       opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels,
-      warningCpuTemp, criticalCpuTemp, warningGpuTemp, criticalGpuTemp,
-      warningRamTemp, criticalRamTemp, warningDiskTemp, criticalDiskTemp,
-      alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
+      thresholds, alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
     };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');

@@ -1,9 +1,58 @@
 //! Persistent user settings model and file I/O helpers.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
+
+// --- Component thresholds --------------------------------------------------
+
+/// Warn/critical temperature pair for a single hardware component.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ComponentThresholds {
+  pub warn: Option<u8>,
+  pub crit: Option<u8>,
+}
+
+/// Default threshold map applied on fresh installs and as migration fallback.
+pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
+  [
+    (
+      "cpu",
+      ComponentThresholds {
+        warn: Some(80),
+        crit: Some(90),
+      },
+    ),
+    (
+      "gpu",
+      ComponentThresholds {
+        warn: Some(80),
+        crit: Some(90),
+      },
+    ),
+    (
+      "ram",
+      ComponentThresholds {
+        warn: Some(50),
+        crit: Some(65),
+      },
+    ),
+    (
+      "disk",
+      ComponentThresholds {
+        warn: Some(55),
+        crit: Some(70),
+      },
+    ),
+  ]
+  .into_iter()
+  .map(|(k, v)| (k.to_string(), v))
+  .collect()
+}
+
+// --- Settings struct -------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,30 +78,10 @@ pub struct Settings {
   /// Version seen on last launch, used to detect first run after an update.
   #[serde(default)]
   pub last_seen_version: String,
-  /// Warning temperature threshold for CPU in °C. `None` = alert disabled.
+  /// Per-component temperature alert thresholds.
+  /// Keys: "cpu", "gpu", "ram", "disk" (and any future components).
   #[serde(default)]
-  pub warning_cpu_temp: Option<u8>,
-  /// Warning temperature threshold for GPU in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub warning_gpu_temp: Option<u8>,
-  /// Warning temperature threshold for RAM in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub warning_ram_temp: Option<u8>,
-  /// Warning temperature threshold for disk in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub warning_disk_temp: Option<u8>,
-  /// Critical temperature threshold for CPU in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub critical_cpu_temp: Option<u8>,
-  /// Critical temperature threshold for GPU in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub critical_gpu_temp: Option<u8>,
-  /// Critical temperature threshold for RAM in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub critical_ram_temp: Option<u8>,
-  /// Critical temperature threshold for disk in °C. `None` = alert disabled.
-  #[serde(default)]
-  pub critical_disk_temp: Option<u8>,
+  pub thresholds: HashMap<String, ComponentThresholds>,
   /// Minimum seconds between repeated notifications for the same component+level.
   /// Floored at 60 s on save to prevent notification spam.
   #[serde(default = "default_alert_cooldown_secs")]
@@ -66,6 +95,32 @@ pub struct Settings {
   /// Active colour theme key (e.g. `"dark-cyan"`).
   #[serde(default = "default_theme")]
   pub theme: String,
+  /// Schema version used to detect and apply one-time migrations.
+  /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
+  #[serde(default)]
+  pub settings_version: u8,
+
+  // ---- Legacy migration shims (schema version 0) --------------------------
+  // These fields existed in older settings files as eight flat values.
+  // They are read from disk but never written back (`skip_serializing`).
+  // `load_settings` copies them into `thresholds` exactly once, then bumps
+  // `settings_version` to 1 so the migration never re-runs.
+  #[serde(default, skip_serializing)]
+  warning_cpu_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  critical_cpu_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  warning_gpu_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  critical_gpu_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  warning_ram_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  critical_ram_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  warning_disk_temp: Option<u8>,
+  #[serde(default, skip_serializing)]
+  critical_disk_temp: Option<u8>,
 }
 
 fn default_alert_cooldown_secs() -> u64 {
@@ -114,21 +169,25 @@ impl Default for Settings {
       visible_panels: default_visible_panels(),
       autostart_enabled: false,
       last_seen_version: String::new(),
-      warning_cpu_temp: Some(80),
-      warning_gpu_temp: Some(80),
-      warning_ram_temp: Some(50),
-      warning_disk_temp: Some(55),
-      critical_cpu_temp: Some(90),
-      critical_gpu_temp: Some(90),
-      critical_ram_temp: Some(65),
-      critical_disk_temp: Some(70),
+      thresholds: default_thresholds(),
       alert_cooldown_secs: default_alert_cooldown_secs(),
       notify_on_warn: true,
       notify_on_crit: true,
       theme: default_theme(),
+      settings_version: 1, // New installs start at current version — no migration needed.
+      warning_cpu_temp: None,
+      critical_cpu_temp: None,
+      warning_gpu_temp: None,
+      critical_gpu_temp: None,
+      warning_ram_temp: None,
+      critical_ram_temp: None,
+      warning_disk_temp: None,
+      critical_disk_temp: None,
     }
   }
 }
+
+// --- File I/O --------------------------------------------------------------
 
 pub fn settings_path(app: &tauri::AppHandle) -> PathBuf {
   // Store settings in app data so they persist across updates.
@@ -139,9 +198,45 @@ pub fn settings_path(app: &tauri::AppHandle) -> PathBuf {
 pub fn load_settings(app: &tauri::AppHandle) -> Settings {
   // On parse/read failure, return defaults to keep startup robust.
   let path = settings_path(app);
-  match fs::read_to_string(path) {
+  let mut settings = match fs::read_to_string(&path) {
     Ok(raw) => serde_json::from_str::<Settings>(&raw).unwrap_or_default(),
     Err(_) => Settings::default(),
+  };
+
+  // One-time migration from schema version 0 (flat threshold fields) to
+  // version 1 (thresholds map). Runs once, then persists the new format.
+  if settings.settings_version == 0 {
+    migrate_v0_thresholds(&mut settings);
+    settings.settings_version = 1;
+    // Persist immediately so the migration is not repeated on the next launch.
+    // Failures are non-fatal: the migrated settings are held in memory and
+    // will be written again the next time the user saves settings.
+    let _ = persist_settings(app, &settings);
+  }
+
+  settings
+}
+
+/// Copies schema-version-0 flat threshold fields into the `thresholds` map.
+///
+/// If at least one flat field was set, the user's values are preserved exactly.
+/// If all flat fields are `None` (either never configured or explicitly cleared),
+/// default thresholds are applied so the dashboard starts with sensible alert
+/// levels rather than all alerts silently disabled.
+fn migrate_v0_thresholds(s: &mut Settings) {
+  let candidates = [
+    ("cpu", s.warning_cpu_temp, s.critical_cpu_temp),
+    ("gpu", s.warning_gpu_temp, s.critical_gpu_temp),
+    ("ram", s.warning_ram_temp, s.critical_ram_temp),
+    ("disk", s.warning_disk_temp, s.critical_disk_temp),
+  ];
+  let any_configured = candidates.iter().any(|(_, w, c)| w.is_some() || c.is_some());
+  if any_configured {
+    for (key, warn, crit) in candidates {
+      s.thresholds.insert(key.to_string(), ComponentThresholds { warn, crit });
+    }
+  } else {
+    s.thresholds = default_thresholds();
   }
 }
 
