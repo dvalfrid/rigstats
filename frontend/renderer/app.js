@@ -366,13 +366,11 @@ function isValidStatsPayload(stats) {
   return true;
 }
 
-function applyThresholds(s) {
-  thresholds = {
-    cpu:  { warn: s.warningCpuTemp  ?? null, crit: s.criticalCpuTemp  ?? null },
-    gpu:  { warn: s.warningGpuTemp  ?? null, crit: s.criticalGpuTemp  ?? null },
-    ram:  { warn: s.warningRamTemp  ?? null, crit: s.criticalRamTemp  ?? null },
-    disk: { warn: s.warningDiskTemp ?? null, crit: s.criticalDiskTemp ?? null },
-  };
+function applyThresholds(payload) {
+  thresholds = {};
+  for (const [key, val] of Object.entries(payload.thresholds ?? {})) {
+    thresholds[key] = { warn: val?.warn ?? null, crit: val?.crit ?? null };
+  }
 }
 
 function applyStats(stats) {

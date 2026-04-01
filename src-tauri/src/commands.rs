@@ -18,7 +18,7 @@ use crate::lhm_process::{
   can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state,
 };
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
-use crate::settings::{persist_settings, Settings};
+use crate::settings::{persist_settings, ComponentThresholds, Settings};
 use crate::stats::{
   AppState, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats, ProcessEntry, RamStats,
   StatsPayload,
@@ -205,14 +205,7 @@ pub fn save_settings(
   #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
   autostart_enabled: Option<bool>,
   #[allow(non_snake_case)] autostartEnabled: Option<bool>,
-  #[allow(non_snake_case)] warningCpuTemp: Option<u8>,
-  #[allow(non_snake_case)] warningGpuTemp: Option<u8>,
-  #[allow(non_snake_case)] warningRamTemp: Option<u8>,
-  #[allow(non_snake_case)] warningDiskTemp: Option<u8>,
-  #[allow(non_snake_case)] criticalCpuTemp: Option<u8>,
-  #[allow(non_snake_case)] criticalGpuTemp: Option<u8>,
-  #[allow(non_snake_case)] criticalRamTemp: Option<u8>,
-  #[allow(non_snake_case)] criticalDiskTemp: Option<u8>,
+  thresholds: Option<std::collections::HashMap<String, ComponentThresholds>>,
   #[allow(non_snake_case)] alertCooldownSecs: Option<u64>,
   #[allow(non_snake_case)] notifyOnWarn: Option<bool>,
   #[allow(non_snake_case)] notifyOnCrit: Option<bool>,
@@ -264,32 +257,21 @@ pub fn save_settings(
   settings.visible_panels = applied_visible_panels.clone();
   settings.autostart_enabled = applied_autostart;
 
-  // Temperature alert thresholds: JS always sends all 8 fields; null = disable.
-  // Reject any pair where warning >= critical — both thresholds are only written
+  // Temperature alert thresholds: validate all pairs before writing any.
+  // Reject any component where warning >= critical — both are only stored
   // when they are internally consistent.
-  let pairs: &[(&str, Option<u8>, Option<u8>)] = &[
-    ("CPU", warningCpuTemp, criticalCpuTemp),
-    ("GPU", warningGpuTemp, criticalGpuTemp),
-    ("RAM", warningRamTemp, criticalRamTemp),
-    ("Disk", warningDiskTemp, criticalDiskTemp),
-  ];
-  for &(name, warn, crit) in pairs {
-    if let (Some(w), Some(c)) = (warn, crit) {
-      if w >= c {
-        return Err(format!(
-          "{name}: warning threshold ({w}°C) must be below critical ({c}°C)"
-        ));
+  if let Some(ref t) = thresholds {
+    for (component, thresh) in t {
+      if let (Some(w), Some(c)) = (thresh.warn, thresh.crit) {
+        if w >= c {
+          return Err(format!(
+            "{component}: warning threshold ({w}°C) must be below critical ({c}°C)"
+          ));
+        }
       }
     }
+    settings.thresholds = t.clone();
   }
-  settings.warning_cpu_temp = warningCpuTemp;
-  settings.warning_gpu_temp = warningGpuTemp;
-  settings.warning_ram_temp = warningRamTemp;
-  settings.warning_disk_temp = warningDiskTemp;
-  settings.critical_cpu_temp = criticalCpuTemp;
-  settings.critical_gpu_temp = criticalGpuTemp;
-  settings.critical_ram_temp = criticalRamTemp;
-  settings.critical_disk_temp = criticalDiskTemp;
   if let Some(secs) = alertCooldownSecs {
     settings.alert_cooldown_secs = secs.max(60);
   }
@@ -351,36 +333,19 @@ pub fn preview_theme(app: tauri::AppHandle, theme: String) -> Result<(), String>
   Ok(())
 }
 
-/// Thin serialisable snapshot of all temperature alert thresholds, emitted to
-/// the renderer after `save_settings` so panel colours update immediately.
-/// `notify_on_warn`/`notify_on_crit` are intentionally excluded: those flags
-/// control whether the backend fires a notification and are irrelevant to the
-/// frontend's colour rendering logic.
+/// Snapshot of temperature alert thresholds emitted to the renderer after
+/// `save_settings` so panel colours update immediately without a reload.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TempThresholdPayload {
-  pub warning_cpu_temp: Option<u8>,
-  pub warning_gpu_temp: Option<u8>,
-  pub warning_ram_temp: Option<u8>,
-  pub warning_disk_temp: Option<u8>,
-  pub critical_cpu_temp: Option<u8>,
-  pub critical_gpu_temp: Option<u8>,
-  pub critical_ram_temp: Option<u8>,
-  pub critical_disk_temp: Option<u8>,
+  pub thresholds: std::collections::HashMap<String, ComponentThresholds>,
   pub alert_cooldown_secs: u64,
 }
 
 impl From<&Settings> for TempThresholdPayload {
   fn from(s: &Settings) -> Self {
     Self {
-      warning_cpu_temp: s.warning_cpu_temp,
-      warning_gpu_temp: s.warning_gpu_temp,
-      warning_ram_temp: s.warning_ram_temp,
-      warning_disk_temp: s.warning_disk_temp,
-      critical_cpu_temp: s.critical_cpu_temp,
-      critical_gpu_temp: s.critical_gpu_temp,
-      critical_ram_temp: s.critical_ram_temp,
-      critical_disk_temp: s.critical_disk_temp,
+      thresholds: s.thresholds.clone(),
       alert_cooldown_secs: s.alert_cooldown_secs,
     }
   }
@@ -489,23 +454,19 @@ fn pending_alerts(
   max_disk_temp: Option<f64>,
   settings: &crate::settings::Settings,
 ) -> Vec<PendingAlert> {
-  type Row = (&'static str, Option<f64>, Option<u8>, Option<u8>);
-  let rows: &[Row] = &[
-    ("CPU", cpu_temp, settings.warning_cpu_temp, settings.critical_cpu_temp),
-    ("GPU", gpu_temp, settings.warning_gpu_temp, settings.critical_gpu_temp),
-    ("RAM", ram_temp, settings.warning_ram_temp, settings.critical_ram_temp),
-    (
-      "Disk",
-      max_disk_temp,
-      settings.warning_disk_temp,
-      settings.critical_disk_temp,
-    ),
+  let readings: &[(&str, &str, Option<f64>)] = &[
+    ("cpu", "CPU", cpu_temp),
+    ("gpu", "GPU", gpu_temp),
+    ("ram", "RAM", ram_temp),
+    ("disk", "Disk", max_disk_temp),
   ];
   let mut out = Vec::new();
-  for &(label, temp_opt, warn, crit) in rows {
+  for &(key, label, temp_opt) in readings {
     if let Some(temp) = temp_opt {
-      push_if_breached(&mut out, settings.notify_on_warn, label, "WARNING", temp, warn);
-      push_if_breached(&mut out, settings.notify_on_crit, label, "CRITICAL", temp, crit);
+      if let Some(thresh) = settings.thresholds.get(key) {
+        push_if_breached(&mut out, settings.notify_on_warn, label, "WARNING", temp, thresh.warn);
+        push_if_breached(&mut out, settings.notify_on_crit, label, "CRITICAL", temp, thresh.crit);
+      }
     }
   }
   out
@@ -591,19 +552,15 @@ mod alert_tests {
   /// Builds a minimal `Settings` with the same warn/crit applied to all four
   /// components. Keeps tests concise while covering all code paths.
   fn settings_with(warn: Option<u8>, crit: Option<u8>, notify_warn: bool, notify_crit: bool) -> Settings {
-    Settings {
-      warning_cpu_temp: warn,
-      warning_gpu_temp: warn,
-      warning_ram_temp: warn,
-      warning_disk_temp: warn,
-      critical_cpu_temp: crit,
-      critical_gpu_temp: crit,
-      critical_ram_temp: crit,
-      critical_disk_temp: crit,
-      notify_on_warn: notify_warn,
-      notify_on_crit: notify_crit,
-      ..Settings::default()
-    }
+    use crate::settings::ComponentThresholds;
+    let mut s = Settings::default();
+    s.thresholds = ["cpu", "gpu", "ram", "disk"]
+      .iter()
+      .map(|&k| (k.to_string(), ComponentThresholds { warn, crit }))
+      .collect();
+    s.notify_on_warn = notify_warn;
+    s.notify_on_crit = notify_crit;
+    s
   }
 
   #[test]
