@@ -35,11 +35,19 @@ wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
     └─► commands.rs     get_stats() assembles StatsPayload every tick
             └─► Tauri IPC  invoke("get-stats")
                     └─► app.js  tick() every 1 s
-                            └─► panel modules update DOM
+                            ├─► panel modules update DOM          (portrait mode)
+                            └─► invoke("broadcast-stats")         (floating mode)
+                                    └─► app.emit per panel window
+                                            └─► panel-host.js updates DOM
 ```
 
 **Tick rate:** 1 second. LHM is polled with an 800 ms timeout; on failure
 the last successful sample is reused so the UI never resets to `--`.
+
+**Floating mode broadcast:** In floating mode the main window (hidden) still
+runs `get-stats` and then calls `broadcast-stats`. The backend emits
+`stats-broadcast` to each open `panel-{key}` window individually — settings,
+about, status, and updater windows are never targeted.
 
 ---
 
@@ -48,14 +56,17 @@ the last successful sample is reused so the UI never resets to `--`.
 ```text
 rig-dashboard/
 ├── frontend/
-│   ├── index.html          Main dashboard
+│   ├── index.html          Main dashboard (portrait mode)
+│   ├── panel-{key}.html    One HTML file per floating panel (9 total)
 │   ├── settings.html
 │   ├── status.html
 │   ├── about.html
 │   ├── updater.html
+│   ├── panel-base.css      Shared styles for all floating panel windows
 │   ├── assets/
 │   └── renderer/
 │       ├── panels/         One JS module per panel
+│       ├── panel-host.js   Shared entry for floating panel windows
 │       └── *.js            Shared utilities and entry scripts
 ├── src-tauri/
 │   ├── src/                Rust source (one module per concern)
@@ -154,6 +165,15 @@ delegates to a domain module.
 6. Assembles `StatsPayload` including top 8 processes sorted by CPU
 7. Checks temperature thresholds and fires tray notifications if due
 
+Floating mode commands:
+
+| Command | Purpose |
+| --- | --- |
+| `toggle_floating_mode(enabled)` | Persists the setting, hides/shows main window, calls `sync_floating_panels` or `close_floating_panels`, emits `apply-floating-mode` |
+| `broadcast_stats(stats)` | Emits `stats-broadcast` to each open `panel-{key}` window; takes `serde_json::Value` to avoid needing `Deserialize` on `StatsPayload` |
+| `save_panel_positions(positions)` | Merges `HashMap<key, PanelLayout>` into `settings.panel_layouts` and persists |
+| `open_settings_window` | Opens the settings window from a floating panel's context menu |
+
 #### `hardware.rs`
 
 All startup hardware detection. Each function tries WMI first, falls back to
@@ -244,10 +264,14 @@ flat fields into the map — then re-persists. The eight legacy flat fields are
 kept as private `#[serde(default, skip_serializing)]` shims so old files can
 be read but are never written back.
 
-Floating panel layout adds `floating_mode: bool` and
-`panel_layouts: HashMap<String, PanelLayout>` where
-`PanelLayout { x: i32, y: i32 }` stores the last known `outer_position` for each
-panel key. Both fields use `#[serde(default)]` — no migration needed.
+Floating panel layout adds two fields — both `#[serde(default)]`, no migration
+needed:
+
+- **`floating_mode: bool`** — whether the app starts in floating mode.
+- **`panel_layouts: HashMap<String, PanelLayout>`** — last known `outer_position`
+  (`x: i32, y: i32`) per panel key. Positions are saved by `panel-host.js`
+  after each move (debounced 500 ms) and re-applied with DWM inset compensation
+  on next startup.
 
 #### `windows.rs`
 
@@ -256,10 +280,31 @@ Creates and positions secondary windows:
 `ensure_updater_window`. Windows anchor to the last tray icon click position
 via `set_last_tray_click_position`.
 
-Also manages floating panel windows: `launch_floating_panels` opens one
-frameless `panel-{key}` window per visible panel (read from `settings.visible_panels`),
-applying DWM invisible resize border compensation to saved positions from
-`settings.panel_layouts`. `close_floating_panels` closes all open panel windows.
+Floating panel management:
+
+- **`all_panel_keys()`** — canonical ordered list of the 9 panel keys; exported
+  so `commands.rs` can iterate panel windows without duplicating the list.
+- **`panel_base_size(key, dashboard_profile)`** — scales each panel's logical
+  pixel dimensions to match the active profile, keeping floating panels the
+  same physical size as in portrait mode.
+- **`launch_floating_panels(app, state)`** — opens one frameless `always_on_top`
+  `panel-{key}` window per panel. Applies DWM invisible resize border
+  compensation (`inner_position − outer_position`) to saved positions from
+  `settings.panel_layouts`. Panels without a saved position are staggered
+  diagonally. Build failures are logged and skipped; the remaining panels are
+  still created.
+- **`sync_floating_panels(app, state)`** — reconciles open windows with the
+  current settings without tearing everything down: hides unwanted panels,
+  resizes/shows existing ones, then calls `launch_floating_panels` for any
+  that are missing.
+- **`close_floating_panels(app)`** — hides (not closes) all open panel windows
+  for fast mode switching.
+
+`on_window_event` handles `CloseRequested` (hide-to-tray) for the main window
+and re-applies `set_decorations(false)` on every `Moved` event for **all**
+windows. The re-application is necessary because Windows can restore
+`WS_CAPTION`/`WS_THICKFRAME` when a borderless window is dragged between
+monitors with different DPI settings.
 
 #### `updater.rs`
 
@@ -471,3 +516,25 @@ thread). Produces a self-contained ZIP for bug reports.
 - `pick_target_monitor` is called only when the profile *changes* in
   `save_settings`. Calling it unconditionally causes a ~3 px drift on every
   save due to the DWM inset compensation.
+- `on_window_event` re-applies `set_decorations(false)` on every `Moved` event
+  for **all** windows (not just `"main"`), because Windows can re-enable the
+  title bar when any borderless window crosses a DPI boundary.
+
+### Floating mode
+
+- **Stats delivery** — the hidden main window runs `get-stats` once per second
+  as normal, then calls `broadcast-stats`. The backend iterates `all_panel_keys`
+  and emits `stats-broadcast` directly to each open `panel-{key}` window. This
+  keeps exactly one IPC round-trip per tick regardless of how many panels are open.
+- **Drag on transparent windows** — `data-tauri-drag-region` is unreliable on
+  transparent borderless WebView2 windows. `panel-host.js` instead calls
+  `invoke("start-window-drag")` explicitly on `pointerdown` (capture phase),
+  guarding against interactive elements and scrollable regions.
+- **Sync vs launch** — `sync_floating_panels` reconciles the current window set
+  against settings without teardown, enabling live preview of panel
+  visibility changes in Settings. `launch_floating_panels` only creates
+  windows that do not yet exist.
+- **Position persistence** — `panel-host.js` reads `currentWindow.outerPosition()`
+  500 ms after each `tauri://moved` event and persists it via `save-panel-positions`.
+  Positions are stored as raw `outer_position` values; DWM inset compensation is
+  re-applied by `launch_floating_panels` at next startup.

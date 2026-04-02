@@ -80,7 +80,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, and a live process monitor — side by side with whatever you're doing.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display — or scatter individual panels freely across any screen in floating mode. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, and a live process monitor.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -128,7 +128,34 @@
           <h3>Silent auto-updates</h3>
           <p>Checks for new versions in the background every 6 hours. A badge in the header lets you update with one click — no manual download required.</p>
         </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Floating panel layout</h3>
+          <p>Switch to floating mode and each panel becomes a draggable, always-on-top window you can place anywhere on any screen. Positions persist across restarts.</p>
+        </li>
       </ul>
+    </div>
+  </section>
+
+  <!-- Floating mode showcase -->
+  <section class="section section-alt" id="floating-mode">
+    <div class="container">
+      <header class="section-head">
+        <h2>Two Display Modes</h2>
+        <p>Portrait mode fills a dedicated vertical display. Floating mode lets you place each panel wherever it fits — on your gaming monitor, your side screen, or anywhere between.</p>
+      </header>
+      <div class="floating-showcase">
+        <div class="screen-wrap screen-wrap--wide">
+          <img src="images/floating-mode.png" alt="RIGStats floating panel layout — individual panels placed across the screen" class="hero-img">
+        </div>
+        <ul class="floating-features">
+          <li>Each panel is an independent frameless window</li>
+          <li>Drag any panel to reposition it — positions are saved across restarts</li>
+          <li>Panel visibility follows the same settings as portrait mode</li>
+          <li>Right-click a panel to open Settings or close that panel</li>
+          <li>Toggle floating mode from Settings or the tray menu</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -313,10 +340,11 @@
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, toggle always-on-top mode, enable launch at startup, configure temperature alert thresholds, choose a colour theme, and choose which panels to show — drag them to set the order.</p>
+            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, toggle floating mode to scatter panels freely, toggle always-on-top mode, enable launch at startup, configure temperature alert thresholds, choose a colour theme, and choose which panels to show — drag them to set the order.</p>
             <ul>
               <li>Opacity slider (live preview)</li>
               <li>Display profile selector</li>
+              <li>Floating mode toggle — independent draggable panel windows</li>
               <li>Always-on-top toggle</li>
               <li>Launch at Startup toggle</li>
               <li>Editable model name</li>

@@ -318,7 +318,7 @@ fn panel_base_size(key: &str, dashboard_profile: &str) -> (f64, f64) {
   (profile_w as f64, panel_h)
 }
 
-fn all_panel_keys() -> &'static [&'static str] {
+pub fn all_panel_keys() -> &'static [&'static str] {
   &[
     "header",
     "clock",
@@ -347,7 +347,7 @@ fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &
 ///
 /// Positions are loaded from `settings.panel_layouts`.  Panels without a saved
 /// position are staggered diagonally so they do not all land on top of each other.
-pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -> Result<(), String> {
+pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
   let (visible_panels, panel_layouts, dashboard_profile) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
@@ -376,7 +376,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -
       .map(|p| (p.x, p.y))
       .unwrap_or_else(|| (80 + i as i32 * 24, 80 + i as i32 * 24));
 
-    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+    let win = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
       .title(*key)
       .inner_size(w, h)
       .position(saved_x as f64, saved_y as f64)
@@ -388,11 +388,13 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -
       .skip_taskbar(true)
       .visible(visible_set.contains(*key))
       .build()
-      .map_err(|e| {
-        let msg = format!("panel window '{}' build failed: {}", label, e);
-        append_debug_log(app, &msg);
-        msg
-      })?;
+    {
+      Ok(w) => w,
+      Err(e) => {
+        append_debug_log(app, &format!("panel window '{}' build failed: {}", label, e));
+        continue;
+      }
+    };
 
     // Apply DWM invisible resize border compensation so the saved position
     // lands flush with the screen edge (same logic as pick_target_monitor).
@@ -420,13 +422,11 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -
       let _ = win.hide();
     }
   }
-
-  Ok(())
 }
 
 /// Reconciles open floating panel windows with the current settings without
 /// tearing down every panel window on each preview interaction.
-pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -> Result<(), String> {
+pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
   let (visible_panels, dashboard_profile) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (s.visible_panels.clone(), s.dashboard_profile.clone())
@@ -451,7 +451,7 @@ pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -> 
   }
 
   append_debug_log(app, "floating sync: ensure missing windows");
-  launch_floating_panels(app, state)
+  launch_floating_panels(app, state);
 }
 
 /// Closes all open floating panel windows.
@@ -470,16 +470,17 @@ pub fn close_floating_panels(app: &AppHandle) {
 /// Also reapplies decorations=false on move, as Windows can re-enable the title bar
 /// when a window is dragged between monitors with different DPI or configurations.
 pub fn on_window_event(win: &Window, event: &WindowEvent) {
-  if win.label() == "main" {
-    match event {
-      WindowEvent::CloseRequested { api, .. } => {
-        api.prevent_close();
-        let _ = win.hide();
-      }
-      WindowEvent::Moved(_) => {
-        let _ = win.set_decorations(false);
-      }
-      _ => {}
+  match event {
+    WindowEvent::CloseRequested { api, .. } if win.label() == "main" => {
+      api.prevent_close();
+      let _ = win.hide();
     }
+    // Re-apply borderless on every move: Windows can restore WS_CAPTION when a
+    // frameless window is dragged between monitors with different DPI settings.
+    // This protection covers both the main window and all floating panel windows.
+    WindowEvent::Moved(_) => {
+      let _ = win.set_decorations(false);
+    }
+    _ => {}
   }
 }

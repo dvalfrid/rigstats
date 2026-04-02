@@ -319,11 +319,13 @@ async function start() {
     backend.on('apply-theme', (_e, key) => applyTheme(key)),
     backend.on('apply-thresholds', (_e, t) => applyThresholds(t)),
   ]);
-  window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));
-
-  // Listen for broadcast stats.
   const unlistenStats = await backend.on('stats-broadcast', (_e, stats) => applyStats(stats));
-  window.addEventListener('beforeunload', () => unlistenStats());
+
+  window.addEventListener('beforeunload', () => {
+    unlisteners.forEach((fn) => fn());
+    unlistenStats();
+    clearTimeout(moveSaveTimer);
+  });
 
   // Save position after each move (debounced).
   if (currentWindow?.listen) {
