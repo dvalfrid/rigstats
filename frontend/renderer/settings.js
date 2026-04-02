@@ -58,12 +58,25 @@ let hiddenPanels = new Set();
 let draggingKey = null;
 let dragGhost = null;
 let dragOffsetX = 0;
+let previewPanelsTimer = null;
 let dragOffsetY = 0;
 
 /** Reads a temp input; returns an integer 1–255 or null (blank = disabled). */
 function readTempInput(el) {
   const v = parseInt(el.value, 10);
   return (!Number.isNaN(v) && v >= 1 && v <= 255) ? v : null;
+}
+
+function requestPreviewVisiblePanels(visiblePanels) {
+  if (!IS_DESKTOP) return;
+  const normalized = normalizeVisiblePanels(visiblePanels);
+  if (previewPanelsTimer) clearTimeout(previewPanelsTimer);
+  previewPanelsTimer = setTimeout(() => {
+    previewVisiblePanels(normalized).catch((error) => {
+      logError('preview-visible-panels', error);
+      setStatus('Could not preview panel visibility.', 'status-err');
+    });
+  }, 120);
 }
 
 /** Writes a saved threshold value back into a number input. */
@@ -146,11 +159,8 @@ function attachPanelItemEvents(item) {
         panelOrder.splice(srcIdx, 1);
         panelOrder.splice(dstIdx, 0, key);
         renderPanelToggles();
-        try {
-          await previewVisiblePanels(getSelectedPanels());
-        } catch (error) {
-          logError('preview-visible-panels', error);
-        }
+        requestPreviewVisiblePanels(getSelectedPanels());
+        setStatus('Previewing panel visibility...');
       }
     }
   };
@@ -179,13 +189,8 @@ function attachPanelItemEvents(item) {
       hiddenPanels.delete(key);
       item.classList.remove('hidden-panel');
     }
-    try {
-      await previewVisiblePanels(getSelectedPanels());
-      setStatus('Previewing panel visibility...');
-    } catch (error) {
-      logError('preview-visible-panels', error);
-      setStatus('Could not preview panel visibility.', 'status-err');
-    }
+    requestPreviewVisiblePanels(getSelectedPanels());
+    setStatus('Previewing panel visibility...');
   });
 }
 

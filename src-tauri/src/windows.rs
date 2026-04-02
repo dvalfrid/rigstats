@@ -6,7 +6,7 @@
 //! - Handle the main window close event (hide-to-tray instead of quit).
 
 use crate::debug::append_debug_log;
-use crate::monitor::profile_dimensions;
+use crate::monitor::{normalize_visible_panels, profile_dimensions};
 use crate::stats::AppState;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -351,7 +351,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
   let (visible_panels, panel_layouts, dashboard_profile) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
-      s.visible_panels.clone(),
+      normalize_visible_panels(s.visible_panels.clone()),
       s.panel_layouts.clone(),
       s.dashboard_profile.clone(),
     )
@@ -429,7 +429,10 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
   let (visible_panels, dashboard_profile) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-    (s.visible_panels.clone(), s.dashboard_profile.clone())
+    (
+      normalize_visible_panels(s.visible_panels.clone()),
+      s.dashboard_profile.clone(),
+    )
   };
 
   let desired: HashSet<&str> = visible_panels.iter().map(String::as_str).collect();
