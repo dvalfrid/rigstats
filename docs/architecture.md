@@ -79,7 +79,7 @@ rig-dashboard/
 | Module | Responsibility |
 | --- | --- |
 | `main.rs` | Tauri builder, tray, lifecycle, startup orchestration |
-| `stats.rs` | Shared state (`AppState`) and all payload structs |
+| `stats.rs` | Shared state (`HardwareInfo` + `AppState`) and all payload structs |
 | `commands.rs` | `#[tauri::command]` handlers — thin wrappers only |
 | `hardware.rs` | WMI/PowerShell hardware detection at startup |
 | `lhm.rs` | LHM HTTP polling and sensor tree flattening |
@@ -96,9 +96,10 @@ rig-dashboard/
 
 #### `main.rs`
 
-Tauri builder, tray icon, and lifecycle. Initializes `AppState` at startup
-(hardware detection via WMI/sysinfo), picks the best monitor for the profile,
-and starts LHM. Spawns two background tasks:
+Tauri builder, tray icon, and lifecycle. Registers two managed state types at
+startup: `HardwareInfo` (one-time WMI/sysinfo hardware detection) and `AppState`
+(per-tick runtime state). Picks the best monitor for the profile and starts LHM.
+Spawns two background tasks:
 
 - **`spawn_wmi_retry`** — re-runs WMI detection for any fields that returned
   fallback values at startup (e.g. WMI not yet ready). Retries up to 3 times
@@ -109,8 +110,19 @@ and starts LHM. Spawns two background tasks:
 
 #### `stats.rs`
 
-Defines `AppState` (shared mutable state behind `Mutex`) and all serializable
-payload structs sent to the frontend:
+Defines two shared state structs and all serializable payload structs sent to
+the frontend.
+
+**`HardwareInfo`** — startup-detected constants registered once and never
+mutated: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`,
+`system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
+Registered with `app.manage(HardwareInfo { ... })`.
+
+**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_client`,
+`settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`,
+`last_lhm`, `last_alert`.
+
+**Payload structs:**
 
 | Struct | Contents |
 | --- | --- |
@@ -163,7 +175,7 @@ PowerShell CIM on failure.
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
-Results are stored in `AppState` so LHM temperatures can be matched by model
+Results are stored in `HardwareInfo` so LHM temperatures can be matched by model
 name rather than by index (stable when USB drives are inserted/removed).
 
 #### `lhm.rs`
@@ -221,6 +233,16 @@ All fields use `#[serde(default)]` for backwards-compatible schema evolution —
 new fields deserialise cleanly from older settings files. `last_seen_version`
 is compared against `CARGO_PKG_VERSION` at startup to detect the first launch
 after an upgrade.
+
+Temperature alert thresholds are stored as
+`thresholds: HashMap<String, ComponentThresholds>` where
+`ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys are
+`"cpu"`, `"gpu"`, `"ram"`, `"disk"`. A `settings_version: u8` field acts as a
+migration sentinel (0 = legacy format, 1 = current). When `load_settings` reads
+a version-0 file it runs `migrate_v0_thresholds` once — copying the eight old
+flat fields into the map — then re-persists. The eight legacy flat fields are
+kept as private `#[serde(default, skip_serializing)]` shims so old files can
+be read but are never written back.
 
 #### `windows.rs`
 

@@ -82,10 +82,23 @@ The Tauri backend will compile and the dashboard window will open.
 
 Built-in profiles:
 
-1. `portrait-xl` -> `450x1920` (default)
-2. `portrait-slim` -> `480x1920`
-3. `portrait-hd` -> `720x1280`
-4. `portrait-wxga` -> `800x1280`
+| Profile | Resolution | Notes |
+| --- | --- | --- |
+| `portrait-xl` | 450×1920 | Default |
+| `portrait-slim` | 480×1920 | |
+| `portrait-hd` | 720×1280 | |
+| `portrait-wxga` | 800×1280 | |
+| `portrait-fhd` | 1080×1920 | |
+| `portrait-wuxga` | 1200×1920 | |
+| `portrait-qhd` | 1440×2560 | |
+| `portrait-4k` | 2160×3840 | |
+| `portrait-hdplus` | 768×1366 | |
+| `portrait-900x1600` | 900×1600 | |
+| `portrait-1050x1680` | 1050×1680 | |
+| `portrait-1600x2560` | 1600×2560 | |
+| `portrait-fhd-side` | 253×1080 | Landscape monitor sidebar |
+| `portrait-qhd-side` | 338×1440 | Landscape monitor sidebar |
+| `portrait-4k-side` | 506×2160 | Landscape monitor sidebar |
 
 How it works:
 

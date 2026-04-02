@@ -48,21 +48,22 @@ drive.
 **Implemented.** A configurable alert system fires a Windows tray notification when
 a component exceeds its threshold, making the app useful during gaming or overclocking.
 
-Eight optional `Option<u8>` fields added to `Settings` (serialised as camelCase JSON):
-`warningCpuTemp`, `warningGpuTemp`, `warningRamTemp`, `warningDiskTemp`,
-`criticalCpuTemp`, `criticalGpuTemp`, `criticalRamTemp`, `criticalDiskTemp`.
+Thresholds are stored as `Settings.thresholds: HashMap<String, ComponentThresholds>`
+where `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and keys are
+`"cpu"`, `"gpu"`, `"ram"`, `"disk"`. `None` = disabled. A `settings_version: u8`
+sentinel handles one-time migration from the original eight flat `Option<u8>` fields
+to the map format, preserving existing user values.
 
 Per-tick comparison runs in `commands.rs` inside `get_stats()` after the
 `StatsPayload` is assembled. Warning and Critical are checked independently —
-each has its own 60-second cooldown key (e.g. `"cpu_warning"` vs `"cpu_critical"`)
+each has its own cooldown key (e.g. `"cpu_warning"` vs `"cpu_critical"`)
 stored in `AppState.last_alert`. Disk alerts fire on the hottest drive's temperature.
 Notifications are sent via `tauri-plugin-notification`; errors are silently discarded
 so a failed toast never disrupts the stats tick.
 
 The Settings window has a compact "Temp Alerts" card with number inputs for all
 eight thresholds. Blank = disabled (maps to `None`). Yellow column headers for
-Warning, red for Critical. Window height bumped from 620 → 700 px to accommodate
-the new card.
+Warning, red for Critical.
 
 ---
 
