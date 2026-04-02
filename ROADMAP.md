@@ -201,6 +201,206 @@ Enabled via Settings → panel toggles.
 
 ---
 
+## Battery panel (laptop support)
+
+**Panel:** New `battery` panel
+**Data source:** `sysinfo` battery API
+
+Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, charge
+rate (W), and estimated time remaining. Panel is hidden automatically on systems
+with no battery detected.
+
+**Scope:**
+
+- Query `sysinfo::Battery` on startup; store in `AppState` if present
+- New `BatteryStats` struct in `stats.rs`, included in `StatsPayload`
+- New `panels/battery.js` frontend panel
+- Add `battery` to the valid panel keys list in `monitor.rs` and settings
+
+---
+
+## Stats logging / data export
+
+**Panel:** Settings (new Logging card) + tray menu shortcut
+**Data source:** Existing `StatsPayload` — no new sensors required
+
+Lets overclockers and benchmark enthusiasts record hardware metrics over time and
+analyse them after a gaming session or stress test. A common request on monitoring
+tools: "I want to see what my GPU temperature peaked at during that boss fight."
+
+**Architecture:**
+
+Logging runs as an opt-in background task inside the Rust backend. When enabled,
+each `get_stats()` tick appends a CSV row to a rolling log file in the Tauri app
+data directory (`rigstats-log-YYYY-MM-DD.csv`). Log files roll daily and are
+automatically pruned after a configurable retention period (default 7 days).
+
+**What is logged (one row per tick):**
+
+`timestamp_unix, cpu_load, cpu_temp, cpu_freq_mhz, gpu_load, gpu_temp, gpu_vram_used_mb, ram_used_gb, disk_read_kbs, disk_write_kbs, net_up_kbs, net_down_kbs, ping_ms`
+
+**Scope:**
+
+- New `logging.rs` module: `append_stats_row(&StatsPayload, path)`, `prune_old_logs(dir, days)`
+- `AppState` gains `logging_enabled: bool` and current log file handle
+- Settings window: "Stats Logging" card with on/off toggle, retention selector
+  (1 / 7 / 30 days), and an "Open log folder" button
+- Tray menu: "Start/Stop logging" shortcut for quick toggle without opening Settings
+- Persist `logging_enabled` and `log_retention_days` in `Settings` struct
+
+---
+
+## Floating panel layout
+
+**Panel:** All panels + new window management
+**Data source:** Existing stats tick — no new sensors required
+
+Portrait mode stays as-is. A new "Floating" mode (toggled in Settings) hides the
+main portrait window and opens each visible panel as its own frameless,
+always-on-top Tauri window. Panels can be placed anywhere across any number of
+monitors and remember their positions across restarts. CPU on one screen, GPU on
+another, disk hidden entirely — fully under user control.
+
+Note: this supersedes the planned "Overlay mode" entry. Floating panels with
+corner positioning and `set_ignore_cursor_events` cover that use case as a subset.
+
+**Architecture:**
+
+Settings gains two new fields: `floating_mode: bool` and
+`panel_layouts: HashMap<String, PanelLayout>` where
+`PanelLayout { x: i32, y: i32 }` stores the last known position for each panel
+key. Both fields use `#[serde(default)]` so existing settings files load cleanly
+without migration logic.
+
+Each panel is a separate Tauri window created via `WebviewWindowBuilder` in
+`windows.rs`, with `.decorations(false)`, `.always_on_top(true)`, and
+`.skip_taskbar(true)`. Window labels follow the scheme `"panel-cpu"`,
+`"panel-gpu"`, etc. The DWM invisible resize border compensation already
+implemented in `pick_target_monitor()` in `monitor.rs` applies here too — saved
+positions are adjusted by the inset before calling `set_position`.
+
+Each panel loads its own HTML file (`panel-cpu.html`, `panel-gpu.html`, etc.)
+containing only that panel's DOM structure — a copy of the relevant section from
+`index.html`. No changes to the existing panel JS modules are required.
+
+A new `renderer/panel-host.js` serves as the shared entry point for all floating
+panel windows. It detects which panel it hosts (from the window label), subscribes
+to the `stats-broadcast` Tauri event, and calls the corresponding panel update
+function on each tick. It also applies `apply-theme` and `apply-opacity` events so
+panels stay in sync with settings changes.
+
+Stats delivery: the main window (hidden in floating mode) continues its `tick()`
+loop as before, calling `get_stats()` once per second. After receiving the payload
+it calls `broadcast_stats(stats)` — a thin Tauri command that calls
+`app.emit("stats-broadcast", stats)`, broadcasting to all open panel windows.
+Only one stats collection runs per second regardless of how many panels are open.
+
+Each panel has a drag handle bar at the top (`data-tauri-drag-region`). When the
+user stops dragging, `save_panel_positions` is called — a Tauri command that reads
+the current `outer_position()` of every open panel window and writes them to
+settings. Right-clicking the drag handle shows a small context menu: "Open
+Settings" and "Close panel".
+
+**Scope:**
+
+- `PanelLayout { x: i32, y: i32 }` struct + `Settings.floating_mode` +
+  `Settings.panel_layouts` in `settings.rs`
+- `launch_floating_panels(app, state)` and `close_floating_panels(app)` in
+  `windows.rs` — opens/closes one window per entry in `visible_panels`
+- New Tauri commands: `toggle_floating_mode`, `broadcast_stats`,
+  `save_panel_positions`
+- One HTML file per panel (7–9 new files) + `renderer/panel-host.js`
+- Settings window: "Floating mode" toggle in a new Layout card
+- Tray menu: "Floating mode" shortcut to toggle without opening Settings
+
+---
+
+## Floating panel groups
+
+**Panel:** Floating panel layout (requires the above feature)
+**Data source:** No new data required
+
+Builds on floating panel layout. Panels can be snapped together magnetically while
+dragging — when a panel edge comes within 20 px of another panel's edge, a snap
+preview highlights the target; releasing the mouse joins them into a group. All
+panels in a group move together as a unit. Groups can be oriented vertically or
+horizontally. A "Collect panels" tray command gathers all floating panels into a
+vertical stack on a chosen monitor.
+
+**Architecture:**
+
+Settings gains `panel_groups: Vec<GroupLayout>` where
+`GroupLayout { members: Vec<String>, orientation: String }` — `orientation` is
+`"vertical"` or `"horizontal"`. An empty vec means no groups. Panels not listed in
+any group are free-standing.
+
+Snap detection runs in `panel-host.js` during drag: `outerPosition()` is polled at
+pointer-move rate and compared against sibling panel positions fetched once at drag
+start. When a snap candidate is found within the threshold, a CSS outline preview
+appears on the target panel. On `mouseup`, if a snap candidate is active, a
+`set_panel_group` command writes the updated group membership to settings; both
+panels are then re-positioned so their edges align flush.
+
+Moving a group: when the user starts dragging any group member, `panel-host.js`
+reads the group membership from settings and calls `move_panel_group(label, dx, dy)`
+on `mousemove` — a Tauri command that applies the same delta to all sibling windows
+via `set_position`, keeping the group locked together.
+
+Group orientation is toggled via right-click → "Flip group orientation"; the
+command re-stacks the group members in the new direction and saves the updated
+`GroupLayout`. Right-click → "Detach from group" removes the panel from its group
+and saves; remaining members keep their current positions.
+
+"Collect panels to screen": a tray submenu lists available monitors by name.
+Selecting one calls `collect_panels_to_monitor(monitor_index)` — a Tauri command
+that re-stacks all open panel windows vertically on the chosen monitor in
+`visible_panels` order, then saves the new positions.
+
+**Scope:**
+
+- `GroupLayout` struct + `Settings.panel_groups` in `settings.rs`
+- Snap detection and drag-group logic in `renderer/panel-host.js`
+- New Tauri commands: `move_panel_group`, `set_panel_group`,
+  `collect_panels_to_monitor`
+- Group orientation toggle + "Detach from group" in the drag-handle context menu
+- "Collect panels" tray submenu with per-monitor options
+
+---
+
+## Stream Deck integration
+
+**Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
+
+Lets streamers and content creators display live hardware stats — CPU load, GPU
+temp, VRAM, fan RPM — directly on Stream Deck keys. No Elgato software, no
+separate plugin, no HTTP server: RIGStats owns the device entirely.
+
+**Architecture:**
+
+The `elgato-streamdeck` crate wraps `hidapi` and communicates directly with the
+USB HID interface. RIGStats detects connected Stream Deck devices on startup,
+renders metric values as button images, and pushes them to the device on every
+stats tick alongside the normal dashboard update.
+
+**Trade-off:** because HID devices can only be held by one process at a time,
+the official Elgato Stream Deck software must not be running simultaneously.
+Users who rely on Elgato's software for other profiles/macros cannot use both
+at once. This should be clearly communicated at setup time.
+
+**Scope:**
+
+- Add `elgato-streamdeck` (+ `hidapi`) to `Cargo.toml`
+- Detect connected Stream Deck devices at startup; store handle in `AppState`
+- New `streamdeck.rs` module: `render_key(metric, value, unit) → image`,
+  `push_stats(device, &StatsPayload, layout)` called from the stats tick
+- Per-key layout configured in Settings: pick metric (CPU load/temp/power,
+  GPU load/temp/VRAM, RAM used, disk read/write, ping) and colour thresholds
+- Brightness and layout persisted in `Settings`
+- Stream Deck integration is opt-in (off by default); auto-disabled when no
+  device is detected so the crate has zero overhead on systems without one
+
+---
+
 ## Landscape monitor support
 
 **Panel:** All panels + profile system
@@ -241,125 +441,5 @@ existing portrait ones.
 - `applyProfile()` in `app.js` sets the orientation class based on profile key
   prefix; panel modules require no changes
 - Settings profile picker groups profiles under "Portrait" / "Landscape" headings
-
----
-
-## Battery panel (laptop support)
-
-**Panel:** New `battery` panel
-**Data source:** `sysinfo` battery API
-
-Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, charge
-rate (W), and estimated time remaining. Panel is hidden automatically on systems
-with no battery detected.
-
-**Scope:**
-
-- Query `sysinfo::Battery` on startup; store in `AppState` if present
-- New `BatteryStats` struct in `stats.rs`, included in `StatsPayload`
-- New `panels/battery.js` frontend panel
-- Add `battery` to the valid panel keys list in `monitor.rs` and settings
-
----
-
-## Overlay mode (single-monitor support)
-
-**Panel:** Main window (new window mode)
-**Data source:** Existing stats tick — no backend changes required
-
-The app is currently designed exclusively for a secondary portrait monitor. Users
-without a second screen regularly ask for a way to show a compact stats overlay
-in a corner of their primary display during gaming — a use case served by tools
-like MSI Afterburner's OSD or RTSS.
-
-**Architecture:**
-
-A new "Overlay" profile type that renders a compact, always-on-top, semi-transparent
-floating widget instead of a full portrait panel. The widget snaps to one of the
-four screen corners (configurable in Settings). It reuses the existing panel
-modules but with a condensed single-column layout (`overlay-compact` CSS class).
-`set_decorations(false)` + `always_on_top` + a click-through flag
-(`set_ignore_cursor_events(true)` while not in settings mode) let the overlay
-stay visible without interfering with the game.
-
-**Scope:**
-
-- Add `overlay` as a special profile key; `profile_dimensions` returns a small
-  fixed size (e.g. 260×420)
-- New corner-snap setting (`top-left`, `top-right`, `bottom-left`, `bottom-right`)
-  persisted in `Settings`
-- `pick_target_monitor` places the window at the selected corner of the primary
-  monitor when overlay mode is active
-- `set_ignore_cursor_events(true)` called after window creation in overlay mode;
-  toggled off temporarily when the user moves the mouse to the widget area so
-  they can interact with it (hover-to-unlock pattern)
-- Compact CSS layout for overlay panels; shared panel JS modules render a
-  subset of metrics to fit the smaller footprint
-- Settings window gets an "Overlay mode" toggle with corner selector
-
----
-
-## Stats logging / data export
-
-**Panel:** Settings (new Logging card) + tray menu shortcut
-**Data source:** Existing `StatsPayload` — no new sensors required
-
-Lets overclockers and benchmark enthusiasts record hardware metrics over time and
-analyse them after a gaming session or stress test. A common request on monitoring
-tools: "I want to see what my GPU temperature peaked at during that boss fight."
-
-**Architecture:**
-
-Logging runs as an opt-in background task inside the Rust backend. When enabled,
-each `get_stats()` tick appends a CSV row to a rolling log file in the Tauri app
-data directory (`rigstats-log-YYYY-MM-DD.csv`). Log files roll daily and are
-automatically pruned after a configurable retention period (default 7 days).
-
-**What is logged (one row per tick):**
-
-`timestamp_unix, cpu_load, cpu_temp, cpu_freq_mhz, gpu_load, gpu_temp, gpu_vram_used_mb, ram_used_gb, disk_read_kbs, disk_write_kbs, net_up_kbs, net_down_kbs, ping_ms`
-
-**Scope:**
-
-- New `logging.rs` module: `append_stats_row(&StatsPayload, path)`, `prune_old_logs(dir, days)`
-- `AppState` gains `logging_enabled: bool` and current log file handle
-- Settings window: "Stats Logging" card with on/off toggle, retention selector
-  (1 / 7 / 30 days), and an "Open log folder" button
-- Tray menu: "Start/Stop logging" shortcut for quick toggle without opening Settings
-- Persist `logging_enabled` and `log_retention_days` in `Settings` struct
-
----
-
-## Stream Deck integration
-
-**Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
-
-Lets streamers and content creators display live hardware stats — CPU load, GPU
-temp, VRAM, fan RPM — directly on Stream Deck keys. No Elgato software, no
-separate plugin, no HTTP server: RIGStats owns the device entirely.
-
-**Architecture:**
-
-The `elgato-streamdeck` crate wraps `hidapi` and communicates directly with the
-USB HID interface. RIGStats detects connected Stream Deck devices on startup,
-renders metric values as button images, and pushes them to the device on every
-stats tick alongside the normal dashboard update.
-
-**Trade-off:** because HID devices can only be held by one process at a time,
-the official Elgato Stream Deck software must not be running simultaneously.
-Users who rely on Elgato's software for other profiles/macros cannot use both
-at once. This should be clearly communicated at setup time.
-
-**Scope:**
-
-- Add `elgato-streamdeck` (+ `hidapi`) to `Cargo.toml`
-- Detect connected Stream Deck devices at startup; store handle in `AppState`
-- New `streamdeck.rs` module: `render_key(metric, value, unit) → image`,
-  `push_stats(device, &StatsPayload, layout)` called from the stats tick
-- Per-key layout configured in Settings: pick metric (CPU load/temp/power,
-  GPU load/temp/VRAM, RAM used, disk read/write, ping) and colour thresholds
-- Brightness and layout persisted in `Settings`
-- Stream Deck integration is opt-in (off by default); auto-disabled when no
-  device is detected so the crate has zero overhead on systems without one
 
 ---
