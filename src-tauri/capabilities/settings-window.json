@@ -10,6 +10,7 @@
     "allow-preview-visible-panels",
     "allow-preview-theme",
     "allow-save-settings",
+    "allow-toggle-floating-mode",
     "allow-test-temp-alert",
     "allow-close-window"
   ]

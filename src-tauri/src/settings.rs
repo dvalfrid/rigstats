@@ -6,6 +6,16 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
 
+// --- Panel layout ----------------------------------------------------------
+
+/// Saved screen position for a single floating panel window.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelLayout {
+  pub x: i32,
+  pub y: i32,
+}
+
 // --- Component thresholds --------------------------------------------------
 
 /// Warn/critical temperature pair for a single hardware component.
@@ -95,6 +105,12 @@ pub struct Settings {
   /// Active colour theme key (e.g. `"dark-cyan"`).
   #[serde(default = "default_theme")]
   pub theme: String,
+  /// Open each visible panel as its own frameless window instead of one portrait window.
+  #[serde(default)]
+  pub floating_mode: bool,
+  /// Last known screen position for each floating panel, keyed by panel key.
+  #[serde(default)]
+  pub panel_layouts: HashMap<String, PanelLayout>,
   /// Schema version used to detect and apply one-time migrations.
   /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
   #[serde(default)]
@@ -174,6 +190,8 @@ impl Default for Settings {
       notify_on_warn: true,
       notify_on_crit: true,
       theme: default_theme(),
+      floating_mode: false,
+      panel_layouts: HashMap::new(),
       settings_version: 1, // New installs start at current version — no migration needed.
       warning_cpu_temp: None,
       critical_cpu_temp: None,

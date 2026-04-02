@@ -6,8 +6,12 @@
 //! - Handle the main window close event (hide-to-tray instead of quit).
 
 use crate::debug::append_debug_log;
+use crate::monitor::profile_dimensions;
+use crate::stats::AppState;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicI32, Ordering};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+use tauri::utils::config::Color;
+use tauri::{AppHandle, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 
 /// Last recorded tray icon click position, used to anchor popups.
 static LAST_TRAY_CLICK_X: AtomicI32 = AtomicI32::new(i32::MIN);
@@ -283,6 +287,181 @@ pub fn ensure_updater_window(app: &AppHandle) -> Result<(), String> {
   window.set_focus().map_err(|e| e.to_string())?;
   append_debug_log(app, "Updater window created successfully");
   Ok(())
+}
+
+// --- Floating panel windows ------------------------------------------------
+
+/// Base dimensions (logical pixels at portrait-xl 1x scale) for each panel key.
+fn panel_base_height(key: &str) -> f64 {
+  match key {
+    "header" => 196.0,
+    "clock" => 148.0,
+    "cpu" => 420.0,
+    "gpu" => 320.0,
+    "ram" => 315.0,
+    "net" => 260.0,
+    "disk" => 295.0,
+    "motherboard" => 260.0,
+    "process" => 260.0,
+    _ => 260.0,
+  }
+}
+
+fn panel_base_size(key: &str, dashboard_profile: &str) -> (f64, f64) {
+  // Match main-dashboard scaling so floating panels keep the same physical size
+  // as in fixed mode for the selected profile.
+  const BASE_PROFILE_H: f64 = 1920.0;
+
+  let (profile_w, profile_h) = profile_dimensions(dashboard_profile);
+  let height_scale = profile_h as f64 / BASE_PROFILE_H;
+  let panel_h = (panel_base_height(key) * height_scale).round().max(1.0);
+  (profile_w as f64, panel_h)
+}
+
+fn all_panel_keys() -> &'static [&'static str] {
+  &[
+    "header",
+    "clock",
+    "cpu",
+    "gpu",
+    "ram",
+    "net",
+    "disk",
+    "motherboard",
+    "process",
+  ]
+}
+
+fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &str) {
+  let label = format!("panel-{}", key);
+  if let Some(win) = app.get_webview_window(&label) {
+    let (w, h) = panel_base_size(key, dashboard_profile);
+    let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
+    let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
+    let _ = win.set_decorations(false);
+    let _ = win.show();
+  }
+}
+
+/// Opens one frameless window per visible panel.
+///
+/// Positions are loaded from `settings.panel_layouts`.  Panels without a saved
+/// position are staggered diagonally so they do not all land on top of each other.
+pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -> Result<(), String> {
+  let (visible_panels, panel_layouts, dashboard_profile) = {
+    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    (
+      s.visible_panels.clone(),
+      s.panel_layouts.clone(),
+      s.dashboard_profile.clone(),
+    )
+  };
+
+  let visible_set: HashSet<&str> = visible_panels.iter().map(String::as_str).collect();
+
+  for (i, key) in all_panel_keys().iter().enumerate() {
+    let label = format!("panel-{}", key);
+
+    // Skip if already open.
+    if app.get_webview_window(&label).is_some() {
+      continue;
+    }
+
+    let url = format!("panel-{}.html", key);
+    let (w, h) = panel_base_size(key, &dashboard_profile);
+
+    // Saved position or staggered default.
+    let (saved_x, saved_y) = panel_layouts
+      .get(*key)
+      .map(|p| (p.x, p.y))
+      .unwrap_or_else(|| (80 + i as i32 * 24, 80 + i as i32 * 24));
+
+    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+      .title(*key)
+      .inner_size(w, h)
+      .position(saved_x as f64, saved_y as f64)
+      .background_color(Color(0, 0, 0, 0))
+      .decorations(false)
+      .transparent(true)
+      .resizable(false)
+      .always_on_top(true)
+      .skip_taskbar(true)
+      .visible(visible_set.contains(*key))
+      .build()
+      .map_err(|e| {
+        let msg = format!("panel window '{}' build failed: {}", label, e);
+        append_debug_log(app, &msg);
+        msg
+      })?;
+
+    // Apply DWM invisible resize border compensation so the saved position
+    // lands flush with the screen edge (same logic as pick_target_monitor).
+    let inset_x = win
+      .inner_position()
+      .ok()
+      .zip(win.outer_position().ok())
+      .map(|(i, o)| i.x - o.x)
+      .unwrap_or(0);
+    let inset_y = win
+      .inner_position()
+      .ok()
+      .zip(win.outer_position().ok())
+      .map(|(i, o)| i.y - o.y)
+      .unwrap_or(0);
+    let _ = win.set_position(Position::Physical(PhysicalPosition {
+      x: saved_x - inset_x,
+      y: saved_y - inset_y,
+    }));
+
+    let _ = win.set_decorations(false);
+    if visible_set.contains(*key) {
+      let _ = win.show();
+    } else {
+      let _ = win.hide();
+    }
+  }
+
+  Ok(())
+}
+
+/// Reconciles open floating panel windows with the current settings without
+/// tearing down every panel window on each preview interaction.
+pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) -> Result<(), String> {
+  let (visible_panels, dashboard_profile) = {
+    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    (s.visible_panels.clone(), s.dashboard_profile.clone())
+  };
+
+  let desired: HashSet<&str> = visible_panels.iter().map(String::as_str).collect();
+
+  for key in all_panel_keys() {
+    let label = format!("panel-{}", key);
+    if !desired.contains(key) {
+      if let Some(win) = app.get_webview_window(&label) {
+        append_debug_log(app, &format!("floating sync: hide {label}"));
+        let _ = win.hide();
+      }
+      continue;
+    }
+
+    if app.get_webview_window(&label).is_some() {
+      append_debug_log(app, &format!("floating sync: show/resize {label}"));
+      resize_existing_panel_window(app, key, &dashboard_profile);
+    }
+  }
+
+  append_debug_log(app, "floating sync: ensure missing windows");
+  launch_floating_panels(app, state)
+}
+
+/// Closes all open floating panel windows.
+pub fn close_floating_panels(app: &AppHandle) {
+  for key in all_panel_keys() {
+    let label = format!("panel-{}", key);
+    if let Some(win) = app.get_webview_window(&label) {
+      let _ = win.hide();
+    }
+  }
 }
 
 // --- Window event handler --------------------------------------------------

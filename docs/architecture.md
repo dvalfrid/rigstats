@@ -244,12 +244,22 @@ flat fields into the map — then re-persists. The eight legacy flat fields are
 kept as private `#[serde(default, skip_serializing)]` shims so old files can
 be read but are never written back.
 
+Floating panel layout adds `floating_mode: bool` and
+`panel_layouts: HashMap<String, PanelLayout>` where
+`PanelLayout { x: i32, y: i32 }` stores the last known `outer_position` for each
+panel key. Both fields use `#[serde(default)]` — no migration needed.
+
 #### `windows.rs`
 
-Creates and positions the four secondary windows:
+Creates and positions secondary windows:
 `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`,
 `ensure_updater_window`. Windows anchor to the last tray icon click position
 via `set_last_tray_click_position`.
+
+Also manages floating panel windows: `launch_floating_panels` opens one
+frameless `panel-{key}` window per visible panel (read from `settings.visible_panels`),
+applying DWM invisible resize border compensation to saved positions from
+`settings.panel_layouts`. `close_floating_panels` closes all open panel windows.
 
 #### `updater.rs`
 
@@ -288,6 +298,7 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `simulator.js` | Synthetic stats for browser-mode development |
 | `themes.js` | CSS custom property application for colour themes |
 | `panels/*.js` | One module per panel (see Dashboard Panels) |
+| `panel-host.js` | Shared entry for floating panel windows — detects panel from window label, subscribes to `stats-broadcast`, saves positions on move |
 | `settings.js` | Settings window entry script |
 | `about.js` | About window entry script |
 | `status.js` | Status window entry script |

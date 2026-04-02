@@ -3739,7 +3739,7 @@ dependencies = [
 
 [[package]]
 name = "rigstats"
-version = "1.14.0"
+version = "1.15.0"
 dependencies = [
  "hostname",
  "reqwest 0.12.28",

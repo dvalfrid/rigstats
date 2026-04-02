@@ -20,9 +20,10 @@ mod updater;
 mod windows;
 
 use commands::{
-  close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats, get_system_brand,
-  get_system_name, log_frontend_error, preview_opacity, preview_profile, preview_theme, preview_visible_panels,
-  save_settings, set_main_height, start_window_drag, test_temp_alert,
+  broadcast_stats, close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
+  get_system_brand, get_system_name, log_frontend_error, open_settings_window, preview_opacity, preview_profile,
+  preview_theme, preview_visible_panels, save_panel_positions, save_settings, set_main_height, start_window_drag,
+  test_temp_alert, toggle_floating_mode,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -44,8 +45,8 @@ use tauri::{
 };
 use updater::{check_for_update, install_update, open_updater_window};
 use windows::{
-  ensure_about_window, ensure_settings_window, ensure_status_window, ensure_updater_window, on_window_event,
-  set_last_tray_click_position,
+  close_floating_panels, ensure_about_window, ensure_settings_window, ensure_status_window, ensure_updater_window,
+  on_window_event, set_last_tray_click_position,
 };
 
 /// Spawns a background task that retries WMI-dependent hardware detection for any
@@ -218,6 +219,7 @@ const TRAY_SETTINGS_ID: &str = "settings";
 const TRAY_ABOUT_ID: &str = "about";
 const TRAY_STATUS_ID: &str = "status";
 const TRAY_UPDATES_ID: &str = "updates";
+const TRAY_FLOATING_ID: &str = "floating";
 const TRAY_QUIT_ID: &str = "quit";
 
 fn focus_main_window(app: &AppHandle) {
@@ -241,6 +243,7 @@ fn toggle_main_window(app: &AppHandle) {
 fn create_tray(app: &tauri::App) -> tauri::Result<()> {
   let tray_menu = MenuBuilder::new(app)
     .text(TRAY_SHOW_ID, "Show RIGStats")
+    .text(TRAY_FLOATING_ID, "Toggle Floating Mode")
     .separator()
     .text(TRAY_SETTINGS_ID, "Settings")
     .text(TRAY_STATUS_ID, "Status")
@@ -255,6 +258,40 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
     .show_menu_on_left_click(false)
     .on_menu_event(|app, event| match event.id().as_ref() {
       TRAY_SHOW_ID => focus_main_window(app),
+      TRAY_FLOATING_ID => {
+        let state = app.state::<stats::AppState>();
+        let enabled = {
+          let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+          s.floating_mode
+        };
+        let next = !enabled;
+        if next {
+          {
+            let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+            s.floating_mode = true;
+            let _ = settings::persist_settings(app, &s);
+          }
+          if let Some(main) = app.get_webview_window("main") {
+            let _ = main.hide();
+          }
+          let _ = crate::windows::sync_floating_panels(app, &state);
+        } else {
+          {
+            let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+            s.floating_mode = false;
+            let _ = settings::persist_settings(app, &s);
+          }
+          close_floating_panels(app);
+          if let Some(main) = app.get_webview_window("main") {
+            let _ = main.show();
+            let _ = main.set_focus();
+          }
+        }
+        // Notify main window JS so it updates floatingMode and starts/stops broadcasting.
+        if let Some(main) = app.get_webview_window("main") {
+          let _ = main.emit("apply-floating-mode", next);
+        }
+      }
       TRAY_SETTINGS_ID => {
         append_debug_log(app, "Tray menu: Settings clicked");
         if let Err(error) = ensure_settings_window(app) {
@@ -329,6 +366,7 @@ fn main() {
       }
       let startup_profile = settings.dashboard_profile.clone();
       let startup_always_on_top = settings.always_on_top;
+      let startup_floating_mode = settings.floating_mode;
       let startup_autostart_enabled = settings.autostart_enabled;
       let current_version = env!("CARGO_PKG_VERSION").to_string();
       let last_seen = settings.last_seen_version.clone();
@@ -392,8 +430,11 @@ fn main() {
         last_alert: Mutex::new(HashMap::new()),
       });
 
-      if let Some(main) = app.get_webview_window("main") {
-        // Place the dashboard on the preferred portrait monitor if present.
+      if startup_floating_mode {
+        // Floating mode: keep main window hidden and open per-panel windows.
+        let _ = crate::windows::sync_floating_panels(app_handle, &app.state::<stats::AppState>());
+      } else if let Some(main) = app.get_webview_window("main") {
+        // Portrait mode: place on preferred monitor and show.
         let _ = pick_target_monitor(&main, &startup_profile);
         let _ = main.set_always_on_top(startup_always_on_top);
         let _ = main.show();
@@ -448,7 +489,11 @@ fn main() {
       check_for_update,
       install_update,
       open_updater_window,
-      set_main_height
+      set_main_height,
+      toggle_floating_mode,
+      broadcast_stats,
+      save_panel_positions,
+      open_settings_window
     ])
     .on_window_event(on_window_event)
     .build(tauri::generate_context!())
