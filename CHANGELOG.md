@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.15.0](https://github.com/dvalfrid/rigstats/compare/v1.14.0...v1.15.0) (2026-04-02)
+
+
+### Features
+
+* add process monitor panel ([f498716](https://github.com/dvalfrid/rigstats/commit/f498716dba6073b60d265c5bcd9b4aa09178f961))
+
 ## [1.14.0](https://github.com/dvalfrid/rigstats/compare/v1.13.0...v1.14.0) (2026-04-01)
 
 
