@@ -47,6 +47,7 @@ let detectedBrand = 'other';
 let detectedCpuModel = '';
 let brandPreviewEnabled = false;
 let thresholds = {};
+let floatingMode = false;
 
 const PROFILE_SIZE = {
   'portrait-xl': { width: 450, height: 1920 },
@@ -403,6 +404,9 @@ async function tick() {
       if (isValidStatsPayload(stats)) {
         lastValidStats = stats;
         applyStats(stats);
+        if (floatingMode) {
+          backend.invoke('broadcast-stats', { stats }).catch(() => {});
+        }
       } else if (lastValidStats) {
         // Reuse last valid sample to avoid visual reset/blink.
         applyStats(lastValidStats);
@@ -439,6 +443,7 @@ function start() {
       applyVisiblePanels(s.visiblePanels);
       applyThresholds(s);
       applyTheme(s.theme ?? 'dark-cyan');
+      floatingMode = s.floatingMode ?? false;
     });
     Promise.all([
       backend.invoke('get-system-brand').catch(() => 'other'),
@@ -478,6 +483,9 @@ function start() {
           detectedCpuModel = cpu || '';
           renderBrandState();
         });
+      }),
+      backend.on('apply-floating-mode', (_event, enabled) => {
+        floatingMode = !!enabled;
       }),
     ]).then((unlisteners) => {
       window.addEventListener('beforeunload', () => unlisteners.forEach((fn) => fn()));

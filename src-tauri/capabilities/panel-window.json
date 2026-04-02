@@ -1,21 +1,22 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "main-window",
-  "description": "Capability for the main dashboard window.",
-  "windows": ["main"],
+  "identifier": "panel-window",
+  "description": "Capability for floating panel windows.",
+  "windows": ["panel-*"],
   "permissions": [
     "core:event:default",
     "core:window:allow-start-dragging",
     "allow-get-settings",
-    "allow-start-window-drag",
     "allow-get-system-name",
     "allow-get-system-brand",
     "allow-get-cpu-info",
     "allow-get-gpu-info",
-    "allow-get-stats",
     "allow-broadcast-stats",
+    "allow-save-panel-positions",
+    "allow-toggle-floating-mode",
+    "allow-close-window",
+    "allow-start-window-drag",
     "allow-log-frontend-error",
-    "allow-open-updater-window",
-    "allow-set-main-height"
+    "allow-open-settings-window"
   ]
 }

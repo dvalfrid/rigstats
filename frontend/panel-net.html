@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Network</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 276px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-net" data-panel="net" style="height:260px">
+  <div class="tl"></div><div class="br"></div>
+  <div class="panel-content">
+    <div class="stat-label">NETWORK</div>
+    <div class="net-grid">
+      <div>
+        <div><span class="net-arrow" style="color:var(--grn)">↑</span><span class="meta-key">UP</span></div>
+        <div><span class="net-val" id="netUp">--</span> <span class="net-unit" id="netUpU">Mbps</span></div>
+      </div>
+      <div>
+        <div><span class="net-arrow" style="color:var(--accent)">↓</span><span class="meta-key">DOWN</span></div>
+        <div><span class="net-val" id="netDown">--</span> <span class="net-unit" id="netDownU">Mbps</span></div>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="meta"><div class="meta-key">PING</div><div class="meta-val" id="netPing">-- ms</div></div>
+      <div class="meta"><div class="meta-key">IFACE</div><div class="meta-val" id="netIface">--</div></div>
+    </div>
+  </div>
+  <canvas class="spark" id="netSpark" height="48"></canvas>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

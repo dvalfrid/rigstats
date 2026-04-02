@@ -18,12 +18,13 @@ use crate::lhm_process::{
   can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state,
 };
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
-use crate::settings::{persist_settings, ComponentThresholds, Settings};
+use crate::settings::{persist_settings, ComponentThresholds, PanelLayout, Settings};
 use crate::stats::{
   AppState, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats, ProcessEntry, RamStats,
   StatsPayload,
 };
 use serde::Serialize;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager, Size, WebviewWindow};
 use tauri_plugin_notification::NotificationExt;
@@ -148,9 +149,15 @@ pub fn preview_opacity(app: tauri::AppHandle, value: f64) -> Result<(), String> 
 }
 
 #[tauri::command]
-pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), String> {
+pub fn preview_profile(app: tauri::AppHandle, state: tauri::State<AppState>, profile: String) -> Result<(), String> {
   let applied_profile = normalize_profile(&profile);
   let (target_w, target_h) = profile_dimensions(&applied_profile);
+
+  {
+    let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    settings.dashboard_profile = applied_profile.clone();
+  }
+
   if let Some(main) = app.get_webview_window("main") {
     let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
       width: target_w,
@@ -161,17 +168,47 @@ pub fn preview_profile(app: tauri::AppHandle, profile: String) -> Result<(), Str
     let _ = main.set_decorations(false);
     main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
   }
+
+  let floating_mode = {
+    let settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    settings.floating_mode
+  };
+  if floating_mode {
+    crate::windows::sync_floating_panels(&app, &state)?;
+  }
+
   Ok(())
 }
 
 #[tauri::command]
-pub fn preview_visible_panels(app: tauri::AppHandle, panels: Vec<String>) -> Result<(), String> {
+pub fn preview_visible_panels(
+  app: tauri::AppHandle,
+  state: tauri::State<AppState>,
+  panels: Vec<String>,
+) -> Result<(), String> {
+  let normalized = normalize_visible_panels(panels);
+
   if let Some(main) = app.get_webview_window("main") {
-    let normalized = normalize_visible_panels(panels);
     main
-      .emit("apply-visible-panels", normalized)
+      .emit("apply-visible-panels", normalized.clone())
       .map_err(|e| e.to_string())?;
   }
+
+  // In floating mode, preview must also open/close floating panel windows.
+  let floating_mode = {
+    let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    if s.floating_mode {
+      s.visible_panels = normalized;
+      true
+    } else {
+      false
+    }
+  };
+
+  if floating_mode {
+    crate::windows::sync_floating_panels(&app, &state)?;
+  }
+
   Ok(())
 }
 
@@ -210,8 +247,11 @@ pub fn save_settings(
   #[allow(non_snake_case)] notifyOnWarn: Option<bool>,
   #[allow(non_snake_case)] notifyOnCrit: Option<bool>,
   theme: Option<String>,
+  floating_mode: Option<bool>,
+  #[allow(non_snake_case)] floatingMode: Option<bool>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+  let previous_floating_mode = settings.floating_mode;
   settings.opacity = opacity.clamp(0.0, 1.0);
 
   // Accept both snake_case and camelCase payload keys from the renderer.
@@ -284,6 +324,9 @@ pub fn save_settings(
   if let Some(t) = theme {
     settings.theme = t;
   }
+  if let Some(fm) = floating_mode.or(floatingMode) {
+    settings.floating_mode = fm;
+  }
 
   persist_settings(&app, &settings)?;
 
@@ -303,6 +346,9 @@ pub fn save_settings(
     append_debug_log(&app, "autostart: unregistered");
   }
 
+  // Capture floating mode before releasing the lock.
+  let new_floating_mode = settings.floating_mode;
+
   if let Some(main) = app.get_webview_window("main") {
     main
       .emit("apply-opacity", settings.opacity)
@@ -320,6 +366,31 @@ pub fn save_settings(
     main
       .emit("apply-theme", settings.theme.clone())
       .map_err(|e| e.to_string())?;
+    // Notify main window JS so it updates floatingMode and starts/stops broadcasting.
+    let _ = main.emit("apply-floating-mode", new_floating_mode);
+  }
+
+  // Release the settings lock before panel window operations — `launch_floating_panels`
+  // acquires the same lock internally, so holding it here would deadlock.
+  drop(settings);
+
+  // If floating mode changed, launch or close the panel windows.
+  if new_floating_mode != previous_floating_mode {
+    if new_floating_mode {
+      if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
+      }
+      crate::windows::sync_floating_panels(&app, &state)?;
+    } else {
+      crate::windows::close_floating_panels(&app);
+      if let Some(main) = app.get_webview_window("main") {
+        let _ = main.show();
+        let _ = main.set_focus();
+      }
+    }
+  } else if new_floating_mode {
+    // Floating mode remained enabled and visible panels/profile may have changed.
+    crate::windows::sync_floating_panels(&app, &state)?;
   }
 
   Ok(())
@@ -374,6 +445,11 @@ pub fn close_window(window: WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 pub fn start_window_drag(window: WebviewWindow) -> Result<(), String> {
   window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+  crate::windows::ensure_settings_window(&app)
 }
 
 // --- System info -----------------------------------------------------------
@@ -939,6 +1015,69 @@ pub fn get_changelog(app: tauri::AppHandle) -> String {
 pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
   let sanitized = message.chars().take(512).collect::<String>();
   append_debug_log(&app, &format!("[renderer] {}", sanitized));
+}
+
+// --- Floating panel mode ---------------------------------------------------
+
+/// Switches between portrait and floating panel layout.
+///
+/// When enabled, the main window is hidden and one frameless window per visible
+/// panel is opened. When disabled, all panel windows are closed and the main
+/// portrait window is shown again.
+#[tauri::command]
+pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>, enabled: bool) -> Result<(), String> {
+  {
+    let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    s.floating_mode = enabled;
+    persist_settings(&app, &s)?;
+  }
+  if enabled {
+    if let Some(main) = app.get_webview_window("main") {
+      let _ = main.hide();
+    }
+    crate::windows::sync_floating_panels(&app, &state)?;
+  } else {
+    crate::windows::close_floating_panels(&app);
+    if let Some(main) = app.get_webview_window("main") {
+      let _ = main.show();
+      let _ = main.set_focus();
+    }
+  }
+  // Notify the main window JS so it updates floatingMode and starts/stops broadcasting.
+  if let Some(main) = app.get_webview_window("main") {
+    let _ = main.emit("apply-floating-mode", enabled);
+  }
+  Ok(())
+}
+
+/// Broadcasts a stats payload to all open floating panel windows.
+///
+/// Called by the main window's tick loop when floating mode is active so that
+/// only one `get-stats` IPC round-trip runs per second regardless of how many
+/// panels are open. The payload is received as a raw JSON value so that
+/// `StatsPayload` does not need to implement `Deserialize`.
+#[tauri::command]
+pub fn broadcast_stats(app: tauri::AppHandle, stats: serde_json::Value) -> Result<(), String> {
+  app.emit("stats-broadcast", stats).map_err(|e| e.to_string())
+}
+
+/// Merges incoming panel positions into persistent settings.
+///
+/// Called by `panel-host.js` after the user stops dragging a panel so positions
+/// survive across restarts. Incoming positions are the raw `outer_position()`
+/// values — the DWM inset compensation is re-applied by `launch_floating_panels`
+/// on the next startup.
+#[tauri::command]
+pub fn save_panel_positions(
+  app: tauri::AppHandle,
+  state: tauri::State<AppState>,
+  positions: HashMap<String, PanelLayout>,
+) -> Result<(), String> {
+  let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+  for (key, layout) in positions {
+    s.panel_layouts.insert(key, layout);
+  }
+  persist_settings(&app, &s)
 }
 
 #[cfg(test)]

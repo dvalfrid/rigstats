@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Clock</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 164px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-clock" data-panel="clock" style="height:148px">
+  <div class="tl"></div><div class="br"></div>
+  <div class="clock-time" id="clockTime">--:--:--</div>
+  <div class="clock-sub">
+    <div class="clock-day" id="clockDay">-------</div>
+    <div class="clock-date" id="clockDate">----·--·--</div>
+  </div>
+  <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

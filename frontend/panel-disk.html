@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Disk</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 311px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-disk" data-panel="disk" style="height:295px">
+  <div class="tl"></div><div class="br"></div>
+  <div class="panel-content">
+    <div class="stat-label">STORAGE</div>
+    <div class="disk-grid">
+      <div><div class="disk-key" style="color:var(--pur)">READ</div><div><span class="disk-val" id="diskRead">--</span> <span class="disk-unit" id="diskReadU">MB/s</span></div></div>
+      <div><div class="disk-key" style="color:var(--disk-write)">WRITE</div><div><span class="disk-val" id="diskWrite">--</span> <span class="disk-unit" id="diskWriteU">MB/s</span></div></div>
+    </div>
+  </div>
+  <div class="bars" id="diskBars"></div>
+  <canvas class="spark" id="diskSpark" height="48"></canvas>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

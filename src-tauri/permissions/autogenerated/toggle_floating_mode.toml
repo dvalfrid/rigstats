@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-toggle-floating-mode"
+description = "Enables the toggle_floating_mode command without any pre-configured scope."
+commands.allow = ["toggle_floating_mode"]
+
+[[permission]]
+identifier = "deny-toggle-floating-mode"
+description = "Denies the toggle_floating_mode command without any pre-configured scope."
+commands.deny = ["toggle_floating_mode"]

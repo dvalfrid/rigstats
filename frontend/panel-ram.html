@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>RAM</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 331px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-ram" data-panel="ram" style="height:315px">
+  <div class="tl"></div><div class="br"></div>
+  <div class="panel-content">
+    <div class="stat-label">RAM USAGE</div>
+    <div><span class="big-num" id="ramUsed">--</span><span class="big-unit" id="ramTotal"> / -- GB</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px;margin-top:10px;">
+      <div class="meta"><div class="meta-key">FREE</div><div class="meta-val" id="ramFree">-- GB</div></div>
+      <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="ramTemp">--°C</div></div>
+      <div class="meta"><div class="meta-key">SPEED</div><div class="meta-val" id="ramSpeed">--</div></div>
+      <div class="meta"><div class="meta-key">TYPE</div><div class="meta-val" id="ramType">--</div></div>
+      <div class="meta"><div class="meta-key">PART</div><div class="meta-val" id="ramPart" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+      <div class="meta"><div class="meta-key">DIMMS</div><div class="meta-val" id="ramDimms">--</div></div>
+      <div class="meta" style="grid-column:span 2;"><div class="meta-key">VENDOR</div><div class="meta-val" id="ramVendor" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div></div>
+    </div>
+  </div>
+  <div class="bars">
+    <div class="bar-row">
+      <div class="bar-lbl">MEM</div>
+      <div class="bar-track"><div class="bar-fill" id="ramBar" style="width:0%"></div></div>
+      <div class="bar-pct" id="ramBarPct">--%</div>
+    </div>
+  </div>
+  <canvas class="spark" id="ramSpark" height="48"></canvas>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

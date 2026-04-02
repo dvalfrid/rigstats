@@ -6,6 +6,7 @@ const modelNameInput = document.getElementById('modelNameInput');
 const profileSelect = document.getElementById('profileSelect');
 const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
 const autostartInput = document.getElementById('autostartInput');
+const floatingModeInput = document.getElementById('floatingModeInput');
 const panelToggles = document.getElementById('panelToggles');
 const statusEl = document.getElementById('status');
 const btnTestAlert = document.getElementById('btnTestAlert');
@@ -41,6 +42,7 @@ let original = {
   dashboardProfile: 'portrait-xl',
   alwaysOnTop: false,
   autostartEnabled: false,
+  floatingMode: false,
   visiblePanels: [...PANEL_KEYS],
   thresholds: { cpu: {}, gpu: {}, ram: {}, disk: {} },
   alertCooldownSecs: 60,
@@ -240,6 +242,7 @@ function applySettings(settings) {
     dashboardProfile: settings.dashboardProfile ?? 'portrait-xl',
     alwaysOnTop: settings.alwaysOnTop ?? false,
     autostartEnabled: settings.autostartEnabled ?? false,
+    floatingMode: settings.floatingMode ?? false,
     visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
     thresholds: {
       cpu:  { warn: t.cpu?.warn  ?? null, crit: t.cpu?.crit  ?? null },
@@ -260,6 +263,7 @@ function applySettings(settings) {
   profileSelect.value = original.dashboardProfile;
   alwaysOnTopInput.checked = original.alwaysOnTop;
   autostartInput.checked = original.autostartEnabled;
+  floatingModeInput.checked = original.floatingMode;
   applyVisiblePanelsToForm(original.visiblePanels);
 
   setTempInput(warnCpuTempInput,  original.thresholds.cpu.warn);
@@ -296,6 +300,9 @@ async function loadSettings() {
 
 async function closeWithRestore() {
   if (dragGhost) { dragGhost.remove(); dragGhost = null; }
+  if (floatingModeInput.checked !== original.floatingMode) {
+    await backend.invoke('toggle-floating-mode', { enabled: original.floatingMode });
+  }
   await backend.invoke('preview-opacity', { value: original.opacity });
   await previewProfile(original.dashboardProfile);
   await previewVisiblePanels(original.visiblePanels);
@@ -334,6 +341,17 @@ profileSelect.addEventListener('change', async () => {
   }
 });
 
+floatingModeInput.addEventListener('change', async () => {
+  if (!IS_DESKTOP || isSaving) return;
+  try {
+    await backend.invoke('toggle-floating-mode', { enabled: floatingModeInput.checked });
+    setStatus('Previewing floating mode...');
+  } catch (error) {
+    logError('toggle-floating-mode', error);
+    setStatus('Could not toggle floating mode preview.', 'status-err');
+  }
+});
+
 document.getElementById('btnSave').addEventListener('click', async () => {
   if (!IS_DESKTOP || isSaving) return;
 
@@ -345,6 +363,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const dashboardProfile = profileSelect.value;
   const alwaysOnTop = alwaysOnTopInput.checked;
   const autostartEnabled = autostartInput.checked;
+  const floatingMode = floatingModeInput.checked;
   const selectedPanels = getSelectedPanels();
 
   const thresholds = {
@@ -373,6 +392,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       dashboardProfile,
       alwaysOnTop,
       autostartEnabled,
+      floatingMode,
       visiblePanels,
       thresholds,
       alertCooldownSecs,
@@ -382,8 +402,8 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     });
 
     original = {
-      opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, visiblePanels,
-      thresholds, alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
+      opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, floatingMode,
+      visiblePanels, thresholds, alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
     };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');

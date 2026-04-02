@@ -18,7 +18,8 @@
         "settings-window",
         "about-window",
         "status-window",
-        "updater-window"
+        "updater-window",
+        "panel-window"
       ]
     },
     "windows": [

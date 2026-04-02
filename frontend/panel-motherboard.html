@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>Motherboard</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 276px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-mb" data-panel="motherboard" style="height:260px">
+  <div class="tl"></div><div class="br"></div>
+  <div class="panel-content">
+    <div class="stat-label">MOTHERBOARD</div>
+    <div style="font-family:var(--mono);font-size:var(--font-ui);color:var(--stat-label);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbBoard"></div>
+    <div style="font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbChip"></div>
+    <div class="mb-scroll">
+      <div class="mb-three-col">
+        <div>
+          <div class="mb-col-label">FANS</div>
+          <div id="mbFans"></div>
+        </div>
+        <div class="mb-col-center">
+          <div class="mb-col-center-inner">
+            <div class="mb-col-label">TEMPS</div>
+            <div id="mbTemps"></div>
+          </div>
+        </div>
+        <div>
+          <div class="mb-col-label">VOLTAGES</div>
+          <div id="mbVoltages"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

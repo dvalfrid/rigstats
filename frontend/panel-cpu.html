@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>CPU</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 436px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-cpu" data-panel="cpu" style="height:420px">
+  <div class="tl"></div><div class="br"></div>
+  <img id="cpuVendorBadge" class="amd-badge-cpu" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="">
+  <div class="panel-content">
+    <div class="stat-label">CPU LOAD</div>
+    <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="cpuModel">--</div>
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-fill" id="cpuRing" cx="50" cy="50" r="42"
+          stroke="var(--accent)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+        <text class="ring-txt" x="50" y="47" id="cpuRingTxt">--%</text>
+        <text class="ring-sub" x="50" y="61">CPU</text>
+      </svg>
+      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+        <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
+        <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="cpuFreq">-- GHz</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="cpuPower">-- W</div></div>
+      </div>
+    </div>
+    <div class="bars" id="cpuCores"></div>
+  </div>
+  <canvas class="spark" id="cpuSpark" height="48"></canvas>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>

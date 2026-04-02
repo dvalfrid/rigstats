@@ -250,7 +250,7 @@ automatically pruned after a configurable retention period (default 7 days).
 
 ---
 
-## Floating panel layout
+## ✓ Floating panel layout
 
 **Panel:** All panels + new window management
 **Data source:** Existing stats tick — no new sensors required

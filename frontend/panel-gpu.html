@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<title>GPU</title>
+<link rel="icon" type="image/x-icon" href="./favicon.ico">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@300;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./panel-base.css">
+<style>
+html, body { width: 450px; height: 336px; }
+</style>
+</head>
+<body>
+<div class="floating-drag-handle" id="dragHandle"></div>
+<div id="ctx-menu">
+  <button id="ctxSettings">Settings</button>
+  <button id="ctxClose">Close panel</button>
+</div>
+<div class="panel panel-gpu" data-panel="gpu" style="height:320px">
+  <div class="tl"></div><div class="br"></div>
+  <img id="gpuVendorBadge" class="amd-badge" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="">
+  <div class="panel-content">
+    <div class="stat-label">GPU LOAD</div>
+    <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="gpuModel">--</div>
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-fill" id="gpuRing" cx="50" cy="50" r="42"
+          stroke="var(--amd)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+        <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
+        <text class="ring-sub" x="50" y="61">GPU</text>
+      </svg>
+      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+        <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
+        <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
+        <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
+        <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
+        <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="bars">
+    <div class="bar-row">
+      <div class="bar-lbl">GPU</div>
+      <div class="bar-track"><div class="bar-fill" id="gpuBar" style="width:0%"></div></div>
+      <div class="bar-pct" id="gpuBarPct">--%</div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-lbl">VRAM</div>
+      <div class="bar-track"><div class="bar-fill" id="vramBar" style="width:0%;background:rgba(255,58,31,.5)"></div></div>
+      <div class="bar-pct" id="vramBarPct">--%</div>
+    </div>
+    <span id="gpuVram" style="display:none" aria-hidden="true"></span>
+    <div class="bar-row" id="gpuD3dRow" style="display:none">
+      <div class="bar-lbl">3D</div>
+      <div class="bar-track"><div class="bar-fill" id="d3d3dBar" style="width:0%"></div></div>
+      <div class="bar-pct" id="d3d3dPct">--%</div>
+    </div>
+    <div class="bar-row" id="gpuVdecRow" style="display:none">
+      <div class="bar-lbl">VDEC</div>
+      <div class="bar-track"><div class="bar-fill" id="d3dVdecBar" style="width:0%"></div></div>
+      <div class="bar-pct" id="d3dVdecPct">--%</div>
+    </div>
+  </div>
+  <div class="warn" id="gpuWarn" style="flex-shrink:0"></div>
+  <canvas class="spark" id="gpuSpark" height="48"></canvas>
+</div>
+<script type="module" src="./renderer/panel-host.js"></script>
+</body>
+</html>
