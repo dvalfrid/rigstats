@@ -174,7 +174,7 @@ pub fn preview_profile(app: tauri::AppHandle, state: tauri::State<AppState>, pro
     settings.floating_mode
   };
   if floating_mode {
-    crate::windows::sync_floating_panels(&app, &state)?;
+    crate::windows::sync_floating_panels(&app, &state);
   }
 
   Ok(())
@@ -206,7 +206,7 @@ pub fn preview_visible_panels(
   };
 
   if floating_mode {
-    crate::windows::sync_floating_panels(&app, &state)?;
+    crate::windows::sync_floating_panels(&app, &state);
   }
 
   Ok(())
@@ -380,7 +380,7 @@ pub fn save_settings(
       if let Some(main) = app.get_webview_window("main") {
         let _ = main.hide();
       }
-      crate::windows::sync_floating_panels(&app, &state)?;
+      crate::windows::sync_floating_panels(&app, &state);
     } else {
       crate::windows::close_floating_panels(&app);
       if let Some(main) = app.get_webview_window("main") {
@@ -390,7 +390,7 @@ pub fn save_settings(
     }
   } else if new_floating_mode {
     // Floating mode remained enabled and visible panels/profile may have changed.
-    crate::windows::sync_floating_panels(&app, &state)?;
+    crate::windows::sync_floating_panels(&app, &state);
   }
 
   Ok(())
@@ -1035,7 +1035,7 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
     if let Some(main) = app.get_webview_window("main") {
       let _ = main.hide();
     }
-    crate::windows::sync_floating_panels(&app, &state)?;
+    crate::windows::sync_floating_panels(&app, &state);
   } else {
     crate::windows::close_floating_panels(&app);
     if let Some(main) = app.get_webview_window("main") {
@@ -1058,7 +1058,15 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
 /// `StatsPayload` does not need to implement `Deserialize`.
 #[tauri::command]
 pub fn broadcast_stats(app: tauri::AppHandle, stats: serde_json::Value) -> Result<(), String> {
-  app.emit("stats-broadcast", stats).map_err(|e| e.to_string())
+  // Emit only to open panel windows — avoids delivering every stats tick to the
+  // settings, about, status, and updater windows which never consume it.
+  for key in crate::windows::all_panel_keys() {
+    let label = format!("panel-{}", key);
+    if let Some(win) = app.get_webview_window(&label) {
+      win.emit("stats-broadcast", &stats).map_err(|e| e.to_string())?;
+    }
+  }
+  Ok(())
 }
 
 /// Merges incoming panel positions into persistent settings.

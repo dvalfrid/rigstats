@@ -274,7 +274,7 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
           if let Some(main) = app.get_webview_window("main") {
             let _ = main.hide();
           }
-          let _ = crate::windows::sync_floating_panels(app, &state);
+          crate::windows::sync_floating_panels(app, &state);
         } else {
           {
             let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
@@ -432,7 +432,7 @@ fn main() {
 
       if startup_floating_mode {
         // Floating mode: keep main window hidden and open per-panel windows.
-        let _ = crate::windows::sync_floating_panels(app_handle, &app.state::<stats::AppState>());
+        crate::windows::sync_floating_panels(app_handle, &app.state::<stats::AppState>());
       } else if let Some(main) = app.get_webview_window("main") {
         // Portrait mode: place on preferred monitor and show.
         let _ = pick_target_monitor(&main, &startup_profile);
