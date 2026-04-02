@@ -198,8 +198,12 @@ pub fn preview_visible_panels(
   let floating_mode = {
     let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     if s.floating_mode {
-      s.visible_panels = normalized;
-      true
+      if s.visible_panels == normalized {
+        false
+      } else {
+        s.visible_panels = normalized;
+        true
+      }
     } else {
       false
     }
@@ -1029,6 +1033,8 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
   {
     let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     s.floating_mode = enabled;
+    // Self-heal older or malformed settings where visible_panels may be empty.
+    s.visible_panels = normalize_visible_panels(s.visible_panels.clone());
     persist_settings(&app, &s)?;
   }
   if enabled {

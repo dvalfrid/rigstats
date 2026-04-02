@@ -48,6 +48,7 @@ const currentWindow = (() => {
 // --- Shared history (sparklines) --------------------------------------------
 
 const history = createHistory(80);
+let lastAppliedUptimeSec = null;
 
 // --- Profile/size scaling ---------------------------------------------------
 
@@ -150,6 +151,16 @@ function getCssVar(name) {
 
 function applyStats(stats) {
   if (!stats) return;
+
+  // Floating windows may occasionally receive duplicate broadcasts in the same
+  // second (e.g. during rapid settings preview churn). Deduplicate by backend
+  // uptime so sparkline history still advances at 1 Hz like fixed mode.
+  const upSec = Number.isFinite(stats.systemUptimeSecs) ? Math.floor(stats.systemUptimeSecs) : null;
+  if (upSec != null) {
+    if (lastAppliedUptimeSec === upSec) return;
+    lastAppliedUptimeSec = upSec;
+  }
+
   switch (panelKey) {
     case 'cpu':
       updateCpuPanel(stats.cpu, history, pushHistory, thresholds.cpu);
