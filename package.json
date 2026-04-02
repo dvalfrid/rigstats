@@ -1,6 +1,6 @@
 {
   "name": "rig-dashboard",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Gaming rig stats dashboard for secondary display",
   "scripts": {
     "prepare:lhm": "powershell -ExecutionPolicy Bypass -File build/prepare-lhm.ps1",
