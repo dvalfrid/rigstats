@@ -219,10 +219,7 @@ pub fn preview_visible_panels(
 #[tauri::command]
 pub fn set_main_height(app: tauri::AppHandle, width: f64, height: f64) -> Result<(), String> {
   if let Some(main) = app.get_webview_window("main") {
-    let _ = main.set_size(Size::Physical(tauri::PhysicalSize {
-      width: width as u32,
-      height: height as u32,
-    }));
+    let _ = main.set_size(Size::Logical(tauri::LogicalSize { width, height }));
     // Enforce no decorations after every resize — Windows may restore WS_CAPTION
     // via SetWindowPos when the window size changes.
     let _ = main.set_decorations(false);
