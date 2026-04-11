@@ -75,12 +75,18 @@ function setPxVar(style, name, value) {
 }
 
 function applyProfileMetrics(profile) {
+  // Divide physical profile dimensions by devicePixelRatio to get CSS logical pixels.
+  // On high-DPI displays (e.g. a 200%-scaled laptop), physical profile pixels are 2×
+  // the CSS viewport size; without this correction all layout variables overflow.
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = Math.round(profile.width / dpr);
+  const logicalH = Math.round(profile.height / dpr);
   const root = document.documentElement.style;
-  const heightScale = profile.height / BASE_PROFILE_HEIGHT;
-  const widthScale = profile.width / BASE_PROFILE_WIDTH;
+  const heightScale = logicalH / BASE_PROFILE_HEIGHT;
+  const widthScale = logicalW / BASE_PROFILE_WIDTH;
   const contentScale = Math.max(0.50, Math.min(1.35, Math.min(heightScale, widthScale)));
   const gap = Math.max(1, Math.round(heightScale));
-  const availableHeight = profile.height - (gap * (PANEL_ROW_CONFIG.length - 1));
+  const availableHeight = logicalH - (gap * (PANEL_ROW_CONFIG.length - 1));
 
   let remaining = availableHeight;
   PANEL_ROW_CONFIG.forEach(({ cssVar, baseHeight, absorbRemainder }) => {
@@ -90,8 +96,8 @@ function applyProfileMetrics(profile) {
     root.setProperty(cssVar, `${applied}px`);
   });
 
-  setPxVar(root, '--dashboard-w', profile.width);
-  setPxVar(root, '--dashboard-h', profile.height);
+  setPxVar(root, '--dashboard-w', logicalW);
+  setPxVar(root, '--dashboard-h', logicalH);
   setPxVar(root, '--panel-gap', gap);
   setPxVar(root, '--panel-pad-y', 22 * contentScale);
   setPxVar(root, '--panel-pad-x', 24 * Math.min(1.2, Math.max(0.55, widthScale)));
@@ -160,9 +166,13 @@ function applyVisiblePanels(visiblePanels) {
 
   // Shrink viewport and window to the height of the visible panels.
   // Mirror applyProfileMetrics exactly so heights match the CSS variables.
-  const heightScale = currentProfile.height / BASE_PROFILE_HEIGHT;
+  // Use logical (CSS) pixels by dividing physical profile dimensions by devicePixelRatio.
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = Math.round(currentProfile.width / dpr);
+  const logicalH = Math.round(currentProfile.height / dpr);
+  const heightScale = logicalH / BASE_PROFILE_HEIGHT;
   const gap = Math.max(1, Math.round(heightScale));
-  const availableH = currentProfile.height - gap * (PANEL_ROW_CONFIG.length - 1);
+  const availableH = logicalH - gap * (PANEL_ROW_CONFIG.length - 1);
   const panelH = {};
   let rem = availableH;
   PANEL_ROW_CONFIG.forEach(({ key, baseHeight, absorbRemainder }) => {
@@ -179,7 +189,7 @@ function applyVisiblePanels(visiblePanels) {
   root.setProperty('--dashboard-h', `${totalH}px`);
 
   if (IS_DESKTOP) {
-    backend.invoke('set-main-height', { width: currentProfile.width, height: totalH }).catch(() => {});
+    backend.invoke('set-main-height', { width: logicalW, height: totalH }).catch(() => {});
   }
 }
 
@@ -206,10 +216,11 @@ function applyProfile(profileName) {
   const profile = PROFILE_SIZE[key];
   currentProfile = profile;
 
+  const dpr = window.devicePixelRatio || 1;
   const root = document.documentElement;
   root.dataset.profile = key;
-  root.style.setProperty('--viewport-w', `${profile.width}px`);
-  root.style.setProperty('--viewport-h', `${profile.height}px`);
+  root.style.setProperty('--viewport-w', `${Math.round(profile.width / dpr)}px`);
+  root.style.setProperty('--viewport-h', `${Math.round(profile.height / dpr)}px`);
   applyProfileMetrics(profile);
 }
 
