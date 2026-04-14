@@ -8,6 +8,20 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.16.0](https://github.com/dvalfrid/rigstats/compare/v1.15.0...v1.16.0) (2026-04-14)
+
+
+### Features
+
+* add floating panel layout mode ([78663c2](https://github.com/dvalfrid/rigstats/commit/78663c255d9c5afc38d2cd9d5bab02cf7e96e1bb))
+
+
+### Bug Fixes
+
+* **floating:** stabilize panel mode sync, drag behavior, and spark history parity ([a4490c5](https://github.com/dvalfrid/rigstats/commit/a4490c5800cef094c3580c5bdebf65ef5f436062))
+* **layout:** correct CSS overflow on high-DPI displays ([d7314b5](https://github.com/dvalfrid/rigstats/commit/d7314b5a3a9b9a2da9c35fb3370e1058cb569077))
+* **layout:** replace hardcoded sizes with scaled CSS variables across all panels ([2187c7b](https://github.com/dvalfrid/rigstats/commit/2187c7bfca0ed07caae3976b7542b6c1466d7d25))
+
 ## [1.15.0](https://github.com/dvalfrid/rigstats/compare/v1.14.0...v1.15.0) (2026-04-02)
 
 
