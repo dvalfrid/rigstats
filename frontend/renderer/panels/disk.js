@@ -46,10 +46,10 @@ function updateDiskBars(drives, thresholds = {}) {
         ? resolveTempColor(d.temp, thresholds.warn ?? 55, thresholds.crit ?? 70)
         : '#6f8db7';
     wrap.innerHTML += `<div class="bar-row">
-      <div class="bar-lbl" style="width:36px">${label}</div>
+      <div class="bar-lbl" style="width:4ch">${label}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${d.pct}%;--c:var(--pur)"></div></div>
-      <div class="bar-pct" style="width:40px">${d.pct}%</div>
-      <div style="font-family:var(--mono);font-size:var(--font-ui);color:${tempColor};width:44px;text-align:right">${tempText}</div>
+      <div class="bar-pct" style="width:4.5ch">${d.pct}%</div>
+      <div style="font-family:var(--mono);font-size:var(--font-ui);color:${tempColor};width:5ch;text-align:right">${tempText}</div>
     </div>`;
   });
 
@@ -58,7 +58,7 @@ function updateDiskBars(drives, thresholds = {}) {
       { length: totalPages },
       (_, i) => `<span style="color:${i === diskPage ? '#fff' : '#3a4a6a'}">●</span>`,
     ).join(' ');
-    wrap.innerHTML += `<div style="text-align:center;margin-top:2px;font-size:7px">${dots}</div>`;
+    wrap.innerHTML += `<div style="text-align:center;margin-top:2px;font-size:calc(var(--font-ui) * 0.5)">${dots}</div>`;
   }
 }
 

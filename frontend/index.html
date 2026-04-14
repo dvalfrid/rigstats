@@ -130,11 +130,11 @@ html, body {
 .panel-header{--c:var(--accent);}
 .panel-header[data-tauri-drag-region]{cursor:move;}
 .rig-label{font-family:var(--mono);font-size:var(--font-ui);color:var(--accent);letter-spacing:4px;text-transform:uppercase;margin-bottom:2px;}
-.rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.rig-header-row{display:flex;align-items:center;justify-content:space-between;gap:var(--gap-inner-sm);}
 .rig-name{font-size:var(--rig-name-size);font-weight:700;letter-spacing:1px;color:#fff;line-height:1;margin:4px 0;}
 .rig-brand-preview{display:none;margin-top:7px;padding:3px 8px;border:1px solid var(--accent-border);background:var(--accent-bg);font-family:var(--mono);font-size:var(--font-ui);letter-spacing:1px;color:#dff7ff;text-transform:uppercase;width:max-content;line-height:1.25;}
-.rig-brand-mark{display:flex;align-items:center;justify-content:center;width:var(--brand-mark-size);height:var(--brand-mark-size);flex-shrink:0;}
-.rig-logo{width:var(--brand-mark-size);height:var(--brand-mark-size);object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
+.rig-brand-mark{display:flex;align-items:center;justify-content:center;width:min(var(--brand-mark-size),calc(var(--row-header) - 2*var(--panel-pad-y)));height:min(var(--brand-mark-size),calc(var(--row-header) - 2*var(--panel-pad-y)));flex-shrink:0;}
+.rig-logo{width:100%;height:100%;object-fit:contain;opacity:0.85;transform-origin:center center;transition:transform .18s ease;}
 .rig-brand-text{display:none;padding:14px 18px;border:1px solid var(--accent-border);background:var(--accent-bg-thin);box-shadow:inset 0 0 18px var(--accent-bg-thin);font-family:var(--mono);font-size:var(--model-name-size);letter-spacing:3px;color:#dff7ff;text-transform:uppercase;text-align:center;line-height:1.15;max-width:var(--brand-mark-size);}
 .rig-sub{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);line-height:1.9;}
 .dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:6px;animation:blink 2s ease-in-out infinite;box-shadow:0 0 6px var(--grn);}
@@ -159,8 +159,8 @@ html, body {
 .big-unit{font-family:var(--mono);font-size:var(--big-unit-size);color:var(--text-muted);}
 .meta-row{display:flex;gap:20px;margin-top:var(--gap-inner-sm);flex-wrap:wrap;}
 .meta{display:flex;flex-direction:column;gap:2px;}
-.meta-key{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);letter-spacing:1px;}
-.meta-val{font-family:var(--mono);font-size:var(--font-ui);color:var(--text);}
+.meta-key{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.meta-val{font-family:var(--mono);font-size:var(--font-ui);color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bars{display:flex;flex-direction:column;gap:6px;margin-top:var(--gap-inner);flex-shrink:0;}
 .bar-row{display:flex;align-items:center;gap:8px;}
 .bar-lbl{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);width:26px;text-align:right;}
@@ -170,14 +170,14 @@ html, body {
 .bar-pct{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);width:28px;}
 .panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb,.panel-proc{display:flex;flex-direction:column;}
 .panel-content{flex:1;overflow:hidden;min-height:0;}
-canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin-top:var(--gap-inner-sm);}
+canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--spark-h);display:block;margin-top:var(--gap-inner-sm);}
 
 /* NULL state */
 .null-val{color:var(--dim) !important;}
 
 /* CPU */
 .panel-cpu{--c:var(--accent);}
-.amd-badge-cpu{position:absolute;top:16px;right:16px;width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
+.amd-badge-cpu{position:absolute;top:var(--panel-pad-y);right:var(--panel-pad-x);width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
 .panel-cpu #cpuCores{
   max-height:var(--cpu-cores-max-h);
   overflow-y:auto;
@@ -191,8 +191,8 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 
 /* GPU */
 .panel-gpu{--c:var(--amd);}
-.amd-badge{position:absolute;top:16px;right:16px;width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
-.ring-wrap{display:flex;align-items:center;gap:16px;margin-top:var(--gap-inner);}
+.amd-badge{position:absolute;top:var(--panel-pad-y);right:var(--panel-pad-x);width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
+.ring-wrap{display:flex;align-items:center;gap:var(--gap-inner);margin-top:var(--gap-inner);}
 .ring-svg{width:var(--ring-size);height:var(--ring-size);flex-shrink:0;}
 .ring-bg{fill:none;stroke:rgba(255,255,255,.04);stroke-width:7;}
 .ring-fill{fill:none;stroke-width:7;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .7s ease;}
@@ -206,27 +206,27 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 
 /* NET */
 .panel-net{--c:var(--grn);}
-.net-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:var(--gap-inner-sm);}
+.net-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-inner);margin-top:var(--gap-inner-sm);}
 .net-arrow{font-size:var(--big-unit-size);font-weight:700;margin-right:4px;}
 .net-val{font-family:var(--mono);font-size:var(--net-val-size);color:#fff;}
 .net-unit{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);}
 
 /* DISK */
 .panel-disk{--c:var(--pur);}
-.disk-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:var(--gap-inner-sm);}
+.disk-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-inner);margin-top:var(--gap-inner-sm);}
 .disk-key{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);}
 .disk-val{font-family:var(--mono);font-size:var(--disk-val-size);color:#fff;}
 .disk-unit{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);}
 
 /* WARN overlay when AMD data is missing */
-.warn{font-family:var(--mono);font-size:var(--font-ui);color:var(--amd);opacity:.7;margin-top:4px;}
+.warn{font-family:var(--mono);font-size:var(--font-ui);color:var(--amd);opacity:.7;margin-top:4px;flex-shrink:1;min-height:0;overflow:hidden;}
 
 /* MOTHERBOARD */
 .panel-mb{--c:var(--mb-accent);}
 .mb-scroll{overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--mb-scrollbar) transparent;}
 .mb-scroll::-webkit-scrollbar{width:3px;}
 .mb-scroll::-webkit-scrollbar-thumb{background:var(--mb-scrollbar);border-radius:2px;}
-.mb-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 10px;}
+.mb-three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0 var(--gap-inner-sm);}
 .mb-col-label{font-family:var(--mono);font-size:var(--font-ui);color:var(--mb-accent);letter-spacing:1px;margin-bottom:4px;}
 /* 8ch label column matches the shortLabel() maxLen=8 cap; font-family must be
    var(--mono) on the row itself so the ch unit is computed with the monospace font. */
@@ -235,7 +235,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
 .mb-row-val{font-family:var(--mono);font-size:var(--font-ui);color:#fff;text-align:right;}
 .mb-col-center{display:flex;flex-direction:column;align-items:center;}
 .mb-col-center-inner{width:fit-content;}
-.mb-row-c{display:flex;gap:10px;align-items:center;margin-bottom:2px;}
+.mb-row-c{display:flex;gap:var(--gap-inner-sm);align-items:center;margin-bottom:2px;}
 
 /* PROCESS MONITOR */
 .panel-proc{--c:var(--proc);height:var(--row-proc);}
@@ -294,7 +294,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
           <text class="ring-txt" x="50" y="47" id="cpuRingTxt">--%</text>
           <text class="ring-sub" x="50" y="61">CPU</text>
         </svg>
-        <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+        <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:var(--gap-inner-sm) var(--gap-inner);">
           <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="cpuTemp" style="color:var(--accent)">--°C</div></div>
           <div class="meta"><div class="meta-key">FREQ</div><div class="meta-val" id="cpuFreq">-- GHz</div></div>
           <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="cpuPower">-- W</div></div>
@@ -320,7 +320,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
           <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
           <text class="ring-sub" x="50" y="61">GPU</text>
         </svg>
-        <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+        <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:var(--gap-inner-sm) var(--gap-inner);">
           <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
           <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
           <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
@@ -364,7 +364,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
     <div class="panel-content">
       <div class="stat-label">RAM USAGE</div>
       <div><span class="big-num" id="ramUsed">--</span><span class="big-unit" id="ramTotal"> / -- GB</span></div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px 14px;margin-top:10px;">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap-inner-sm) var(--gap-inner);margin-top:var(--gap-inner-sm);">
         <div class="meta"><div class="meta-key">FREE</div><div class="meta-val" id="ramFree">-- GB</div></div>
         <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="ramTemp">--°C</div></div>
         <div class="meta"><div class="meta-key">SPEED</div><div class="meta-val" id="ramSpeed">--</div></div>
@@ -430,7 +430,7 @@ canvas.spark{flex-shrink:0;width:100%;height:var(--spark-h);display:block;margin
     <div class="panel-content">
       <div class="stat-label">MOTHERBOARD</div>
       <div style="font-family:var(--mono);font-size:var(--font-ui);color:var(--stat-label);letter-spacing:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbBoard"></div>
-      <div style="font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbChip"></div>
+      <div style="font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:var(--gap-inner);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mbChip"></div>
       <div class="mb-scroll">
         <div class="mb-three-col">
           <div>
