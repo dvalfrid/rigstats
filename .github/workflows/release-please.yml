@@ -48,7 +48,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Update Cargo.lock for rigstats
-        run: cargo update --manifest-path src-tauri/Cargo.toml --package rigstats
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
 
       - name: Commit updated Cargo.lock
         run: |
