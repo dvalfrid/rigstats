@@ -12,6 +12,12 @@
 
 use crate::autostart::{is_autostart_registered_with_log, register_autostart, unregister_autostart};
 use crate::debug::{append_debug_log, read_debug_log_tail};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Set to `true` by `notify_app_ready` when the frontend has finished
+/// initialising. The startup watchdog in `main.rs` uses this flag to detect
+/// WebView2 failures (common at Windows boot) and reload the webview.
+pub static APP_READY: AtomicBool = AtomicBool::new(false);
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
 use crate::lhm_process::{
@@ -35,6 +41,17 @@ const LICENSE_NAME: &str = "MIT";
 const LHM_VERSION: &str = "v0.9.6";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
+
+// --- Startup readiness -----------------------------------------------------
+
+/// Called by the renderer once the frontend has successfully initialised.
+/// Clears the startup watchdog — if this is never called (e.g. because
+/// WebView2 failed to load the page at boot), the watchdog will reload
+/// the webview after its timeout to recover automatically.
+#[tauri::command]
+pub fn notify_app_ready() {
+  APP_READY.store(true, Ordering::Relaxed);
+}
 
 // --- About -----------------------------------------------------------------
 

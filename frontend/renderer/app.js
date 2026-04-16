@@ -510,6 +510,13 @@ function start() {
   updateCpuModel();
   updateGpuModel();
 
+  if (IS_DESKTOP) {
+    // Signal the startup watchdog that the frontend initialised successfully.
+    // If this call never reaches the backend (e.g. WebView2 failed to load the
+    // page during Windows boot) the watchdog reloads the webview automatically.
+    backend.invoke('notify-app-ready').catch(() => {});
+  }
+
   tick();
   setInterval(tick, 1000);
 }

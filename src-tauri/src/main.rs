@@ -21,9 +21,9 @@ mod windows;
 
 use commands::{
   broadcast_stats, close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
-  get_system_brand, get_system_name, log_frontend_error, open_settings_window, preview_opacity, preview_profile,
-  preview_theme, preview_visible_panels, save_panel_positions, save_settings, set_main_height, start_window_drag,
-  test_temp_alert, toggle_floating_mode,
+  get_system_brand, get_system_name, log_frontend_error, notify_app_ready, open_settings_window, preview_opacity,
+  preview_profile, preview_theme, preview_visible_panels, save_panel_positions, save_settings, set_main_height,
+  start_window_drag, test_temp_alert, toggle_floating_mode,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -448,6 +448,27 @@ fn main() {
         }
       }
 
+      // Startup watchdog: if the frontend hasn't called notify-app-ready within
+      // 12 seconds the WebView2 component likely failed to initialise — a known
+      // Windows-boot race where the GPU process or Edge runtime isn't ready when
+      // RigStats auto-starts. Reload the main webview to recover automatically
+      // so the user doesn't have to restart the application manually.
+      {
+        let watchdog_handle = app_handle.clone();
+        tauri::async_runtime::spawn(async move {
+          tokio::time::sleep(std::time::Duration::from_secs(12)).await;
+          if !commands::APP_READY.load(std::sync::atomic::Ordering::Relaxed) {
+            append_debug_log(
+              &watchdog_handle,
+              "startup watchdog: frontend not ready after 12 s — reloading webview",
+            );
+            if let Some(main) = watchdog_handle.get_webview_window("main") {
+              let _ = main.eval("window.location.reload()");
+            }
+          }
+        });
+      }
+
       // Fallback for cases where installer task did not launch LHM yet.
       ensure_lhm_running(app_handle);
       spawn_wmi_retry(app_handle.clone());
@@ -468,6 +489,7 @@ fn main() {
       Ok(())
     })
     .invoke_handler(tauri::generate_handler![
+      notify_app_ready,
       get_settings,
       get_about_info,
       preview_opacity,
