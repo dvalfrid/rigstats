@@ -184,7 +184,9 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
   GpuData {
     load: find("Load", "GPU Core"),
     temp: find("Temperatures", "GPU Core"),
-    hotspot: find("Temperatures", "GPU Hot Spot"),
+    // "GPU Hot Spot" is present on desktop NVIDIA GPUs; laptop GPUs (e.g. RTX
+    // 5070 Ti Laptop) expose "GPU Memory Junction" instead — use it as fallback.
+    hotspot: find("Temperatures", "GPU Hot Spot").or_else(|| find("Temperatures", "GPU Memory Junction")),
     freq: find("Clocks", "GPU Core"),
     mem_freq: find("Clocks", "GPU Memory"),
     power: find("Powers", "GPU Package"),
