@@ -8,6 +8,24 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.17.0](https://github.com/dvalfrid/rigstats/compare/v1.16.0...v1.17.0) (2026-04-16)
+
+
+### Features
+
+* **gpu:** show active GPU when iGPU and dGPU coexist ([c6810ec](https://github.com/dvalfrid/rigstats/commit/c6810ec5cf30ba86396a95f96f317d403cc0120b))
+
+
+### Bug Fixes
+
+* **ci:** use cargo generate-lockfile to sync Cargo.lock after release ([79d2e15](https://github.com/dvalfrid/rigstats/commit/79d2e1577e844808e2e2ea3362af2a3cd2420757))
+* **gpu:** prevent ring clipping when D3D/VDEC bars are visible ([08f1497](https://github.com/dvalfrid/rigstats/commit/08f1497d865121045371635c91afb0991b6a5647))
+* **layout:** clip procList from bottom and scale ring-wrap gap in floating panels ([2be2923](https://github.com/dvalfrid/rigstats/commit/2be292302de3b5a7b298378926890f7ada262f70))
+* **lhm:** extract temp and power for AMD iGPU (Radeon 890M) ([55173c6](https://github.com/dvalfrid/rigstats/commit/55173c6d988e0809f9f3019ab6bd0b94a912a9bd))
+* **lhm:** fall back to GPU Memory Junction for hotspot on laptop GPUs ([39dbd1a](https://github.com/dvalfrid/rigstats/commit/39dbd1a69283dc35df33e059d3fa18d5bfbff785))
+* **lhm:** show AMD SVI2 voltage rails in motherboard panel on laptops ([1bee073](https://github.com/dvalfrid/rigstats/commit/1bee073fc8f694098a07a732c74acb12da2e68b0))
+* **startup:** reload webview when WebView2 fails to init at Windows boot ([0ce4bb6](https://github.com/dvalfrid/rigstats/commit/0ce4bb64a0f9e385d83e699398fa8149cc1c9e67))
+
 ## [1.16.0](https://github.com/dvalfrid/rigstats/compare/v1.15.0...v1.16.0) (2026-04-14)
 
 
