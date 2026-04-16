@@ -158,7 +158,7 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 .warn { font-family: var(--mono); font-size: var(--font-ui); color: var(--amd); opacity: .7; margin-top: 4px; }
 
 /* Ring */
-.ring-wrap { display: flex; align-items: center; gap: 16px; margin-top: var(--gap-inner); }
+.ring-wrap { display: flex; align-items: center; gap: var(--gap-inner); margin-top: var(--gap-inner); }
 .ring-svg { width: var(--ring-size); height: var(--ring-size); flex-shrink: 0; }
 .ring-bg { fill: none; stroke: rgba(255,255,255,.04); stroke-width: 7; }
 .ring-fill { fill: none; stroke-width: 7; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; transition: stroke-dashoffset .7s ease; }
@@ -236,6 +236,9 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 
 /* PROCESS */
 .panel-proc { --c: var(--proc); display: flex; flex-direction: column; }
+.panel-proc > .stat-label,
+.panel-proc > .proc-header { flex-shrink: 0; }
+.panel-proc > #procList { flex: 1; overflow: hidden; min-height: 0; }
 .proc-header { display: grid; grid-template-columns: 1fr 4.5ch 5.5ch; gap: 0 8px; font-family: var(--mono); font-size: var(--font-sub); color: var(--text-muted); letter-spacing: 1px; margin-bottom: 4px; }
 .proc-header-cpu { text-align: right; }
 .proc-header-ram { text-align: right; }

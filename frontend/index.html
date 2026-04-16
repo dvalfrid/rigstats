@@ -243,6 +243,8 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 
 /* PROCESS MONITOR */
 .panel-proc{--c:var(--proc);height:var(--row-proc);}
+.panel-proc>.stat-label,.panel-proc>.proc-header{flex-shrink:0;}
+.panel-proc>#procList{flex:1;overflow:hidden;min-height:0;}
 .proc-header{display:grid;grid-template-columns:1fr 4.5ch 5.5ch;gap:0 8px;font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:4px;}
 .proc-header-cpu{text-align:right;}
 .proc-header-ram{text-align:right;}
