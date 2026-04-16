@@ -345,8 +345,11 @@ struct MbData {
 
 /// Extracts Super I/O motherboard metrics (fans, temps, voltages, chip name).
 ///
-/// All sensors are identified by the /lpc/ SensorId prefix, which is chip-agnostic
-/// and covers NCT, ITE, Winbond, and other Super I/O variants.
+/// Primary source: /lpc/ SensorId prefix (chip-agnostic, covers NCT, ITE, Winbond, etc.).
+/// Voltage fallback: AMD CPU SVI2 rails (/amdcpu/ prefix, parent "Voltages") when no LPC
+/// chip is present — laptops use an embedded controller instead of a discrete Super I/O.
+/// Per-core VID readouts ("… VID") are excluded as they are switching targets, not supply
+/// rail measurements.
 fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
   // Fans: RPM > 0 required (0 is the LHM sentinel for disconnected headers), sorted descending.
   let mut fans: Vec<(String, f64)> = nodes
@@ -364,13 +367,29 @@ fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
     .collect();
 
   // Voltages: named rails only — generic "Voltage #N" entries are unmapped hardware pins.
-  let voltages: Vec<(String, f64)> = nodes
+  let mut voltages: Vec<(String, f64)> = nodes
     .iter()
     .filter(|n| {
       n.sensor_id.starts_with("/lpc/") && n.sensor_id.contains("/voltage/") && !n.text.starts_with("Voltage #")
     })
     .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.1)?)))
     .collect();
+
+  // No LPC chip present (laptop EC) — fall back to AMD CPU SVI2 voltage rails.
+  // Per-core VID readouts (e.g. "Core #1 VID") are switching targets, not supply rail
+  // measurements — exclude them to avoid flooding the panel with 12+ nearly identical rows.
+  if voltages.is_empty() {
+    voltages = nodes
+      .iter()
+      .filter(|n| {
+        n.sensor_id.starts_with("/amdcpu/")
+          && n.sensor_id.contains("/voltage/")
+          && !n.text.contains("VID")
+          && !n.text.starts_with("Voltage #")
+      })
+      .filter_map(|n| Some((n.text.clone(), parse_val(&n.value).filter(|&v| v > 0.1)?)))
+      .collect();
+  }
 
   // Chip name is the grandparent of any /lpc/ sensor (the Super I/O device node).
   let chip = nodes
@@ -1218,6 +1237,74 @@ mod tests {
       Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
       "dGPU (most VRAM) must win when both are idle"
     );
+  }
+
+  // --- AMD CPU voltage fallback for laptops without a Super I/O chip -----------
+
+  #[test]
+  fn parse_lhm_mb_voltages_fall_back_to_amd_svi2_when_no_lpc() {
+    // Laptops with AMD CPUs expose Vcore/VSoC via AMD SMU SVI2 sensors.
+    // When no /lpc/ sensors are present, those should populate mb_voltages.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "AMD Ryzen AI 9 HX 370", "Value": "",
+        "Children": [{
+          "Text": "Voltages", "Value": "",
+          "Children": [
+            { "Text": "Core (SVI2 TFN)", "Value": "1,550 V", "SensorId": "/amdcpu/0/voltage/0", "Children": [] },
+            { "Text": "SoC (SVI2 TFN)",  "Value": "0,950 V", "SensorId": "/amdcpu/0/voltage/1", "Children": [] },
+            { "Text": "Core #1 VID",      "Value": "0,794 V", "SensorId": "/amdcpu/0/voltage/2", "Children": [] },
+            { "Text": "Core #2 VID",      "Value": "0,794 V", "SensorId": "/amdcpu/0/voltage/3", "Children": [] }
+          ]
+        }]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(
+      result.mb_voltages.len(),
+      2,
+      "only named SVI2 rails, no per-core VID entries"
+    );
+    let names: Vec<&str> = result.mb_voltages.iter().map(|(n, _)| n.as_str()).collect();
+    assert!(names.contains(&"Core (SVI2 TFN)"));
+    assert!(names.contains(&"SoC (SVI2 TFN)"));
+    assert!(!names.iter().any(|n| n.contains("VID")), "VID entries must be excluded");
+    // No fans or temps — EC-controlled on laptops.
+    assert!(result.mb_fans.is_empty());
+    assert!(result.mb_temps.is_empty());
+    assert_eq!(result.mb_chip, None);
+  }
+
+  #[test]
+  fn parse_lhm_mb_lpc_voltages_take_priority_over_amd_fallback() {
+    // When both LPC and AMD CPU sensors are present, LPC must win (desktop case).
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [
+        {
+          "Text": "Nuvoton NCT6799D", "Value": "",
+          "Children": [{
+            "Text": "Voltages", "Value": "",
+            "Children": [
+              { "Text": "Vcore", "Value": "1,200 V", "SensorId": "/lpc/nct6799d/0/voltage/0", "Children": [] }
+            ]
+          }]
+        },
+        {
+          "Text": "AMD Ryzen 9 7950X", "Value": "",
+          "Children": [{
+            "Text": "Voltages", "Value": "",
+            "Children": [
+              { "Text": "Core (SVI2 TFN)", "Value": "1,350 V", "SensorId": "/amdcpu/0/voltage/0", "Children": [] }
+            ]
+          }]
+        }
+      ]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.mb_voltages.len(), 1, "LPC voltage only");
+    assert_eq!(result.mb_voltages[0].0, "Vcore", "LPC sensor must win");
   }
 }
 
