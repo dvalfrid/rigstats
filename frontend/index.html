@@ -193,6 +193,10 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 .panel-gpu{--c:var(--amd);}
 .amd-badge{position:absolute;top:var(--panel-pad-y);right:var(--panel-pad-x);width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
 .ring-wrap{display:flex;align-items:center;gap:var(--gap-inner);margin-top:var(--gap-inner);}
+/* Ring-wrap must not be clipped when D3D/VDEC bars are visible — those bars
+   are flex-shrink:0 siblings that reduce available height and would otherwise
+   clip the ring through panel-content's overflow:hidden. */
+.panel-gpu>.stat-label,.panel-gpu>.ring-wrap{flex-shrink:0;}
 .ring-svg{width:var(--ring-size);height:var(--ring-size);flex-shrink:0;}
 .ring-bg{fill:none;stroke:rgba(255,255,255,.04);stroke-width:7;}
 .ring-fill{fill:none;stroke-width:7;stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset .7s ease;}
@@ -309,25 +313,23 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
   <div class="panel panel-gpu" data-panel="gpu">
     <div class="tl"></div><div class="br"></div>
     <img id="gpuVendorBadge" class="amd-badge" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="GPU Vendor Badge">
-    <div class="panel-content">
-      <div class="stat-label">GPU LOAD</div>
-      <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="gpuModel">--</div>
-      <div class="ring-wrap">
-        <svg class="ring-svg" viewBox="0 0 100 100">
-          <circle class="ring-bg" cx="50" cy="50" r="42"/>
-          <circle class="ring-fill" id="gpuRing" cx="50" cy="50" r="42"
-            stroke="var(--amd)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
-          <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
-          <text class="ring-sub" x="50" y="61">GPU</text>
-        </svg>
-        <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:var(--gap-inner-sm) var(--gap-inner);">
-          <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
-          <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
-          <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
-          <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
-          <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
-          <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
-        </div>
+    <div class="stat-label">GPU LOAD</div>
+    <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;" id="gpuModel">--</div>
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-fill" id="gpuRing" cx="50" cy="50" r="42"
+          stroke="var(--amd)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+        <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
+        <text class="ring-sub" x="50" y="61">GPU</text>
+      </svg>
+      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:var(--gap-inner-sm) var(--gap-inner);">
+        <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
+        <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
+        <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
+        <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
+        <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
       </div>
     </div>
     <div class="bars">
@@ -341,7 +343,7 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
         <div class="bar-track"><div class="bar-fill" id="vramBar" style="width:0%;background:rgba(255,58,31,.5)"></div></div>
         <div class="bar-pct" id="vramBarPct">--%</div>
       </div>
-      <span id="gpuVram" style="display:none"></span>
+      <span id="gpuVram" style="display:none" aria-hidden="true"></span>
       <div class="bar-row" id="gpuD3dRow" style="display:none">
         <div class="bar-lbl">3D</div>
         <div class="bar-track"><div class="bar-fill" id="d3d3dBar" style="width:0%"></div></div>
@@ -354,7 +356,6 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
       </div>
     </div>
     <div class="warn" id="gpuWarn" style="flex-shrink:0"></div>
-    <span id="gpuVram" style="display:none" aria-hidden="true"></span>
     <canvas class="spark" id="gpuSpark" height="48"></canvas>
   </div>
 

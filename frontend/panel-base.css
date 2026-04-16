@@ -176,6 +176,10 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 /* GPU */
 .panel-gpu { --c: var(--amd); display: flex; flex-direction: column; }
 .amd-badge { position: absolute; top: 16px; right: 16px; width: var(--badge-size); height: auto; object-fit: contain; opacity: .9; pointer-events: none; z-index: 1; }
+/* Ring-wrap must not be clipped when D3D/VDEC bars are visible — those bars
+   are flex-shrink:0 and take extra space that would otherwise clip the ring. */
+.panel-gpu > .stat-label,
+.panel-gpu > .ring-wrap { flex-shrink: 0; }
 
 /* RAM */
 .panel-ram { --c: var(--ram); display: flex; flex-direction: column; }

@@ -19,25 +19,23 @@ html, body { width: 450px; height: 336px; }
 <div class="panel panel-gpu" data-panel="gpu" style="height:320px">
   <div class="tl"></div><div class="br"></div>
   <img id="gpuVendorBadge" class="amd-badge" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="">
-  <div class="panel-content">
-    <div class="stat-label">GPU LOAD</div>
-    <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" id="gpuModel">--</div>
-    <div class="ring-wrap">
-      <svg class="ring-svg" viewBox="0 0 100 100">
-        <circle class="ring-bg" cx="50" cy="50" r="42"/>
-        <circle class="ring-fill" id="gpuRing" cx="50" cy="50" r="42"
-          stroke="var(--amd)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
-        <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
-        <text class="ring-sub" x="50" y="61">GPU</text>
-      </svg>
-      <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
-        <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
-        <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
-        <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
-        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
-        <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
-        <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
-      </div>
+  <div class="stat-label">GPU LOAD</div>
+  <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;" id="gpuModel">--</div>
+  <div class="ring-wrap">
+    <svg class="ring-svg" viewBox="0 0 100 100">
+      <circle class="ring-bg" cx="50" cy="50" r="42"/>
+      <circle class="ring-fill" id="gpuRing" cx="50" cy="50" r="42"
+        stroke="var(--amd)" stroke-dasharray="263.9" stroke-dashoffset="263.9"/>
+      <text class="ring-txt" x="50" y="47" id="gpuRingTxt">--%</text>
+      <text class="ring-sub" x="50" y="61">GPU</text>
+    </svg>
+    <div style="display:grid;grid-template-columns:0.55fr 1fr 1fr;gap:10px 14px;">
+      <div class="meta"><div class="meta-key">TEMP</div><div class="meta-val" id="gpuTemp" style="color:var(--amd)">--°C</div></div>
+      <div class="meta"><div class="meta-key">HOT SPOT</div><div class="meta-val" id="gpuHotspot" style="color:var(--amd)">--°C</div></div>
+      <div class="meta"><div class="meta-key">CORE CLK</div><div class="meta-val" id="gpuFreq">-- MHz</div></div>
+      <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="gpuPower">-- W</div></div>
+      <div class="meta"><div class="meta-key">MEM CLK</div><div class="meta-val" id="gpuMemFreq">-- MHz</div></div>
+      <div class="meta"><div class="meta-key">FAN</div><div class="meta-val" id="gpuFan">-- RPM</div></div>
     </div>
   </div>
   <div class="bars">
