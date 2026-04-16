@@ -19,6 +19,8 @@ pub struct FlatNode {
 
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct LhmData {
+  /// Device name of the GPU currently selected for display (grandparent in LHM tree).
+  pub gpu_name: Option<String>,
   pub gpu_load: Option<f64>,
   pub gpu_temp: Option<f64>,
   pub gpu_hotspot: Option<f64>,
@@ -128,6 +130,7 @@ fn to_mbs(raw: &str) -> f64 {
 }
 
 struct GpuData {
+  name: Option<String>,
   load: Option<f64>,
   temp: Option<f64>,
   hotspot: Option<f64>,
@@ -143,26 +146,49 @@ struct GpuData {
 
 /// Extracts all GPU metrics from the sensor list.
 ///
-/// Anchors on the "GPU Memory Total" sensor with the highest value to identify
-/// the discrete GPU in iGPU+dGPU configurations, then collects all sensors
-/// sharing the same grandparent (device name).
+/// Collects all GPU candidates (unique grandparents of "GPU Memory Total" sensors),
+/// then picks the one that is currently active:
+///   • Primary: highest "GPU Core" load — shows the iGPU when the dGPU is idle.
+///   • Tiebreak: highest VRAM — selects the dGPU when both report 0 % load.
+///
+/// Intel iGPU + NVIDIA dGPU: Intel reports "D3D Shared Memory Total", not
+/// "GPU Memory Total", so the Intel iGPU is not a candidate and the NVIDIA dGPU
+/// is always shown regardless of load.
 fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
-  // Locate the discrete GPU block by anchoring on the "GPU Memory Total" sensor
-  // with the highest reported value. This handles two distinct multi-GPU cases:
-  //   • Intel iGPU + NVIDIA dGPU: Intel reports "D3D Shared Memory Total", not
-  //     "GPU Memory Total", so the text match alone excludes it.
-  //   • AMD iGPU + AMD dGPU: both report "GPU Memory Total", but the iGPU has
-  //     far less VRAM than the discrete card — picking the maximum selects the dGPU.
-  let gpu_device: Option<String> = nodes
-    .iter()
-    .enumerate()
-    .filter(|(_, n)| n.text == "GPU Memory Total")
-    .max_by(|(_, a), (_, b)| {
-      let av = parse_val(&a.value).unwrap_or(0.0);
-      let bv = parse_val(&b.value).unwrap_or(0.0);
-      av.partial_cmp(&bv).unwrap_or(std::cmp::Ordering::Equal)
-    })
-    .map(|(_, n)| n.grandparent.clone());
+  // Collect all unique GPU device names that expose a "GPU Memory Total" sensor.
+  let mut seen_devices: Vec<String> = Vec::new();
+  for n in nodes.iter().filter(|n| n.text == "GPU Memory Total") {
+    if !n.grandparent.is_empty() && !seen_devices.contains(&n.grandparent) {
+      seen_devices.push(n.grandparent.clone());
+    }
+  }
+
+  let load_for = |dev: &str| -> f64 {
+    nodes
+      .iter()
+      .find(|n| n.grandparent == dev && n.parent == "Load" && n.text == "GPU Core")
+      .and_then(|n| parse_val(&n.value))
+      .unwrap_or(0.0)
+  };
+  let vram_for = |dev: &str| -> f64 {
+    nodes
+      .iter()
+      .find(|n| n.grandparent == dev && n.text == "GPU Memory Total")
+      .and_then(|n| parse_val(&n.value))
+      .unwrap_or(0.0)
+  };
+
+  // Pick the GPU with the highest load; break ties by highest VRAM (dGPU wins when idle).
+  let gpu_device: Option<String> = seen_devices.into_iter().max_by(|a, b| {
+    let la = load_for(a);
+    let lb = load_for(b);
+    match la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal) {
+      std::cmp::Ordering::Equal => vram_for(a)
+        .partial_cmp(&vram_for(b))
+        .unwrap_or(std::cmp::Ordering::Equal),
+      other => other,
+    }
+  });
 
   // Identify the GPU device by the grandparent of the anchor node, then collect
   // all sensors that belong to the same device. A fixed window was fragile: GPUs
@@ -182,6 +208,7 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
   };
 
   GpuData {
+    name: gpu_device.clone(),
     load: find("Load", "GPU Core"),
     temp: find("Temperatures", "GPU Core"),
     // "GPU Hot Spot" is present on desktop NVIDIA GPUs; laptop GPUs (e.g. RTX
@@ -375,6 +402,7 @@ fn parse_lhm(data: &Value) -> LhmData {
   let mb = extract_motherboard(&nodes);
 
   LhmData {
+    gpu_name: gpu.name,
     gpu_load: gpu.load,
     gpu_temp: gpu.temp,
     gpu_hotspot: gpu.hotspot,
@@ -1118,6 +1146,78 @@ mod tests {
     let result = parse_lhm(&data);
     assert_eq!(result.mb_fans.len(), 1, "only /lpc/ fan should be included");
     assert_eq!(result.mb_fans[0].0, "Fan #7");
+  }
+
+  // --- Active GPU selection (iGPU + dGPU) -----------------------------------
+
+  fn igpu_dgpu_tree(igpu_load: &str, dgpu_load: &str) -> serde_json::Value {
+    // AMD 890M iGPU (512 MB VRAM) + NVIDIA RTX 5070 Ti Laptop GPU (8 GB VRAM).
+    json!({
+      "Text": "Root", "Value": "",
+      "Children": [
+        {
+          "Text": "AMD Radeon 890M", "Value": "",
+          "Children": [
+            { "Text": "Load", "Value": "",
+              "Children": [{ "Text": "GPU Core", "Value": igpu_load, "Children": [] }] },
+            { "Text": "Data", "Value": "",
+              "Children": [
+                { "Text": "GPU Memory Total", "Value": "512 MB", "Children": [] },
+                { "Text": "GPU Memory Used",  "Value": "128 MB", "Children": [] }
+              ]
+            }
+          ]
+        },
+        {
+          "Text": "NVIDIA GeForce RTX 5070 Ti Laptop GPU", "Value": "",
+          "Children": [
+            { "Text": "Load", "Value": "",
+              "Children": [{ "Text": "GPU Core", "Value": dgpu_load, "Children": [] }] },
+            { "Text": "Data", "Value": "",
+              "Children": [
+                { "Text": "GPU Memory Total", "Value": "8192 MB", "Children": [] },
+                { "Text": "GPU Memory Used",  "Value": "1024 MB", "Children": [] }
+              ]
+            }
+          ]
+        }
+      ]
+    })
+  }
+
+  #[test]
+  fn extract_gpu_picks_igpu_when_dgpu_idle() {
+    // dGPU at 0 %, iGPU at 11 % — iGPU must win.
+    let result = parse_lhm(&igpu_dgpu_tree("11 %", "0 %"));
+    assert_eq!(
+      result.gpu_name.as_deref(),
+      Some("AMD Radeon 890M"),
+      "active iGPU must be selected when dGPU is idle"
+    );
+    assert_eq!(result.gpu_load, Some(11.0));
+  }
+
+  #[test]
+  fn extract_gpu_picks_dgpu_when_active() {
+    // dGPU at 60 %, iGPU at 5 % — dGPU must win.
+    let result = parse_lhm(&igpu_dgpu_tree("5 %", "60 %"));
+    assert_eq!(
+      result.gpu_name.as_deref(),
+      Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
+      "active dGPU must be selected"
+    );
+    assert_eq!(result.gpu_load, Some(60.0));
+  }
+
+  #[test]
+  fn extract_gpu_picks_dgpu_by_vram_when_both_idle() {
+    // Both at 0 % — dGPU (most VRAM) must win.
+    let result = parse_lhm(&igpu_dgpu_tree("0 %", "0 %"));
+    assert_eq!(
+      result.gpu_name.as_deref(),
+      Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
+      "dGPU (most VRAM) must win when both are idle"
+    );
   }
 }
 

@@ -22,6 +22,7 @@ pub struct CpuStats {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GpuStats {
+  pub name: Option<String>,
   pub load: Option<f64>,
   pub temp: Option<f64>,
   pub hotspot: Option<f64>,
