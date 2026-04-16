@@ -210,13 +210,15 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
   GpuData {
     name: gpu_device.clone(),
     load: find("Load", "GPU Core"),
-    temp: find("Temperatures", "GPU Core"),
+    // AMD iGPUs (e.g. Radeon 890M) report "GPU VR SoC" instead of "GPU Core" temperature.
+    temp: find("Temperatures", "GPU Core").or_else(|| find("Temperatures", "GPU VR SoC")),
     // "GPU Hot Spot" is present on desktop NVIDIA GPUs; laptop GPUs (e.g. RTX
     // 5070 Ti Laptop) expose "GPU Memory Junction" instead — use it as fallback.
     hotspot: find("Temperatures", "GPU Hot Spot").or_else(|| find("Temperatures", "GPU Memory Junction")),
     freq: find("Clocks", "GPU Core"),
     mem_freq: find("Clocks", "GPU Memory"),
-    power: find("Powers", "GPU Package"),
+    // AMD iGPUs expose the total GPU power as "GPU Core" under Powers rather than "GPU Package".
+    power: find("Powers", "GPU Package").or_else(|| find("Powers", "GPU Core")),
     fan: gpu_block
       .iter()
       .find(|n| n.parent == "Fans" && n.text.starts_with("GPU Fan"))
@@ -1214,6 +1216,44 @@ mod tests {
       "active iGPU must be selected when dGPU is idle"
     );
     assert_eq!(result.gpu_load, Some(11.0));
+  }
+
+  #[test]
+  fn extract_gpu_amd_igpu_temp_and_power_sensors() {
+    // AMD Radeon 890M exposes "GPU VR SoC" for temperature and "GPU Core" under
+    // Powers — different names from discrete NVIDIA/AMD GPUs.
+    let data = json!({
+      "Text": "Root", "Value": "",
+      "Children": [{
+        "Text": "AMD Radeon(TM) 890M Graphics", "Value": "",
+        "Children": [
+          { "Text": "Temperatures", "Value": "",
+            "Children": [{ "Text": "GPU VR SoC", "Value": "51 °C", "Children": [] }] },
+          { "Text": "Powers", "Value": "",
+            "Children": [{ "Text": "GPU Core", "Value": "2 W", "Children": [] }] },
+          { "Text": "Load", "Value": "",
+            "Children": [{ "Text": "GPU Core", "Value": "11 %", "Children": [] }] },
+          { "Text": "Clocks", "Value": "",
+            "Children": [
+              { "Text": "GPU Core",   "Value": "1343 MHz", "Children": [] },
+              { "Text": "GPU Memory", "Value": "1000 MHz", "Children": [] }
+            ]
+          },
+          { "Text": "Data", "Value": "",
+            "Children": [
+              { "Text": "GPU Memory Used",  "Value": "319 MB", "Children": [] },
+              { "Text": "GPU Memory Total", "Value": "512 MB", "Children": [] }
+            ]
+          }
+        ]
+      }]
+    });
+    let result = parse_lhm(&data);
+    assert_eq!(result.gpu_temp, Some(51.0), "GPU VR SoC must be used as temp");
+    assert_eq!(result.gpu_power, Some(2.0), "GPU Core under Powers must be used");
+    assert_eq!(result.gpu_load, Some(11.0));
+    assert_eq!(result.gpu_freq, Some(1343.0));
+    assert_eq!(result.gpu_mem_freq, Some(1000.0));
   }
 
   #[test]
