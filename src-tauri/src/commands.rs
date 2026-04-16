@@ -927,6 +927,7 @@ pub async fn get_stats(
       power: lhm.as_ref().and_then(|l| l.cpu_power),
     },
     gpu: GpuStats {
+      name: lhm.as_ref().and_then(|l| l.gpu_name.clone()),
       load: lhm.as_ref().and_then(|l| l.gpu_load),
       temp: lhm.as_ref().and_then(|l| l.gpu_temp),
       hotspot: lhm.as_ref().and_then(|l| l.gpu_hotspot),

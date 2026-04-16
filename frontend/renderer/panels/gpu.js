@@ -2,8 +2,25 @@
 // Updates ring gauge, bars, and thermals from normalized backend fields.
 
 import { resolveTempColor } from '../tempColors.js';
+import { resolveVendorBadge } from '../vendorBranding.js';
 
 function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
+  if (gpu.name) {
+    const nameEl = document.getElementById('gpuModel');
+    if (nameEl) nameEl.textContent = gpu.name;
+    const badgeEl = document.getElementById('gpuVendorBadge');
+    if (badgeEl) {
+      const badge = resolveVendorBadge(gpu.name, 'GPU');
+      if (badge) {
+        badgeEl.src = badge.src;
+        badgeEl.alt = badge.alt;
+        badgeEl.style.display = '';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+  }
+
   const gpuLoad = gpu.load ?? null;
   const circumference = 263.9;
   const gpuTempEl = document.getElementById('gpuTemp');
