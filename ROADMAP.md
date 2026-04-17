@@ -266,11 +266,11 @@ corner positioning and `set_ignore_cursor_events` cover that use case as a subse
 
 **Architecture:**
 
-Settings gains two new fields: `floating_mode: bool` and
-`panel_layouts: HashMap<String, PanelLayout>` where
+Settings gains three new fields: `floating_mode: bool`,
+`floating_panel_scale: f64`, and `panel_layouts: HashMap<String, PanelLayout>` where
 `PanelLayout { x: i32, y: i32 }` stores the last known position for each panel
-key. Both fields use `#[serde(default)]` so existing settings files load cleanly
-without migration logic.
+key. All three fields use `#[serde(default)]` so existing settings files load
+cleanly without migration logic.
 
 Each panel is a separate Tauri window created via `WebviewWindowBuilder` in
 `windows.rs`, with `.decorations(false)`, `.always_on_top(true)`, and
@@ -278,6 +278,11 @@ Each panel is a separate Tauri window created via `WebviewWindowBuilder` in
 `"panel-gpu"`, etc. The DWM invisible resize border compensation already
 implemented in `pick_target_monitor()` in `monitor.rs` applies here too — saved
 positions are adjusted by the inset before calling `set_position`.
+
+To harden mode transitions, panel sync is scheduled through
+`spawn_sync_floating_panels` (main-thread dispatch + queue coalescing) and
+`close_floating_panels` now hides windows instead of destroying them. This avoids
+WebView2 create/destroy churn during rapid toggles and keeps transitions stable.
 
 Each panel loads its own HTML file (`panel-cpu.html`, `panel-gpu.html`, etc.)
 containing only that panel's DOM structure — a copy of the relevant section from
@@ -305,12 +310,14 @@ Settings" and "Close panel".
 
 - `PanelLayout { x: i32, y: i32 }` struct + `Settings.floating_mode` +
   `Settings.panel_layouts` in `settings.rs`
-- `launch_floating_panels(app, state)` and `close_floating_panels(app)` in
-  `windows.rs` — opens/closes one window per entry in `visible_panels`
+- `launch_floating_panels(app, state)`, `spawn_sync_floating_panels(app)`, and
+  `close_floating_panels(app)` in `windows.rs` — opens/reconciles/hides windows
+  per entry in `visible_panels`
 - New Tauri commands: `toggle_floating_mode`, `broadcast_stats`,
-  `save_panel_positions`
+  `save_panel_positions`, `preview_floating_scale`
 - One HTML file per panel (7–9 new files) + `renderer/panel-host.js`
-- Settings window: "Floating mode" toggle in a new Layout card
+- Settings window: "Floating mode" toggle and "Panel Scale" slider in a new
+  Layout card
 - Tray menu: "Floating mode" shortcut to toggle without opening Settings
 
 ---

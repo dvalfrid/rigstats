@@ -169,7 +169,8 @@ Floating mode commands:
 
 | Command | Purpose |
 | --- | --- |
-| `toggle_floating_mode(enabled)` | Persists the setting, hides/shows main window, calls `sync_floating_panels` or `close_floating_panels`, emits `apply-floating-mode` |
+| `toggle_floating_mode(enabled)` | Persists the setting, emits `apply-floating-mode`, and routes window transitions through `spawn_sync_floating_panels` / `close_floating_panels` with a mutex guard to serialize rapid toggles |
+| `preview_floating_scale(scale)` | Applies floating panel scale preview (`0.4..=1.0`) and re-syncs floating windows when floating mode is active |
 | `broadcast_stats(stats)` | Emits `stats-broadcast` to each open `panel-{key}` window; takes `serde_json::Value` to avoid needing `Deserialize` on `StatsPayload` |
 | `save_panel_positions(positions)` | Merges `HashMap<key, PanelLayout>` into `settings.panel_layouts` and persists |
 | `open_settings_window` | Opens the settings window from a floating panel's context menu |
@@ -264,10 +265,12 @@ flat fields into the map — then re-persists. The eight legacy flat fields are
 kept as private `#[serde(default, skip_serializing)]` shims so old files can
 be read but are never written back.
 
-Floating panel layout adds two fields — both `#[serde(default)]`, no migration
+Floating panel layout adds three fields — all `#[serde(default)]`, no migration
 needed:
 
 - **`floating_mode: bool`** — whether the app starts in floating mode.
+- **`floating_panel_scale: f64`** — floating panel size multiplier in the
+  range `0.4..=1.0` (sanitized in command handlers before persistence).
 - **`panel_layouts: HashMap<String, PanelLayout>`** — last known `outer_position`
   (`x: i32, y: i32`) per panel key. Positions are saved by `panel-host.js`
   after each move (debounced 500 ms) and re-applied with DWM inset compensation
@@ -284,27 +287,33 @@ Floating panel management:
 
 - **`all_panel_keys()`** — canonical ordered list of the 9 panel keys; exported
   so `commands.rs` can iterate panel windows without duplicating the list.
-- **`panel_base_size(key, dashboard_profile)`** — scales each panel's logical
-  pixel dimensions to match the active profile, keeping floating panels the
-  same physical size as in portrait mode.
+- **`panel_base_size(key, dashboard_profile, user_scale)`** — scales each
+  panel's logical dimensions to match the active profile, then applies the user
+  `floating_panel_scale` multiplier.
 - **`launch_floating_panels(app, state)`** — opens one frameless `always_on_top`
-  `panel-{key}` window per panel. Applies DWM invisible resize border
+  `panel-{key}` window per panel and reconciles already-open windows by
+  resize/show/hide instead of skipping them. Applies DWM invisible resize border
   compensation (`inner_position − outer_position`) to saved positions from
   `settings.panel_layouts`. Panels without a saved position are staggered
-  diagonally. Build failures are logged and skipped; the remaining panels are
-  still created.
+  diagonally. Build failures and panics are logged and skipped; the remaining
+  panels are still created.
 - **`sync_floating_panels(app, state)`** — reconciles open windows with the
   current settings without tearing everything down: hides unwanted panels,
   resizes/shows existing ones, then calls `launch_floating_panels` for any
-  that are missing.
+  that are missing. Main window hide/show is fail-safe: it hides main only when
+  at least one requested floating panel is visible, otherwise it logs and keeps
+  main visible.
+- **`spawn_sync_floating_panels(app)`** — schedules floating sync on the main
+  thread (required by `WebviewWindowBuilder::build`) with queue coalescing so
+  repeated preview/toggle calls do not flood the event loop.
 - **`close_floating_panels(app)`** — hides (not closes) all open panel windows
   for fast mode switching.
 
 `on_window_event` handles `CloseRequested` (hide-to-tray) for the main window
-and re-applies `set_decorations(false)` on every `Moved` event for **all**
-windows. The re-application is necessary because Windows can restore
-`WS_CAPTION`/`WS_THICKFRAME` when a borderless window is dragged between
-monitors with different DPI settings.
+and re-applies `set_decorations(false)` on `Moved` for the main window and
+floating panel windows only. The re-application is necessary because Windows
+can restore `WS_CAPTION`/`WS_THICKFRAME` when a borderless window is dragged
+between monitors with different DPI settings.
 
 #### `updater.rs`
 
@@ -392,6 +401,10 @@ Each panel exports one `update*Panel(stats, ...)` function called from
 - `hiddenPanels` is a `Set` of unchecked keys
 - Drag-to-reorder uses the Pointer Events API with `setPointerCapture` instead
   of the HTML5 Drag API (which shows a prohibition cursor inside WebView2)
+- Floating mode preview toggles are serialized in the renderer to avoid
+  overlapping IPC transitions; the latest requested state is queued
+- Floating panel scale slider previews are sent via `preview-floating-scale`
+  and restored on cancel
 
 #### `updater.js`
 

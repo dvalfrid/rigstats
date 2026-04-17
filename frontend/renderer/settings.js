@@ -7,6 +7,9 @@ const profileSelect = document.getElementById('profileSelect');
 const alwaysOnTopInput = document.getElementById('alwaysOnTopInput');
 const autostartInput = document.getElementById('autostartInput');
 const floatingModeInput = document.getElementById('floatingModeInput');
+const floatingScaleSlider = document.getElementById('floatingScaleSlider');
+const floatingScaleVal = document.getElementById('floatingScaleVal');
+const floatingScaleRow = document.getElementById('floatingScaleRow');
 const panelToggles = document.getElementById('panelToggles');
 const statusEl = document.getElementById('status');
 const btnTestAlert = document.getElementById('btnTestAlert');
@@ -22,6 +25,8 @@ const critDiskTempInput = document.getElementById('critDiskTempInput');
 const notifyOnWarnInput = document.getElementById('notifyOnWarnInput');
 const notifyOnCritInput = document.getElementById('notifyOnCritInput');
 const themeSelect = document.getElementById('themeSelect');
+const modelNameCard = document.getElementById('modelNameCard');
+const opacityCard = document.getElementById('opacityCard');
 
 const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard', 'process'];
 const PANEL_LABELS = {
@@ -43,6 +48,7 @@ let original = {
   alwaysOnTop: false,
   autostartEnabled: false,
   floatingMode: false,
+  floatingPanelScale: 1.0,
   visiblePanels: [...PANEL_KEYS],
   thresholds: { cpu: {}, gpu: {}, ram: {}, disk: {} },
   alertCooldownSecs: 60,
@@ -51,6 +57,9 @@ let original = {
   theme: 'dark-cyan',
 };
 let isSaving = false;
+let isTogglingFloatingMode = false;
+let queuedFloatingMode = null;
+let previewFloatingMode = false;
 
 // Panel ordering state — tracks all panels (visible + hidden) in user-defined order.
 let panelOrder = [...PANEL_KEYS];
@@ -60,6 +69,27 @@ let dragGhost = null;
 let dragOffsetX = 0;
 let previewPanelsTimer = null;
 let dragOffsetY = 0;
+
+function updateFloatingScaleVisibility() {
+  floatingScaleRow.style.display = floatingModeInput.checked ? 'block' : 'none';
+  syncCardHeights();
+}
+
+function syncCardHeights() {
+  const pairs = [
+    [modelNameCard, opacityCard],
+  ];
+
+  for (const [left, right] of pairs) {
+    if (!left || !right) continue;
+    left.style.minHeight = '';
+    right.style.minHeight = '';
+    const target = Math.max(left.offsetHeight, right.offsetHeight);
+    left.style.minHeight = `${target}px`;
+    right.style.minHeight = `${target}px`;
+  }
+}
+
 
 /** Reads a temp input; returns an integer 1–255 or null (blank = disabled). */
 function readTempInput(el) {
@@ -248,6 +278,7 @@ function applySettings(settings) {
     alwaysOnTop: settings.alwaysOnTop ?? false,
     autostartEnabled: settings.autostartEnabled ?? false,
     floatingMode: settings.floatingMode ?? false,
+    floatingPanelScale: settings.floatingPanelScale ?? 1.0,
     visiblePanels: normalizeVisiblePanels(settings.visiblePanels),
     thresholds: {
       cpu:  { warn: t.cpu?.warn  ?? null, crit: t.cpu?.crit  ?? null },
@@ -260,6 +291,7 @@ function applySettings(settings) {
     notifyOnCrit: settings.notifyOnCrit ?? true,
     theme: settings.theme ?? 'dark-cyan',
   };
+  previewFloatingMode = original.floatingMode;
 
   const percentage = Math.round(original.opacity * 100);
   slider.value = percentage;
@@ -269,6 +301,10 @@ function applySettings(settings) {
   alwaysOnTopInput.checked = original.alwaysOnTop;
   autostartInput.checked = original.autostartEnabled;
   floatingModeInput.checked = original.floatingMode;
+  const scalePct = Math.round(original.floatingPanelScale * 100);
+  floatingScaleSlider.value = scalePct;
+  floatingScaleVal.textContent = `${scalePct}%`;
+  updateFloatingScaleVisibility();
   applyVisiblePanelsToForm(original.visiblePanels);
 
   setTempInput(warnCpuTempInput,  original.thresholds.cpu.warn);
@@ -283,6 +319,7 @@ function applySettings(settings) {
   notifyOnWarnInput.checked = original.notifyOnWarn;
   notifyOnCritInput.checked = original.notifyOnCrit;
   themeSelect.value = original.theme;
+  syncCardHeights();
 }
 
 async function loadSettings() {
@@ -312,6 +349,9 @@ async function closeWithRestore() {
   await previewProfile(original.dashboardProfile);
   await previewVisiblePanels(original.visiblePanels);
   await backend.invoke('preview-theme', { theme: original.theme });
+  if (parseFloat(floatingScaleSlider.value) / 100 !== original.floatingPanelScale) {
+    await backend.invoke('preview-floating-scale', { scale: original.floatingPanelScale });
+  }
   await backend.invoke('close-window');
 }
 
@@ -347,14 +387,37 @@ profileSelect.addEventListener('change', async () => {
 });
 
 floatingModeInput.addEventListener('change', async () => {
+  updateFloatingScaleVisibility();
   if (!IS_DESKTOP || isSaving) return;
+
+  queuedFloatingMode = floatingModeInput.checked;
+  if (isTogglingFloatingMode) return;
+
+  isTogglingFloatingMode = true;
+  floatingModeInput.disabled = true;
   try {
-    await backend.invoke('toggle-floating-mode', { enabled: floatingModeInput.checked });
-    setStatus('Previewing floating mode...');
+    while (queuedFloatingMode != null) {
+      const target = queuedFloatingMode;
+      queuedFloatingMode = null;
+      await backend.invoke('toggle-floating-mode', { enabled: target });
+      previewFloatingMode = target;
+      setStatus('');
+    }
   } catch (error) {
     logError('toggle-floating-mode', error);
     setStatus('Could not toggle floating mode preview.', 'status-err');
+    floatingModeInput.checked = previewFloatingMode;
+    updateFloatingScaleVisibility();
+  } finally {
+    isTogglingFloatingMode = false;
+    floatingModeInput.disabled = false;
   }
+});
+
+floatingScaleSlider.addEventListener('input', async () => {
+  const pct = parseInt(floatingScaleSlider.value, 10);
+  floatingScaleVal.textContent = `${pct}%`;
+  if (IS_DESKTOP) await backend.invoke('preview-floating-scale', { scale: pct / 100 });
 });
 
 document.getElementById('btnSave').addEventListener('click', async () => {
@@ -369,6 +432,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const alwaysOnTop = alwaysOnTopInput.checked;
   const autostartEnabled = autostartInput.checked;
   const floatingMode = floatingModeInput.checked;
+  const floatingPanelScale = parseInt(floatingScaleSlider.value, 10) / 100;
   const selectedPanels = getSelectedPanels();
 
   const thresholds = {
@@ -398,6 +462,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
       alwaysOnTop,
       autostartEnabled,
       floatingMode,
+      floatingPanelScale,
       visiblePanels,
       thresholds,
       alertCooldownSecs,
@@ -408,7 +473,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
 
     original = {
       opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled, floatingMode,
-      visiblePanels, thresholds, alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
+      floatingPanelScale, visiblePanels, thresholds, alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
     };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');
@@ -454,3 +519,7 @@ btnTestAlert.addEventListener('click', async () => {
 });
 
 loadSettings();
+
+window.addEventListener('resize', () => {
+  syncCardHeights();
+});

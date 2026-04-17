@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-show-settings-window"
+description = "Enables the show_settings_window command without any pre-configured scope."
+commands.allow = ["show_settings_window"]
+
+[[permission]]
+identifier = "deny-show-settings-window"
+description = "Denies the show_settings_window command without any pre-configured scope."
+commands.deny = ["show_settings_window"]

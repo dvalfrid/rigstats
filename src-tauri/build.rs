@@ -19,6 +19,10 @@ fn main() {
       "get_stats",
       "log_frontend_error",
       "collect_diagnostics",
+      "preview_floating_scale",
+      "hide_settings_window",
+      "show_settings_window",
+      "set_settings_pinned",
     ])),
   )
   .unwrap();

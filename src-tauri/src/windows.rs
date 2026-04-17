@@ -9,13 +9,16 @@ use crate::debug::append_debug_log;
 use crate::monitor::{normalize_visible_panels, profile_dimensions};
 use crate::stats::AppState;
 use std::collections::HashSet;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use tauri::utils::config::Color;
 use tauri::{AppHandle, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 
 /// Last recorded tray icon click position, used to anchor popups.
 static LAST_TRAY_CLICK_X: AtomicI32 = AtomicI32::new(i32::MIN);
 static LAST_TRAY_CLICK_Y: AtomicI32 = AtomicI32::new(i32::MIN);
+// Prevent flooding main-thread window creation with duplicate sync tasks.
+// We only need one queued sync because each run reads the latest settings.
+static FLOATING_SYNC_QUEUED: AtomicBool = AtomicBool::new(false);
 
 pub fn set_last_tray_click_position(x: f64, y: f64) {
   LAST_TRAY_CLICK_X.store(x.round() as i32, Ordering::Relaxed);
@@ -117,7 +120,7 @@ pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
   }
 
   let width = 640.0;
-  let height = 760.0;
+  let height = 860.0;
   let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
 
   let window = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
@@ -307,15 +310,17 @@ fn panel_base_height(key: &str) -> f64 {
   }
 }
 
-fn panel_base_size(key: &str, dashboard_profile: &str) -> (f64, f64) {
+fn panel_base_size(key: &str, dashboard_profile: &str, user_scale: f64) -> (f64, f64) {
   // Match main-dashboard scaling so floating panels keep the same physical size
-  // as in fixed mode for the selected profile.
+  // as in fixed mode for the selected profile, then apply user_scale.
   const BASE_PROFILE_H: f64 = 1920.0;
 
   let (profile_w, profile_h) = profile_dimensions(dashboard_profile);
   let height_scale = profile_h as f64 / BASE_PROFILE_H;
-  let panel_h = (panel_base_height(key) * height_scale).round().max(1.0);
-  (profile_w as f64, panel_h)
+  let scale = user_scale.clamp(0.4, 1.0);
+  let panel_h = (panel_base_height(key) * height_scale * scale).round().max(1.0);
+  let panel_w = (profile_w as f64 * scale).round().max(1.0);
+  (panel_w, panel_h)
 }
 
 pub fn all_panel_keys() -> &'static [&'static str] {
@@ -332,10 +337,10 @@ pub fn all_panel_keys() -> &'static [&'static str] {
   ]
 }
 
-fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &str) {
+fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &str, user_scale: f64) {
   let label = format!("panel-{}", key);
   if let Some(win) = app.get_webview_window(&label) {
-    let (w, h) = panel_base_size(key, dashboard_profile);
+    let (w, h) = panel_base_size(key, dashboard_profile, user_scale);
     let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
     let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
     let _ = win.set_decorations(false);
@@ -348,12 +353,13 @@ fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &
 /// Positions are loaded from `settings.panel_layouts`.  Panels without a saved
 /// position are staggered diagonally so they do not all land on top of each other.
 pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
-  let (visible_panels, panel_layouts, dashboard_profile) = {
+  let (visible_panels, panel_layouts, dashboard_profile, user_scale) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
       normalize_visible_panels(s.visible_panels.clone()),
       s.panel_layouts.clone(),
       s.dashboard_profile.clone(),
+      s.floating_panel_scale,
     )
   };
 
@@ -361,14 +367,23 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 
   for (i, key) in all_panel_keys().iter().enumerate() {
     let label = format!("panel-{}", key);
+    let desired_visible = visible_set.contains(*key);
+    let (w, h) = panel_base_size(key, &dashboard_profile, user_scale);
 
-    // Skip if already open.
-    if app.get_webview_window(&label).is_some() {
+    // If already open, reconcile size/visibility instead of skipping.
+    if let Some(win) = app.get_webview_window(&label) {
+      let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
+      let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
+      let _ = win.set_decorations(false);
+      if desired_visible {
+        let _ = win.show();
+      } else {
+        let _ = win.hide();
+      }
       continue;
     }
 
     let url = format!("panel-{}.html", key);
-    let (w, h) = panel_base_size(key, &dashboard_profile);
 
     // Saved position or staggered default.
     let (saved_x, saved_y) = panel_layouts
@@ -376,7 +391,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
       .map(|p| (p.x, p.y))
       .unwrap_or_else(|| (80 + i as i32 * 24, 80 + i as i32 * 24));
 
-    let win = match WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
       .title(*key)
       .inner_size(w, h)
       .position(saved_x as f64, saved_y as f64)
@@ -386,12 +401,23 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
       .resizable(false)
       .always_on_top(true)
       .skip_taskbar(true)
-      .visible(visible_set.contains(*key))
-      .build()
-    {
-      Ok(w) => w,
-      Err(e) => {
+      .visible(desired_visible);
+
+    // WebView2 can panic instead of returning Err when in a degraded state
+    // (e.g. after the startup watchdog reloads the main webview). Catch the
+    // panic so the process survives and the remaining panels can still open.
+    let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder.build()));
+    let win = match build_result {
+      Ok(Ok(w)) => w,
+      Ok(Err(e)) => {
         append_debug_log(app, &format!("panel window '{}' build failed: {}", label, e));
+        continue;
+      }
+      Err(_) => {
+        append_debug_log(
+          app,
+          &format!("panel window '{}' build panicked (WebView2 degraded)", label),
+        );
         continue;
       }
     };
@@ -416,7 +442,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     }));
 
     let _ = win.set_decorations(false);
-    if visible_set.contains(*key) {
+    if desired_visible {
       let _ = win.show();
     } else {
       let _ = win.hide();
@@ -427,11 +453,23 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 /// Reconciles open floating panel windows with the current settings without
 /// tearing down every panel window on each preview interaction.
 pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
-  let (visible_panels, dashboard_profile) = {
+  // Guard against stale queued sync tasks: if floating mode was disabled
+  // before this sync runs, ensure all panel windows are closed and exit.
+  let floating_enabled = {
+    let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    s.floating_mode
+  };
+  if !floating_enabled {
+    close_floating_panels(app);
+    return;
+  }
+
+  let (visible_panels, dashboard_profile, user_scale) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
       normalize_visible_panels(s.visible_panels.clone()),
       s.dashboard_profile.clone(),
+      s.floating_panel_scale,
     )
   };
 
@@ -449,15 +487,73 @@ pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 
     if app.get_webview_window(&label).is_some() {
       append_debug_log(app, &format!("floating sync: show/resize {label}"));
-      resize_existing_panel_window(app, key, &dashboard_profile);
+      resize_existing_panel_window(app, key, &dashboard_profile, user_scale);
     }
   }
 
   append_debug_log(app, "floating sync: ensure missing windows");
   launch_floating_panels(app, state);
+
+  // Transition safety: only hide the main window after at least one desired
+  // floating panel is actually visible. If panel creation failed (e.g. WebView2
+  // degraded), keep main visible so the app never appears to have crashed.
+  let mut any_visible_panel = false;
+  for key in &desired {
+    let label = format!("panel-{}", key);
+    if let Some(win) = app.get_webview_window(&label) {
+      if win.is_visible().unwrap_or(false) {
+        any_visible_panel = true;
+        break;
+      }
+    }
+  }
+
+  if let Some(main) = app.get_webview_window("main") {
+    if any_visible_panel {
+      let _ = main.hide();
+    } else {
+      append_debug_log(app, "floating sync: no visible panel windows; keeping main visible");
+      let _ = main.show();
+      let _ = main.set_focus();
+    }
+  }
 }
 
-/// Closes all open floating panel windows.
+/// Schedules `sync_floating_panels` on the main event thread and returns
+/// immediately. `WebviewWindowBuilder::build()` must run on the main thread;
+/// calling it from an IPC handler thread blocks until each window is ready,
+/// freezing the JS `await` in the settings window. Fire-and-forget via
+/// `run_on_main_thread` keeps the IPC call responsive.
+pub fn spawn_sync_floating_panels(app: &AppHandle) {
+  if FLOATING_SYNC_QUEUED.swap(true, Ordering::SeqCst) {
+    return;
+  }
+
+  let app2 = app.clone();
+  if let Err(e) = app.run_on_main_thread(move || {
+    FLOATING_SYNC_QUEUED.store(false, Ordering::SeqCst);
+
+    let state = app2.state::<crate::stats::AppState>();
+    // If floating mode was disabled before this closure ran (race between
+    // enable and disable), do nothing — close_floating_panels already ran.
+    let floating = {
+      let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+      s.floating_mode
+    };
+    if !floating {
+      return;
+    }
+    sync_floating_panels(&app2, &state);
+  }) {
+    FLOATING_SYNC_QUEUED.store(false, Ordering::SeqCst);
+    append_debug_log(app, &format!("floating sync: run_on_main_thread failed: {}", e));
+  }
+}
+
+/// Hides all open floating panel windows.
+///
+/// We intentionally keep the webviews alive instead of destroying them to
+/// avoid repeated WebView2 create/destroy churn during rapid mode toggles.
 pub fn close_floating_panels(app: &AppHandle) {
   for key in all_panel_keys() {
     let label = format!("panel-{}", key);
@@ -480,8 +576,9 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
     }
     // Re-apply borderless on every move: Windows can restore WS_CAPTION when a
     // frameless window is dragged between monitors with different DPI settings.
-    // This protection covers both the main window and all floating panel windows.
-    WindowEvent::Moved(_) => {
+    // Only applies to the main window and floating panel windows; settings/about/
+    // status/updater windows have decorations and must keep them.
+    WindowEvent::Moved(_) if win.label() == "main" || win.label().starts_with("panel-") => {
       let _ = win.set_decorations(false);
     }
     _ => {}

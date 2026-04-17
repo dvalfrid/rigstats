@@ -136,6 +136,21 @@ input[type=number].alert-num {
 }
 .panel-item.hidden-panel .panel-item-label { color: var(--text-2); }
 
+.floating-scale-row {
+  display: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+
+.floating-scale-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
 /* Status bar (class names must match setStatus() in settings.js) */
 .status {
   font-size: 11px;
@@ -159,12 +174,12 @@ input[type=number].alert-num {
 
     <!-- Left column: model name, display/window, temperature alerts -->
     <div class="col">
-      <div class="card">
+      <div class="card" id="modelNameCard">
         <div class="section-label">Model Name</div>
         <input type="text" id="modelNameInput" maxlength="40" spellcheck="false" style="width:100%;">
       </div>
 
-      <div class="card">
+      <div class="card" id="displayWindowCard">
         <div class="section-label">Display &amp; Window</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
           <select id="profileSelect">
@@ -202,10 +217,24 @@ input[type=number].alert-num {
             </div>
             <input class="toggle-input" type="checkbox" id="floatingModeInput">
           </label>
+          <div id="floatingScaleRow" class="floating-scale-row">
+            <div class="floating-scale-head">
+              <span style="font-size:12px;color:var(--text-2);">Panel Scale</span>
+              <span class="slider-val" id="floatingScaleVal">100%</span>
+            </div>
+            <div class="slider-row">
+              <input type="range" id="floatingScaleSlider" min="40" max="100" value="100" step="5">
+            </div>
+            <div class="slider-labels">
+              <span>40%</span>
+              <span>100%</span>
+            </div>
+
+          </div>
         </div>
       </div>
 
-      <div class="card" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card" id="alertsCard" style="flex:1;display:flex;flex-direction:column;">
         <div class="section-label">Temperature Alerts</div>
         <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
           <span style="font-size:12px;color:var(--text-2);">Cooldown</span>
@@ -244,7 +273,7 @@ input[type=number].alert-num {
 
     <!-- Right column: opacity, model name, panel order -->
     <div class="col">
-      <div class="card">
+      <div class="card" id="opacityCard">
         <div class="section-label">Opacity</div>
         <div class="slider-row">
           <input type="range" id="slider" min="0" max="100" value="55" step="1">
@@ -256,7 +285,7 @@ input[type=number].alert-num {
         </div>
       </div>
 
-      <div class="card">
+      <div class="card" id="appearanceCard">
         <div class="section-label">Appearance</div>
         <label style="font-size:12px;color:var(--text-2);display:block;margin-bottom:4px;">Theme</label>
         <select id="themeSelect">
@@ -268,7 +297,7 @@ input[type=number].alert-num {
         </select>
       </div>
 
-      <div class="card panels-card">
+      <div class="card panels-card" id="panelsCard">
         <div class="section-label">Panels — drag to reorder</div>
         <div id="panelToggles" class="panel-list"></div>
       </div>

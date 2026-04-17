@@ -18,6 +18,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// initialising. The startup watchdog in `main.rs` uses this flag to detect
 /// WebView2 failures (common at Windows boot) and reload the webview.
 pub static APP_READY: AtomicBool = AtomicBool::new(false);
+static FLOATING_TOGGLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm;
 use crate::lhm_process::{
@@ -191,7 +192,7 @@ pub fn preview_profile(app: tauri::AppHandle, state: tauri::State<AppState>, pro
     settings.floating_mode
   };
   if floating_mode {
-    crate::windows::sync_floating_panels(&app, &state);
+    crate::windows::spawn_sync_floating_panels(&app);
   }
 
   Ok(())
@@ -227,7 +228,7 @@ pub fn preview_visible_panels(
   };
 
   if floating_mode {
-    crate::windows::sync_floating_panels(&app, &state);
+    crate::windows::spawn_sync_floating_panels(&app);
   }
 
   Ok(())
@@ -242,6 +243,13 @@ pub fn set_main_height(app: tauri::AppHandle, width: f64, height: f64) -> Result
     let _ = main.set_decorations(false);
   }
   Ok(())
+}
+
+fn sanitize_floating_panel_scale(scale: f64) -> f64 {
+  if !scale.is_finite() {
+    return 1.0;
+  }
+  scale.clamp(0.4, 1.0)
 }
 
 #[tauri::command]
@@ -267,6 +275,8 @@ pub fn save_settings(
   theme: Option<String>,
   floating_mode: Option<bool>,
   #[allow(non_snake_case)] floatingMode: Option<bool>,
+  floating_panel_scale: Option<f64>,
+  #[allow(non_snake_case)] floatingPanelScale: Option<f64>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   let previous_floating_mode = settings.floating_mode;
@@ -345,6 +355,16 @@ pub fn save_settings(
   if let Some(fm) = floating_mode.or(floatingMode) {
     settings.floating_mode = fm;
   }
+  if let Some(raw_scale) = floating_panel_scale.or(floatingPanelScale) {
+    let sanitized = sanitize_floating_panel_scale(raw_scale);
+    if !raw_scale.is_finite() || (sanitized - raw_scale).abs() > f64::EPSILON {
+      append_debug_log(
+        &app,
+        &format!("settings: floating_panel_scale sanitized from {raw_scale} to {sanitized}"),
+      );
+    }
+    settings.floating_panel_scale = sanitized;
+  }
 
   persist_settings(&app, &settings)?;
 
@@ -374,7 +394,9 @@ pub fn save_settings(
     main
       .emit("apply-model-name", settings.model_name.clone())
       .map_err(|e| e.to_string())?;
-    main.emit("apply-profile", applied_profile).map_err(|e| e.to_string())?;
+    main
+      .emit("apply-profile", applied_profile.clone())
+      .map_err(|e| e.to_string())?;
     main
       .emit("apply-visible-panels", applied_visible_panels)
       .map_err(|e| e.to_string())?;
@@ -395,22 +417,66 @@ pub fn save_settings(
   // If floating mode changed, launch or close the panel windows.
   if new_floating_mode != previous_floating_mode {
     if new_floating_mode {
-      if let Some(main) = app.get_webview_window("main") {
-        let _ = main.hide();
-      }
-      crate::windows::sync_floating_panels(&app, &state);
+      crate::windows::spawn_sync_floating_panels(&app);
     } else {
       crate::windows::close_floating_panels(&app);
       if let Some(main) = app.get_webview_window("main") {
+        let _ = pick_target_monitor(&main, &applied_profile);
         let _ = main.show();
         let _ = main.set_focus();
       }
     }
   } else if new_floating_mode {
     // Floating mode remained enabled and visible panels/profile may have changed.
-    crate::windows::sync_floating_panels(&app, &state);
+    crate::windows::spawn_sync_floating_panels(&app);
   }
 
+  Ok(())
+}
+
+#[tauri::command]
+pub fn preview_floating_scale(app: tauri::AppHandle, state: tauri::State<AppState>, scale: f64) -> Result<(), String> {
+  let sanitized = sanitize_floating_panel_scale(scale);
+  if !scale.is_finite() || (sanitized - scale).abs() > f64::EPSILON {
+    append_debug_log(
+      &app,
+      &format!("preview-floating-scale: sanitized from {scale} to {sanitized}"),
+    );
+  }
+
+  let floating_mode = {
+    let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    settings.floating_panel_scale = sanitized;
+    settings.floating_mode
+  };
+  if floating_mode {
+    crate::windows::spawn_sync_floating_panels(&app);
+  }
+  Ok(())
+}
+
+#[tauri::command]
+pub fn set_settings_pinned(app: tauri::AppHandle, pinned: bool) -> Result<(), String> {
+  if let Some(w) = app.get_webview_window("settings") {
+    w.set_always_on_top(pinned).map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+#[tauri::command]
+pub fn hide_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(w) = app.get_webview_window("settings") {
+    w.hide().map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
+#[tauri::command]
+pub fn show_settings_window(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(w) = app.get_webview_window("settings") {
+    w.show().map_err(|e| e.to_string())?;
+    let _ = w.set_focus();
+  }
   Ok(())
 }
 
@@ -1045,29 +1111,42 @@ pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
 /// portrait window is shown again.
 #[tauri::command]
 pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>, enabled: bool) -> Result<(), String> {
+  let _toggle_guard = FLOATING_TOGGLE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+  append_debug_log(&app, &format!("floating mode toggle requested: enabled={enabled}"));
+
+  let applied_visible_panels;
   {
     let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     s.floating_mode = enabled;
     // Self-heal older or malformed settings where visible_panels may be empty.
     s.visible_panels = normalize_visible_panels(s.visible_panels.clone());
+    applied_visible_panels = s.visible_panels.clone();
     persist_settings(&app, &s)?;
-  }
-  if enabled {
-    if let Some(main) = app.get_webview_window("main") {
-      let _ = main.hide();
-    }
-    crate::windows::sync_floating_panels(&app, &state);
-  } else {
-    crate::windows::close_floating_panels(&app);
-    if let Some(main) = app.get_webview_window("main") {
-      let _ = main.show();
-      let _ = main.set_focus();
-    }
   }
   // Notify the main window JS so it updates floatingMode and starts/stops broadcasting.
   if let Some(main) = app.get_webview_window("main") {
     let _ = main.emit("apply-floating-mode", enabled);
+    if !enabled {
+      // Force a layout refresh when returning to fixed mode so the main window
+      // shrinks/expands to the currently visible panel set immediately.
+      let _ = main.emit("apply-visible-panels", applied_visible_panels);
+    }
   }
+  if enabled {
+    crate::windows::spawn_sync_floating_panels(&app);
+  } else {
+    let profile = {
+      let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+      s.dashboard_profile.clone()
+    };
+    crate::windows::close_floating_panels(&app);
+    if let Some(main) = app.get_webview_window("main") {
+      let _ = pick_target_monitor(&main, &profile);
+      let _ = main.show();
+      let _ = main.set_focus();
+    }
+  }
+  append_debug_log(&app, &format!("floating mode toggle applied: enabled={enabled}"));
   Ok(())
 }
 
@@ -1142,6 +1221,22 @@ mod stats_helpers_tests {
     let disk_temps = vec![("Crucial P3 Plus".to_string(), 41.0)];
     assert_eq!(lhm_temp_for_model("", &disk_temps), None);
     assert_eq!(lhm_temp_for_model("Some Other Drive", &disk_temps), None);
+  }
+
+  #[test]
+  fn sanitize_floating_panel_scale_clamps_to_supported_range() {
+    assert_eq!(sanitize_floating_panel_scale(0.1), 0.4);
+    assert_eq!(sanitize_floating_panel_scale(0.4), 0.4);
+    assert_eq!(sanitize_floating_panel_scale(0.73), 0.73);
+    assert_eq!(sanitize_floating_panel_scale(1.0), 1.0);
+    assert_eq!(sanitize_floating_panel_scale(3.0), 1.0);
+  }
+
+  #[test]
+  fn sanitize_floating_panel_scale_rejects_non_finite_values() {
+    assert_eq!(sanitize_floating_panel_scale(f64::NAN), 1.0);
+    assert_eq!(sanitize_floating_panel_scale(f64::INFINITY), 1.0);
+    assert_eq!(sanitize_floating_panel_scale(f64::NEG_INFINITY), 1.0);
   }
 
   #[test]
