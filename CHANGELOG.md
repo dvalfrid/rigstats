@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.18.0](https://github.com/dvalfrid/rigstats/compare/v1.17.0...v1.18.0) (2026-04-17)
+
+
+### Features
+
+* **floating:** add floating panel scale setting with live preview ([8305caf](https://github.com/dvalfrid/rigstats/commit/8305cafb20be2d68bc99533aaa02fb193e6eb42b))
+
 ## [1.17.0](https://github.com/dvalfrid/rigstats/compare/v1.16.0...v1.17.0) (2026-04-16)
 
 
