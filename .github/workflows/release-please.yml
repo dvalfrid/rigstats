@@ -32,32 +32,6 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  sync-cargo-lock:
-    name: Sync Cargo.lock version
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Update Cargo.lock for rigstats
-        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
-
-      - name: Commit updated Cargo.lock
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add src-tauri/Cargo.lock
-          git diff --cached --quiet || git commit -m "chore: sync Cargo.lock to ${{ needs.release-please.outputs.tag_name }}"
-          git push
-
   trigger-build:
     name: Trigger Release Build
     needs: release-please
