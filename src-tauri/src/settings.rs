@@ -108,6 +108,9 @@ pub struct Settings {
   /// Open each visible panel as its own frameless window instead of one portrait window.
   #[serde(default)]
   pub floating_mode: bool,
+  /// Scale factor for floating panel windows in the range [0.4, 1.0].
+  #[serde(default = "default_floating_panel_scale")]
+  pub floating_panel_scale: f64,
   /// Last known screen position for each floating panel, keyed by panel key.
   #[serde(default)]
   pub panel_layouts: HashMap<String, PanelLayout>,
@@ -145,6 +148,10 @@ fn default_alert_cooldown_secs() -> u64 {
 
 fn default_true() -> bool {
   true
+}
+
+fn default_floating_panel_scale() -> f64 {
+  1.0
 }
 
 fn default_theme() -> String {
@@ -191,6 +198,7 @@ impl Default for Settings {
       notify_on_crit: true,
       theme: default_theme(),
       floating_mode: false,
+      floating_panel_scale: default_floating_panel_scale(),
       panel_layouts: HashMap::new(),
       settings_version: 1, // New installs start at current version — no migration needed.
       warning_cpu_temp: None,

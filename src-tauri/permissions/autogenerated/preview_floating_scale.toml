@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-floating-scale"
+description = "Enables the preview_floating_scale command without any pre-configured scope."
+commands.allow = ["preview_floating_scale"]
+
+[[permission]]
+identifier = "deny-preview-floating-scale"
+description = "Denies the preview_floating_scale command without any pre-configured scope."
+commands.deny = ["preview_floating_scale"]

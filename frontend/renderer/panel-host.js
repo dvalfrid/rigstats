@@ -324,6 +324,9 @@ async function start() {
     });
   }
 
+  if (panelKey === 'cpu') updateCpuModel();
+  if (panelKey === 'gpu') updateGpuModel();
+
   // Listen for settings change events.
   const unlisteners = await Promise.all([
     backend.on('apply-opacity', (_e, value) => applyOpacity(value)),

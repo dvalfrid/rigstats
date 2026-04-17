@@ -21,9 +21,10 @@ mod windows;
 
 use commands::{
   broadcast_stats, close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
-  get_system_brand, get_system_name, log_frontend_error, notify_app_ready, open_settings_window, preview_opacity,
-  preview_profile, preview_theme, preview_visible_panels, save_panel_positions, save_settings, set_main_height,
-  start_window_drag, test_temp_alert, toggle_floating_mode,
+  get_system_brand, get_system_name, hide_settings_window, log_frontend_error, notify_app_ready, open_settings_window,
+  preview_floating_scale, preview_opacity, preview_profile, preview_theme, preview_visible_panels,
+  save_panel_positions, save_settings, set_main_height, set_settings_pinned, show_settings_window, start_window_drag,
+  test_temp_alert, toggle_floating_mode,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -271,18 +272,17 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
             s.floating_mode = true;
             let _ = settings::persist_settings(app, &s);
           }
-          if let Some(main) = app.get_webview_window("main") {
-            let _ = main.hide();
-          }
-          crate::windows::sync_floating_panels(app, &state);
+          crate::windows::spawn_sync_floating_panels(app);
         } else {
-          {
+          let profile = {
             let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
             s.floating_mode = false;
             let _ = settings::persist_settings(app, &s);
-          }
+            s.dashboard_profile.clone()
+          };
           close_floating_panels(app);
           if let Some(main) = app.get_webview_window("main") {
+            let _ = pick_target_monitor(&main, &profile);
             let _ = main.show();
             let _ = main.set_focus();
           }
@@ -431,8 +431,12 @@ fn main() {
       });
 
       if startup_floating_mode {
-        // Floating mode: keep main window hidden and open per-panel windows.
-        crate::windows::sync_floating_panels(app_handle, &app.state::<stats::AppState>());
+        // Defer panel creation so the main window WebView2 can initialise and
+        // call notify_app_ready before the watchdog timeout. Blocking the setup
+        // callback with 9 synchronous WebviewWindowBuilder::build() calls
+        // delays the frontend JS and causes the watchdog to fire, which
+        // degrades WebView2 and makes subsequent window creation crash.
+        crate::windows::spawn_sync_floating_panels(app_handle);
       } else if let Some(main) = app.get_webview_window("main") {
         // Portrait mode: place on preferred monitor and show.
         let _ = pick_target_monitor(&main, &startup_profile);
@@ -453,6 +457,9 @@ fn main() {
       // Windows-boot race where the GPU process or Edge runtime isn't ready when
       // RigStats auto-starts. Reload the main webview to recover automatically
       // so the user doesn't have to restart the application manually.
+      // In debug/dev sessions this watchdog can race with hot-reload and cause
+      // unnecessary reload churn, so it is enabled only for release builds.
+      #[cfg(not(debug_assertions))]
       {
         let watchdog_handle = app_handle.clone();
         tauri::async_runtime::spawn(async move {
@@ -513,6 +520,10 @@ fn main() {
       open_updater_window,
       set_main_height,
       toggle_floating_mode,
+      preview_floating_scale,
+      set_settings_pinned,
+      hide_settings_window,
+      show_settings_window,
       broadcast_stats,
       save_panel_positions,
       open_settings_window

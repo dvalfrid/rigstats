@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hide-settings-window"
+description = "Enables the hide_settings_window command without any pre-configured scope."
+commands.allow = ["hide_settings_window"]
+
+[[permission]]
+identifier = "deny-hide-settings-window"
+description = "Denies the hide_settings_window command without any pre-configured scope."
+commands.deny = ["hide_settings_window"]
