@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.19.0](https://github.com/dvalfrid/rigstats/compare/v1.18.0...v1.19.0) (2026-04-18)
+
+
+### Features
+
+* **gpu:** add multi-GPU selector and persist preferred GPU to prevent auto-switching ([af23665](https://github.com/dvalfrid/rigstats/commit/af23665dfbfe83be35b49525cb9785c5aa8dd873))
+
 ## [1.18.0](https://github.com/dvalfrid/rigstats/compare/v1.17.0...v1.18.0) (2026-04-17)
 
 
