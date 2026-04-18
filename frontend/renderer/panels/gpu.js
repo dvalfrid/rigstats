@@ -3,6 +3,127 @@
 
 import { resolveTempColor } from '../tempColors.js';
 import { resolveVendorBadge } from '../vendorBranding.js';
+import { backend } from '../environment.js';
+
+const SELECTOR_STATE = {
+  NONE: 'none',
+  SINGLE: 'single',
+  MULTI: 'multi',
+};
+
+const SELECTOR_DATASET = {
+  KEY: 'gpuSelectorKey',
+  WIRED: 'gpuSelectorWired',
+  BUSY: 'gpuSelectorBusy',
+};
+
+const SELECTOR_FALLBACK_STYLE = 'color:var(--stat-label);font-size:9px;letter-spacing:0.5px;';
+const SELECTOR_BUTTON_BASE_STYLE = 'width:11px;height:11px;border-radius:50%;padding:0;cursor:pointer;';
+
+function getSelectorState(optionCount) {
+  if (optionCount > 1) return SELECTOR_STATE.MULTI;
+  if (optionCount === 1) return SELECTOR_STATE.SINGLE;
+  return SELECTOR_STATE.NONE;
+}
+
+function escapeHtmlAttr(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function buildSelectorModel(gpu = {}) {
+  const availableGpus = Array.isArray(gpu.availableGpus) ? gpu.availableGpus : [];
+  const selectedName = gpu.name ?? null;
+  const options = availableGpus
+    .filter((entry) => Array.isArray(entry) && typeof entry[0] === 'string')
+    .map(([name, vramRaw]) => ({
+      name,
+      vramMb: Number.isFinite(vramRaw) ? vramRaw : 0,
+      selected: selectedName === name,
+    }));
+
+  const state = getSelectorState(options.length);
+  const key = JSON.stringify({
+    state,
+    selectedName,
+    options: options.map((o) => [o.name, o.vramMb, o.selected]),
+  });
+
+  return { state, options, selectedName, key };
+}
+
+function selectorFallbackMarkup(state) {
+  if (state === SELECTOR_STATE.SINGLE) {
+    return `<span style="${SELECTOR_FALLBACK_STYLE}">1 GPU</span>`;
+  }
+  return `<span style="${SELECTOR_FALLBACK_STYLE}">AUTO</span>`;
+}
+
+function renderSelectorButtons(options) {
+  return options.map((opt) => {
+    const selectedStyle = opt.selected
+      ? 'border:1px solid var(--amd);background:var(--amd);box-shadow:0 0 6px rgba(255,58,31,0.65);'
+      : 'border:1px solid var(--stat-label);background:transparent;box-shadow:none;';
+    return `<button data-gpu-name="${escapeHtmlAttr(opt.name)}" style="${SELECTOR_BUTTON_BASE_STYLE}${selectedStyle}" title="${escapeHtmlAttr(opt.name)}" type="button" aria-label="Välj ${escapeHtmlAttr(opt.name)}"></button>`;
+  }).join('');
+}
+
+function buildGpuPreferencePayload(deviceName) {
+  return { gpu_name: deviceName, gpuName: deviceName };
+}
+
+function applySelectorMarkup(selectorEl, model) {
+  if (model.state === 'multi') {
+    selectorEl.innerHTML = renderSelectorButtons(model.options);
+  } else {
+    selectorEl.innerHTML = selectorFallbackMarkup(model.state);
+  }
+}
+
+function wireSelectorClick(selectorEl) {
+  if (selectorEl.dataset[SELECTOR_DATASET.WIRED] === '1') return;
+  selectorEl.dataset[SELECTOR_DATASET.WIRED] = '1';
+
+  selectorEl.onclick = async (e) => {
+    const target = e.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== 'BUTTON') return;
+    e.preventDefault();
+
+    const deviceName = target.getAttribute('data-gpu-name');
+    if (!deviceName || selectorEl.dataset[SELECTOR_DATASET.BUSY] === '1') return;
+
+    selectorEl.dataset[SELECTOR_DATASET.BUSY] = '1';
+    try {
+      // Send both naming styles for maximum compatibility across invoke callers.
+      await backend.invoke('set_gpu_preference', buildGpuPreferencePayload(deviceName));
+    } catch (err) {
+      console.error('Failed to set GPU preference:', err);
+    } finally {
+      selectorEl.dataset[SELECTOR_DATASET.BUSY] = '0';
+    }
+  };
+}
+
+function renderGpuSelector(gpu) {
+  const selectorEl = document.getElementById('gpuSelector');
+  if (!selectorEl) return;
+
+  const model = buildSelectorModel(gpu);
+  if (selectorEl.dataset[SELECTOR_DATASET.KEY] !== model.key) {
+    applySelectorMarkup(selectorEl, model);
+    selectorEl.dataset[SELECTOR_DATASET.KEY] = model.key;
+  }
+
+  if (model.state === SELECTOR_STATE.MULTI) {
+    wireSelectorClick(selectorEl);
+  } else {
+    selectorEl.onclick = null;
+    selectorEl.dataset[SELECTOR_DATASET.WIRED] = '0';
+  }
+}
 
 function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
   if (gpu.name) {
@@ -20,6 +141,8 @@ function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
       }
     }
   }
+
+  renderGpuSelector(gpu);
 
   const gpuLoad = gpu.load ?? null;
   const circumference = 263.9;
@@ -75,4 +198,10 @@ function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
   document.getElementById('gpuFan').textContent = gpu.fanSpeed != null ? `${gpu.fanSpeed} RPM` : '-- RPM';
 }
 
-export { updateGpuPanel };
+export {
+  updateGpuPanel,
+  buildSelectorModel,
+  buildGpuPreferencePayload,
+  selectorFallbackMarkup,
+  renderSelectorButtons,
+};

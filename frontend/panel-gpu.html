@@ -19,7 +19,10 @@ html, body { width: 450px; height: 336px; }
 <div class="panel panel-gpu" data-panel="gpu" style="height:320px">
   <div class="tl"></div><div class="br"></div>
   <img id="gpuVendorBadge" class="amd-badge" src="./assets/AMD-Radeon-Ryzen-Symbol.png" alt="">
-  <div class="stat-label">GPU LOAD</div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;position:relative;z-index:2;">
+    <div class="stat-label" style="margin-bottom:0;">GPU LOAD</div>
+    <div id="gpuSelector" style="display:flex;flex-direction:row;gap:5px;padding:0 2px;font-size:9px;" aria-label="GPU selector"></div>
+  </div>
   <div style="font-family:var(--mono);color:var(--stat-label);letter-spacing:1px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;" id="gpuModel">--</div>
   <div class="ring-wrap">
     <svg class="ring-svg" viewBox="0 0 100 100">

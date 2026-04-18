@@ -34,6 +34,9 @@ pub struct GpuStats {
   pub power: Option<f64>,
   pub d3d_3d: Option<f64>,
   pub d3d_vdec: Option<f64>,
+  /// Available GPU devices: `[(device_name, vram_total_mb), ...]`.
+  /// Used by the frontend to render GPU selector.
+  pub available_gpus: Vec<(String, f64)>,
 }
 
 #[derive(Debug, Clone, Serialize)]

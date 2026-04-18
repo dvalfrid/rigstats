@@ -54,6 +54,10 @@ pub struct LhmData {
   pub net_down: f64,
   /// Per-device disk temperatures: `(device_name, temp_celsius)`, in LHM device order.
   pub disk_temps: Vec<(String, f64)>,
+  /// All detected GPU devices: `(device_name, vram_total_mb)`.
+  /// Used by the frontend to display GPU selector; the backend selects which GPU data to return
+  /// in `gpu_*` fields based on user preference and load heuristics.
+  pub gpu_devices: Vec<(String, f64)>,
 }
 
 fn parse_val(str_val: &str) -> Option<f64> {
@@ -146,18 +150,38 @@ struct GpuData {
 
 /// Extracts all GPU metrics from the sensor list.
 ///
-/// Collects all GPU candidates (unique grandparents of "GPU Memory Total" sensors),
+/// Collects all GPU candidates from multiple GPU sensor families,
 /// then picks the one that is currently active:
-///   • Primary: highest "GPU Core" load — shows the iGPU when the dGPU is idle.
-///   • Tiebreak: highest VRAM — selects the dGPU when both report 0 % load.
+///   • If `preferred_gpu` is Some and exists in the candidates, that GPU is selected.
+///   • Otherwise, Primary: highest VRAM (stable default, avoids per-tick switching).
+///   • Tiebreak: highest load.
 ///
-/// Intel iGPU + NVIDIA dGPU: Intel reports "D3D Shared Memory Total", not
-/// "GPU Memory Total", so the Intel iGPU is not a candidate and the NVIDIA dGPU
-/// is always shown regardless of load.
-fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
-  // Collect all unique GPU device names that expose a "GPU Memory Total" sensor.
+/// Returns (GpuData, Vec<(device_name, vram_total_mb)>).
+fn extract_gpu(nodes: &[FlatNode], preferred_gpu: Option<&str>) -> (GpuData, Vec<(String, f64)>) {
+  // Collect all unique GPU device names from a broad GPU sensor set so iGPU+dGPU
+  // systems are represented even when one device lacks "GPU Memory Total".
   let mut seen_devices: Vec<String> = Vec::new();
-  for n in nodes.iter().filter(|n| n.text == "GPU Memory Total") {
+  let is_gpu_candidate = |n: &FlatNode| {
+    if n.grandparent.is_empty() {
+      return false;
+    }
+    // Prefer SensorId family detection — this is stable across vendor naming variants.
+    if n.sensor_id.starts_with("/gpu-") {
+      return true;
+    }
+    // Fallback for snapshots where SensorId is missing/incomplete.
+    matches!(
+      (n.parent.as_str(), n.text.as_str()),
+      ("Load", "GPU Core")
+        | ("Load", "D3D 3D")
+        | ("Data", "GPU Memory Total")
+        | ("Data", "D3D Shared Memory Total")
+        | ("Temperatures", "GPU Core")
+        | ("Temperatures", "GPU VR SoC")
+        | ("Clocks", "GPU Core")
+    )
+  };
+  for n in nodes.iter().filter(|n| is_gpu_candidate(n)) {
     if !n.grandparent.is_empty() && !seen_devices.contains(&n.grandparent) {
       seen_devices.push(n.grandparent.clone());
     }
@@ -167,28 +191,58 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
     nodes
       .iter()
       .find(|n| n.grandparent == dev && n.parent == "Load" && n.text == "GPU Core")
+      .or_else(|| {
+        nodes
+          .iter()
+          .find(|n| n.grandparent == dev && n.parent == "Load" && n.text == "D3D 3D")
+      })
       .and_then(|n| parse_val(&n.value))
       .unwrap_or(0.0)
   };
   let vram_for = |dev: &str| -> f64 {
     nodes
       .iter()
-      .find(|n| n.grandparent == dev && n.text == "GPU Memory Total")
+      .find(|n| n.grandparent == dev && n.parent == "Data" && n.text == "GPU Memory Total")
+      .or_else(|| {
+        nodes
+          .iter()
+          .find(|n| n.grandparent == dev && n.parent == "Data" && n.text == "D3D Shared Memory Total")
+      })
       .and_then(|n| parse_val(&n.value))
       .unwrap_or(0.0)
   };
 
-  // Pick the GPU with the highest load; break ties by highest VRAM (dGPU wins when idle).
-  let gpu_device: Option<String> = seen_devices.into_iter().max_by(|a, b| {
-    let la = load_for(a);
-    let lb = load_for(b);
-    match la.partial_cmp(&lb).unwrap_or(std::cmp::Ordering::Equal) {
-      std::cmp::Ordering::Equal => vram_for(a)
-        .partial_cmp(&vram_for(b))
-        .unwrap_or(std::cmp::Ordering::Equal),
-      other => other,
-    }
+  // Build list of all GPU devices with their VRAM.
+  let gpu_devices: Vec<(String, f64)> = seen_devices.iter().map(|dev| (dev.clone(), vram_for(dev))).collect();
+
+  // Match preferred GPU robustly to survive minor naming differences across samples.
+  let preferred_match = preferred_gpu.and_then(|pref| {
+    let pref_norm = pref.trim().to_ascii_lowercase();
+    seen_devices
+      .iter()
+      .find(|d| {
+        let d_norm = d.trim().to_ascii_lowercase();
+        d_norm == pref_norm || d_norm.contains(&pref_norm) || pref_norm.contains(&d_norm)
+      })
+      .cloned()
   });
+
+  // Pick the GPU: prefer user-selected, otherwise use load-based selection.
+  let gpu_device: Option<String> = if let Some(pref) = preferred_match {
+    Some(pref)
+  } else {
+    // No user preference: choose the most capable GPU for stable display.
+    seen_devices.iter().cloned().max_by(|a, b| {
+      let va = vram_for(a);
+      let vb = vram_for(b);
+      match va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal) {
+        std::cmp::Ordering::Equal => load_for(a)
+          .partial_cmp(&load_for(b))
+          .unwrap_or(std::cmp::Ordering::Equal),
+        other => other,
+      }
+    })
+  };
 
   // Identify the GPU device by the grandparent of the anchor node, then collect
   // all sensors that belong to the same device. A fixed window was fragile: GPUs
@@ -207,7 +261,7 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
       .and_then(|n| parse_val(&n.value))
   };
 
-  GpuData {
+  let gpu_data = GpuData {
     name: gpu_device.clone(),
     load: find("Load", "GPU Core"),
     // AMD iGPUs (e.g. Radeon 890M) report "GPU VR SoC" instead of "GPU Core" temperature.
@@ -224,10 +278,12 @@ fn extract_gpu(nodes: &[FlatNode]) -> GpuData {
       .find(|n| n.parent == "Fans" && n.text.starts_with("GPU Fan"))
       .and_then(|n| parse_val(&n.value)),
     vram_used: find("Data", "GPU Memory Used"),
-    vram_total: find("Data", "GPU Memory Total"),
+    vram_total: find("Data", "GPU Memory Total").or_else(|| find("Data", "D3D Shared Memory Total")),
     d3d_3d: find("Load", "D3D 3D"),
     d3d_vdec: find("Load", "D3D Video Decode"),
-  }
+  };
+
+  (gpu_data, gpu_devices)
 }
 
 /// Returns total disk read and write throughput in MB/s across all drives.
@@ -410,11 +466,11 @@ fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
 
 // --- Top-level parser ------------------------------------------------------
 
-fn parse_lhm(data: &Value) -> LhmData {
+fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
   let mut nodes = Vec::new();
   flatten_lhm(data, &mut nodes, "", "");
 
-  let gpu = extract_gpu(&nodes);
+  let (gpu, gpu_devices) = extract_gpu(&nodes, preferred_gpu);
   let (disk_read, disk_write) = extract_disk_throughput(&nodes);
   let (net_up, net_down) = extract_network(&nodes);
   let disk_temps = extract_disk_temps(&nodes);
@@ -447,6 +503,7 @@ fn parse_lhm(data: &Value) -> LhmData {
     mb_temps: mb.temps,
     mb_voltages: mb.voltages,
     mb_chip: mb.chip,
+    gpu_devices,
   }
 }
 
@@ -569,7 +626,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_temp, Some(72.0));
   }
 
@@ -589,7 +646,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_temp, Some(68.0));
   }
 
@@ -617,7 +674,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_temp, Some(68.0), "temp must come from Temperatures section");
     assert_eq!(result.cpu_power, Some(95.0), "power must come from Powers section");
   }
@@ -636,7 +693,7 @@ mod tests {
         }
       ]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_temp, Some(72.0));
   }
 
@@ -650,7 +707,7 @@ mod tests {
         "Children": [{ "Text": "CPU Package", "Value": "125 W", "Children": [] }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_power, Some(125.0));
   }
 
@@ -664,7 +721,7 @@ mod tests {
         "Children": [{ "Text": "Package", "Value": "95 W", "Children": [] }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_power, Some(95.0));
   }
 
@@ -681,7 +738,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert!(
       (result.disk_read - 2.0).abs() < 1e-9,
       "2048 KB should be 2.0 MB, got {}",
@@ -707,7 +764,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert!(
       (result.disk_read - 2048.0).abs() < 1e-9,
       "2 GB should be 2048.0 MB, got {}",
@@ -740,7 +797,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert!(
       (result.disk_read - 100.0).abs() < 1e-9,
       "disk read should sum all four drives (10+20+30+40=100), got {}",
@@ -768,7 +825,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     // Network values are multiplied by 8 (bytes → bits), so 10+20 MB = 240 Mbit
     assert!(
       result.net_up > result.net_down * 0.0,
@@ -826,7 +883,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.disk_temps.len(), 2, "motherboard sensor must be excluded");
     assert_eq!(result.disk_temps[0].0, "Samsung SSD 980 PRO");
     assert_eq!(result.disk_temps[0].1, 44.0, "Composite wins (highest real sensor)");
@@ -865,7 +922,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(
       result.ram_temp,
       Some(38.0),
@@ -887,7 +944,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(
       result.ram_temp, None,
       "only threshold sensors present — no real reading"
@@ -909,7 +966,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.disk_temps.len(), 1, "/ssd/ prefix must be included");
     assert_eq!(result.disk_temps[0].0, "WDC WDS500G2B0A-00SM50");
     assert_eq!(result.disk_temps[0].1, 32.0);
@@ -948,7 +1005,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(
       result.gpu_temp,
       Some(72.0),
@@ -982,7 +1039,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.gpu_freq, Some(2520.0));
     assert_eq!(result.gpu_mem_freq, Some(10501.0));
   }
@@ -1011,7 +1068,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.gpu_load, Some(75.0));
     assert_eq!(result.gpu_d3d_3d, Some(68.0));
     assert_eq!(result.gpu_d3d_vdec, Some(12.0));
@@ -1022,7 +1079,7 @@ mod tests {
   #[test]
   fn parse_lhm_returns_zero_defaults_for_empty_tree() {
     let data = json!({ "Text": "Root", "Value": "", "Children": [] });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.cpu_temp, None);
     assert_eq!(result.gpu_load, None);
     assert_eq!(result.gpu_mem_freq, None);
@@ -1081,7 +1138,7 @@ mod tests {
 
   #[test]
   fn parse_lhm_extracts_mb_fans_sorted_descending_zero_excluded() {
-    let result = parse_lhm(&lpc_tree());
+    let result = parse_lhm(&lpc_tree(), None);
     // Fan #6 (0 RPM) must be excluded; remainder sorted descending.
     assert_eq!(result.mb_fans.len(), 3);
     assert_eq!(result.mb_fans[0].0, "Fan #7");
@@ -1109,7 +1166,7 @@ mod tests {
         "Children": [{ "Text": "Fans", "Value": "", "Children": fans }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.mb_fans.len(), 7, "all active fan channels are returned");
     assert_eq!(result.mb_fans[0].0, "Fan #7", "highest RPM first");
     assert_eq!(result.mb_fans[6].0, "Fan #1", "lowest RPM last");
@@ -1117,7 +1174,7 @@ mod tests {
 
   #[test]
   fn parse_lhm_extracts_mb_temps_filters_sentinel_below_5c() {
-    let result = parse_lhm(&lpc_tree());
+    let result = parse_lhm(&lpc_tree(), None);
     // Temperature #3 = 2 °C must be filtered out.
     assert_eq!(result.mb_temps.len(), 2);
     assert_eq!(result.mb_temps[0].0, "Temperature #1");
@@ -1128,7 +1185,7 @@ mod tests {
 
   #[test]
   fn parse_lhm_extracts_mb_named_voltages_only() {
-    let result = parse_lhm(&lpc_tree());
+    let result = parse_lhm(&lpc_tree(), None);
     // "Voltage #5" must be excluded; three named rails remain.
     assert_eq!(result.mb_voltages.len(), 3);
     let names: Vec<&str> = result.mb_voltages.iter().map(|(n, _)| n.as_str()).collect();
@@ -1164,7 +1221,7 @@ mod tests {
         }
       ]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.mb_fans.len(), 1, "only /lpc/ fan should be included");
     assert_eq!(result.mb_fans[0].0, "Fan #7");
   }
@@ -1207,15 +1264,15 @@ mod tests {
   }
 
   #[test]
-  fn extract_gpu_picks_igpu_when_dgpu_idle() {
-    // dGPU at 0 %, iGPU at 11 % — iGPU must win.
-    let result = parse_lhm(&igpu_dgpu_tree("11 %", "0 %"));
+  fn extract_gpu_defaults_to_dgpu_when_igpu_is_more_active() {
+    // Default policy is stable: dGPU (most VRAM) wins even when iGPU load is higher.
+    let result = parse_lhm(&igpu_dgpu_tree("11 %", "0 %"), None);
     assert_eq!(
       result.gpu_name.as_deref(),
-      Some("AMD Radeon 890M"),
-      "active iGPU must be selected when dGPU is idle"
+      Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
+      "default selection must stay on dGPU for stability"
     );
-    assert_eq!(result.gpu_load, Some(11.0));
+    assert_eq!(result.gpu_load, Some(0.0));
   }
 
   #[test]
@@ -1248,7 +1305,7 @@ mod tests {
         ]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.gpu_temp, Some(51.0), "GPU VR SoC must be used as temp");
     assert_eq!(result.gpu_power, Some(2.0), "GPU Core under Powers must be used");
     assert_eq!(result.gpu_load, Some(11.0));
@@ -1259,7 +1316,7 @@ mod tests {
   #[test]
   fn extract_gpu_picks_dgpu_when_active() {
     // dGPU at 60 %, iGPU at 5 % — dGPU must win.
-    let result = parse_lhm(&igpu_dgpu_tree("5 %", "60 %"));
+    let result = parse_lhm(&igpu_dgpu_tree("5 %", "60 %"), None);
     assert_eq!(
       result.gpu_name.as_deref(),
       Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
@@ -1271,11 +1328,32 @@ mod tests {
   #[test]
   fn extract_gpu_picks_dgpu_by_vram_when_both_idle() {
     // Both at 0 % — dGPU (most VRAM) must win.
-    let result = parse_lhm(&igpu_dgpu_tree("0 %", "0 %"));
+    let result = parse_lhm(&igpu_dgpu_tree("0 %", "0 %"), None);
     assert_eq!(
       result.gpu_name.as_deref(),
       Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU"),
       "dGPU (most VRAM) must win when both are idle"
+    );
+  }
+
+  #[test]
+  fn extract_gpu_prefers_explicit_gpu_exact_match() {
+    let result = parse_lhm(&igpu_dgpu_tree("11 %", "0 %"), Some("AMD Radeon 890M"));
+    assert_eq!(
+      result.gpu_name.as_deref(),
+      Some("AMD Radeon 890M"),
+      "explicit preferred GPU must override default stable selection"
+    );
+    assert_eq!(result.gpu_load, Some(11.0));
+  }
+
+  #[test]
+  fn extract_gpu_prefers_explicit_gpu_fuzzy_match() {
+    let result = parse_lhm(&igpu_dgpu_tree("11 %", "0 %"), Some("radeon 890m"));
+    assert_eq!(
+      result.gpu_name.as_deref(),
+      Some("AMD Radeon 890M"),
+      "case-insensitive fuzzy preferred name must match"
     );
   }
 
@@ -1300,7 +1378,7 @@ mod tests {
         }]
       }]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(
       result.mb_voltages.len(),
       2,
@@ -1342,15 +1420,15 @@ mod tests {
         }
       ]
     });
-    let result = parse_lhm(&data);
+    let result = parse_lhm(&data, None);
     assert_eq!(result.mb_voltages.len(), 1, "LPC voltage only");
     assert_eq!(result.mb_voltages[0].0, "Vcore", "LPC sensor must win");
   }
 }
 
-pub async fn fetch_lhm(client: &reqwest::Client) -> Option<LhmData> {
+pub async fn fetch_lhm(client: &reqwest::Client, preferred_gpu: Option<&str>) -> Option<LhmData> {
   // Keep timeout short so stats polling remains responsive even if LHM is down.
   let response = client.get("http://localhost:8085/data.json").send().await.ok()?;
   let json: Value = response.json().await.ok()?;
-  Some(parse_lhm(&json))
+  Some(parse_lhm(&json, preferred_gpu))
 }

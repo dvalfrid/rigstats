@@ -118,6 +118,10 @@ pub struct Settings {
   /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
   #[serde(default)]
   pub settings_version: u8,
+  /// User's preferred GPU device name for stable display when multiple GPUs are available.
+  /// If set and the GPU exists, that GPU will be displayed. Otherwise, auto-selection by load is used.
+  #[serde(default)]
+  pub preferred_gpu: Option<String>,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -201,6 +205,7 @@ impl Default for Settings {
       floating_panel_scale: default_floating_panel_scale(),
       panel_layouts: HashMap::new(),
       settings_version: 1, // New installs start at current version — no migration needed.
+      preferred_gpu: None,
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,
