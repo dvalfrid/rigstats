@@ -139,7 +139,7 @@ Registered with `app.manage(HardwareInfo { ... })`.
 | --- | --- |
 | `StatsPayload` | Top-level payload returned by `get_stats()` |
 | `CpuStats` | Load, per-core loads, temp, freq, power |
-| `GpuStats` | Load, temps, clocks, VRAM, fan, power, D3D |
+| `GpuStats` | Load, temps, clocks, VRAM, fan, power, D3D, and `available_gpus` selector metadata |
 | `RamStats` | Used/free/total, spec string, DIMM temp |
 | `NetStats` | Up/down throughput, interface name, ping |
 | `DiskStats` | Read/write throughput, per-drive entries |
@@ -158,12 +158,13 @@ delegates to a domain module.
 `get_stats()` is the main tick handler. Per call it:
 
 1. Fetches a fresh LHM sample (falls back to last good sample on failure)
-2. Calls `system.refresh_cpu()`, `refresh_memory()`, `refresh_processes()`
-3. Collects disk throughput and drive metadata
-4. Computes network throughput delta over elapsed time
-5. Refreshes ping (cached, re-measured every 5 s)
-6. Assembles `StatsPayload` including top 8 processes sorted by CPU
-7. Checks temperature thresholds and fires tray notifications if due
+2. Reads `settings.preferred_gpu` and passes it into LHM parsing
+3. Calls `system.refresh_cpu()`, `refresh_memory()`, `refresh_processes()`
+4. Collects disk throughput and drive metadata
+5. Computes network throughput delta over elapsed time
+6. Refreshes ping (cached, re-measured every 5 s)
+7. Assembles `StatsPayload` including top 8 processes sorted by CPU
+8. Checks temperature thresholds and fires tray notifications if due
 
 Floating mode commands:
 
@@ -171,6 +172,7 @@ Floating mode commands:
 | --- | --- |
 | `toggle_floating_mode(enabled)` | Persists the setting, emits `apply-floating-mode`, and routes window transitions through `spawn_sync_floating_panels` / `close_floating_panels` with a mutex guard to serialize rapid toggles |
 | `preview_floating_scale(scale)` | Applies floating panel scale preview (`0.4..=1.0`) and re-syncs floating windows when floating mode is active |
+| `set_gpu_preference(gpu_name)` | Persists the user-selected GPU name used by LHM extraction on subsequent ticks |
 | `broadcast_stats(stats)` | Emits `stats-broadcast` to each open `panel-{key}` window; takes `serde_json::Value` to avoid needing `Deserialize` on `StatsPayload` |
 | `save_panel_positions(positions)` | Merges `HashMap<key, PanelLayout>` into `settings.panel_layouts` and persists |
 | `open_settings_window` | Opens the settings window from a floating panel's context menu |
@@ -206,13 +208,20 @@ into `Vec<FlatNode>`, and extracts metrics into `LhmData`.
 
 Each `FlatNode` carries: `text`, `value`, `parent`, `grandparent`, `sensor_id`.
 
-**GPU extraction:** Anchored on the `GPU Memory Total` node with the highest
-value (selects dGPU over iGPU on multi-GPU systems). All sensors sharing that
-anchor's `grandparent` (the GPU device name) are collected.
+**GPU extraction:** Candidates are built from SensorId families (`/gpu-*`) with
+fallback to key sensor pairs when SensorId is missing. This captures iGPU+dGPU
+systems more reliably than a single anchor sensor. Selection policy is:
+
+- Use `preferred_gpu` if it matches a candidate (case-insensitive fuzzy match)
+- Otherwise pick the highest VRAM GPU (stable default)
+- Tie-break by load
+
+All sensors sharing the selected device's `grandparent` are collected.
 
 Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
 memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
-(`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`).
+(`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus
+`gpu_devices: Vec<(device_name, vram_total_mb)>` for the frontend selector.
 
 **Disk temperatures:** Identified by `SensorId` prefix
 (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`) — not by sensor name.
@@ -275,6 +284,11 @@ needed:
   (`x: i32, y: i32`) per panel key. Positions are saved by `panel-host.js`
   after each move (debounced 500 ms) and re-applied with DWM inset compensation
   on next startup.
+
+Multi-GPU pinning adds one field:
+
+- **`preferred_gpu: Option<String>`** — user-selected GPU device name for stable
+  display across ticks; `None` means use backend stable default (highest VRAM).
 
 #### `windows.rs`
 
@@ -387,7 +401,7 @@ Each panel exports one `update*Panel(stats, ...)` function called from
 | Panel module | Key behaviour |
 | --- | --- |
 | `cpu.js` | Ring gauge, per-core bar list (scrollable), sparkline |
-| `gpu.js` | Ring gauge, 3×2 metadata grid, VRAM bar, two optional D3D bars hidden when `null` |
+| `gpu.js` | Ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM + GPU load bars, two optional D3D bars hidden when `null`, and compact selector dots that persist preferred GPU via `set_gpu_preference` |
 | `ram.js` | Usage bar, spec metadata, DIMM temperature |
 | `network.js` | Upload/download values, dual-series sparkline |
 | `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |

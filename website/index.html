@@ -80,7 +80,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display — or scatter individual panels freely across any screen in floating mode. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, and a live process monitor.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a vertical secondary display — or scatter individual panels freely across any screen in floating mode. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, live process monitor, and a built-in multi-GPU selector for stable tracking.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -107,6 +107,11 @@
           <div class="feature-dot"></div>
           <h3>Deep sensor data</h3>
           <p>LibreHardwareMonitor provides per-core clocks, GPU hot-spot, memory clock, VRAM, fan RPM, and D3D engine workloads — not just OS counters.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Stable multi-GPU view</h3>
+          <p>When your system has both iGPU and dGPU, use the GPU panel selector to pin exactly which device should be shown.</p>
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
@@ -193,7 +198,7 @@
           </div>
           <div class="panel-body">
             <h3>GPU</h3>
-            <p>Core load, temperatures, clocks, power, VRAM, and fan RPM. D3D engine workload breakdown shows when the GPU is rendering 3D or decoding video. Works with NVIDIA and AMD discrete GPUs.</p>
+            <p>Core load, temperatures, clocks, power, VRAM, and fan RPM. D3D engine workload breakdown shows when the GPU is rendering 3D or decoding video. Includes a multi-GPU selector so you can pin a specific GPU instead of auto-switching each tick.</p>
             <ul>
               <li>Core load (%)</li>
               <li>Core temperature &amp; hot-spot (°C)</li>
@@ -201,6 +206,7 @@
               <li>Package power (W) &amp; fan speed (RPM)</li>
               <li>VRAM used / total (GB)</li>
               <li>D3D 3D &amp; Video Decode load (when active)</li>
+              <li>GPU selector for iGPU/dGPU pinning</li>
             </ul>
             <span class="source-tag">LHM</span>
           </div>

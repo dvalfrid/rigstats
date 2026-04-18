@@ -456,6 +456,24 @@ pub fn preview_floating_scale(app: tauri::AppHandle, state: tauri::State<AppStat
 }
 
 #[tauri::command]
+pub fn set_gpu_preference(
+  app: tauri::AppHandle,
+  state: tauri::State<AppState>,
+  gpu_name: Option<String>,
+  #[allow(non_snake_case)] gpuName: Option<String>,
+) -> Result<(), String> {
+  let selected_gpu = normalize_gpu_preference_input(gpu_name, gpuName);
+  // Update both the in-memory AppState AND persist to disk.
+  {
+    let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    settings.preferred_gpu = selected_gpu.clone();
+    persist_settings(&app, &settings)?;
+  }
+  append_debug_log(&app, &format!("GPU preference set to: {:?}", selected_gpu));
+  Ok(())
+}
+
+#[tauri::command]
 pub fn set_settings_pinned(app: tauri::AppHandle, pinned: bool) -> Result<(), String> {
   if let Some(w) = app.get_webview_window("settings") {
     w.set_always_on_top(pinned).map_err(|e| e.to_string())?;
@@ -835,14 +853,30 @@ fn normalize_top_processes(mut entries: Vec<ProcessEntry>, limit: usize) -> Vec<
   entries
 }
 
+fn normalize_gpu_preference_input(gpu_name: Option<String>, gpu_name_camel: Option<String>) -> Option<String> {
+  gpu_name
+    .or(gpu_name_camel)
+    .map(|s| s.trim().to_string())
+    .filter(|s| !s.is_empty())
+}
+
 #[tauri::command]
 pub async fn get_stats(
   app: tauri::AppHandle,
   state: tauri::State<'_, AppState>,
   hw: tauri::State<'_, HardwareInfo>,
 ) -> Result<StatsPayload, String> {
+  // Get the user's GPU preference from settings.
+  let preferred_gpu = {
+    let settings = state.settings.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: settings mutex poisoned; recovering guard");
+      e.into_inner()
+    });
+    settings.preferred_gpu.clone()
+  };
+
   // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
-  let lhm_fresh = fetch_lhm(&state.lhm_client).await;
+  let lhm_fresh = fetch_lhm(&state.lhm_client, preferred_gpu.as_deref()).await;
   let lhm = {
     let mut last_lhm = state.last_lhm.lock().unwrap_or_else(|e| {
       append_debug_log(&app, "stats: last_lhm mutex poisoned; recovering guard");
@@ -1008,6 +1042,7 @@ pub async fn get_stats(
       power: lhm.as_ref().and_then(|l| l.gpu_power),
       d3d_3d: lhm.as_ref().and_then(|l| l.gpu_d3d_3d),
       d3d_vdec: lhm.as_ref().and_then(|l| l.gpu_d3d_vdec),
+      available_gpus: lhm.as_ref().map(|l| l.gpu_devices.clone()).unwrap_or_default(),
     },
     ram: RamStats {
       total,
@@ -1237,6 +1272,27 @@ mod stats_helpers_tests {
     assert_eq!(sanitize_floating_panel_scale(f64::NAN), 1.0);
     assert_eq!(sanitize_floating_panel_scale(f64::INFINITY), 1.0);
     assert_eq!(sanitize_floating_panel_scale(f64::NEG_INFINITY), 1.0);
+  }
+
+  #[test]
+  fn normalize_gpu_preference_input_prefers_snake_case_when_present() {
+    let selected = normalize_gpu_preference_input(Some("GPU A".to_string()), Some("GPU B".to_string()));
+    assert_eq!(selected.as_deref(), Some("GPU A"));
+  }
+
+  #[test]
+  fn normalize_gpu_preference_input_uses_camel_case_fallback() {
+    let selected = normalize_gpu_preference_input(None, Some("GPU B".to_string()));
+    assert_eq!(selected.as_deref(), Some("GPU B"));
+  }
+
+  #[test]
+  fn normalize_gpu_preference_input_trims_and_rejects_blank_values() {
+    let selected_blank = normalize_gpu_preference_input(Some("   ".to_string()), None);
+    assert_eq!(selected_blank, None);
+
+    let selected_trimmed = normalize_gpu_preference_input(None, Some("  GPU C  ".to_string()));
+    assert_eq!(selected_trimmed.as_deref(), Some("GPU C"));
   }
 
   #[test]

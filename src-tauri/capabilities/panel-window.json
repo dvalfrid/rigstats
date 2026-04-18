@@ -11,6 +11,7 @@
     "allow-get-system-brand",
     "allow-get-cpu-info",
     "allow-get-gpu-info",
+    "allow-set-gpu-preference",
     "allow-broadcast-stats",
     "allow-save-panel-positions",
     "allow-toggle-floating-mode",

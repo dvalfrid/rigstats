@@ -13,6 +13,7 @@
     "allow-get-cpu-info",
     "allow-get-gpu-info",
     "allow-get-stats",
+    "allow-set-gpu-preference",
     "allow-broadcast-stats",
     "allow-log-frontend-error",
     "allow-open-updater-window",

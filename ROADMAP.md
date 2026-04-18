@@ -139,6 +139,34 @@ tree but not yet surfaced in the UI.
 
 ---
 
+## Multi-GPU selector and pinning ✓
+
+**Panel:** GPU  
+**Data source:** LHM sensor tree (`/gpu-*` SensorId family + GPU data/load fallbacks)
+
+**Implemented.** Systems with both iGPU and dGPU can now pin which GPU is shown
+in the GPU panel. Small selector dots appear next to `GPU LOAD` in both fixed
+and floating modes, with tooltips that show the full GPU name.
+
+**Behavior:**
+
+- Selector is shown when multiple GPU candidates are available
+- Clicking a selector dot calls `set_gpu_preference` and persists
+  `Settings.preferred_gpu`
+- Backend uses preferred GPU when available (case-insensitive fuzzy match)
+- Without preference, backend uses a stable default (highest VRAM, tie-break by load)
+  to avoid per-tick auto-switching
+
+**Implementation notes:**
+
+- Added `GpuStats.available_gpus` for renderer selector metadata
+- Added `LhmData.gpu_devices` extracted from multi-sensor GPU candidates
+- Added ACL permission + window capability entries for `set_gpu_preference`
+- Added parser tests for exact/fuzzy preferred GPU matching and default stability
+- Added frontend tests for selector model/markup helpers
+
+---
+
 ## Customisable themes / accent colours ✓
 
 **Panel:** Settings (new Appearance card) + CSS custom properties across all panels
