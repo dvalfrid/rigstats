@@ -301,11 +301,11 @@ fn panel_base_height(key: &str) -> f64 {
     "clock" => 148.0,
     "cpu" => 420.0,
     "gpu" => 320.0,
-    "ram" => 315.0,
-    "net" => 260.0,
-    "disk" => 295.0,
-    "motherboard" => 260.0,
-    "process" => 260.0,
+    "ram" => 320.0,
+    "net" => 320.0,
+    "disk" => 320.0,
+    "motherboard" => 320.0,
+    "process" => 320.0,
     _ => 260.0,
   }
 }

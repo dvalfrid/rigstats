@@ -94,28 +94,6 @@ html, body {
 }
 
 /* Context menu (right-click on drag handle) */
-#ctx-menu {
-  display: none;
-  position: fixed;
-  background: rgba(11,13,18,0.97);
-  border: 1px solid rgba(0,200,255,.35);
-  z-index: 100;
-  min-width: 140px;
-}
-#ctx-menu button {
-  display: block;
-  width: 100%;
-  background: none;
-  border: none;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 8px 14px;
-  text-align: left;
-  cursor: pointer;
-  letter-spacing: 1px;
-}
-#ctx-menu button:hover { background: rgba(0,200,255,.1); color: #fff; }
 
 /* Panel shell */
 .panel {

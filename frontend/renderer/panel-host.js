@@ -58,11 +58,11 @@ const BASE_PANEL_HEIGHT = {
   clock: 148,
   cpu: 420,
   gpu: 320,
-  ram: 315,
-  net: 260,
-  disk: 295,
-  motherboard: 260,
-  process: 260,
+  ram: 320,
+  net: 320,
+  disk: 320,
+  motherboard: 320,
+  process: 320,
 };
 
 function setPxVar(style, name, value) {
@@ -218,7 +218,6 @@ function scheduleSavePosition() {
   }, 500);
 }
 
-// --- Context menu -----------------------------------------------------------
 // --- Drag handling ---------------------------------------------------------
 // Add explicit mousedown → start-window-drag IPC so dragging works reliably
 // on transparent borderless windows (mirrors how the main window does it).
@@ -234,12 +233,9 @@ function initDrag() {
     lastDragStartTs = now;
 
     // Keep interactive or scrollable regions usable.
-    if (e.target.closest('#ctx-menu, button, a, input, select, textarea')) return;
+    if (e.target.closest('button, a, input, select, textarea')) return;
     if (e.target.closest('#cpuCores, .mb-scroll')) return;
     if (e.target.id === 'updateBadge' || e.target.closest('#updateBadge')) return;
-    // Don't start drag when the context menu is open.
-    const menu = document.getElementById('ctx-menu');
-    if (menu && menu.style.display === 'block') return;
     backend.invoke('start-window-drag').catch((error) => {
       const message = `[panel-host:${panelKey}] start-window-drag failed: ${String(error)}`;
       backend.invoke('log-frontend-error', { message }).catch(() => {});
@@ -248,41 +244,6 @@ function initDrag() {
 
   document.getElementById('dragHandle')?.addEventListener('pointerdown', tryStartDrag, true);
   document.body.addEventListener('pointerdown', tryStartDrag, true);
-}
-
-// --- Context menu -----------------------------------------------------------
-
-function initContextMenu() {
-  const handle = document.getElementById('dragHandle');
-  const menu = document.getElementById('ctx-menu');
-  if (!handle || !menu) return;
-
-  handle.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    menu.style.display = 'block';
-    menu.style.left = `${e.clientX}px`;
-    menu.style.top = `${e.clientY}px`;
-  });
-
-  document.getElementById('ctxSettings')?.addEventListener('click', () => {
-    menu.style.display = 'none';
-    backend.invoke('open-settings-window').catch(() => {});
-  });
-
-  document.getElementById('ctxClose')?.addEventListener('click', () => {
-    menu.style.display = 'none';
-    backend.invoke('close-window').catch(() => {});
-  });
-
-  // Dismiss on click outside, Escape, scroll, or blur.
-  document.addEventListener('click', (e) => {
-    if (!menu.contains(e.target)) menu.style.display = 'none';
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') menu.style.display = 'none';
-  });
-  document.addEventListener('scroll', () => { menu.style.display = 'none'; }, true);
-  window.addEventListener('blur', () => { menu.style.display = 'none'; });
 }
 
 // --- Startup ----------------------------------------------------------------
@@ -350,7 +311,6 @@ async function start() {
   await syncWindowScaling();
 
   initDrag();
-  initContextMenu();
 }
 
 start();
