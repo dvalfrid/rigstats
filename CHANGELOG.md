@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.20.0](https://github.com/dvalfrid/rigstats/compare/v1.19.0...v1.20.0) (2026-04-21)
+
+
+### Features
+
+* **panels:** remove right-click context menu and standardize secondary panel heights to 320px ([5b46c71](https://github.com/dvalfrid/rigstats/commit/5b46c71d8eebcfe7300de9f83e3c68e3415db9b5))
+
 ## [1.19.0](https://github.com/dvalfrid/rigstats/compare/v1.18.0...v1.19.0) (2026-04-18)
 
 
