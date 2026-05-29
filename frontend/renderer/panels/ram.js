@@ -4,10 +4,15 @@
 import { resolveTempColor } from '../tempColors.js';
 
 function parseRamType(spec, details) {
-  const match = (spec || '').match(/(DDR\d*)/i);
+  // Match LPDDR variants before DDR so "LPDDR5" isn't shortened to "DDR5".
+  const match = (spec || '').match(/(LPDDR\d*X?|DDR\d*)/i);
   if (match) return match[1].toUpperCase();
 
   const source = `${spec || ''} ${details || ''}`.toUpperCase();
+  if (source.includes('LPDDR5X')) return 'LPDDR5X';
+  if (source.includes('LPDDR5')) return 'LPDDR5';
+  if (source.includes('LPDDR4')) return 'LPDDR4';
+  if (source.includes('LPDDR3')) return 'LPDDR3';
   if (source.includes('DDR5') || source.includes('D5') || source.includes('PC5')) return 'DDR5';
   if (source.includes('DDR4') || source.includes('D4') || source.includes('PC4')) return 'DDR4';
   if (source.includes('DDR3') || source.includes('D3') || source.includes('PC3')) return 'DDR3';

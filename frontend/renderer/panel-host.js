@@ -174,7 +174,6 @@ function applyStats(stats) {
       break;
     case 'ram':
       updateRamPanel(stats.ram, history, pushHistory, thresholds.ram);
-      drawSpark('ramSpark', history.ram, getCssVar('--ram'));
       break;
     case 'net':
       updateNetworkPanel(stats, history, pushHistory);

@@ -402,7 +402,6 @@ function applyStats(stats) {
 
   drawSpark('cpuSpark', history.cpu, getCssVar('--accent'));
   drawSpark('gpuSpark', history.gpu, getCssVar('--amd'));
-  drawSpark('ramSpark', history.ram, getCssVar('--ram'));
   drawDoubleSpark('netSpark', history.netDown, getCssVar('--accent'), history.netUp, getCssVar('--grn'));
   drawDoubleSpark('diskSpark', history.diskRead, getCssVar('--pur'), history.diskWrite, getCssVar('--disk-write'));
 }
