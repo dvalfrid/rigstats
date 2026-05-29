@@ -21,6 +21,13 @@ function formatWatts(w) {
   return `${w.toFixed(1)} W`;
 }
 
+function powerColor(w, charging) {
+  if (charging || w == null) return '';
+  if (w < 12) return 'var(--grn)';
+  if (w < 20) return '#ffb300';
+  return 'var(--amd)';
+}
+
 function updateBatteryPanel(battery) {
   const pctEl = document.getElementById('batPct');
   const barEl = document.getElementById('batBar');
@@ -35,7 +42,7 @@ function updateBatteryPanel(battery) {
     if (barPctEl) barPctEl.textContent = '--%';
     if (statusEl) statusEl.textContent = 'NO BATTERY';
     if (timeEl) timeEl.textContent = '--';
-    if (powerEl) powerEl.textContent = '--';
+    if (powerEl) { powerEl.textContent = '--'; powerEl.style.color = ''; }
     return;
   }
 
@@ -48,7 +55,10 @@ function updateBatteryPanel(battery) {
   if (barPctEl) barPctEl.textContent = `${pct}%`;
   if (statusEl) statusEl.textContent = charging ? 'CHARGING' : 'DISCHARGING';
   if (timeEl) timeEl.textContent = charging ? '--' : formatTimeRemaining(battery.timeRemainingMins);
-  if (powerEl) powerEl.textContent = formatWatts(battery.powerW);
+  if (powerEl) {
+    powerEl.textContent = formatWatts(battery.powerW);
+    powerEl.style.color = powerColor(battery.powerW, charging);
+  }
 }
 
 export { updateBatteryPanel };

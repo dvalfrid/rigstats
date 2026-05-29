@@ -150,7 +150,7 @@ html, body {
 
 /* CLOCK */
 .panel-clock{--c:var(--grn);}
-.clock-time{font-family:var(--mono);font-size:var(--clock-time-size);color:#fff;letter-spacing:2px;line-height:1;}
+.clock-time{font-family:var(--sans);font-weight:500;font-size:var(--clock-time-size);color:#fff;letter-spacing:1px;line-height:1;}
 .clock-sub{display:flex;justify-content:space-between;margin-top:var(--gap-inner-sm);}
 .clock-day{font-size:var(--clock-day-size);font-weight:600;color:var(--grn);letter-spacing:3px;}
 .clock-date{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);align-self:flex-end;}
@@ -207,7 +207,7 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 
 /* RAM */
 .panel-ram{--c:var(--ram);}
-#ramUsed{font-size:var(--ram-big-num-size);}
+#ramUsed{font-size:var(--clock-time-size);}
 :is(html[data-profile="portrait-fhd-side"],html[data-profile="portrait-qhd-side"]) .ram-meta-2{display:none;}
 
 /* NET */
@@ -250,6 +250,7 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 /* BATTERY */
 .panel-battery{--c:var(--grn);}
 .panel-battery>.stat-label{flex-shrink:0;}
+#batPct{font-size:var(--clock-time-size);}
 .panel-proc>#procList{flex:1;overflow:hidden;min-height:0;}
 .proc-header{display:grid;grid-template-columns:1fr 4.5ch 5.5ch;gap:0 8px;font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:4px;}
 .proc-header-cpu{text-align:right;}

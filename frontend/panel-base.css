@@ -161,7 +161,7 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 
 /* RAM */
 .panel-ram { --c: var(--ram); display: flex; flex-direction: column; }
-#ramUsed { font-size: var(--ram-big-num-size); }
+#ramUsed { font-size: var(--clock-time-size); }
 
 /* NET */
 .panel-net { --c: var(--grn); display: flex; flex-direction: column; }
@@ -179,7 +179,7 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 
 /* CLOCK */
 .panel-clock { --c: var(--grn); }
-.clock-time { font-family: var(--mono); font-size: var(--clock-time-size); color: #fff; letter-spacing: 2px; line-height: 1; }
+.clock-time { font-family: var(--sans); font-weight: 500; font-size: var(--clock-time-size); color: #fff; letter-spacing: 1px; line-height: 1; }
 .clock-sub { display: flex; justify-content: space-between; margin-top: var(--gap-inner-sm); }
 .clock-day { font-size: var(--clock-day-size); font-weight: 600; color: var(--grn); letter-spacing: 3px; }
 .clock-date { font-family: var(--mono); font-size: var(--font-ui); color: var(--text-muted); align-self: flex-end; }
@@ -218,6 +218,7 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 /* BATTERY */
 .panel-battery { --c: var(--grn); display: flex; flex-direction: column; }
 .panel-battery > .stat-label { flex-shrink: 0; }
+#batPct { font-size: var(--clock-time-size); }
 
 /* PROCESS */
 .panel-proc { --c: var(--proc); display: flex; flex-direction: column; }
