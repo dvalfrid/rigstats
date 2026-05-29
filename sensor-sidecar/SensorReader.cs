@@ -166,8 +166,8 @@ public static class SensorReader
         foreach (var s in hw.Sensors)
         {
             var id = s.Identifier.ToString();
-            // Indices 1-5 are resolution and Low/High/CriticalLow/CriticalHigh limits — skip them
-            if (!id.StartsWith("/memory/dimm/") || !id.EndsWith("/temperature/0")) continue;
+            Console.Error.WriteLine($"[RAM sensor] hw={hw.Identifier} name={s.Name} type={s.SensorType} id={id} val={s.Value}");
+            if (!id.StartsWith("/memory/") || !id.EndsWith("/temperature/0")) continue;
             if (s.Value is null) continue;
             if (s.Value > (max ?? float.MinValue)) max = s.Value;
         }

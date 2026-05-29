@@ -52,10 +52,12 @@
   DetailPrint "Service start: exit $6"
   FileWrite $9 "service_start_exit=$6$\r$\n"
 
-  ; Add a Windows Defender exclusion for the sidecar so WinRing0 (the kernel
-  ; driver used by LibreHardwareMonitorLib for Super I/O sensor access) does
-  ; not trigger a SmartScreen or real-time protection alert on first launch.
-  nsExec::ExecToLog 'cmd /C powershell -NonInteractive -Command "Add-MpPreference -ExclusionProcess ''rigstats-sensor.exe'' -ErrorAction SilentlyContinue" >NUL 2>&1'
+  ; Add a Windows Defender path exclusion for the install directory so the
+  ; WinRing0 kernel driver (extracted by LibreHardwareMonitorLib for Super I/O
+  ; sensor access) is not quarantined on first service start. A path exclusion
+  ; is used rather than a process exclusion because Defender scans the .sys
+  ; file at write time, before the process exclusion takes effect.
+  nsExec::ExecToLog 'cmd /C powershell -NonInteractive -Command "Add-MpPreference -ExclusionPath ''$INSTDIR'' -ErrorAction SilentlyContinue" >NUL 2>&1'
   FileWrite $9 "defender_exclusion=added$\r$\n"
 
   FileClose $9
