@@ -21,6 +21,29 @@ fn pretty_json(s: &str) -> String {
     .unwrap_or_else(|_| s.to_string())
 }
 
+// --- Shell probe helper ----------------------------------------------------
+
+/// Runs a PowerShell `-Command` and captures stdout, stderr, and exit code as JSON.
+/// Used by diagnostic probes so the exact command output is visible in the ZIP.
+fn run_ps_capture(cmd: &str) -> serde_json::Value {
+  #[cfg(windows)]
+  {
+    match run_hidden_command("powershell", &["-NoProfile", "-Command", cmd]) {
+      Ok(out) => serde_json::json!({
+        "exit_code": out.status.code().unwrap_or(-1),
+        "stdout": String::from_utf8_lossy(&out.stdout).trim().to_string(),
+        "stderr": String::from_utf8_lossy(&out.stderr).trim().to_string(),
+      }),
+      Err(e) => serde_json::json!({ "error": e.to_string() }),
+    }
+  }
+  #[cfg(not(windows))]
+  {
+    let _ = cmd;
+    serde_json::json!({ "error": "not windows" })
+  }
+}
+
 // --- Data collection helpers -----------------------------------------------
 
 fn diag_collect_hardware() -> String {
@@ -141,19 +164,22 @@ struct SysinfoSnapshot {
   total_memory_mb: u64,
   used_memory_mb: u64,
   disk_mount_points: Vec<String>,
-  /// WMI drive-letter → model-name map; empty means WMI join failed.
+  /// WMI drive-letter → model-name map built at startup; empty when the WMI join failed.
   disk_model_map: std::collections::HashMap<String, String>,
   network_interfaces: Vec<String>,
   system_brand: String,
   sysinfo_available: bool,
   wmi_available: bool,
+  /// What detect_ram_spec() produced at startup. "RAM" means detection failed.
   ram_spec: String,
   ram_details: String,
-  /// Raw output of the same PowerShell command used by detect_ram_spec at startup.
-  /// When the probe fails or returns no data, this contains a human-readable
-  /// marker such as "(null)", "(empty output)", "(exit ...)", "(error: ...)",
-  /// or "(not windows)".
-  ram_spec_probe: String,
+  /// Runs the exact PowerShell command used by detect_ram_spec at startup.
+  /// Captures stdout, stderr, and exit_code so any syntax error is immediately visible.
+  /// exit_code 0 + non-empty stdout = success. Anything else explains the failure.
+  ram_spec_shell_test: serde_json::Value,
+  /// Runs the WMI three-table join used to build disk_model_map.
+  /// Empty result means the join returned no rows (common on some laptop BIOSes).
+  disk_model_map_probe: serde_json::Value,
   ping_target: String,
 }
 
@@ -165,6 +191,46 @@ fn diag_collect_installer_log(_app: &tauri::AppHandle) -> Vec<u8> {
     .join("se.codeby.rigstats")
     .join("rigstats-install.log");
   std::fs::read(path).unwrap_or_else(|_| b"(install log not found)".to_vec())
+}
+
+fn diag_collect_battery(state: &AppState) -> String {
+  // Cached state: what the frontend is currently seeing.
+  let cached = {
+    let guard = state.last_battery_sample.lock().unwrap_or_else(|e| e.into_inner());
+    match &*guard {
+      Some((instant, s)) => serde_json::json!({
+        "age_secs": instant.elapsed().as_secs(),
+        "present": s.present,
+        "charge_pct": s.charge_pct,
+        "charging": s.charging,
+        "time_remaining_mins": s.time_remaining_mins,
+        "power_w": s.power_w,
+      }),
+      None => serde_json::json!({ "status": "not yet sampled" }),
+    }
+  };
+
+  // Win32_Battery — charge %, status code, estimated runtime.
+  let win32_battery = run_ps_capture(
+    "$b = Get-CimInstance Win32_Battery -EA SilentlyContinue; \
+     if(-not $b){ '(no battery detected)' } \
+     else { $b | Select-Object EstimatedChargeRemaining, BatteryStatus, EstimatedRunTime, Name | ConvertTo-Json -Depth 2 }",
+  );
+
+  // root\wmi BatteryStatus — charge/discharge rate in mW.
+  // This is where the live watt reading comes from; absence means driver doesn't expose it.
+  let wmi_battery_status = run_ps_capture(
+    "$s = Get-CimInstance -Namespace root\\wmi -Class BatteryStatus -EA SilentlyContinue; \
+     if(-not $s){ '(no data — driver may not expose root\\wmi BatteryStatus)' } \
+     else { $s | Select-Object ChargeRate, DischargeRate, Charging, Discharging, PowerOnline, Voltage | ConvertTo-Json -Depth 2 }",
+  );
+
+  serde_json::to_string_pretty(&serde_json::json!({
+    "cached": cached,
+    "win32_battery": win32_battery,
+    "wmi_battery_status": wmi_battery_status,
+  }))
+  .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
 
 fn diag_collect_sysinfo(state: &AppState, hw: &HardwareInfo) -> String {
@@ -187,37 +253,35 @@ fn diag_collect_sysinfo(state: &AppState, hw: &HardwareInfo) -> String {
     let networks = state.networks.lock().unwrap_or_else(|e| e.into_inner());
     networks.keys().cloned().collect()
   };
-  // Re-run the same PowerShell command used by detect_ram_spec at startup so we
-  // can see what it actually returns, independent of timing or WMI crate issues.
-  let ram_spec_probe = {
-    #[cfg(windows)]
-    {
-      let result = run_hidden_command(
-        "powershell",
-        &[
-          "-NoProfile",
-          "-Command",
-          "$m=Get-CimInstance Win32_PhysicalMemory;if(-not $m){'(null)'} else { $m|ForEach-Object{\"speed=$($_.Speed) configured=$($_.ConfiguredClockSpeed) smbios=$($_.SMBIOSMemoryType) memtype=$($_.MemoryType)\"}|Out-String }",
-        ],
-      );
-      match result {
-        Ok(out) if out.status.success() => {
-          let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-          if s.is_empty() {
-            "(empty output)".to_string()
-          } else {
-            s
-          }
-        }
-        Ok(out) => format!("(exit {})", out.status),
-        Err(e) => format!("(error: {})", e),
-      }
-    }
-    #[cfg(not(windows))]
-    {
-      "(not windows)".to_string()
-    }
-  };
+  // Run the exact PowerShell command from detect_ram_spec_from_shell, capturing
+  // stdout + stderr + exit_code. A non-zero exit or non-empty stderr immediately
+  // explains why ram_spec shows "RAM" even when WMI has the data.
+  let ram_spec_shell_test = run_ps_capture(
+    "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; \
+     $dimms = $m.Count; \
+     $speed = ($m | ForEach-Object { if($_.ConfiguredClockSpeed){ $_.ConfiguredClockSpeed } else { $_.Speed } } | Measure-Object -Maximum).Maximum; \
+     $typeCode = ($m | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); \
+     if(-not $typeCode){ $typeCode = ($m | Select-Object -First 1 -ExpandProperty MemoryType) }; \
+     $type = switch([int]$typeCode){ 18 {'DDR'} 20 {'DDR2'} 24 {'DDR3'} 26 {'DDR4'} 27 {'LPDDR'} 28 {'LPDDR2'} 29 {'LPDDR3'} 30 {'LPDDR4'} 34 {'DDR5'} 35 {'LPDDR5'} 36 {'LPDDR5X'} default {''} }; \
+     $r = if($type -and $speed){ \"$type $speed MT/s ($dimms DIMMs)\" } elseif($type){ \"$type ($dimms DIMMs)\" } elseif($speed){ \"$speed MT/s ($dimms DIMMs)\" } else { \"RAM ($dimms DIMMs)\" }; $r",
+  );
+
+  // Run the WMI drive-letter→model join used by detect_disk_model_map.
+  // Empty result pinpoints which part of the association chain is broken.
+  let disk_model_map_probe = run_ps_capture(
+    "try { \
+       $r = Get-CimInstance Win32_DiskDrive | ForEach-Object { \
+         $d = $_; \
+         Get-CimAssociatedInstance $d -ResultClassName Win32_DiskPartition -EA Stop | ForEach-Object { \
+           $p = $_; \
+           Get-CimAssociatedInstance $p -ResultClassName Win32_LogicalDisk -EA Stop | ForEach-Object { \
+             [pscustomobject]@{letter=$_.DeviceID;model=$d.Model} \
+           } \
+         } \
+       }; \
+       if(-not $r){'(empty — join returned no rows)'} else { $r | ConvertTo-Json -Depth 2 } \
+     } catch { \"(error: $_)\" }",
+  );
   let snap = SysinfoSnapshot {
     cpu_brand,
     cpu_count,
@@ -231,7 +295,8 @@ fn diag_collect_sysinfo(state: &AppState, hw: &HardwareInfo) -> String {
     wmi_available: hw.wmi_available,
     ram_spec: hw.ram_spec.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     ram_details: hw.ram_details.lock().unwrap_or_else(|e| e.into_inner()).clone(),
-    ram_spec_probe,
+    ram_spec_shell_test,
+    disk_model_map_probe,
     ping_target: hw.ping_target.clone(),
   };
   serde_json::to_string_pretty(&snap).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
@@ -394,6 +459,7 @@ pub async fn collect_diagnostics(
   let hardware_json = pretty_json(&diag_collect_hardware());
   let tasks_txt = diag_collect_tasks();
   let env_txt = diag_collect_environment();
+  let battery_json = diag_collect_battery(&state);
   let sysinfo_json = diag_collect_sysinfo(&state, &hw);
   let install_log_bytes = diag_collect_installer_log(&app);
   let displays_json = {
@@ -428,6 +494,7 @@ pub async fn collect_diagnostics(
     ("lhm-data.json", lhm_json.as_bytes()),
     ("lhm-parsed.json", lhm_parsed_json.as_bytes()),
     ("hardware.json", hardware_json.as_bytes()),
+    ("battery.json", battery_json.as_bytes()),
     ("sched-task.txt", tasks_txt.as_bytes()),
     ("environment.txt", env_txt.as_bytes()),
     ("sysinfo.json", sysinfo_json.as_bytes()),

@@ -146,7 +146,7 @@ Registered with `app.manage(HardwareInfo { ... })`.
 | `DiskDrive` | Filesystem label, size, used, pct, temp |
 | `MotherboardStats` | Fans, temps, voltages, chip name, board name |
 | `ProcessEntry` | Process name, CPU % of total system, RAM in MB |
-| `BatteryStats` | `present`, charge %, charging state, time remaining |
+| `BatteryStats` | `present`, charge %, charging state, time remaining, power draw (W) |
 
 `StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU usage
 and capped at 8 entries before serialisation.
@@ -164,7 +164,7 @@ delegates to a domain module.
 4. Collects disk throughput and drive metadata
 5. Computes network throughput delta over elapsed time
 6. Refreshes ping (cached, re-measured every 5 s)
-7. Refreshes battery via WMI (cached, re-sampled every 30 s)
+7. Refreshes battery via WMI (cached, re-sampled every 10 s)
 8. Assembles `StatsPayload` including top 8 processes sorted by CPU
 9. Checks temperature thresholds and fires tray notifications if due
 
@@ -197,7 +197,7 @@ PowerShell CIM on failure.
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
 | `detect_ping_target` | Default gateway or public fallback |
 | `probe_wmi_status` | Checks whether WMI is reachable |
-| `sample_battery_wmi` | Per-tick (cached 30 s) battery query via `Win32_Battery` |
+| `sample_battery_wmi` | Per-tick (cached 10 s) battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW) |
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
@@ -410,7 +410,7 @@ Each panel exports one `update*Panel(stats, ...)` function called from
 | `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |
 | `motherboard.js` | Three-column layout: fans / temps / voltages; `shortLabel()` maps `"Temperature #N"` → `"TN"` |
 | `process.js` | Top 8 processes: name (`.exe` stripped, 16 char max), CPU %, RAM. Names are HTML-escaped before `innerHTML` insertion. `truncateName` and `formatRam` exported for unit tests. |
-| `battery.js` | Charge % (big number), dynamic bar colour (accent=charging, green >50 %, amber 20–50 %, red <20 %), status (CHARGING / DISCHARGING), time remaining. Shows "NO BATTERY" when `present == false` (desktops). |
+| `battery.js` | Charge % (big number), dynamic bar colour (accent=charging, green >50 %, amber 20–50 %, red <20 %), status (CHARGING / DISCHARGING), time remaining, live power draw (W) colour-coded by rate (green <12 W, amber 12–20 W, red >20 W, no colour when charging). Shows "NO BATTERY" when `present == false` (desktops). |
 | `clock.js` | Time, weekday, date |
 
 #### `settings.js`
@@ -465,18 +465,40 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### ZIP contents
 
-| File | Source | Notes |
+| File | Source | Key fields |
 | --- | --- | --- |
 | `manifest.json` | inline | Unix timestamp + `CARGO_PKG_VERSION` |
-| `debug.log` | `std::fs::read(debug_log_path)` | Full file, not the tail shown in the UI |
-| `settings.json` | serde_json of `AppState.settings` | Read-only snapshot |
-| `lhm-data.json` | `GET localhost:8085/data.json` | 3 s timeout; error payload on failure |
-| `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM |
-| `sched-task.txt` | `schtasks /Query /V` | Both LHM task names |
-| `environment.txt` | env vars + Windows registry | Arch, build, hostname |
-| `install.log` | `rigstats-install.log` from app data | Written by NSIS installer |
-| `sysinfo.json` | `AppState` mutexes | CPU brand, RAM totals, mount points, interfaces |
-| `displays.json` | Tauri monitor list | Resolution, position, scale, fit score, selected flag |
+| `debug.log` | `std::fs::read(debug_log_path)` | Full startup + runtime log |
+| `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
+| `settings.json` | `AppState.settings` snapshot | All user settings |
+| `lhm-data.json` | `GET localhost:8085/data.json` | Raw LHM sensor tree (3 s timeout) |
+| `lhm-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
+| `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
+| `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
+| `sched-task.txt` | `schtasks /Query /V` | Both LHM task name variants |
+| `environment.txt` | env vars + Windows registry | Arch, build number, hostname |
+| `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
+| `displays.json` | Tauri monitor list | Resolution, position, scale, fit score, which was selected |
+
+### `sysinfo.json` — key fields
+
+| Field | What it tells you |
+| --- | --- |
+| `ramSpec` | What `detect_ram_spec()` produced at startup. `"RAM"` = detection failed — check `ramSpecShellTest`. |
+| `ramSpecShellTest` | Runs the exact same PowerShell command as `detect_ram_spec`. Has `stdout`, `stderr`, `exit_code`. Non-zero exit or non-empty `stderr` explains the failure immediately (e.g. the `\| Out-String` bug that caused exit 1 with "An empty pipe element is not allowed"). |
+| `diskModelMap` | Drive-letter → model-name map built at startup. Empty map = WMI join failed — check `diskModelMapProbe`. |
+| `diskModelMapProbe` | Runs the WMI three-table join used by `detect_disk_model_map`. Empty result means the BIOS doesn't expose the partition associations. |
+| `wmiAvailable` | Whether WMI was reachable at startup. `false` means all WMI-sourced fields (RAM type/speed, GPU VRAM, etc.) will be missing. |
+
+### `battery.json` — key fields
+
+| Field | What it tells you |
+| --- | --- |
+| `cached.present` | `false` = no battery detected at last 10 s sample. On desktops this is expected. |
+| `cached.ageSecs` | Seconds since the last battery WMI sample. Should be ≤ 10 on a live system. |
+| `cached.powerW` | `null` = `root\wmi BatteryStatus` didn't return a rate — check `wmiStatusProbe`. |
+| `win32Battery` | Raw `Win32_Battery` values: `EstimatedChargeRemaining`, `BatteryStatus`, `EstimatedRunTime`. `exit_code` 0 = query succeeded. Non-empty `stderr` = access or class error. |
+| `wmiBatteryStatus` | Raw `root\wmi BatteryStatus` values: `ChargeRate`, `DischargeRate` in mW. Many desktop drivers don't expose this class — `"(no data)"` is expected on non-laptop systems. |
 
 ---
 

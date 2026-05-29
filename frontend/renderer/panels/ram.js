@@ -84,4 +84,4 @@ function updateRamPanel(ram, history, pushHistory, thresholds = {}) {
   document.getElementById('ramBarPct').textContent = `${ramPct}%`;
 }
 
-export { updateRamPanel };
+export { updateRamPanel, parseRamType, parseRamSpeed };

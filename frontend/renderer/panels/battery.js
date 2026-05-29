@@ -61,4 +61,4 @@ function updateBatteryPanel(battery) {
   }
 }
 
-export { updateBatteryPanel };
+export { updateBatteryPanel, batColor, powerColor, formatTimeRemaining };

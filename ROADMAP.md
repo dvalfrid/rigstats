@@ -241,15 +241,19 @@ Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, status
 **Implemented:**
 
 - WMI `Win32_Battery` query in `hardware.rs`: `sample_battery_wmi()` returns
-  `(charge_pct, is_charging, time_remaining_mins)` or `None` when no battery present.
-  `EstimatedRunTime == 71582788` (Windows sentinel) is filtered to `None`.
-- Battery sampled every 30 s via a cache in `AppState.last_battery_sample` (same
-  pattern as ping) — avoids WMI COM overhead on every tick.
-- `BatteryStats { present, charge_pct, charging, time_remaining_mins }` struct in
-  `stats.rs`, included in `StatsPayload`.
-- `panels/battery.js` — charge bar color adapts: accent when charging, green > 50 %,
-  amber 20–50 %, red < 20 %. Shows "NO BATTERY" when `present == false`.
-- Floating panel: `panel-battery.html` (240 px, standard drag handle).
+  `(charge_pct, is_charging, time_remaining_mins, power_w)` or `None` when no battery
+  present. `EstimatedRunTime == 71582788` (Windows sentinel) is filtered to `None`.
+  A second query against `root\wmi BatteryStatus` provides `ChargeRate` /
+  `DischargeRate` in mW, converted to watts for `power_w`.
+- Battery sampled every 10 s via a cache in `AppState.last_battery_sample` — frequent
+  enough to catch charger connect/disconnect, avoids WMI overhead every tick.
+- `BatteryStats { present, charge_pct, charging, time_remaining_mins, power_w }` struct
+  in `stats.rs`, included in `StatsPayload`.
+- `panels/battery.js` — charge bar colour adapts: accent when charging, green > 50 %,
+  amber 20–50 %, red < 20 %. POWER field colour-coded by discharge rate: green < 12 W,
+  amber 12–20 W, red > 20 W (no colour when charging). Shows "NO BATTERY" when
+  `present == false`.
+- Floating panel: `panel-battery.html` (256 px, standard drag handle).
 - `"battery"` added to valid panel keys in `monitor.rs`, `windows.rs`, `settings.js`,
   `app.js`, and `panel-host.js`.
 

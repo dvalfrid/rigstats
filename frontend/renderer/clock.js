@@ -19,11 +19,16 @@ function startClock() {
   setInterval(updateClock, 1000);
 }
 
+// Exported for unit tests — pure, no DOM access.
+function formatUptime(seconds) {
+  const upSec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  return `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
+}
+
 function setUptimeFromSeconds(seconds) {
   const el = document.getElementById('uptime');
   if (!el) return;
-  const upSec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  el.textContent = `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
+  el.textContent = formatUptime(seconds);
 }
 
-export { startClock, setUptimeFromSeconds };
+export { startClock, setUptimeFromSeconds, formatUptime };
