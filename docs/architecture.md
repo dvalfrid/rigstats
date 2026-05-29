@@ -26,7 +26,7 @@ pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
 ## Data Flow
 
 ```text
-rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs elevated)
+rigstats-sensor.exe  (sensor-sidecar/, .NET 8, Windows Service / LocalSystem)
     └─► LibreHardwareMonitor NuGet → WinRing0 kernel driver
             └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
                     └─► lhm.rs  pipe client → LhmData

@@ -3,9 +3,9 @@
   "version": "1.20.0",
   "description": "Gaming rig stats dashboard for secondary display",
   "scripts": {
-    "prepare:lhm": "powershell -ExecutionPolicy Bypass -File build/prepare-lhm.ps1",
+    "prepare:sidecar": "dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release",
     "start": "set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri dev",
-    "build": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
+    "build": "npm run prepare:sidecar && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && tauri build",
     "test": "vitest run",
     "lint": "eslint frontend/renderer",
     "lint:fix": "eslint frontend/renderer --fix",
@@ -13,7 +13,7 @@
     "fmt:rs": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:rs:check": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml",
-    "verify": "npm run prepare:lhm && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo check --manifest-path src-tauri/Cargo.toml && npm run lint && npm run lint:md && vitest run",
+    "verify": "npm run prepare:sidecar && set PATH=%USERPROFILE%\\.cargo\\bin;%PATH% && cargo test --manifest-path src-tauri/Cargo.toml && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings && cargo check --manifest-path src-tauri/Cargo.toml && npm run lint && npm run lint:md && vitest run",
     "prepare": "lefthook install"
   },
   "keywords": [],

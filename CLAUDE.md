@@ -20,14 +20,14 @@ npm test
 # Run Rust tests only (requires Windows for most tests)
 cargo test --manifest-path src-tauri/Cargo.toml
 
-# Full verification: prepare LHM assets + Rust tests + check + frontend tests
+# Full verification: publish sidecar + Rust tests + check + frontend tests
 npm run verify
 
 # Production build (NSIS installer output)
 npm run build
 
-# Prepare the LibreHardwareMonitor vendor assets (copies to build output)
-npm run prepare:lhm
+# Publish sensor sidecar as single-file exe (required before npm run build)
+npm run prepare:sidecar
 ```
 
 Run a single frontend test file with vitest:
@@ -130,8 +130,8 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs as Windows service)
 - **`commands.rs`** — Thin `#[tauri::command]` handlers only. Each handler delegates to a domain module; no business logic lives here. Floating mode transitions are serialized with a mutex in `toggle_floating_mode` to prevent overlapping enable/disable races. Includes `set_gpu_preference` command (accepts both `gpu_name` and `gpuName`) used by the GPU selector dots in fixed and floating mode.
 - **`debug.rs`** — `append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`. No deps on other crate modules — safe to import from anywhere.
 - **`hardware.rs`** — WMI structs + all startup hardware detection: `detect_gpu_name`, `detect_gpu_vram_total_mb`, `detect_system_brand`, `classify_system_brand`, `detect_model_name`, `detect_motherboard_name`, `normalize_manufacturer`, `detect_ram_spec`, `detect_ram_details`, `detect_ping_target`, `sample_ping_ms`, `probe_wmi_status`, `detect_disk_model_map`. Each function tries WMI first, falls back to PowerShell CIM. `detect_disk_model_map` resolves drive letters to physical disk model names via a three-table WMI join and stores the result in `HardwareInfo` at startup for stable LHM temperature matching. `detect_motherboard_name` queries `Win32_BaseBoard` for manufacturer + product and normalizes the manufacturer string (ASUSTeK → ASUS, Micro-Star → MSI, etc.); result stored in `HardwareInfo.mb_name`.
-- **`lhm.rs`** — HTTP client that fetches LHM's `/data.json`, flattens the nested sensor tree into `Vec<FlatNode>` (each node carries `text`, `value`, `parent`, `grandparent`, `sensor_id`), then extracts GPU/CPU/disk/network/motherboard metrics. Disk temperatures are identified by `SensorId` prefix (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`); Warning/Critical threshold sensors are excluded; the highest real temperature per device is stored in `LhmData.disk_temps`. RAM temperature uses `SensorId` prefix `/memory/dimm/` with suffix `/temperature/0` (the actual reading; indices 1–5 are resolution and Low/High/CriticalLow/CriticalHigh limits which are excluded); max across all populated DIMM slots is stored in `LhmData.ram_temp`. CPU temperature is matched by name (`"Core (Tctl/Tdie)"` for AMD, `"CPU Package"` / `"Core Average"` for Intel) restricted to `parent == "Temperatures"` — this prevents the Intel `"CPU Package"` power sensor (same name, parent `"Powers"`) from being returned instead. CPU package power is matched as `"CPU Package"` (Intel) or `"Package"` (AMD) under parent `"Powers"`. GPU candidate devices are built from `/gpu-*` SensorId families with fallbacks, exported as `LhmData.gpu_devices`, and selected by: preferred GPU (if set) → otherwise highest VRAM (stable default) → tie-break by load. Motherboard Super I/O sensors use the `/lpc/` SensorId prefix (chip-agnostic, works on NCT, ITE, Winbond, etc.): fans filtered to RPM > 0 sorted descending (`LhmData.mb_fans`), temperatures filtered ≥ 5 °C (`LhmData.mb_temps`), named voltage rails only — generic `Voltage #N` unmapped slots excluded — filtered > 0.1 V (`LhmData.mb_voltages`), chip name from the grandparent of the first `/lpc/` node (`LhmData.mb_chip`).
-- **`lhm_process.rs`** — LHM process lifecycle: `ensure_lhm_running` (scheduled task → direct spawn), `can_reach_lhm_endpoint`, `get_lhm_task_details`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
+- **`lhm.rs`** — Named pipe client that connects to `\\.\pipe\rigstats-sensors` and deserialises the newline-delimited JSON stream into `LhmData`. `fetch_lhm_pipe` reuses an established connection stored in `AppState.lhm_pipe`; on connect failure it logs at most once every 30 s via `LAST_PIPE_FAIL_LOG_SECS`. The pipe client uses `.write(false)` on `ClientOptions` because the sidecar pipe is `PipeDirection.Out` (requesting write access returns `ERROR_ACCESS_DENIED`). GPU selection is handled by `select_gpu_idx` (pure function, testable): preferred GPU (case-insensitive substring) → highest VRAM → tie-break by load. Old HTTP parsing code (`flatten_lhm`, `parse_lhm`, `FlatNode`, etc.) is retained under `#[cfg(test)]` to keep the existing unit tests green.
+- **`lhm_process.rs`** — Retained query helpers for the legacy LHM scheduled task, used only by `diagnostics.rs`: `can_reach_lhm_endpoint`, `get_lhm_task_details`, `get_lhm_task_diagnosis`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
 - **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`). `pick_target_monitor` never uses `set_fullscreen` — borderless positioning via `set_size` + `set_decorations(false)` + `set_position` is sufficient. `set_decorations(false)` is always called after `set_size` because Windows `SetWindowPos` can restore `WS_CAPTION`/`WS_THICKFRAME`. `set_position` compensates for the DWM invisible resize border (inset = `inner_position − outer_position`) so the visible content lands flush with the monitor edge.
 - **`windows.rs`** — Secondary window creation and tray-anchored positioning: `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`, `ensure_updater_window`, `on_window_event`, `set_last_tray_click_position`. Floating panels are reconciled via `spawn_sync_floating_panels` (main-thread scheduling + queue coalescing). `close_floating_panels` hides windows instead of closing them to reduce WebView2 churn during rapid mode switches. Main window hide in floating mode is fail-safe: it only hides after at least one target floating panel is visible.
 - **`updater.rs`** — Auto-update logic: `spawn_background_check` (6-hour loop, first check after 10 s), `check_for_update`, `install_update`, `open_updater_window` commands.
@@ -140,20 +140,19 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs as Windows service)
 
 ### Sensor sidecar (`sensor-sidecar/`)
 
-A .NET 8 C# project that replaces the standalone LibreHardwareMonitor application. Instead of running LHM as a separate scheduled task communicating over HTTP, the sidecar embeds the `LibreHardwareMonitor` NuGet library directly and streams sensor data over a Windows named pipe (`\\.\pipe\rigstats-sensors`).
+A .NET 8 C# project that replaces the standalone LibreHardwareMonitor application. Embeds the `LibreHardwareMonitor` NuGet library directly and streams sensor data over a Windows named pipe (`\\.\pipe\rigstats-sensors`). Installed and managed as a Windows Service (`rigstats-sensor`) running as LocalSystem — no scheduled task, no HTTP server, no user-session dependency.
 
 **Why a sidecar instead of embedding in Rust:** LHM requires the `WinRing0` kernel driver for low-level hardware register access. This driver is loaded by the .NET library and requires admin privileges — there is no pure-Rust alternative that covers the same breadth of sensors (CPU temp, MB fans/voltages, disk temps, RAM DIMM temps).
 
-**Protocol:** Newline-delimited JSON (one `SensorPayload` object per line, once per second). The Rust `lhm.rs` module will be updated to connect as a named pipe client and deserialize this stream instead of polling HTTP.
+**Protocol:** Newline-delimited JSON (one `SensorPayload` object per line, once per second). `lhm.rs` connects as a named pipe client with `.write(false)` and deserialises the stream into `LhmData`.
 
 **Key files:**
 
-- `Program.cs` — entry point, pipe server loop, `UpdateVisitor` (required by LHM to trigger sensor refresh)
-- `SensorReader.cs` — `SensorPayload` model records + static `Extract()` that maps LHM `IComputer` → payload. Extraction logic mirrors `lhm.rs` exactly: same sensor name matching, same SensorId prefix filtering for disks, same `/lpc/` approach for motherboard Super I/O.
-- `app.manifest` — requests `requireAdministrator` so Windows prompts for elevation on launch (needed for WinRing0 driver load)
-- Published as a self-contained single-file exe (no .NET runtime required on user machines)
-
-**Status:** In development. The Rust backend still uses HTTP/LHM. Integration (pipe client in `lhm.rs`, Windows service installer, migration of NSIS bundling) is the next step after the sidecar is verified working.
+- `Program.cs` — entry point; sets up the Generic Host with `AddWindowsService()` and registers `SensorWorker`
+- `SensorWorker.cs` — `BackgroundService` implementation: opens `IComputer`, runs the pipe server loop, closes hardware on stop. Creates the pipe with `NamedPipeServerStreamAcl` so `BUILTIN\Users` can connect (required because the service runs as LocalSystem in session 0). Contains `UpdateVisitor` (required by LHM to trigger sensor refresh).
+- `SensorReader.cs` — `SensorPayload` model records + static `Extract()` that maps LHM `IComputer` → payload. Same sensor name matching and SensorId prefix filtering as the old `lhm.rs` HTTP parser.
+- `app.manifest` — requests `requireAdministrator` for interactive/debug launches; ignored by the SCM when running as a service
+- Published as a self-contained single-file exe (`npm run prepare:sidecar`); no .NET runtime required on user machines
 
 ### Frontend (`frontend/`)
 
@@ -178,9 +177,11 @@ Valid profiles: `portrait-xl` (450×1920), `portrait-slim` (480×1920), `portrai
 
 Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `battery`. `motherboard`, `process`, and `battery` are opt-in (not included in the default visible set).
 
-### LHM integration
+### Sensor sidecar integration
 
-LibreHardwareMonitor runs as a Windows scheduled task (installed by the NSIS installer as admin). It exposes a local HTTP server on port 8085. The Rust backend polls `/data.json` every tick with an 800 ms timeout. On failure it falls back to the last successful sample. GPU candidates are collected from `/gpu-*` SensorId families with sensor-name fallbacks, then selected by preferred GPU (if set) or stable default (highest VRAM, tie-break by load). Extracted GPU fields: core load, core temp, hotspot temp, core clock (`gpu_freq`), memory clock (`gpu_mem_freq`), power, fan speed, VRAM used/total, D3D 3D engine load (`gpu_d3d_3d`), and D3D Video Decode load (`gpu_d3d_vdec`), plus `gpu_devices` for selector dots in the renderer. D3D fields are `None` when the GPU is idle or the driver does not report them; the frontend hides their bar rows in that case.
+`rigstats-sensor.exe` runs as a Windows Service (LocalSystem, auto-start at boot). The NSIS installer registers the service with `sc create`, sets restart-on-failure policy via `sc failure`, and starts it immediately. On update: `sc stop` in PREINSTALL, then `sc delete` + `sc create` + `sc start` in POSTINSTALL. On uninstall: `sc stop` + `sc delete`.
+
+The Rust backend connects to `\\.\pipe\rigstats-sensors` with `.write(false)` (pipe is write-only from the server side). On connect failure it falls back to the last successful sample so the UI never resets. GPU selection: preferred GPU (if set) → highest VRAM (stable default) → tie-break by load. Extracted GPU fields: core load, core temp, hotspot temp, core clock (`gpu_freq`), memory clock (`gpu_mem_freq`), power, fan speed, VRAM used/total, D3D 3D engine load (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus `gpu_devices` for selector dots. D3D fields are `None` when idle; the frontend hides their bar rows in that case.
 
 ### Settings persistence
 

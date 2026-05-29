@@ -55,8 +55,7 @@
       "../assets/tray.png"
     ],
     "resources": {
-      "../vendor/lhm/": "lhm/",
-      "../build/lhm-default/": "lhm/defaults/",
+      "../sensor-sidecar/bin/Release/net8.0-windows/win-x64/publish/rigstats-sensor.exe": "rigstats-sensor.exe",
       "../CHANGELOG.md": "CHANGELOG.md"
     }
   },

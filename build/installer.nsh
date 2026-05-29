@@ -1,17 +1,16 @@
-!include "FileFunc.nsh"
-
 !macro NSIS_HOOK_PREINSTALL
-  ; Stop LibreHardwareMonitor before files are extracted.
-  ; During an update LHM is already running and holds its DLLs (Aga.Controls.dll
-  ; etc.) open — without this step the installer fails with "Error opening file
-  ; for writing" on every update.
-  ; All commands redirect to NUL so they fail silently on a fresh install where
-  ; LHM is not running yet.
+  ; Stop the sidecar service before files are extracted.
+  ; During an update the running service holds rigstats-sensor.exe open — without
+  ; this the installer fails with "Error opening file for writing".
+  ; All commands redirect to NUL so they fail silently on a fresh install.
+  nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
+  Sleep 3000
+  ; Also stop old LHM processes when upgrading from a pre-sidecar version (< 1.20).
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "RIGStats\LibreHardwareMonitor" >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "RigStats\LibreHardwareMonitor" >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "LibreHardwareMonitor" >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C taskkill /F /IM LibreHardwareMonitor.exe >NUL 2>&1'
-  Sleep 1500
+  Sleep 1000
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
@@ -22,69 +21,46 @@
   FileOpen $9 "$PROGRAMDATA\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
 
-  ; Prefer an existing LibreHardwareMonitor installation if present.
-  ; Fallback to bundled LHM inside RigStats installation directory.
-  StrCpy $0 "$INSTDIR\\lhm\\LibreHardwareMonitor.exe"
-
-  IfFileExists "$PROGRAMFILES64\\LibreHardwareMonitor\\LibreHardwareMonitor.exe" 0 +2
-  StrCpy $0 "$PROGRAMFILES64\\LibreHardwareMonitor\\LibreHardwareMonitor.exe"
-
-  IfFileExists "$PROGRAMFILES\\LibreHardwareMonitor\\LibreHardwareMonitor.exe" 0 +2
-  StrCpy $0 "$PROGRAMFILES\\LibreHardwareMonitor\\LibreHardwareMonitor.exe"
-
-  IfFileExists "$LOCALAPPDATA\\Programs\\LibreHardwareMonitor\\LibreHardwareMonitor.exe" 0 +2
-  StrCpy $0 "$LOCALAPPDATA\\Programs\\LibreHardwareMonitor\\LibreHardwareMonitor.exe"
-
-  FileWrite $9 "lhm_exe=$0$\r$\n"
-
-  ; Apply default config to the selected LHM installation (existing or bundled).
-  ; This enables the web server on port 8085 without manual setup.
-  IfFileExists "$INSTDIR\\lhm\\defaults\\LibreHardwareMonitor.config" 0 no_bundled_config
-  ${GetParent} "$0" $1
-  IfFileExists "$1\\LibreHardwareMonitor.config" 0 +3
-  Delete "$1\\LibreHardwareMonitor.config.backup"
-  Rename "$1\\LibreHardwareMonitor.config" "$1\\LibreHardwareMonitor.config.backup"
-  nsExec::ExecToStack 'cmd /C copy /Y "$INSTDIR\lhm\defaults\LibreHardwareMonitor.config" "$1\LibreHardwareMonitor.config"'
-  Pop $4
-  Pop $5
-  DetailPrint "LHM config copy: exit $4"
-  FileWrite $9 "config_copy_exit=$4$\r$\n"
-  no_bundled_config:
-
-  ; Create or update scheduled task for LibreHardwareMonitor at any user logon.
-  ; Uses PowerShell Register-ScheduledTask without -UserId so the trigger fires for
-  ; ALL users (not just the admin who ran the installer). HighestAvailable = admin token
-  ; for admin users, standard token for standard users.
+  ; Remove old LHM scheduled tasks from pre-sidecar versions (< 1.20).
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RIGStats\LibreHardwareMonitor" /F >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RigStats\LibreHardwareMonitor" /F >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "LibreHardwareMonitor" /F >NUL 2>&1'
+  FileWrite $9 "old_lhm_tasks_removed=1$\r$\n"
 
-  FileOpen $3 "$TEMP\create-lhm-task.ps1" w
-  FileWrite $3 "$$a = New-ScheduledTaskAction -Execute $\"$0$\"$\r$\n"
-  FileWrite $3 "$$t = New-ScheduledTaskTrigger -AtLogOn$\r$\n"
-  FileWrite $3 "$$s = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)$\r$\n"
-  FileWrite $3 "$$p = New-ScheduledTaskPrincipal -GroupId 'S-1-5-32-545' -RunLevel Highest$\r$\n"
-  FileWrite $3 "Register-ScheduledTask -TaskName 'LibreHardwareMonitor' -Action $$a -Trigger $$t -Settings $$s -Principal $$p -Force$\r$\n"
-  FileClose $3
-  nsExec::ExecToStack 'powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$TEMP\create-lhm-task.ps1"'
+  ; Remove the existing service before re-registering (handles update scenario).
+  ; The service was already stopped in PREINSTALL; this delete just removes the
+  ; SCM entry so we can re-create it with the fresh binary path.
+  nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
+  Sleep 1000
+
+  ; Register rigstats-sensor.exe as a Windows Service running as LocalSystem.
+  ; LocalSystem has the privileges needed to load the WinRing0 kernel driver.
+  ; start= auto means the SCM starts it automatically at boot.
+  nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "$INSTDIR\rigstats-sensor.exe" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
   Pop $4
   Pop $5
-  DetailPrint "LHM task register: exit $4"
-  FileWrite $9 "lhm_task_register_exit=$4$\r$\n"
-  Delete "$TEMP\create-lhm-task.ps1"
+  DetailPrint "Service create: exit $4"
+  FileWrite $9 "service_create_exit=$4$\r$\n"
 
-  ; Run LHM directly in the installer's admin context so PawnIO (kernel driver) is
-  ; installed on first use. The user will see a PawnIO prompt and should click Yes.
-  ; Using Exec (non-blocking) so the installer can finish while LHM initialises.
-  DetailPrint "Starting LibreHardwareMonitor — click Yes if asked about PawnIO installation."
-  FileWrite $9 "lhm_started=1$\r$\n"
-  Exec "$\"$0$\""
+  nsExec::ExecToLog 'cmd /C sc description rigstats-sensor "Reads hardware sensors for the RIGStats dashboard." >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C sc failure rigstats-sensor reset= 60 actions= restart/5000/restart/10000/restart/30000 >NUL 2>&1'
+
+  ; Start the service now so sensor data is available without a reboot.
+  nsExec::ExecToStack 'cmd /C sc start rigstats-sensor >NUL 2>&1'
+  Pop $6
+  Pop $7
+  DetailPrint "Service start: exit $6"
+  FileWrite $9 "service_start_exit=$6$\r$\n"
 
   FileClose $9
 !macroend
 
 !macro NSIS_HOOK_POSTUNINSTALL
-  ; Remove scheduled task created during installation.
-  nsExec::ExecToLog 'schtasks /Delete /TN "RigStats\\LibreHardwareMonitor" /F'
-  nsExec::ExecToLog 'schtasks /Delete /TN "LibreHardwareMonitor" /F'
+  ; Stop and remove the sensor service.
+  nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
+  Sleep 2000
+  nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
+  ; Remove old LHM tasks if still present from a partial upgrade.
+  nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RigStats\LibreHardwareMonitor" /F >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "LibreHardwareMonitor" /F >NUL 2>&1'
 !macroend
