@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.20.0](https://github.com/dvalfrid/rigstats/compare/v1.19.0...v1.20.0) (2026-05-29)
+
+
+### Features
+
+* add battery panel and fix clock/header UI issues ([ed7d35d](https://github.com/dvalfrid/rigstats/commit/ed7d35d9574cd7f0bb0a4d7e47b75c6268d21d24))
+* **diag:** expand diagnostics ZIP and add regression tests ([3df0868](https://github.com/dvalfrid/rigstats/commit/3df0868fffa73e8c74d400fc192439a16544b1a2))
+* **panels:** remove right-click context menu and standardize secondary panel heights to 320px ([5b46c71](https://github.com/dvalfrid/rigstats/commit/5b46c71d8eebcfe7300de9f83e3c68e3415db9b5))
+* **settings:** redesign with four-tab UI, battery alerts, and DPI fix ([adac083](https://github.com/dvalfrid/rigstats/commit/adac08314c159480de732600e67f866b7dbc083b))
+
+
+### Bug Fixes
+
+* remove RAM sparkline and fix SPEED/TYPE detection on laptops ([b0bba5d](https://github.com/dvalfrid/rigstats/commit/b0bba5d4219891cb481bbdfcf1427dca0d4347a4))
+* **ui:** sync clock/RAM/battery font size and add battery power colours ([c80d3d2](https://github.com/dvalfrid/rigstats/commit/c80d3d2a9df60c7397be597836f857c5f92a9e91))
+
 ## [1.19.0](https://github.com/dvalfrid/rigstats/compare/v1.18.0...v1.19.0) (2026-04-18)
 
 
