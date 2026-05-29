@@ -48,6 +48,37 @@ fn monitor_work_area(
   (x as f64, y as f64)
 }
 
+/// Centers a window on the monitor that contains the tray icon.
+/// Converts physical monitor coordinates to logical pixels using the monitor's scale
+/// factor, so the result is correct on high-DPI displays.
+fn center_on_tray_monitor(app: &AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
+  let tray_x = LAST_TRAY_CLICK_X.load(Ordering::Relaxed);
+  let tray_y = LAST_TRAY_CLICK_Y.load(Ordering::Relaxed);
+  let monitors = app.available_monitors().ok()?;
+
+  let monitor = if tray_x != i32::MIN && tray_y != i32::MIN {
+    monitors.into_iter().find(|m| {
+      let pos = m.position();
+      let size = m.size();
+      tray_x >= pos.x && tray_x < pos.x + size.width as i32 && tray_y >= pos.y && tray_y < pos.y + size.height as i32
+    })
+  } else {
+    None
+  }?;
+
+  let scale = monitor.scale_factor();
+  // Physical monitor origin → logical pixels.
+  let logical_ox = monitor.position().x as f64 / scale;
+  let logical_oy = monitor.position().y as f64 / scale;
+  // Physical monitor dimensions → logical pixels.
+  let logical_w = monitor.size().width as f64 / scale;
+  let logical_h = monitor.size().height as f64 / scale;
+
+  let x = (logical_ox + (logical_w - width) / 2.0).max(logical_ox);
+  let y = (logical_oy + (logical_h - height) / 2.0).max(logical_oy);
+  Some((x, y))
+}
+
 /// Computes a position for a popup that is anchored just above the tray icon.
 /// Falls back to the bottom-right corner of the primary monitor.
 fn tray_anchor_position(app: &AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
@@ -119,9 +150,13 @@ pub fn ensure_settings_window(app: &AppHandle) -> Result<(), String> {
     return Ok(());
   }
 
-  let width = 640.0;
-  let height = 860.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((40.0, 40.0));
+  let width = 560.0;
+  let height = 600.0;
+  // Settings is a dialog — center it on the monitor that contains the tray icon.
+  // tray_anchor_position computes in physical pixels but WebviewWindowBuilder::position
+  // expects logical pixels, causing off-screen placement on high-DPI displays.
+  // Centering avoids that coordinate-system mismatch entirely.
+  let (x, y) = center_on_tray_monitor(app, width, height).unwrap_or((60.0, 60.0));
 
   let window = WebviewWindowBuilder::new(app, "settings", WebviewUrl::App("settings.html".into()))
     .title("Settings")

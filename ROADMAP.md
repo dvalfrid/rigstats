@@ -259,6 +259,38 @@ Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, status
 
 ---
 
+## Settings redesign ✓
+
+**UI:** Four-tab layout replacing the previous two-column scroll.
+
+**Implemented.** The Settings window was reorganised from a tall two-column layout
+into a compact 560×560 tabbed interface that scales cleanly as new settings are added.
+
+**Tabs:**
+
+| Tab | Content |
+| --- | --- |
+| Dashboard | Display profile, floating mode + panel scale |
+| Panels | Drag-to-reorder panel list with visibility toggles |
+| Alerts | Notification cooldown, notify-on-critical toggle, temperature thresholds (CPU/GPU/RAM/Disk), battery charge thresholds |
+| Appearance | Rig name, opacity, always-on-top, autostart, theme |
+
+The active tab is remembered across sessions in `localStorage`. The window is
+centered on the monitor that contains the tray icon using DPI-aware coordinate
+conversion (`center_on_tray_monitor`) — the previous `tray_anchor_position`
+approach mixed physical and logical pixel coordinates and placed the window
+off-screen on scaled displays.
+
+Battery charge alert thresholds were added alongside the redesign. The backend
+fires a Windows notification when the battery charge drops below a configurable
+percentage while discharging. Semantics are reversed from temperature alerts —
+the warn threshold must be *above* the crit threshold (e.g. warn at 20 %, crit at 10 %).
+Validation enforces this constraint in `save_settings`. Default thresholds: warn 20 %, crit 10 %.
+Warning-level notifications are permanently disabled (`notify_on_warn` is always
+sent as `false`); only Critical alerts have a user-visible toggle.
+
+---
+
 ## Stats logging / data export
 
 **Panel:** Settings (new Logging card) + tray menu shortcut

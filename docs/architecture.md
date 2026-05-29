@@ -267,15 +267,23 @@ new fields deserialise cleanly from older settings files. `last_seen_version`
 is compared against `CARGO_PKG_VERSION` at startup to detect the first launch
 after an upgrade.
 
-Temperature alert thresholds are stored as
-`thresholds: HashMap<String, ComponentThresholds>` where
-`ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys are
-`"cpu"`, `"gpu"`, `"ram"`, `"disk"`. A `settings_version: u8` field acts as a
-migration sentinel (0 = legacy format, 1 = current). When `load_settings` reads
-a version-0 file it runs `migrate_v0_thresholds` once — copying the eight old
-flat fields into the map — then re-persists. The eight legacy flat fields are
-kept as private `#[serde(default, skip_serializing)]` shims so old files can
-be read but are never written back.
+Alert thresholds are stored as `thresholds: HashMap<String, ComponentThresholds>`
+where `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys
+are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"battery"`.
+
+Threshold semantics differ by key:
+- **Temperature keys** (`cpu`/`gpu`/`ram`/`disk`): alert fires when the reading
+  **exceeds** the threshold. `warn < crit` is enforced.
+- **Battery key**: alert fires when charge % **drops below** the threshold.
+  `warn > crit` is enforced (warn at 20 %, crit at 10 % is the default).
+  Only fires when discharging. Alert message: "Battery WARNING — 18% remaining".
+
+A `settings_version: u8` field acts as a migration sentinel (0 = legacy format,
+1 = current). When `load_settings` reads a version-0 file it runs
+`migrate_v0_thresholds` once — copying the eight old flat fields into the map —
+then re-persists. The eight legacy flat fields are kept as private
+`#[serde(default, skip_serializing)]` shims so old files can be read but are
+never written back.
 
 Floating panel layout adds three fields — all `#[serde(default)]`, no migration
 needed:
@@ -297,8 +305,14 @@ Multi-GPU pinning adds one field:
 
 Creates and positions secondary windows:
 `ensure_settings_window`, `ensure_about_window`, `ensure_status_window`,
-`ensure_updater_window`. Windows anchor to the last tray icon click position
-via `set_last_tray_click_position`.
+`ensure_updater_window`.
+
+Settings window uses `center_on_tray_monitor` which converts the physical tray
+click position to logical pixels using `monitor.scale_factor()`, then centres
+the 560×600 window on that monitor. Other secondary windows use
+`tray_anchor_position` (anchored above the tray icon). Both functions read
+`LAST_TRAY_CLICK_X/Y` set by `set_last_tray_click_position`; fall back to a
+fixed offset when no click has been recorded.
 
 Floating panel management:
 
@@ -370,7 +384,7 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `themes.js` | CSS custom property application for colour themes |
 | `panels/*.js` | One module per panel (see Dashboard Panels) |
 | `panel-host.js` | Shared entry for floating panel windows — detects panel from window label, subscribes to `stats-broadcast`, saves positions on move |
-| `settings.js` | Settings window entry script |
+| `settings.js` | Settings window — four-tab segmented UI (Dashboard · Panels · Alerts · Appearance); active tab persisted in `localStorage`; warning alerts permanently off, only Critical has a toggle |
 | `about.js` | About window entry script |
 | `status.js` | Status window entry script |
 | `updater.js` | Updates & Changelog window entry script |

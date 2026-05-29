@@ -7,23 +7,59 @@
 <link rel="icon" type="image/x-icon" href="./favicon.ico">
 <link rel="stylesheet" href="./dialog.css">
 <style>
-/* ── Settings-specific layout ───────────────────────────────────────────── */
-.content {
-  padding: 10px;
-  display: flex;
-  gap: 8px;
-  flex: 1;
-  min-height: 0;
+/* ── Tab bar ──────────────────────────────────────────────────────────────── */
+.tabs-bar {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.col {
-  flex: 1;
+.tabs-segment {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2px;
+  gap: 2px;
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-lg) - 2px);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 5px 8px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.12s, color 0.12s;
+}
+.tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.tab.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: transparent;
+  font-weight: 600;
 }
 
-/* Range slider */
+/* ── Scrollable content area ──────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+}
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+}
+.tab-panel.active { display: flex; }
+
+/* ── Range sliders ────────────────────────────────────────────────────────── */
 input[type=range] {
   flex: 1;
   -webkit-appearance: none;
@@ -57,50 +93,44 @@ input[type=range]::-webkit-slider-thumb {
 .slider-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 4px;
+  margin-top: 2px;
   font-size: 10px;
   color: var(--text-3);
 }
 
-/* Alert grid */
+/* ── Alert threshold grid ─────────────────────────────────────────────────── */
 .alert-grid {
   display: grid;
   grid-template-columns: 1fr 48px 48px;
   align-items: center;
-  gap: 4px 5px;
+  gap: 5px 6px;
 }
 .alert-col-header {
   font-size: 10px;
   font-weight: 600;
   text-align: center;
-  padding-bottom: 1px;
 }
 .alert-col-header.warn { color: var(--warn); }
 .alert-col-header.crit { color: var(--bad); }
-.alert-row-label {
-  font-size: 12px;
-  color: var(--text);
-}
+.alert-row-label { font-size: 12px; color: var(--text); }
 input[type=number].alert-num {
   width: 48px;
   font-family: var(--mono);
+  text-align: center;
   padding: 4px 4px;
 }
-
-/* Panel drag-and-drop list */
-.panels-card {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.alert-separator {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
 }
+
+/* ── Panel drag-and-drop list ─────────────────────────────────────────────── */
 .panel-list {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow-y: auto;
-  min-height: 0;
 }
 .panel-item {
   display: flex;
@@ -109,7 +139,7 @@ input[type=number].alert-num {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 5px 8px;
+  padding: 4px 8px;
   user-select: none;
   transition: border-color 0.12s, background 0.12s, margin-top 0.2s ease;
 }
@@ -136,14 +166,14 @@ input[type=number].alert-num {
 }
 .panel-item.hidden-panel .panel-item-label { color: var(--text-2); }
 
-.floating-scale-row {
+/* ── Floating scale row ───────────────────────────────────────────────────── */
+#floatingScaleRow {
   display: none;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 8px 10px;
 }
-
 .floating-scale-head {
   display: flex;
   align-items: center;
@@ -151,13 +181,13 @@ input[type=number].alert-num {
   margin-bottom: 4px;
 }
 
-/* Status bar (class names must match setStatus() in settings.js) */
+/* ── Status bar ───────────────────────────────────────────────────────────── */
 .status {
   font-size: 11px;
   color: var(--text-2);
   min-height: 14px;
-  padding: 2px 1px;
   flex-shrink: 0;
+  margin-right: auto;
 }
 .status-ok  { color: var(--good); }
 .status-err { color: var(--bad); }
@@ -165,51 +195,52 @@ input[type=number].alert-num {
 </head>
 <body>
 <div class="shell">
+
+  <!-- Title -->
   <div class="hero">
     <div class="dialog-title">Settings</div>
-    <div class="dialog-subtitle">Dashboard preferences and window behavior.</div>
   </div>
 
+  <!-- Tab bar -->
+  <div class="tabs-bar">
+    <div class="tabs-segment">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="panels">Panels</button>
+      <button class="tab" data-tab="alerts">Alerts</button>
+      <button class="tab" data-tab="appearance">Appearance</button>
+    </div>
+  </div>
+
+  <!-- Tab content -->
   <div class="content">
 
-    <!-- Left column: model name, display/window, temperature alerts -->
-    <div class="col">
-      <div class="card" id="modelNameCard">
-        <div class="section-label">Model Name</div>
-        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false" style="width:100%;">
+    <!-- ── Dashboard tab ──────────────────────────────────────────────────── -->
+    <div class="tab-panel active" id="tab-dashboard">
+
+      <div class="card">
+        <div class="section-label">Display Profile</div>
+        <select id="profileSelect">
+          <option value="portrait-xl">Portrait XL (450×1920)</option>
+          <option value="portrait-slim">Portrait Slim (480×1920)</option>
+          <option value="portrait-fhd-side">FHD Sidebar (253×1080)</option>
+          <option value="portrait-qhd-side">QHD Sidebar (338×1440)</option>
+          <option value="portrait-4k-side">4K Sidebar (506×2160)</option>
+          <option value="portrait-hd">Portrait HD (720×1280)</option>
+          <option value="portrait-wxga">Portrait WXGA (800×1280)</option>
+          <option value="portrait-fhd">Portrait FHD (1080×1920)</option>
+          <option value="portrait-wuxga">Portrait WUXGA (1200×1920)</option>
+          <option value="portrait-qhd">Portrait QHD (1440×2560)</option>
+          <option value="portrait-hdplus">Portrait HD+ (768×1366)</option>
+          <option value="portrait-900x1600">Portrait 900×1600</option>
+          <option value="portrait-1050x1680">Portrait 1050×1680</option>
+          <option value="portrait-1600x2560">Portrait 1600×2560</option>
+          <option value="portrait-4k">Portrait 4K (2160×3840)</option>
+        </select>
       </div>
 
-      <div class="card" id="displayWindowCard">
-        <div class="section-label">Display &amp; Window</div>
+      <div class="card">
+        <div class="section-label">Layout</div>
         <div style="display:flex;flex-direction:column;gap:6px;">
-          <select id="profileSelect">
-            <option value="portrait-xl">Portrait XL (450×1920)</option>
-            <option value="portrait-slim">Portrait Slim (480×1920)</option>
-            <option value="portrait-fhd-side">FHD Sidebar (253×1080)</option>
-            <option value="portrait-qhd-side">QHD Sidebar (338×1440)</option>
-            <option value="portrait-4k-side">4K Sidebar (506×2160)</option>
-            <option value="portrait-hd">Portrait HD (720×1280)</option>
-            <option value="portrait-wxga">Portrait WXGA (800×1280)</option>
-            <option value="portrait-fhd">Portrait FHD (1080×1920)</option>
-            <option value="portrait-wuxga">Portrait WUXGA (1200×1920)</option>
-            <option value="portrait-qhd">Portrait QHD (1440×2560)</option>
-            <option value="portrait-hdplus">Portrait HD+ (768×1366)</option>
-            <option value="portrait-900x1600">Portrait 900×1600</option>
-            <option value="portrait-1050x1680">Portrait 1050×1680</option>
-            <option value="portrait-1600x2560">Portrait 1600×2560</option>
-            <option value="portrait-4k">Portrait 4K (2160×3840)</option>
-          </select>
-          <label class="toggle-row" for="alwaysOnTopInput">
-            <span class="toggle-label">Always On Top</span>
-            <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
-          </label>
-          <label class="toggle-row" for="autostartInput">
-            <div>
-              <div class="toggle-label">Launch at Startup</div>
-              <div class="toggle-sublabel">Starts at login · LHM connects automatically</div>
-            </div>
-            <input class="toggle-input" type="checkbox" id="autostartInput">
-          </label>
           <label class="toggle-row" for="floatingModeInput">
             <div>
               <div class="toggle-label">Floating Mode</div>
@@ -217,7 +248,7 @@ input[type=number].alert-num {
             </div>
             <input class="toggle-input" type="checkbox" id="floatingModeInput">
           </label>
-          <div id="floatingScaleRow" class="floating-scale-row">
+          <div id="floatingScaleRow">
             <div class="floating-scale-head">
               <span style="font-size:12px;color:var(--text-2);">Panel Scale</span>
               <span class="slider-val" id="floatingScaleVal">100%</span>
@@ -225,31 +256,46 @@ input[type=number].alert-num {
             <div class="slider-row">
               <input type="range" id="floatingScaleSlider" min="40" max="100" value="100" step="5">
             </div>
-            <div class="slider-labels">
-              <span>40%</span>
-              <span>100%</span>
-            </div>
-
+            <div class="slider-labels"><span>40%</span><span>100%</span></div>
           </div>
         </div>
       </div>
 
-      <div class="card" id="alertsCard" style="flex:1;display:flex;flex-direction:column;">
-        <div class="section-label">Temperature Alerts</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
-          <span style="font-size:12px;color:var(--text-2);">Cooldown</span>
-          <input type="number" id="alertCooldownInput" min="60" max="3600" step="30" style="width:60px;">
-          <span style="font-size:11px;color:var(--text-2);">s</span>
-          <button id="btnTestAlert" style="margin-left:auto;">Test Alert</button>
+    </div><!-- /tab-dashboard -->
+
+    <!-- ── Panels tab ─────────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-panels">
+      <div class="card">
+        <div class="section-label">Drag to reorder · toggle to show/hide</div>
+        <div id="panelToggles" class="panel-list"></div>
+      </div>
+    </div><!-- /tab-panels -->
+
+    <!-- ── Alerts tab ─────────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-alerts">
+
+      <div class="card">
+        <div class="section-label">Notifications</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label class="toggle-row" for="notifyOnCritInput">
+            <span class="toggle-label">Notify on Critical</span>
+            <input class="toggle-input" type="checkbox" id="notifyOnCritInput" checked>
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--text-2);">Cooldown</span>
+            <input type="number" id="alertCooldownInput" min="60" max="3600" step="30" style="width:60px;">
+            <span style="font-size:11px;color:var(--text-2);">s</span>
+            <button id="btnTestAlert" style="margin-left:auto;">Test Notification</button>
+          </div>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Thresholds (blank to disable)</div>
         <div class="alert-grid">
-          <div style="font-size:11px;color:var(--text-2);">°C — blank to disable</div>
+          <div style="font-size:11px;color:var(--text-3);">Temperature °C</div>
           <div class="alert-col-header warn">Warn</div>
           <div class="alert-col-header crit">Crit</div>
-
-          <div class="alert-row-label" style="color:var(--text-2);">Notify</div>
-          <input type="checkbox" id="notifyOnWarnInput" checked class="toggle-input" style="justify-self:center;">
-          <input type="checkbox" id="notifyOnCritInput" checked class="toggle-input" style="justify-self:center;">
 
           <div class="alert-row-label">CPU</div>
           <input type="number" class="alert-num" id="warnCpuTempInput" min="1" max="255" placeholder="—">
@@ -266,28 +312,55 @@ input[type=number].alert-num {
           <div class="alert-row-label">Disk</div>
           <input type="number" class="alert-num" id="warnDiskTempInput" min="1" max="255" placeholder="—">
           <input type="number" class="alert-num" id="critDiskTempInput" min="1" max="255" placeholder="—">
-        </div>
-        <div id="status" class="status" style="margin-top:auto;padding-top:6px;"></div>
-      </div>
-    </div>
 
-    <!-- Right column: opacity, model name, panel order -->
-    <div class="col">
-      <div class="card" id="opacityCard">
-        <div class="section-label">Opacity</div>
-        <div class="slider-row">
-          <input type="range" id="slider" min="0" max="100" value="55" step="1">
-          <span class="slider-val" id="val">55%</span>
-        </div>
-        <div class="slider-labels">
-          <span>Transparent</span>
-          <span>Solid</span>
+          <div class="alert-separator"></div>
+
+          <div style="font-size:11px;color:var(--text-3);">Battery % (below)</div>
+          <div></div><div></div>
+
+          <div class="alert-row-label">Battery</div>
+          <input type="number" class="alert-num" id="warnBatteryInput" min="1" max="99" placeholder="—">
+          <input type="number" class="alert-num" id="critBatteryInput" min="1" max="99" placeholder="—">
         </div>
       </div>
 
-      <div class="card" id="appearanceCard">
-        <div class="section-label">Appearance</div>
-        <label style="font-size:12px;color:var(--text-2);display:block;margin-bottom:4px;">Theme</label>
+    </div><!-- /tab-alerts -->
+
+    <!-- ── Appearance tab ─────────────────────────────────────────────────── -->
+    <div class="tab-panel" id="tab-appearance">
+      <div class="card">
+        <div class="section-label">Rig Name</div>
+        <input type="text" id="modelNameInput" maxlength="40" spellcheck="false"
+               style="width:100%;" placeholder="Auto-detected from BIOS">
+      </div>
+      <div class="card">
+        <div class="section-label">Window</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+              <span style="font-size:12px;color:var(--text-2);">Opacity</span>
+              <span class="slider-val" id="val">55%</span>
+            </div>
+            <div class="slider-row">
+              <input type="range" id="slider" min="0" max="100" value="55" step="1">
+            </div>
+            <div class="slider-labels"><span>Transparent</span><span>Solid</span></div>
+          </div>
+          <label class="toggle-row" for="alwaysOnTopInput">
+            <span class="toggle-label">Always On Top</span>
+            <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
+          </label>
+          <label class="toggle-row" for="autostartInput">
+            <div>
+              <div class="toggle-label">Launch at Startup</div>
+              <div class="toggle-sublabel">Starts with Windows · LHM connects automatically</div>
+            </div>
+            <input class="toggle-input" type="checkbox" id="autostartInput">
+          </label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-label">Theme</div>
         <select id="themeSelect">
           <option value="dark-cyan">Dark Cyan (default)</option>
           <option value="amber">Amber</option>
@@ -296,21 +369,18 @@ input[type=number].alert-num {
           <option value="slate">Slate</option>
         </select>
       </div>
+    </div><!-- /tab-appearance -->
 
-      <div class="card panels-card" id="panelsCard">
-        <div class="section-label">Panels — drag to reorder</div>
-        <div id="panelToggles" class="panel-list"></div>
-      </div>
-    </div>
+  </div><!-- /content -->
 
-  </div>
-
+  <!-- Footer -->
   <div class="dialog-actions">
+    <div id="status" class="status"></div>
     <button class="btn-primary" id="btnSave">Save</button>
     <button id="btnCancel">Cancel</button>
   </div>
-</div>
 
+</div><!-- /shell -->
 <script type="module" src="./renderer/settings.js"></script>
 </body>
 </html>

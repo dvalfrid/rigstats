@@ -325,13 +325,19 @@ pub fn save_settings(
   settings.visible_panels = applied_visible_panels.clone();
   settings.autostart_enabled = applied_autostart;
 
-  // Temperature alert thresholds: validate all pairs before writing any.
-  // Reject any component where warning >= critical — both are only stored
-  // when they are internally consistent.
+  // Alert threshold validation. Semantics differ by component:
+  // - Temperature (cpu/gpu/ram/disk): warn must be below crit (fires when reading exceeds threshold).
+  // - Battery: warn must be above crit (fires when charge % drops below threshold).
   if let Some(ref t) = thresholds {
     for (component, thresh) in t {
       if let (Some(w), Some(c)) = (thresh.warn, thresh.crit) {
-        if w >= c {
+        if component == "battery" {
+          if w <= c {
+            return Err(format!(
+              "battery: warning threshold ({w}%) must be above critical ({c}%) — both fire when charge drops below the threshold"
+            ));
+          }
+        } else if w >= c {
           return Err(format!(
             "{component}: warning threshold ({w}°C) must be below critical ({c}°C)"
           ));
@@ -680,6 +686,67 @@ fn fire_alert_if_due(
       );
     }
     last_alert.insert(key, now);
+  }
+}
+
+/// Fires a battery charge notification when charge drops below a threshold.
+/// Battery alerts fire when charge is LOW (opposite of temperature which fires when HIGH).
+fn fire_battery_alert_if_due(
+  app: &tauri::AppHandle,
+  last_alert: &mut std::collections::HashMap<String, Instant>,
+  level: &str,
+  charge: u8,
+  threshold: u8,
+  cooldown_secs: u64,
+) {
+  let key = format!("battery_{}", level.to_lowercase());
+  let cooldown = Duration::from_secs(cooldown_secs);
+  let now = Instant::now();
+  let due = match last_alert.get(&key) {
+    None => true,
+    Some(&last) => now.duration_since(last) >= cooldown,
+  };
+  if due {
+    let title = format!("Battery {} — {}% remaining", level, charge);
+    let body = format!("Threshold: below {}%", threshold);
+    if let Err(e) = app.notification().builder().title(&title).body(&body).show() {
+      append_debug_log(app, &format!("notification: battery alert failed ({level}): {e}"));
+    }
+    last_alert.insert(key, now);
+  }
+}
+
+/// Checks battery charge against configured thresholds and fires notifications.
+/// Only fires when the battery is present and actively discharging.
+fn check_battery_alerts(
+  app: &tauri::AppHandle,
+  battery: &crate::stats::BatteryStats,
+  settings: &crate::settings::Settings,
+  last_alert: &mut std::collections::HashMap<String, Instant>,
+) {
+  if !battery.present || battery.charging.unwrap_or(true) {
+    return;
+  }
+  let charge = match battery.charge_pct {
+    Some(c) => c,
+    None => return,
+  };
+  let Some(thresh) = settings.thresholds.get("battery") else {
+    return;
+  };
+  if settings.notify_on_crit {
+    if let Some(c) = thresh.crit {
+      if charge <= c {
+        fire_battery_alert_if_due(app, last_alert, "CRITICAL", charge, c, settings.alert_cooldown_secs);
+      }
+    }
+  }
+  if settings.notify_on_warn {
+    if let Some(w) = thresh.warn {
+      if charge <= w {
+        fire_battery_alert_if_due(app, last_alert, "WARNING", charge, w, settings.alert_cooldown_secs);
+      }
+    }
   }
 }
 
@@ -1151,6 +1218,7 @@ pub async fn get_stats(
       &mut alert_map,
       settings_snap.alert_cooldown_secs,
     );
+    check_battery_alerts(&app, &payload.battery, &settings_snap, &mut alert_map);
   }
 
   Ok(payload)

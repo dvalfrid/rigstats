@@ -18,7 +18,11 @@ pub struct PanelLayout {
 
 // --- Component thresholds --------------------------------------------------
 
-/// Warn/critical temperature pair for a single hardware component.
+/// Warn/critical threshold pair for a hardware component.
+///
+/// Semantics differ by component type:
+/// - Temperature (cpu/gpu/ram/disk): fires when reading **exceeds** the threshold.
+/// - Battery: fires when charge % **drops below** the threshold (warn > crit).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ComponentThresholds {
   pub warn: Option<u8>,
@@ -54,6 +58,14 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
       ComponentThresholds {
         warn: Some(55),
         crit: Some(70),
+      },
+    ),
+    (
+      // Battery fires when charge % DROPS BELOW the threshold (warn > crit).
+      "battery",
+      ComponentThresholds {
+        warn: Some(20),
+        crit: Some(10),
       },
     ),
   ]
