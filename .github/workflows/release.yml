@@ -46,6 +46,12 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
+
       - name: Install dependencies
         run: npm ci
 
