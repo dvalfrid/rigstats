@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.21.0](https://github.com/dvalfrid/rigstats/compare/v1.20.0...v1.21.0) (2026-05-29)
+
+
+### Features
+
+* **diagnostics:** add sidecar log and service status; replace LHM task probe ([1f07487](https://github.com/dvalfrid/rigstats/commit/1f0748730c9ed99afe10aefbaa1bcf76e88d7089))
+* **sidecar:** replace LHM HTTP polling with named pipe sensor sidecar ([5867d1d](https://github.com/dvalfrid/rigstats/commit/5867d1df808e982ccf8588be3d25f3e180941167))
+* **sidecar:** run as Windows Service with PipeSecurity and auto-restart ([78110b0](https://github.com/dvalfrid/rigstats/commit/78110b018f4d81d0b029e7f689db0233e03cfecd))
+* **status:** replace LHM task fields with sidecar service status ([00c9583](https://github.com/dvalfrid/rigstats/commit/00c95837141021b659aee918fab8bd8e77b67420))
+
+
+### Bug Fixes
+
+* **installer:** add Defender exclusion for rigstats-sensor.exe ([70a7044](https://github.com/dvalfrid/rigstats/commit/70a7044a65e7eb5d4695df59009326e66edd3719))
+* **sidecar:** grant full GENERIC_READ rights on pipe ACL ([18279ea](https://github.com/dvalfrid/rigstats/commit/18279ea2e47cc7d97e3e077898ccda2e03e7f18e))
+
 ## [1.20.0](https://github.com/dvalfrid/rigstats/compare/v1.19.0...v1.20.0) (2026-05-29)
 
 
