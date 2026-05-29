@@ -1,5 +1,24 @@
 # Troubleshooting
 
+## Windows Defender Alert On Service Start
+
+When the `rigstats-sensor` service starts for the first time, Windows Defender
+may show a real-time protection alert or SmartScreen warning. This is expected.
+
+`LibreHardwareMonitorLib` loads the `WinRing0` kernel driver to access
+Super I/O chip registers for motherboard fan speeds and voltages. Defender
+flags this driver as potentially unwanted (`HackTool:Win32/WinRing0` or
+similar). The same issue affects Open Hardware Monitor, HWiNFO, and every
+other tool that uses WinRing0.
+
+The installer adds a process-scoped Defender exclusion for `rigstats-sensor.exe`
+automatically. If you installed manually or are running from source, add it once
+via an elevated PowerShell prompt:
+
+```powershell
+Add-MpPreference -ExclusionProcess "rigstats-sensor.exe"
+```
+
 ## GPU Data Always Shows `--`
 
 Make sure the `rigstats-sensor` Windows Service is running:

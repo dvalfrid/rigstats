@@ -30,6 +30,11 @@ npm run build
 npm run prepare:sidecar
 ```
 
+> **Local dev note:** `npm run verify` and `npm run prepare:sidecar` fail if the
+> `rigstats-sensor` Windows Service is running, because the service holds the exe
+> open. Stop it first (`sc.exe stop rigstats-sensor` in an elevated terminal),
+> then run verify, then restart the service.
+
 Run a single frontend test file with vitest:
 
 ```bash
