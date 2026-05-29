@@ -104,8 +104,10 @@ This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardw
 ### Data flow
 
 ```text
-LibreHardwareMonitor (localhost:8085/data.json)          ← current, being replaced
-    └─► lhm.rs: fetch + flatten JSON tree → LhmData struct
+rigstats-sensor.exe  (sensor-sidecar/, .NET 8, Windows Service / LocalSystem)
+    └─► LibreHardwareMonitor NuGet → WinRing0 kernel driver
+            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
+                    └─► lhm.rs: pipe client → LhmData struct
 sysinfo crate (CPU load/freq, RAM, disk, network)
 wmi crate (GPU name, VRAM, RAM spec/details, system brand)
     └─► commands.rs: get_stats() → StatsPayload
@@ -114,22 +116,13 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
                             └─► panel modules update DOM
 ```
 
-**Planned data flow (sensor sidecar, in development):**
-
-```text
-rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs as Windows service)
-    └─► LibreHardwareMonitor NuGet library → WinRing0 kernel driver
-            └─► named pipe \\.\pipe\rigstats-sensors
-                    └─► lhm.rs (pipe client, replaces HTTP client) → LhmData struct
-```
-
 ### Backend (`src-tauri/src/`)
 
-- **`main.rs`** — Tauri builder, tray icon, lifecycle. Registers two managed state types at startup: `HardwareInfo` (one-time WMI/sysinfo detection) and `AppState` (per-tick runtime state). Picks the best monitor for the profile and starts LHM.
-- **`stats.rs`** — Two shared state structs and all serializable payload structs (`StatsPayload`, `CpuStats`, etc.). `HardwareInfo` holds startup-detected constants (disk model map, RAM spec, GPU VRAM, system brand, etc.) registered once and never mutated. `AppState` holds per-tick mutable state (LHM client, sysinfo handles, last samples, alert timestamps, settings) behind a `Mutex`.
+- **`main.rs`** — Tauri builder, tray icon, lifecycle. Registers two managed state types at startup: `HardwareInfo` (one-time WMI/sysinfo detection) and `AppState` (per-tick runtime state). Picks the best monitor for the profile and shows the main window.
+- **`stats.rs`** — Two shared state structs and all serializable payload structs (`StatsPayload`, `CpuStats`, etc.). `HardwareInfo` holds startup-detected constants (disk model map, RAM spec, GPU VRAM, system brand, etc.) registered once and never mutated. `AppState` holds per-tick mutable state (lhm_pipe named pipe connection, sysinfo handles, last samples, alert timestamps, settings) behind a `Mutex`.
 - **`commands.rs`** — Thin `#[tauri::command]` handlers only. Each handler delegates to a domain module; no business logic lives here. Floating mode transitions are serialized with a mutex in `toggle_floating_mode` to prevent overlapping enable/disable races. Includes `set_gpu_preference` command (accepts both `gpu_name` and `gpuName`) used by the GPU selector dots in fixed and floating mode.
 - **`debug.rs`** — `append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`. No deps on other crate modules — safe to import from anywhere.
-- **`hardware.rs`** — WMI structs + all startup hardware detection: `detect_gpu_name`, `detect_gpu_vram_total_mb`, `detect_system_brand`, `classify_system_brand`, `detect_model_name`, `detect_motherboard_name`, `normalize_manufacturer`, `detect_ram_spec`, `detect_ram_details`, `detect_ping_target`, `sample_ping_ms`, `probe_wmi_status`, `detect_disk_model_map`. Each function tries WMI first, falls back to PowerShell CIM. `detect_disk_model_map` resolves drive letters to physical disk model names via a three-table WMI join and stores the result in `HardwareInfo` at startup for stable LHM temperature matching. `detect_motherboard_name` queries `Win32_BaseBoard` for manufacturer + product and normalizes the manufacturer string (ASUSTeK → ASUS, Micro-Star → MSI, etc.); result stored in `HardwareInfo.mb_name`.
+- **`hardware.rs`** — WMI structs + all startup hardware detection: `detect_gpu_name`, `detect_gpu_vram_total_mb`, `detect_system_brand`, `classify_system_brand`, `detect_model_name`, `detect_motherboard_name`, `normalize_manufacturer`, `detect_ram_spec`, `detect_ram_details`, `detect_ping_target`, `sample_ping_ms`, `probe_wmi_status`, `detect_disk_model_map`. Each function tries WMI first, falls back to PowerShell CIM. `detect_disk_model_map` resolves drive letters to physical disk model names via a three-table WMI join and stores the result in `HardwareInfo` at startup for stable sidecar temperature matching. `detect_motherboard_name` queries `Win32_BaseBoard` for manufacturer + product and normalizes the manufacturer string (ASUSTeK → ASUS, Micro-Star → MSI, etc.); result stored in `HardwareInfo.mb_name`.
 - **`lhm.rs`** — Named pipe client that connects to `\\.\pipe\rigstats-sensors` and deserialises the newline-delimited JSON stream into `LhmData`. `fetch_lhm_pipe` reuses an established connection stored in `AppState.lhm_pipe`; on connect failure it logs at most once every 30 s via `LAST_PIPE_FAIL_LOG_SECS`. The pipe client uses `.write(false)` on `ClientOptions` because the sidecar pipe is `PipeDirection.Out` (requesting write access returns `ERROR_ACCESS_DENIED`). GPU selection is handled by `select_gpu_idx` (pure function, testable): preferred GPU (case-insensitive substring) → highest VRAM → tie-break by load. Old HTTP parsing code (`flatten_lhm`, `parse_lhm`, `FlatNode`, etc.) is retained under `#[cfg(test)]` to keep the existing unit tests green.
 - **`lhm_process.rs`** — Retained query helpers for the legacy LHM scheduled task, used only by `diagnostics.rs`: `can_reach_lhm_endpoint`, `get_lhm_task_details`, `get_lhm_task_diagnosis`, `track_lhm_connection_state` (connect/disconnect logging with 30 s throttle).
 - **`monitor.rs`** — Profile definitions (`normalize_profile`, `profile_dimensions`), monitor selection (`pick_target_monitor`, `fit_score`), panel visibility normalisation (`normalize_visible_panels`). `pick_target_monitor` never uses `set_fullscreen` — borderless positioning via `set_size` + `set_decorations(false)` + `set_position` is sufficient. `set_decorations(false)` is always called after `set_size` because Windows `SetWindowPos` can restore `WS_CAPTION`/`WS_THICKFRAME`. `set_position` compensates for the DWM invisible resize border (inset = `inner_position − outer_position`) so the visible content lands flush with the monitor edge.

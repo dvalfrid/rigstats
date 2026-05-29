@@ -6,7 +6,7 @@ The repository includes `.github/workflows/verify.yml`.
 
 It runs on Windows for push and pull requests and executes:
 
-- `npm run prepare:lhm` (pinned LHM download if needed)
+- `npm run prepare:sidecar` (publishes the .NET sensor sidecar)
 - `cargo test`
 - `cargo check`
 - `vitest run`
@@ -62,9 +62,8 @@ Installer publishing is handled by `.github/workflows/release.yml`.
 
 It runs when a GitHub Release is published and:
 
-- runs verification
-- downloads and bundles pinned LibreHardwareMonitor via build scripts
-- builds the NSIS installer
+- runs verification (including sidecar publish)
+- builds the NSIS installer (sidecar exe is bundled automatically)
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
 - **signs the installer with the Tauri minisign key** (`@tauri-apps/cli signer sign`) — must happen after Azure signing so the signature covers the final PE
 - **generates `latest.json`** — extracts the current version's section from `CHANGELOG.md` and embeds it in the `notes` field; the updater dialog uses this to show release notes before installing
@@ -114,4 +113,5 @@ For best changelog quality, use Conventional Commits, for example:
 3. When you want to release, merge that release PR.
 4. GitHub will create the new tag/release and the release workflow will attach the installer.
 
-The bundled LHM version is pinned in `build/prepare-lhm.ps1` (currently `v0.9.6`).
+The sensor sidecar version is determined by the NuGet package reference in
+`sensor-sidecar/sensor-sidecar.csproj` (`LibreHardwareMonitorLib`).

@@ -134,7 +134,7 @@ mutated: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`,
 `system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
 Registered with `app.manage(HardwareInfo { ... })`.
 
-**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_client`,
+**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`,
 `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`,
 `last_lhm`, `last_alert`, `last_battery_sample`.
 

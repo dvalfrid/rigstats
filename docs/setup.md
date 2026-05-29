@@ -8,52 +8,25 @@
 - Visual Studio 2022 Build Tools with Desktop development with C++
 - Tauri CLI (installed automatically via `npm install`)
 
-## LibreHardwareMonitor
+## Sensor Sidecar
 
-LHM is bundled and runs via a scheduled task with highest privileges.
+Hardware sensor data (GPU temp, CPU temp, fan speeds, voltages, disk temps) is
+collected by `rigstats-sensor.exe` — a self-contained .NET 8 executable that
+embeds `LibreHardwareMonitorLib` and streams readings over a Windows named pipe.
 
-This means:
+The sidecar is installed and managed as a **Windows Service** (`rigstats-sensor`,
+LocalSystem, auto-start at boot). The NSIS installer registers it with `sc create`
+and starts it immediately. It restarts automatically on crash (5 s / 10 s / 30 s).
 
-- The dashboard runs as a normal user without an admin prompt on every start
-- LHM starts at logon and can read sensors with proper permissions
-- The installer uses an existing LHM installation if found, otherwise the bundled version
-- LHM is configured automatically during installation with the web server on port `8085`
-- The pinned LHM release is downloaded automatically into `vendor/lhm/` when you run `npm run build`
-
-The repo does not check in the LHM binaries. Instead, builds use a pinned release:
-
-1. Version: `v0.9.6`
-2. Asset: `LibreHardwareMonitor.zip`
-3. Source: <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/tag/v0.9.6>
-
-You can fetch it manually at any time with:
+The repo does not check in the sidecar binary. It is built from source as part of
+the build pipeline:
 
 ```powershell
-npm run prepare:lhm
+npm run prepare:sidecar   # dotnet publish → sensor-sidecar/bin/Release/.../publish/
+npm run build             # calls prepare:sidecar, then tauri build
 ```
 
-That script downloads the pinned ZIP and extracts the full contents into `vendor/lhm/`.
-
-Expected layout:
-
-```text
-vendor/
-└── lhm/
-    ├── LibreHardwareMonitor.exe
-    ├── LibreHardwareMonitorLib.dll
-    └── ...
-```
-
-During installation:
-
-- The installer first looks for an existing `LibreHardwareMonitor.exe`
-- If none is found, it uses the bundled version in the app's `lhm` folder
-- Default config from `build/lhm-default/LibreHardwareMonitor.config` is applied
-- If a config already exists, it is backed up as `LibreHardwareMonitor.config.backup`
-- Scheduled task `LibreHardwareMonitor` is created or updated with the selected exe path
-- The task is started once immediately after install
-
-If the LHM download fails and `vendor/lhm/` is still missing, `npm run build` will fail instead of producing an installer without bundled sensor support.
+The published exe is bundled into the NSIS installer automatically.
 
 ## Local Development
 
@@ -117,7 +90,7 @@ Build an installable release with:
 npm run build
 ```
 
-This automatically prepares the pinned LibreHardwareMonitor bundle before `tauri build` runs.
+This publishes the sensor sidecar and then runs `tauri build`.
 
 On first run this can take 5 to 10 minutes because Rust dependencies are compiled.
 
@@ -141,4 +114,5 @@ Launch at startup is configured directly in the app — no manual steps required
 
 Open the Settings window (right-click the tray icon → Settings) and enable the **Launch at Startup** toggle. The app registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` and keeps the `StartupApproved\Run` entry in sync so the toggle reflects the actual state shown in Windows Settings → Apps → Startup.
 
-LHM startup is handled separately by the installer-created scheduled task.
+The sensor sidecar (`rigstats-sensor` Windows Service) is installed and started
+by the NSIS installer during setup.

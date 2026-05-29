@@ -2,15 +2,15 @@
 
 ## GPU Data Always Shows `--`
 
-Make sure LibreHardwareMonitor is running and its web server is enabled on port `8085`.
+Make sure the `rigstats-sensor` Windows Service is running:
 
-Test in a browser:
-
-```text
-http://localhost:8085/data.json
+```powershell
+sc.exe query rigstats-sensor
 ```
 
-It should return JSON.
+`STATE: 4 RUNNING` means the sidecar is active. If it is stopped or missing,
+the installer may not have completed successfully — check `install.log` in the
+diagnostics ZIP (Status → Collect Diagnostics).
 
 ## Can I Change Which Display Is Used?
 
@@ -26,7 +26,7 @@ Yes. Open Settings and change Display Profile. Save to apply immediately and per
 
 CPU data comes from `sysinfo` regardless of vendor.
 
-For NVIDIA GPUs, LHM works as well. If labels differ on your machine, adjust the GPU sensor matching in `src-tauri/src/lhm.rs`.
+For NVIDIA GPUs, the sidecar works as well. If labels differ on your machine, adjust the GPU sensor matching in `sensor-sidecar/SensorReader.cs`.
 
 ## How Do I Inspect Real WMI Strings?
 
@@ -90,12 +90,18 @@ Each entry shows:
 
 If the dashboard appears on the wrong monitor, compare the `fitScore` values and check whether the correct monitor has `isPortrait: true` and a lower score than the others.
 
-### What To Look For In `lhm-data.json`
+### What To Look For In `sidecar-parsed.json`
 
-The file is the raw JSON from `http://localhost:8085/data.json`.
-It contains a nested `Children` tree. Each leaf node has `Text` (the sensor name) and `Value` (the current reading).
-When a sensor in the dashboard always shows `--`, compare the `Text` values in this file against the expected strings in `src-tauri/src/lhm.rs`.
-The mismatch is the fix location.
+The file contains the last sensor payload that the Rust backend successfully
+received from the sidecar pipe. It shows the extracted values — GPU temps,
+CPU temp, fan speeds, disk temps, etc. — exactly as the app uses them.
+
+When a sensor always shows `--`, check whether the relevant field is `null`
+here. If it is, the mismatch is in `sensor-sidecar/SensorReader.cs` (the C#
+extraction logic). If the field is present but the wrong value appears in the
+UI, the mismatch is in `src-tauri/src/lhm.rs` (the Rust selection logic).
+
+Check `sidecar-log.txt` for service start/stop events and connection errors.
 
 ## How Do I Update The UI Without Rebuilding?
 
