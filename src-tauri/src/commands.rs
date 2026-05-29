@@ -7,8 +7,8 @@
 // by the IPC dispatch mechanism; suppressing the clippy lint for this module.
 #![allow(clippy::needless_pass_by_value)]
 //! - Settings updates are emitted to the renderer immediately after persistence.
-//! - Stats collection keeps the last successful LHM sample to avoid UI flicker
-//!   when LibreHardwareMonitor is temporarily unavailable.
+//! - Stats collection keeps the last successful sidecar pipe sample to avoid UI flicker
+//!   when the sensor service is temporarily unavailable.
 
 use crate::autostart::{is_autostart_registered_with_log, register_autostart, unregister_autostart};
 use crate::debug::{append_debug_log, read_debug_log_tail};
@@ -21,9 +21,7 @@ pub static APP_READY: AtomicBool = AtomicBool::new(false);
 static FLOATING_TOGGLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm_pipe;
-use crate::lhm_process::{
-  can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state,
-};
+use crate::lhm_process::track_lhm_connection_state;
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, ComponentThresholds, PanelLayout, Settings};
 use crate::stats::{
@@ -39,7 +37,7 @@ use tauri_plugin_notification::NotificationExt;
 const GITHUB_URL: &str = "https://github.com/dvalfrid/rigstats";
 const CONTACT_EMAIL: &str = "daniel@valfridsson.net";
 const LICENSE_NAME: &str = "MIT";
-const LHM_VERSION: &str = "v0.9.6";
+const LHM_LIB_VERSION: &str = "0.9.4";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
 
@@ -75,28 +73,44 @@ pub struct AboutInfo {
   pub contact_email: String,
   pub log_path: String,
   pub log_tail: String,
-  pub lhm_connected: bool,
-  pub lhm_task_name: Option<String>,
-  pub lhm_task_status: Option<String>,
-  pub lhm_task_last_result: Option<String>,
-  pub lhm_task_to_run: Option<String>,
-  pub lhm_task_diagnosis: String,
+  pub sidecar_pipe_connected: bool,
+  pub sidecar_service_state: String,
   pub dependencies: Vec<AboutDependency>,
 }
 
-fn build_about_dependencies(hw: &HardwareInfo) -> Vec<AboutDependency> {
-  let lhm_ok = can_reach_lhm_endpoint();
+fn query_sidecar_service_state() -> String {
+  #[cfg(windows)]
+  {
+    use crate::debug::run_hidden_command;
+    if let Ok(out) = run_hidden_command("sc", &["query", "rigstats-sensor"]) {
+      let text = String::from_utf8_lossy(&out.stdout);
+      for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("STATE") {
+          if let Some((_, rest)) = trimmed.split_once(':') {
+            // "4  RUNNING" → second whitespace-separated token
+            let state = rest.split_whitespace().nth(1).unwrap_or("UNKNOWN");
+            return state.to_string();
+          }
+        }
+      }
+    }
+  }
+  "UNKNOWN".to_string()
+}
+
+fn build_about_dependencies(hw: &HardwareInfo, pipe_connected: bool) -> Vec<AboutDependency> {
   vec![
     AboutDependency {
-      name: "LibreHardwareMonitor".to_string(),
-      version: LHM_VERSION.to_string(),
-      note: Some("GPU and sensor telemetry feed".to_string()),
-      status: if lhm_ok {
+      name: "rigstats-sensor".to_string(),
+      version: format!("LHM {}", LHM_LIB_VERSION),
+      note: Some("Hardware sensor feed (Windows Service)".to_string()),
+      status: if pipe_connected {
         "SUCCESS".to_string()
       } else {
-        "FAILED".to_string()
+        "NO DATA".to_string()
       },
-      ok: lhm_ok,
+      ok: pipe_connected,
     },
     AboutDependency {
       name: "sysinfo".to_string(),
@@ -124,10 +138,18 @@ fn build_about_dependencies(hw: &HardwareInfo) -> Vec<AboutDependency> {
 }
 
 #[tauri::command]
-pub fn get_about_info(app: tauri::AppHandle, hw: tauri::State<'_, HardwareInfo>) -> AboutInfo {
+pub fn get_about_info(
+  app: tauri::AppHandle,
+  hw: tauri::State<'_, HardwareInfo>,
+  state: tauri::State<'_, AppState>,
+) -> AboutInfo {
   use crate::debug::debug_log_path;
   let log_path = debug_log_path(&app);
-  let (lhm_task_name, lhm_task_status, lhm_task_last_result, lhm_task_to_run) = get_lhm_task_details(&app);
+  let pipe_connected = {
+    let last = state.last_lhm.lock().unwrap_or_else(|e| e.into_inner());
+    last.is_some()
+  };
+  let service_state = query_sidecar_service_state();
 
   AboutInfo {
     rigstats_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -136,13 +158,9 @@ pub fn get_about_info(app: tauri::AppHandle, hw: tauri::State<'_, HardwareInfo>)
     contact_email: CONTACT_EMAIL.to_string(),
     log_path: log_path.display().to_string(),
     log_tail: read_debug_log_tail(&app, 160),
-    lhm_connected: can_reach_lhm_endpoint(),
-    lhm_task_name,
-    lhm_task_status,
-    lhm_task_last_result,
-    lhm_task_to_run,
-    lhm_task_diagnosis: get_lhm_task_diagnosis(&app).to_string(),
-    dependencies: build_about_dependencies(&hw),
+    sidecar_pipe_connected: pipe_connected,
+    sidecar_service_state: service_state,
+    dependencies: build_about_dependencies(&hw, pipe_connected),
   }
 }
 

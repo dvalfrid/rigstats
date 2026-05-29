@@ -2,9 +2,8 @@ import { backend, IS_DESKTOP } from './environment.js';
 
 const ids = {
   rigstatsVersion: document.getElementById('rigstatsVersion'),
-  taskName: document.getElementById('taskName'),
-  taskHealth: document.getElementById('taskHealth'),
-  taskToRun: document.getElementById('taskToRun'),
+  serviceState: document.getElementById('serviceState'),
+  pipeHealth: document.getElementById('pipeHealth'),
   logPath: document.getElementById('logPath'),
   lastSuccessAt: document.getElementById('lastSuccessAt'),
   logTail: document.getElementById('logTail'),
@@ -29,10 +28,6 @@ function setCopyState(message) {
   }, 1800);
 }
 
-function setTaskText(element, value) {
-  element.textContent = value && String(value).trim() ? value : '--';
-}
-
 function formatLocalTimestamp(date) {
   return date.toLocaleString('sv-SE', {
     year: 'numeric',
@@ -44,51 +39,24 @@ function formatLocalTimestamp(date) {
   });
 }
 
-function setTaskHealth(info) {
-  const rawStatus = (info.lhmTaskStatus || '').trim().toLowerCase();
-  const rawResult = (info.lhmTaskLastResult || '').trim().toLowerCase();
+function setSidecarStatus(info) {
+  const state = (info.sidecarServiceState || '').trim().toUpperCase();
 
-  let label = 'Unknown';
-  let className = 'health-neutral';
+  let serviceClass = 'health-neutral';
+  if (state === 'RUNNING') serviceClass = 'health-good';
+  else if (state === 'STOPPED' || state === 'FAILED') serviceClass = 'health-bad';
+  ids.serviceState.textContent = state || 'UNKNOWN';
+  ids.serviceState.className = `meta-value ${serviceClass}`;
 
-  if (!info.lhmTaskName) {
-    if (info.lhmTaskDiagnosis === 'access_denied') {
-      label = 'Access denied';
-      className = 'health-bad';
-    } else {
-      label = 'Missing';
-      className = 'health-bad';
-    }
-  } else if (info.lhmConnected) {
-    label = 'Success';
-    className = 'health-good';
-  } else if (rawStatus.includes('running') || rawResult === '267009' || rawResult === '0x41301') {
-    label = 'Running';
-    className = 'health-warn';
-  } else if (rawResult === '0' || rawResult === '0x0') {
-    label = 'Success';
-    className = 'health-good';
-  } else if (rawStatus.includes('disabled') || rawStatus.includes('failed')) {
-    label = 'Failed';
-    className = 'health-bad';
-  } else if (rawResult) {
-    label = 'Failed';
-    className = 'health-bad';
+  if (info.sidecarPipeConnected) {
+    ids.pipeHealth.textContent = 'Connected';
+    ids.pipeHealth.className = 'meta-value health-good';
+    ids.pipeHealth.title = 'The sidecar pipe has delivered at least one sensor payload since startup.';
+  } else {
+    ids.pipeHealth.textContent = 'No data';
+    ids.pipeHealth.className = 'meta-value health-bad';
+    ids.pipeHealth.title = 'No sensor payload received from the sidecar pipe since startup. Check that the rigstats-sensor service is running.';
   }
-
-  ids.taskHealth.textContent = label;
-  ids.taskHealth.className = `meta-value ${className}`;
-  let tooltip = rawResult
-    ? `Derived from Windows Task Scheduler state/result. Raw result: ${info.lhmTaskLastResult}`
-    : 'Derived from Windows Task Scheduler state/result.';
-  if (!info.lhmTaskName) {
-    if (info.lhmTaskDiagnosis === 'access_denied') {
-      tooltip = 'The LHM scheduled task exists but cannot be accessed. It was likely created by a different admin account. Reinstall RIGStats as administrator to fix task permissions.';
-    } else {
-      tooltip = 'No LHM scheduled task was found. Reinstall RIGStats as administrator to create the task.';
-    }
-  }
-  ids.taskHealth.title = tooltip;
 }
 
 function renderDependencies(items) {
@@ -111,9 +79,7 @@ function render(info) {
   const shouldStickToBottom = ids.logTail.scrollHeight - ids.logTail.scrollTop - ids.logTail.clientHeight < 24;
 
   ids.rigstatsVersion.textContent = info.rigstatsVersion;
-  setTaskText(ids.taskName, info.lhmTaskName);
-  setTaskHealth(info);
-  setTaskText(ids.taskToRun, info.lhmTaskToRun);
+  setSidecarStatus(info);
   ids.logPath.textContent = info.logPath;
   ids.logTail.value = info.logTail || '(empty log)';
   if (shouldStickToBottom) {

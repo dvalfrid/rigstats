@@ -549,13 +549,18 @@ task, no HTTP, no external process lifecycle to manage.
 - Old HTTP parsing code (`flatten_lhm`, `parse_lhm`, `FlatNode`, etc.) is
   retained under `#[cfg(test)]` to keep the existing 104-test suite green.
 
-**Remaining work:**
+**Also completed (same release):**
 
-- Windows Service installer (NSIS) — sidecar currently launched manually;
-  installer integration and auto-elevation are the next step.
+- Windows Service installer (NSIS) — `build/installer.nsh` registers
+  `rigstats-sensor` as a Windows Service (`sc create`, restart-on-failure
+  policy, `sc start`). Uninstaller stops and deletes the service.
+- Status screen — "Service" and "Pipe" fields replace the old LHM task fields;
+  dependency table now shows `rigstats-sensor` with live pipe-connected state.
+
+**Remaining:**
+
 - Disk I/O throughput — `SensorReader.cs` does not yet expose disk read/write
   throughput (coming from sysinfo in the interim).
-- About screen — no sidecar connection status indicator yet.
 
 ---
 

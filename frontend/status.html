@@ -129,16 +129,12 @@ textarea {
           <div class="card-title">Diagnostics</div>
           <div class="meta-grid">
             <div>
-              <div class="meta-label">Task Name</div>
-              <div class="meta-value" id="taskName">--</div>
+              <div class="meta-label">Service</div>
+              <div class="meta-value health-neutral" id="serviceState" title="Windows Service state of rigstats-sensor.">--</div>
             </div>
             <div>
-              <div class="meta-label">Task Health</div>
-              <div class="meta-value health-neutral" id="taskHealth" title="Derived from Windows Task Scheduler state and result code.">--</div>
-            </div>
-            <div style="grid-column: 1 / -1;">
-              <div class="meta-label">Task To Run</div>
-              <div class="meta-value" id="taskToRun">--</div>
+              <div class="meta-label">Pipe</div>
+              <div class="meta-value health-neutral" id="pipeHealth" title="Whether the sidecar named pipe has delivered sensor data since startup.">--</div>
             </div>
             <div style="grid-column: 1 / -1;">
               <div class="meta-label">Debug Log Path</div>
@@ -172,7 +168,7 @@ textarea {
 
     <div class="dialog-actions" style="justify-content:space-between;">
       <div class="diag-actions">
-        <button id="collectDiagBtn" title="Collect hardware info, LHM sensor data, debug log and environment details into a ZIP file for bug reports.">Collect Diagnostics…</button>
+        <button id="collectDiagBtn" title="Collect hardware info, sidecar sensor data, debug log and environment details into a ZIP file for bug reports.">Collect Diagnostics…</button>
         <span id="diagState" class="diag-state"></span>
       </div>
       <div style="display:flex;gap:6px;">
