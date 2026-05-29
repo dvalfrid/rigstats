@@ -501,11 +501,11 @@ thread). Produces a self-contained ZIP for bug reports.
 | `debug.log` | `std::fs::read(debug_log_path)` | Full startup + runtime log |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `AppState.settings` snapshot | All user settings |
-| `lhm-data.json` | `GET localhost:8085/data.json` | Raw LHM sensor tree if old HTTP LHM is still reachable (3 s timeout) |
-| `lhm-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
+| `sidecar-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
+| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, connect/disconnect, errors |
+| `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
 | `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
-| `sched-task.txt` | `schtasks /Query /V` | Both LHM task name variants |
 | `environment.txt` | env vars + Windows registry | Arch, build number, hostname |
 | `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
 | `displays.json` | Tauri monitor list | Resolution, position, scale, fit score, which was selected |

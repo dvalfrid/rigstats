@@ -81,22 +81,35 @@ fn diag_collect_hardware() -> String {
   }
 }
 
-fn diag_collect_tasks() -> String {
+fn diag_collect_service() -> String {
   #[cfg(windows)]
   {
-    let task_names = [
-      "LibreHardwareMonitor",
-      "RIGStats\\LibreHardwareMonitor",
-      "RigStats\\LibreHardwareMonitor",
-    ];
     let mut out = String::new();
-    for task_name in task_names {
-      out.push_str(&format!("=== {} ===\n", task_name));
+    for (label, args) in &[
+      ("sc query rigstats-sensor", vec!["query", "rigstats-sensor"]),
+      ("sc qc rigstats-sensor", vec!["qc", "rigstats-sensor"]),
+    ] {
+      out.push_str(&format!("=== {} ===\n", label));
+      match run_hidden_command("sc", args) {
+        Ok(r) => {
+          out.push_str(&String::from_utf8_lossy(&r.stdout));
+          if !r.stderr.is_empty() {
+            out.push_str(&String::from_utf8_lossy(&r.stderr));
+          }
+        }
+        Err(e) => out.push_str(&format!("Error: {}\n", e)),
+      }
+      out.push('\n');
+    }
+    // Also probe old LHM scheduled tasks to help diagnose mixed/partial upgrades.
+    out.push_str("=== legacy LHM tasks (schtasks) ===\n");
+    for task_name in &["LibreHardwareMonitor", "RIGStats\\LibreHardwareMonitor"] {
+      out.push_str(&format!("--- {} ---\n", task_name));
       match run_hidden_command("schtasks", &["/Query", "/TN", task_name, "/V", "/FO", "LIST"]) {
-        Ok(result) => {
-          out.push_str(&String::from_utf8_lossy(&result.stdout));
-          if !result.stderr.is_empty() {
-            out.push_str(&String::from_utf8_lossy(&result.stderr));
+        Ok(r) => {
+          out.push_str(&String::from_utf8_lossy(&r.stdout));
+          if !r.stderr.is_empty() {
+            out.push_str(&String::from_utf8_lossy(&r.stderr));
           }
         }
         Err(e) => out.push_str(&format!("Error: {}\n", e)),
@@ -109,6 +122,13 @@ fn diag_collect_tasks() -> String {
   {
     "not windows\n".to_string()
   }
+}
+
+fn diag_collect_sidecar_log() -> Vec<u8> {
+  let path = std::path::PathBuf::from(std::env::var("PROGRAMDATA").unwrap_or_else(|_| "C:\\ProgramData".to_string()))
+    .join("se.codeby.rigstats")
+    .join("rigstats-sensor.log");
+  std::fs::read(path).unwrap_or_else(|_| b"(sidecar log not found)".to_vec())
 }
 
 fn diag_collect_environment() -> String {
@@ -439,21 +459,13 @@ pub async fn collect_diagnostics(
     serde_json::to_string_pretty(&*s).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
   };
 
-  // Last sensor payload received from the sidecar pipe (replaces raw LHM HTTP dump).
-  let lhm_json = {
-    let last = state.last_lhm.lock().unwrap_or_else(|e| e.into_inner());
-    match &*last {
-      Some(data) => serde_json::to_string_pretty(data).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e)),
-      None => "{\"error\":\"no data received from sidecar yet\"}".to_string(),
-    }
-  };
-
   let hardware_json = pretty_json(&diag_collect_hardware());
-  let tasks_txt = diag_collect_tasks();
+  let service_txt = diag_collect_service();
   let env_txt = diag_collect_environment();
   let battery_json = diag_collect_battery(&state);
   let sysinfo_json = diag_collect_sysinfo(&state, &hw);
   let install_log_bytes = diag_collect_installer_log(&app);
+  let sidecar_log_bytes = diag_collect_sidecar_log();
   let displays_json = {
     let profile = state
       .settings
@@ -463,14 +475,13 @@ pub async fn collect_diagnostics(
       .clone();
     diag_collect_displays(&app, &profile)
   };
-  // Parsed LHM snapshot: shows exactly what values the app derived from the sensor
-  // tree (disk_temps, cpu_temp, gpu_temp, ram_temp, etc.). Faster to read than the
-  // raw tree and directly pinpoints sensor extraction failures.
-  let lhm_parsed_json = {
+  // Parsed sidecar snapshot: what values the Rust backend derived from the last
+  // sidecar payload (disk_temps, cpu_temp, gpu devices, mb fans/voltages, etc.).
+  let sidecar_parsed_json = {
     let guard = state.last_lhm.lock().unwrap_or_else(|e| e.into_inner());
     match &*guard {
       Some(data) => serde_json::to_string_pretty(data).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e)),
-      None => "{\"error\":\"no LHM sample available\"}".to_string(),
+      None => "{\"error\":\"no sidecar sample received yet\"}".to_string(),
     }
   };
 
@@ -483,11 +494,11 @@ pub async fn collect_diagnostics(
     ("debug.log", &log_bytes),
     ("install.log", &install_log_bytes),
     ("settings.json", settings_json.as_bytes()),
-    ("lhm-data.json", lhm_json.as_bytes()),
-    ("lhm-parsed.json", lhm_parsed_json.as_bytes()),
+    ("sidecar-parsed.json", sidecar_parsed_json.as_bytes()),
+    ("sidecar-log.txt", &sidecar_log_bytes),
+    ("sidecar-service.txt", service_txt.as_bytes()),
     ("hardware.json", hardware_json.as_bytes()),
     ("battery.json", battery_json.as_bytes()),
-    ("sched-task.txt", tasks_txt.as_bytes()),
     ("environment.txt", env_txt.as_bytes()),
     ("sysinfo.json", sysinfo_json.as_bytes()),
     ("displays.json", displays_json.as_bytes()),

@@ -9,6 +9,39 @@ namespace SensorSidecar;
 
 public sealed class SensorWorker : BackgroundService
 {
+    private static readonly string LogPath =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "se.codeby.rigstats",
+            "rigstats-sensor.log");
+
+    private static void Log(string message)
+    {
+        var line = $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {message}";
+        Console.Error.WriteLine(line);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            File.AppendAllText(LogPath, line + Environment.NewLine);
+        }
+        catch { }
+    }
+
+    // Keep the log from growing indefinitely: when it exceeds 512 KB, truncate
+    // to the last 500 lines so recent context is always preserved.
+    private static void TruncateLogIfNeeded()
+    {
+        try
+        {
+            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
+            {
+                var lines = File.ReadAllLines(LogPath);
+                File.WriteAllLines(LogPath, lines.TakeLast(500));
+            }
+        }
+        catch { }
+    }
+
     private readonly Computer _computer = new()
     {
         IsCpuEnabled = true,
@@ -45,8 +78,9 @@ public sealed class SensorWorker : BackgroundService
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {
+        TruncateLogIfNeeded();
         _computer.Open();
-        Console.Error.WriteLine("[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\rigstats-sensors");
+        Log("[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\rigstats-sensors");
         return base.StartAsync(cancellationToken);
     }
 
@@ -67,7 +101,7 @@ public sealed class SensorWorker : BackgroundService
             try
             {
                 await pipe.WaitForConnectionAsync(stoppingToken);
-                Console.Error.WriteLine("[rigstats-sensor] Client connected.");
+                Log("[rigstats-sensor] Client connected.");
 
                 try
                 {
@@ -82,7 +116,7 @@ public sealed class SensorWorker : BackgroundService
                 }
                 catch (IOException) { }
 
-                Console.Error.WriteLine("[rigstats-sensor] Client disconnected.");
+                Log("[rigstats-sensor] Client disconnected.");
             }
             catch (OperationCanceledException) { }
             finally
@@ -95,7 +129,7 @@ public sealed class SensorWorker : BackgroundService
     public override Task StopAsync(CancellationToken cancellationToken)
     {
         _computer.Close();
-        Console.Error.WriteLine("[rigstats-sensor] Stopped.");
+        Log("[rigstats-sensor] Stopped.");
         return base.StopAsync(cancellationToken);
     }
 }
