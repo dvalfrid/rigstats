@@ -522,3 +522,35 @@ existing portrait ones.
 - Settings profile picker groups profiles under "Portrait" / "Landscape" headings
 
 ---
+
+## LHM stability — investigate alternative data source
+
+**Background:** LibreHardwareMonitor runs as a separate process (Windows scheduled task) and exposes data over HTTP. Several users report that LHM fails to start, stops responding, or requires a manual restart. Depending on an external process makes hardware data collection inherently fragile.
+
+**What to investigate:**
+
+- **Embed LHM as a .NET library** via a managed sidecar executable (launched and supervised by RigStats) or via Rust → COM/FFI. LHM is MIT-licensed and can be compiled as a class library reference. A sidecar.exe owned by the Tauri process avoids the scheduled-task problem and makes the lifecycle deterministic.
+- **Pure-Rust sensor crates** — are there Rust-native alternatives that cover GPU temp, CPU temp, and fan RPM without requiring .NET?
+- **WMI `MSAcpi_ThermalZoneTemperature` + vendor-specific WMI namespaces** — can these complement sysinfo for the sensors we actually use?
+- **DirectX DXGI + NVAPI / AMD AGS** — pull GPU data directly from the driver, eliminating the LHM middleman entirely.
+
+**Goal:** Eliminate the need for a separate LHM process — or at minimum make the lifecycle fully managed from within RigStats so that crashes or failed starts are handled transparently without user intervention.
+
+---
+
+## UI performance — investigate lighter rendering strategy
+
+**Background:** The dashboard updates the DOM every second via vanilla JS. As panel count grows (floating mode, battery, motherboard, process) layout cost increases. It is worth investigating whether a simpler or faster rendering model can reduce CPU and GPU overhead on the UI thread.
+
+**What to investigate:**
+
+- **Dirty-check before DOM writes** — profile with Chrome DevTools to identify panels causing unnecessary reflows; only write to the DOM when a value has actually changed (`textContent` set guarded by a previous-value comparison).
+- **Canvas-based rendering** — replace DOM panels with canvas drawing (already done for sparklines). Gives sub-millisecond updates without layout/paint overhead at the cost of CSS flexibility.
+- **OffscreenCanvas + Worker** — move canvas rendering to a Web Worker to fully offload the main thread.
+- **WebGL / GPU-accelerated rendering** — relevant if animations or richer visuals are added without incurring CPU cost.
+- **Tauri `wry` / WebView2 process overhead** — measure whether the WebView2 process itself is the bottleneck compared to a native Win32 surface with Direct2D.
+- **Baseline measurement first** — record CPU % for the WebView2 process at idle vs. during a stats tick; target < 1 % on a modern CPU as the acceptance criterion before and after any change.
+
+**Goal:** Identify where UI overhead actually lives and find the highest-impact, lowest-effort fix — likely dirty-checking before DOM writes rather than a full architectural rewrite.
+
+---
