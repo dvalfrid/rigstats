@@ -49,10 +49,11 @@
   --row-ram: 315px;
   --row-net: 260px;
   --row-disk: 295px;
+  --row-battery: 256px;
   --brand-mark-size: 165px;
   --rig-name-size: 44px;
   --model-name-size: 28px;
-  --clock-time-size: 70px;
+  --clock-time-size: 52px;
   --clock-day-size: 18px;
   --big-num-size: 78px;
   --ram-big-num-size: 64px;
@@ -92,14 +93,15 @@ html, body {
   background:var(--border);
   overflow:hidden;
 }
-.panel-header { height:var(--row-header); }
-.panel-clock  { height:var(--row-clock); }
-.panel-cpu    { height:var(--row-cpu); }
-.panel-gpu    { height:var(--row-gpu); }
-.panel-ram    { height:var(--row-ram); }
-.panel-net    { height:var(--row-net); }
-.panel-disk   { height:var(--row-disk); }
-.panel-mb     { height:var(--row-mb); }
+.panel-header  { height:var(--row-header); }
+.panel-clock   { height:var(--row-clock); }
+.panel-cpu     { height:var(--row-cpu); }
+.panel-gpu     { height:var(--row-gpu); }
+.panel-ram     { height:var(--row-ram); }
+.panel-net     { height:var(--row-net); }
+.panel-disk    { height:var(--row-disk); }
+.panel-mb      { height:var(--row-mb); }
+.panel-battery { height:var(--row-battery); }
 
 .dashboard::before {
   content:'';position:absolute;inset:0;
@@ -168,7 +170,7 @@ html, body {
 .bar-fill{height:100%;border-radius:3px;background:var(--c,var(--accent));position:relative;transition:width .7s ease;}
 .bar-fill::after{content:'';position:absolute;right:0;top:0;bottom:0;width:5px;background:#fff;opacity:.5;border-radius:3px;filter:blur(2px);}
 .bar-pct{font-family:var(--mono);font-size:var(--font-ui);color:var(--text-muted);width:28px;}
-.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb,.panel-proc{display:flex;flex-direction:column;}
+.panel-cpu,.panel-gpu,.panel-ram,.panel-net,.panel-disk,.panel-mb,.panel-proc,.panel-battery{display:flex;flex-direction:column;}
 .panel-content{flex:1;overflow:hidden;min-height:0;}
 canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--spark-h);display:block;margin-top:var(--gap-inner-sm);}
 
@@ -244,6 +246,10 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 /* PROCESS MONITOR */
 .panel-proc{--c:var(--proc);height:var(--row-proc);}
 .panel-proc>.stat-label,.panel-proc>.proc-header{flex-shrink:0;}
+
+/* BATTERY */
+.panel-battery{--c:var(--grn);}
+.panel-battery>.stat-label{flex-shrink:0;}
 .panel-proc>#procList{flex:1;overflow:hidden;min-height:0;}
 .proc-header{display:grid;grid-template-columns:1fr 4.5ch 5.5ch;gap:0 8px;font-family:var(--mono);font-size:var(--font-sub);color:var(--text-muted);letter-spacing:1px;margin-bottom:4px;}
 .proc-header-cpu{text-align:right;}
@@ -265,8 +271,6 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
         <div class="rig-label">// GAMING RIG</div>
         <div id="rigBrandPreview" class="rig-brand-preview"></div>
         <div class="rig-name"><span id="rigName">--</span><span id="modelName">--</span></div>
-        <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
-        <div id="updateBadge" class="update-badge" style="display:none"></div>
       </div>
       <div class="rig-brand-mark" aria-hidden="true">
         <img id="rigLogo" class="rig-logo" src="./assets/ROG_logo_red.png" alt="ROG">
@@ -282,6 +286,10 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
     <div class="clock-sub">
       <div class="clock-day" id="clockDay">-------</div>
       <div class="clock-date" id="clockDate">----·--·--</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:var(--gap-inner-sm);">
+      <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+      <div id="updateBadge" class="update-badge" style="display:none;margin-top:0"></div>
     </div>
   </div>
 
@@ -468,6 +476,30 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
       <span class="proc-header-ram">RAM</span>
     </div>
     <div id="procList"><!-- populated by JS --></div>
+  </div>
+
+  <!-- BATTERY -->
+  <div class="panel panel-battery" data-panel="battery">
+    <div class="tl"></div><div class="br"></div>
+    <div class="panel-content">
+      <div class="stat-label">BATTERY</div>
+      <div>
+        <span class="big-num" id="batPct">--</span>
+        <span class="big-unit">%</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--gap-inner-sm) var(--gap-inner);margin-top:var(--gap-inner-sm);">
+        <div class="meta"><div class="meta-key">STATUS</div><div class="meta-val" id="batStatus">--</div></div>
+        <div class="meta"><div class="meta-key">TIME LEFT</div><div class="meta-val" id="batTime">--</div></div>
+        <div class="meta"><div class="meta-key">POWER</div><div class="meta-val" id="batPower">--</div></div>
+      </div>
+    </div>
+    <div class="bars">
+      <div class="bar-row">
+        <div class="bar-lbl">PWR</div>
+        <div class="bar-track"><div class="bar-fill" id="batBar" style="width:0%"></div></div>
+        <div class="bar-pct" id="batBarPct">--%</div>
+      </div>
+    </div>
   </div>
 
 </div>

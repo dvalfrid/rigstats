@@ -19,7 +19,10 @@ html, body { width: 450px; height: 164px; }
     <div class="clock-day" id="clockDay">-------</div>
     <div class="clock-date" id="clockDate">----·--·--</div>
   </div>
-  <div class="uptime"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div class="uptime" style="margin-top:0"><span class="dot"></span><span id="uptime">UP 00:00:00</span></div>
+    <div id="updateBadge" class="update-badge" style="display:none;margin-top:0"></div>
+  </div>
 </div>
 <script type="module" src="./renderer/panel-host.js"></script>
 </body>

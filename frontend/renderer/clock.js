@@ -20,9 +20,10 @@ function startClock() {
 }
 
 function setUptimeFromSeconds(seconds) {
+  const el = document.getElementById('uptime');
+  if (!el) return;
   const upSec = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
-  document.getElementById('uptime').textContent =
-    `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
+  el.textContent = `UP ${pad(Math.floor(upSec / 3600))}:${pad(Math.floor((upSec % 3600) / 60))}:${pad(upSec % 60)}`;
 }
 
 export { startClock, setUptimeFromSeconds };

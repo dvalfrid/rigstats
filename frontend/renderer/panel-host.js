@@ -12,6 +12,7 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { updateMotherboardPanel } from './panels/motherboard.js';
 import { updateProcessPanel } from './panels/process.js';
+import { updateBatteryPanel } from './panels/battery.js';
 import { updateRigName, updateCpuModel, updateGpuModel, updateRigLogo } from './systemInfo.js';
 import { applyTheme } from './themes.js';
 
@@ -63,6 +64,7 @@ const BASE_PANEL_HEIGHT = {
   disk: 320,
   motherboard: 320,
   process: 320,
+  battery: 256,
 };
 
 function setPxVar(style, name, value) {
@@ -102,7 +104,7 @@ function applyWindowScaling(windowW, windowH) {
   setPxVar(root, '--disk-val-size', 24 * contentScale);
   setPxVar(root, '--gap-inner', 12 * contentScale);
   setPxVar(root, '--gap-inner-sm', 10 * contentScale);
-  setPxVar(root, '--clock-time-size', 70 * contentScale);
+  setPxVar(root, '--clock-time-size', 52 * contentScale);
   setPxVar(root, '--clock-day-size', 18 * contentScale);
   setPxVar(root, '--rig-name-size', 44 * contentScale);
   setPxVar(root, '--model-name-size', 28 * contentScale);
@@ -187,6 +189,9 @@ function applyStats(stats) {
       break;
     case 'process':
       updateProcessPanel(stats.topProcesses ?? []);
+      break;
+    case 'battery':
+      updateBatteryPanel(stats.battery ?? { present: false });
       break;
     case 'header':
       setUptimeFromSeconds(stats.systemUptimeSecs);

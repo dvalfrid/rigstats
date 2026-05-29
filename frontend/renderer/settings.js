@@ -28,7 +28,7 @@ const themeSelect = document.getElementById('themeSelect');
 const modelNameCard = document.getElementById('modelNameCard');
 const opacityCard = document.getElementById('opacityCard');
 
-const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard', 'process'];
+const PANEL_KEYS = ['header', 'clock', 'cpu', 'gpu', 'ram', 'net', 'disk', 'motherboard', 'process', 'battery'];
 const PANEL_LABELS = {
   header: 'Header',
   clock: 'Clock',
@@ -39,6 +39,7 @@ const PANEL_LABELS = {
   disk: 'Storage',
   motherboard: 'Motherboard',
   process: 'Processes',
+  battery: 'Battery',
 };
 
 let original = {

@@ -91,6 +91,22 @@ pub struct MotherboardStats {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BatteryStats {
+  /// `false` on desktop systems with no battery, or when WMI query fails.
+  pub present: bool,
+  /// Charge percentage 0–100. `None` when not present.
+  pub charge_pct: Option<u8>,
+  /// `true` when on AC power (charging, full, or connected). `None` when not present.
+  pub charging: Option<bool>,
+  /// Estimated minutes until empty. `None` when charging, on AC, or unknown.
+  pub time_remaining_mins: Option<u32>,
+  /// Current power in watts: charge rate when on AC, discharge rate when on battery.
+  /// `None` when the driver does not report it or no battery is present.
+  pub power_w: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProcessEntry {
   pub name: String,
   /// CPU usage as a percentage of total system capacity (sum of all cores = 100%).
@@ -108,6 +124,7 @@ pub struct StatsPayload {
   pub net: NetStats,
   pub disk: DiskStats,
   pub motherboard: MotherboardStats,
+  pub battery: BatteryStats,
   pub top_processes: Vec<ProcessEntry>,
   pub system_uptime_secs: u64,
   pub lhm_connected: bool,
@@ -161,4 +178,7 @@ pub struct AppState {
   /// Per-component alert cooldown tracker. Key: "<component>_<level>" (e.g. "cpu_warning").
   /// Stores the `Instant` of the last fired notification to enforce the 60-second cooldown.
   pub last_alert: Mutex<HashMap<String, Instant>>,
+  /// Cached battery sample (refreshed every 10 s). Power draw can change quickly
+  /// (charger connect/disconnect) while charge % changes slowly.
+  pub last_battery_sample: Mutex<Option<(Instant, BatteryStats)>>,
 }

@@ -306,6 +306,7 @@ fn panel_base_height(key: &str) -> f64 {
     "disk" => 320.0,
     "motherboard" => 320.0,
     "process" => 320.0,
+    "battery" => 256.0,
     _ => 260.0,
   }
 }
@@ -334,6 +335,7 @@ pub fn all_panel_keys() -> &'static [&'static str] {
     "disk",
     "motherboard",
     "process",
+    "battery",
   ]
 }
 

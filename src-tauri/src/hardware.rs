@@ -888,6 +888,75 @@ pub(crate) fn sample_ping_ms(target: &str) -> Option<f64> {
   }
 }
 
+// --- Battery detection -----------------------------------------------------
+
+#[cfg(windows)]
+#[derive(serde::Deserialize, Debug)]
+struct Win32BatteryRow {
+  #[serde(rename = "EstimatedChargeRemaining")]
+  charge_remaining: Option<u16>,
+  #[serde(rename = "BatteryStatus")]
+  battery_status: Option<u16>,
+  #[serde(rename = "EstimatedRunTime")]
+  estimated_run_time: Option<u32>,
+}
+
+#[cfg(windows)]
+#[derive(serde::Deserialize, Debug)]
+struct WmiBatteryStatusRow {
+  /// Charge rate in mW (valid when charging; 0 when discharging).
+  #[serde(rename = "ChargeRate")]
+  charge_rate: Option<u32>,
+  /// Discharge rate in mW (valid when discharging; 0 when charging).
+  #[serde(rename = "DischargeRate")]
+  discharge_rate: Option<u32>,
+}
+
+/// Queries the first battery detected by WMI.
+///
+/// Returns `(charge_pct, is_charging, time_remaining_mins, power_w)` or `None`
+/// when no battery is present (desktop systems, WMI failure, or empty result set).
+/// `power_w` is positive watts — charge rate when on AC, discharge rate when on battery.
+pub fn sample_battery_wmi() -> Option<(u8, bool, Option<u32>, Option<f64>)> {
+  #[cfg(windows)]
+  {
+    let com = wmi::COMLibrary::new().ok()?;
+    let conn = wmi::WMIConnection::new(com).ok()?;
+    let rows: Vec<Win32BatteryRow> = conn
+      .raw_query("SELECT EstimatedChargeRemaining, BatteryStatus, EstimatedRunTime FROM Win32_Battery")
+      .ok()?;
+    let row = rows.into_iter().next()?;
+    let charge_pct = row.charge_remaining.map(|v| v.min(100) as u8).unwrap_or(0);
+    // BatteryStatus values: 1=discharging, 2=AC/no discharge, 3=fully charged,
+    //                       6=charging, 7=charging+high, 8=charging+low, 9=charging+critical
+    let status = row.battery_status.unwrap_or(1);
+    let is_charging = matches!(status, 2 | 3 | 6 | 7 | 8 | 9);
+    // EstimatedRunTime of 71582788 (0x44AAAAA4) means "unknown / on AC".
+    let time_remaining_mins = row.estimated_run_time.filter(|&t| t > 0 && t < 71_582_788);
+
+    // root\wmi BatteryStatus gives ChargeRate / DischargeRate in mW.
+    let power_w = (|| -> Option<f64> {
+      let wmi_conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com).ok()?;
+      let status_rows: Vec<WmiBatteryStatusRow> = wmi_conn
+        .raw_query("SELECT ChargeRate, DischargeRate FROM BatteryStatus")
+        .ok()?;
+      let sr = status_rows.into_iter().next()?;
+      let mw = if is_charging {
+        sr.charge_rate.filter(|&v| v > 0)?
+      } else {
+        sr.discharge_rate.filter(|&v| v > 0)?
+      };
+      Some(mw as f64 / 1000.0)
+    })();
+
+    Some((charge_pct, is_charging, time_remaining_mins, power_w))
+  }
+  #[cfg(not(windows))]
+  {
+    None
+  }
+}
+
 // --- Tests -----------------------------------------------------------------
 
 #[cfg(test)]

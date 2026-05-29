@@ -99,6 +99,13 @@ function simulateStats() {
       { name: 'svchost.exe',     cpu: 0.3  + Math.random() * 0.4,       memMb: 62   },
       { name: 'Taskmgr.exe',     cpu: 0.1  + Math.random() * 0.2,       memMb: 44   },
     ],
+    battery: {
+      present: true,
+      chargePct: 73,
+      charging: false,
+      timeRemainingMins: 145,
+      powerW: 12.4,
+    },
     systemUptimeSecs: Math.floor((Date.now() - simulatorStartMs) / 1000),
     lhmConnected: false,
   };

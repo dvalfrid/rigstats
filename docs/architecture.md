@@ -131,7 +131,7 @@ Registered with `app.manage(HardwareInfo { ... })`.
 
 **`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_client`,
 `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`,
-`last_lhm`, `last_alert`.
+`last_lhm`, `last_alert`, `last_battery_sample`.
 
 **Payload structs:**
 
@@ -146,6 +146,7 @@ Registered with `app.manage(HardwareInfo { ... })`.
 | `DiskDrive` | Filesystem label, size, used, pct, temp |
 | `MotherboardStats` | Fans, temps, voltages, chip name, board name |
 | `ProcessEntry` | Process name, CPU % of total system, RAM in MB |
+| `BatteryStats` | `present`, charge %, charging state, time remaining |
 
 `StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU usage
 and capped at 8 entries before serialisation.
@@ -163,8 +164,9 @@ delegates to a domain module.
 4. Collects disk throughput and drive metadata
 5. Computes network throughput delta over elapsed time
 6. Refreshes ping (cached, re-measured every 5 s)
-7. Assembles `StatsPayload` including top 8 processes sorted by CPU
-8. Checks temperature thresholds and fires tray notifications if due
+7. Refreshes battery via WMI (cached, re-sampled every 30 s)
+8. Assembles `StatsPayload` including top 8 processes sorted by CPU
+9. Checks temperature thresholds and fires tray notifications if due
 
 Floating mode commands:
 
@@ -195,6 +197,7 @@ PowerShell CIM on failure.
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
 | `detect_ping_target` | Default gateway or public fallback |
 | `probe_wmi_status` | Checks whether WMI is reachable |
+| `sample_battery_wmi` | Per-tick (cached 30 s) battery query via `Win32_Battery` |
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
@@ -252,7 +255,7 @@ named voltage rails only (generic `Voltage #N` slots excluded > 0.1 V).
 - `normalize_visible_panels` — validates and deduplicates panel key lists
 
 Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`,
-`motherboard`, `process`. Both `motherboard` and `process` are opt-in.
+`motherboard`, `process`, `battery`. `motherboard`, `process`, and `battery` are opt-in.
 
 #### `settings.rs`
 
@@ -299,7 +302,7 @@ via `set_last_tray_click_position`.
 
 Floating panel management:
 
-- **`all_panel_keys()`** — canonical ordered list of the 9 panel keys; exported
+- **`all_panel_keys()`** — canonical ordered list of the 10 panel keys; exported
   so `commands.rs` can iterate panel windows without duplicating the list.
 - **`panel_base_size(key, dashboard_profile, user_scale)`** — scales each
   panel's logical dimensions to match the active profile, then applies the user
@@ -407,6 +410,7 @@ Each panel exports one `update*Panel(stats, ...)` function called from
 | `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |
 | `motherboard.js` | Three-column layout: fans / temps / voltages; `shortLabel()` maps `"Temperature #N"` → `"TN"` |
 | `process.js` | Top 8 processes: name (`.exe` stripped, 16 char max), CPU %, RAM. Names are HTML-escaped before `innerHTML` insertion. `truncateName` and `formatRam` exported for unit tests. |
+| `battery.js` | Charge % (big number), dynamic bar colour (accent=charging, green >50 %, amber 20–50 %, red <20 %), status (CHARGING / DISCHARGING), time remaining. Shows "NO BATTERY" when `present == false` (desktops). |
 | `clock.js` | Time, weekday, date |
 
 #### `settings.js`

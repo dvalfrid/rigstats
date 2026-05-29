@@ -428,6 +428,7 @@ fn main() {
         last_ping_sample: Mutex::new(None),
         last_lhm: Mutex::new(None),
         last_alert: Mutex::new(HashMap::new()),
+        last_battery_sample: Mutex::new(None),
       });
 
       if startup_floating_mode {

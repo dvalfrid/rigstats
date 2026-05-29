@@ -16,6 +16,7 @@ import { updateNetworkPanel } from './panels/network.js';
 import { updateDiskPanel } from './panels/disk.js';
 import { updateMotherboardPanel } from './panels/motherboard.js';
 import { updateProcessPanel } from './panels/process.js';
+import { updateBatteryPanel } from './panels/battery.js';
 import { simulateStats } from './simulator.js';
 import { applyTheme } from './themes.js';
 
@@ -104,7 +105,7 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--brand-mark-size', 165 * contentScale);
   setPxVar(root, '--rig-name-size', 44 * contentScale);
   setPxVar(root, '--model-name-size', 28 * contentScale);
-  setPxVar(root, '--clock-time-size', 70 * contentScale);
+  setPxVar(root, '--clock-time-size', 52 * contentScale);
   setPxVar(root, '--clock-day-size', 18 * contentScale);
   setPxVar(root, '--big-num-size', 78 * contentScale);
   setPxVar(root, '--ram-big-num-size', 64 * contentScale);
@@ -133,8 +134,9 @@ const PANEL_ROW_CONFIG = [
   { key: 'ram',         cssVar: '--row-ram',    baseHeight: 315 },
   { key: 'net',         cssVar: '--row-net',    baseHeight: 260 },
   { key: 'disk',        cssVar: '--row-disk',   baseHeight: 295, absorbRemainder: true },
-  { key: 'motherboard', cssVar: '--row-mb',     baseHeight: 260 },
-  { key: 'process',     cssVar: '--row-proc',   baseHeight: 260 },
+  { key: 'motherboard', cssVar: '--row-mb',      baseHeight: 260 },
+  { key: 'process',     cssVar: '--row-proc',    baseHeight: 260 },
+  { key: 'battery',     cssVar: '--row-battery', baseHeight: 256 },
 ];
 
 const PANEL_KEYS = PANEL_ROW_CONFIG.map((p) => p.key);
@@ -395,6 +397,7 @@ function applyStats(stats) {
   updateDiskPanel(stats.disk, history, pushHistory, thresholds.disk);
   updateMotherboardPanel(stats.motherboard ?? {});
   updateProcessPanel(stats.topProcesses ?? []);
+  updateBatteryPanel(stats.battery ?? { present: false });
   setUptimeFromSeconds(stats.systemUptimeSecs);
 
   drawSpark('cpuSpark', history.cpu, getCssVar('--accent'));

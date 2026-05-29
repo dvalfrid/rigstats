@@ -27,8 +27,8 @@ use crate::lhm_process::{
 use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
 use crate::settings::{persist_settings, ComponentThresholds, PanelLayout, Settings};
 use crate::stats::{
-  AppState, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats, ProcessEntry, RamStats,
-  StatsPayload,
+  AppState, BatteryStats, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats,
+  ProcessEntry, RamStats, StatsPayload,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -1005,6 +1005,47 @@ pub async fn get_stats(
     }
   };
 
+  // Battery: queried via WMI and cached for 30 s (charge changes slowly).
+  let battery = {
+    let mut cache = state.last_battery_sample.lock().unwrap_or_else(|e| {
+      append_debug_log(&app, "stats: last_battery_sample mutex poisoned; recovering guard");
+      e.into_inner()
+    });
+    let should_refresh = cache
+      .as_ref()
+      .map(|(t, _)| now.duration_since(*t).as_secs_f64() >= 10.0)
+      .unwrap_or(true);
+    if should_refresh {
+      let sampled = crate::hardware::sample_battery_wmi();
+      let stats = match sampled {
+        Some((charge_pct, is_charging, time_remaining_mins, power_w)) => BatteryStats {
+          present: true,
+          charge_pct: Some(charge_pct),
+          charging: Some(is_charging),
+          time_remaining_mins,
+          power_w,
+        },
+        None => BatteryStats {
+          present: false,
+          charge_pct: None,
+          charging: None,
+          time_remaining_mins: None,
+          power_w: None,
+        },
+      };
+      *cache = Some((now, stats.clone()));
+      stats
+    } else {
+      cache.as_ref().map(|(_, s)| s.clone()).unwrap_or(BatteryStats {
+        present: false,
+        charge_pct: None,
+        charging: None,
+        time_remaining_mins: None,
+        power_w: None,
+      })
+    }
+  };
+
   // Network is always sourced from sysinfo — it reads the same OS counters as
   // Task Manager and reliably tracks the active interface by traffic volume.
   // LHM's network sensors track adapters by GUID and can latch onto the wrong
@@ -1090,6 +1131,7 @@ pub async fn get_stats(
       chip: lhm.as_ref().and_then(|l| l.mb_chip.clone()),
       board: hw.mb_name.lock().unwrap_or_else(|e| e.into_inner()).clone(),
     },
+    battery,
     top_processes: proc_list,
     system_uptime_secs,
     lhm_connected,
