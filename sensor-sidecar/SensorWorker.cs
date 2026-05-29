@@ -67,7 +67,7 @@ public sealed class SensorWorker : BackgroundService
         var security = new PipeSecurity();
         security.AddAccessRule(new PipeAccessRule(
             new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
-            PipeAccessRights.ReadData | PipeAccessRights.Synchronize,
+            PipeAccessRights.Read | PipeAccessRights.Synchronize,
             AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
