@@ -9,7 +9,7 @@ use crate::monitor::{normalize_profile, profile_dimensions};
 use crate::stats::{AppState, HardwareInfo};
 use serde::Serialize;
 use std::io::Write;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 // --- Helpers ---------------------------------------------------------------
 
@@ -439,21 +439,13 @@ pub async fn collect_diagnostics(
     serde_json::to_string_pretty(&*s).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
   };
 
-  // Raw LHM sensor tree — the most useful data for adding new sensor support.
-  let lhm_json = match state
-    .lhm_client
-    .get("http://localhost:8085/data.json")
-    .timeout(Duration::from_secs(3))
-    .send()
-    .await
-  {
-    Ok(resp) => pretty_json(
-      &resp
-        .text()
-        .await
-        .unwrap_or_else(|e| format!("{{\"error\":\"body: {}\"}}", e)),
-    ),
-    Err(e) => format!("{{\"error\":\"request: {}\"}}", e),
+  // Last sensor payload received from the sidecar pipe (replaces raw LHM HTTP dump).
+  let lhm_json = {
+    let last = state.last_lhm.lock().unwrap_or_else(|e| e.into_inner());
+    match &*last {
+      Some(data) => serde_json::to_string_pretty(data).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e)),
+      None => "{\"error\":\"no data received from sidecar yet\"}".to_string(),
+    }
   };
 
   let hardware_json = pretty_json(&diag_collect_hardware());

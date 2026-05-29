@@ -523,18 +523,39 @@ existing portrait ones.
 
 ---
 
-## LHM stability — investigate alternative data source
+## ✓ LHM stability — sensor sidecar replaces HTTP LHM
 
-**Background:** LibreHardwareMonitor runs as a separate process (Windows scheduled task) and exposes data over HTTP. Several users report that LHM fails to start, stops responding, or requires a manual restart. Depending on an external process makes hardware data collection inherently fragile.
+**Implemented in v1.20.0.**
 
-**What to investigate:**
+Replaced the standalone LibreHardwareMonitor HTTP server with a managed .NET 8
+sidecar (`sensor-sidecar/rigstats-sensor.exe`) that embeds the
+`LibreHardwareMonitorLib` NuGet package and streams sensor data over a Windows
+named pipe (`\\.\pipe\rigstats-sensors`). The Rust backend connects as a
+read-only pipe client, deserialising one JSON payload per second — no scheduled
+task, no HTTP, no external process lifecycle to manage.
 
-- **Embed LHM as a .NET library** via a managed sidecar executable (launched and supervised by RigStats) or via Rust → COM/FFI. LHM is MIT-licensed and can be compiled as a class library reference. A sidecar.exe owned by the Tauri process avoids the scheduled-task problem and makes the lifecycle deterministic.
-- **Pure-Rust sensor crates** — are there Rust-native alternatives that cover GPU temp, CPU temp, and fan RPM without requiring .NET?
-- **WMI `MSAcpi_ThermalZoneTemperature` + vendor-specific WMI namespaces** — can these complement sysinfo for the sensors we actually use?
-- **DirectX DXGI + NVAPI / AMD AGS** — pull GPU data directly from the driver, eliminating the LHM middleman entirely.
+**What was built:**
 
-**Goal:** Eliminate the need for a separate LHM process — or at minimum make the lifecycle fully managed from within RigStats so that crashes or failed starts are handled transparently without user intervention.
+- `sensor-sidecar/` — self-contained .NET 8 single-file exe (no runtime required
+  on user machines). `Program.cs` runs the pipe server loop and LHM update
+  visitor. `SensorReader.cs` maps `IComputer` → `SensorPayload` using the same
+  sensor-name and SensorId-prefix rules previously in `lhm.rs`.
+- `lhm.rs` — converted from HTTP polling to named pipe client.
+  `fetch_lhm_pipe` connects with `.write(false)` (pipe is `PipeDirection.Out`;
+  requesting write access returns `ERROR_ACCESS_DENIED`). Connection failures are
+  throttled to one log line per 30 s.
+- `select_gpu_idx` — extracted GPU selection into a pure function with 10 unit
+  tests covering preference matching, VRAM tiebreak, load tiebreak, and fallback.
+- Old HTTP parsing code (`flatten_lhm`, `parse_lhm`, `FlatNode`, etc.) is
+  retained under `#[cfg(test)]` to keep the existing 104-test suite green.
+
+**Remaining work:**
+
+- Windows Service installer (NSIS) — sidecar currently launched manually;
+  installer integration and auto-elevation are the next step.
+- Disk I/O throughput — `SensorReader.cs` does not yet expose disk read/write
+  throughput (coming from sysinfo in the interim).
+- About screen — no sidecar connection status indicator yet.
 
 ---
 

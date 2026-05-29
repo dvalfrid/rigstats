@@ -3,8 +3,10 @@
 //! LHM publishes a nested tree structure. We flatten it into simple nodes, then
 //! extract metrics by parent/text pairs for stable lookup.
 
+#[cfg(test)]
 use serde_json::Value;
 
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct FlatNode {
   pub text: String,
@@ -60,6 +62,7 @@ pub struct LhmData {
   pub gpu_devices: Vec<(String, f64)>,
 }
 
+#[cfg(test)]
 fn parse_val(str_val: &str) -> Option<f64> {
   // LHM values can include units and locale commas; keep only numeric content.
   let cleaned = str_val.replace(',', ".");
@@ -73,6 +76,7 @@ fn parse_val(str_val: &str) -> Option<f64> {
   filtered.parse::<f64>().ok()
 }
 
+#[cfg(test)]
 fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str, grandparent: &str) {
   // Recursively flatten the tree so sensor lookups become linear scans.
   let text = value
@@ -122,6 +126,7 @@ fn flatten_lhm(value: &Value, results: &mut Vec<FlatNode>, parent: &str, grandpa
 // --- Helpers ---------------------------------------------------------------
 
 /// Converts an LHM throughput value string to MB/s, handling KB and GB suffixes.
+#[cfg(test)]
 fn to_mbs(raw: &str) -> f64 {
   let v = parse_val(raw).unwrap_or(0.0);
   if raw.contains("KB") {
@@ -133,6 +138,7 @@ fn to_mbs(raw: &str) -> f64 {
   }
 }
 
+#[cfg(test)]
 struct GpuData {
   name: Option<String>,
   load: Option<f64>,
@@ -157,6 +163,7 @@ struct GpuData {
 ///   • Tiebreak: highest load.
 ///
 /// Returns (GpuData, Vec<(device_name, vram_total_mb)>).
+#[cfg(test)]
 fn extract_gpu(nodes: &[FlatNode], preferred_gpu: Option<&str>) -> (GpuData, Vec<(String, f64)>) {
   // Collect all unique GPU device names from a broad GPU sensor set so iGPU+dGPU
   // systems are represented even when one device lacks "GPU Memory Total".
@@ -287,6 +294,7 @@ fn extract_gpu(nodes: &[FlatNode], preferred_gpu: Option<&str>) -> (GpuData, Vec
 }
 
 /// Returns total disk read and write throughput in MB/s across all drives.
+#[cfg(test)]
 fn extract_disk_throughput(nodes: &[FlatNode]) -> (f64, f64) {
   let read = nodes
     .iter()
@@ -302,6 +310,7 @@ fn extract_disk_throughput(nodes: &[FlatNode]) -> (f64, f64) {
 }
 
 /// Returns the busiest network interface's upload and download speed in Mbit/s.
+#[cfg(test)]
 fn extract_network(nodes: &[FlatNode]) -> (f64, f64) {
   let uploads: Vec<&FlatNode> = nodes
     .iter()
@@ -331,6 +340,7 @@ fn extract_network(nodes: &[FlatNode]) -> (f64, f64) {
 /// "Warning Composite" and "Critical Composite" are NVMe thresholds, not readings — excluded.
 /// LHM reports 0 as a sentinel for unsupported sensors — those are skipped too.
 /// Multiple temperature entries for the same device are collapsed to the highest value.
+#[cfg(test)]
 fn extract_disk_temps(nodes: &[FlatNode]) -> Vec<(String, f64)> {
   let mut temps: Vec<(String, f64)> = Vec::new();
   for n in nodes.iter().filter(|n| {
@@ -361,6 +371,7 @@ fn extract_disk_temps(nodes: &[FlatNode]) -> Vec<(String, f64)> {
 /// AMD Ryzen reports "Core (Tctl/Tdie)"; Intel reports "CPU Package" or "Core Average".
 /// All three sensor names also appear under "Powers", so temp lookup is restricted to
 /// parent == "Temperatures" to avoid the Intel "CPU Package" power sensor.
+#[cfg(test)]
 fn extract_cpu(nodes: &[FlatNode]) -> (Option<f64>, Option<f64>) {
   let temp = ["Core (Tctl/Tdie)", "CPU Package", "Core Average"]
     .iter()
@@ -384,6 +395,7 @@ fn extract_cpu(nodes: &[FlatNode]) -> (Option<f64>, Option<f64>) {
 ///
 /// DDR5 (and some DDR4) DIMM sensors: the real reading is always /temperature/0
 /// per slot. Indices 1–5 are resolution and threshold values — excluded.
+#[cfg(test)]
 fn extract_ram_temp(nodes: &[FlatNode]) -> Option<f64> {
   nodes
     .iter()
@@ -394,6 +406,7 @@ fn extract_ram_temp(nodes: &[FlatNode]) -> Option<f64> {
     .reduce(f64::max)
 }
 
+#[cfg(test)]
 struct MbData {
   fans: Vec<(String, f64)>,
   temps: Vec<(String, f64)>,
@@ -408,6 +421,7 @@ struct MbData {
 /// chip is present — laptops use an embedded controller instead of a discrete Super I/O.
 /// Per-core VID readouts ("… VID") are excluded as they are switching targets, not supply
 /// rail measurements.
+#[cfg(test)]
 fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
   // Fans: RPM > 0 required (0 is the LHM sentinel for disconnected headers), sorted descending.
   let mut fans: Vec<(String, f64)> = nodes
@@ -466,6 +480,7 @@ fn extract_motherboard(nodes: &[FlatNode]) -> MbData {
 
 // --- Top-level parser ------------------------------------------------------
 
+#[cfg(test)]
 fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
   let mut nodes = Vec::new();
   flatten_lhm(data, &mut nodes, "", "");
@@ -511,7 +526,7 @@ fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
 
 #[cfg(test)]
 mod tests {
-  use super::{flatten_lhm, parse_lhm, parse_val};
+  use super::{flatten_lhm, parse_lhm, parse_val, select_gpu_idx, SidecarGpuDevice, SidecarPayload};
   use serde_json::json;
 
   // parse_val
@@ -1424,11 +1439,426 @@ mod tests {
     assert_eq!(result.mb_voltages.len(), 1, "LPC voltage only");
     assert_eq!(result.mb_voltages[0].0, "Vcore", "LPC sensor must win");
   }
+
+  // --- Sidecar pipe transport -----------------------------------------------
+
+  fn make_gpu(name: &str, vram_mb: f32, load: f32) -> SidecarGpuDevice {
+    SidecarGpuDevice {
+      name: name.to_string(),
+      load: Some(load),
+      temp: None,
+      hotspot_temp: None,
+      core_clock: None,
+      mem_clock: None,
+      power: None,
+      fan: None,
+      vram_used_mb: None,
+      vram_total_mb: Some(vram_mb),
+      d3d_3d: None,
+      d3d_vdec: None,
+    }
+  }
+
+  #[test]
+  fn select_gpu_idx_returns_none_for_empty() {
+    assert_eq!(select_gpu_idx(&[], None), None);
+  }
+
+  #[test]
+  fn select_gpu_idx_single_device_returns_zero() {
+    let devices = vec![make_gpu("RTX 4090", 24576.0, 0.0)];
+    assert_eq!(select_gpu_idx(&devices, None), Some(0));
+  }
+
+  #[test]
+  fn select_gpu_idx_picks_highest_vram_by_default() {
+    let devices = vec![
+      make_gpu("Radeon 890M", 512.0, 11.0),
+      make_gpu("RTX 5070 Ti", 8192.0, 0.0),
+    ];
+    assert_eq!(
+      select_gpu_idx(&devices, None),
+      Some(1),
+      "dGPU (more VRAM) must win even when iGPU load is higher"
+    );
+  }
+
+  #[test]
+  fn select_gpu_idx_tiebreaks_by_load() {
+    let devices = vec![make_gpu("GPU A", 8192.0, 5.0), make_gpu("GPU B", 8192.0, 60.0)];
+    assert_eq!(
+      select_gpu_idx(&devices, None),
+      Some(1),
+      "higher load must win on VRAM tie"
+    );
+  }
+
+  #[test]
+  fn select_gpu_idx_respects_preferred_exact_match() {
+    let devices = vec![
+      make_gpu("Radeon 890M", 512.0, 11.0),
+      make_gpu("RTX 5070 Ti", 8192.0, 0.0),
+    ];
+    assert_eq!(select_gpu_idx(&devices, Some("Radeon 890M")), Some(0));
+  }
+
+  #[test]
+  fn select_gpu_idx_respects_preferred_case_insensitive() {
+    let devices = vec![
+      make_gpu("Radeon 890M", 512.0, 11.0),
+      make_gpu("RTX 5070 Ti", 8192.0, 0.0),
+    ];
+    assert_eq!(select_gpu_idx(&devices, Some("radeon 890m")), Some(0));
+  }
+
+  #[test]
+  fn select_gpu_idx_falls_back_when_preferred_not_found() {
+    let devices = vec![
+      make_gpu("Radeon 890M", 512.0, 0.0),
+      make_gpu("RTX 5070 Ti", 8192.0, 0.0),
+    ];
+    // Unknown preference → fall back to highest VRAM
+    assert_eq!(select_gpu_idx(&devices, Some("GTX 1080")), Some(1));
+  }
+
+  #[test]
+  fn sidecar_payload_full_round_trip() {
+    let json = r#"{
+      "cpu_temp": 72.0,
+      "cpu_power": 95.0,
+      "gpu_devices": [{
+        "name": "NVIDIA GeForce RTX 4090",
+        "load": 60.0, "temp": 72.0, "hotspot_temp": 80.0,
+        "core_clock": 2520.0, "mem_clock": 10501.0,
+        "power": 150.0, "fan": 1200.0,
+        "vram_used_mb": 4096.0, "vram_total_mb": 24576.0,
+        "d3d_3d": 55.0, "d3d_vdec": 12.0
+      }],
+      "disk_temps": {"Samsung SSD 980 PRO": 44.0, "WD Blue": 35.0},
+      "ram_temp": 38.0,
+      "mb_fans": [{"label": "Fan #1", "rpm": 882.0}],
+      "mb_temps": [{"label": "Temperature #1", "celsius": 35.5}],
+      "mb_voltages": [{"label": "Vcore", "volts": 1.048}],
+      "mb_chip": "Nuvoton NCT6799D"
+    }"#;
+
+    let data = serde_json::from_str::<SidecarPayload>(json)
+      .expect("JSON must deserialize")
+      .into_lhm_data(None);
+
+    assert_eq!(data.cpu_temp, Some(72.0));
+    assert_eq!(data.cpu_power, Some(95.0));
+    assert_eq!(data.ram_temp, Some(38.0));
+    assert_eq!(data.gpu_name.as_deref(), Some("NVIDIA GeForce RTX 4090"));
+    assert!((data.gpu_load.unwrap() - 60.0).abs() < 0.01);
+    assert!((data.gpu_temp.unwrap() - 72.0).abs() < 0.01);
+    assert!((data.gpu_hotspot.unwrap() - 80.0).abs() < 0.01);
+    assert!((data.gpu_freq.unwrap() - 2520.0).abs() < 0.01);
+    assert!((data.gpu_mem_freq.unwrap() - 10501.0).abs() < 0.01);
+    assert!((data.gpu_power.unwrap() - 150.0).abs() < 0.01);
+    assert!((data.gpu_fan.unwrap() - 1200.0).abs() < 0.01);
+    assert!((data.vram_used.unwrap() - 4096.0).abs() < 0.01);
+    assert!((data.vram_total.unwrap() - 24576.0).abs() < 0.01);
+    assert!((data.gpu_d3d_3d.unwrap() - 55.0).abs() < 0.01);
+    assert!((data.gpu_d3d_vdec.unwrap() - 12.0).abs() < 0.01);
+    assert_eq!(data.disk_temps.len(), 2);
+    assert_eq!(data.mb_fans.len(), 1);
+    assert_eq!(data.mb_fans[0].0, "Fan #1");
+    assert!((data.mb_fans[0].1 - 882.0).abs() < 0.01);
+    assert_eq!(data.mb_temps.len(), 1);
+    assert!((data.mb_temps[0].1 - 35.5).abs() < 0.01);
+    assert_eq!(data.mb_voltages.len(), 1);
+    assert!((data.mb_voltages[0].1 - 1.048).abs() < 0.001);
+    assert_eq!(data.mb_chip.as_deref(), Some("Nuvoton NCT6799D"));
+    assert_eq!(data.gpu_devices.len(), 1);
+    assert_eq!(data.gpu_devices[0].0, "NVIDIA GeForce RTX 4090");
+    assert!((data.gpu_devices[0].1 - 24576.0).abs() < 0.01);
+    // Placeholders until sidecar emits throughput
+    assert_eq!(data.disk_read, 0.0);
+    assert_eq!(data.disk_write, 0.0);
+    assert_eq!(data.net_up, 0.0);
+    assert_eq!(data.net_down, 0.0);
+  }
+
+  #[test]
+  fn sidecar_payload_no_gpus_yields_none_fields() {
+    let json = r#"{
+      "cpu_temp": 65.0, "cpu_power": null,
+      "gpu_devices": [],
+      "disk_temps": {}, "ram_temp": null,
+      "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null
+    }"#;
+    let data = serde_json::from_str::<SidecarPayload>(json)
+      .unwrap()
+      .into_lhm_data(None);
+    assert_eq!(data.gpu_name, None);
+    assert_eq!(data.gpu_load, None);
+    assert_eq!(data.gpu_temp, None);
+    assert!(data.gpu_devices.is_empty());
+  }
+
+  #[test]
+  fn sidecar_payload_gpu_preference_overrides_vram_heuristic() {
+    let json = r#"{
+      "cpu_temp": null, "cpu_power": null,
+      "gpu_devices": [
+        {"name": "AMD Radeon 890M",   "load": 11.0, "temp": null, "hotspot_temp": null,
+         "core_clock": null, "mem_clock": null, "power": null, "fan": null,
+         "vram_used_mb": null, "vram_total_mb": 512.0, "d3d_3d": null, "d3d_vdec": null},
+        {"name": "RTX 5070 Ti Laptop", "load": 0.0,  "temp": null, "hotspot_temp": null,
+         "core_clock": null, "mem_clock": null, "power": null, "fan": null,
+         "vram_used_mb": null, "vram_total_mb": 8192.0, "d3d_3d": null, "d3d_vdec": null}
+      ],
+      "disk_temps": {}, "ram_temp": null,
+      "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null
+    }"#;
+
+    // Default: dGPU wins on VRAM
+    let data = serde_json::from_str::<SidecarPayload>(json)
+      .unwrap()
+      .into_lhm_data(None);
+    assert_eq!(data.gpu_name.as_deref(), Some("RTX 5070 Ti Laptop"));
+
+    // Preference: iGPU selected despite lower VRAM
+    let data = serde_json::from_str::<SidecarPayload>(json)
+      .unwrap()
+      .into_lhm_data(Some("AMD Radeon 890M"));
+    assert_eq!(data.gpu_name.as_deref(), Some("AMD Radeon 890M"));
+    assert!((data.gpu_load.unwrap() - 11.0).abs() < 0.01);
+  }
 }
 
-pub async fn fetch_lhm(client: &reqwest::Client, preferred_gpu: Option<&str>) -> Option<LhmData> {
-  // Keep timeout short so stats polling remains responsive even if LHM is down.
-  let response = client.get("http://localhost:8085/data.json").send().await.ok()?;
-  let json: Value = response.json().await.ok()?;
-  Some(parse_lhm(&json, preferred_gpu))
+// --- Named pipe transport (replaces LHM HTTP client) -----------------------
+
+/// Deserialization structs matching the JSON emitted by `rigstats-sensor.exe`.
+#[derive(serde::Deserialize)]
+struct SidecarPayload {
+  cpu_temp: Option<f32>,
+  cpu_power: Option<f32>,
+  gpu_devices: Vec<SidecarGpuDevice>,
+  disk_temps: std::collections::HashMap<String, f32>,
+  ram_temp: Option<f32>,
+  mb_fans: Vec<SidecarMbFan>,
+  mb_temps: Vec<SidecarMbTemp>,
+  mb_voltages: Vec<SidecarMbVoltage>,
+  mb_chip: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct SidecarGpuDevice {
+  name: String,
+  load: Option<f32>,
+  temp: Option<f32>,
+  hotspot_temp: Option<f32>,
+  core_clock: Option<f32>,
+  mem_clock: Option<f32>,
+  power: Option<f32>,
+  fan: Option<f32>,
+  vram_used_mb: Option<f32>,
+  vram_total_mb: Option<f32>,
+  d3d_3d: Option<f32>,
+  d3d_vdec: Option<f32>,
+}
+
+#[derive(serde::Deserialize)]
+struct SidecarMbFan {
+  label: String,
+  rpm: f32,
+}
+#[derive(serde::Deserialize)]
+struct SidecarMbTemp {
+  label: String,
+  celsius: f32,
+}
+#[derive(serde::Deserialize)]
+struct SidecarMbVoltage {
+  label: String,
+  volts: f32,
+}
+
+/// Picks the GPU to display: preferred match → highest VRAM → tiebreak by load.
+/// Mirrors the selection logic in `extract_gpu` for the HTTP path.
+fn select_gpu_idx(devices: &[SidecarGpuDevice], preferred_gpu: Option<&str>) -> Option<usize> {
+  if devices.is_empty() {
+    return None;
+  }
+  if let Some(pref) = preferred_gpu {
+    let pref_norm = pref.trim().to_ascii_lowercase();
+    let pos = devices.iter().position(|d| {
+      let dn = d.name.trim().to_ascii_lowercase();
+      dn == pref_norm || dn.contains(&pref_norm) || pref_norm.contains(&dn)
+    });
+    if pos.is_some() {
+      return pos;
+    }
+  }
+  devices
+    .iter()
+    .enumerate()
+    .max_by(|(_, a), (_, b)| {
+      let va = a.vram_total_mb.unwrap_or(0.0);
+      let vb = b.vram_total_mb.unwrap_or(0.0);
+      match va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal) {
+        std::cmp::Ordering::Equal => a
+          .load
+          .unwrap_or(0.0)
+          .partial_cmp(&b.load.unwrap_or(0.0))
+          .unwrap_or(std::cmp::Ordering::Equal),
+        other => other,
+      }
+    })
+    .map(|(i, _)| i)
+}
+
+impl SidecarPayload {
+  fn into_lhm_data(self, preferred_gpu: Option<&str>) -> LhmData {
+    let gpu_devices: Vec<(String, f64)> = self
+      .gpu_devices
+      .iter()
+      .map(|g| (g.name.clone(), g.vram_total_mb.unwrap_or(0.0) as f64))
+      .collect();
+
+    let gpu = select_gpu_idx(&self.gpu_devices, preferred_gpu).map(|i| &self.gpu_devices[i]);
+
+    LhmData {
+      gpu_name: gpu.map(|g| g.name.clone()),
+      gpu_load: gpu.and_then(|g| g.load).map(|v| v as f64),
+      gpu_temp: gpu.and_then(|g| g.temp).map(|v| v as f64),
+      gpu_hotspot: gpu.and_then(|g| g.hotspot_temp).map(|v| v as f64),
+      gpu_freq: gpu.and_then(|g| g.core_clock).map(|v| v as f64),
+      gpu_mem_freq: gpu.and_then(|g| g.mem_clock).map(|v| v as f64),
+      gpu_power: gpu.and_then(|g| g.power).map(|v| v as f64),
+      gpu_fan: gpu.and_then(|g| g.fan).map(|v| v as f64),
+      vram_used: gpu.and_then(|g| g.vram_used_mb).map(|v| v as f64),
+      vram_total: gpu.and_then(|g| g.vram_total_mb).map(|v| v as f64),
+      gpu_d3d_3d: gpu.and_then(|g| g.d3d_3d).map(|v| v as f64),
+      gpu_d3d_vdec: gpu.and_then(|g| g.d3d_vdec).map(|v| v as f64),
+      cpu_temp: self.cpu_temp.map(|v| v as f64),
+      cpu_power: self.cpu_power.map(|v| v as f64),
+      ram_temp: self.ram_temp.map(|v| v as f64),
+      // Disk throughput not yet extracted by sidecar — will be added in follow-up.
+      disk_read: 0.0,
+      disk_write: 0.0,
+      // Network is sourced from sysinfo in commands.rs, not from LHM.
+      net_up: 0.0,
+      net_down: 0.0,
+      disk_temps: self.disk_temps.into_iter().map(|(k, v)| (k, v as f64)).collect(),
+      mb_fans: self.mb_fans.into_iter().map(|f| (f.label, f.rpm as f64)).collect(),
+      mb_temps: self.mb_temps.into_iter().map(|t| (t.label, t.celsius as f64)).collect(),
+      mb_voltages: self
+        .mb_voltages
+        .into_iter()
+        .map(|v| (v.label, v.volts as f64))
+        .collect(),
+      mb_chip: self.mb_chip,
+      gpu_devices,
+    }
+  }
+}
+
+/// Unix timestamp of the last "pipe connect failed" log message.
+/// Throttles to one entry per 30-second window so the log stays readable.
+static LAST_PIPE_FAIL_LOG_SECS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Persistent pipe reader stored in `AppState`.
+pub type LhmPipeReader = tokio::io::BufReader<tokio::net::windows::named_pipe::NamedPipeClient>;
+
+/// Reads one sensor sample from the sidecar named pipe.
+///
+/// Reuses the existing connection when healthy; reconnects transparently on
+/// disconnect or timeout so the stats tick never blocks longer than 1200 ms.
+pub async fn fetch_lhm_pipe(
+  pipe: &tokio::sync::Mutex<Option<LhmPipeReader>>,
+  preferred_gpu: Option<&str>,
+  app: &tauri::AppHandle,
+) -> Option<LhmData> {
+  use crate::debug::append_debug_log;
+  use tokio::io::AsyncBufReadExt;
+
+  let mut guard = pipe.lock().await;
+
+  // Try reading from the established connection first.
+  if let Some(ref mut reader) = *guard {
+    let mut line = String::new();
+    let res = tokio::time::timeout(std::time::Duration::from_millis(1200), reader.read_line(&mut line)).await;
+    match res {
+      Ok(Ok(n)) if n > 0 => {
+        return match serde_json::from_str::<SidecarPayload>(line.trim()) {
+          Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
+          Err(e) => {
+            let preview = line.trim().chars().take(120).collect::<String>();
+            append_debug_log(app, &format!("pipe: JSON parse error: {e} — raw: {preview}"));
+            None
+          }
+        };
+      }
+      Ok(Err(e)) => {
+        append_debug_log(app, &format!("pipe: read error (established): {e}"));
+        *guard = None;
+      }
+      Err(_) => {
+        append_debug_log(app, "pipe: read timed out (established connection)");
+        *guard = None;
+      }
+      Ok(Ok(_)) => {
+        // n == 0: EOF — server closed its end.
+        *guard = None;
+      }
+    }
+  }
+
+  // Connect (first call or after disconnect).
+  // The sidecar pipe is PipeDirection.Out (server writes, client reads only).
+  // Windows denies GENERIC_WRITE access on an outbound-only pipe, so we must
+  // explicitly request read-only access to avoid ERROR_ACCESS_DENIED (os=5).
+  let client = match tokio::net::windows::named_pipe::ClientOptions::new()
+    .write(false)
+    .open(r"\\.\pipe\rigstats-sensors")
+  {
+    Ok(c) => c,
+    Err(e) => {
+      use crate::debug::unix_now_secs;
+      use std::sync::atomic::Ordering;
+      let now = unix_now_secs();
+      let last = LAST_PIPE_FAIL_LOG_SECS.load(Ordering::Relaxed);
+      if now.saturating_sub(last) >= 30 {
+        LAST_PIPE_FAIL_LOG_SECS.store(now, Ordering::Relaxed);
+        append_debug_log(app, &format!("pipe: connect failed: {e} (os={:?})", e.raw_os_error()));
+      }
+      return None;
+    }
+  };
+  append_debug_log(app, "pipe: connected to rigstats-sensors");
+  let mut reader = tokio::io::BufReader::new(client);
+
+  let mut line = String::new();
+  let res = tokio::time::timeout(std::time::Duration::from_millis(1200), reader.read_line(&mut line)).await;
+
+  match res {
+    Ok(Ok(n)) if n > 0 => {
+      let data = match serde_json::from_str::<SidecarPayload>(line.trim()) {
+        Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
+        Err(e) => {
+          let preview = line.trim().chars().take(120).collect::<String>();
+          append_debug_log(
+            app,
+            &format!("pipe: JSON parse error (first read): {e} — raw: {preview}"),
+          );
+          None
+        }
+      };
+      // Store the live connection even if parsing failed — sidecar is up.
+      *guard = Some(reader);
+      data
+    }
+    Ok(Err(e)) => {
+      append_debug_log(app, &format!("pipe: read error (first connect): {e}"));
+      None
+    }
+    Err(_) => {
+      append_debug_log(app, "pipe: timed out waiting for first line after connect");
+      None
+    }
+    Ok(Ok(_)) => None, // n == 0: EOF immediately after connect
+  }
 }

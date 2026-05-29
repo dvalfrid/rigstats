@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 pub static APP_READY: AtomicBool = AtomicBool::new(false);
 static FLOATING_TOGGLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
-use crate::lhm::fetch_lhm;
+use crate::lhm::fetch_lhm_pipe;
 use crate::lhm_process::{
   can_reach_lhm_endpoint, get_lhm_task_details, get_lhm_task_diagnosis, track_lhm_connection_state,
 };
@@ -942,8 +942,8 @@ pub async fn get_stats(
     settings.preferred_gpu.clone()
   };
 
-  // Fetch a fresh LHM sample, then fall back to the last successful one if needed.
-  let lhm_fresh = fetch_lhm(&state.lhm_client, preferred_gpu.as_deref()).await;
+  // Fetch a fresh sample from the sensor sidecar, fall back to last successful one if needed.
+  let lhm_fresh = fetch_lhm_pipe(&state.lhm_pipe, preferred_gpu.as_deref(), &app).await;
   let lhm = {
     let mut last_lhm = state.last_lhm.lock().unwrap_or_else(|e| {
       append_debug_log(&app, "stats: last_lhm mutex poisoned; recovering guard");

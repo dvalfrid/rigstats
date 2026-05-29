@@ -18,16 +18,18 @@
 RIGStats is a Windows-only Tauri v2 desktop app that displays live hardware
 telemetry on a secondary portrait monitor. The frontend is vanilla ES modules
 served directly by Tauri — no bundler or framework. The backend is Rust and
-uses three data sources: LibreHardwareMonitor (GPU/sensor data via HTTP),
-sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
+uses three data sources: a managed sensor sidecar (GPU/sensor data via named
+pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
 
 ---
 
 ## Data Flow
 
 ```text
-LibreHardwareMonitor (localhost:8085/data.json)
-    └─► lhm.rs          fetch + flatten JSON tree → LhmData
+rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs elevated)
+    └─► LibreHardwareMonitor NuGet → WinRing0 kernel driver
+            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
+                    └─► lhm.rs  pipe client → LhmData
 
 sysinfo crate           CPU load/freq, RAM, disk, network, processes
 wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
@@ -41,8 +43,8 @@ wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
                                             └─► panel-host.js updates DOM
 ```
 
-**Tick rate:** 1 second. LHM is polled with an 800 ms timeout; on failure
-the last successful sample is reused so the UI never resets to `--`.
+**Tick rate:** 1 second. The sidecar pushes one JSON line per second; on
+failure the last successful sample is reused so the UI never resets to `--`.
 
 **Floating mode broadcast:** In floating mode the main window (hidden) still
 runs `get-stats` and then calls `broadcast-stats`. The backend emits
@@ -68,6 +70,11 @@ rig-dashboard/
 │       ├── panels/         One JS module per panel
 │       ├── panel-host.js   Shared entry for floating panel windows
 │       └── *.js            Shared utilities and entry scripts
+├── sensor-sidecar/         .NET 8 C# sidecar (rigstats-sensor.exe)
+│   ├── Program.cs          Entry point, pipe server loop, UpdateVisitor
+│   ├── SensorReader.cs     SensorPayload model + Extract() mapping
+│   ├── app.manifest        requireAdministrator manifest
+│   └── sensor-sidecar.csproj
 ├── src-tauri/
 │   ├── src/                Rust source (one module per concern)
 │   ├── Cargo.toml
@@ -75,10 +82,8 @@ rig-dashboard/
 ├── docs/
 ├── website/
 ├── assets/
-├── vendor/lhm/
 └── build/
-    ├── installer.nsh
-    └── lhm-default/
+    └── installer.nsh
 ```
 
 ---
@@ -93,8 +98,8 @@ rig-dashboard/
 | `stats.rs` | Shared state (`HardwareInfo` + `AppState`) and all payload structs |
 | `commands.rs` | `#[tauri::command]` handlers — thin wrappers only |
 | `hardware.rs` | WMI/PowerShell hardware detection at startup |
-| `lhm.rs` | LHM HTTP polling and sensor tree flattening |
-| `lhm_process.rs` | LHM process lifecycle (scheduled task / direct spawn) |
+| `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
+| `lhm_process.rs` | LHM scheduled-task query helpers (task details, connection state tracking) |
 | `monitor.rs` | Display profiles, monitor selection, panel key validation |
 | `settings.rs` | Settings struct, JSON persistence |
 | `windows.rs` | Secondary window creation and tray-anchored positioning |
@@ -206,44 +211,54 @@ name rather than by index (stable when USB drives are inserted/removed).
 
 #### `lhm.rs`
 
-HTTP client that fetches `/data.json` from LHM, flattens the nested sensor tree
-into `Vec<FlatNode>`, and extracts metrics into `LhmData`.
+Named pipe client that connects to `\\.\pipe\rigstats-sensors` (written by the
+`sensor-sidecar` process) and deserialises the newline-delimited JSON stream
+into `LhmData`.
 
-Each `FlatNode` carries: `text`, `value`, `parent`, `grandparent`, `sensor_id`.
+`fetch_lhm_pipe` is called once per tick. It reuses an established connection
+stored in `AppState.lhm_pipe` (`tokio::sync::Mutex<Option<LhmPipeReader>>`).
+On connection failure, errors are logged at most once every 30 s via a
+`LAST_PIPE_FAIL_LOG_SECS` atomic to avoid log spam. The pipe client requests
+read-only access (`.write(false)` on `ClientOptions`) because the sidecar pipe
+is `PipeDirection.Out` and Windows denies write-access requests to outbound-only
+pipes.
 
-**GPU extraction:** Candidates are built from SensorId families (`/gpu-*`) with
-fallback to key sensor pairs when SensorId is missing. This captures iGPU+dGPU
-systems more reliably than a single anchor sensor. Selection policy is:
+The incoming JSON deserialises into `SidecarPayload`, which mirrors the
+`SensorPayload` record from `SensorReader.cs`. All extraction logic (sensor-name
+matching, SensorId-prefix filtering) is implemented by the sidecar; `lhm.rs`
+handles GPU selection and assembles `LhmData` from the payload.
 
-- Use `preferred_gpu` if it matches a candidate (case-insensitive fuzzy match)
+**GPU selection:** `SidecarPayload.gpu_devices` carries one `SidecarGpuDevice`
+per detected GPU (name, VRAM total, core load). `select_gpu_idx` picks the
+index using the same policy as the old HTTP parser:
+
+- Use `preferred_gpu` if it matches a candidate (case-insensitive substring)
 - Otherwise pick the highest VRAM GPU (stable default)
 - Tie-break by load
-
-All sensors sharing the selected device's `grandparent` are collected.
 
 Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
 memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus
 `gpu_devices: Vec<(device_name, vram_total_mb)>` for the frontend selector.
 
-**Disk temperatures:** Identified by `SensorId` prefix
-(`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`) — not by sensor name.
-Warning/Critical Composite sensors are excluded. Highest real temp per device
-stored as `disk_temps: Vec<(device_name, °C)>`.
+**Disk temperatures**, **RAM temperature**, **CPU temperature**, and
+**Motherboard Super I/O** sensor extraction are all performed inside the sidecar
+(`SensorReader.cs`) using the same filtering rules previously in `lhm.rs`
+(SensorId prefixes `/nvme/`, `/hdd/`, `/memory/dimm/`, `/lpc/`, etc.). The
+`LhmData` fields for these are populated directly from the sidecar payload.
 
-**RAM temperature:** `SensorId` prefix `/memory/dimm/` with suffix
-`/temperature/0`. Index 0 is the actual reading; indices 1–5 are resolution and
-threshold limits and are excluded. Max across all populated DIMM slots stored
-as `ram_temp: Option<f64>`.
+#### `lhm_process.rs`
 
-**CPU temperature:** Matched by name (`"Core (Tctl/Tdie)"` for AMD,
-`"CPU Package"` / `"Core Average"` for Intel) restricted to
-`parent == "Temperatures"` — prevents the Intel CPU Package *power* sensor
-(same name, different parent) from being picked up.
+Retained query helpers for the legacy LHM scheduled task — used only by
+`diagnostics.rs` to include task state in the diagnostics ZIP. No longer
+manages LHM process lifecycle (that responsibility has moved to the sidecar).
 
-**Motherboard Super I/O:** `/lpc/` `SensorId` prefix (chip-agnostic — works
-on NCT, ITE, Winbond, etc.). Fans > 0 RPM sorted descending, temps ≥ 5 °C,
-named voltage rails only (generic `Voltage #N` slots excluded > 0.1 V).
+- `get_lhm_task_details` / `get_lhm_task_diagnosis` — query `schtasks` for the
+  LHM task status and parse the result into a structured string
+- `track_lhm_connection_state` — logs connect/disconnect transitions at most
+  once every 30 s (shares the throttle approach used by `fetch_lhm_pipe`)
+- `can_reach_lhm_endpoint` — retained for diagnostics; checks whether the old
+  LHM HTTP port is still reachable (helps diagnose mixed-install scenarios)
 
 #### `monitor.rs`
 
@@ -272,6 +287,7 @@ where `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys
 are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"battery"`.
 
 Threshold semantics differ by key:
+
 - **Temperature keys** (`cpu`/`gpu`/`ram`/`disk`): alert fires when the reading
   **exceeds** the threshold. `warn < crit` is enforced.
 - **Battery key**: alert fires when charge % **drops below** the threshold.
@@ -452,12 +468,12 @@ download + progress flow.
 | --- | --- | --- | --- |
 | `header` | System Identity | ✓ | WMI · sysinfo |
 | `clock` | Clock | ✓ | system time |
-| `cpu` | CPU | ✓ | sysinfo · LHM |
-| `gpu` | GPU | ✓ | LHM |
-| `ram` | RAM | ✓ | sysinfo · WMI · LHM |
+| `cpu` | CPU | ✓ | sysinfo · sidecar |
+| `gpu` | GPU | ✓ | sidecar |
+| `ram` | RAM | ✓ | sysinfo · WMI · sidecar |
 | `net` | Network | ✓ | sysinfo |
-| `disk` | Storage | ✓ | LHM · sysinfo |
-| `motherboard` | Motherboard | opt-in | LHM · WMI |
+| `disk` | Storage | ✓ | sidecar · sysinfo |
+| `motherboard` | Motherboard | opt-in | sidecar · WMI |
 | `process` | Processes | opt-in | sysinfo |
 
 Panel visibility and order are saved in `Settings.visible_panels` and
@@ -485,7 +501,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `debug.log` | `std::fs::read(debug_log_path)` | Full startup + runtime log |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `AppState.settings` snapshot | All user settings |
-| `lhm-data.json` | `GET localhost:8085/data.json` | Raw LHM sensor tree (3 s timeout) |
+| `lhm-data.json` | `GET localhost:8085/data.json` | Raw LHM sensor tree if old HTTP LHM is still reachable (3 s timeout) |
 | `lhm-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
 | `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
@@ -557,8 +573,8 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### Reliability and correctness
 
-- **LHM fallback** — the last successful sample is kept in memory so the UI
-  never resets to `--` during transient LHM timeouts.
+- **Sidecar fallback** — the last successful sample is kept in memory so the UI
+  never resets to `--` when the sidecar pipe is temporarily unavailable.
 - **Payload validation** — `isValidStatsPayload` rejects malformed or empty
   payloads before rendering to avoid visual resets.
 - **No tick overlap** — the tick loop sets `isTicking` before the async call and

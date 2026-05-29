@@ -32,7 +32,6 @@ use hardware::{
   detect_disk_model_map, detect_gpu_vram_total_mb, detect_model_name, detect_motherboard_name, detect_ping_target,
   detect_ram_details, detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
-use lhm_process::ensure_lhm_running;
 use monitor::pick_target_monitor;
 use settings::{load_settings, persist_settings};
 use stats::{AppState, HardwareInfo};
@@ -416,10 +415,7 @@ fn main() {
 
       // Per-tick runtime state — mutated on every stats poll.
       app.manage(AppState {
-        lhm_client: reqwest::Client::builder()
-          .timeout(std::time::Duration::from_millis(800))
-          .build()
-          .unwrap_or_default(),
+        lhm_pipe: tokio::sync::Mutex::new(None),
         settings: Mutex::new(settings),
         system: Mutex::new(system),
         disks: Mutex::new(Disks::new_with_refreshed_list()),
@@ -477,8 +473,6 @@ fn main() {
         });
       }
 
-      // Fallback for cases where installer task did not launch LHM yet.
-      ensure_lhm_running(app_handle);
       spawn_wmi_retry(app_handle.clone());
       updater::spawn_background_check(app_handle);
 

@@ -5,6 +5,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+# Build sensor sidecar (debug, requires .NET 8 SDK)
+dotnet build sensor-sidecar/sensor-sidecar.csproj
+
+# Publish sensor sidecar as single-file self-contained exe (release)
+dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release
+
 # Start in development mode (hot-reload frontend, debug Rust build)
 npm start
 
@@ -69,6 +75,7 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 | Any Rust file | `npm run fmt:rs` then `npm run clippy` |
 | Any `.js` file | `npm run lint` |
 | Any `.md` file | `npm run lint:md` |
+| Any `sensor-sidecar/*.cs` file | `dotnet build sensor-sidecar/sensor-sidecar.csproj` |
 | Logic in Rust or JS | `npm test` (or the single-file variant) |
 | Unsure | `npm run verify` (runs everything, including markdown lint) |
 
@@ -97,7 +104,7 @@ This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardw
 ### Data flow
 
 ```text
-LibreHardwareMonitor (localhost:8085/data.json)
+LibreHardwareMonitor (localhost:8085/data.json)          ← current, being replaced
     └─► lhm.rs: fetch + flatten JSON tree → LhmData struct
 sysinfo crate (CPU load/freq, RAM, disk, network)
 wmi crate (GPU name, VRAM, RAM spec/details, system brand)
@@ -105,6 +112,15 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
             └─► Tauri IPC invoke("get-stats")
                     └─► frontend/renderer/app.js: tick() every 1s
                             └─► panel modules update DOM
+```
+
+**Planned data flow (sensor sidecar, in development):**
+
+```text
+rigstats-sensor.exe  (sensor-sidecar/, .NET 8, runs as Windows service)
+    └─► LibreHardwareMonitor NuGet library → WinRing0 kernel driver
+            └─► named pipe \\.\pipe\rigstats-sensors
+                    └─► lhm.rs (pipe client, replaces HTTP client) → LhmData struct
 ```
 
 ### Backend (`src-tauri/src/`)
@@ -121,6 +137,23 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`updater.rs`** — Auto-update logic: `spawn_background_check` (6-hour loop, first check after 10 s), `check_for_update`, `install_update`, `open_updater_window` commands.
 - **`diagnostics.rs`** — `collect_diagnostics` Tauri command + helpers (`diag_collect_hardware`, `diag_collect_tasks`, etc.) that gather system info into a ZIP archive for bug reports.
 - **`settings.rs`** — `Settings` struct (opacity, model name, dashboard profile, always-on-top, visible panels, `last_seen_version`, `thresholds: HashMap<String, ComponentThresholds>`, `alert_cooldown_secs`, `notify_on_warn`, `notify_on_crit`, `settings_version`, `preferred_gpu`, `floating_mode`, `floating_panel_scale`, `panel_layouts`), JSON persistence to Tauri app data dir. `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` is keyed by component (`"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"battery"`). Threshold semantics differ: temperature components fire when reading **exceeds** the threshold; battery fires when charge % **drops below** the threshold (so warn must be above crit for battery). `settings_version` is a `u8` migration sentinel: 0 = legacy flat fields (pre-1.15), 1 = current map format. `load_settings` runs `migrate_v0_thresholds` once when it reads a version-0 file, then re-persists. The eight legacy flat fields are kept as private `#[serde(default, skip_serializing)]` shims so old settings files can still be read but are never written. Floating panel scale is sanitized in command handlers to `[0.4, 1.0]` (non-finite values fallback to `1.0`).
+
+### Sensor sidecar (`sensor-sidecar/`)
+
+A .NET 8 C# project that replaces the standalone LibreHardwareMonitor application. Instead of running LHM as a separate scheduled task communicating over HTTP, the sidecar embeds the `LibreHardwareMonitor` NuGet library directly and streams sensor data over a Windows named pipe (`\\.\pipe\rigstats-sensors`).
+
+**Why a sidecar instead of embedding in Rust:** LHM requires the `WinRing0` kernel driver for low-level hardware register access. This driver is loaded by the .NET library and requires admin privileges — there is no pure-Rust alternative that covers the same breadth of sensors (CPU temp, MB fans/voltages, disk temps, RAM DIMM temps).
+
+**Protocol:** Newline-delimited JSON (one `SensorPayload` object per line, once per second). The Rust `lhm.rs` module will be updated to connect as a named pipe client and deserialize this stream instead of polling HTTP.
+
+**Key files:**
+
+- `Program.cs` — entry point, pipe server loop, `UpdateVisitor` (required by LHM to trigger sensor refresh)
+- `SensorReader.cs` — `SensorPayload` model records + static `Extract()` that maps LHM `IComputer` → payload. Extraction logic mirrors `lhm.rs` exactly: same sensor name matching, same SensorId prefix filtering for disks, same `/lpc/` approach for motherboard Super I/O.
+- `app.manifest` — requests `requireAdministrator` so Windows prompts for elevation on launch (needed for WinRing0 driver load)
+- Published as a self-contained single-file exe (no .NET runtime required on user machines)
+
+**Status:** In development. The Rust backend still uses HTTP/LHM. Integration (pipe client in `lhm.rs`, Windows service installer, migration of NSIS bundling) is the next step after the sidecar is verified working.
 
 ### Frontend (`frontend/`)
 

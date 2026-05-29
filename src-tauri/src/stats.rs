@@ -161,8 +161,9 @@ pub struct HardwareInfo {
 
 /// Per-tick runtime state shared across Tauri command handlers.
 pub struct AppState {
-  /// Reused HTTP client for LHM polling — avoids allocating a new connection pool every tick.
-  pub lhm_client: reqwest::Client,
+  /// Persistent named pipe connection to the sensor sidecar (`rigstats-sensor.exe`).
+  /// `None` on startup or after a disconnect; reconnected transparently by `fetch_lhm_pipe`.
+  pub lhm_pipe: tokio::sync::Mutex<Option<crate::lhm::LhmPipeReader>>,
   /// Persisted UI preferences mirrored in memory for fast reads.
   pub settings: Mutex<Settings>,
   /// Reused sysinfo collector to avoid reallocating sensors every tick.
