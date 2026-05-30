@@ -27,6 +27,11 @@
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "LibreHardwareMonitor" /F >NUL 2>&1'
   FileWrite $9 "old_lhm_tasks_removed=1$\r$\n"
 
+  ; Remove the bundled LHM directory left over from pre-sidecar versions (< 1.20).
+  ; The process was already killed in PREINSTALL so the files are no longer locked.
+  RMDir /r "$INSTDIR\lhm"
+  FileWrite $9 "old_lhm_dir_removed=1$\r$\n"
+
   ; Install PawnIO kernel driver (used by LibreHardwareMonitorLib for sensor access).
   ; pnputil stages the signed driver into the Windows Driver Store and registers the
   ; service. Safe to run on reinstall — pnputil silently skips already-staged packages.
