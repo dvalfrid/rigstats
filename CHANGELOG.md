@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.1](https://github.com/dvalfrid/rigstats/compare/v1.22.0...v1.22.1) (2026-05-30)
+
+
+### Bug Fixes
+
+* **installer:** fix PawnIO catalog mismatch caused by git line ending conversion ([1bfa927](https://github.com/dvalfrid/rigstats/commit/1bfa92760fc7320ce78b5702560ca41a03789909))
+* **installer:** log pnputil output to install log for easier diagnostics ([90e8b52](https://github.com/dvalfrid/rigstats/commit/90e8b52494cfb53f68587df58946833e414a00bb))
+
 ## [1.22.0](https://github.com/dvalfrid/rigstats/compare/v1.21.1...v1.22.0) (2026-05-30)
 
 
