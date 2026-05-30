@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.21.1](https://github.com/dvalfrid/rigstats/compare/v1.21.0...v1.21.1) (2026-05-30)
+
+
+### Bug Fixes
+
+* **installer:** use path exclusion for Defender instead of process ([8a2bf99](https://github.com/dvalfrid/rigstats/commit/8a2bf99646a34c1baefb439df57e3c678d930a34))
+
 ## [1.21.0](https://github.com/dvalfrid/rigstats/compare/v1.20.0...v1.21.0) (2026-05-29)
 
 
