@@ -37,7 +37,7 @@ use tauri_plugin_notification::NotificationExt;
 const GITHUB_URL: &str = "https://github.com/dvalfrid/rigstats";
 const CONTACT_EMAIL: &str = "daniel@valfridsson.net";
 const LICENSE_NAME: &str = "MIT";
-const LHM_LIB_VERSION: &str = "0.9.4";
+const LHM_LIB_VERSION: &str = "0.9.6";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
 

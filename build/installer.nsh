@@ -27,6 +27,15 @@
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "LibreHardwareMonitor" /F >NUL 2>&1'
   FileWrite $9 "old_lhm_tasks_removed=1$\r$\n"
 
+  ; Install PawnIO kernel driver (used by LibreHardwareMonitorLib for sensor access).
+  ; pnputil stages the signed driver into the Windows Driver Store and registers the
+  ; service. Safe to run on reinstall — pnputil silently skips already-staged packages.
+  nsExec::ExecToStack 'cmd /C pnputil /add-driver "$INSTDIR\pawnio\pawnio.inf" /install >NUL 2>&1'
+  Pop $R0
+  Pop $R1
+  DetailPrint "PawnIO install: exit $R0"
+  FileWrite $9 "pawnio_install_exit=$R0$\r$\n"
+
   ; Remove the existing service before re-registering (handles update scenario).
   ; The service was already stopped in PREINSTALL; this delete just removes the
   ; SCM entry so we can re-create it with the fresh binary path.
@@ -51,14 +60,6 @@
   Pop $7
   DetailPrint "Service start: exit $6"
   FileWrite $9 "service_start_exit=$6$\r$\n"
-
-  ; Add a Windows Defender path exclusion for the install directory so the
-  ; WinRing0 kernel driver (extracted by LibreHardwareMonitorLib for Super I/O
-  ; sensor access) is not quarantined on first service start. A path exclusion
-  ; is used rather than a process exclusion because Defender scans the .sys
-  ; file at write time, before the process exclusion takes effect.
-  nsExec::ExecToLog 'cmd /C powershell -NonInteractive -Command "Add-MpPreference -ExclusionPath ''$INSTDIR'' -ErrorAction SilentlyContinue" >NUL 2>&1'
-  FileWrite $9 "defender_exclusion=added$\r$\n"
 
   FileClose $9
 !macroend

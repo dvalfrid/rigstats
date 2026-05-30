@@ -2,21 +2,16 @@
 
 ## Windows Defender Alert On Service Start
 
-When the `rigstats-sensor` service starts for the first time, Windows Defender
-may show a real-time protection alert or SmartScreen warning. This is expected.
+Since v1.21.0, `LibreHardwareMonitorLib` uses **PawnIO** — a properly signed
+kernel driver — instead of WinRing0. The installer stages PawnIO into the
+Windows Driver Store via `pnputil` before starting the service, so Defender
+alerts should no longer occur on fresh installs.
 
-`LibreHardwareMonitorLib` loads the `WinRing0` kernel driver to access
-Super I/O chip registers for motherboard fan speeds and voltages. Defender
-flags this driver as potentially unwanted (`HackTool:Win32/WinRing0` or
-similar). The same issue affects Open Hardware Monitor, HWiNFO, and every
-other tool that uses WinRing0.
-
-The installer adds a process-scoped Defender exclusion for `rigstats-sensor.exe`
-automatically. If you installed manually or are running from source, add it once
-via an elevated PowerShell prompt:
+If you are running from source (dev environment) and see a Defender alert, it
+means PawnIO is not yet installed. Install it once from an elevated prompt:
 
 ```powershell
-Add-MpPreference -ExclusionProcess "rigstats-sensor.exe"
+pnputil /add-driver build\pawnio\pawnio.inf /install
 ```
 
 ## GPU Data Always Shows `--`
