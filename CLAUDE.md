@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-# Build sensor sidecar (debug, requires .NET 8 SDK)
+# Build sensor sidecar (debug, requires .NET 10 SDK)
 dotnet build sensor-sidecar/sensor-sidecar.csproj
 
 # Publish sensor sidecar as single-file self-contained exe (release)
@@ -109,7 +109,7 @@ This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardw
 ### Data flow
 
 ```text
-rigstats-sensor.exe  (sensor-sidecar/, .NET 8, Windows Service / LocalSystem)
+rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
     └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
             └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
                     └─► lhm.rs: pipe client → LhmData struct
@@ -138,7 +138,7 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 
 ### Sensor sidecar (`sensor-sidecar/`)
 
-A .NET 8 C# project that replaces the standalone LibreHardwareMonitor application. Embeds the `LibreHardwareMonitor` NuGet library directly and streams sensor data over a Windows named pipe (`\\.\pipe\rigstats-sensors`). Installed and managed as a Windows Service (`rigstats-sensor`) running as LocalSystem — no scheduled task, no HTTP server, no user-session dependency.
+A .NET 10 C# project that replaces the standalone LibreHardwareMonitor application. Embeds the `LibreHardwareMonitor` NuGet library directly and streams sensor data over a Windows named pipe (`\\.\pipe\rigstats-sensors`). Installed and managed as a Windows Service (`rigstats-sensor`) running as LocalSystem — no scheduled task, no HTTP server, no user-session dependency.
 
 **Why a sidecar instead of embedding in Rust:** LHM requires the `PawnIO` kernel driver for low-level hardware register access. This driver is loaded by the .NET library and requires admin privileges — there is no pure-Rust alternative that covers the same breadth of sensors (CPU temp, MB fans/voltages, disk temps, RAM DIMM temps).
 
