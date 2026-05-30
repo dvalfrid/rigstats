@@ -43,7 +43,7 @@
   Sleep 1000
 
   ; Register rigstats-sensor.exe as a Windows Service running as LocalSystem.
-  ; LocalSystem has the privileges needed to load the WinRing0 kernel driver.
+  ; LocalSystem has the privileges needed to load the PawnIO kernel driver.
   ; start= auto means the SCM starts it automatically at boot.
   nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "$INSTDIR\rigstats-sensor.exe" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
   Pop $4
