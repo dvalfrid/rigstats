@@ -35,11 +35,12 @@
   ; Install PawnIO kernel driver (used by LibreHardwareMonitorLib for sensor access).
   ; pnputil stages the signed driver into the Windows Driver Store and registers the
   ; service. Safe to run on reinstall — pnputil silently skips already-staged packages.
-  nsExec::ExecToStack 'cmd /C pnputil /add-driver "$INSTDIR\pawnio\pawnio.inf" /install >NUL 2>&1'
+  nsExec::ExecToStack 'cmd /C pnputil /add-driver "$INSTDIR\pawnio\pawnio.inf" /install 2>&1'
   Pop $R0
   Pop $R1
   DetailPrint "PawnIO install: exit $R0"
   FileWrite $9 "pawnio_install_exit=$R0$\r$\n"
+  FileWrite $9 "pawnio_install_output=$R1$\r$\n"
 
   ; Remove the existing service before re-registering (handles update scenario).
   ; The service was already stopped in PREINSTALL; this delete just removes the
