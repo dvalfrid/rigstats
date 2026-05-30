@@ -55,7 +55,7 @@
       "../assets/tray.png"
     ],
     "resources": {
-      "../sensor-sidecar/bin/Release/net8.0-windows/win-x64/publish/rigstats-sensor.exe": "rigstats-sensor.exe",
+      "../sensor-sidecar/bin/Release/net10.0-windows/win-x64/publish/rigstats-sensor.exe": "rigstats-sensor.exe",
       "../build/pawnio/PawnIO.sys": "pawnio/PawnIO.sys",
       "../build/pawnio/pawnio.inf": "pawnio/pawnio.inf",
       "../build/pawnio/PawnIO.cat": "pawnio/PawnIO.cat",
