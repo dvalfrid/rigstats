@@ -7,3 +7,6 @@
 *.exe binary
 *.dll binary
 *.sig binary
+*.sys binary
+*.cat binary
+*.inf binary
