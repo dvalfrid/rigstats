@@ -271,6 +271,7 @@ The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a n
 | `debug.log` | Full RIGStats debug log from disk | Startup sequence, LHM connectivity, error events |
 | `settings.json` | Persisted user settings (opacity, profile, model name) | Rules out configuration-specific issues |
 | `sidecar-parsed.json` | Last sensor payload received from the sidecar pipe — GPU temps, CPU temp, fan speeds, disk temps, etc. | **Most important file for adding sensor support** — shows all extracted sensor values exactly as the app uses them |
+| `sensor-tree.txt` | Full LHM hardware and sensor tree as seen at the last sidecar service start — every hardware node, sub-hardware, sensor identifier, type, name, and value | Use this to find the exact identifier for a sensor that isn't being picked up by `SensorReader.cs` |
 | `hardware.json` | WMI/CIM snapshot: OS version, CPU (name, cores, max clock), GPU (name, VRAM, driver), motherboard (manufacturer, model, product, base board), RAM (capacity per stick, speed, type code, manufacturer, part number) | Hardware identification and brand detection |
 | `sidecar-service.txt` | Output of `sc query` and `sc qc` for the `rigstats-sensor` Windows Service | Diagnose sidecar autostart and service registration failures |
 | `environment.txt` | `PROCESSOR_ARCHITECTURE`, `COMPUTERNAME`, Windows build and display version | OS-level context for platform-specific bugs |
