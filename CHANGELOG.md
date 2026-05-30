@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.0](https://github.com/dvalfrid/rigstats/compare/v1.21.1...v1.22.0) (2026-05-30)
+
+
+### Features
+
+* **diagnostics:** write sensor tree to file on sidecar start and include in diagnostics ZIP ([0b9a2df](https://github.com/dvalfrid/rigstats/commit/0b9a2df2b935b3e1cbe0689555a144b4601858e2))
+* **sidecar:** replace WinRing0 with PawnIO via LHM 0.9.6 ([8f94e36](https://github.com/dvalfrid/rigstats/commit/8f94e367304387149771e289415f0b4bdae2750b))
+
 ## [1.21.1](https://github.com/dvalfrid/rigstats/compare/v1.21.0...v1.21.1) (2026-05-30)
 
 
