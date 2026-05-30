@@ -76,12 +76,44 @@ public sealed class SensorWorker : BackgroundService
         return security;
     }
 
+    private static readonly string SensorTreePath =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "se.codeby.rigstats",
+            "sensor-tree.txt");
+
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         TruncateLogIfNeeded();
         _computer.Open();
         Log("[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\rigstats-sensors");
+        WriteSensorTree();
         return base.StartAsync(cancellationToken);
+    }
+
+    private void WriteSensorTree()
+    {
+        try
+        {
+            _computer.Accept(_visitor);
+            var lines = new System.Text.StringBuilder();
+            lines.AppendLine($"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
+            foreach (var hw in _computer.Hardware)
+            {
+                lines.AppendLine($"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
+                foreach (var s in hw.Sensors)
+                    lines.AppendLine($"  S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                foreach (var sub in hw.SubHardware)
+                {
+                    lines.AppendLine($"  SUB {sub.HardwareType,-18} id={sub.Identifier} name={sub.Name}");
+                    foreach (var s in sub.Sensors)
+                        lines.AppendLine($"    S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                }
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(SensorTreePath)!);
+            File.WriteAllText(SensorTreePath, lines.ToString());
+        }
+        catch { }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

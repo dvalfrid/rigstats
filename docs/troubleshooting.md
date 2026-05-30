@@ -104,6 +104,16 @@ Each entry shows:
 
 If the dashboard appears on the wrong monitor, compare the `fitScore` values and check whether the correct monitor has `isPortrait: true` and a lower score than the others.
 
+### What To Look For In `sensor-tree.txt`
+
+The file contains the full LHM hardware and sensor tree as seen by the sidecar at the last service start.
+Each hardware node shows its type, identifier, and name; each sensor shows its type, identifier, name, and current value.
+
+Use this file to identify the exact identifier path for a sensor that isn't being picked up.
+For example, if a DIMM temperature reads correctly in standalone LHM but not in RIGStats, find the sensor here and compare its identifier against the filter in `sensor-sidecar/SensorReader.cs`.
+
+The file is overwritten on every service start, so it always reflects the current hardware configuration.
+
 ### What To Look For In `sidecar-parsed.json`
 
 The file contains the last sensor payload that the Rust backend successfully

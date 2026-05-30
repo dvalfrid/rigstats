@@ -131,6 +131,13 @@ fn diag_collect_sidecar_log() -> Vec<u8> {
   std::fs::read(path).unwrap_or_else(|_| b"(sidecar log not found)".to_vec())
 }
 
+fn diag_collect_sensor_tree() -> Vec<u8> {
+  let path = std::path::PathBuf::from(std::env::var("PROGRAMDATA").unwrap_or_else(|_| "C:\\ProgramData".to_string()))
+    .join("se.codeby.rigstats")
+    .join("sensor-tree.txt");
+  std::fs::read(path).unwrap_or_else(|_| b"(sensor tree not found - service may not have started yet)".to_vec())
+}
+
 fn diag_collect_environment() -> String {
   let mut lines = Vec::<String>::new();
   for var in &[
@@ -466,6 +473,7 @@ pub async fn collect_diagnostics(
   let sysinfo_json = diag_collect_sysinfo(&state, &hw);
   let install_log_bytes = diag_collect_installer_log(&app);
   let sidecar_log_bytes = diag_collect_sidecar_log();
+  let sensor_tree_bytes = diag_collect_sensor_tree();
   let displays_json = {
     let profile = state
       .settings
@@ -496,6 +504,7 @@ pub async fn collect_diagnostics(
     ("settings.json", settings_json.as_bytes()),
     ("sidecar-parsed.json", sidecar_parsed_json.as_bytes()),
     ("sidecar-log.txt", &sidecar_log_bytes),
+    ("sensor-tree.txt", &sensor_tree_bytes),
     ("sidecar-service.txt", service_txt.as_bytes()),
     ("hardware.json", hardware_json.as_bytes()),
     ("battery.json", battery_json.as_bytes()),
