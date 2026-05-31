@@ -8,17 +8,17 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 
 | Feature | Status |
 | --- | --- |
-| Auto-update | ✅ Done |
-| NVMe / SSD temperatures | ✅ Done |
-| Temperature threshold alerts | ✅ Done |
-| Motherboard panel | ✅ Done |
-| Extended GPU panel | ✅ Done |
-| Multi-GPU selector and pinning | ✅ Done |
-| Customisable themes / accent colours | ✅ Done |
-| Process monitor panel | ✅ Done |
-| Battery panel (laptop support) | ✅ Done |
-| Settings redesign | ✅ Done |
-| Floating panel layout | ✅ Done |
+| Auto-update | ✅ Done (v1.6) |
+| NVMe / SSD temperatures | ✅ Done (v1.8) |
+| Temperature threshold alerts | ✅ Done (v1.9) |
+| Motherboard panel | ✅ Done (v1.11) |
+| Extended GPU panel | ✅ Done (v1.13) |
+| Customisable themes / accent colours | ✅ Done (v1.14) |
+| Process monitor panel | ✅ Done (v1.15) |
+| Floating panel layout | ✅ Done (v1.16) |
+| Multi-GPU selector and pinning | ✅ Done (v1.19) |
+| Battery panel (laptop support) | ✅ Done (v1.20) |
+| Settings redesign | ✅ Done (v1.20) |
 | LHM stability — sensor sidecar | ✅ Done (v1.21) |
 | CPU fan speed | ⏭ Investigated, skipped |
 | Stats logging / data export | 🔲 Planned |
