@@ -591,6 +591,64 @@ at once. This should be clearly communicated at setup time.
 
 ---
 
+## Total system power consumption
+
+**Panel:** Header or dedicated power row in CPU/GPU panel
+**Data source:** LHM sensor tree (built-in sensors only — no external hardware required)
+
+Shows how much power the computer draws in total, in real time.
+
+**Status by platform:**
+
+- **Laptops:** Already solved. Battery discharge rate (`power_w` in the battery panel)
+  is the total system power draw when running on battery. PSU losses don't apply —
+  the battery measures what the whole system actually consumes.
+- **Desktops:** Requires investigation per machine. Two approaches, in priority order:
+
+### Approach 1 — Motherboard power sensor (preferred)
+
+Some motherboards expose a total VRM input power or "System Power" sensor via their
+Super I/O chip or dedicated power management IC (e.g. ASUS DIGI+ VRM, MSI MEG sensors).
+If present, this appears in the LHM sensor tree under the motherboard hardware node as a
+`Power` sensor type. This is the most accurate built-in reading — it covers CPU, RAM,
+and other VRM-fed components.
+
+Implementation: scan `SensorReader.cs` motherboard extraction for `SensorType.Power`
+sensors under the `/lpc/` node and surface the highest one as `system_power_w` in
+`SensorPayload`. No new data collection needed — if the sensor is there, it's free.
+
+### Approach 2 — Component sum estimate (fallback)
+
+When no motherboard power sensor is available, sum the known component readings:
+
+```text
+estimated_total = cpu_package_w + gpu_power_w + (dram_power_w if available) + fixed_overhead_w
+```
+
+`fixed_overhead_w` covers fans, storage, USB devices, and MB standby (typically 20–40 W
+on a desktop). The result is labelled clearly as an estimate (`~XXX W`) rather than a
+measured value. Accuracy: roughly ±20 % of actual wall power (excludes PSU efficiency
+losses which are 10–15 % on a typical 80 Plus Gold unit).
+
+Intel CPUs expose DRAM power via RAPL (`/intelcpu/N/power/2`). AMD SMU may expose it
+on some platforms. LHM already reads these — `SensorReader.cs` just needs to extract
+and include them.
+
+**Investigation step first:**
+
+Before implementing, collect `sensor-tree.txt` from a representative desktop and check
+for `Power` sensors under the `Motherboard` hardware node. If present, approach 1 is
+sufficient. If absent, approach 2 is the fallback.
+
+**Scope:**
+
+- `SensorReader.cs`: extract MB power sensor if present; extract DRAM power if available
+- `SensorPayload`: add `system_power_w: float?` (measured) and `dram_power_w: float?`
+- `StatsPayload` / `stats.rs`: surface as `system_power_w` with fallback sum logic
+- Frontend: display in header panel or as a new row in the CPU panel
+
+---
+
 ## Landscape monitor support
 
 **Panel:** All panels + profile system
