@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.2](https://github.com/dvalfrid/rigstats/compare/v1.22.1...v1.22.2) (2026-05-30)
+
+
+### Bug Fixes
+
+* ensure PawnIO and .NET 10 changes are included in release ([2a6717b](https://github.com/dvalfrid/rigstats/commit/2a6717b8c773b332df9ff62f16948597de66f6ed))
+
 ## [1.22.1](https://github.com/dvalfrid/rigstats/compare/v1.22.0...v1.22.1) (2026-05-30)
 
 
