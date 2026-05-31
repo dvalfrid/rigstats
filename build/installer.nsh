@@ -20,7 +20,7 @@
   CreateDirectory "$R2\se.codeby.rigstats"
   FileOpen $9 "$R2\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
-  FileWrite $9 "version=$APPVERSION$\r$\n"
+  FileWrite $9 "version=${VERSION}$\r$\n"
   FileWrite $9 "instdir=$INSTDIR$\r$\n"
   nsExec::ExecToStack 'cmd /C echo %DATE% %TIME%'
   Pop $R3
@@ -50,7 +50,7 @@
   ; Install PawnIO kernel driver (used by LibreHardwareMonitorLib for sensor access).
   ; pnputil stages the signed driver into the Windows Driver Store and registers the
   ; service. Safe to run on reinstall — pnputil silently skips already-staged packages.
-  nsExec::ExecToStack 'cmd /C "$WINDIR\System32\pnputil.exe" /add-driver "$INSTDIR\pawnio\pawnio.inf" /install 2>&1'
+  nsExec::ExecToStack '"$WINDIR\System32\pnputil.exe" /add-driver "$INSTDIR\pawnio\pawnio.inf" /install'
   Pop $R0
   Pop $R1
   DetailPrint "PawnIO install: exit $R0"
@@ -61,7 +61,7 @@
   ; Exit code 0 means success (including "already exists"). Non-zero is a real failure.
   IntCmp $R0 0 pawnio_done pawnio_done pawnio_check_existing
   pawnio_check_existing:
-    nsExec::ExecToStack 'cmd /C "$WINDIR\System32\pnputil.exe" /enum-drivers 2>&1 | findstr /i "pawnio"'
+    nsExec::ExecToStack '"$WINDIR\System32\pnputil.exe" /enum-drivers'
     Pop $R3
     Pop $R4
     FileWrite $9 "pawnio_already_staged=$R4$\r$\n"
