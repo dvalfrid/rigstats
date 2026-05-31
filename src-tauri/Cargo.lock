@@ -3504,7 +3504,7 @@ dependencies = [
 
 [[package]]
 name = "rigstats"
-version = "1.22.1"
+version = "1.22.3"
 dependencies = [
  "hostname",
  "rfd",

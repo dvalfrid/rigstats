@@ -14,11 +14,11 @@
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
-  ; Open install log in ProgramData — the installer runs elevated (perMachine) so
-  ; $APPDATA resolves to the system account profile, not the user's. $PROGRAMDATA
-  ; is machine-wide and consistent regardless of which account runs the installer.
-  CreateDirectory "$COMMONAPPDATA\se.codeby.rigstats"
-  FileOpen $9 "$COMMONAPPDATA\se.codeby.rigstats\rigstats-install.log" w
+  ; Open install log in ProgramData — neither $PROGRAMDATA nor $COMMONAPPDATA are
+  ; valid NSIS built-in variables; use ReadEnvStr to read the Windows env var instead.
+  ReadEnvStr $R2 "PROGRAMDATA"
+  CreateDirectory "$R2\se.codeby.rigstats"
+  FileOpen $9 "$R2\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
 
   ; Remove old LHM scheduled tasks from pre-sidecar versions (< 1.20).
