@@ -108,6 +108,7 @@ public static class SensorReader
                 case SensorType.Temperature:
                     if (s.Name == "GPU Core") temp = s.Value;
                     else if (s.Name is "GPU Hot Spot" or "GPU Hot Spot Temperature") hotspot = s.Value;
+                    else if (temp is null && s.Name == "GPU VR SoC") temp = s.Value;
                     break;
                 case SensorType.Clock:
                     if (s.Name == "GPU Core") coreClock = s.Value;
