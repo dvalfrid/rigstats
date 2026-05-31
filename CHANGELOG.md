@@ -8,6 +8,15 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.5](https://github.com/dvalfrid/rigstats/compare/v1.22.4...v1.22.5) (2026-05-31)
+
+
+### Bug Fixes
+
+* **installer:** add pawnio.inf pre-check and driver store fallback on install failure ([181b369](https://github.com/dvalfrid/rigstats/commit/181b369fcf991ca362179c97c5d4c99f7af0c955))
+* **installer:** add version, instdir, timestamp and sc create output to install log ([5c762f6](https://github.com/dvalfrid/rigstats/commit/5c762f6be245fdc81d2c421fd671b5e399a4779a))
+* **installer:** use full path to pnputil.exe — not reliably in PATH in elevated NSIS context ([f4907a5](https://github.com/dvalfrid/rigstats/commit/f4907a52c2b8854cc77c97cce0f6bf49bbddf8a6))
+
 ## [1.22.4](https://github.com/dvalfrid/rigstats/compare/v1.22.3...v1.22.4) (2026-05-31)
 
 
