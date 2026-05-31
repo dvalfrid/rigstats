@@ -57,9 +57,11 @@
   FileWrite $9 "pawnio_install_exit=$R0$\r$\n"
   FileWrite $9 "pawnio_install_output=$R1$\r$\n"
 
-  ; If pnputil failed, check whether PawnIO is already staged in the Driver Store.
-  ; Exit code 0 means success (including "already exists"). Non-zero is a real failure.
-  IntCmp $R0 0 pawnio_done pawnio_done pawnio_check_existing
+  ; Exit 0 = newly added, 259 = already present — both are success.
+  ; Anything else is a real failure; log enum-drivers for diagnostics.
+  IntCmp $R0 0 pawnio_done pawnio_nonzero pawnio_nonzero
+  pawnio_nonzero:
+    IntCmp $R0 259 pawnio_done pawnio_check_existing pawnio_check_existing
   pawnio_check_existing:
     nsExec::ExecToStack '"$WINDIR\Sysnative\pnputil.exe" /enum-drivers'
     Pop $R3
