@@ -434,7 +434,7 @@ Each panel exports one `update*Panel(stats, ...)` function called from
 | Panel module | Key behaviour |
 | --- | --- |
 | `cpu.js` | Ring gauge, per-core bar list (scrollable), sparkline |
-| `gpu.js` | Ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM + GPU load bars, two optional D3D bars hidden when `null`, and compact selector dots that persist preferred GPU via `set_gpu_preference` |
+| `gpu.js` | Ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM + GPU load bars, one optional D3D row (3D + VID side by side) hidden when both fields are `null`, and compact selector dots that persist preferred GPU via `set_gpu_preference` |
 | `ram.js` | Usage bar, spec metadata, DIMM temperature |
 | `network.js` | Upload/download values, dual-series sparkline |
 | `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |
