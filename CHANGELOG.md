@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.3](https://github.com/dvalfrid/rigstats/compare/v1.22.2...v1.22.3) (2026-05-31)
+
+
+### Bug Fixes
+
+* **gpu:** add GPU VR SoC as fallback temperature for AMD iGPU (Radeon 890M) ([1988794](https://github.com/dvalfrid/rigstats/commit/1988794a04c1cee593d12dc21aae78c3da24307b))
+* **installer:** use $COMMONAPPDATA instead of $PROGRAMDATA in NSIS hook ([3a8a146](https://github.com/dvalfrid/rigstats/commit/3a8a146b6b91f8eaacbef567aea18daab618aa76))
+
 ## [1.22.2](https://github.com/dvalfrid/rigstats/compare/v1.22.1...v1.22.2) (2026-05-30)
 
 
