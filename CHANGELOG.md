@@ -8,6 +8,15 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.6](https://github.com/dvalfrid/rigstats/compare/v1.22.5...v1.22.6) (2026-05-31)
+
+
+### Bug Fixes
+
+* **installer:** fix pnputil cmd quoting, use ${VERSION} for version, call pnputil directly without cmd /C ([02a6764](https://github.com/dvalfrid/rigstats/commit/02a6764c6537e91e7481b8aadeeba7fdaa82a2a6))
+* **installer:** treat pnputil exit 259 as success on reinstall ([73fbb65](https://github.com/dvalfrid/rigstats/commit/73fbb65e5088dec33b787063f38e70c40f1bb36a))
+* **installer:** use Sysnative to bypass WOW64 redirection for pnputil ([ace42bc](https://github.com/dvalfrid/rigstats/commit/ace42bc21008f40fd16a42604824c6149b5d030b))
+
 ## [1.22.5](https://github.com/dvalfrid/rigstats/compare/v1.22.4...v1.22.5) (2026-05-31)
 
 
