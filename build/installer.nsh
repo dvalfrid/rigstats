@@ -20,6 +20,12 @@
   CreateDirectory "$R2\se.codeby.rigstats"
   FileOpen $9 "$R2\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
+  FileWrite $9 "version=$APPVERSION$\r$\n"
+  FileWrite $9 "instdir=$INSTDIR$\r$\n"
+  nsExec::ExecToStack 'cmd /C echo %DATE% %TIME%'
+  Pop $R3
+  Pop $R4
+  FileWrite $9 "timestamp=$R4$\r$\n"
 
   ; Remove old LHM scheduled tasks from pre-sidecar versions (< 1.20).
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RIGStats\LibreHardwareMonitor" /F >NUL 2>&1'
@@ -56,6 +62,7 @@
   Pop $5
   DetailPrint "Service create: exit $4"
   FileWrite $9 "service_create_exit=$4$\r$\n"
+  FileWrite $9 "service_create_output=$5$\r$\n"
 
   nsExec::ExecToLog 'cmd /C sc description rigstats-sensor "Reads hardware sensors for the RIGStats dashboard." >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C sc failure rigstats-sensor reset= 60 actions= restart/5000/restart/10000/restart/30000 >NUL 2>&1'
