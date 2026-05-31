@@ -17,8 +17,8 @@
   ; Open install log in ProgramData — the installer runs elevated (perMachine) so
   ; $APPDATA resolves to the system account profile, not the user's. $PROGRAMDATA
   ; is machine-wide and consistent regardless of which account runs the installer.
-  CreateDirectory "$PROGRAMDATA\se.codeby.rigstats"
-  FileOpen $9 "$PROGRAMDATA\se.codeby.rigstats\rigstats-install.log" w
+  CreateDirectory "$COMMONAPPDATA\se.codeby.rigstats"
+  FileOpen $9 "$COMMONAPPDATA\se.codeby.rigstats\rigstats-install.log" w
   FileWrite $9 "[RIGStats post-install]$\r$\n"
 
   ; Remove old LHM scheduled tasks from pre-sidecar versions (< 1.20).
