@@ -173,16 +173,11 @@ function updateGpuPanel(gpu, history, pushHistory, thresholds = {}) {
 
   const d3d3d = gpu.d3d3d ?? null;
   const d3dVdec = gpu.d3dVdec ?? null;
-  document.getElementById('gpuD3dRow').style.display = d3d3d != null ? '' : 'none';
-  document.getElementById('gpuVdecRow').style.display = d3dVdec != null ? '' : 'none';
-  if (d3d3d != null) {
-    document.getElementById('d3d3dBar').style.width = `${d3d3d}%`;
-    document.getElementById('d3d3dPct').textContent = `${d3d3d.toFixed(0)}%`;
-  }
-  if (d3dVdec != null) {
-    document.getElementById('d3dVdecBar').style.width = `${d3dVdec}%`;
-    document.getElementById('d3dVdecPct').textContent = `${d3dVdec.toFixed(0)}%`;
-  }
+  document.getElementById('gpuD3dRow').style.display = (d3d3d != null || d3dVdec != null) ? '' : 'none';
+  document.getElementById('d3d3dBar').style.width = d3d3d != null ? `${d3d3d}%` : '0%';
+  document.getElementById('d3d3dPct').textContent = d3d3d != null ? `${d3d3d.toFixed(0)}%` : '--%';
+  document.getElementById('d3dVdecBar').style.width = d3dVdec != null ? `${d3dVdec}%` : '0%';
+  document.getElementById('d3dVdecPct').textContent = d3dVdec != null ? `${d3dVdec.toFixed(0)}%` : '--%';
 
   const vramUsedGB = gpu.vramUsed != null ? (gpu.vramUsed / 1024).toFixed(1) : null;
   const vramTotalGB = gpu.vramTotal != null ? (gpu.vramTotal / 1024).toFixed(0) : null;
