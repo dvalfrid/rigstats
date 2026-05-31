@@ -19,7 +19,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Battery panel (laptop support) | ✅ Done |
 | Settings redesign | ✅ Done |
 | Floating panel layout | ✅ Done |
-| LHM stability — sensor sidecar | ✅ Done (v1.20) |
+| LHM stability — sensor sidecar | ✅ Done (v1.21) |
 | CPU fan speed | ⏭ Investigated, skipped |
 | Stats logging / data export | 🔲 Planned |
 | Floating panel groups | 🔲 Planned |
@@ -722,7 +722,7 @@ existing portrait ones.
 
 ## LHM stability — sensor sidecar replaces HTTP LHM ✅
 
-**Implemented in v1.20.0.**
+**Implemented in v1.21.0.**
 
 Replaced the standalone LibreHardwareMonitor HTTP server with a managed .NET 8
 sidecar (`sensor-sidecar/rigstats-sensor.exe`) that embeds the
