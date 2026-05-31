@@ -446,6 +446,117 @@ that re-stacks all open panel windows vertically on the chosen monitor in
 
 ---
 
+## Desktop background mode — Level 1: Always behind (HWND_BOTTOM)
+
+**Panel:** Main window + floating panels
+**Data source:** No new data required
+
+Adds a third window-layer option alongside the existing "Normal" and "Always on top"
+modes. In "Always behind" mode the dashboard sits below all other windows — visible
+when the desktop is clear but automatically covered whenever another app is in focus.
+Behaves like a classic Windows desktop gadget from Windows Vista/7.
+
+**Pros:**
+
+- Non-intrusive — never overlaps work windows; visible only when the desktop is exposed
+- Simple Win32 implementation: a single `SetWindowPos(hwnd, HWND_BOTTOM, ...)` call
+- No undocumented APIs or Explorer dependency
+- Works for both the portrait main window and individual floating panels
+- Compatible with existing always-on-top and floating-mode settings
+
+**Cons:**
+
+- Does **not** survive `Win+D` (Show Desktop) — Windows minimises all non-desktop
+  windows, including HWND_BOTTOM windows, when the user presses Win+D
+- The window can temporarily flicker to a higher z-order during monitor changes or
+  DWM redraws; a `WM_WINDOWPOSCHANGING` hook is needed to suppress this
+- Clicking on the dashboard area while it is "behind" requires all other windows to
+  be moved first — the window itself cannot be brought forward without toggling the mode
+
+**Architecture:**
+
+The existing always-on-top implementation in `commands.rs` / `windows.rs` is extended
+with a third state. When "Always behind" is selected, `set_always_on_top(false)` is
+called first, then `SetWindowPos` with `HWND_BOTTOM` and `SWP_NOMOVE | SWP_NOSIZE |
+SWP_NOACTIVATE`. A `WM_WINDOWPOSCHANGING` subclass hook re-applies `HWND_BOTTOM` if
+another operation reorders the z-stack. The setting is persisted in `Settings` as a
+new `window_layer` enum field (`"normal"` | `"on_top"` | `"behind"`).
+
+**Scope:**
+
+- New `window_layer: String` field in `Settings` struct (`#[serde(default)]`)
+- `set_window_layer(layer)` Tauri command replacing the current boolean `always_on_top`
+  toggle (backwards-compatible via migration)
+- Win32 `SetWindowPos` call via the `windows` crate in `windows.rs`
+- `WM_WINDOWPOSCHANGING` subclass to keep the window pinned at HWND_BOTTOM
+- Settings window: replace the "Always on top" checkbox with a three-way selector
+  (Normal / Always on top / Always behind)
+- Applies to the main portrait window; optionally also to each floating panel
+
+---
+
+## Desktop background mode — Level 2: Wallpaper layer (Progman/WorkerW)
+
+**Panel:** Main window + floating panels
+**Data source:** No new data required
+
+Makes the dashboard a true part of the wallpaper layer — living between the
+desktop wallpaper and the desktop icons. Survives `Win+D`, is never covered by
+any normal window, and appears below even desktop icons. This is the technique
+used by Wallpaper Engine and similar tools.
+
+**Pros:**
+
+- Genuinely part of the background — survives `Win+D`, screen switches, and
+  window maximize/fullscreen operations
+- Never accidentally visible above game fullscreen windows (unlike HWND_BOTTOM
+  which can flicker)
+- Dashboard is accessible without any window management — it is always "there"
+
+**Cons:**
+
+- Relies on undocumented Windows internals: finding the `WorkerW` child of
+  `Progman` via `SendMessageTimeout(0x052C)` and reparenting into it. Microsoft
+  could remove or change this behaviour in any Windows update
+- When Explorer crashes and restarts, the WorkerW hierarchy is rebuilt —
+  the dashboard process must detect this (via `WM_SHELLHOOKMESSAGE` or polling)
+  and re-parent itself
+- WebView2 as a child of WorkerW has known rendering edge cases: some GPU
+  compositing modes draw incorrectly, and hardware-accelerated WebView2 may
+  not composite cleanly in the wallpaper layer
+- Mouse input is not forwarded to WorkerW children by default — click-through
+  to the desktop is expected, but interactive elements (GPU selector dots,
+  drag handles) would stop working unless the window is temporarily un-parented
+- Incompatible with floating panel mode (each floating window would need its own
+  WorkerW reparenting and input-forwarding solution)
+- Significantly harder to test across Windows 10 / 11 versions
+
+**Architecture:**
+
+On mode activation, the app:
+
+1. Sends `SendMessageTimeout(progman_hwnd, 0x052C, 0, 0, ...)` to Progman to
+   force creation of the split `WorkerW` sibling
+2. Enumerates top-level windows to find the `WorkerW` that sits *behind* the
+   desktop icon layer (identified by checking for a `SHELLDLL_DefView` child)
+3. Calls `SetParent(dashboard_hwnd, workerview_hwnd)` to reparent the window
+4. Subscribes to shell hook messages to detect Explorer restarts and re-parent
+
+Input handling: because WorkerW does not relay mouse events, a separate
+`WH_MOUSE_LL` low-level hook captures clicks in the dashboard's bounding rect
+and injects them directly via `PostMessage`.
+
+**Scope:**
+
+- Win32 interop in `windows.rs`: Progman discovery, WorkerW enumeration,
+  `SetParent`, shell hook registration
+- Explorer restart watchdog (polling or `WM_SHELLHOOKMESSAGE`)
+- Low-level mouse hook for interactive elements in wallpaper mode
+- Settings toggle (mutually exclusive with floating mode)
+- Comprehensive testing on Windows 10 21H2, Windows 11 22H2 and 24H2
+
+---
+
 ## Stream Deck integration
 
 **Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
