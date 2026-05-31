@@ -38,6 +38,15 @@
   RMDir /r "$INSTDIR\lhm"
   FileWrite $9 "old_lhm_dir_removed=1$\r$\n"
 
+  ; Verify pawnio.inf exists before attempting installation.
+  IfFileExists "$INSTDIR\pawnio\pawnio.inf" pawnio_inf_ok pawnio_inf_missing
+  pawnio_inf_ok:
+    FileWrite $9 "pawnio_inf_exists=1$\r$\n"
+    Goto pawnio_install
+  pawnio_inf_missing:
+    FileWrite $9 "pawnio_inf_exists=0$\r$\n"
+  pawnio_install:
+
   ; Install PawnIO kernel driver (used by LibreHardwareMonitorLib for sensor access).
   ; pnputil stages the signed driver into the Windows Driver Store and registers the
   ; service. Safe to run on reinstall — pnputil silently skips already-staged packages.
@@ -47,6 +56,16 @@
   DetailPrint "PawnIO install: exit $R0"
   FileWrite $9 "pawnio_install_exit=$R0$\r$\n"
   FileWrite $9 "pawnio_install_output=$R1$\r$\n"
+
+  ; If pnputil failed, check whether PawnIO is already staged in the Driver Store.
+  ; Exit code 0 means success (including "already exists"). Non-zero is a real failure.
+  IntCmp $R0 0 pawnio_done pawnio_done pawnio_check_existing
+  pawnio_check_existing:
+    nsExec::ExecToStack 'cmd /C "$WINDIR\System32\pnputil.exe" /enum-drivers 2>&1 | findstr /i "pawnio"'
+    Pop $R3
+    Pop $R4
+    FileWrite $9 "pawnio_already_staged=$R4$\r$\n"
+  pawnio_done:
 
   ; Remove the existing service before re-registering (handles update scenario).
   ; The service was already stopped in PREINSTALL; this delete just removes the
