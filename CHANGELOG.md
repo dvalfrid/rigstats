@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.22.4](https://github.com/dvalfrid/rigstats/compare/v1.22.3...v1.22.4) (2026-05-31)
+
+
+### Bug Fixes
+
+* **gpu:** combine 3D and VDEC into single bar row to prevent sparkline overflow ([0e941f3](https://github.com/dvalfrid/rigstats/commit/0e941f3b99cd241d977ec12078c208795c49a9ae))
+* **installer:** use ReadEnvStr to read %PROGRAMDATA% — $COMMONAPPDATA is ([b24313b](https://github.com/dvalfrid/rigstats/commit/b24313b49135d835ecf51021e17f9b72c5fcccdb))
+
 ## [1.22.3](https://github.com/dvalfrid/rigstats/compare/v1.22.2...v1.22.3) (2026-05-31)
 
 

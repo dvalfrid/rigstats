@@ -1,6 +1,6 @@
 {
   "name": "rig-dashboard",
-  "version": "1.22.3",
+  "version": "1.22.4",
   "description": "Gaming rig stats dashboard for secondary display",
   "scripts": {
     "prepare:sidecar": "dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release",
