@@ -4,7 +4,35 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 
 ---
 
-## Auto-update ✓
+## Status overview
+
+| Feature | Status |
+| --- | --- |
+| Auto-update | ✅ Done |
+| NVMe / SSD temperatures | ✅ Done |
+| Temperature threshold alerts | ✅ Done |
+| Motherboard panel | ✅ Done |
+| Extended GPU panel | ✅ Done |
+| Multi-GPU selector and pinning | ✅ Done |
+| Customisable themes / accent colours | ✅ Done |
+| Process monitor panel | ✅ Done |
+| Battery panel (laptop support) | ✅ Done |
+| Settings redesign | ✅ Done |
+| Floating panel layout | ✅ Done |
+| LHM stability — sensor sidecar | ✅ Done (v1.20) |
+| CPU fan speed | ⏭ Investigated, skipped |
+| Stats logging / data export | 🔲 Planned |
+| Floating panel groups | 🔲 Planned |
+| Desktop background — Level 1 (HWND_BOTTOM) | 🔲 Planned |
+| Desktop background — Level 2 (WorkerW) | 🔲 Planned |
+| Total system power consumption | 🔲 Planned |
+| Stream Deck integration | 🔲 Planned |
+| Landscape monitor support | 🔲 Planned |
+| UI performance — lighter rendering strategy | 🔲 Planned |
+
+---
+
+## Auto-update ✅
 
 **Plugin:** `tauri-plugin-updater`
 **Distribution:** GitHub Releases (existing pipeline)
@@ -19,7 +47,7 @@ first launch following an upgrade.
 
 ---
 
-## NVMe / SSD temperatures ✓
+## NVMe / SSD temperatures ✅
 
 **Panel:** Disk
 **Data source:** LHM `Temperatures` section per storage device
@@ -40,7 +68,7 @@ drive.
 
 ---
 
-## Temperature threshold alerts ✓
+## Temperature threshold alerts ✅
 
 **Panel:** Settings (new threshold fields) + tray notifications
 **Data source:** Existing CPU / GPU / RAM / disk temp fields
@@ -67,7 +95,7 @@ Warning, red for Critical.
 
 ---
 
-## CPU fan speed — investigated, skipped
+## CPU fan speed ⏭
 
 **Panel:** CPU
 
@@ -81,7 +109,7 @@ alongside all other fan channels.
 
 ---
 
-## Motherboard panel ✓
+## Motherboard panel ✅
 
 **Panel:** New `motherboard` panel
 **Data source:** LHM Super I/O chip node (`/lpc/` SensorId prefix) + WMI `Win32_BaseBoard`
@@ -111,7 +139,7 @@ approach is used for disk temperature matching.
 
 ---
 
-## Extended GPU panel ✓
+## Extended GPU panel ✅
 
 **Panel:** GPU
 **Data source:** LHM sensors already fetched each tick
@@ -139,7 +167,7 @@ tree but not yet surfaced in the UI.
 
 ---
 
-## Multi-GPU selector and pinning ✓
+## Multi-GPU selector and pinning ✅
 
 **Panel:** GPU  
 **Data source:** LHM sensor tree (`/gpu-*` SensorId family + GPU data/load fallbacks)
@@ -167,7 +195,7 @@ and floating modes, with tooltips that show the full GPU name.
 
 ---
 
-## Customisable themes / accent colours ✓
+## Customisable themes / accent colours ✅
 
 **Panel:** Settings (new Appearance card) + CSS custom properties across all panels
 
@@ -199,7 +227,7 @@ without sharing the exact accent colour.
 
 ---
 
-## Process monitor panel ✓
+## Process monitor panel ✅
 
 **Panel:** New `process` panel (opt-in)
 **Data source:** `sysinfo::Process` — CPU %, memory used, name
@@ -229,7 +257,7 @@ Enabled via Settings → panel toggles.
 
 ---
 
-## Battery panel (laptop support) ✓
+## Battery panel (laptop support) ✅
 
 **Panel:** New `battery` panel
 **Data source:** WMI `Win32_Battery` (sysinfo 0.30 has no battery API)
@@ -259,7 +287,7 @@ Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, status
 
 ---
 
-## Settings redesign ✓
+## Settings redesign ✅
 
 **UI:** Four-tab layout replacing the previous two-column scroll.
 
@@ -291,7 +319,7 @@ sent as `false`); only Critical alerts have a user-visible toggle.
 
 ---
 
-## Stats logging / data export
+## Stats logging / data export 🔲
 
 **Panel:** Settings (new Logging card) + tray menu shortcut
 **Data source:** Existing `StatsPayload` — no new sensors required
@@ -322,7 +350,7 @@ automatically pruned after a configurable retention period (default 7 days).
 
 ---
 
-## ✓ Floating panel layout
+## Floating panel layout ✅
 
 **Panel:** All panels + new window management
 **Data source:** Existing stats tick — no new sensors required
@@ -394,7 +422,7 @@ Settings" and "Close panel".
 
 ---
 
-## Floating panel groups
+## Floating panel groups 🔲
 
 **Panel:** Floating panel layout (requires the above feature)
 **Data source:** No new data required
@@ -446,7 +474,7 @@ that re-stacks all open panel windows vertically on the chosen monitor in
 
 ---
 
-## Desktop background mode — Level 1: Always behind (HWND_BOTTOM)
+## Desktop background mode — Level 1 (HWND_BOTTOM) 🔲
 
 **Panel:** Main window + floating panels
 **Data source:** No new data required
@@ -495,7 +523,7 @@ new `window_layer` enum field (`"normal"` | `"on_top"` | `"behind"`).
 
 ---
 
-## Desktop background mode — Level 2: Wallpaper layer (Progman/WorkerW)
+## Desktop background mode — Level 2 (WorkerW) 🔲
 
 **Panel:** Main window + floating panels
 **Data source:** No new data required
@@ -557,7 +585,7 @@ and injects them directly via `PostMessage`.
 
 ---
 
-## Stream Deck integration
+## Stream Deck integration 🔲
 
 **Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
 
@@ -591,7 +619,7 @@ at once. This should be clearly communicated at setup time.
 
 ---
 
-## Total system power consumption
+## Total system power consumption 🔲
 
 **Panel:** Header or dedicated power row in CPU/GPU panel
 **Data source:** LHM sensor tree (built-in sensors only — no external hardware required)
@@ -649,7 +677,7 @@ sufficient. If absent, approach 2 is the fallback.
 
 ---
 
-## Landscape monitor support
+## Landscape monitor support 🔲
 
 **Panel:** All panels + profile system
 **Data source:** No new data required
@@ -692,7 +720,7 @@ existing portrait ones.
 
 ---
 
-## ✓ LHM stability — sensor sidecar replaces HTTP LHM
+## LHM stability — sensor sidecar replaces HTTP LHM ✅
 
 **Implemented in v1.20.0.**
 
@@ -733,7 +761,7 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
-## UI performance — investigate lighter rendering strategy
+## UI performance — lighter rendering strategy 🔲
 
 **Background:** The dashboard updates the DOM every second via vanilla JS. As panel count grows (floating mode, battery, motherboard, process) layout cost increases. It is worth investigating whether a simpler or faster rendering model can reduce CPU and GPU overhead on the UI thread.
 
