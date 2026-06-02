@@ -1302,9 +1302,14 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
       let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
       s.dashboard_profile.clone()
     };
+    let always_on_top = {
+      let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+      s.always_on_top
+    };
     crate::windows::close_floating_panels(&app);
     if let Some(main) = app.get_webview_window("main") {
       let _ = pick_target_monitor(&main, &profile);
+      let _ = main.set_always_on_top(always_on_top);
       let _ = main.show();
       let _ = main.set_focus();
     }
