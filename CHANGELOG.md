@@ -8,6 +8,23 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.23.0](https://github.com/dvalfrid/rigstats/compare/v1.22.6...v1.23.0) (2026-06-02)
+
+
+### Features
+
+* **cpu:** display core bars two per row for denser layout ([addf819](https://github.com/dvalfrid/rigstats/commit/addf819beda75af24bbbd2ef3915dc97bbe40cf3))
+* **cpu:** make core bars area dynamically fill available panel height ([502074b](https://github.com/dvalfrid/rigstats/commit/502074bd0e019395e6c36234019e70ccf7100a2b))
+
+
+### Bug Fixes
+
+* **app:** reapply visible panels after profile change to remove blank gap ([e2b3441](https://github.com/dvalfrid/rigstats/commit/e2b3441d25aeb425aa52aec7596c9d51460bfa6f))
+* **commands:** restore always_on_top when leaving floating mode ([15a8ef3](https://github.com/dvalfrid/rigstats/commit/15a8ef39c7ea13d86226764f1be0546d2af08b09))
+* **diagnostics:** lower status window always_on_top before save dialog ([6e9fd83](https://github.com/dvalfrid/rigstats/commit/6e9fd8351227ee7f935c11f69948e348b1917956))
+* **gpu:** merge GPU+VRAM bars onto one row to free space for sparkline ([34d5ead](https://github.com/dvalfrid/rigstats/commit/34d5ead534c9d90e0a9d8d5b111ede3e2088457f))
+* **windows:** center all modal windows on the tray monitor consistently ([ce8dcc7](https://github.com/dvalfrid/rigstats/commit/ce8dcc720f77164b53c69c7922bbbda886af315a))
+
 ## [1.22.6](https://github.com/dvalfrid/rigstats/compare/v1.22.5...v1.22.6) (2026-05-31)
 
 
