@@ -141,6 +141,7 @@ const PANEL_ROW_CONFIG = [
 const PANEL_KEYS = PANEL_ROW_CONFIG.map((p) => p.key);
 
 let currentProfile = PROFILE_SIZE['portrait-xl'];
+let currentVisiblePanels = PANEL_KEYS;
 
 function normalizeVisiblePanels(value) {
   const list = Array.isArray(value) ? value : [];
@@ -152,6 +153,7 @@ function normalizeVisiblePanels(value) {
 
 function applyVisiblePanels(visiblePanels) {
   const ordered = normalizeVisiblePanels(visiblePanels);
+  currentVisiblePanels = ordered;
   const dashboard = document.querySelector('.dashboard');
   const panelEls = {};
   document.querySelectorAll('.panel[data-panel]').forEach((p) => {
@@ -223,6 +225,7 @@ function applyProfile(profileName) {
   root.style.setProperty('--viewport-w', `${Math.round(profile.width / dpr)}px`);
   root.style.setProperty('--viewport-h', `${Math.round(profile.height / dpr)}px`);
   applyProfileMetrics(profile);
+  applyVisiblePanels(currentVisiblePanels);
 }
 
 function initWindowDrag() {
