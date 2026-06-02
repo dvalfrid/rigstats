@@ -32,7 +32,6 @@
   --font-ui: 14px;
   --font-sub: 12px;
   --ring-size: 100px;
-  --cpu-cores-max-h: 50px;
   --badge-size: 96px;
   --spark-h: 48px;
   --big-unit-size: 20px;
@@ -145,8 +144,9 @@ canvas.spark { flex-shrink: 0; width: 100%; height: var(--spark-h); display: blo
 
 /* CPU */
 .panel-cpu { --c: var(--accent); display: flex; flex-direction: column; }
+.panel-cpu .panel-content { display: flex; flex-direction: column; padding-bottom: var(--gap-inner); }
 .amd-badge-cpu { position: absolute; top: 16px; right: 16px; width: var(--badge-size); height: auto; object-fit: contain; opacity: .9; pointer-events: none; z-index: 1; }
-.panel-cpu #cpuCores { max-height: var(--cpu-cores-max-h); overflow-y: auto; overflow-x: hidden; padding-right: 4px; -webkit-app-region: no-drag; }
+.panel-cpu #cpuCores { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; -webkit-app-region: no-drag; }
 .panel-cpu #cpuCores::-webkit-scrollbar { width: 6px; }
 .panel-cpu #cpuCores::-webkit-scrollbar-track { background: rgba(255,255,255,.04); border-radius: 4px; }
 .panel-cpu #cpuCores::-webkit-scrollbar-thumb { background: var(--accent-scrollbar); border-radius: 4px; }

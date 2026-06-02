@@ -62,7 +62,6 @@
   --font-ui: 14px;
   --font-sub: 12px;
   --ring-size: 100px;
-  --cpu-cores-max-h: 50px;
   --badge-size: 96px;
   --spark-h: 48px;
   --big-unit-size: 20px;
@@ -181,9 +180,11 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
 
 /* CPU */
 .panel-cpu{--c:var(--accent);}
+.panel-cpu .panel-content{display:flex;flex-direction:column;padding-bottom:var(--gap-inner);}
 .amd-badge-cpu{position:absolute;top:var(--panel-pad-y);right:var(--panel-pad-x);width:var(--badge-size);height:auto;object-fit:contain;opacity:.9;pointer-events:none;z-index:1;}
 .panel-cpu #cpuCores{
-  max-height:var(--cpu-cores-max-h);
+  flex:1;
+  min-height:0;
   overflow-y:auto;
   overflow-x:hidden;
   padding-right:4px;

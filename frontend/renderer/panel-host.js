@@ -96,7 +96,6 @@ function applyWindowScaling(windowW, windowH) {
   setPxVar(root, '--font-ui', 14 * contentScale);
   setPxVar(root, '--font-sub', 12 * contentScale);
   setPxVar(root, '--ring-size', 100 * contentScale);
-  setPxVar(root, '--cpu-cores-max-h', 50 * heightScale);
   setPxVar(root, '--badge-size', 96 * contentScale);
   setPxVar(root, '--spark-h', 48 * heightScale);
   setPxVar(root, '--big-unit-size', 20 * contentScale);

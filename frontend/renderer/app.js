@@ -111,7 +111,6 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--ram-big-num-size', 64 * contentScale);
   setPxVar(root, '--panel-model-size', 10 * contentScale);
   setPxVar(root, '--ring-size', 100 * contentScale);
-  setPxVar(root, '--cpu-cores-max-h', 50 * heightScale);
   setPxVar(root, '--badge-size', 96 * contentScale);
   setPxVar(root, '--spark-h', 48 * heightScale);
   setPxVar(root, '--big-unit-size', 20 * contentScale);
