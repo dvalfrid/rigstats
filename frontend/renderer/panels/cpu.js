@@ -6,17 +6,23 @@ import { resolveTempColor } from '../tempColors.js';
 let numCores = 8;
 
 function buildCoreBars(count) {
-  // Rebuild bars only when core count changes.
   numCores = count;
   const wrap = document.getElementById('cpuCores');
   wrap.innerHTML = '';
-
-  for (let i = 0; i < Math.min(count, 16); i++) {
-    wrap.innerHTML += `<div class="bar-row">
+  const cap = Math.min(count, 16);
+  for (let i = 0; i < cap; i += 2) {
+    const second = i + 1 < cap;
+    let html = `<div class="bar-row">
       <div class="bar-lbl">C${i}</div>
       <div class="bar-track"><div class="bar-fill" id="c${i}" style="width:0%"></div></div>
-      <div class="bar-pct" id="cp${i}">0%</div>
-    </div>`;
+      <div class="bar-pct" id="cp${i}">0%</div>`;
+    if (second) {
+      html += `<div class="bar-lbl" style="width:30px">C${i + 1}</div>
+      <div class="bar-track"><div class="bar-fill" id="c${i + 1}" style="width:0%"></div></div>
+      <div class="bar-pct" id="cp${i + 1}">0%</div>`;
+    }
+    html += '</div>';
+    wrap.innerHTML += html;
   }
 }
 
