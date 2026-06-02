@@ -5,13 +5,14 @@
 - Windows 10/11 (x64)
 - Node.js LTS: <https://nodejs.org>
 - Rust: <https://rustup.rs>
+- .NET 10 SDK: `winget install Microsoft.DotNet.SDK.10`
 - Visual Studio 2022 Build Tools with Desktop development with C++
 - Tauri CLI (installed automatically via `npm install`)
 
 ## Sensor Sidecar
 
 Hardware sensor data (GPU temp, CPU temp, fan speeds, voltages, disk temps) is
-collected by `rigstats-sensor.exe` — a self-contained .NET 8 executable that
+collected by `rigstats-sensor.exe` — a self-contained .NET 10 executable that
 embeds `LibreHardwareMonitorLib` and streams readings over a Windows named pipe.
 
 The sidecar is installed and managed as a **Windows Service** (`rigstats-sensor`,

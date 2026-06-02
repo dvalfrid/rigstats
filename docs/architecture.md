@@ -26,7 +26,7 @@ pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
 ## Data Flow
 
 ```text
-rigstats-sensor.exe  (sensor-sidecar/, .NET 8, Windows Service / LocalSystem)
+rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
     └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
             └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
                     └─► lhm.rs  pipe client → LhmData
@@ -70,7 +70,7 @@ rig-dashboard/
 │       ├── panels/         One JS module per panel
 │       ├── panel-host.js   Shared entry for floating panel windows
 │       └── *.js            Shared utilities and entry scripts
-├── sensor-sidecar/         .NET 8 C# sidecar (rigstats-sensor.exe)
+├── sensor-sidecar/         .NET 10 C# sidecar (rigstats-sensor.exe)
 │   ├── Program.cs          Entry point, pipe server loop, UpdateVisitor
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
 │   ├── app.manifest        requireAdministrator manifest

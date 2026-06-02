@@ -44,12 +44,14 @@
   --panel-pad-x: 24px;
   --row-header: 196px;
   --row-clock: 148px;
-  --row-cpu: 420px;
+  --row-cpu: 320px;
   --row-gpu: 320px;
-  --row-ram: 315px;
-  --row-net: 260px;
-  --row-disk: 295px;
-  --row-battery: 256px;
+  --row-ram: 320px;
+  --row-net: 320px;
+  --row-disk: 320px;
+  --row-mb: 320px;
+  --row-proc: 320px;
+  --row-battery: 320px;
   --brand-mark-size: 165px;
   --rig-name-size: 44px;
   --model-name-size: 28px;
@@ -60,7 +62,7 @@
   --font-ui: 14px;
   --font-sub: 12px;
   --ring-size: 100px;
-  --cpu-cores-max-h: 150px;
+  --cpu-cores-max-h: 50px;
   --badge-size: 96px;
   --spark-h: 48px;
   --big-unit-size: 20px;
@@ -351,9 +353,7 @@ canvas.spark{flex-shrink:1;min-height:0;overflow:hidden;width:100%;height:var(--
         <div class="bar-lbl">GPU</div>
         <div class="bar-track"><div class="bar-fill" id="gpuBar" style="width:0%"></div></div>
         <div class="bar-pct" id="gpuBarPct">--%</div>
-      </div>
-      <div class="bar-row">
-        <div class="bar-lbl">VRAM</div>
+        <div class="bar-lbl" style="width:34px">VRAM</div>
         <div class="bar-track"><div class="bar-fill" id="vramBar" style="width:0%;background:rgba(255,58,31,.5)"></div></div>
         <div class="bar-pct" id="vramBarPct">--%</div>
       </div>

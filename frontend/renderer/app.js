@@ -111,7 +111,7 @@ function applyProfileMetrics(profile) {
   setPxVar(root, '--ram-big-num-size', 64 * contentScale);
   setPxVar(root, '--panel-model-size', 10 * contentScale);
   setPxVar(root, '--ring-size', 100 * contentScale);
-  setPxVar(root, '--cpu-cores-max-h', 150 * heightScale);
+  setPxVar(root, '--cpu-cores-max-h', 50 * heightScale);
   setPxVar(root, '--badge-size', 96 * contentScale);
   setPxVar(root, '--spark-h', 48 * heightScale);
   setPxVar(root, '--big-unit-size', 20 * contentScale);
@@ -129,14 +129,14 @@ function applyProfileMetrics(profile) {
 const PANEL_ROW_CONFIG = [
   { key: 'header',      cssVar: '--row-header', baseHeight: 196 },
   { key: 'clock',       cssVar: '--row-clock',  baseHeight: 148 },
-  { key: 'cpu',         cssVar: '--row-cpu',    baseHeight: 420 },
+  { key: 'cpu',         cssVar: '--row-cpu',    baseHeight: 320 },
   { key: 'gpu',         cssVar: '--row-gpu',    baseHeight: 320 },
-  { key: 'ram',         cssVar: '--row-ram',    baseHeight: 315 },
-  { key: 'net',         cssVar: '--row-net',    baseHeight: 260 },
-  { key: 'disk',        cssVar: '--row-disk',   baseHeight: 295, absorbRemainder: true },
-  { key: 'motherboard', cssVar: '--row-mb',      baseHeight: 260 },
-  { key: 'process',     cssVar: '--row-proc',    baseHeight: 260 },
-  { key: 'battery',     cssVar: '--row-battery', baseHeight: 256 },
+  { key: 'ram',         cssVar: '--row-ram',    baseHeight: 320 },
+  { key: 'net',         cssVar: '--row-net',    baseHeight: 320 },
+  { key: 'disk',        cssVar: '--row-disk',   baseHeight: 320 },
+  { key: 'motherboard', cssVar: '--row-mb',      baseHeight: 320 },
+  { key: 'process',     cssVar: '--row-proc',    baseHeight: 320 },
+  { key: 'battery',     cssVar: '--row-battery', baseHeight: 320 },
 ];
 
 const PANEL_KEYS = PANEL_ROW_CONFIG.map((p) => p.key);

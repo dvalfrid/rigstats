@@ -724,7 +724,7 @@ existing portrait ones.
 
 **Implemented in v1.21.0.**
 
-Replaced the standalone LibreHardwareMonitor HTTP server with a managed .NET 8
+Replaced the standalone LibreHardwareMonitor HTTP server with a managed .NET 10
 sidecar (`sensor-sidecar/rigstats-sensor.exe`) that embeds the
 `LibreHardwareMonitorLib` NuGet package and streams sensor data over a Windows
 named pipe (`\\.\pipe\rigstats-sensors`). The Rust backend connects as a
@@ -733,7 +733,7 @@ task, no HTTP, no external process lifecycle to manage.
 
 **What was built:**
 
-- `sensor-sidecar/` — self-contained .NET 8 single-file exe (no runtime required
+- `sensor-sidecar/` — self-contained .NET 10 single-file exe (no runtime required
   on user machines). `Program.cs` runs the pipe server loop and LHM update
   visitor. `SensorReader.cs` maps `IComputer` → `SensorPayload` using the same
   sensor-name and SensorId-prefix rules previously in `lhm.rs`.
