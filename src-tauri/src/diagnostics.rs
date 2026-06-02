@@ -10,6 +10,7 @@ use crate::stats::{AppState, HardwareInfo};
 use serde::Serialize;
 use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::Manager;
 
 // --- Helpers ---------------------------------------------------------------
 
@@ -439,6 +440,11 @@ pub async fn collect_diagnostics(
     .as_secs();
   let default_name = format!("rigstats-diag-{}.zip", ts);
 
+  // Lower always_on_top on the status window so the native save dialog appears above it.
+  if let Some(w) = app.get_webview_window("status") {
+    let _ = w.set_always_on_top(false);
+  }
+
   // Open a native save dialog on an OS thread (Win32 requires STA/message loop).
   let save_path = tokio::task::spawn_blocking(move || {
     rfd::FileDialog::new()
@@ -448,6 +454,11 @@ pub async fn collect_diagnostics(
   })
   .await
   .map_err(|e| format!("Dialog spawn error: {}", e))?;
+
+  // Restore always_on_top regardless of whether the user saved or cancelled.
+  if let Some(w) = app.get_webview_window("status") {
+    let _ = w.set_always_on_top(true);
+  }
 
   let Some(path) = save_path else {
     return Ok(None); // user cancelled
