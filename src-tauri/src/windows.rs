@@ -27,27 +27,6 @@ pub fn set_last_tray_click_position(x: f64, y: f64) {
 
 // --- Popup positioning -----------------------------------------------------
 
-/// Clamps a popup to stay fully inside the monitor work area.
-#[allow(clippy::too_many_arguments)]
-fn monitor_work_area(
-  origin_x: i32,
-  origin_y: i32,
-  monitor_w: u32,
-  monitor_h: u32,
-  popup_w: f64,
-  popup_h: f64,
-  preferred_x: i32,
-  preferred_y: i32,
-) -> (f64, f64) {
-  let popup_w_px = popup_w.round() as i32;
-  let popup_h_px = popup_h.round() as i32;
-  let max_x = origin_x + monitor_w as i32 - popup_w_px;
-  let max_y = origin_y + monitor_h as i32 - popup_h_px;
-  let x = preferred_x.clamp(origin_x, max_x);
-  let y = preferred_y.clamp(origin_y, max_y);
-  (x as f64, y as f64)
-}
-
 /// Centers a window on the monitor that contains the tray icon.
 /// Converts physical monitor coordinates to logical pixels using the monitor's scale
 /// factor, so the result is correct on high-DPI displays.
@@ -77,56 +56,6 @@ fn center_on_tray_monitor(app: &AppHandle, width: f64, height: f64) -> Option<(f
   let x = (logical_ox + (logical_w - width) / 2.0).max(logical_ox);
   let y = (logical_oy + (logical_h - height) / 2.0).max(logical_oy);
   Some((x, y))
-}
-
-/// Computes a position for a popup that is anchored just above the tray icon.
-/// Falls back to the bottom-right corner of the primary monitor.
-fn tray_anchor_position(app: &AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
-  let margin_px = 12i32;
-  let tray_x = LAST_TRAY_CLICK_X.load(Ordering::Relaxed);
-  let tray_y = LAST_TRAY_CLICK_Y.load(Ordering::Relaxed);
-
-  if tray_x != i32::MIN && tray_y != i32::MIN {
-    if let Ok(monitors) = app.available_monitors() {
-      if let Some(monitor) = monitors.into_iter().find(|monitor| {
-        let pos = monitor.position();
-        let size = monitor.size();
-        let within_x = tray_x >= pos.x && tray_x < pos.x + size.width as i32;
-        let within_y = tray_y >= pos.y && tray_y < pos.y + size.height as i32;
-        within_x && within_y
-      }) {
-        let pos = monitor.position();
-        let size = monitor.size();
-        let preferred_x = tray_x - width.round() as i32 + 26;
-        let preferred_y = tray_y - height.round() as i32 - margin_px;
-        return Some(monitor_work_area(
-          pos.x,
-          pos.y,
-          size.width,
-          size.height,
-          width,
-          height,
-          preferred_x,
-          preferred_y,
-        ));
-      }
-    }
-  }
-
-  // Fallback: bottom-right of the primary monitor.
-  let monitor = app.primary_monitor().ok().flatten()?;
-  let origin = monitor.position();
-  let size = monitor.size();
-  Some(monitor_work_area(
-    origin.x,
-    origin.y,
-    size.width,
-    size.height,
-    width,
-    height,
-    origin.x + size.width as i32 - width.round() as i32 - margin_px,
-    origin.y + size.height as i32 - height.round() as i32 - margin_px,
-  ))
 }
 
 // --- Window constructors ---------------------------------------------------
@@ -208,7 +137,7 @@ pub fn ensure_about_window(app: &AppHandle) -> Result<(), String> {
 
   let width = 640.0;
   let height = 380.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
+  let (x, y) = center_on_tray_monitor(app, width, height).unwrap_or((60.0, 60.0));
 
   let window = WebviewWindowBuilder::new(app, "about", WebviewUrl::App("about.html".into()))
     .title("About RIGStats")
@@ -260,7 +189,7 @@ pub fn ensure_status_window(app: &AppHandle) -> Result<(), String> {
 
   let width = 700.0;
   let height = 760.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((56.0, 56.0));
+  let (x, y) = center_on_tray_monitor(app, width, height).unwrap_or((60.0, 60.0));
 
   let window = WebviewWindowBuilder::new(app, "status", WebviewUrl::App("status.html".into()))
     .title("RIGStats Status")
@@ -304,7 +233,7 @@ pub fn ensure_updater_window(app: &AppHandle) -> Result<(), String> {
 
   let width = 500.0;
   let height = 560.0;
-  let (x, y) = tray_anchor_position(app, width, height).unwrap_or((60.0, 60.0));
+  let (x, y) = center_on_tray_monitor(app, width, height).unwrap_or((60.0, 60.0));
 
   let window = WebviewWindowBuilder::new(app, "updater", WebviewUrl::App("updater.html".into()))
     .title("RIGStats Update")
@@ -334,14 +263,14 @@ fn panel_base_height(key: &str) -> f64 {
   match key {
     "header" => 196.0,
     "clock" => 148.0,
-    "cpu" => 420.0,
+    "cpu" => 320.0,
     "gpu" => 320.0,
     "ram" => 320.0,
     "net" => 320.0,
     "disk" => 320.0,
     "motherboard" => 320.0,
     "process" => 320.0,
-    "battery" => 256.0,
+    "battery" => 320.0,
     _ => 260.0,
   }
 }
