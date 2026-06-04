@@ -35,15 +35,18 @@ fn center_on_tray_monitor(app: &AppHandle, width: f64, height: f64) -> Option<(f
   let tray_y = LAST_TRAY_CLICK_Y.load(Ordering::Relaxed);
   let monitors = app.available_monitors().ok()?;
 
-  let monitor = if tray_x != i32::MIN && tray_y != i32::MIN {
-    monitors.into_iter().find(|m| {
+  let has_tray_pos = tray_x != i32::MIN && tray_y != i32::MIN;
+  let monitor = monitors
+    .iter()
+    .find(|m| {
+      if !has_tray_pos {
+        return false;
+      }
       let pos = m.position();
       let size = m.size();
       tray_x >= pos.x && tray_x < pos.x + size.width as i32 && tray_y >= pos.y && tray_y < pos.y + size.height as i32
     })
-  } else {
-    None
-  }?;
+    .or_else(|| monitors.first())?;
 
   let scale = monitor.scale_factor();
   // Physical monitor origin → logical pixels.
