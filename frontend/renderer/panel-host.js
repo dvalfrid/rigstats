@@ -296,6 +296,14 @@ async function start() {
     backend.on('apply-opacity', (_e, value) => applyOpacity(value)),
     backend.on('apply-theme', (_e, key) => applyTheme(key)),
     backend.on('apply-thresholds', (_e, t) => applyThresholds(t)),
+    backend.on('update-available', (_e, version) => {
+      if (panelKey !== 'clock') return;
+      const badge = document.getElementById('updateBadge');
+      if (!badge) return;
+      badge.textContent = `↑ UPDATE  v${version}`;
+      badge.style.display = '';
+      badge.addEventListener('click', () => backend.invoke('open-updater-window').catch(() => {}));
+    }),
   ]);
   const unlistenStats = await backend.on('stats-broadcast', (_e, stats) => applyStats(stats));
 

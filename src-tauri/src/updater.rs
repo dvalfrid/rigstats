@@ -90,7 +90,11 @@ async fn check_update_inner(app: &AppHandle) -> Result<Option<UpdateInfo>, Strin
 
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Result<Option<UpdateInfo>, String> {
-  check_update_inner(&app).await
+  let result = check_update_inner(&app).await?;
+  if let Some(ref info) = result {
+    let _ = app.emit("update-available", &info.version);
+  }
+  Ok(result)
 }
 
 #[tauri::command]
