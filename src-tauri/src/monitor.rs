@@ -208,6 +208,29 @@ mod tests {
   }
 }
 
+/// Computes the logical-pixel height for a set of visible panels, matching the
+/// formula used by `applyVisiblePanels` in `app.js` exactly so the backend can
+/// pre-size the window before `show()` and avoid a full-height flash.
+///
+/// `scale_factor` is the window's current DPR (from `window.scale_factor()`).
+pub(crate) fn compute_panels_logical_height(profile_h: u32, scale_factor: f64, visible_panels: &[String]) -> f64 {
+  const BASE_H: f64 = 1920.0;
+  let logical_h = (profile_h as f64 / scale_factor).round();
+  let height_scale = logical_h / BASE_H;
+  let gap = 1.0_f64.max(height_scale.round());
+  let mut total = 0.0;
+  for (i, key) in visible_panels.iter().enumerate() {
+    let base: f64 = match key.as_str() {
+      "header" => 196.0,
+      "clock" => 148.0,
+      _ => 320.0,
+    };
+    let h = (base * height_scale).round().max(1.0);
+    total += h + if i > 0 { gap } else { 0.0 };
+  }
+  total
+}
+
 /// Moves and resizes `window` to the monitor that best fits `profile`.
 ///
 /// Selection priority:

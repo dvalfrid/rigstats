@@ -346,10 +346,14 @@ input[type=number].alert-num {
             </div>
             <div class="slider-labels"><span>Transparent</span><span>Solid</span></div>
           </div>
-          <label class="toggle-row" for="alwaysOnTopInput">
-            <span class="toggle-label">Always On Top</span>
-            <input class="toggle-input" type="checkbox" id="alwaysOnTopInput">
-          </label>
+          <div class="toggle-row">
+            <span class="toggle-label">Window Layer</span>
+            <select id="windowLayerSelect">
+              <option value="normal">Normal</option>
+              <option value="on_top">Always On Top</option>
+              <option value="behind">Always Behind</option>
+            </select>
+          </div>
           <label class="toggle-row" for="autostartInput">
             <div>
               <div class="toggle-label">Launch at Startup</div>

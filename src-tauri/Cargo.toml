@@ -27,13 +27,14 @@ tauri-plugin-updater = "2"
 [target.'cfg(windows)'.dependencies]
 wmi = "0.13"
 winreg = "0.52"
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
 
 [lints.rust]
-unsafe_code = "forbid"
+unsafe_code = "deny"
 
 [lints.clippy]
 # Correctness

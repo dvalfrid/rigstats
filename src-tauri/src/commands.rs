@@ -22,7 +22,9 @@ static FLOATING_TOGGLE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 use crate::hardware::{detect_gpu_name, detect_model_name, is_placeholder_model_name, sample_ping_ms};
 use crate::lhm::fetch_lhm_pipe;
 use crate::lhm_process::track_lhm_connection_state;
-use crate::monitor::{normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions};
+use crate::monitor::{
+  compute_panels_logical_height, normalize_profile, normalize_visible_panels, pick_target_monitor, profile_dimensions,
+};
 use crate::settings::{persist_settings, ComponentThresholds, PanelLayout, Settings};
 use crate::stats::{
   AppState, BatteryStats, CpuStats, DiskDrive, DiskStats, GpuStats, HardwareInfo, MotherboardStats, NetStats,
@@ -48,8 +50,17 @@ const WMI_VERSION: &str = "0.13";
 /// WebView2 failed to load the page at boot), the watchdog will reload
 /// the webview after its timeout to recover automatically.
 #[tauri::command]
-pub fn notify_app_ready() {
+pub fn notify_app_ready(app: tauri::AppHandle, state: tauri::State<AppState>) {
   APP_READY.store(true, Ordering::Relaxed);
+  // Pre-create all floating panel windows (hidden) one at a time so the first
+  // floating-mode toggle shows them instantly instead of creating them on demand.
+  // Window-on-demand creation runs all build() calls in a single run_on_main_thread
+  // closure, which can deadlock on some systems when WebView2 needs the Win32
+  // message loop to dispatch its readiness signal.
+  let is_floating = state.settings.lock().unwrap_or_else(|e| e.into_inner()).floating_mode;
+  if !is_floating {
+    crate::windows::prewarm_panel_windows(&app);
+  }
 }
 
 // --- About -----------------------------------------------------------------
@@ -282,6 +293,8 @@ pub fn save_settings(
   #[allow(non_snake_case)] dashboardProfile: Option<String>,
   always_on_top: Option<bool>,
   #[allow(non_snake_case)] alwaysOnTop: Option<bool>,
+  window_layer: Option<String>,
+  #[allow(non_snake_case)] windowLayer: Option<String>,
   visible_panels: Option<Vec<String>>,
   #[allow(non_snake_case)] visiblePanels: Option<Vec<String>>,
   autostart_enabled: Option<bool>,
@@ -314,7 +327,14 @@ pub fn save_settings(
     .unwrap_or_else(|| settings.dashboard_profile.clone());
   let applied_profile = normalize_profile(&requested_profile);
 
-  let applied_always_on_top = always_on_top.or(alwaysOnTop).unwrap_or(settings.always_on_top);
+  // window_layer takes precedence; fall back to always_on_top bool for backward compat.
+  let applied_layer = window_layer.or(windowLayer).unwrap_or_else(|| {
+    always_on_top
+      .or(alwaysOnTop)
+      .map(|v| if v { "on_top".to_string() } else { "normal".to_string() })
+      .unwrap_or_else(|| settings.window_layer.clone())
+  });
+  let applied_always_on_top = applied_layer == "on_top";
 
   let requested_visible_panels = visible_panels
     .or(visiblePanels)
@@ -333,13 +353,12 @@ pub fn save_settings(
     if applied_profile != settings.dashboard_profile {
       let _ = pick_target_monitor(&main, &applied_profile);
     }
-    main
-      .set_always_on_top(applied_always_on_top)
-      .map_err(|e| e.to_string())?;
+    crate::windows::apply_window_layer(&main, &applied_layer);
   }
 
   settings.dashboard_profile = applied_profile.clone();
   settings.always_on_top = applied_always_on_top;
+  settings.window_layer = applied_layer;
   settings.visible_panels = applied_visible_panels.clone();
   settings.autostart_enabled = applied_autostart;
 
@@ -422,7 +441,7 @@ pub fn save_settings(
       .emit("apply-profile", applied_profile.clone())
       .map_err(|e| e.to_string())?;
     main
-      .emit("apply-visible-panels", applied_visible_panels)
+      .emit("apply-visible-panels", applied_visible_panels.clone())
       .map_err(|e| e.to_string())?;
     main
       .emit("apply-thresholds", TempThresholdPayload::from(&*settings))
@@ -446,8 +465,20 @@ pub fn save_settings(
       crate::windows::close_floating_panels(&app);
       if let Some(main) = app.get_webview_window("main") {
         let _ = pick_target_monitor(&main, &applied_profile);
+        // Pre-shrink to the correct panel height before show() — same rationale
+        // as toggle_floating_mode: pick_target_monitor resets to full profile height.
+        let (profile_w, profile_h) = profile_dimensions(&applied_profile);
+        let scale = main.scale_factor().unwrap_or(1.0);
+        let logical_w = (profile_w as f64 / scale).round();
+        let panel_h = compute_panels_logical_height(profile_h, scale, &applied_visible_panels);
+        let _ = main.set_size(tauri::Size::Logical(tauri::LogicalSize {
+          width: logical_w,
+          height: panel_h,
+        }));
+        let _ = main.set_decorations(false);
         let _ = main.show();
         let _ = main.set_focus();
+        let _ = main.emit("apply-visible-panels", applied_visible_panels);
       }
     }
   } else if new_floating_mode {
@@ -1289,29 +1320,33 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
   // Notify the main window JS so it updates floatingMode and starts/stops broadcasting.
   if let Some(main) = app.get_webview_window("main") {
     let _ = main.emit("apply-floating-mode", enabled);
-    if !enabled {
-      // Force a layout refresh when returning to fixed mode so the main window
-      // shrinks/expands to the currently visible panel set immediately.
-      let _ = main.emit("apply-visible-panels", applied_visible_panels);
-    }
   }
   if enabled {
     crate::windows::spawn_sync_floating_panels(&app);
   } else {
-    let profile = {
+    let (profile, window_layer) = {
       let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-      s.dashboard_profile.clone()
-    };
-    let always_on_top = {
-      let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
-      s.always_on_top
+      (s.dashboard_profile.clone(), s.window_layer.clone())
     };
     crate::windows::close_floating_panels(&app);
     if let Some(main) = app.get_webview_window("main") {
       let _ = pick_target_monitor(&main, &profile);
-      let _ = main.set_always_on_top(always_on_top);
+      // Pre-shrink to the correct panel height before show() so the window never
+      // appears at full profile height — pick_target_monitor resets it to full height.
+      let (profile_w, profile_h) = profile_dimensions(&profile);
+      let scale = main.scale_factor().unwrap_or(1.0);
+      let logical_w = (profile_w as f64 / scale).round();
+      let panel_h = compute_panels_logical_height(profile_h, scale, &applied_visible_panels);
+      let _ = main.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: logical_w,
+        height: panel_h,
+      }));
+      let _ = main.set_decorations(false);
+      crate::windows::apply_window_layer(&main, &window_layer);
       let _ = main.show();
       let _ = main.set_focus();
+      // Keep emitting so the frontend updates CSS variables and DOM panel order.
+      let _ = main.emit("apply-visible-panels", applied_visible_panels);
     }
   }
   append_debug_log(&app, &format!("floating mode toggle applied: enabled={enabled}"));

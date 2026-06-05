@@ -12,6 +12,8 @@ use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use tauri::utils::config::Color;
 use tauri::{AppHandle, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE};
 
 /// Last recorded tray icon click position, used to anchor popups.
 static LAST_TRAY_CLICK_X: AtomicI32 = AtomicI32::new(i32::MIN);
@@ -59,6 +61,56 @@ fn center_on_tray_monitor(app: &AppHandle, width: f64, height: f64) -> Option<(f
   let x = (logical_ox + (logical_w - width) / 2.0).max(logical_ox);
   let y = (logical_oy + (logical_h - height) / 2.0).max(logical_oy);
   Some((x, y))
+}
+
+// --- Window layer (z-order) ------------------------------------------------
+
+/// Applies the stored `window_layer` setting to `window`.
+///
+/// - `"on_top"`  → always on top
+/// - `"behind"`  → always below other windows (Win32 `HWND_BOTTOM`)
+/// - `"normal"`  → remove always-on-top; leave z-order at the default stack position
+pub fn apply_window_layer(window: &tauri::WebviewWindow, layer: &str) {
+  match layer {
+    "on_top" => {
+      let _ = window.set_always_on_top(true);
+    }
+    "behind" => {
+      let _ = window.set_always_on_top(false);
+      #[cfg(windows)]
+      set_hwnd_bottom(window);
+    }
+    _ => {
+      let _ = window.set_always_on_top(false);
+    }
+  }
+}
+
+/// Moves the window to the bottom of the z-stack via `SetWindowPos(HWND_BOTTOM)`.
+///
+/// Called when `window_layer = "behind"` is set.  The main window stays visible
+/// and repaints normally, but sits below every other application window —
+/// visible only when the desktop is otherwise uncovered.
+#[cfg(windows)]
+#[allow(unsafe_code)]
+fn set_hwnd_bottom(window: &tauri::WebviewWindow) {
+  let hwnd = match window.hwnd() {
+    Ok(h) => h,
+    Err(_) => return,
+  };
+  // SAFETY: hwnd is a valid HWND from Tauri's platform integration.
+  // SWP flags change only z-order — size, position, and activation are untouched.
+  unsafe {
+    let _ = SetWindowPos(
+      hwnd,
+      Some(HWND_BOTTOM),
+      0,
+      0,
+      0,
+      0,
+      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+    );
+  }
 }
 
 // --- Window constructors ---------------------------------------------------
@@ -306,7 +358,13 @@ pub fn all_panel_keys() -> &'static [&'static str] {
   ]
 }
 
-fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &str, user_scale: f64) {
+fn resize_existing_panel_window(
+  app: &AppHandle,
+  key: &str,
+  dashboard_profile: &str,
+  user_scale: f64,
+  window_layer: &str,
+) {
   let label = format!("panel-{}", key);
   if let Some(win) = app.get_webview_window(&label) {
     let (w, h) = panel_base_size(key, dashboard_profile, user_scale);
@@ -314,21 +372,68 @@ fn resize_existing_panel_window(app: &AppHandle, key: &str, dashboard_profile: &
     let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
     let _ = win.set_decorations(false);
     let _ = win.show();
+    // Apply layer last: set_size/set_decorations/show all call SetWindowPos
+    // internally and would reset z-order if applied before them.
+    apply_window_layer(&win, window_layer);
   }
+}
+
+/// Pre-creates all floating panel windows (hidden) immediately after startup.
+///
+/// Called from `notify_app_ready` when not in floating mode so the first
+/// floating-mode toggle shows pre-created windows instantly rather than
+/// creating them on demand. On-demand creation runs all `build()` calls
+/// inside a `run_on_main_thread` closure, which deadlocks on some systems
+/// because `build()` dispatches to the main event loop (which is already
+/// blocked by the closure). A `spawn_blocking` thread leaves the event loop
+/// free to receive WebView2's readiness callback.
+pub fn prewarm_panel_windows(app: &AppHandle) {
+  let app = app.clone();
+  // Same rationale as spawn_sync_floating_panels: build() must NOT run on the
+  // main event loop thread. A spawn_blocking thread lets the event loop dispatch
+  // WebView2's readiness callback without deadlocking.
+  tauri::async_runtime::spawn_blocking(move || {
+    for (i, key) in all_panel_keys().iter().enumerate() {
+      let label = format!("panel-{}", key);
+      if app.get_webview_window(&label).is_some() {
+        continue;
+      }
+      let url = format!("panel-{}.html", key);
+      let builder = WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
+        .title(*key)
+        .inner_size(360.0, 320.0)
+        .position((80 + i as i32 * 24) as f64, (80 + i as i32 * 24) as f64)
+        .background_color(Color(0, 0, 0, 0))
+        .decorations(false)
+        .transparent(true)
+        .resizable(false)
+        .skip_taskbar(true)
+        .visible(false);
+      let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| builder.build()));
+      let msg = match result {
+        Ok(Ok(_)) => format!("prewarm: panel-{key} ready"),
+        Ok(Err(e)) => format!("prewarm: panel-{key} failed: {e}"),
+        Err(_) => format!("prewarm: panel-{key} panicked"),
+      };
+      append_debug_log(&app, &msg);
+    }
+    append_debug_log(&app, "prewarm: all panel windows ready");
+  });
 }
 
 /// Opens one frameless window per visible panel.
 ///
-/// Positions are loaded from `settings.panel_layouts`.  Panels without a saved
+/// Positions are loaded from `settings.panel_layouts`. Panels without a saved
 /// position are staggered diagonally so they do not all land on top of each other.
 pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
-  let (visible_panels, panel_layouts, dashboard_profile, user_scale) = {
+  let (visible_panels, panel_layouts, dashboard_profile, user_scale, window_layer) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
       normalize_visible_panels(s.visible_panels.clone()),
       s.panel_layouts.clone(),
       s.dashboard_profile.clone(),
       s.floating_panel_scale,
+      s.window_layer.clone(),
     )
   };
 
@@ -339,7 +444,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     let desired_visible = visible_set.contains(*key);
     let (w, h) = panel_base_size(key, &dashboard_profile, user_scale);
 
-    // If already open, reconcile size/visibility instead of skipping.
+    // If already open, reconcile size/visibility/layer instead of skipping.
     if let Some(win) = app.get_webview_window(&label) {
       let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
       let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
@@ -349,6 +454,9 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
       } else {
         let _ = win.hide();
       }
+      // Apply layer last: set_size/set_decorations/show all call SetWindowPos
+      // internally and would reset z-order if applied before them.
+      apply_window_layer(&win, &window_layer);
       continue;
     }
 
@@ -368,7 +476,7 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
       .decorations(false)
       .transparent(true)
       .resizable(false)
-      .always_on_top(true)
+      .always_on_top(window_layer == "on_top")
       .skip_taskbar(true)
       .visible(desired_visible);
 
@@ -416,6 +524,9 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     } else {
       let _ = win.hide();
     }
+    // Apply layer last: set_position/set_decorations/show all call SetWindowPos
+    // internally and would reset z-order if applied before them.
+    apply_window_layer(&win, &window_layer);
   }
 }
 
@@ -433,12 +544,13 @@ pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     return;
   }
 
-  let (visible_panels, dashboard_profile, user_scale) = {
+  let (visible_panels, dashboard_profile, user_scale, window_layer) = {
     let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
     (
       normalize_visible_panels(s.visible_panels.clone()),
       s.dashboard_profile.clone(),
       s.floating_panel_scale,
+      s.window_layer.clone(),
     )
   };
 
@@ -456,7 +568,7 @@ pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 
     if app.get_webview_window(&label).is_some() {
       append_debug_log(app, &format!("floating sync: show/resize {label}"));
-      resize_existing_panel_window(app, key, &dashboard_profile, user_scale);
+      resize_existing_panel_window(app, key, &dashboard_profile, user_scale, &window_layer);
     }
   }
 
@@ -488,22 +600,26 @@ pub fn sync_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
   }
 }
 
-/// Schedules `sync_floating_panels` on the main event thread and returns
-/// immediately. `WebviewWindowBuilder::build()` must run on the main thread;
-/// calling it from an IPC handler thread blocks until each window is ready,
-/// freezing the JS `await` in the settings window. Fire-and-forget via
-/// `run_on_main_thread` keeps the IPC call responsive.
+/// Schedules `sync_floating_panels` on a blocking thread and returns
+/// immediately. Coalesces rapid calls via `FLOATING_SYNC_QUEUED` so at most
+/// one sync task is pending at a time.
+///
+/// `WebviewWindowBuilder::build()` internally dispatches to the main event
+/// loop thread. Running it *from* `run_on_main_thread` deadlocks: the closure
+/// blocks the main thread waiting for a dispatch that can only complete when
+/// that same thread processes messages. A `spawn_blocking` thread leaves the
+/// main event loop free, so WebView2 can receive its readiness callback.
 pub fn spawn_sync_floating_panels(app: &AppHandle) {
   if FLOATING_SYNC_QUEUED.swap(true, Ordering::SeqCst) {
     return;
   }
 
   let app2 = app.clone();
-  if let Err(e) = app.run_on_main_thread(move || {
+  tauri::async_runtime::spawn_blocking(move || {
     FLOATING_SYNC_QUEUED.store(false, Ordering::SeqCst);
 
     let state = app2.state::<crate::stats::AppState>();
-    // If floating mode was disabled before this closure ran (race between
+    // If floating mode was disabled before this task ran (race between
     // enable and disable), do nothing — close_floating_panels already ran.
     let floating = {
       let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
@@ -513,10 +629,7 @@ pub fn spawn_sync_floating_panels(app: &AppHandle) {
       return;
     }
     sync_floating_panels(&app2, &state);
-  }) {
-    FLOATING_SYNC_QUEUED.store(false, Ordering::SeqCst);
-    append_debug_log(app, &format!("floating sync: run_on_main_thread failed: {}", e));
-  }
+  });
 }
 
 /// Hides all open floating panel windows.
@@ -549,6 +662,22 @@ pub fn on_window_event(win: &Window, event: &WindowEvent) {
     // status/updater windows have decorations and must keep them.
     WindowEvent::Moved(_) if win.label() == "main" || win.label().starts_with("panel-") => {
       let _ = win.set_decorations(false);
+    }
+    // Re-pin to HWND_BOTTOM when any dashboard window receives focus while in
+    // "behind" mode. Clicking or dragging a window causes Windows to raise it
+    // in the Z-order (WM_ACTIVATE), which overrides HWND_BOTTOM. Re-applying
+    // immediately on focus restores the correct layer.
+    WindowEvent::Focused(true) if win.label() == "main" || win.label().starts_with("panel-") => {
+      let layer = {
+        let state = win.app_handle().state::<AppState>();
+        let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+        s.window_layer.clone()
+      };
+      if layer == "behind" {
+        if let Some(webview_win) = win.app_handle().get_webview_window(win.label()) {
+          apply_window_layer(&webview_win, "behind");
+        }
+      }
     }
     _ => {}
   }

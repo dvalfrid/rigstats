@@ -6,7 +6,7 @@ const slider              = document.getElementById('slider');
 const valueLabel          = document.getElementById('val');
 const modelNameInput      = document.getElementById('modelNameInput');
 const profileSelect       = document.getElementById('profileSelect');
-const alwaysOnTopInput    = document.getElementById('alwaysOnTopInput');
+const windowLayerSelect   = document.getElementById('windowLayerSelect');
 const autostartInput      = document.getElementById('autostartInput');
 const floatingModeInput   = document.getElementById('floatingModeInput');
 const floatingScaleSlider = document.getElementById('floatingScaleSlider');
@@ -65,7 +65,7 @@ let original = {
   opacity: 0.55,
   modelName: '',
   dashboardProfile: 'portrait-xl',
-  alwaysOnTop: false,
+  windowLayer: 'normal',
   autostartEnabled: false,
   floatingMode: false,
   floatingPanelScale: 1.0,
@@ -262,7 +262,7 @@ function applySettings(settings) {
     opacity:           settings.opacity ?? 0.55,
     modelName:         settings.modelName ?? '',
     dashboardProfile:  settings.dashboardProfile ?? 'portrait-xl',
-    alwaysOnTop:       settings.alwaysOnTop ?? false,
+    windowLayer:       settings.windowLayer ?? 'normal',
     autostartEnabled:  settings.autostartEnabled ?? false,
     floatingMode:      settings.floatingMode ?? false,
     floatingPanelScale: settings.floatingPanelScale ?? 1.0,
@@ -285,7 +285,7 @@ function applySettings(settings) {
   valueLabel.textContent = `${pct}%`;
   modelNameInput.value = original.modelName;
   profileSelect.value = original.dashboardProfile;
-  alwaysOnTopInput.checked = original.alwaysOnTop;
+  windowLayerSelect.value = original.windowLayer;
   autostartInput.checked = original.autostartEnabled;
   floatingModeInput.checked = original.floatingMode;
   const scalePct = Math.round(original.floatingPanelScale * 100);
@@ -398,7 +398,7 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const opacity           = parseInt(slider.value, 10) / 100;
   const modelName         = modelNameInput.value.trim();
   const dashboardProfile  = profileSelect.value;
-  const alwaysOnTop       = alwaysOnTopInput.checked;
+  const windowLayer       = windowLayerSelect.value;
   const autostartEnabled  = autostartInput.checked;
   const floatingMode      = floatingModeInput.checked;
   const floatingPanelScale = parseInt(floatingScaleSlider.value, 10) / 100;
@@ -424,12 +424,12 @@ document.getElementById('btnSave').addEventListener('click', async () => {
   const visiblePanels = normalizeVisiblePanels(selectedPanels);
   try {
     await backend.invoke('save-settings', {
-      opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled,
+      opacity, modelName, dashboardProfile, windowLayer, autostartEnabled,
       floatingMode, floatingPanelScale, visiblePanels, thresholds,
       alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
     });
     original = {
-      opacity, modelName, dashboardProfile, alwaysOnTop, autostartEnabled,
+      opacity, modelName, dashboardProfile, windowLayer, autostartEnabled,
       floatingMode, floatingPanelScale, visiblePanels, thresholds,
       alertCooldownSecs, notifyOnCrit, theme,
     };

@@ -32,7 +32,7 @@ use hardware::{
   detect_disk_model_map, detect_gpu_vram_total_mb, detect_model_name, detect_motherboard_name, detect_ping_target,
   detect_ram_details, detect_ram_spec, detect_system_brand, is_placeholder_model_name, probe_wmi_status,
 };
-use monitor::pick_target_monitor;
+use monitor::{compute_panels_logical_height, pick_target_monitor, profile_dimensions};
 use settings::{load_settings, persist_settings};
 use stats::{AppState, HardwareInfo};
 use std::collections::HashMap;
@@ -273,18 +273,35 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
           }
           crate::windows::spawn_sync_floating_panels(app);
         } else {
-          let profile = {
+          let (profile, visible_panels) = {
             let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
             s.floating_mode = false;
             let _ = settings::persist_settings(app, &s);
-            s.dashboard_profile.clone()
+            (
+              s.dashboard_profile.clone(),
+              crate::monitor::normalize_visible_panels(s.visible_panels.clone()),
+            )
           };
           close_floating_panels(app);
           if let Some(main) = app.get_webview_window("main") {
             let _ = pick_target_monitor(&main, &profile);
+            // Pre-shrink to the correct panel height before show() — pick_target_monitor
+            // resets the window to full profile height, causing a visible flash otherwise.
+            let (profile_w, profile_h) = profile_dimensions(&profile);
+            let scale = main.scale_factor().unwrap_or(1.0);
+            let logical_w = (profile_w as f64 / scale).round();
+            let panel_h = compute_panels_logical_height(profile_h, scale, &visible_panels);
+            let _ = main.set_size(tauri::Size::Logical(tauri::LogicalSize {
+              width: logical_w,
+              height: panel_h,
+            }));
+            let _ = main.set_decorations(false);
             let _ = main.show();
             let _ = main.set_focus();
+            let _ = main.emit("apply-floating-mode", next);
+            let _ = main.emit("apply-visible-panels", visible_panels);
           }
+          return;
         }
         // Notify main window JS so it updates floatingMode and starts/stops broadcasting.
         if let Some(main) = app.get_webview_window("main") {
@@ -364,7 +381,7 @@ fn main() {
         }
       }
       let startup_profile = settings.dashboard_profile.clone();
-      let startup_always_on_top = settings.always_on_top;
+      let startup_window_layer = settings.window_layer.clone();
       let startup_floating_mode = settings.floating_mode;
       let startup_autostart_enabled = settings.autostart_enabled;
       let current_version = env!("CARGO_PKG_VERSION").to_string();
@@ -437,7 +454,7 @@ fn main() {
       } else if let Some(main) = app.get_webview_window("main") {
         // Portrait mode: place on preferred monitor and show.
         let _ = pick_target_monitor(&main, &startup_profile);
-        let _ = main.set_always_on_top(startup_always_on_top);
+        windows::apply_window_layer(&main, &startup_window_layer);
         let _ = main.show();
         let _ = main.set_focus();
         if should_show_changelog {

@@ -23,7 +23,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | CPU fan speed | ⏭ Investigated, skipped |
 | Stats logging / data export | 🔲 Planned |
 | Floating panel groups | 🔲 Planned |
-| Desktop background — Level 1 (HWND_BOTTOM) | 🔲 Planned |
+| Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
 | Total system power consumption | 🔲 Planned |
 | Stream Deck integration | 🔲 Planned |
@@ -474,7 +474,7 @@ that re-stacks all open panel windows vertically on the chosen monitor in
 
 ---
 
-## Desktop background mode — Level 1 (HWND_BOTTOM) 🔲
+## Desktop background mode — Level 1 (HWND_BOTTOM) ✅
 
 **Panel:** Main window + floating panels
 **Data source:** No new data required
@@ -501,25 +501,28 @@ Behaves like a classic Windows desktop gadget from Windows Vista/7.
 - Clicking on the dashboard area while it is "behind" requires all other windows to
   be moved first — the window itself cannot be brought forward without toggling the mode
 
+**Implemented.** The "Always on top" checkbox in Settings → Appearance is replaced with
+a three-way **Window Layer** selector: Normal / Always On Top / Always Behind.
+
 **Architecture:**
 
-The existing always-on-top implementation in `commands.rs` / `windows.rs` is extended
-with a third state. When "Always behind" is selected, `set_always_on_top(false)` is
-called first, then `SetWindowPos` with `HWND_BOTTOM` and `SWP_NOMOVE | SWP_NOSIZE |
-SWP_NOACTIVATE`. A `WM_WINDOWPOSCHANGING` subclass hook re-applies `HWND_BOTTOM` if
-another operation reorders the z-stack. The setting is persisted in `Settings` as a
-new `window_layer` enum field (`"normal"` | `"on_top"` | `"behind"`).
+`Settings.window_layer: String` (`"normal"` | `"on_top"` | `"behind"`) replaces the
+old `always_on_top: bool`. Old settings files are migrated on load: `always_on_top: true`
+maps to `"on_top"`.
 
-**Scope:**
+`apply_window_layer(window, layer)` in `windows.rs` handles all three states:
 
-- New `window_layer: String` field in `Settings` struct (`#[serde(default)]`)
-- `set_window_layer(layer)` Tauri command replacing the current boolean `always_on_top`
-  toggle (backwards-compatible via migration)
-- Win32 `SetWindowPos` call via the `windows` crate in `windows.rs`
-- `WM_WINDOWPOSCHANGING` subclass to keep the window pinned at HWND_BOTTOM
-- Settings window: replace the "Always on top" checkbox with a three-way selector
-  (Normal / Always on top / Always behind)
-- Applies to the main portrait window; optionally also to each floating panel
+- `"on_top"` → Tauri's `set_always_on_top(true)`
+- `"behind"` → `set_always_on_top(false)` then `SetWindowPos(hwnd, HWND_BOTTOM, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)` via the `windows 0.61` crate
+- `"normal"` → `set_always_on_top(false)`
+
+Z-order is re-applied in `on_window_event` when the main window receives `Focused(true)`
+while in `"behind"` mode, self-healing any drift from DWM restarts. The `WM_WINDOWPOSCHANGING`
+subclass hook is not implemented — focus-based re-pinning is sufficient for practical use.
+
+Applies to both the main portrait window and all floating panel windows. In floating mode,
+`launch_floating_panels` and `sync_floating_panels` read `window_layer` from settings and
+call `apply_window_layer` on each panel window at creation and on every sync.
 
 ---
 

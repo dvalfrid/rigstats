@@ -3517,6 +3517,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-updater",
  "tokio",
+ "windows 0.61.3",
  "winreg 0.52.0",
  "wmi",
  "zip 2.4.2",

@@ -134,6 +134,9 @@ pub struct Settings {
   /// If set and the GPU exists, that GPU will be displayed. Otherwise, auto-selection by load is used.
   #[serde(default)]
   pub preferred_gpu: Option<String>,
+  /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), or `"behind"` (HWND_BOTTOM).
+  #[serde(default = "default_window_layer")]
+  pub window_layer: String,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -172,6 +175,10 @@ fn default_floating_panel_scale() -> f64 {
 
 fn default_theme() -> String {
   "dark-cyan".to_string()
+}
+
+fn default_window_layer() -> String {
+  "normal".to_string()
 }
 
 fn default_opacity() -> f64 {
@@ -218,6 +225,7 @@ impl Default for Settings {
       panel_layouts: HashMap::new(),
       settings_version: 1, // New installs start at current version — no migration needed.
       preferred_gpu: None,
+      window_layer: default_window_layer(),
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,
@@ -245,6 +253,15 @@ pub fn load_settings(app: &tauri::AppHandle) -> Settings {
     Ok(raw) => serde_json::from_str::<Settings>(&raw).unwrap_or_default(),
     Err(_) => Settings::default(),
   };
+
+  // Migrate always_on_top bool → window_layer string (pre-1.24 settings files).
+  // window_layer defaults to "normal", so if an old file had always_on_top: true
+  // and no window_layer field, we promote it to "on_top" here.
+  if settings.window_layer == default_window_layer() && settings.always_on_top {
+    settings.window_layer = "on_top".to_string();
+  }
+  // Keep always_on_top in sync so main.rs startup reads the right value.
+  settings.always_on_top = settings.window_layer == "on_top";
 
   // One-time migration from schema version 0 (flat threshold fields) to
   // version 1 (thresholds map). Runs once, then persists the new format.
