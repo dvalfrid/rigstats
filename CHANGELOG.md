@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.24.0](https://github.com/dvalfrid/rigstats/compare/v1.23.0...v1.24.0) (2026-06-05)
+
+
+### Features
+
+* **floating:** add lock-positions toggle to prevent accidental panel moves ([c490349](https://github.com/dvalfrid/rigstats/commit/c490349966369a10784f9c0a98bc9eba31824f02))
+
+
+### Bug Fixes
+
+* **floating:** correct BASE_PANEL_HEIGHT for CPU panel ([eb108f4](https://github.com/dvalfrid/rigstats/commit/eb108f4a54b884a94ab8fd2dec18ea3525ed8c76))
+* **floating:** eliminate frame gap and WebView2 deadlock when toggling ([4963b20](https://github.com/dvalfrid/rigstats/commit/4963b2089d40aa8649159f4a663260fca55f151d))
+* **updater:** show update badge when manual check finds a new version ([2d4282d](https://github.com/dvalfrid/rigstats/commit/2d4282d6023607c92b20222c1b9bf6b9deae8d52))
+* **windows:** center popup windows on primary monitor when no tray click ([d6676b5](https://github.com/dvalfrid/rigstats/commit/d6676b5cbae69e1d4a54c41f947ae80d3a66a076))
+* **windows:** smooth fade-in on show and eliminate white flash ([ea7e973](https://github.com/dvalfrid/rigstats/commit/ea7e9736ee6c3605fe724b17727da8b6d7627598))
+
 ## [1.23.0](https://github.com/dvalfrid/rigstats/compare/v1.22.6...v1.23.0) (2026-06-02)
 
 
