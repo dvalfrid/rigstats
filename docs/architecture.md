@@ -178,6 +178,7 @@ Floating mode commands:
 | Command | Purpose |
 | --- | --- |
 | `toggle_floating_mode(enabled)` | Persists the setting, emits `apply-floating-mode`, and routes window transitions through `spawn_sync_floating_panels` / `close_floating_panels` with a mutex guard to serialize rapid toggles |
+| `toggle_floating_lock` | Flips `floating_panels_locked`, persists immediately, and emits `floating-lock-changed` to all open panel windows |
 | `preview_floating_scale(scale)` | Applies floating panel scale preview (`0.4..=1.0`) and re-syncs floating windows when floating mode is active |
 | `set_gpu_preference(gpu_name)` | Persists the user-selected GPU name used by LHM extraction on subsequent ticks |
 | `broadcast_stats(stats)` | Emits `stats-broadcast` to each open `panel-{key}` window; takes `serde_json::Value` to avoid needing `Deserialize` on `StatsPayload` |
@@ -301,12 +302,14 @@ then re-persists. The eight legacy flat fields are kept as private
 `#[serde(default, skip_serializing)]` shims so old files can be read but are
 never written back.
 
-Floating panel layout adds three fields — all `#[serde(default)]`, no migration
+Floating panel layout adds four fields — all `#[serde(default)]`, no migration
 needed:
 
 - **`floating_mode: bool`** — whether the app starts in floating mode.
 - **`floating_panel_scale: f64`** — floating panel size multiplier in the
   range `0.4..=1.0` (sanitized in command handlers before persistence).
+- **`floating_panels_locked: bool`** — when true, drag handles are disabled on
+  all panel windows; toggled by `toggle_floating_lock` and persisted immediately.
 - **`panel_layouts: HashMap<String, PanelLayout>`** — last known `outer_position`
   (`x: i32, y: i32`) per panel key. Positions are saved by `panel-host.js`
   after each move (debounced 500 ms) and re-applied with DWM inset compensation
@@ -327,8 +330,8 @@ Settings window uses `center_on_tray_monitor` which converts the physical tray
 click position to logical pixels using `monitor.scale_factor()`, then centres
 the 560×600 window on that monitor. Other secondary windows use
 `tray_anchor_position` (anchored above the tray icon). Both functions read
-`LAST_TRAY_CLICK_X/Y` set by `set_last_tray_click_position`; fall back to a
-fixed offset when no click has been recorded.
+`LAST_TRAY_CLICK_X/Y` set by `set_last_tray_click_position`; fall back to the
+first available monitor when no click has been recorded.
 
 Floating panel management:
 
