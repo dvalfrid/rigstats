@@ -11,6 +11,7 @@
     "allow-preview-theme",
     "allow-save-settings",
     "allow-toggle-floating-mode",
+    "allow-toggle-floating-lock",
     "allow-preview-floating-scale",
     "allow-hide-settings-window",
     "allow-show-settings-window",

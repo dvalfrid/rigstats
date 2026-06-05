@@ -1352,6 +1352,26 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
   Ok(())
 }
 
+/// Toggles the floating-panel position lock and broadcasts the new state to all
+/// open panel windows. Persists immediately so the lock survives restarts without
+/// requiring a separate Save action.
+#[tauri::command]
+pub fn toggle_floating_lock(app: tauri::AppHandle, state: tauri::State<AppState>) -> Result<bool, String> {
+  let (new_locked, snapshot) = {
+    let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+    s.floating_panels_locked = !s.floating_panels_locked;
+    (s.floating_panels_locked, s.clone())
+  };
+  persist_settings(&app, &snapshot)?;
+  for key in crate::windows::all_panel_keys() {
+    let label = format!("panel-{}", key);
+    if let Some(win) = app.get_webview_window(&label) {
+      let _ = win.emit("floating-lock-changed", new_locked);
+    }
+  }
+  Ok(new_locked)
+}
+
 /// Broadcasts a stats payload to all open floating panel windows.
 ///
 /// Called by the main window's tick loop when floating mode is active so that

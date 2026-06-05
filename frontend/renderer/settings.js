@@ -8,10 +8,11 @@ const modelNameInput      = document.getElementById('modelNameInput');
 const profileSelect       = document.getElementById('profileSelect');
 const windowLayerSelect   = document.getElementById('windowLayerSelect');
 const autostartInput      = document.getElementById('autostartInput');
-const floatingModeInput   = document.getElementById('floatingModeInput');
-const floatingScaleSlider = document.getElementById('floatingScaleSlider');
-const floatingScaleVal    = document.getElementById('floatingScaleVal');
-const floatingScaleRow    = document.getElementById('floatingScaleRow');
+const floatingModeInput        = document.getElementById('floatingModeInput');
+const floatingScaleSlider      = document.getElementById('floatingScaleSlider');
+const floatingScaleVal         = document.getElementById('floatingScaleVal');
+const floatingScaleRow         = document.getElementById('floatingScaleRow');
+const floatingPanelsLockedInput = document.getElementById('floatingPanelsLockedInput');
 const panelToggles        = document.getElementById('panelToggles');
 const statusEl            = document.getElementById('status');
 const btnTestAlert        = document.getElementById('btnTestAlert');
@@ -264,8 +265,9 @@ function applySettings(settings) {
     dashboardProfile:  settings.dashboardProfile ?? 'portrait-xl',
     windowLayer:       settings.windowLayer ?? 'normal',
     autostartEnabled:  settings.autostartEnabled ?? false,
-    floatingMode:      settings.floatingMode ?? false,
-    floatingPanelScale: settings.floatingPanelScale ?? 1.0,
+    floatingMode:          settings.floatingMode ?? false,
+    floatingPanelScale:    settings.floatingPanelScale ?? 1.0,
+    floatingPanelsLocked:  settings.floatingPanelsLocked ?? false,
     visiblePanels:     normalizeVisiblePanels(settings.visiblePanels),
     thresholds: {
       cpu:     { warn: t.cpu?.warn     ?? null, crit: t.cpu?.crit     ?? null },
@@ -291,6 +293,7 @@ function applySettings(settings) {
   const scalePct = Math.round(original.floatingPanelScale * 100);
   floatingScaleSlider.value = scalePct;
   floatingScaleVal.textContent = `${scalePct}%`;
+  floatingPanelsLockedInput.checked = original.floatingPanelsLocked;
   updateFloatingScaleVisibility();
   applyVisiblePanelsToForm(original.visiblePanels);
 
@@ -325,6 +328,9 @@ async function closeWithRestore() {
   if (dragGhost) { dragGhost.remove(); dragGhost = null; }
   if (floatingModeInput.checked !== original.floatingMode) {
     await backend.invoke('toggle-floating-mode', { enabled: original.floatingMode });
+  }
+  if (floatingPanelsLockedInput.checked !== original.floatingPanelsLocked) {
+    await backend.invoke('toggle-floating-lock');
   }
   await backend.invoke('preview-opacity', { value: original.opacity });
   await previewProfile(original.dashboardProfile);
@@ -386,6 +392,16 @@ floatingScaleSlider.addEventListener('input', async () => {
   const pct = parseInt(floatingScaleSlider.value, 10);
   floatingScaleVal.textContent = `${pct}%`;
   if (IS_DESKTOP) await backend.invoke('preview-floating-scale', { scale: pct / 100 });
+});
+
+floatingPanelsLockedInput.addEventListener('change', async () => {
+  if (!IS_DESKTOP) return;
+  try {
+    await backend.invoke('toggle-floating-lock');
+  } catch (e) {
+    logError('toggle-floating-lock', e);
+    floatingPanelsLockedInput.checked = !floatingPanelsLockedInput.checked;
+  }
 });
 
 // --- Save -------------------------------------------------------------------

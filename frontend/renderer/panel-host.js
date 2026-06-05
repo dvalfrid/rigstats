@@ -202,6 +202,16 @@ function applyStats(stats) {
   }
 }
 
+// --- Panel drag lock --------------------------------------------------------
+
+let panelsLocked = false;
+
+function applyLockState(locked) {
+  panelsLocked = locked;
+  const handle = document.getElementById('dragHandle');
+  if (handle) handle.classList.toggle('locked', locked);
+}
+
 // --- Position saving (debounced on window move) ----------------------------
 
 let moveSaveTimer = null;
@@ -228,6 +238,7 @@ function initDrag() {
   let lastDragStartTs = 0;
 
   const tryStartDrag = (e) => {
+    if (panelsLocked) return;
     const button = Number.isFinite(e.button) ? e.button : 0;
     if (button !== 0) return;
 
@@ -258,11 +269,12 @@ async function start() {
   if (panelKey === 'cpu') initCpuPanel();
   if (panelKey === 'clock') startClock();
 
-  // Apply settings (theme, opacity, thresholds).
+  // Apply settings (theme, opacity, thresholds, lock state).
   backend.invoke('get-settings').then((s) => {
     applyOpacity(s.opacity);
     applyTheme(s.theme ?? 'dark-cyan');
     applyThresholds(s);
+    applyLockState(s.floatingPanelsLocked ?? false);
 
     if (panelKey === 'header') {
       // Populate static labels in the header panel.
@@ -296,6 +308,7 @@ async function start() {
     backend.on('apply-opacity', (_e, value) => applyOpacity(value)),
     backend.on('apply-theme', (_e, key) => applyTheme(key)),
     backend.on('apply-thresholds', (_e, t) => applyThresholds(t)),
+    backend.on('floating-lock-changed', (_e, locked) => applyLockState(locked)),
     backend.on('update-available', (_e, version) => {
       if (panelKey !== 'clock') return;
       const badge = document.getElementById('updateBadge');

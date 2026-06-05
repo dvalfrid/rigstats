@@ -24,7 +24,7 @@ use commands::{
   get_system_brand, get_system_name, hide_settings_window, log_frontend_error, notify_app_ready, open_settings_window,
   preview_floating_scale, preview_opacity, preview_profile, preview_theme, preview_visible_panels,
   save_panel_positions, save_settings, set_gpu_preference, set_main_height, set_settings_pinned, show_settings_window,
-  start_window_drag, test_temp_alert, toggle_floating_mode,
+  start_window_drag, test_temp_alert, toggle_floating_lock, toggle_floating_mode,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -534,6 +534,7 @@ fn main() {
       open_updater_window,
       set_main_height,
       toggle_floating_mode,
+      toggle_floating_lock,
       preview_floating_scale,
       set_gpu_preference,
       set_settings_pinned,

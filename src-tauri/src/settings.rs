@@ -137,6 +137,9 @@ pub struct Settings {
   /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), or `"behind"` (HWND_BOTTOM).
   #[serde(default = "default_window_layer")]
   pub window_layer: String,
+  /// When true, floating panel windows cannot be moved by dragging.
+  #[serde(default)]
+  pub floating_panels_locked: bool,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -226,6 +229,7 @@ impl Default for Settings {
       settings_version: 1, // New installs start at current version — no migration needed.
       preferred_gpu: None,
       window_layer: default_window_layer(),
+      floating_panels_locked: false,
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,

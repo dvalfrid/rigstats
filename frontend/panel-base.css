@@ -92,6 +92,18 @@ html, body {
   color: rgba(0,200,255,0.55);
 }
 
+/* Locked state: no highlight, dim dots, not-allowed cursor */
+.floating-drag-handle.locked {
+  cursor: not-allowed;
+}
+.floating-drag-handle.locked:hover {
+  background: transparent;
+}
+.floating-drag-handle.locked:hover::after {
+  content: '· · ·';
+  color: rgba(255, 255, 255, 0.15);
+}
+
 /* Context menu (right-click on drag handle) */
 
 /* Panel shell */
