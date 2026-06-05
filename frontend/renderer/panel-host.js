@@ -57,7 +57,7 @@ const BASE_WIDTH = 450;
 const BASE_PANEL_HEIGHT = {
   header: 196,
   clock: 148,
-  cpu: 420,
+  cpu: 320,
   gpu: 320,
   ram: 320,
   net: 320,
