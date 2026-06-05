@@ -285,8 +285,6 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
           close_floating_panels(app);
           if let Some(main) = app.get_webview_window("main") {
             let _ = pick_target_monitor(&main, &profile);
-            // Pre-shrink to the correct panel height before show() — pick_target_monitor
-            // resets the window to full profile height, causing a visible flash otherwise.
             let (profile_w, profile_h) = profile_dimensions(&profile);
             let scale = main.scale_factor().unwrap_or(1.0);
             let logical_w = (profile_w as f64 / scale).round();
@@ -296,10 +294,10 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
               height: panel_h,
             }));
             let _ = main.set_decorations(false);
-            let _ = main.show();
-            let _ = main.set_focus();
             let _ = main.emit("apply-floating-mode", next);
             let _ = main.emit("apply-visible-panels", visible_panels);
+            crate::windows::show_faded(&main);
+            let _ = main.set_focus();
           }
           return;
         }
@@ -453,6 +451,10 @@ fn main() {
         crate::windows::spawn_sync_floating_panels(app_handle);
       } else if let Some(main) = app.get_webview_window("main") {
         // Portrait mode: place on preferred monitor and show.
+        // ensure_layered adds WS_EX_LAYERED so show_faded can use
+        // SetLayeredWindowAttributes to eliminate the white flash on re-show.
+        #[cfg(windows)]
+        windows::ensure_layered(&main);
         let _ = pick_target_monitor(&main, &startup_profile);
         windows::apply_window_layer(&main, &startup_window_layer);
         let _ = main.show();

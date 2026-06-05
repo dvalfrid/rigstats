@@ -13,7 +13,14 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use tauri::utils::config::Color;
 use tauri::{AppHandle, Manager, PhysicalPosition, Position, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
 #[cfg(windows)]
-use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE};
+use windows::Win32::Foundation::COLORREF;
+#[cfg(windows)]
+use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
+use windows::Win32::UI::WindowsAndMessaging::{
+  GetWindowLongPtrW, SetLayeredWindowAttributes, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_BOTTOM, LWA_ALPHA,
+  SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_LAYERED,
+};
 
 /// Last recorded tray icon click position, used to anchor popups.
 static LAST_TRAY_CLICK_X: AtomicI32 = AtomicI32::new(i32::MIN);
@@ -25,6 +32,75 @@ static FLOATING_SYNC_QUEUED: AtomicBool = AtomicBool::new(false);
 pub fn set_last_tray_click_position(x: f64, y: f64) {
   LAST_TRAY_CLICK_X.store(x.round() as i32, Ordering::Relaxed);
   LAST_TRAY_CLICK_Y.store(y.round() as i32, Ordering::Relaxed);
+}
+
+// --- Flash-free window show ------------------------------------------------
+
+/// Ensures a window has the `WS_EX_LAYERED` extended style needed for
+/// `SetLayeredWindowAttributes`. Safe to call from the main thread only
+/// (Windows restriction on `SetWindowLongPtrW`).
+#[cfg(windows)]
+#[allow(unsafe_code)]
+pub fn ensure_layered(win: &tauri::WebviewWindow) {
+  if let Ok(hwnd) = win.hwnd() {
+    unsafe {
+      let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+      if ex & WS_EX_LAYERED.0 as isize == 0 {
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED.0 as isize);
+        // SWP_FRAMECHANGED forces Windows to re-read the new extended style.
+        let _ = SetWindowPos(
+          hwnd,
+          None,
+          0,
+          0,
+          0,
+          0,
+          SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+        );
+      }
+    }
+  }
+}
+
+/// Shows a window with a smooth fade-in to avoid the white flash that occurs
+/// when `ShowWindow` sends `WM_ERASEBKGND` before WebView2 has finished
+/// repainting. Sets alpha to 0 before show, then animates to 255 using a
+/// quadratic ease-out curve over ~200 ms: content appears quickly at first,
+/// then settles to full opacity without a hard pop at the end. Requires
+/// `WS_EX_LAYERED` on the window (transparent panels have it from
+/// construction; call `ensure_layered` first for the main window). Falls back
+/// to plain `show()` if the layered API is unavailable.
+#[allow(unsafe_code)]
+pub fn show_faded(win: &tauri::WebviewWindow) {
+  #[cfg(windows)]
+  {
+    if let Ok(hwnd) = win.hwnd() {
+      let did_set = unsafe { SetLayeredWindowAttributes(hwnd, COLORREF(0), 0, LWA_ALPHA).is_ok() };
+      if did_set {
+        let _ = win.show();
+        // HWND wraps *mut c_void which is not Send. Cast to usize for the
+        // async boundary and reconstruct the pointer inside the spawned task.
+        let raw = hwnd.0 as usize;
+        tauri::async_runtime::spawn(async move {
+          // 10 steps × 20 ms = 200 ms, quadratic ease-out: f(t) = 2t − t²
+          // Reaches ~75 % opacity at the midpoint so the window is clearly
+          // visible early, then glides to 100 % rather than popping in hard.
+          const STEPS: u32 = 10;
+          for step in 1u32..=STEPS {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            let t = step as f64 / STEPS as f64;
+            let alpha = ((255.0 * (2.0 * t - t * t)).round() as u32).min(255) as u8;
+            #[allow(unsafe_code)]
+            unsafe {
+              let _ = SetLayeredWindowAttributes(HWND(raw as *mut core::ffi::c_void), COLORREF(0), alpha, LWA_ALPHA);
+            }
+          }
+        });
+        return;
+      }
+    }
+  }
+  let _ = win.show();
 }
 
 // --- Popup positioning -----------------------------------------------------
@@ -369,11 +445,8 @@ fn resize_existing_panel_window(
   if let Some(win) = app.get_webview_window(&label) {
     let (w, h) = panel_base_size(key, dashboard_profile, user_scale);
     let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
-    let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
     let _ = win.set_decorations(false);
-    let _ = win.show();
-    // Apply layer last: set_size/set_decorations/show all call SetWindowPos
-    // internally and would reset z-order if applied before them.
+    show_faded(&win);
     apply_window_layer(&win, window_layer);
   }
 }
@@ -447,15 +520,12 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     // If already open, reconcile size/visibility/layer instead of skipping.
     if let Some(win) = app.get_webview_window(&label) {
       let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize { width: w, height: h }));
-      let _ = win.set_background_color(Some(Color(0, 0, 0, 0)));
       let _ = win.set_decorations(false);
       if desired_visible {
-        let _ = win.show();
+        show_faded(&win);
       } else {
         let _ = win.hide();
       }
-      // Apply layer last: set_size/set_decorations/show all call SetWindowPos
-      // internally and would reset z-order if applied before them.
       apply_window_layer(&win, &window_layer);
       continue;
     }
@@ -520,12 +590,10 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
 
     let _ = win.set_decorations(false);
     if desired_visible {
-      let _ = win.show();
+      show_faded(&win);
     } else {
       let _ = win.hide();
     }
-    // Apply layer last: set_position/set_decorations/show all call SetWindowPos
-    // internally and would reset z-order if applied before them.
     apply_window_layer(&win, &window_layer);
   }
 }

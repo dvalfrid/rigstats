@@ -476,7 +476,7 @@ pub fn save_settings(
           height: panel_h,
         }));
         let _ = main.set_decorations(false);
-        let _ = main.show();
+        crate::windows::show_faded(&main);
         let _ = main.set_focus();
         let _ = main.emit("apply-visible-panels", applied_visible_panels);
       }
@@ -1343,9 +1343,8 @@ pub fn toggle_floating_mode(app: tauri::AppHandle, state: tauri::State<AppState>
       }));
       let _ = main.set_decorations(false);
       crate::windows::apply_window_layer(&main, &window_layer);
-      let _ = main.show();
+      crate::windows::show_faded(&main);
       let _ = main.set_focus();
-      // Keep emitting so the frontend updates CSS variables and DOM panel order.
       let _ = main.emit("apply-visible-panels", applied_visible_panels);
     }
   }
