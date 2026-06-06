@@ -1,5 +1,11 @@
 # RIGStats (rig-dashboard)
 
+[![Release](https://img.shields.io/github/v/release/dvalfrid/rigstats?label=release)](https://github.com/dvalfrid/rigstats/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/dvalfrid/rigstats/total)](https://github.com/dvalfrid/rigstats/releases)
+[![License](https://img.shields.io/github/license/dvalfrid/rigstats)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
+
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
 - Shows CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, and motherboard sensors in real time.
