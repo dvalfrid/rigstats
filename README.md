@@ -1,13 +1,17 @@
 # RIGStats (rig-dashboard)
 
+<div align="center">
+
 [![Release](https://img.shields.io/github/v/release/dvalfrid/rigstats?label=release)](https://github.com/dvalfrid/rigstats/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/dvalfrid/rigstats/total)](https://github.com/dvalfrid/rigstats/releases)
 [![License](https://img.shields.io/github/license/dvalfrid/rigstats)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
+
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
 [![Release pipeline](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml)
+
+</div>
 
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
