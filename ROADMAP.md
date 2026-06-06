@@ -21,7 +21,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Settings redesign | ✅ Done (v1.20) |
 | LHM stability — sensor sidecar | ✅ Done (v1.21) |
 | CPU fan speed | ⏭ Investigated, skipped |
-| Stats logging / data export | 🔲 Planned |
+| Stats logging / data export | ✅ Done |
 | Floating panel groups | 🔲 Planned |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
@@ -319,34 +319,41 @@ sent as `false`); only Critical alerts have a user-visible toggle.
 
 ---
 
-## Stats logging / data export 🔲
+## Stats logging / data export ✅
 
-**Panel:** Settings (new Logging card) + tray menu shortcut
+**Panel:** Settings (new Logging card, Dashboard tab) + tray menu shortcut
 **Data source:** Existing `StatsPayload` — no new sensors required
 
 Lets overclockers and benchmark enthusiasts record hardware metrics over time and
-analyse them after a gaming session or stress test. A common request on monitoring
-tools: "I want to see what my GPU temperature peaked at during that boss fight."
+analyse them after a gaming session or stress test.
 
 **Architecture:**
 
 Logging runs as an opt-in background task inside the Rust backend. When enabled,
 each `get_stats()` tick appends a CSV row to a rolling log file in the Tauri app
 data directory (`rigstats-log-YYYY-MM-DD.csv`). Log files roll daily and are
-automatically pruned after a configurable retention period (default 7 days).
+automatically pruned once per calendar day based on file modification time.
 
 **What is logged (one row per tick):**
 
-`timestamp_unix, cpu_load, cpu_temp, cpu_freq_mhz, gpu_load, gpu_temp, gpu_vram_used_mb, ram_used_gb, disk_read_kbs, disk_write_kbs, net_up_kbs, net_down_kbs, ping_ms`
+`timestamp_unix, cpu_load, cpu_temp, cpu_freq_mhz, gpu_load, gpu_temp, gpu_vram_used_mb, ram_used_gb, disk_read_mbs, disk_write_mbs, net_up_mbps, net_down_mbps, ping_ms`
 
-**Scope:**
+Note: disk throughput is in MB/s (from LHM); network throughput is in Mbps (from sysinfo).
+Optional fields (cpu_temp, gpu_*, ping_ms) are blank when the sensor is unavailable.
 
-- New `logging.rs` module: `append_stats_row(&StatsPayload, path)`, `prune_old_logs(dir, days)`
-- `AppState` gains `logging_enabled: bool` and current log file handle
-- Settings window: "Stats Logging" card with on/off toggle, retention selector
-  (1 / 7 / 30 days), and an "Open log folder" button
-- Tray menu: "Start/Stop logging" shortcut for quick toggle without opening Settings
-- Persist `logging_enabled` and `log_retention_days` in `Settings` struct
+**Implemented:**
+
+- `logging.rs` — `append_stats_row(&StatsPayload, dir)`, `prune_old_logs(dir, days)`,
+  `current_log_path(dir)`, and `ymd_from_unix` (Howard Hinnant algorithm, no chrono dep)
+- `AppState.last_log_prune_day` — throttles directory scan to at most once per calendar day
+- `Settings.logging_enabled` (default `false`) and `Settings.log_retention_days` (default 7)
+- Settings → Dashboard tab: "Stats Logging" card with enable toggle, retention selector
+  (1 / 7 / 30 days), and "Open Log Folder" button
+- Tray menu: "Start Recording" / "Stop Recording" item for quick toggle without opening Settings
+- Tray recording indicator: icon swaps to a red-dot variant while recording; tooltip shows "RIGStats — Recording"
+- `apply_tray_logging_indicator` rebuilds the tray menu and swaps the icon atomically on each toggle
+- `open_log_folder` Tauri command opens `%APPDATA%\se.codeby.rigstats\` in Explorer
+- `assets/tray-recording.png` — 32×32 recording-state tray icon (original icon + red dot, bottom-right corner)
 
 ---
 

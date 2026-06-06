@@ -16,6 +16,7 @@
     "allow-hide-settings-window",
     "allow-show-settings-window",
     "allow-test-temp-alert",
+    "allow-open-log-folder",
     "allow-close-window"
   ]
 }

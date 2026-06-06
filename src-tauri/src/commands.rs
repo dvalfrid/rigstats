@@ -32,7 +32,8 @@ use crate::stats::{
 };
 use serde::Serialize;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{Emitter, Manager, Size, WebviewWindow};
 use tauri_plugin_notification::NotificationExt;
 
@@ -42,6 +43,17 @@ const LICENSE_NAME: &str = "MIT";
 const LHM_LIB_VERSION: &str = "0.9.6";
 const SYSINFO_VERSION: &str = "0.30";
 const WMI_VERSION: &str = "0.13";
+
+pub static TRAY_RECORDING_ICON: &[u8] = include_bytes!("../../assets/tray-recording.png");
+
+pub const TRAY_SHOW_ID: &str = "show";
+pub const TRAY_FLOATING_ID: &str = "floating";
+pub const TRAY_LOGGING_ID: &str = "logging";
+pub const TRAY_SETTINGS_ID: &str = "settings";
+pub const TRAY_STATUS_ID: &str = "status";
+pub const TRAY_ABOUT_ID: &str = "about";
+pub const TRAY_UPDATES_ID: &str = "updates";
+pub const TRAY_QUIT_ID: &str = "quit";
 
 // --- Startup readiness -----------------------------------------------------
 
@@ -308,6 +320,10 @@ pub fn save_settings(
   #[allow(non_snake_case)] floatingMode: Option<bool>,
   floating_panel_scale: Option<f64>,
   #[allow(non_snake_case)] floatingPanelScale: Option<f64>,
+  logging_enabled: Option<bool>,
+  #[allow(non_snake_case)] loggingEnabled: Option<bool>,
+  log_retention_days: Option<u32>,
+  #[allow(non_snake_case)] logRetentionDays: Option<u32>,
 ) -> Result<(), String> {
   let mut settings = state.settings.lock().unwrap_or_else(|e| e.into_inner());
   let previous_floating_mode = settings.floating_mode;
@@ -408,6 +424,12 @@ pub fn save_settings(
     }
     settings.floating_panel_scale = sanitized;
   }
+  if let Some(v) = logging_enabled.or(loggingEnabled) {
+    settings.logging_enabled = v;
+  }
+  if let Some(days) = log_retention_days.or(logRetentionDays) {
+    settings.log_retention_days = days.max(1);
+  }
 
   persist_settings(&app, &settings)?;
 
@@ -427,8 +449,9 @@ pub fn save_settings(
     append_debug_log(&app, "autostart: unregistered");
   }
 
-  // Capture floating mode before releasing the lock.
+  // Capture values before releasing the lock.
   let new_floating_mode = settings.floating_mode;
+  let new_logging_enabled = settings.logging_enabled;
 
   if let Some(main) = app.get_webview_window("main") {
     main
@@ -456,6 +479,8 @@ pub fn save_settings(
   // Release the settings lock before panel window operations — `launch_floating_panels`
   // acquires the same lock internally, so holding it here would deadlock.
   drop(settings);
+
+  apply_tray_logging_indicator(&app, new_logging_enabled);
 
   // If floating mode changed, launch or close the panel windows.
   if new_floating_mode != previous_floating_mode {
@@ -1270,6 +1295,30 @@ pub async fn get_stats(
     check_battery_alerts(&app, &payload.battery, &settings_snap, &mut alert_map);
   }
 
+  // Append a CSV row to the daily log file when logging is enabled.
+  {
+    let (logging_enabled, log_retention_days) = {
+      let s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+      (s.logging_enabled, s.log_retention_days)
+    };
+    if logging_enabled {
+      let dir = app.path().app_data_dir().unwrap_or_else(|_| PathBuf::from("."));
+      if let Err(e) = crate::logging::append_stats_row(&payload, &dir) {
+        append_debug_log(&app, &format!("stats logging: {e}"));
+      }
+      // Prune old log files at most once per calendar day.
+      let today = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() / 86400)
+        .unwrap_or(0);
+      let mut last_prune = state.last_log_prune_day.lock().unwrap_or_else(|e| e.into_inner());
+      if last_prune.map_or(true, |d| d != today) {
+        crate::logging::prune_old_logs(&dir, log_retention_days);
+        *last_prune = Some(today);
+      }
+    }
+  }
+
   Ok(payload)
 }
 
@@ -1294,6 +1343,54 @@ pub fn get_changelog(app: tauri::AppHandle) -> String {
 pub fn log_frontend_error(app: tauri::AppHandle, message: String) {
   let sanitized = message.chars().take(512).collect::<String>();
   append_debug_log(&app, &format!("[renderer] {}", sanitized));
+}
+
+/// Updates the tray icon tooltip and the logging menu item label to reflect the current
+/// recording state. Call this whenever `logging_enabled` changes.
+///
+/// `TrayIcon` has no menu getter after build, so we rebuild and replace the full menu.
+/// The `on_menu_event` handler is registered on the `TrayIcon` (not the `Menu`), so it
+/// keeps firing correctly for the new menu as long as the item IDs match.
+pub fn apply_tray_logging_indicator(app: &tauri::AppHandle, enabled: bool) {
+  let Some(tray) = app.tray_by_id("main") else {
+    return;
+  };
+  let _ = tray.set_tooltip(Some(if enabled { "RIGStats — Recording" } else { "RIGStats" }));
+  // Swap tray icon: red-dot variant while recording, default icon otherwise.
+  if enabled {
+    if let Ok(icon) = tauri::image::Image::from_bytes(TRAY_RECORDING_ICON) {
+      let _ = tray.set_icon(Some(icon));
+    }
+  } else if let Some(icon) = app.default_window_icon() {
+    let _ = tray.set_icon(Some(icon.clone()));
+  }
+  let label = if enabled { "Stop Recording" } else { "Start Recording" };
+  if let Ok(menu) = tauri::menu::MenuBuilder::new(app)
+    .text(TRAY_SHOW_ID, "Show RIGStats")
+    .text(TRAY_FLOATING_ID, "Toggle Floating Mode")
+    .text(TRAY_LOGGING_ID, label)
+    .separator()
+    .text(TRAY_SETTINGS_ID, "Settings")
+    .text(TRAY_STATUS_ID, "Status")
+    .text(TRAY_ABOUT_ID, "About")
+    .text(TRAY_UPDATES_ID, "Updates & Changelog")
+    .separator()
+    .text(TRAY_QUIT_ID, "Quit")
+    .build()
+  {
+    let _ = tray.set_menu(Some(menu));
+  }
+}
+
+/// Opens the app data directory in Windows Explorer so users can access log files.
+#[tauri::command]
+pub fn open_log_folder(app: tauri::AppHandle) -> Result<(), String> {
+  let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  std::process::Command::new("explorer.exe")
+    .arg(&dir)
+    .spawn()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 // --- Floating panel mode ---------------------------------------------------

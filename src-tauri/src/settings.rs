@@ -140,6 +140,12 @@ pub struct Settings {
   /// When true, floating panel windows cannot be moved by dragging.
   #[serde(default)]
   pub floating_panels_locked: bool,
+  /// When true, a CSV row is appended to the daily log file on every stats tick.
+  #[serde(default)]
+  pub logging_enabled: bool,
+  /// Number of days to retain daily log files before automatic pruning.
+  #[serde(default = "default_log_retention_days")]
+  pub log_retention_days: u32,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -178,6 +184,10 @@ fn default_floating_panel_scale() -> f64 {
 
 fn default_theme() -> String {
   "dark-cyan".to_string()
+}
+
+fn default_log_retention_days() -> u32 {
+  7
 }
 
 fn default_window_layer() -> String {
@@ -230,6 +240,8 @@ impl Default for Settings {
       preferred_gpu: None,
       window_layer: default_window_layer(),
       floating_panels_locked: false,
+      logging_enabled: false,
+      log_retention_days: default_log_retention_days(),
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,

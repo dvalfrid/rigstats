@@ -29,6 +29,9 @@ const warnBatteryInput    = document.getElementById('warnBatteryInput');
 const critBatteryInput    = document.getElementById('critBatteryInput');
 const notifyOnCritInput   = document.getElementById('notifyOnCritInput');
 const themeSelect         = document.getElementById('themeSelect');
+const loggingEnabledInput     = document.getElementById('loggingEnabledInput');
+const logRetentionDaysSelect  = document.getElementById('logRetentionDaysSelect');
+const btnOpenLogFolder        = document.getElementById('btnOpenLogFolder');
 
 // --- Panel config ------------------------------------------------------------
 
@@ -75,6 +78,8 @@ let original = {
   alertCooldownSecs: 60,
   notifyOnCrit: true,
   theme: 'dark-cyan',
+  loggingEnabled: false,
+  logRetentionDays: 7,
 };
 let isSaving = false;
 let isTogglingFloatingMode = false;
@@ -279,6 +284,8 @@ function applySettings(settings) {
     alertCooldownSecs: settings.alertCooldownSecs ?? 60,
     notifyOnCrit:      settings.notifyOnCrit ?? true,
     theme:             settings.theme ?? 'dark-cyan',
+    loggingEnabled:    settings.loggingEnabled ?? false,
+    logRetentionDays:  settings.logRetentionDays ?? 7,
   };
   previewFloatingMode = original.floatingMode;
 
@@ -310,6 +317,8 @@ function applySettings(settings) {
   alertCooldownInput.value = original.alertCooldownSecs;
   notifyOnCritInput.checked = original.notifyOnCrit;
   themeSelect.value = original.theme;
+  loggingEnabledInput.checked = original.loggingEnabled;
+  logRetentionDaysSelect.value = String(original.logRetentionDays);
 }
 
 async function loadSettings() {
@@ -437,17 +446,21 @@ document.getElementById('btnSave').addEventListener('click', async () => {
     return;
   }
 
+  const loggingEnabled = loggingEnabledInput.checked;
+  const logRetentionDays = parseInt(logRetentionDaysSelect.value, 10) || 7;
   const visiblePanels = normalizeVisiblePanels(selectedPanels);
   try {
     await backend.invoke('save-settings', {
       opacity, modelName, dashboardProfile, windowLayer, autostartEnabled,
       floatingMode, floatingPanelScale, visiblePanels, thresholds,
       alertCooldownSecs, notifyOnWarn, notifyOnCrit, theme,
+      loggingEnabled, logRetentionDays,
     });
     original = {
       opacity, modelName, dashboardProfile, windowLayer, autostartEnabled,
       floatingMode, floatingPanelScale, visiblePanels, thresholds,
       alertCooldownSecs, notifyOnCrit, theme,
+      loggingEnabled, logRetentionDays,
     };
     setStatus('Saved', 'status-ok');
     await backend.invoke('close-window');
@@ -483,6 +496,18 @@ btnTestAlert.addEventListener('click', async () => {
   } catch (e) {
     logError('test-temp-alert', e);
     setStatus('Notification failed — check OS settings.', 'status-err');
+  }
+});
+
+// --- Open log folder --------------------------------------------------------
+
+btnOpenLogFolder.addEventListener('click', async () => {
+  if (!IS_DESKTOP) return;
+  try {
+    await backend.invoke('open-log-folder');
+  } catch (e) {
+    logError('open-log-folder', e);
+    setStatus('Could not open log folder.', 'status-err');
   }
 });
 

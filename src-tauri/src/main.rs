@@ -13,6 +13,7 @@ mod diagnostics;
 mod hardware;
 mod lhm;
 mod lhm_process;
+mod logging;
 mod monitor;
 mod settings;
 mod stats;
@@ -20,11 +21,13 @@ mod updater;
 mod windows;
 
 use commands::{
-  broadcast_stats, close_window, get_about_info, get_changelog, get_cpu_info, get_gpu_info, get_settings, get_stats,
-  get_system_brand, get_system_name, hide_settings_window, log_frontend_error, notify_app_ready, open_settings_window,
-  preview_floating_scale, preview_opacity, preview_profile, preview_theme, preview_visible_panels,
-  save_panel_positions, save_settings, set_gpu_preference, set_main_height, set_settings_pinned, show_settings_window,
-  start_window_drag, test_temp_alert, toggle_floating_lock, toggle_floating_mode,
+  apply_tray_logging_indicator, broadcast_stats, close_window, get_about_info, get_changelog, get_cpu_info,
+  get_gpu_info, get_settings, get_stats, get_system_brand, get_system_name, hide_settings_window, log_frontend_error,
+  notify_app_ready, open_log_folder, open_settings_window, preview_floating_scale, preview_opacity, preview_profile,
+  preview_theme, preview_visible_panels, save_panel_positions, save_settings, set_gpu_preference, set_main_height,
+  set_settings_pinned, show_settings_window, start_window_drag, test_temp_alert, toggle_floating_lock,
+  toggle_floating_mode, TRAY_ABOUT_ID, TRAY_FLOATING_ID, TRAY_LOGGING_ID, TRAY_QUIT_ID, TRAY_SETTINGS_ID, TRAY_SHOW_ID,
+  TRAY_STATUS_ID, TRAY_UPDATES_ID,
 };
 use debug::{append_debug_log, reset_debug_log};
 use diagnostics::collect_diagnostics;
@@ -214,14 +217,6 @@ fn register_notification_app_id() {
   }
 }
 
-const TRAY_SHOW_ID: &str = "show";
-const TRAY_SETTINGS_ID: &str = "settings";
-const TRAY_ABOUT_ID: &str = "about";
-const TRAY_STATUS_ID: &str = "status";
-const TRAY_UPDATES_ID: &str = "updates";
-const TRAY_FLOATING_ID: &str = "floating";
-const TRAY_QUIT_ID: &str = "quit";
-
 fn focus_main_window(app: &AppHandle) {
   if let Some(main) = app.get_webview_window("main") {
     let _ = main.show();
@@ -241,9 +236,24 @@ fn toggle_main_window(app: &AppHandle) {
 }
 
 fn create_tray(app: &tauri::App) -> tauri::Result<()> {
+  let logging_enabled = app
+    .state::<stats::AppState>()
+    .settings
+    .lock()
+    .unwrap_or_else(|e| e.into_inner())
+    .logging_enabled;
+
   let tray_menu = MenuBuilder::new(app)
     .text(TRAY_SHOW_ID, "Show RIGStats")
     .text(TRAY_FLOATING_ID, "Toggle Floating Mode")
+    .text(
+      TRAY_LOGGING_ID,
+      if logging_enabled {
+        "Stop Recording"
+      } else {
+        "Start Recording"
+      },
+    )
     .separator()
     .text(TRAY_SETTINGS_ID, "Settings")
     .text(TRAY_STATUS_ID, "Status")
@@ -306,6 +316,25 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
           let _ = main.emit("apply-floating-mode", next);
         }
       }
+      TRAY_LOGGING_ID => {
+        let state = app.state::<stats::AppState>();
+        let (new_enabled, retention_days, dir) = {
+          let mut s = state.settings.lock().unwrap_or_else(|e| e.into_inner());
+          s.logging_enabled = !s.logging_enabled;
+          let _ = settings::persist_settings(app, &s);
+          let dir = app
+            .path()
+            .app_data_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("."));
+          (s.logging_enabled, s.log_retention_days, dir)
+        };
+        append_debug_log(app, &format!("Stats logging toggled: {}", new_enabled));
+        apply_tray_logging_indicator(app, new_enabled);
+        // Prune on enable so old files from previous sessions are cleaned up.
+        if new_enabled {
+          logging::prune_old_logs(&dir, retention_days);
+        }
+      }
       TRAY_SETTINGS_ID => {
         append_debug_log(app, "Tray menu: Settings clicked");
         if let Err(error) = ensure_settings_window(app) {
@@ -353,6 +382,17 @@ fn create_tray(app: &tauri::App) -> tauri::Result<()> {
   }
 
   tray_builder.build(app)?;
+
+  // Set initial icon/tooltip to reflect whether logging was already active on startup.
+  if logging_enabled {
+    if let Some(tray) = app.tray_by_id("main") {
+      let _ = tray.set_tooltip(Some("RIGStats — Recording"));
+      if let Ok(icon) = tauri::image::Image::from_bytes(commands::TRAY_RECORDING_ICON) {
+        let _ = tray.set_icon(Some(icon));
+      }
+    }
+  }
+
   Ok(())
 }
 
@@ -440,6 +480,7 @@ fn main() {
         last_lhm: Mutex::new(None),
         last_alert: Mutex::new(HashMap::new()),
         last_battery_sample: Mutex::new(None),
+        last_log_prune_day: Mutex::new(None),
       });
 
       if startup_floating_mode {
@@ -542,7 +583,8 @@ fn main() {
       show_settings_window,
       broadcast_stats,
       save_panel_positions,
-      open_settings_window
+      open_settings_window,
+      open_log_folder
     ])
     .on_window_event(on_window_event)
     .build(tauri::generate_context!())

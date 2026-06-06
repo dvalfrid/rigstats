@@ -182,4 +182,7 @@ pub struct AppState {
   /// Cached battery sample (refreshed every 10 s). Power draw can change quickly
   /// (charger connect/disconnect) while charge % changes slowly.
   pub last_battery_sample: Mutex<Option<(Instant, BatteryStats)>>,
+  /// Unix day index (seconds / 86400) of the last log-prune run.
+  /// Ensures `prune_old_logs` runs at most once per calendar day.
+  pub last_log_prune_day: Mutex<Option<u64>>,
 }

@@ -268,6 +268,28 @@ input[type=number].alert-num {
         </div>
       </div>
 
+      <div class="card">
+        <div class="section-label">Stats Logging</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label class="toggle-row" for="loggingEnabledInput">
+            <div>
+              <div class="toggle-label">Enable Logging</div>
+              <div class="toggle-sublabel">Saves one CSV row per second to the app data folder</div>
+            </div>
+            <input class="toggle-input" type="checkbox" id="loggingEnabledInput">
+          </label>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:12px;color:var(--text-2);">Retain for</span>
+            <select id="logRetentionDaysSelect">
+              <option value="1">1 day</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+          <button id="btnOpenLogFolder" style="align-self:flex-start;">Open Log Folder</button>
+        </div>
+      </div>
+
     </div><!-- /tab-dashboard -->
 
     <!-- ── Panels tab ─────────────────────────────────────────────────────── -->

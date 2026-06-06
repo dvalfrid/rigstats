@@ -106,6 +106,7 @@ rig-dashboard/
 | `updater.rs` | Background update checks and install flow |
 | `autostart.rs` | Windows startup registry management |
 | `diagnostics.rs` | Diagnostics ZIP export |
+| `logging.rs` | Stats CSV logging — `append_stats_row`, `prune_old_logs`, `current_log_path` |
 | `debug.rs` | Debug log helpers (no deps on other modules) |
 
 ### Module details
