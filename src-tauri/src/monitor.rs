@@ -102,7 +102,9 @@ fn fit_score(monitor_w: u32, monitor_h: u32, target_w: u32, target_h: u32) -> f6
 
 #[cfg(test)]
 mod tests {
-  use super::{fit_score, normalize_profile, normalize_visible_panels, profile_dimensions};
+  use super::{
+    compute_panels_logical_height, fit_score, normalize_profile, normalize_visible_panels, profile_dimensions,
+  };
 
   #[test]
   fn normalize_profile_passes_through_all_valid_names() {
@@ -205,6 +207,58 @@ mod tests {
     let close = fit_score(450, 1920, 480, 1920);
     let far = fit_score(450, 1920, 2160, 3840);
     assert!(close < far);
+  }
+
+  // --- compute_panels_logical_height ---
+  // These tests mirror the JS applyVisiblePanels formula. If the Rust and JS
+  // sides ever drift, the window pre-sizing will be wrong and cause a height
+  // flash on every floating-mode toggle.
+
+  fn panels(keys: &[&str]) -> Vec<String> {
+    keys.iter().map(|s| s.to_string()).collect()
+  }
+
+  #[test]
+  fn panel_height_single_header_at_1x_scale() {
+    // logical_h = 1920, height_scale = 1.0, gap = 1.0
+    // header only: (196 * 1.0).round() = 196, no gap for first panel
+    let h = compute_panels_logical_height(1920, 1.0, &panels(&["header"]));
+    assert_eq!(h, 196.0);
+  }
+
+  #[test]
+  fn panel_height_two_panels_adds_gap() {
+    // header = 196, gap = 1, clock = 148 + 1 gap = 149 → total = 345
+    let h = compute_panels_logical_height(1920, 1.0, &panels(&["header", "clock"]));
+    assert_eq!(h, 345.0);
+  }
+
+  #[test]
+  fn panel_height_default_visible_panels_at_1x_scale() {
+    // ["header","clock","cpu","gpu","ram","net","disk"] at portrait-xl (1920h) scale 1.0
+    // header=196, clock=148+1=149, cpu=320+1=321, gpu=321, ram=321, net=321, disk=321 → 1950
+    let h = compute_panels_logical_height(
+      1920,
+      1.0,
+      &panels(&["header", "clock", "cpu", "gpu", "ram", "net", "disk"]),
+    );
+    assert_eq!(h, 1950.0);
+  }
+
+  #[test]
+  fn panel_height_scales_with_higher_dpi() {
+    // At 2x scale, logical_h = 1920/2 = 960, height_scale = 960/1920 = 0.5
+    // header: (196*0.5).round() = 98, gap = max(1, 0.5.round()) = 1
+    // clock: (148*0.5).round() + 1 = 74 + 1 = 75
+    // total = 98 + 75 = 173
+    let h = compute_panels_logical_height(1920, 2.0, &panels(&["header", "clock"]));
+    assert_eq!(h, 173.0);
+  }
+
+  #[test]
+  fn panel_height_empty_panel_list_is_zero() {
+    let h = compute_panels_logical_height(1920, 1.0, &[]);
+    assert_eq!(h, 0.0);
   }
 }
 

@@ -3564,6 +3564,7 @@ dependencies = [
  "tauri-plugin-notification",
  "tauri-plugin-opener",
  "tauri-plugin-updater",
+ "tempfile",
  "tokio",
  "windows 0.61.3",
  "winreg 0.52.0",

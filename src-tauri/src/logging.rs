@@ -88,6 +88,7 @@ pub fn append_stats_row(payload: &StatsPayload, dir: &Path) -> std::io::Result<(
 
 /// Deletes log files in `dir` older than `days` days, based on modification time.
 /// Silently ignores entries it cannot stat or delete.
+/// Silently returns if `dir` does not exist.
 pub fn prune_old_logs(dir: &Path, days: u32) {
   let now_secs = unix_now_secs();
   let cutoff_secs = days as u64 * 86400;
@@ -112,5 +113,113 @@ pub fn prune_old_logs(dir: &Path, days: u32) {
         }
       }
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::fs;
+  use std::time::{Duration, SystemTime};
+
+  // --- ymd_from_unix ---
+
+  #[test]
+  fn ymd_unix_epoch_is_1970_01_01() {
+    assert_eq!(ymd_from_unix(0), (1970, 1, 1));
+  }
+
+  #[test]
+  fn ymd_known_dates() {
+    // 2024-01-01 00:00:00 UTC
+    assert_eq!(ymd_from_unix(1_704_067_200), (2024, 1, 1));
+    // 2024-02-29 00:00:00 UTC  (leap day)
+    assert_eq!(ymd_from_unix(1_709_164_800), (2024, 2, 29));
+    // 2025-01-01 00:00:00 UTC
+    assert_eq!(ymd_from_unix(1_735_689_600), (2025, 1, 1));
+    // 2000-03-01 00:00:00 UTC  (century year, not a leap year in non-400 centuries)
+    assert_eq!(ymd_from_unix(951_868_800), (2000, 3, 1));
+  }
+
+  #[test]
+  fn ymd_last_second_of_day_stays_on_same_day() {
+    // 2024-01-01 23:59:59 UTC = 1704067200 + 86399
+    assert_eq!(ymd_from_unix(1_704_067_200 + 86_399), (2024, 1, 1));
+  }
+
+  #[test]
+  fn ymd_first_second_of_next_day_rolls_over() {
+    // 2024-01-02 00:00:00 UTC = 1704067200 + 86400
+    assert_eq!(ymd_from_unix(1_704_067_200 + 86_400), (2024, 1, 2));
+  }
+
+  // --- current_log_path ---
+
+  #[test]
+  fn log_path_filename_format() {
+    let dir = std::path::Path::new("/logs");
+    // 2024-03-15 = 1710460800
+    let path = current_log_path(dir, 1_710_460_800);
+    assert_eq!(path.file_name().unwrap(), "rigstats-log-2024-03-15.csv");
+  }
+
+  // --- fmt_opt ---
+
+  #[test]
+  fn fmt_opt_none_is_empty_string() {
+    assert_eq!(fmt_opt(None, 1), "");
+  }
+
+  #[test]
+  fn fmt_opt_rounds_to_precision() {
+    assert_eq!(fmt_opt(Some(3.14159), 1), "3.1");
+    assert_eq!(fmt_opt(Some(42.0), 0), "42");
+    assert_eq!(fmt_opt(Some(0.0), 3), "0.000");
+  }
+
+  // --- prune_old_logs ---
+
+  #[test]
+  fn prune_silently_ignores_missing_directory() {
+    // Should not panic on a non-existent path.
+    prune_old_logs(std::path::Path::new("/nonexistent/path/xyz"), 7);
+  }
+
+  #[test]
+  fn prune_only_deletes_log_files_not_other_files() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let log = dir.path().join("rigstats-log-2024-01-01.csv");
+    let other = dir.path().join("important.txt");
+    let sublog = dir.path().join("rigstats-log-2024-01-02.csv");
+
+    fs::write(&log, "data").unwrap();
+    fs::write(&other, "keep me").unwrap();
+    fs::write(&sublog, "data2").unwrap();
+
+    // Back-date all log files to 30 days ago so they are past the 7-day cutoff.
+    let old = SystemTime::now() - Duration::from_secs(30 * 86400);
+    for path in [&log, &sublog] {
+      let f = fs::OpenOptions::new().write(true).open(path).unwrap();
+      f.set_modified(old).unwrap();
+    }
+    // Also back-date other.txt — it should still NOT be deleted (wrong prefix).
+    let f = fs::OpenOptions::new().write(true).open(&other).unwrap();
+    f.set_modified(old).unwrap();
+
+    prune_old_logs(dir.path(), 7);
+
+    assert!(!log.exists(), "old log should be pruned");
+    assert!(!sublog.exists(), "old log should be pruned");
+    assert!(other.exists(), "non-log file must never be touched");
+  }
+
+  #[test]
+  fn prune_keeps_recent_log_files() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let recent = dir.path().join("rigstats-log-2099-12-31.csv");
+    fs::write(&recent, "data").unwrap();
+    // mtime is "now" by default — well within any retention window.
+    prune_old_logs(dir.path(), 7);
+    assert!(recent.exists(), "recent log must not be pruned");
   }
 }
