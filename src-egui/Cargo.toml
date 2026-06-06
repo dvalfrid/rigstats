@@ -1,0 +1,23 @@
+[package]
+name = "rigstats-egui"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+
+[[bin]]
+name = "rigstats-egui"
+path = "src/main.rs"
+
+[dependencies]
+rigstats-backend = { path = "../rigstats-backend" }
+eframe = "0.34"
+egui = "0.34"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
+sysinfo = "0.30"
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"

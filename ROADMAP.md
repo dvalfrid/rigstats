@@ -771,6 +771,24 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
+## egui migration — replace Tauri/WebView2 with native egui 🔲
+
+**Background:** WebView2 (Chromium) costs 2–4 % CPU at idle due to its internal render loop, even though the dashboard only updates once per second. Replacing the frontend with egui + `ctx.request_repaint_after(Duration::from_secs(1))` allows the process to sleep completely between repaints.
+
+**Full plan:** `docs/egui-migration.md` — 8 phases, each producing a runnable binary.
+
+### Phase 1 — Scaffold + data pipeline ✓
+
+- Created `rigstats-backend` shared lib (Tauri-free copies of `lhm.rs`, `hardware.rs`, `stats.rs`, `settings.rs`, `debug.rs`, `lhm_process.rs`, `logging.rs`, `autostart.rs`). Key API change: `AppHandle` replaced by `&Path` for settings/debug path resolution.
+- Created `src-egui` binary (`eframe` 0.34 + `egui` 0.34). Poll thread via `tokio::spawn` sends stats over `std::sync::mpsc` to the egui main thread.
+- `ctx.request_repaint_after(1 s)` wired — process sleeps between ticks.
+- Verified: window shows live CPU %, GPU %, RAM, LHM pipe state. CPU idle ~0.5 % in debug build.
+- Root `Cargo.toml` workspace covers all three crates; existing Tauri npm scripts unaffected.
+
+**Remaining phases:** 2 (panels + sparklines) → 3 (all panels) → 4 (tray, window placement) → 5 (settings windows) → 6 (floating mode) → 7 (autostart, logging, auto-update) → 8 (remove Tauri, ship).
+
+---
+
 ## UI performance — lighter rendering strategy 🔲
 
 **Background:** The dashboard updates the DOM every second via vanilla JS. As panel count grows (floating mode, battery, motherboard, process) layout cost increases. It is worth investigating whether a simpler or faster rendering model can reduce CPU and GPU overhead on the UI thread.

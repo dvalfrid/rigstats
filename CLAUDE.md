@@ -5,6 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+# --- egui migration (feat/egui-migration branch) ---
+
+# Build egui binary (debug)
+cargo build --manifest-path src-egui/Cargo.toml
+
+# Run egui binary directly
+.\target\debug\rigstats-egui.exe
+
+# Check egui + backend for errors
+cargo check --manifest-path src-egui/Cargo.toml
+
+# Clippy on backend + egui
+cargo clippy --manifest-path rigstats-backend/Cargo.toml -- -D warnings
+cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings
+
+# --- Tauri (production, main branch) ---
+
 # Build sensor sidecar (debug, requires .NET 10 SDK)
 dotnet build sensor-sidecar/sensor-sidecar.csproj
 
@@ -105,6 +122,16 @@ These four files must be consistent with the code at all times. Check all four b
 ## Architecture Overview
 
 This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardware telemetry on a secondary portrait monitor. It has no bundler/build step for the frontend — vanilla JS ES modules are served directly from `frontend/`.
+
+**Active migration:** `feat/egui-migration` branch replaces the Tauri/WebView2 frontend with a native egui UI to eliminate the 2–4 % idle CPU cost. The repo is a Cargo workspace (`Cargo.toml` at root) with three members:
+
+| Crate | Path | Role |
+|---|---|---|
+| `rigstats` | `src-tauri/` | Production Tauri binary (unchanged) |
+| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules with Tauri coupling removed (`AppHandle` → `&Path` for settings/debug/lhm functions) |
+| `rigstats-egui` | `src-egui/` | New egui binary (Phase 1 scaffold; grows each phase) |
+
+`src-tauri` builds and runs independently; existing npm scripts remain valid. The egui binary reads settings from the same `%APPDATA%\se.codeby.rigstats\` directory as the Tauri app. The sidecar pipe only accepts one client at a time, so LHM data (temps, GPU) is only available in egui when the Tauri app is not running.
 
 ### Data flow
 

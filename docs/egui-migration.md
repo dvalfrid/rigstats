@@ -46,12 +46,12 @@ completely between repaints → 0 % CPU at idle vs Chromium's constant render lo
 ### Phase 1 — Scaffold + data pipeline ✅ testable
 *Goal: prove the architecture works end-to-end before any UI work.*
 
-- [ ] Create `src-egui/` as a new Cargo binary in a workspace alongside `src-tauri/`
-- [ ] Add `eframe`, `egui` dependencies
-- [ ] Reuse `lhm.rs`, `hardware.rs`, `stats.rs`, `settings.rs` via workspace path dep
-- [ ] Spawn poll thread (1 s tick), send `StatsPayload` over `mpsc::channel` to UI thread
-- [ ] egui window shows raw text: CPU %, GPU %, RAM used, pipe connected yes/no
-- [ ] `ctx.request_repaint_after(1s)` wired up
+- [x] Create `src-egui/` as a new Cargo binary in a workspace alongside `src-tauri/`
+- [x] Add `eframe`, `egui` dependencies
+- [x] Reuse `lhm.rs`, `hardware.rs`, `stats.rs`, `settings.rs` via workspace path dep
+- [x] Spawn poll thread (1 s tick), send `StatsPayload` over `mpsc::channel` to UI thread
+- [x] egui window shows raw text: CPU %, GPU %, RAM used, pipe connected yes/no
+- [x] `ctx.request_repaint_after(1s)` wired up
 
 **Done when:** app launches, shows a live-updating window with real sensor data,
 Task Manager shows < 0.5 % CPU for the process at idle.
@@ -198,4 +198,5 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 1 not started. Tauri version is production-ready at v1.25.0.
+> Phase 1 complete. `rigstats-backend` lib + `src-egui` binary both compile and run.
+> CPU idle ~0.5 % (debug build). Tauri production build at v1.25.0 is unaffected.
