@@ -5,6 +5,9 @@
 [![License](https://img.shields.io/github/license/dvalfrid/rigstats)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
+[![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
+[![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
+[![Release pipeline](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml)
 
 - A gaming stats dashboard optimized for a vertical secondary display (450×1920).
 
