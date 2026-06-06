@@ -61,11 +61,11 @@ Task Manager shows < 0.5 % CPU for the process at idle.
 ### Phase 2 — Core panels (CPU, GPU, RAM) ✅ testable
 *Goal: establish the panel component pattern and sparklines.*
 
-- [ ] Implement `spark.rs` — ring buffer + egui `Painter` polyline drawing
-- [ ] `tempcolor.rs` — port JS threshold → color logic to Rust
-- [ ] CPU panel: load bar, sparkline, temp, freq, power
-- [ ] GPU panel: load bar, sparkline, temp, hotspot, clocks, VRAM, power, fan
-- [ ] RAM panel: used/total bar, sparkline, spec metadata
+- [x] Implement `spark.rs` — ring buffer + egui `Painter` polyline drawing
+- [x] `tempcolor.rs` — port JS threshold → color logic to Rust
+- [x] CPU panel: load bar, sparkline, temp, freq, power
+- [x] GPU panel: load bar, sparkline, temp, hotspot, clocks, VRAM, power, fan
+- [x] RAM panel: used/total bar, sparkline, spec metadata
 - [ ] Panel sizing follows profile height (port `compute_panels_logical_height`)
 
 **Done when:** three panels render correctly with live data and sparklines update
@@ -198,5 +198,6 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 1 complete. `rigstats-backend` lib + `src-egui` binary both compile and run.
-> CPU idle ~0.5 % (debug build). Tauri production build at v1.25.0 is unaffected.
+> Phase 2 complete. CPU, GPU, and RAM panels render live data with sparklines.
+> `ui.columns()` replaced with `egui::Grid` to avoid eframe 0.34 NaN-layout panic.
+> Panel sizing from profile (`compute_panels_logical_height`) deferred to Phase 3.
