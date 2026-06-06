@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.25.0](https://github.com/dvalfrid/rigstats/compare/v1.24.0...v1.25.0) (2026-06-06)
+
+
+### Features
+
+* **logging:** add stats CSV logging with tray recording indicator ([696352b](https://github.com/dvalfrid/rigstats/commit/696352b2ea3c6f58cbd0151e25a41e7e73a86117))
+
 ## [1.24.0](https://github.com/dvalfrid/rigstats/compare/v1.23.0...v1.24.0) (2026-06-05)
 
 
