@@ -15,6 +15,11 @@ use tray_icon::{
   Icon, TrayIconBuilder,
 };
 
+/// Commands sent from the tray-polling thread to the UI thread.
+enum TrayCmd {
+  Toggle,
+}
+
 fn app_data_dir() -> PathBuf {
   let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
   PathBuf::from(appdata).join("se.codeby.rigstats")
@@ -206,10 +211,11 @@ fn build_tray() -> Tray {
 
 struct RigStatsApp {
   receiver: mpsc::Receiver<PollStats>,
+  tray_rx: mpsc::Receiver<TrayCmd>,
   latest: PollStats,
   visible_panels: Vec<String>,
   opacity: f32,
-  tray: Tray,
+  _tray: Tray,
   window_visible: bool,
   // Sparklines
   cpu_spark: Sparkline,
@@ -225,16 +231,18 @@ struct RigStatsApp {
 impl RigStatsApp {
   fn new(
     receiver: mpsc::Receiver<PollStats>,
+    tray_rx: mpsc::Receiver<TrayCmd>,
     visible_panels: Vec<String>,
     opacity: f32,
     tray: Tray,
   ) -> Self {
     Self {
       receiver,
+      tray_rx,
       latest: PollStats::default(),
       visible_panels,
       opacity,
-      tray,
+      _tray: tray,
       window_visible: true,
       cpu_spark: Sparkline::new(60, 100.0),
       gpu_spark: Sparkline::new(60, 100.0),
@@ -264,22 +272,11 @@ impl eframe::App for RigStatsApp {
       self.latest = stats;
     }
 
-    // Handle tray menu events.
-    if let Ok(event) = MenuEvent::receiver().try_recv() {
-      if event.id == self.tray.quit_id {
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-      } else if event.id == self.tray.show_id {
-        self.window_visible = !self.window_visible;
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
-      }
-    }
-
-    // Handle tray icon clicks (left double-click toggles visibility).
-    if let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
-      if matches!(event, tray_icon::TrayIconEvent::DoubleClick { .. }) {
-        self.window_visible = !self.window_visible;
-        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
-      }
+    // Handle tray commands forwarded by the background polling thread.
+    // Handle tray commands forwarded by the background polling thread.
+    while self.tray_rx.try_recv().is_ok() {
+      self.window_visible = !self.window_visible;
+      ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
     }
 
     // Reset disk page if drive count changed.
@@ -576,7 +573,37 @@ fn main() {
       cc.egui_ctx.set_visuals(visuals);
 
       let tray = build_tray();
-      Ok(Box::new(RigStatsApp::new(rx, visible_panels, opacity, tray)))
+      let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
+
+      // Spawn a thread that polls tray events at 50 ms intervals and wakes the
+      // egui event loop via request_repaint().  Quit is handled here directly
+      // with process::exit so it is never delayed by a missed repaint.
+      let ctx = cc.egui_ctx.clone();
+      let quit_id = tray.quit_id.clone();
+      let show_id = tray.show_id.clone();
+      std::thread::spawn(move || loop {
+        let mut repaint = false;
+        if let Ok(ev) = MenuEvent::receiver().try_recv() {
+          if ev.id == quit_id {
+            std::process::exit(0);
+          } else if ev.id == show_id {
+            let _ = tray_tx.send(TrayCmd::Toggle);
+            repaint = true;
+          }
+        }
+        if let Ok(ev) = tray_icon::TrayIconEvent::receiver().try_recv() {
+          if matches!(ev, tray_icon::TrayIconEvent::DoubleClick { .. }) {
+            let _ = tray_tx.send(TrayCmd::Toggle);
+            repaint = true;
+          }
+        }
+        if repaint {
+          ctx.request_repaint();
+        }
+        std::thread::sleep(Duration::from_millis(50));
+      });
+
+      Ok(Box::new(RigStatsApp::new(rx, tray_rx, visible_panels, opacity, tray)))
     }),
   )
   .expect("eframe");
