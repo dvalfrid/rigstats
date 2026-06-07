@@ -61,7 +61,7 @@ pub fn show(
 ) {
   if ctx.input(|i| i.viewport().close_requested()) {
     open.store(false, Ordering::Relaxed);
-    main_ctx.request_repaint();
+    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     return;
   }
@@ -115,7 +115,7 @@ pub fn show(
           (Ok(()), Ok(())) => {
             *saved.lock().unwrap() = state.draft.clone();
             reload.store(true, Ordering::Relaxed);
-            main_ctx.request_repaint(); // apply changes immediately
+            main_ctx.request_repaint_of(egui::ViewportId::ROOT); // apply changes immediately
             state.error = None;
             open.store(false, Ordering::Relaxed);
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -128,7 +128,7 @@ pub fn show(
 
       if ui.button("Cancel").clicked() {
         open.store(false, Ordering::Relaxed);
-        main_ctx.request_repaint();
+        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
       }
     });

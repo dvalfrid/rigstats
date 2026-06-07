@@ -29,7 +29,7 @@ pub fn show(
 ) {
   if ctx.input(|i| i.viewport().close_requested()) {
     open.store(false, Ordering::Relaxed);
-    main_ctx.request_repaint();
+    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     return;
   }
