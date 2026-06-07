@@ -1,13 +1,15 @@
 mod panels;
 mod spark;
 mod tempcolor;
+mod windows;
 
 use eframe::egui;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, settings};
 use spark::Sparkline;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use tray_icon::{
@@ -18,6 +20,10 @@ use tray_icon::{
 /// Commands sent from the tray-polling thread to the UI thread.
 enum TrayCmd {
   Toggle,
+  OpenSettings,
+  OpenAbout,
+  OpenStatus,
+  OpenUpdater,
 }
 
 fn app_data_dir() -> PathBuf {
@@ -175,6 +181,10 @@ fn pick_window_position() -> [f32; 2] {
 struct Tray {
   _icon: tray_icon::TrayIcon,
   show_id: tray_icon::menu::MenuId,
+  settings_id: tray_icon::menu::MenuId,
+  about_id: tray_icon::menu::MenuId,
+  status_id: tray_icon::menu::MenuId,
+  updater_id: tray_icon::menu::MenuId,
   quit_id: tray_icon::menu::MenuId,
 }
 
@@ -187,12 +197,26 @@ fn load_tray_icon() -> Icon {
 
 fn build_tray() -> Tray {
   let show_item = MenuItem::new("Show / Hide", true, None);
+  let settings_item = MenuItem::new("Settings", true, None);
+  let about_item = MenuItem::new("About", true, None);
+  let status_item = MenuItem::new("Status", true, None);
+  let updater_item = MenuItem::new("Check for Updates", true, None);
   let quit_item = MenuItem::new("Quit", true, None);
+
   let show_id = show_item.id().clone();
+  let settings_id = settings_item.id().clone();
+  let about_id = about_item.id().clone();
+  let status_id = status_item.id().clone();
+  let updater_id = updater_item.id().clone();
   let quit_id = quit_item.id().clone();
 
   let menu = Menu::new();
   let _ = menu.append(&show_item);
+  let _ = menu.append(&PredefinedMenuItem::separator());
+  let _ = menu.append(&settings_item);
+  let _ = menu.append(&about_item);
+  let _ = menu.append(&status_item);
+  let _ = menu.append(&updater_item);
   let _ = menu.append(&PredefinedMenuItem::separator());
   let _ = menu.append(&quit_item);
 
@@ -204,7 +228,7 @@ fn build_tray() -> Tray {
     .build()
     .expect("tray icon");
 
-  Tray { _icon: tray_icon, show_id, quit_id }
+  Tray { _icon: tray_icon, show_id, settings_id, about_id, status_id, updater_id, quit_id }
 }
 
 // ── eframe application ────────────────────────────────────────────────────────
@@ -226,16 +250,33 @@ struct RigStatsApp {
   // Disk page state
   disk_page: usize,
   disk_page_tick: u32,
+  // Secondary windows
+  settings_open: Arc<AtomicBool>,
+  about_open: Arc<AtomicBool>,
+  status_open: Arc<AtomicBool>,
+  updater_open: Arc<AtomicBool>,
+  settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
+  status_win: Arc<Mutex<windows::status::StatusState>>,
+  updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
+  // Shared settings (updated on save, applied each frame)
+  current_settings: Arc<Mutex<settings::Settings>>,
+  settings_reload: Arc<AtomicBool>,
+  dir: Arc<PathBuf>,
 }
 
 impl RigStatsApp {
+  #[allow(clippy::too_many_arguments)]
   fn new(
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
     visible_panels: Vec<String>,
     opacity: f32,
     tray: Tray,
+    current_settings: Arc<Mutex<settings::Settings>>,
+    settings_reload: Arc<AtomicBool>,
+    dir: Arc<PathBuf>,
   ) -> Self {
+    let init_settings = current_settings.lock().unwrap().clone();
     Self {
       receiver,
       tray_rx,
@@ -251,6 +292,18 @@ impl RigStatsApp {
       net_dn_spark: Sparkline::new(60, 100.0),
       disk_page: 0,
       disk_page_tick: 0,
+      settings_open: Arc::new(AtomicBool::new(false)),
+      about_open: Arc::new(AtomicBool::new(false)),
+      status_open: Arc::new(AtomicBool::new(false)),
+      updater_open: Arc::new(AtomicBool::new(false)),
+      settings_win: Arc::new(Mutex::new(
+        windows::settings::SettingsWindow::from_settings(&init_settings),
+      )),
+      status_win: Arc::new(Mutex::new(windows::status::StatusState::load(&dir))),
+      updater_win: Arc::new(Mutex::new(windows::updater::UpdaterState::default())),
+      current_settings,
+      settings_reload,
+      dir,
     }
   }
 
@@ -273,10 +326,103 @@ impl eframe::App for RigStatsApp {
     }
 
     // Handle tray commands forwarded by the background polling thread.
+    // Apply settings saved from the settings window.
+    if self.settings_reload.swap(false, Ordering::Relaxed) {
+      let s = self.current_settings.lock().unwrap();
+      self.visible_panels = s.visible_panels.clone();
+      self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
+    }
+
     // Handle tray commands forwarded by the background polling thread.
-    while self.tray_rx.try_recv().is_ok() {
-      self.window_visible = !self.window_visible;
-      ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+    while let Ok(cmd) = self.tray_rx.try_recv() {
+      match cmd {
+        TrayCmd::Toggle => {
+          self.window_visible = !self.window_visible;
+          ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+        }
+        TrayCmd::OpenSettings => {
+          // Re-initialise draft from current settings each time the window opens.
+          let s = self.current_settings.lock().unwrap().clone();
+          *self.settings_win.lock().unwrap() =
+            windows::settings::SettingsWindow::from_settings(&s);
+          self.settings_open.store(true, Ordering::Relaxed);
+        }
+        TrayCmd::OpenAbout => {
+          self.about_open.store(true, Ordering::Relaxed);
+        }
+        TrayCmd::OpenStatus => {
+          *self.status_win.lock().unwrap() = windows::status::StatusState::load(&self.dir);
+          self.status_open.store(true, Ordering::Relaxed);
+        }
+        TrayCmd::OpenUpdater => {
+          self.updater_open.store(true, Ordering::Relaxed);
+        }
+      }
+    }
+
+    // ── Secondary windows ─────────────────────────────────────────────────
+
+    if self.settings_open.load(Ordering::Relaxed) {
+      let open = self.settings_open.clone();
+      let state = self.settings_win.clone();
+      let dir = self.dir.clone();
+      let saved = self.current_settings.clone();
+      let reload = self.settings_reload.clone();
+      ui.ctx().show_viewport_deferred(
+        egui::ViewportId::from_hash_of("settings"),
+        egui::ViewportBuilder::default()
+          .with_title("RigStats — Settings")
+          .with_inner_size([560.0, 600.0])
+          .with_resizable(false),
+        move |ctx, _class| {
+          windows::settings::show(ctx, &open, &state, &dir, &saved, &reload);
+        },
+      );
+    }
+
+    if self.about_open.load(Ordering::Relaxed) {
+      let open = self.about_open.clone();
+      let dir = self.dir.clone();
+      ui.ctx().show_viewport_deferred(
+        egui::ViewportId::from_hash_of("about"),
+        egui::ViewportBuilder::default()
+          .with_title("About RigStats")
+          .with_inner_size([360.0, 280.0])
+          .with_resizable(false),
+        move |ctx, _class| {
+          windows::about::show(ctx, &open, &dir);
+        },
+      );
+    }
+
+    if self.status_open.load(Ordering::Relaxed) {
+      let open = self.status_open.clone();
+      let state = self.status_win.clone();
+      let dir = self.dir.clone();
+      ui.ctx().show_viewport_deferred(
+        egui::ViewportId::from_hash_of("status"),
+        egui::ViewportBuilder::default()
+          .with_title("RigStats — Status")
+          .with_inner_size([520.0, 500.0]),
+        move |ctx, _class| {
+          windows::status::show(ctx, &open, &state, &dir);
+        },
+      );
+    }
+
+    if self.updater_open.load(Ordering::Relaxed) {
+      let open = self.updater_open.clone();
+      let state = self.updater_win.clone();
+      ui.ctx().show_viewport_deferred(
+        egui::ViewportId::from_hash_of("updater"),
+        egui::ViewportBuilder::default()
+          .with_title("RigStats — Updates")
+          .with_inner_size([340.0, 220.0])
+          .with_resizable(false),
+        move |ctx, _class| {
+          windows::updater::show(ctx, &open, &state);
+        },
+      );
     }
 
     // Reset disk page if drive count changed.
@@ -581,13 +727,30 @@ fn main() {
       let ctx = cc.egui_ctx.clone();
       let quit_id = tray.quit_id.clone();
       let show_id = tray.show_id.clone();
+      let settings_id = tray.settings_id.clone();
+      let about_id = tray.about_id.clone();
+      let status_id = tray.status_id.clone();
+      let updater_id = tray.updater_id.clone();
       std::thread::spawn(move || loop {
         let mut repaint = false;
         if let Ok(ev) = MenuEvent::receiver().try_recv() {
-          if ev.id == quit_id {
+          let cmd = if ev.id == quit_id {
             std::process::exit(0);
           } else if ev.id == show_id {
-            let _ = tray_tx.send(TrayCmd::Toggle);
+            Some(TrayCmd::Toggle)
+          } else if ev.id == settings_id {
+            Some(TrayCmd::OpenSettings)
+          } else if ev.id == about_id {
+            Some(TrayCmd::OpenAbout)
+          } else if ev.id == status_id {
+            Some(TrayCmd::OpenStatus)
+          } else if ev.id == updater_id {
+            Some(TrayCmd::OpenUpdater)
+          } else {
+            None
+          };
+          if let Some(c) = cmd {
+            let _ = tray_tx.send(c);
             repaint = true;
           }
         }
@@ -603,7 +766,20 @@ fn main() {
         std::thread::sleep(Duration::from_millis(50));
       });
 
-      Ok(Box::new(RigStatsApp::new(rx, tray_rx, visible_panels, opacity, tray)))
+      let current_settings = Arc::new(Mutex::new(settings::load_settings(&dir)));
+      let settings_reload = Arc::new(AtomicBool::new(false));
+      let dir_arc = Arc::new(dir.clone());
+
+      Ok(Box::new(RigStatsApp::new(
+        rx,
+        tray_rx,
+        visible_panels,
+        opacity,
+        tray,
+        current_settings,
+        settings_reload,
+        dir_arc,
+      )))
     }),
   )
   .expect("eframe");

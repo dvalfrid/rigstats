@@ -109,14 +109,16 @@ menu works, always-on-top and opacity behave as before.
 ### Phase 5 — Secondary windows ✅ testable
 *Goal: Settings, About, Status fully functional.*
 
-- [ ] Settings window via `ctx.show_viewport_deferred()` — four-tab layout
+- [x] Settings window via `ctx.show_viewport_deferred()` — four-tab layout
   - Dashboard (profile, floating mode toggle)
-  - Panels (drag-to-reorder, toggle visibility)
+  - Panels (↑/↓ reorder, toggle visibility)
   - Alerts (thresholds, cooldown, notify-on-crit)
-  - Appearance (name, opacity, always-on-top, autostart, theme)
-- [ ] About window
-- [ ] Status/diagnostics window (debug log, dependency health, collect-diagnostics button)
-- [ ] Updater window (check, changelog, install flow)
+  - Appearance (name, opacity, always-on-top, autostart, logging)
+- [x] About window (version, description, open logs folder)
+- [x] Status window (debug log viewer, sensor service status, refresh)
+- [x] Updater window (version display, check button stub — actual HTTP check in Phase 7)
+- [x] All windows opened from tray menu
+- [x] Settings changes (visible_panels, opacity) applied to main window immediately on save
 
 **Done when:** all four secondary windows open, save settings correctly, and
 the dashboard reacts to changes immediately.
@@ -200,6 +202,7 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 4 complete. Tray icon (Show/Hide + Quit), borderless window, always-on-top,
-> opacity via clear_color, and portrait monitor auto-placement via EnumDisplayMonitors.
-> DWM inset compensation and tray recording indicator deferred to later phases.
+> Phase 5 complete. Settings (four tabs), About, Status, and Updater windows via
+> deferred egui viewports. All opened from tray menu. Settings save back to disk;
+> visible_panels and opacity applied immediately. Updater is a UI stub — actual HTTP
+> check against latest.json will be implemented in Phase 7.
