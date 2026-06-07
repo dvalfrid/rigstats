@@ -76,14 +76,14 @@ every second without visual glitches.
 ### Phase 3 — Remaining panels ✅ testable
 *Goal: reach full panel coverage.*
 
-- [ ] Header panel (hostname, CPU/GPU label, brand logo as `egui::Image`)
-- [ ] Clock panel (time, date, uptime)
-- [ ] Network panel (up/down bars, sparkline, ping, interface name)
-- [ ] Disk panel (read/write bars, per-drive usage, temps, page cycling)
-- [ ] Motherboard panel (fans, temps, voltages in three-column grid)
-- [ ] Process panel (top 8 processes, name + CPU % + RAM)
-- [ ] Battery panel (charge %, charging state, power draw)
-- [ ] Panel visibility + ordering from settings applied at startup
+- [x] Header panel (hostname, CPU label, LHM status indicator)
+- [x] Clock panel (time, date, uptime)
+- [x] Network panel (up/down Mbps with sparklines, ping, interface name)
+- [x] Disk panel (read/write speeds, per-drive bars with temps, page cycling)
+- [x] Motherboard panel (fans, temps, voltages in Grid layout)
+- [x] Process panel (top 8 processes by CPU, name + CPU % + RAM)
+- [x] Battery panel (charge %, charging state, time remaining, power draw)
+- [x] Panel visibility + ordering from settings applied at startup
 
 **Done when:** full dashboard matches current feature coverage on a portrait monitor.
 
@@ -198,6 +198,6 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 2 complete. CPU, GPU, and RAM panels render live data with sparklines.
-> `ui.columns()` replaced with `egui::Grid` to avoid eframe 0.34 NaN-layout panic.
-> Panel sizing from profile (`compute_panels_logical_height`) deferred to Phase 3.
+> Phase 3 complete. All 10 panels implemented (header, clock, cpu, gpu, ram, net,
+> disk, motherboard, process, battery). Panel visibility read from settings at startup.
+> Disk page cycling and battery/ping caching ported from Tauri backend logic.
