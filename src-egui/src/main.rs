@@ -158,6 +158,25 @@ mod win_monitor {
   }
 }
 
+/// Returns the (x, y) top-left position to center a window of `w × h` on the
+/// first landscape monitor (or first monitor if all are portrait).
+fn dialog_center(w: f32, h: f32) -> [f32; 2] {
+  #[cfg(windows)]
+  {
+    let monitors = win_monitor::list();
+    let picked = monitors
+      .iter()
+      .find(|&&(l, t, r, b)| (r - l) >= (b - t)) // landscape first
+      .or_else(|| monitors.first());
+    if let Some(&(l, t, r, b)) = picked {
+      let cx = (l + r) as f32 / 2.0;
+      let cy = (t + b) as f32 / 2.0;
+      return [cx - w / 2.0, cy - h / 2.0];
+    }
+  }
+  [100.0, 100.0]
+}
+
 /// Returns (x, y) position for the window — top-left of the best portrait monitor.
 /// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
 fn pick_window_position() -> [f32; 2] {
@@ -362,20 +381,25 @@ impl eframe::App for RigStatsApp {
 
     // ── Secondary windows ─────────────────────────────────────────────────
 
+    let main_ctx = ui.ctx().clone();
+
     if self.settings_open.load(Ordering::Relaxed) {
       let open = self.settings_open.clone();
       let state = self.settings_win.clone();
       let dir = self.dir.clone();
       let saved = self.current_settings.clone();
       let reload = self.settings_reload.clone();
+      let mctx = main_ctx.clone();
+      let [px, py] = dialog_center(560.0, 600.0);
       ui.ctx().show_viewport_deferred(
         egui::ViewportId::from_hash_of("settings"),
         egui::ViewportBuilder::default()
           .with_title("RigStats — Settings")
           .with_inner_size([560.0, 600.0])
+          .with_position([px, py])
           .with_resizable(false),
         move |ctx, _class| {
-          windows::settings::show(ctx, &open, &state, &dir, &saved, &reload);
+          windows::settings::show(ctx, &mctx, &open, &state, &dir, &saved, &reload);
         },
       );
     }
@@ -383,14 +407,17 @@ impl eframe::App for RigStatsApp {
     if self.about_open.load(Ordering::Relaxed) {
       let open = self.about_open.clone();
       let dir = self.dir.clone();
+      let mctx = main_ctx.clone();
+      let [px, py] = dialog_center(360.0, 280.0);
       ui.ctx().show_viewport_deferred(
         egui::ViewportId::from_hash_of("about"),
         egui::ViewportBuilder::default()
           .with_title("About RigStats")
           .with_inner_size([360.0, 280.0])
+          .with_position([px, py])
           .with_resizable(false),
         move |ctx, _class| {
-          windows::about::show(ctx, &open, &dir);
+          windows::about::show(ctx, &mctx, &open, &dir);
         },
       );
     }
@@ -399,13 +426,16 @@ impl eframe::App for RigStatsApp {
       let open = self.status_open.clone();
       let state = self.status_win.clone();
       let dir = self.dir.clone();
+      let mctx = main_ctx.clone();
+      let [px, py] = dialog_center(520.0, 500.0);
       ui.ctx().show_viewport_deferred(
         egui::ViewportId::from_hash_of("status"),
         egui::ViewportBuilder::default()
           .with_title("RigStats — Status")
-          .with_inner_size([520.0, 500.0]),
+          .with_inner_size([520.0, 500.0])
+          .with_position([px, py]),
         move |ctx, _class| {
-          windows::status::show(ctx, &open, &state, &dir);
+          windows::status::show(ctx, &mctx, &open, &state, &dir);
         },
       );
     }
@@ -413,14 +443,17 @@ impl eframe::App for RigStatsApp {
     if self.updater_open.load(Ordering::Relaxed) {
       let open = self.updater_open.clone();
       let state = self.updater_win.clone();
+      let mctx = main_ctx.clone();
+      let [px, py] = dialog_center(340.0, 220.0);
       ui.ctx().show_viewport_deferred(
         egui::ViewportId::from_hash_of("updater"),
         egui::ViewportBuilder::default()
           .with_title("RigStats — Updates")
           .with_inner_size([340.0, 220.0])
+          .with_position([px, py])
           .with_resizable(false),
         move |ctx, _class| {
-          windows::updater::show(ctx, &open, &state);
+          windows::updater::show(ctx, &mctx, &open, &state);
         },
       );
     }

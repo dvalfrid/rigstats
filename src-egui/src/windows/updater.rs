@@ -21,9 +21,15 @@ impl Default for UpdaterState {
 }
 
 #[allow(deprecated)] // CentralPanel::show() is correct for deferred viewport callbacks
-pub fn show(ctx: &egui::Context, open: &Arc<AtomicBool>, state: &Arc<Mutex<UpdaterState>>) {
+pub fn show(
+  ctx: &egui::Context,
+  main_ctx: &egui::Context,
+  open: &Arc<AtomicBool>,
+  state: &Arc<Mutex<UpdaterState>>,
+) {
   if ctx.input(|i| i.viewport().close_requested()) {
     open.store(false, Ordering::Relaxed);
+    main_ctx.request_repaint();
     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     return;
   }
