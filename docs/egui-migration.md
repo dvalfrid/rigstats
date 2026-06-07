@@ -92,12 +92,14 @@ every second without visual glitches.
 ### Phase 4 — Window chrome ✅ testable
 *Goal: correct placement and tray integration.*
 
-- [ ] `tray-icon` crate: system tray icon + context menu (Show, Settings, Quit, etc.)
-- [ ] Always-on-top toggle via `eframe::WindowBuilder`
-- [ ] Opacity/transparency (eframe window decorations off + clear color alpha)
-- [ ] Monitor selection: port `pick_target_monitor` to winit monitor enumeration
-- [ ] Window placed flush to monitor edge (DWM inset compensation, same logic as now)
-- [ ] Recording indicator: swap tray icon when logging is active
+- [x] `tray-icon` crate: system tray icon with Show/Hide + Quit menu
+- [x] Always-on-top applied at startup from `window_layer` setting
+- [x] Opacity via `clear_color()` alpha + `with_transparent(true)` (background transparency)
+- [x] Borderless window: `with_decorations(false)`
+- [x] Monitor selection: `EnumDisplayMonitors` picks portrait monitor (height > width)
+- [x] Window sized from `dashboard_profile` setting (`profile_to_size()`)
+- [ ] DWM inset compensation (flush-to-edge positioning, ~3 px detail, deferred)
+- [ ] Recording indicator: swap tray icon when logging is active (deferred to Phase 7)
 
 **Done when:** app lands on the correct portrait monitor with the right size, tray
 menu works, always-on-top and opacity behave as before.
@@ -198,6 +200,6 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 3 complete. All 10 panels implemented (header, clock, cpu, gpu, ram, net,
-> disk, motherboard, process, battery). Panel visibility read from settings at startup.
-> Disk page cycling and battery/ping caching ported from Tauri backend logic.
+> Phase 4 complete. Tray icon (Show/Hide + Quit), borderless window, always-on-top,
+> opacity via clear_color, and portrait monitor auto-placement via EnumDisplayMonitors.
+> DWM inset compensation and tray recording indicator deferred to later phases.

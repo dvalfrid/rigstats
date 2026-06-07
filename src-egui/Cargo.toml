@@ -15,6 +15,11 @@ egui = "0.34"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
 sysinfo = "0.30"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+tray-icon = "0.23"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winuser", "windef"] }
 
 [lints.rust]
 unsafe_code = "deny"

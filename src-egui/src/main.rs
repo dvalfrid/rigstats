@@ -10,6 +10,10 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
+use tray_icon::{
+  menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+  Icon, TrayIconBuilder,
+};
 
 fn app_data_dir() -> PathBuf {
   let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
@@ -87,27 +91,151 @@ pub struct PollStats {
   pub lhm_connected: bool,
 }
 
+// ── Profile window dimensions ─────────────────────────────────────────────────
+
+fn profile_to_size(profile: &str) -> [f32; 2] {
+  match profile {
+    "portrait-xl" => [450.0, 1920.0],
+    "portrait-slim" => [480.0, 1920.0],
+    "portrait-hd" => [720.0, 1280.0],
+    "portrait-wxga" => [800.0, 1280.0],
+    "portrait-fhd" => [1080.0, 1920.0],
+    "portrait-wuxga" => [1200.0, 1920.0],
+    "portrait-qhd" => [1440.0, 2560.0],
+    "portrait-hdplus" => [768.0, 1366.0],
+    "portrait-900x1600" => [900.0, 1600.0],
+    "portrait-1050x1680" => [1050.0, 1680.0],
+    "portrait-1600x2560" => [1600.0, 2560.0],
+    "portrait-4k" => [2160.0, 3840.0],
+    "portrait-fhd-side" => [253.0, 1080.0],
+    "portrait-qhd-side" => [338.0, 1440.0],
+    "portrait-4k-side" => [506.0, 2160.0],
+    _ => [400.0, 780.0],
+  }
+}
+
+// ── Windows monitor enumeration ───────────────────────────────────────────────
+
+#[cfg(windows)]
+mod win_monitor {
+  use winapi::shared::minwindef::LPARAM;
+  use winapi::shared::windef::{HDC, HMONITOR, LPRECT};
+  use winapi::um::winuser::EnumDisplayMonitors;
+
+  /// Returns (left, top, right, bottom) for every connected display.
+  #[allow(unsafe_code)]
+  pub fn list() -> Vec<(i32, i32, i32, i32)> {
+    #[allow(unsafe_code)]
+    unsafe extern "system" fn callback(_: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
+      let v = &mut *(data as *mut Vec<(i32, i32, i32, i32)>);
+      let r = *lp;
+      v.push((r.left, r.top, r.right, r.bottom));
+      1
+    }
+
+    let mut rects: Vec<(i32, i32, i32, i32)> = Vec::new();
+    #[allow(unsafe_code)]
+    unsafe {
+      EnumDisplayMonitors(
+        std::ptr::null_mut(),
+        std::ptr::null_mut(),
+        Some(callback),
+        &mut rects as *mut _ as LPARAM,
+      );
+    }
+    rects
+  }
+}
+
+/// Returns (x, y) position for the window — top-left of the best portrait monitor.
+/// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
+fn pick_window_position() -> [f32; 2] {
+  #[cfg(windows)]
+  {
+    let monitors = win_monitor::list();
+    // Prefer portrait (height > width), else use first monitor.
+    let picked = monitors
+      .iter()
+      .find(|&&(l, t, r, b)| (b - t) > (r - l))
+      .or_else(|| monitors.first());
+    if let Some(&(x, y, _, _)) = picked {
+      return [x as f32, y as f32];
+    }
+  }
+  [0.0, 0.0]
+}
+
+// ── Tray icon ─────────────────────────────────────────────────────────────────
+
+struct Tray {
+  _icon: tray_icon::TrayIcon,
+  show_id: tray_icon::menu::MenuId,
+  quit_id: tray_icon::menu::MenuId,
+}
+
+fn load_tray_icon() -> Icon {
+  let bytes = include_bytes!("../../assets/tray.png");
+  let img = image::load_from_memory(bytes).expect("tray.png").to_rgba8();
+  let (w, h) = img.dimensions();
+  Icon::from_rgba(img.into_raw(), w, h).expect("tray icon rgba")
+}
+
+fn build_tray() -> Tray {
+  let show_item = MenuItem::new("Show / Hide", true, None);
+  let quit_item = MenuItem::new("Quit", true, None);
+  let show_id = show_item.id().clone();
+  let quit_id = quit_item.id().clone();
+
+  let menu = Menu::new();
+  let _ = menu.append(&show_item);
+  let _ = menu.append(&PredefinedMenuItem::separator());
+  let _ = menu.append(&quit_item);
+
+  let icon = load_tray_icon();
+  let tray_icon = TrayIconBuilder::new()
+    .with_menu(Box::new(menu))
+    .with_icon(icon)
+    .with_tooltip("RigStats")
+    .build()
+    .expect("tray icon");
+
+  Tray { _icon: tray_icon, show_id, quit_id }
+}
+
 // ── eframe application ────────────────────────────────────────────────────────
 
 struct RigStatsApp {
   receiver: mpsc::Receiver<PollStats>,
   latest: PollStats,
   visible_panels: Vec<String>,
+  opacity: f32,
+  tray: Tray,
+  window_visible: bool,
+  // Sparklines
   cpu_spark: Sparkline,
   gpu_spark: Sparkline,
   ram_spark: Sparkline,
   net_up_spark: Sparkline,
   net_dn_spark: Sparkline,
+  // Disk page state
   disk_page: usize,
   disk_page_tick: u32,
 }
 
 impl RigStatsApp {
-  fn new(receiver: mpsc::Receiver<PollStats>, visible_panels: Vec<String>) -> Self {
+  fn new(
+    receiver: mpsc::Receiver<PollStats>,
+    visible_panels: Vec<String>,
+    opacity: f32,
+    tray: Tray,
+  ) -> Self {
     Self {
       receiver,
       latest: PollStats::default(),
       visible_panels,
+      opacity,
+      tray,
+      window_visible: true,
       cpu_spark: Sparkline::new(60, 100.0),
       gpu_spark: Sparkline::new(60, 100.0),
       ram_spark: Sparkline::new(60, 100.0),
@@ -124,12 +252,37 @@ impl RigStatsApp {
 }
 
 impl eframe::App for RigStatsApp {
+  fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+    // Background #0e1117 = (14/255, 17/255, 23/255); pre-multiplied with opacity.
+    let a = self.opacity;
+    [0.0549 * a, 0.0667 * a, 0.0902 * a, a]
+  }
+
   fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    // Pull latest stats from poll thread.
     while let Ok(stats) = self.receiver.try_recv() {
       self.latest = stats;
     }
 
-    // Reset disk page if drive count changed (drive added/removed).
+    // Handle tray menu events.
+    if let Ok(event) = MenuEvent::receiver().try_recv() {
+      if event.id == self.tray.quit_id {
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+      } else if event.id == self.tray.show_id {
+        self.window_visible = !self.window_visible;
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+      }
+    }
+
+    // Handle tray icon clicks (left double-click toggles visibility).
+    if let Ok(event) = tray_icon::TrayIconEvent::receiver().try_recv() {
+      if matches!(event, tray_icon::TrayIconEvent::DoubleClick { .. }) {
+        self.window_visible = !self.window_visible;
+        ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
+      }
+    }
+
+    // Reset disk page if drive count changed.
     let page_total = self.latest.disk_drives.len().div_ceil(3);
     if self.disk_page >= page_total.max(1) {
       self.disk_page = 0;
@@ -203,7 +356,6 @@ fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
 async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
-  // One-time blocking startup detections.
   let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec).await.unwrap_or_default();
   let disk_model_map: HashMap<String, String> =
     tokio::task::spawn_blocking(hardware::detect_disk_model_map).await.unwrap_or_default();
@@ -215,7 +367,6 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
   let preferred_gpu = s.preferred_gpu.clone();
 
   let mut sys = System::new();
-  // Initial full CPU refresh to populate brand string (available after first refresh).
   sys.refresh_cpu();
   let cpu_model = sys.cpus().first().map(|c| c.brand().to_string()).unwrap_or_default();
   let hostname = System::host_name().unwrap_or_else(|| "—".to_string());
@@ -242,7 +393,6 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
     let cpu_cores: Vec<u8> = sys.cpus().iter().map(|c| c.cpu_usage() as u8).collect();
     let uptime_secs = System::uptime();
 
-    // Processes — sort by CPU descending, cap at 8.
     let num_cpus = sys.cpus().len().max(1) as f32;
     let mut processes: Vec<ProcessInfo> = sys
       .processes()
@@ -256,7 +406,6 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
     processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap_or(std::cmp::Ordering::Equal));
     processes.truncate(8);
 
-    // Disks.
     disks.refresh();
     let mut disk_drives: Vec<DriveInfo> = disks
       .iter()
@@ -265,17 +414,10 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
         let total = d.total_space();
         let used = total.saturating_sub(d.available_space());
         let pct = if total > 0 { ((used as f64 / total as f64) * 100.0) as u8 } else { 0 };
-        DriveInfo {
-          fs: d.mount_point().to_string_lossy().to_string(),
-          used,
-          total,
-          pct,
-          temp: None,
-        }
+        DriveInfo { fs: d.mount_point().to_string_lossy().to_string(), used, total, pct, temp: None }
       })
       .collect();
 
-    // Networks — delta-based throughput in Mbps.
     let now = Instant::now();
     let elapsed = now.duration_since(last_net_instant).as_secs_f64().max(0.5);
     last_net_instant = now;
@@ -293,7 +435,6 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       }
     }
 
-    // Ping — cached for 5 s, measured in a blocking thread.
     let ping_ms = {
       let stale = last_ping.as_ref().map(|(t, _)| t.elapsed().as_secs_f64() >= 5.0).unwrap_or(true);
       if stale {
@@ -308,14 +449,13 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       }
     };
 
-    // Battery — cached for 10 s.
     let (battery_present, battery_charge_pct, battery_charging, battery_time_mins, battery_power_w) = {
-      let stale = last_battery.as_ref().map(|(t, _)| t.elapsed().as_secs_f64() >= 10.0).unwrap_or(true);
+      let stale =
+        last_battery.as_ref().map(|(t, _)| t.elapsed().as_secs_f64() >= 10.0).unwrap_or(true);
       if stale {
         let result = tokio::task::spawn_blocking(hardware::sample_battery_wmi).await.ok().flatten();
-        let data = result;
-        last_battery = data.as_ref().map(|d| (Instant::now(), *d));
-        match data {
+        last_battery = result.as_ref().map(|d| (Instant::now(), *d));
+        match result {
           Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
           None => (false, None, None, None, None),
         }
@@ -327,12 +467,10 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       }
     };
 
-    // LHM pipe.
     let lhm_data = lhm::fetch_lhm_pipe(&pipe, preferred_gpu.as_deref(), &dir).await;
     let lhm_connected = lhm_data.is_some();
     lhm_process::track_lhm_connection_state(&dir, lhm_connected);
 
-    // Match disk temps from LHM by disk model name.
     if let Some(ref lhm) = lhm_data {
       for (i, drive) in disk_drives.iter_mut().enumerate() {
         let key = drive.fs.trim_end_matches(['\\', '/']).to_string();
@@ -396,12 +534,15 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
 
 fn main() {
   let dir = app_data_dir();
-
   debug::reset_debug_log(&dir);
-  debug::append_debug_log(&dir, "rigstats-egui starting (Phase 3)");
+  debug::append_debug_log(&dir, "rigstats-egui starting (Phase 4)");
 
   let s = settings::load_settings(&dir);
   let visible_panels = s.visible_panels.clone();
+  let opacity = s.opacity.clamp(0.1, 1.0) as f32;
+  let always_on_top = s.window_layer == "on_top";
+  let [win_w, win_h] = profile_to_size(&s.dashboard_profile);
+  let [pos_x, pos_y] = pick_window_position();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .enable_all()
@@ -409,25 +550,35 @@ fn main() {
     .expect("tokio runtime");
 
   let (tx, rx) = mpsc::sync_channel::<PollStats>(4);
-
   let dir_clone = dir.clone();
-  runtime.spawn(async move {
-    poll_loop(tx, dir_clone).await;
-  });
+  runtime.spawn(async move { poll_loop(tx, dir_clone).await });
 
-  let options = eframe::NativeOptions {
-    viewport: egui::ViewportBuilder::default()
-      .with_title("RigStats")
-      .with_inner_size([400.0, 780.0]),
-    ..Default::default()
-  };
+  let mut viewport = egui::ViewportBuilder::default()
+    .with_title("RigStats")
+    .with_inner_size([win_w, win_h])
+    .with_position([pos_x, pos_y])
+    .with_decorations(false)
+    .with_transparent(true);
+  if always_on_top {
+    viewport = viewport.with_always_on_top();
+  }
 
-  eframe::run_native("RigStats", options, Box::new(|cc| {
-    let mut visuals = egui::Visuals::dark();
-    visuals.panel_fill = egui::Color32::from_rgb(14, 17, 23);
-    cc.egui_ctx.set_visuals(visuals);
-    Ok(Box::new(RigStatsApp::new(rx, visible_panels)))
-  }))
+  let options = eframe::NativeOptions { viewport, ..Default::default() };
+
+  eframe::run_native(
+    "RigStats",
+    options,
+    Box::new(|cc| {
+      let mut visuals = egui::Visuals::dark();
+      // Transparent background — color comes from clear_color().
+      visuals.panel_fill = egui::Color32::TRANSPARENT;
+      visuals.window_fill = egui::Color32::TRANSPARENT;
+      cc.egui_ctx.set_visuals(visuals);
+
+      let tray = build_tray();
+      Ok(Box::new(RigStatsApp::new(rx, visible_panels, opacity, tray)))
+    }),
+  )
   .expect("eframe");
 
   runtime.shutdown_background();
