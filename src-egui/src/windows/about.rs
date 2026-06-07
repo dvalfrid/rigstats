@@ -9,13 +9,11 @@ pub fn show(
   ctx: &egui::Context,
   main_ctx: &egui::Context,
   open: &Arc<AtomicBool>,
+  needs_focus: &Arc<AtomicBool>,
   dir: &Arc<PathBuf>,
 ) {
-  if ctx.input(|i| i.viewport().close_requested()) {
-    open.store(false, Ordering::Relaxed);
-    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-    return;
+  if needs_focus.swap(false, Ordering::Relaxed) {
+    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
   }
 
   egui::CentralPanel::default().show(ctx, |ui| {
@@ -53,4 +51,10 @@ pub fn show(
       }
     });
   });
+
+  // Closing: set flag so main ui() stops calling show_viewport_deferred → auto-close.
+  if ctx.input(|i| i.viewport().close_requested()) {
+    open.store(false, Ordering::Relaxed);
+    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+  }
 }

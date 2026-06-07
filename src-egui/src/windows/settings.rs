@@ -50,20 +50,19 @@ impl SettingsWindow {
 }
 
 #[allow(deprecated)] // CentralPanel::show() is correct for deferred viewport callbacks
+#[allow(clippy::too_many_arguments)]
 pub fn show(
   ctx: &egui::Context,
   main_ctx: &egui::Context,
   open: &Arc<AtomicBool>,
+  needs_focus: &Arc<AtomicBool>,
   state: &Arc<Mutex<SettingsWindow>>,
   dir: &Arc<PathBuf>,
   saved: &Arc<Mutex<settings::Settings>>,
   reload: &Arc<AtomicBool>,
 ) {
-  if ctx.input(|i| i.viewport().close_requested()) {
-    open.store(false, Ordering::Relaxed);
-    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-    return;
+  if needs_focus.swap(false, Ordering::Relaxed) {
+    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
   }
 
   egui::CentralPanel::default().show(ctx, |ui| {
@@ -115,10 +114,9 @@ pub fn show(
           (Ok(()), Ok(())) => {
             *saved.lock().unwrap() = state.draft.clone();
             reload.store(true, Ordering::Relaxed);
-            main_ctx.request_repaint_of(egui::ViewportId::ROOT); // apply changes immediately
             state.error = None;
             open.store(false, Ordering::Relaxed);
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            main_ctx.request_repaint_of(egui::ViewportId::ROOT);
           }
           (Err(e), _) | (Ok(()), Err(e)) => {
             state.error = Some(format!("Save failed: {e}"));
@@ -129,10 +127,14 @@ pub fn show(
       if ui.button("Cancel").clicked() {
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
       }
     });
   });
+
+  if ctx.input(|i| i.viewport().close_requested()) {
+    open.store(false, Ordering::Relaxed);
+    main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+  }
 }
 
 // ── Dashboard tab ─────────────────────────────────────────────────────────────

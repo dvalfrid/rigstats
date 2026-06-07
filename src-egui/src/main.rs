@@ -104,6 +104,29 @@ pub struct PollStats {
 
 // ── Profile window dimensions ─────────────────────────────────────────────────
 
+/// Estimated pixel height for each panel type (calibrated in Phase 6).
+/// Used to size the main window to exactly the visible content — no overflow, no scroll.
+fn compute_window_height(visible: &[String]) -> f32 {
+  const HEIGHTS: &[(&str, f32)] = &[
+    ("header", 52.0),
+    ("clock", 72.0),
+    ("cpu", 168.0),
+    ("gpu", 216.0),
+    ("ram", 132.0),
+    ("net", 144.0),
+    ("disk", 168.0),
+    ("motherboard", 160.0),
+    ("process", 184.0),
+    ("battery", 108.0),
+  ];
+  let gap = 6.0;
+  let padding = 8.0;
+  visible.iter().fold(padding, |acc, key| {
+    let h = HEIGHTS.iter().find(|(k, _)| *k == key).map(|(_, v)| *v).unwrap_or(100.0);
+    acc + h + gap
+  })
+}
+
 fn profile_to_size(profile: &str) -> [f32; 2] {
   match profile {
     "portrait-xl" => [450.0, 1920.0],
@@ -274,6 +297,11 @@ struct RigStatsApp {
   about_open: Arc<AtomicBool>,
   status_open: Arc<AtomicBool>,
   updater_open: Arc<AtomicBool>,
+  // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
+  settings_focus: Arc<AtomicBool>,
+  about_focus: Arc<AtomicBool>,
+  status_focus: Arc<AtomicBool>,
+  updater_focus: Arc<AtomicBool>,
   settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
   status_win: Arc<Mutex<windows::status::StatusState>>,
   updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
@@ -315,6 +343,10 @@ impl RigStatsApp {
       about_open: Arc::new(AtomicBool::new(false)),
       status_open: Arc::new(AtomicBool::new(false)),
       updater_open: Arc::new(AtomicBool::new(false)),
+      settings_focus: Arc::new(AtomicBool::new(false)),
+      about_focus: Arc::new(AtomicBool::new(false)),
+      status_focus: Arc::new(AtomicBool::new(false)),
+      updater_focus: Arc::new(AtomicBool::new(false)),
       settings_win: Arc::new(Mutex::new(
         windows::settings::SettingsWindow::from_settings(&init_settings),
       )),
@@ -350,6 +382,9 @@ impl eframe::App for RigStatsApp {
       let s = self.current_settings.lock().unwrap();
       self.visible_panels = s.visible_panels.clone();
       self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
+      let w = profile_to_size(&s.dashboard_profile)[0];
+      let h = compute_window_height(&s.visible_panels);
+      ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
     }
 
     // Handle tray commands forwarded by the background polling thread.
@@ -365,16 +400,20 @@ impl eframe::App for RigStatsApp {
           *self.settings_win.lock().unwrap() =
             windows::settings::SettingsWindow::from_settings(&s);
           self.settings_open.store(true, Ordering::Relaxed);
+          self.settings_focus.store(true, Ordering::Relaxed);
         }
         TrayCmd::OpenAbout => {
           self.about_open.store(true, Ordering::Relaxed);
+          self.about_focus.store(true, Ordering::Relaxed);
         }
         TrayCmd::OpenStatus => {
           *self.status_win.lock().unwrap() = windows::status::StatusState::load(&self.dir);
           self.status_open.store(true, Ordering::Relaxed);
+          self.status_focus.store(true, Ordering::Relaxed);
         }
         TrayCmd::OpenUpdater => {
           self.updater_open.store(true, Ordering::Relaxed);
+          self.updater_focus.store(true, Ordering::Relaxed);
         }
       }
     }
@@ -385,6 +424,7 @@ impl eframe::App for RigStatsApp {
 
     if self.settings_open.load(Ordering::Relaxed) {
       let open = self.settings_open.clone();
+      let focus = self.settings_focus.clone();
       let state = self.settings_win.clone();
       let dir = self.dir.clone();
       let saved = self.current_settings.clone();
@@ -397,15 +437,17 @@ impl eframe::App for RigStatsApp {
           .with_title("RigStats — Settings")
           .with_inner_size([560.0, 600.0])
           .with_position([px, py])
-          .with_resizable(false),
+          .with_resizable(false)
+          .with_always_on_top(),
         move |ctx, _class| {
-          windows::settings::show(ctx, &mctx, &open, &state, &dir, &saved, &reload);
+          windows::settings::show(ctx, &mctx, &open, &focus, &state, &dir, &saved, &reload);
         },
       );
     }
 
     if self.about_open.load(Ordering::Relaxed) {
       let open = self.about_open.clone();
+      let focus = self.about_focus.clone();
       let dir = self.dir.clone();
       let mctx = main_ctx.clone();
       let [px, py] = dialog_center(360.0, 280.0);
@@ -415,15 +457,17 @@ impl eframe::App for RigStatsApp {
           .with_title("About RigStats")
           .with_inner_size([360.0, 280.0])
           .with_position([px, py])
-          .with_resizable(false),
+          .with_resizable(false)
+          .with_always_on_top(),
         move |ctx, _class| {
-          windows::about::show(ctx, &mctx, &open, &dir);
+          windows::about::show(ctx, &mctx, &open, &focus, &dir);
         },
       );
     }
 
     if self.status_open.load(Ordering::Relaxed) {
       let open = self.status_open.clone();
+      let focus = self.status_focus.clone();
       let state = self.status_win.clone();
       let dir = self.dir.clone();
       let mctx = main_ctx.clone();
@@ -433,15 +477,17 @@ impl eframe::App for RigStatsApp {
         egui::ViewportBuilder::default()
           .with_title("RigStats — Status")
           .with_inner_size([520.0, 500.0])
-          .with_position([px, py]),
+          .with_position([px, py])
+          .with_always_on_top(),
         move |ctx, _class| {
-          windows::status::show(ctx, &mctx, &open, &state, &dir);
+          windows::status::show(ctx, &mctx, &open, &focus, &state, &dir);
         },
       );
     }
 
     if self.updater_open.load(Ordering::Relaxed) {
       let open = self.updater_open.clone();
+      let focus = self.updater_focus.clone();
       let state = self.updater_win.clone();
       let mctx = main_ctx.clone();
       let [px, py] = dialog_center(340.0, 220.0);
@@ -451,9 +497,10 @@ impl eframe::App for RigStatsApp {
           .with_title("RigStats — Updates")
           .with_inner_size([340.0, 220.0])
           .with_position([px, py])
-          .with_resizable(false),
+          .with_resizable(false)
+          .with_always_on_top(),
         move |ctx, _class| {
-          windows::updater::show(ctx, &mctx, &open, &state);
+          windows::updater::show(ctx, &mctx, &open, &focus, &state);
         },
       );
     }
@@ -508,7 +555,19 @@ impl eframe::App for RigStatsApp {
       }
     });
 
-    ui.ctx().request_repaint_after(Duration::from_secs(1));
+    // Repaint faster when a secondary window is open so it closes within ~100 ms
+    // of the user clicking X/Save/Cancel (the open flag is set in the callback
+    // which runs after ui(), so the NEXT frame sees open=false and stops calling
+    // show_viewport_deferred, which is what actually destroys the viewport).
+    let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
+      || self.about_open.load(Ordering::Relaxed)
+      || self.status_open.load(Ordering::Relaxed)
+      || self.updater_open.load(Ordering::Relaxed);
+    ui.ctx().request_repaint_after(if any_dialog_open {
+      Duration::from_millis(100)
+    } else {
+      Duration::from_secs(1)
+    });
   }
 }
 
@@ -717,7 +776,9 @@ fn main() {
   let visible_panels = s.visible_panels.clone();
   let opacity = s.opacity.clamp(0.1, 1.0) as f32;
   let always_on_top = s.window_layer == "on_top";
-  let [win_w, win_h] = profile_to_size(&s.dashboard_profile);
+  // Width from profile, height from visible panel content (not full profile height).
+  let win_w = profile_to_size(&s.dashboard_profile)[0];
+  let win_h = compute_window_height(&visible_panels);
   let [pos_x, pos_y] = pick_window_position();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -767,6 +828,17 @@ fn main() {
       std::thread::spawn(move || loop {
         let mut repaint = false;
         if let Ok(ev) = MenuEvent::receiver().try_recv() {
+          // Grant all processes foreground rights immediately while our process is
+          // still active from the tray-menu interaction.  This allows the subsequent
+          // ViewportCommand::Focus (sent on the first callback frame of each dialog)
+          // to call SetForegroundWindow successfully — without this call Windows blocks
+          // focus changes from background processes.
+          #[cfg(windows)]
+          #[allow(unsafe_code)]
+          unsafe {
+            winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
+          }
+
           let cmd = if ev.id == quit_id {
             std::process::exit(0);
           } else if ev.id == show_id {

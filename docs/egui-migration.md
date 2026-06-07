@@ -125,7 +125,33 @@ the dashboard reacts to changes immediately.
 
 ---
 
-### Phase 6 — Floating mode ✅ testable
+### Phase 6 — Visual fidelity ✅ testable
+*Goal: dashboard looks and behaves like the Tauri version.*
+
+- [ ] Window sizing: width from profile, height = sum of visible panel heights (no overflow)
+  - `compute_window_height(visible_panels)` mirrors Tauri's `compute_panels_logical_height`
+  - Height updates automatically when panels are toggled or profile changes
+  - Panel height constants calibrated to match actual render output
+- [ ] Drag handle: thin strip at top of window so user can move it to any monitor
+- [ ] Panel styling parity:
+  - Dark background `#0E1117`, panel cards with subtle border/separator
+  - Typography: large metric values, small labels, monospace where Tauri uses it
+  - Progress bars: accent colour, background fill, same proportions
+  - Sparklines: same stroke width and colour as Tauri canvas
+  - Section headers bold, same capitalisation
+- [ ] Per-panel visual review against screenshots of Tauri version:
+  - Header, Clock, CPU, GPU, RAM, Network, Disk, Motherboard, Process, Battery
+- [ ] Opacity: window background alpha driven by `clear_color()` opacity setting
+  (investigate wgpu transparent surface if current `with_transparent(true)` is insufficient)
+- [ ] Always-on-top main window: apply `window_layer` setting at runtime
+  (already applied at startup; `ViewportCommand::WindowLevel` for live changes)
+
+**Done when:** side-by-side screenshot of egui and Tauri dashboards shows no obvious
+visual differences in layout, colours, or typography.
+
+---
+
+### Phase 7 — Floating mode ✅ testable
 *Goal: independent per-panel windows.*
 
 - [ ] Each visible panel → separate egui viewport (or `eframe` child window)
@@ -140,7 +166,7 @@ survive app restart.
 
 ---
 
-### Phase 7 — Autostart, logging, auto-update ✅ testable
+### Phase 8 — Autostart, logging, auto-update ✅ testable
 *Goal: operational features at parity.*
 
 - [ ] Autostart: reuse `autostart.rs` (registry, unchanged)
@@ -154,7 +180,7 @@ finds new versions and can install them.
 
 ---
 
-### Phase 8 — Remove Tauri, ship ✅ testable
+### Phase 9 — Remove Tauri, ship ✅ testable
 *Goal: clean build with no WebView2 dependency.*
 
 - [ ] Remove `src-tauri/` and all Tauri deps from workspace
