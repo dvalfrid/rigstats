@@ -7,11 +7,12 @@ use crate::tempcolor::temp_color;
 use crate::theme;
 use crate::PollStats;
 
-const RING_SIZE: f32 = 94.0;
+const RING_SIZE: f32 = 80.0;
 const SPARK_H: f32 = 36.0;
 
 pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
   theme::panel_frame(ui, theme::C_ACCENT, |ui| {
+    ui.set_min_height(theme::PANEL_DATA_H);
     let load_frac = stats.cpu_load as f32 / 100.0;
     let tc = temp_color(stats.cpu_temp, 80, 90);
 
@@ -20,10 +21,11 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
       ui.label(RichText::new("CPU LOAD").strong().color(theme::C_TEXT).size(13.0));
       if let Some(logo) = tex.cpu_logo(&stats.cpu_model) {
         let [lw, lh] = logo.size();
-        let scale = 28.0 / lh as f32;
+        let scale = 40.0 / lh as f32;
         let w = lw as f32 * scale;
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-          let sized = egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, 28.0));
+          ui.add_space(6.0);
+          let sized = egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, 40.0));
           ui.add(egui::Image::new(sized));
         });
       }
@@ -35,7 +37,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
       ui.label(RichText::new(model).small().color(theme::C_TEXT_MUTED));
     }
 
-    ui.add_space(4.0);
+    ui.add_space(2.0);
 
     // Ring gauge + metadata side by side
     ui.horizontal(|ui| {
@@ -66,9 +68,12 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
 
     ui.add_space(6.0);
 
-    // Per-core bars — scroll area shows 4 cores (2 rows) at a time.
+    // Per-core bars — two columns spanning full panel width.
     if !stats.cpu_cores.is_empty() {
       let cores = &stats.cpu_cores;
+      // Estimate fixed pixel cost per column: label (~16) + value (~26) + gaps (~8)
+      let avail = ui.available_width();
+      let per_bar_w = ((avail - 100.0) / 2.0).max(4.0);
       let row_h = 18.0;
       egui::ScrollArea::vertical()
         .id_salt("cpu_cores")
@@ -82,11 +87,13 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
                 ui.label(
                   RichText::new(format!("C{idx}")).small().color(theme::C_TEXT_MUTED),
                 );
-                theme::thin_bar(ui, load as f32 / 100.0, 60.0, theme::C_ACCENT);
+                theme::thin_bar(ui, load as f32 / 100.0, per_bar_w, theme::C_ACCENT);
                 ui.label(
                   RichText::new(format!("{load}%")).small().color(theme::C_TEXT),
                 );
-                ui.add_space(8.0);
+                if col == 0 {
+                  ui.add_space(8.0);
+                }
               }
             });
           }

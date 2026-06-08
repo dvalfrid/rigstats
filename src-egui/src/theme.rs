@@ -8,6 +8,7 @@ pub const C_GRN: Color32 = Color32::from_rgb(0x39, 0xff, 0x88);    // Net, Clock
 pub const C_PUR: Color32 = Color32::from_rgb(0xbf, 0x7f, 0xff);    // Disk
 pub const C_PROC: Color32 = Color32::from_rgb(0xff, 0x9f, 0x2f);   // Process
 pub const C_MB: Color32 = Color32::from_rgb(0x3a, 0x99, 0xb8);     // Motherboard
+pub const C_NET_DOWN: Color32 = Color32::from_rgb(0x3a, 0xa5, 0xff); // Network DOWN
 
 // ── Text colours ─────────────────────────────────────────────────────────────
 pub const C_TEXT: Color32 = Color32::from_rgb(0xb8, 0xcc, 0xe8);
@@ -21,6 +22,11 @@ pub const PANEL_BORDER: Color32 = Color32::from_rgb(22, 28, 42);
 
 /// Height of the drag handle strip at the top of the main window (logical px).
 pub const DRAG_HANDLE_H: f32 = 14.0;
+
+/// Minimum content height for header/clock panels (equalises their visual size).
+pub const PANEL_HEADER_H: f32 = 105.0;
+/// Minimum content height for all data panels (CPU, GPU, RAM, Net, Disk, etc.).
+pub const PANEL_DATA_H: f32 = 200.0;
 
 /// Draw a thin (4 px high) progress bar with dark background.
 pub fn thin_bar(ui: &mut Ui, frac: f32, width: f32, color: Color32) {

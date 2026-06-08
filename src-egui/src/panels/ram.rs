@@ -1,14 +1,14 @@
 use egui::{RichText, Ui};
 
-use crate::spark::Sparkline;
+use crate::tempcolor::temp_color;
 use crate::theme;
 use crate::PollStats;
 
-const SPARK_H: f32 = 32.0;
 const GIB: f64 = 1_073_741_824.0;
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline) {
+pub fn draw(ui: &mut Ui, stats: &PollStats) {
   theme::panel_frame(ui, theme::C_RAM, |ui| {
+    ui.set_min_height(theme::PANEL_DATA_H);
     let used_gb = stats.ram_used as f64 / GIB;
     let total_gb = stats.ram_total as f64 / GIB;
     let frac =
@@ -27,24 +27,31 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline) {
       });
     });
 
-    // Spec line
-    if !stats.ram_spec.is_empty() {
-      ui.label(RichText::new(&stats.ram_spec).small().color(theme::C_TEXT_MUTED));
-    }
+    // Spec + optional temperature on one row
+    ui.horizontal(|ui| {
+      if let Some(t) = stats.ram_temp {
+        let tc = temp_color(Some(t), 60, 70);
+        ui.label(RichText::new("TEMP").small().color(theme::C_STAT_LABEL));
+        ui.label(RichText::new(format!("{t:.0}°C")).color(tc));
+        ui.add_space(12.0);
+      }
+      if !stats.ram_spec.is_empty() {
+        ui.label(RichText::new(&stats.ram_spec).small().color(theme::C_TEXT_MUTED));
+      }
+    });
 
-    ui.add_space(4.0);
+    // Push MEM bar to the bottom of the panel.
+    let cursor_after_meta = ui.cursor().top();
+    let bar_row_h = 14.0;
+    let filler = (theme::PANEL_DATA_H - (cursor_after_meta - ui.min_rect().top()) - bar_row_h)
+      .max(2.0);
+    ui.add_space(filler);
 
-    // Bar — compute remaining width AFTER placing the "MEM" label.
     ui.horizontal(|ui| {
       ui.label(RichText::new("MEM").small().color(theme::C_STAT_LABEL));
-      // Reserve ~32 px for the "XX%" label that follows.
       let bar_w = (ui.available_width() - 32.0).max(4.0);
       theme::thin_bar(ui, frac, bar_w, theme::C_RAM);
       ui.label(RichText::new(format!("{pct}%")).small().color(theme::C_RAM));
     });
-
-    // Sparkline
-    ui.add_space(2.0);
-    spark.draw(ui, SPARK_H, theme::C_RAM);
   });
 }

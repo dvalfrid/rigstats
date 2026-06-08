@@ -70,6 +70,8 @@ pub struct PollStats {
   pub gpu_vram_total_mb: Option<f64>,
   pub gpu_power: Option<f64>,
   pub gpu_fan: Option<f64>,
+  pub gpu_d3d_3d: Option<f64>,
+  pub gpu_d3d_vdec: Option<f64>,
   // RAM
   pub ram_used: u64,
   pub ram_total: u64,
@@ -104,6 +106,8 @@ pub struct PollStats {
   pub model_name: String,    // product model, e.g. "ROG GM700TZ"
   pub system_brand: String,  // brand key, e.g. "asus-rog"
   pub gpu_name: String,      // GPU display name, e.g. "AMD Radeon RX 9070 XT"
+  pub ram_temp: Option<f64>,
+  pub gpu_devices: Vec<(String, f64)>,
   // Meta
   pub lhm_connected: bool,
 }
@@ -270,7 +274,6 @@ struct RigStatsApp {
   // Sparklines
   cpu_spark: Sparkline,
   gpu_spark: Sparkline,
-  ram_spark: Sparkline,
   net_up_spark: Sparkline,
   net_dn_spark: Sparkline,
   // Brand textures (loaded once at startup)
@@ -294,6 +297,7 @@ struct RigStatsApp {
   // Shared settings (updated on save, applied each frame)
   current_settings: Arc<Mutex<settings::Settings>>,
   settings_reload: Arc<AtomicBool>,
+  preferred_gpu: Arc<Mutex<Option<String>>>,
   dir: Arc<PathBuf>,
 }
 
@@ -309,6 +313,7 @@ impl RigStatsApp {
     settings_reload: Arc<AtomicBool>,
     dir: Arc<PathBuf>,
     textures: brand::Textures,
+    preferred_gpu: Arc<Mutex<Option<String>>>,
   ) -> Self {
     let init_settings = current_settings.lock().unwrap().clone();
     Self {
@@ -321,7 +326,6 @@ impl RigStatsApp {
       window_visible: true,
       cpu_spark: Sparkline::new(60),
       gpu_spark: Sparkline::new(60),
-      ram_spark: Sparkline::new(60),
       net_up_spark: Sparkline::new(60),
       net_dn_spark: Sparkline::new(60),
       textures,
@@ -342,6 +346,7 @@ impl RigStatsApp {
       updater_win: Arc::new(Mutex::new(windows::updater::UpdaterState::default())),
       current_settings,
       settings_reload,
+      preferred_gpu,
       dir,
     }
   }
@@ -360,12 +365,6 @@ impl eframe::App for RigStatsApp {
     while let Ok(stats) = self.receiver.try_recv() {
       self.cpu_spark.push(stats.cpu_load as f32);
       self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
-      let ram_pct = if stats.ram_total > 0 {
-        stats.ram_used as f32 / stats.ram_total as f32 * 100.0
-      } else {
-        0.0
-      };
-      self.ram_spark.push(ram_pct);
       self.net_up_spark.push(stats.net_up_mbps as f32);
       self.net_dn_spark.push(stats.net_down_mbps as f32);
       self.latest = stats;
@@ -511,23 +510,40 @@ impl eframe::App for RigStatsApp {
       let w = ui.available_width();
       if w.is_finite() && w > 0.0 { w } else { ui.ctx().content_rect().width().max(1.0) }
     };
-    let (_drag_rect, drag_resp) = ui.allocate_exact_size(
+    let (drag_rect, drag_resp) = ui.allocate_exact_size(
       egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
       egui::Sense::drag(),
     );
     if drag_resp.dragged() {
       ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
+    if drag_resp.hovered() {
+      let painter = ui.painter();
+      let cy = drag_rect.center().y;
+      let cx = drag_rect.center().x;
+      for i in [-5.0f32, 0.0, 5.0] {
+        painter.circle_filled(
+          egui::Pos2::new(cx + i, cy),
+          1.5,
+          egui::Color32::from_gray(160),
+        );
+      }
+    }
 
     // Panels in the order defined by visible_panels (respects user reordering).
     let panels_to_draw = self.visible_panels.clone();
+    let mut new_preferred_gpu: Option<String> = None;
     egui::ScrollArea::vertical().show(ui, |ui| { for panel in &panels_to_draw {
       match panel.as_str() {
         "header" => panels::header::draw(ui, &self.latest, &self.textures),
         "clock" => panels::clock::draw(ui, self.latest.uptime_secs),
         "cpu" => panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures),
-        "gpu" => panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures),
-        "ram" => panels::ram::draw(ui, &self.latest, &self.ram_spark),
+        "gpu" => {
+          if let Some(p) = panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures) {
+            new_preferred_gpu = Some(p);
+          }
+        }
+        "ram" => panels::ram::draw(ui, &self.latest),
         "net" => {
           panels::net::draw(ui, &self.latest, &self.net_up_spark, &self.net_dn_spark)
         }
@@ -541,6 +557,12 @@ impl eframe::App for RigStatsApp {
       }
       ui.add_space(6.0);
     } }); // end ScrollArea
+    if let Some(new_pref) = new_preferred_gpu {
+      *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
+      let mut s = self.current_settings.lock().unwrap();
+      s.preferred_gpu = Some(new_pref);
+      let _ = settings::persist_settings(&self.dir, &s);
+    }
 
     // Repaint faster when a secondary window is open so it closes within ~100 ms
     // of the user clicking X/Save/Cancel (the open flag is set in the callback
@@ -577,7 +599,11 @@ fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f
 
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
-async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
+async fn poll_loop(
+  tx: mpsc::SyncSender<PollStats>,
+  dir: PathBuf,
+  preferred_gpu: Arc<Mutex<Option<String>>>,
+) {
   let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec).await.unwrap_or_default();
   let disk_model_map: HashMap<String, String> =
     tokio::task::spawn_blocking(hardware::detect_disk_model_map).await.unwrap_or_default();
@@ -590,9 +616,6 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
     tokio::task::spawn_blocking(hardware::detect_system_brand).await.unwrap_or_default();
   let gpu_name: String =
     tokio::task::spawn_blocking(hardware::detect_gpu_name).await.ok().flatten().unwrap_or_default();
-
-  let s = settings::load_settings(&dir);
-  let preferred_gpu = s.preferred_gpu.clone();
 
   let mut sys = System::new();
   sys.refresh_cpu();
@@ -695,7 +718,8 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       }
     };
 
-    let lhm_data = lhm::fetch_lhm_pipe(&pipe, preferred_gpu.as_deref(), &dir).await;
+    let pref = preferred_gpu.lock().unwrap().clone();
+    let lhm_data = lhm::fetch_lhm_pipe(&pipe, pref.as_deref(), &dir).await;
     let lhm_connected = lhm_data.is_some();
     lhm_process::track_lhm_connection_state(&dir, lhm_connected);
 
@@ -726,6 +750,8 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       gpu_vram_total_mb: lhm_data.as_ref().and_then(|l| l.vram_total),
       gpu_power: lhm_data.as_ref().and_then(|l| l.gpu_power),
       gpu_fan: lhm_data.as_ref().and_then(|l| l.gpu_fan),
+      gpu_d3d_3d: lhm_data.as_ref().and_then(|l| l.gpu_d3d_3d),
+      gpu_d3d_vdec: lhm_data.as_ref().and_then(|l| l.gpu_d3d_vdec),
       ram_used: sys.used_memory(),
       ram_total: sys.total_memory(),
       ram_spec: ram_spec.clone(),
@@ -752,7 +778,9 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       cpu_model: cpu_model.clone(),
       model_name: model_name.clone(),
       system_brand: system_brand.clone(),
-      gpu_name: gpu_name.clone(),
+      gpu_name: lhm_data.as_ref().and_then(|l| l.gpu_name.clone()).unwrap_or_else(|| gpu_name.clone()),
+      ram_temp: lhm_data.as_ref().and_then(|l| l.ram_temp),
+      gpu_devices: lhm_data.as_ref().map(|l| l.gpu_devices.clone()).unwrap_or_default(),
       lhm_connected,
     };
 
@@ -780,9 +808,12 @@ fn main() {
     .build()
     .expect("tokio runtime");
 
+  let preferred_gpu_arc: Arc<Mutex<Option<String>>> =
+    Arc::new(Mutex::new(s.preferred_gpu.clone()));
   let (tx, rx) = mpsc::sync_channel::<PollStats>(4);
   let dir_clone = dir.clone();
-  runtime.spawn(async move { poll_loop(tx, dir_clone).await });
+  let pref_poll = preferred_gpu_arc.clone();
+  runtime.spawn(async move { poll_loop(tx, dir_clone, pref_poll).await });
 
   let mut viewport = egui::ViewportBuilder::default()
     .with_title("RigStats")
@@ -882,6 +913,7 @@ fn main() {
         settings_reload,
         dir_arc,
         textures,
+        preferred_gpu_arc,
       )))
     }),
   )
