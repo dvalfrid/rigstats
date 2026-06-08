@@ -11,6 +11,7 @@ cargo-check-out.txt
 debugLog/
 
 # Rust build output
+/target/
 src-tauri/target/
 src-tauri/target-check/
 

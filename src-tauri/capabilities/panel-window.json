@@ -6,6 +6,7 @@
   "permissions": [
     "core:event:default",
     "core:window:allow-start-dragging",
+    "core:window:allow-outer-position",
     "allow-get-settings",
     "allow-get-system-name",
     "allow-get-system-brand",
