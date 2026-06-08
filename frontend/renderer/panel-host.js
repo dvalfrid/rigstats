@@ -328,7 +328,7 @@ async function start() {
 
   // Save position after each move (debounced).
   if (currentWindow?.listen) {
-    currentWindow.listen('tauri://moved', scheduleSavePosition).catch(() => {});
+    currentWindow.listen('tauri://move', scheduleSavePosition).catch(() => {});
   }
   window.addEventListener('resize', () => { syncWindowScaling(); });
 

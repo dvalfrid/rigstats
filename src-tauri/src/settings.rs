@@ -317,11 +317,14 @@ fn migrate_v0_thresholds(s: &mut Settings) {
 }
 
 pub fn persist_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
-  // Ensure parent directories exist before writing the settings file.
   let path = settings_path(app);
   if let Some(parent) = path.parent() {
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
   }
   let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-  fs::write(path, json).map_err(|e| e.to_string())
+  // Write to a sibling .tmp file then rename atomically so a hard shutdown
+  // mid-write never leaves the settings file truncated or corrupted.
+  let tmp = path.with_extension("json.tmp");
+  fs::write(&tmp, &json).map_err(|e| e.to_string())?;
+  fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
