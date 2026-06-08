@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.26.0](https://github.com/dvalfrid/rigstats/compare/v1.25.1...v1.26.0) (2026-06-08)
+
+
+### Features
+
+* surface Tauri capability-denied errors instead of swallowing them ([f17793d](https://github.com/dvalfrid/rigstats/commit/f17793dc5025056c9ea5df03744f2274eee88025))
+
+
+### Bug Fixes
+
+* floating panel positions never saved after drag ([7580971](https://github.com/dvalfrid/rigstats/commit/75809711188e521a32b84174748dd277ed1b03c1))
+* grant outer-position permission to panel windows so drag positions save correctly ([1673afa](https://github.com/dvalfrid/rigstats/commit/1673afa8ec849b11dd9603a521b765f56631a2dd))
+
 ## [1.25.1](https://github.com/dvalfrid/rigstats/compare/v1.25.0...v1.25.1) (2026-06-08)
 
 
