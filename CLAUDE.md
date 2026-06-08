@@ -157,7 +157,7 @@ A .NET 10 C# project that replaces the standalone LibreHardwareMonitor applicati
 
 No framework, no bundler. Pure ES modules. Each HTML page loads its own entry script.
 
-- **`renderer/environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__.core.invoke` / `.event.listen`) and `IS_DESKTOP`. All renderer modules go through this instead of accessing Tauri globals directly.
+- **`renderer/environment.js`** — Detects whether running inside Tauri. Exports `backend` (thin wrapper around `window.__TAURI__.core.invoke` / `.event.listen`), `IS_DESKTOP`, and `logPermissionError(err, context)`. All renderer modules go through this instead of accessing Tauri globals directly. `logPermissionError` detects "not allowed" responses from Tauri's ACL system and writes them to the debug log; use it in every `catch` block that wraps a direct Tauri Window API call (e.g. `outerPosition`, `innerSize`, `listen`) so missing capability entries are never silently swallowed.
 - **`renderer/app.js`** — Main dashboard orchestrator. Drives the 1-second poll loop (`tick()`), applies settings/profile/opacity from Tauri events, manages brand preview mode. `applyThresholds(s)` builds per-component `{ warn, crit }` objects and stores them in the module-level `thresholds` variable; called at startup and on every `apply-thresholds` event so panel colours update instantly after saving settings.
 - **`renderer/systemInfo.js`** — Host name, CPU model, GPU model, and branding/logo wiring.
 - **`renderer/clock.js`** — Local time and uptime rendering.
