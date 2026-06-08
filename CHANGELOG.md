@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.25.1](https://github.com/dvalfrid/rigstats/compare/v1.25.0...v1.25.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* improve floating panel position diagnostics for bug reports ([70756c8](https://github.com/dvalfrid/rigstats/commit/70756c801072fa1782a63c03c465e71e65a2cda8))
+
 ## [1.25.0](https://github.com/dvalfrid/rigstats/compare/v1.24.0...v1.25.0) (2026-06-06)
 
 
