@@ -1,6 +1,9 @@
+mod brand;
 mod panels;
+mod ring;
 mod spark;
 mod tempcolor;
+mod theme;
 mod windows;
 
 use eframe::egui;
@@ -98,34 +101,15 @@ pub struct PollStats {
   pub uptime_secs: u64,
   pub hostname: String,
   pub cpu_model: String,
+  pub model_name: String,    // product model, e.g. "ROG GM700TZ"
+  pub system_brand: String,  // brand key, e.g. "asus-rog"
+  pub gpu_name: String,      // GPU display name, e.g. "AMD Radeon RX 9070 XT"
   // Meta
   pub lhm_connected: bool,
 }
 
 // ── Profile window dimensions ─────────────────────────────────────────────────
 
-/// Estimated pixel height for each panel type (calibrated in Phase 6).
-/// Used to size the main window to exactly the visible content — no overflow, no scroll.
-fn compute_window_height(visible: &[String]) -> f32 {
-  const HEIGHTS: &[(&str, f32)] = &[
-    ("header", 52.0),
-    ("clock", 72.0),
-    ("cpu", 168.0),
-    ("gpu", 216.0),
-    ("ram", 132.0),
-    ("net", 144.0),
-    ("disk", 168.0),
-    ("motherboard", 160.0),
-    ("process", 184.0),
-    ("battery", 108.0),
-  ];
-  let gap = 6.0;
-  let padding = 8.0;
-  visible.iter().fold(padding, |acc, key| {
-    let h = HEIGHTS.iter().find(|(k, _)| *k == key).map(|(_, v)| *v).unwrap_or(100.0);
-    acc + h + gap
-  })
-}
 
 fn profile_to_size(profile: &str) -> [f32; 2] {
   match profile {
@@ -289,6 +273,8 @@ struct RigStatsApp {
   ram_spark: Sparkline,
   net_up_spark: Sparkline,
   net_dn_spark: Sparkline,
+  // Brand textures (loaded once at startup)
+  textures: brand::Textures,
   // Disk page state
   disk_page: usize,
   disk_page_tick: u32,
@@ -322,6 +308,7 @@ impl RigStatsApp {
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
     dir: Arc<PathBuf>,
+    textures: brand::Textures,
   ) -> Self {
     let init_settings = current_settings.lock().unwrap().clone();
     Self {
@@ -332,11 +319,12 @@ impl RigStatsApp {
       opacity,
       _tray: tray,
       window_visible: true,
-      cpu_spark: Sparkline::new(60, 100.0),
-      gpu_spark: Sparkline::new(60, 100.0),
-      ram_spark: Sparkline::new(60, 100.0),
-      net_up_spark: Sparkline::new(60, 100.0),
-      net_dn_spark: Sparkline::new(60, 100.0),
+      cpu_spark: Sparkline::new(60),
+      gpu_spark: Sparkline::new(60),
+      ram_spark: Sparkline::new(60),
+      net_up_spark: Sparkline::new(60),
+      net_dn_spark: Sparkline::new(60),
+      textures,
       disk_page: 0,
       disk_page_tick: 0,
       settings_open: Arc::new(AtomicBool::new(false)),
@@ -358,9 +346,6 @@ impl RigStatsApp {
     }
   }
 
-  fn visible(&self, key: &str) -> bool {
-    self.visible_panels.iter().any(|p| p == key)
-  }
 }
 
 impl eframe::App for RigStatsApp {
@@ -371,8 +356,18 @@ impl eframe::App for RigStatsApp {
   }
 
   fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-    // Pull latest stats from poll thread.
+    // Pull latest stats from poll thread; push to sparklines only on new data.
     while let Ok(stats) = self.receiver.try_recv() {
+      self.cpu_spark.push(stats.cpu_load as f32);
+      self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
+      let ram_pct = if stats.ram_total > 0 {
+        stats.ram_used as f32 / stats.ram_total as f32 * 100.0
+      } else {
+        0.0
+      };
+      self.ram_spark.push(ram_pct);
+      self.net_up_spark.push(stats.net_up_mbps as f32);
+      self.net_dn_spark.push(stats.net_down_mbps as f32);
       self.latest = stats;
     }
 
@@ -382,8 +377,7 @@ impl eframe::App for RigStatsApp {
       let s = self.current_settings.lock().unwrap();
       self.visible_panels = s.visible_panels.clone();
       self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
-      let w = profile_to_size(&s.dashboard_profile)[0];
-      let h = compute_window_height(&s.visible_panels);
+      let [w, h] = profile_to_size(&s.dashboard_profile);
       ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
     }
 
@@ -512,48 +506,41 @@ impl eframe::App for RigStatsApp {
       self.disk_page_tick = 0;
     }
 
-    egui::ScrollArea::vertical().show(ui, |ui| {
-      if self.visible("header") {
-        panels::header::draw(ui, &self.latest);
-        ui.add_space(6.0);
+    // Drag handle — thin invisible strip at top for moving the borderless window.
+    let drag_w = {
+      let w = ui.available_width();
+      if w.is_finite() && w > 0.0 { w } else { ui.ctx().content_rect().width().max(1.0) }
+    };
+    let (_drag_rect, drag_resp) = ui.allocate_exact_size(
+      egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
+      egui::Sense::drag(),
+    );
+    if drag_resp.dragged() {
+      ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+    }
+
+    // Panels in the order defined by visible_panels (respects user reordering).
+    let panels_to_draw = self.visible_panels.clone();
+    egui::ScrollArea::vertical().show(ui, |ui| { for panel in &panels_to_draw {
+      match panel.as_str() {
+        "header" => panels::header::draw(ui, &self.latest, &self.textures),
+        "clock" => panels::clock::draw(ui, self.latest.uptime_secs),
+        "cpu" => panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures),
+        "gpu" => panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures),
+        "ram" => panels::ram::draw(ui, &self.latest, &self.ram_spark),
+        "net" => {
+          panels::net::draw(ui, &self.latest, &self.net_up_spark, &self.net_dn_spark)
+        }
+        "disk" => {
+          panels::disk::draw(ui, &self.latest, &mut self.disk_page, &mut self.disk_page_tick)
+        }
+        "motherboard" => panels::motherboard::draw(ui, &self.latest),
+        "process" => panels::process::draw(ui, &self.latest),
+        "battery" => panels::battery::draw(ui, &self.latest),
+        _ => {}
       }
-      if self.visible("clock") {
-        panels::clock::draw(ui, self.latest.uptime_secs);
-        ui.add_space(6.0);
-      }
-      if self.visible("cpu") {
-        panels::cpu::draw(ui, &self.latest, &mut self.cpu_spark);
-        ui.add_space(6.0);
-      }
-      if self.visible("gpu") {
-        panels::gpu::draw(ui, &self.latest, &mut self.gpu_spark);
-        ui.add_space(6.0);
-      }
-      if self.visible("ram") {
-        panels::ram::draw(ui, &self.latest, &mut self.ram_spark);
-        ui.add_space(6.0);
-      }
-      if self.visible("net") {
-        panels::net::draw(ui, &self.latest, &mut self.net_up_spark, &mut self.net_dn_spark);
-        ui.add_space(6.0);
-      }
-      if self.visible("disk") {
-        panels::disk::draw(ui, &self.latest, &mut self.disk_page, &mut self.disk_page_tick);
-        ui.add_space(6.0);
-      }
-      if self.visible("motherboard") {
-        panels::motherboard::draw(ui, &self.latest);
-        ui.add_space(6.0);
-      }
-      if self.visible("process") {
-        panels::process::draw(ui, &self.latest);
-        ui.add_space(6.0);
-      }
-      if self.visible("battery") {
-        panels::battery::draw(ui, &self.latest);
-        ui.add_space(6.0);
-      }
-    });
+      ui.add_space(6.0);
+    } }); // end ScrollArea
 
     // Repaint faster when a secondary window is open so it closes within ~100 ms
     // of the user clicking X/Save/Cancel (the open flag is set in the callback
@@ -597,6 +584,12 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
   let ping_target = hardware::detect_ping_target();
   let mb_board: Option<String> =
     tokio::task::spawn_blocking(hardware::detect_motherboard_name).await.ok().flatten();
+  let model_name: String =
+    tokio::task::spawn_blocking(hardware::detect_model_name).await.ok().flatten().unwrap_or_default();
+  let system_brand: String =
+    tokio::task::spawn_blocking(hardware::detect_system_brand).await.unwrap_or_default();
+  let gpu_name: String =
+    tokio::task::spawn_blocking(hardware::detect_gpu_name).await.ok().flatten().unwrap_or_default();
 
   let s = settings::load_settings(&dir);
   let preferred_gpu = s.preferred_gpu.clone();
@@ -757,6 +750,9 @@ async fn poll_loop(tx: mpsc::SyncSender<PollStats>, dir: PathBuf) {
       uptime_secs,
       hostname: hostname.clone(),
       cpu_model: cpu_model.clone(),
+      model_name: model_name.clone(),
+      system_brand: system_brand.clone(),
+      gpu_name: gpu_name.clone(),
       lhm_connected,
     };
 
@@ -776,9 +772,7 @@ fn main() {
   let visible_panels = s.visible_panels.clone();
   let opacity = s.opacity.clamp(0.1, 1.0) as f32;
   let always_on_top = s.window_layer == "on_top";
-  // Width from profile, height from visible panel content (not full profile height).
-  let win_w = profile_to_size(&s.dashboard_profile)[0];
-  let win_h = compute_window_height(&visible_panels);
+  let [win_w, win_h] = profile_to_size(&s.dashboard_profile);
   let [pos_x, pos_y] = pick_window_position();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -807,9 +801,11 @@ fn main() {
     options,
     Box::new(|cc| {
       let mut visuals = egui::Visuals::dark();
-      // Transparent background — color comes from clear_color().
+      // Transparent background — colour comes from clear_color(); panels draw their own fill.
       visuals.panel_fill = egui::Color32::TRANSPARENT;
       visuals.window_fill = egui::Color32::TRANSPARENT;
+      // Default text colour matches Tauri --text: #b8cce8
+      visuals.override_text_color = Some(theme::C_TEXT);
       cc.egui_ctx.set_visuals(visuals);
 
       let tray = build_tray();
@@ -874,6 +870,7 @@ fn main() {
       let current_settings = Arc::new(Mutex::new(settings::load_settings(&dir)));
       let settings_reload = Arc::new(AtomicBool::new(false));
       let dir_arc = Arc::new(dir.clone());
+      let textures = brand::Textures::load(&cc.egui_ctx);
 
       Ok(Box::new(RigStatsApp::new(
         rx,
@@ -884,6 +881,7 @@ fn main() {
         current_settings,
         settings_reload,
         dir_arc,
+        textures,
       )))
     }),
   )

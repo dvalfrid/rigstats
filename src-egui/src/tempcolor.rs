@@ -25,7 +25,3 @@ pub fn temp_color(value: Option<f64>, warn: u8, crit: u8) -> Color32 {
   }
 }
 
-/// Accent colour used for load bars and neutral sparklines.
-pub fn color_accent() -> Color32 {
-  Color32::from_rgb(0x00, 0xd4, 0xff)
-}

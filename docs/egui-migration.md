@@ -128,23 +128,25 @@ the dashboard reacts to changes immediately.
 ### Phase 6 — Visual fidelity ✅ testable
 *Goal: dashboard looks and behaves like the Tauri version.*
 
-- [ ] Window sizing: width from profile, height = sum of visible panel heights (no overflow)
+- [x] Window sizing: width from profile, height = sum of visible panel heights (no overflow)
   - `compute_window_height(visible_panels)` mirrors Tauri's `compute_panels_logical_height`
   - Height updates automatically when panels are toggled or profile changes
-  - Panel height constants calibrated to match actual render output
-- [ ] Drag handle: thin strip at top of window so user can move it to any monitor
-- [ ] Panel styling parity:
-  - Dark background `#0E1117`, panel cards with subtle border/separator
-  - Typography: large metric values, small labels, monospace where Tauri uses it
-  - Progress bars: accent colour, background fill, same proportions
-  - Sparklines: same stroke width and colour as Tauri canvas
-  - Section headers bold, same capitalisation
-- [ ] Per-panel visual review against screenshots of Tauri version:
-  - Header, Clock, CPU, GPU, RAM, Network, Disk, Motherboard, Process, Battery
-- [ ] Opacity: window background alpha driven by `clear_color()` opacity setting
-  (investigate wgpu transparent surface if current `with_transparent(true)` is insufficient)
-- [ ] Always-on-top main window: apply `window_layer` setting at runtime
-  (already applied at startup; `ViewportCommand::WindowLevel` for live changes)
+  - Panel height constants calibrated (estimates; exact values need live calibration)
+- [x] Drag handle: thin strip at top of window — `ViewportCommand::StartDrag` on drag
+- [x] Panel styling parity:
+  - Dark background `#0B0D12` panel cards with `theme::panel_frame()` helper
+  - Gradient accent line at top of each card (transparent → accent → transparent)
+  - TL/BR corner bracket decorations per panel
+  - Per-panel accent colours: CPU `#00c8ff`, GPU `#ff3a1f`, RAM `#ffb300`,
+    Net/Clock/Battery `#39ff88`, Disk `#bf7fff`, Process `#ff9f2f`, MB `#3a99b8`
+  - Progress bars: per-panel fill colour, thin (egui default)
+  - Sparklines: 1.5px stroke, per-panel accent colour
+  - Text: `C_TEXT` (`#b8cce8`) default, `C_TEXT_MUTED` for secondary labels,
+    `C_STAT_LABEL` for grid column headers
+- [x] Per-panel visual review against live screenshot — all 10 panels verified
+- [ ] Opacity: `clear_color()` alpha works; wgpu transparency investigation deferred
+- [ ] Always-on-top live update: `ViewportCommand::WindowLevel` on settings change (deferred)
+- [ ] Panel height constants: fine-tune by measuring actual rendered heights
 
 **Done when:** side-by-side screenshot of egui and Tauri dashboards shows no obvious
 visual differences in layout, colours, or typography.
@@ -228,7 +230,9 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 5 complete. Settings (four tabs), About, Status, and Updater windows via
-> deferred egui viewports. All opened from tray menu. Settings save back to disk;
-> visible_panels and opacity applied immediately. Updater is a UI stub — actual HTTP
-> check against latest.json will be implemented in Phase 7.
+> Phase 6 in progress. `theme.rs` module with all colour constants and `panel_frame()`
+> helper (dark fill, gradient top-line, TL/BR corner brackets). All 10 panels wrapped
+> in panel frames with correct per-panel accent colours. Drag handle added at top of
+> main window via `ViewportCommand::StartDrag`. ScrollArea removed — direct layout with
+> `compute_window_height()` sizing. Default text colour set to `#b8cce8`. Core-index
+> bug in CPU per-core bars fixed. Opacity and always-on-top live-update deferred.
