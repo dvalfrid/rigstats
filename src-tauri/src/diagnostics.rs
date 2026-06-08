@@ -351,6 +351,8 @@ struct DiagDisplays {
   target_w: u32,
   target_h: u32,
   monitors: Vec<DiagMonitor>,
+  /// Stable hardware IDs from PnP manager — survives reboots and monitor re-enumeration.
+  monitor_hardware_ids: serde_json::Value,
 }
 
 fn fit_score(mw: u32, mh: u32, tw: u32, th: u32) -> f64 {
@@ -415,13 +417,78 @@ fn diag_collect_displays(app: &tauri::AppHandle, profile: &str) -> String {
     })
     .collect();
 
+  let monitor_hardware_ids = run_ps_capture(
+    "Get-PnpDevice -Class Monitor -EA SilentlyContinue | \
+     Select-Object FriendlyName,InstanceId | \
+     ConvertTo-Json -Depth 2",
+  );
+
   let payload = DiagDisplays {
     current_profile: profile,
     target_w,
     target_h,
     monitors: diag_monitors,
+    monitor_hardware_ids,
   };
   serde_json::to_string_pretty(&payload).unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
+}
+
+// --- Live panel window positions -------------------------------------------
+
+fn diag_collect_panel_windows(app: &tauri::AppHandle) -> String {
+  const PANEL_KEYS: &[&str] = &[
+    "header",
+    "clock",
+    "cpu",
+    "gpu",
+    "ram",
+    "net",
+    "disk",
+    "motherboard",
+    "process",
+    "battery",
+  ];
+
+  let monitors = app
+    .get_webview_window("main")
+    .and_then(|w| w.available_monitors().ok())
+    .unwrap_or_default();
+
+  let panels: Vec<serde_json::Value> = PANEL_KEYS
+    .iter()
+    .filter_map(|key| {
+      let win = app.get_webview_window(&format!("panel-{}", key))?;
+      let outer = win.outer_position().ok();
+      let inner = win.inner_position().ok();
+      let size = win.inner_size().ok();
+      let visible = win.is_visible().unwrap_or(false);
+
+      // Identify which monitor (by name) contains the outer_position.
+      let on_monitor = outer
+        .and_then(|pos| {
+          monitors.iter().find(|m: &&tauri::Monitor| {
+            let mx = m.position().x;
+            let my = m.position().y;
+            let mw = m.size().width as i32;
+            let mh = m.size().height as i32;
+            pos.x >= mx && pos.x < mx + mw && pos.y >= my && pos.y < my + mh
+          })
+        })
+        .and_then(|m| m.name().cloned());
+
+      Some(serde_json::json!({
+        "panel": key,
+        "visible": visible,
+        "outer_pos": outer.map(|p| serde_json::json!({"x": p.x, "y": p.y})),
+        "inner_pos": inner.map(|p| serde_json::json!({"x": p.x, "y": p.y})),
+        "size": size.map(|s| serde_json::json!({"w": s.width, "h": s.height})),
+        "on_monitor": on_monitor,
+      }))
+    })
+    .collect();
+
+  serde_json::to_string_pretty(&serde_json::json!({ "panels": panels }))
+    .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e))
 }
 
 // --- Tauri command ---------------------------------------------------------
@@ -494,6 +561,7 @@ pub async fn collect_diagnostics(
       .clone();
     diag_collect_displays(&app, &profile)
   };
+  let panel_windows_json = diag_collect_panel_windows(&app);
   // Parsed sidecar snapshot: what values the Rust backend derived from the last
   // sidecar payload (disk_temps, cpu_temp, gpu devices, mb fans/voltages, etc.).
   let sidecar_parsed_json = {
@@ -522,6 +590,7 @@ pub async fn collect_diagnostics(
     ("environment.txt", env_txt.as_bytes()),
     ("sysinfo.json", sysinfo_json.as_bytes()),
     ("displays.json", displays_json.as_bytes()),
+    ("panel-windows.json", panel_windows_json.as_bytes()),
   ];
 
   for (name, data) in entries {

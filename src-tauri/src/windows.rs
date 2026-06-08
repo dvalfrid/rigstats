@@ -533,10 +533,21 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
     let url = format!("panel-{}.html", key);
 
     // Saved position or staggered default.
-    let (saved_x, saved_y) = panel_layouts
-      .get(*key)
+    let layout = panel_layouts.get(*key);
+    let (saved_x, saved_y) = layout
       .map(|p| (p.x, p.y))
       .unwrap_or_else(|| (80 + i as i32 * 24, 80 + i as i32 * 24));
+    append_debug_log(
+      app,
+      &format!(
+        "panel {key}: {} pos=({saved_x},{saved_y})",
+        if layout.is_some() {
+          "saved"
+        } else {
+          "default (no saved layout)"
+        }
+      ),
+    );
 
     let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(url.into()))
       .title(*key)
@@ -583,10 +594,22 @@ pub fn launch_floating_panels(app: &AppHandle, state: &tauri::State<AppState>) {
       .zip(win.outer_position().ok())
       .map(|(i, o)| i.y - o.y)
       .unwrap_or(0);
+    let target_x = saved_x - inset_x;
+    let target_y = saved_y - inset_y;
+    append_debug_log(
+      app,
+      &format!("panel {key}: inset=({inset_x},{inset_y}) → set_position=({target_x},{target_y})"),
+    );
     let _ = win.set_position(Position::Physical(PhysicalPosition {
-      x: saved_x - inset_x,
-      y: saved_y - inset_y,
+      x: target_x,
+      y: target_y,
     }));
+    if let Ok(actual) = win.outer_position() {
+      append_debug_log(
+        app,
+        &format!("panel {key}: actual outer_pos=({},{})", actual.x, actual.y),
+      );
+    }
 
     let _ = win.set_decorations(false);
     if desired_visible {
