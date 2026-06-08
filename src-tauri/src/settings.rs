@@ -316,15 +316,62 @@ fn migrate_v0_thresholds(s: &mut Settings) {
   }
 }
 
+/// Writes `content` to `path` via an adjacent `.tmp` file that is renamed into
+/// place. On the same filesystem, `rename` is atomic, so a hard shutdown
+/// mid-write leaves either the old file intact or the new file complete —
+/// never a truncated or partially-written result.
+pub(crate) fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), String> {
+  let tmp = path.with_extension("json.tmp");
+  fs::write(&tmp, content).map_err(|e| e.to_string())?;
+  fs::rename(&tmp, path).map_err(|e| e.to_string())
+}
+
 pub fn persist_settings(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
   let path = settings_path(app);
   if let Some(parent) = path.parent() {
     fs::create_dir_all(parent).map_err(|e| e.to_string())?;
   }
   let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-  // Write to a sibling .tmp file then rename atomically so a hard shutdown
-  // mid-write never leaves the settings file truncated or corrupted.
-  let tmp = path.with_extension("json.tmp");
-  fs::write(&tmp, &json).map_err(|e| e.to_string())?;
-  fs::rename(&tmp, &path).map_err(|e| e.to_string())
+  atomic_write(&path, &json)
+}
+
+#[cfg(test)]
+mod tests {
+  use super::atomic_write;
+
+  #[test]
+  fn atomic_write_creates_file_with_correct_content() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    atomic_write(&path, r#"{"ok":true}"#).unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"ok":true}"#);
+  }
+
+  #[test]
+  fn atomic_write_leaves_no_tmp_file_on_success() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    atomic_write(&path, "{}").unwrap();
+    assert!(!path.with_extension("json.tmp").exists());
+  }
+
+  #[test]
+  fn atomic_write_overwrites_existing_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    atomic_write(&path, r#"{"v":1}"#).unwrap();
+    atomic_write(&path, r#"{"v":2}"#).unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"v":2}"#);
+  }
+
+  #[test]
+  fn atomic_write_replaces_stale_tmp_from_previous_crash() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    // Simulate a .tmp left behind by a previous hard-killed write.
+    std::fs::write(path.with_extension("json.tmp"), "corrupted").unwrap();
+    atomic_write(&path, r#"{"recovered":true}"#).unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"recovered":true}"#);
+    assert!(!path.with_extension("json.tmp").exists());
+  }
 }
