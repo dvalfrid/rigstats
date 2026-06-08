@@ -4,12 +4,13 @@ use crate::theme;
 
 pub fn draw(ui: &mut Ui, uptime_secs: u64) {
   theme::panel_frame(ui, theme::C_GRN, |ui| {
+    ui.set_min_height(theme::PANEL_HEADER_H);
     let now = chrono::Local::now();
 
     // Large time display
     ui.label(
       RichText::new(now.format("%H:%M:%S").to_string())
-        .size(52.0)
+        .size(40.0)
         .color(egui::Color32::WHITE),
     );
 

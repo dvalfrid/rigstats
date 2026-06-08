@@ -13,6 +13,7 @@ fn fmt_ram(mb: u64) -> String {
 
 pub fn draw(ui: &mut Ui, stats: &PollStats) {
   theme::panel_frame(ui, theme::C_PROC, |ui| {
+    ui.set_min_height(theme::PANEL_DATA_H);
     ui.label(RichText::new("PROCESSES").strong().color(theme::C_TEXT).size(13.0));
 
     if stats.processes.is_empty() {

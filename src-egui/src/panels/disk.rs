@@ -18,6 +18,7 @@ fn fmt_gb(bytes: u64) -> String {
 
 pub fn draw(ui: &mut Ui, stats: &PollStats, page: &mut usize, page_tick: &mut u32) {
   theme::panel_frame(ui, theme::C_PUR, |ui| {
+    ui.set_min_height(theme::PANEL_DATA_H);
     let drives = &stats.disk_drives;
 
     ui.horizontal(|ui| {
