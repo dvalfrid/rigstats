@@ -1,65 +1,85 @@
 use egui::{Context, TextureHandle, TextureOptions};
 
 pub struct Textures {
-  pub rog: TextureHandle,
-  pub amd: TextureHandle,
-  pub nvidia: TextureHandle,
-  pub intel: TextureHandle,
+    pub rog: TextureHandle,
+    pub amd: TextureHandle,
+    pub nvidia: TextureHandle,
+    pub intel: TextureHandle,
 }
 
 impl Textures {
-  pub fn load(ctx: &Context) -> Self {
-    Self {
-      rog: load_png(ctx, "rog", include_bytes!("../../frontend/assets/ROG_logo_red.png")),
-      amd: load_png(
-        ctx,
-        "amd",
-        include_bytes!("../../frontend/assets/AMD-Radeon-Ryzen-Symbol.png"),
-      ),
-      nvidia: load_png(ctx, "nvidia", include_bytes!("../../frontend/assets/nvidia.png")),
-      intel: load_png(ctx, "intel", include_bytes!("../../frontend/assets/intel.png")),
+    pub fn load(ctx: &Context) -> Self {
+        Self {
+            rog: load_png(
+                ctx,
+                "rog",
+                include_bytes!("../../frontend/assets/ROG_logo_red.png"),
+            ),
+            amd: load_png(
+                ctx,
+                "amd",
+                include_bytes!("../../frontend/assets/AMD-Radeon-Ryzen-Symbol.png"),
+            ),
+            nvidia: load_png(
+                ctx,
+                "nvidia",
+                include_bytes!("../../frontend/assets/nvidia.png"),
+            ),
+            intel: load_png(
+                ctx,
+                "intel",
+                include_bytes!("../../frontend/assets/intel.png"),
+            ),
+        }
     }
-  }
 
-  /// Brand logo for the rig header. Returns None when no image exists for this brand.
-  pub fn rig_logo(&self, brand: &str) -> Option<&TextureHandle> {
-    match brand {
-      "rog" | "asus-rog" => Some(&self.rog),
-      _ => None,
+    /// Brand logo for the rig header. Returns None when no image exists for this brand.
+    pub fn rig_logo(&self, brand: &str) -> Option<&TextureHandle> {
+        match brand {
+            "rog" | "asus-rog" => Some(&self.rog),
+            _ => None,
+        }
     }
-  }
 
-  /// CPU vendor logo derived from cpu_model string.
-  pub fn cpu_logo(&self, cpu_model: &str) -> Option<&TextureHandle> {
-    let m = cpu_model.to_ascii_lowercase();
-    if m.contains("amd") || m.contains("ryzen") || m.contains("athlon") || m.contains("epyc") {
-      Some(&self.amd)
-    } else if m.contains("intel") || m.contains("core i") || m.contains("xeon") {
-      Some(&self.intel)
-    } else {
-      None
+    /// CPU vendor logo derived from cpu_model string.
+    pub fn cpu_logo(&self, cpu_model: &str) -> Option<&TextureHandle> {
+        let m = cpu_model.to_ascii_lowercase();
+        if m.contains("amd") || m.contains("ryzen") || m.contains("athlon") || m.contains("epyc") {
+            Some(&self.amd)
+        } else if m.contains("intel") || m.contains("core i") || m.contains("xeon") {
+            Some(&self.intel)
+        } else {
+            None
+        }
     }
-  }
 
-  /// GPU vendor logo derived from gpu_name string.
-  pub fn gpu_logo(&self, gpu_name: &str) -> Option<&TextureHandle> {
-    let m = gpu_name.to_ascii_lowercase();
-    if m.contains("amd") || m.contains("radeon") || m.contains("rx ") || m.contains("vega") {
-      Some(&self.amd)
-    } else if m.contains("nvidia") || m.contains("geforce") || m.contains("rtx") || m.contains("gtx") {
-      Some(&self.nvidia)
-    } else if m.contains("intel") || m.contains("arc") || m.contains("uhd") || m.contains("iris") {
-      Some(&self.intel)
-    } else {
-      None
+    /// GPU vendor logo derived from gpu_name string.
+    pub fn gpu_logo(&self, gpu_name: &str) -> Option<&TextureHandle> {
+        let m = gpu_name.to_ascii_lowercase();
+        if m.contains("amd") || m.contains("radeon") || m.contains("rx ") || m.contains("vega") {
+            Some(&self.amd)
+        } else if m.contains("nvidia")
+            || m.contains("geforce")
+            || m.contains("rtx")
+            || m.contains("gtx")
+        {
+            Some(&self.nvidia)
+        } else if m.contains("intel")
+            || m.contains("arc")
+            || m.contains("uhd")
+            || m.contains("iris")
+        {
+            Some(&self.intel)
+        } else {
+            None
+        }
     }
-  }
 }
 
 fn load_png(ctx: &Context, name: &str, bytes: &[u8]) -> TextureHandle {
-  let img = image::load_from_memory(bytes).expect("logo png").to_rgba8();
-  let (w, h) = img.dimensions();
-  let color_image =
-    egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
-  ctx.load_texture(name, color_image, TextureOptions::LINEAR)
+    let img = image::load_from_memory(bytes).expect("logo png").to_rgba8();
+    let (w, h) = img.dimensions();
+    let color_image =
+        egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
+    ctx.load_texture(name, color_image, TextureOptions::LINEAR)
 }
