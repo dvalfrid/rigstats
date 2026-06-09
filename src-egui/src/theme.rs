@@ -71,15 +71,32 @@ pub fn thin_bar(ui: &mut Ui, frac: f32, width: f32, color: Color32) {
   }
 }
 
-/// Wrap `add_contents` in a styled panel card:
-/// dark fill, thin border, gradient accent line at top, TL/BR corner brackets.
-pub fn panel_frame(ui: &mut Ui, accent: Color32, add_contents: impl FnOnce(&mut Ui)) {
+/// Premultiply `color` (assumed fully opaque) by `opacity`.
+fn premul(color: Color32, opacity: f32) -> Color32 {
+  let a = opacity.clamp(0.0, 1.0);
+  Color32::from_rgba_premultiplied(
+    (color.r() as f32 * a) as u8,
+    (color.g() as f32 * a) as u8,
+    (color.b() as f32 * a) as u8,
+    (255.0 * a) as u8,
+  )
+}
+
+/// Wrap `add_contents` in a styled panel card.
+/// `opacity` (0.0–1.0) is baked into all fills, borders, and decorations so
+/// the panel blends correctly over the transparent window background.
+pub fn panel_frame(
+  ui: &mut Ui,
+  accent: Color32,
+  opacity: f32,
+  add_contents: impl FnOnce(&mut Ui),
+) {
   let frame = Frame {
     inner_margin: Margin::symmetric(12, 8),
     outer_margin: Margin::ZERO,
     corner_radius: CornerRadius::ZERO,
-    fill: PANEL_FILL,
-    stroke: Stroke::new(0.5, PANEL_BORDER),
+    fill: premul(PANEL_FILL, opacity),
+    stroke: Stroke::new(0.5, premul(PANEL_BORDER, opacity)),
     ..Default::default()
   };
 
@@ -87,13 +104,14 @@ pub fn panel_frame(ui: &mut Ui, accent: Color32, add_contents: impl FnOnce(&mut 
   let rect = fr.response.rect;
   let painter = ui.painter();
 
-  draw_accent_line(painter, rect, accent);
-  draw_corner_brackets(painter, rect, accent);
+  draw_accent_line(painter, rect, accent, opacity);
+  draw_corner_brackets(painter, rect, accent, opacity);
 }
 
 /// Horizontal gradient line at the top edge: transparent → accent → transparent.
-fn draw_accent_line(painter: &egui::Painter, rect: egui::Rect, accent: Color32) {
-  let peak = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 180);
+fn draw_accent_line(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
+  let peak_a = (180.0 * opacity) as u8;
+  let peak = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), peak_a);
   let cx = rect.center().x;
   let y0 = rect.top();
   let y1 = rect.top() + 1.5;
@@ -122,8 +140,9 @@ fn draw_accent_line(painter: &egui::Painter, rect: egui::Rect, accent: Color32) 
 }
 
 /// Small L-shaped brackets at TL and BR corners of the panel.
-fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32) {
-  let c = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 128);
+fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
+  let bracket_a = (128.0 * opacity) as u8;
+  let c = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), bracket_a);
   let stroke = Stroke::new(1.0, c);
   let size = 8.0;
   let inset = 5.0;

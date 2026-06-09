@@ -156,43 +156,6 @@ fn compute_window_height(visible_panels: &[String]) -> f32 {
   h + (n as f32 * 6.0)
 }
 
-// ── Windows opacity (SetLayeredWindowAttributes) ─────────────────────────────
-
-/// On Windows, window-level opacity is applied via `SetLayeredWindowAttributes`
-/// (LWA_ALPHA) rather than via the wgpu swapchain alpha channel. The window is
-/// NOT created with `with_transparent(true)` because winit's transparent mode
-/// sets `WS_EX_NOREDIRECTIONBITMAP`, which is incompatible with LWA_ALPHA.
-#[cfg(windows)]
-mod win_opacity {
-  use winapi::shared::windef::HWND;
-  use winapi::um::winuser::{
-    FindWindowW, GetWindowLongW, SetLayeredWindowAttributes, SetWindowLongW, GWL_EXSTYLE,
-    LWA_ALPHA,
-  };
-
-  const WS_EX_LAYERED: i32 = 0x0008_0000_i32;
-
-  #[allow(unsafe_code)]
-  pub fn find_hwnd(title: &str) -> Option<usize> {
-    let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-    let hwnd = unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) };
-    if hwnd.is_null() { None } else { Some(hwnd as usize) }
-  }
-
-  #[allow(unsafe_code)]
-  pub fn set_alpha(hwnd: usize, opacity: f32) {
-    let hwnd = hwnd as HWND;
-    let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
-    unsafe {
-      let ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
-      if ex & WS_EX_LAYERED == 0 {
-        SetWindowLongW(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
-      }
-      SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
-    }
-  }
-}
-
 // ── Windows monitor enumeration ───────────────────────────────────────────────
 
 #[cfg(windows)]
@@ -353,9 +316,6 @@ struct RigStatsApp {
   settings_reload: Arc<AtomicBool>,
   preferred_gpu: Arc<Mutex<Option<String>>>,
   dir: Arc<PathBuf>,
-  // 0 = not yet found; set on first ui() frame and used for opacity changes.
-  #[cfg(windows)]
-  win_hwnd: usize,
 }
 
 impl RigStatsApp {
@@ -403,8 +363,6 @@ impl RigStatsApp {
       settings_reload,
       preferred_gpu,
       dir,
-      #[cfg(windows)]
-      win_hwnd: 0,
     }
   }
 
@@ -412,21 +370,12 @@ impl RigStatsApp {
 
 impl eframe::App for RigStatsApp {
   fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-    // Background #0e1117 — fully opaque in the swapchain.
-    // Window-level opacity is handled by SetLayeredWindowAttributes in ui().
-    [0.0549, 0.0667, 0.0902, 1.0]
+    // Fully transparent — the window background is pure desktop.
+    // Panel fills carry the dark colour and are premultiplied by opacity.
+    egui::Rgba::TRANSPARENT.to_array()
   }
 
   fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-    // First frame: locate the window handle and apply the stored opacity.
-    #[cfg(windows)]
-    if self.win_hwnd == 0 {
-      if let Some(hwnd) = win_opacity::find_hwnd("RigStats") {
-        self.win_hwnd = hwnd;
-        win_opacity::set_alpha(hwnd, self.opacity);
-      }
-    }
-
     // Pull latest stats from poll thread; push to sparklines only on new data.
     while let Ok(stats) = self.receiver.try_recv() {
       self.cpu_spark.push(stats.cpu_load as f32);
@@ -441,10 +390,6 @@ impl eframe::App for RigStatsApp {
       let s = self.current_settings.lock().unwrap();
       self.visible_panels = s.visible_panels.clone();
       self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
-      #[cfg(windows)]
-      if self.win_hwnd != 0 {
-        win_opacity::set_alpha(self.win_hwnd, self.opacity);
-      }
       let level = match s.window_layer.as_str() {
         "on_top" => egui::WindowLevel::AlwaysOnTop,
         "behind" => egui::WindowLevel::AlwaysOnBottom,
@@ -603,25 +548,22 @@ impl eframe::App for RigStatsApp {
     let panels_to_draw = self.visible_panels.clone();
     let mut new_preferred_gpu: Option<String> = None;
     for panel in &panels_to_draw {
+      let op = self.opacity;
       match panel.as_str() {
-        "header" => panels::header::draw(ui, &self.latest, &self.textures),
-        "clock" => panels::clock::draw(ui, self.latest.uptime_secs),
-        "cpu" => panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures),
+        "header" => panels::header::draw(ui, &self.latest, &self.textures, op),
+        "clock" => panels::clock::draw(ui, self.latest.uptime_secs, op),
+        "cpu" => panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures, op),
         "gpu" => {
-          if let Some(p) = panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures) {
+          if let Some(p) = panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures, op) {
             new_preferred_gpu = Some(p);
           }
         }
-        "ram" => panels::ram::draw(ui, &self.latest),
-        "net" => {
-          panels::net::draw(ui, &self.latest, &self.net_up_spark, &self.net_dn_spark)
-        }
-        "disk" => {
-          panels::disk::draw(ui, &self.latest)
-        }
-        "motherboard" => panels::motherboard::draw(ui, &self.latest),
-        "process" => panels::process::draw(ui, &self.latest),
-        "battery" => panels::battery::draw(ui, &self.latest),
+        "ram" => panels::ram::draw(ui, &self.latest, op),
+        "net" => panels::net::draw(ui, &self.latest, &self.net_up_spark, &self.net_dn_spark, op),
+        "disk" => panels::disk::draw(ui, &self.latest, op),
+        "motherboard" => panels::motherboard::draw(ui, &self.latest, op),
+        "process" => panels::process::draw(ui, &self.latest, op),
+        "battery" => panels::battery::draw(ui, &self.latest, op),
         _ => {}
       }
       ui.add_space(6.0);
@@ -909,7 +851,8 @@ fn main() {
     .with_title("RigStats")
     .with_inner_size([win_w - 2.0, win_h])
     .with_position([pos_x, pos_y])
-    .with_decorations(false);
+    .with_decorations(false)
+    .with_transparent(true);
   if always_on_top {
     viewport = viewport.with_always_on_top();
   }

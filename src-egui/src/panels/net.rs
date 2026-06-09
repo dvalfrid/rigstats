@@ -95,8 +95,8 @@ fn draw_dual(
   }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, up_spark: &Sparkline, dn_spark: &Sparkline) {
-  theme::panel_frame(ui, theme::C_GRN, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, up_spark: &Sparkline, dn_spark: &Sparkline, opacity: f32) {
+  theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
 
     ui.label(RichText::new("NETWORK").strong().color(theme::C_PANEL_TITLE).size(theme::FONT_PANEL_TITLE));

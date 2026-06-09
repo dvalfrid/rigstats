@@ -14,8 +14,8 @@ fn short_label(label: &str) -> String {
   label.chars().take(8).collect()
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats) {
-  theme::panel_frame(ui, theme::C_MB, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+  theme::panel_frame(ui, theme::C_MB, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     ui.horizontal(|ui| {
       ui.label(RichText::new("MOTHERBOARD").strong().color(theme::C_PANEL_TITLE).size(theme::FONT_PANEL_TITLE));

@@ -61,11 +61,11 @@ fn paint_row(
   );
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
   // Derive inner_w from the outer UI's max_rect — set once by window width, never changes.
   let inner_w = ui.max_rect().width() - FRAME_H_MARGIN;
 
-  theme::panel_frame(ui, theme::C_PROC, |ui| {
+  theme::panel_frame(ui, theme::C_PROC, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     ui.allocate_space(Vec2::new(inner_w, 0.0));
 

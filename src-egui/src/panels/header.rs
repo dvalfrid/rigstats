@@ -28,8 +28,8 @@ fn brand_subtitle(brand: &str) -> &'static str {
   }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures) {
-  theme::panel_frame(ui, theme::C_ACCENT, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures, opacity: f32) {
+  theme::panel_frame(ui, theme::C_ACCENT, opacity, |ui| {
     ui.set_min_height(theme::PANEL_HEADER_H);
 
     let subtitle = brand_subtitle(&stats.system_brand);

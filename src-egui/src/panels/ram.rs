@@ -6,8 +6,8 @@ use crate::PollStats;
 
 const GIB: f64 = 1_073_741_824.0;
 
-pub fn draw(ui: &mut Ui, stats: &PollStats) {
-  theme::panel_frame(ui, theme::C_RAM, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+  theme::panel_frame(ui, theme::C_RAM, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     let used_gb = stats.ram_used as f64 / GIB;
     let total_gb = stats.ram_total as f64 / GIB;

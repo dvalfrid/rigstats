@@ -32,10 +32,11 @@ pub fn draw(
   stats: &PollStats,
   spark: &Sparkline,
   tex: &Textures,
+  opacity: f32,
 ) -> Option<String> {
   let mut new_gpu: Option<String> = None;
 
-  theme::panel_frame(ui, theme::C_AMD, |ui| {
+  theme::panel_frame(ui, theme::C_AMD, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     let load = stats.gpu_load.unwrap_or(0.0);
     let load_frac = (load / 100.0) as f32;

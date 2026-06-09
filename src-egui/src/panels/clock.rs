@@ -2,8 +2,8 @@ use egui::{RichText, Ui};
 
 use crate::theme;
 
-pub fn draw(ui: &mut Ui, uptime_secs: u64) {
-  theme::panel_frame(ui, theme::C_GRN, |ui| {
+pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32) {
+  theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
     ui.set_min_height(theme::PANEL_HEADER_H);
     let now = chrono::Local::now();
 

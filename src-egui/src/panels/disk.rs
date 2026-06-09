@@ -21,8 +21,8 @@ fn fmt_speed(mb: f64) -> String {
   }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats) {
-  theme::panel_frame(ui, theme::C_PUR, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+  theme::panel_frame(ui, theme::C_PUR, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     let drives = &stats.disk_drives;
 

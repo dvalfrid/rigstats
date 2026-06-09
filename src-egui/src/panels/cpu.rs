@@ -15,8 +15,8 @@ const CORE_LBL_W: f32 = 30.0; // "C16"
 const CORE_VAL_W: f32 = 36.0; // "100%"
 const CORE_ROW_H: f32 = 16.0;
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures) {
-  theme::panel_frame(ui, theme::C_ACCENT, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, opacity: f32) {
+  theme::panel_frame(ui, theme::C_ACCENT, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     let load_frac = stats.cpu_load as f32 / 100.0;
     let tc = temp_color(stats.cpu_temp, 80, 90);

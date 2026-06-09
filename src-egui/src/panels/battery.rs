@@ -28,8 +28,8 @@ fn power_color(w: f64, charging: bool) -> Color32 {
   }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats) {
-  theme::panel_frame(ui, theme::C_GRN, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+  theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
     ui.label(RichText::new("BATTERY").strong().color(theme::C_PANEL_TITLE).size(theme::FONT_PANEL_TITLE));
 
