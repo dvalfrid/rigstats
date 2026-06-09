@@ -99,14 +99,14 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, up_spark: &Sparkline, dn_spark: &Spa
   theme::panel_frame(ui, theme::C_GRN, |ui| {
     ui.set_min_height(theme::PANEL_DATA_H);
 
-    ui.label(RichText::new("NETWORK").strong().color(theme::C_TEXT).size(13.0));
+    ui.label(RichText::new("NETWORK").strong().color(theme::C_PANEL_TITLE).size(theme::FONT_PANEL_TITLE));
     ui.add_space(4.0);
 
     // UP (green ↑) and DOWN (blue ↓) side by side in two columns.
     ui.columns(2, |cols| {
       // UP column
       cols[0].horizontal(|ui| {
-        ui.label(RichText::new("↑").size(14.0).color(theme::C_GRN));
+        theme::arrow_up(ui, 12.0, theme::C_GRN);
         ui.add_space(2.0);
         ui.label(RichText::new("UP").small().color(theme::C_GRN));
       });
@@ -116,7 +116,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, up_spark: &Sparkline, dn_spark: &Spa
 
       // DOWN column
       cols[1].horizontal(|ui| {
-        ui.label(RichText::new("↓").size(14.0).color(theme::C_NET_DOWN));
+        theme::arrow_down(ui, 12.0, theme::C_NET_DOWN);
         ui.add_space(2.0);
         ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
       });

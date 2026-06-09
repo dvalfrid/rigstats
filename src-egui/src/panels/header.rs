@@ -32,23 +32,22 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures) {
   theme::panel_frame(ui, theme::C_ACCENT, |ui| {
     ui.set_min_height(theme::PANEL_HEADER_H);
 
-    ui.add_space(6.0);
-
     let subtitle = brand_subtitle(&stats.system_brand);
-    ui.label(RichText::new(subtitle).small().color(theme::C_STAT_LABEL));
 
-    // Hostname row: text on left, brand logo right-aligned
+    // Single horizontal row spanning full panel height so the logo fills edge-to-edge.
     ui.horizontal(|ui| {
       ui.vertical(|ui| {
-        ui.label(RichText::new(&stats.hostname).size(32.0).strong().color(egui::Color32::WHITE));
+        ui.add_space(6.0);
+        ui.label(RichText::new(subtitle).small().color(theme::C_STAT_LABEL));
+        ui.label(RichText::new(&stats.hostname).size(36.0).strong().color(egui::Color32::WHITE));
         if !stats.model_name.is_empty() {
-          ui.label(RichText::new(&stats.model_name).size(14.0).color(theme::C_ACCENT));
+          ui.label(RichText::new(&stats.model_name).size(16.0).color(theme::C_ACCENT));
         }
       });
 
       if let Some(logo) = tex.rig_logo(&stats.system_brand) {
         let [lw, lh] = logo.size();
-        let target_h = 90.0;
+        let target_h = theme::PANEL_HEADER_H;
         let w = lw as f32 * (target_h / lh as f32);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
           let sized = egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, target_h));

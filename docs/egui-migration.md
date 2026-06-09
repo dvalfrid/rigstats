@@ -145,7 +145,7 @@ the dashboard reacts to changes immediately.
     `C_STAT_LABEL` for grid column headers
 - [x] Per-panel visual review against live screenshot — all 10 panels verified
 - [ ] Opacity: `clear_color()` alpha works; wgpu transparency investigation deferred
-- [ ] Always-on-top live update: `ViewportCommand::WindowLevel` on settings change (deferred)
+- [x] Always-on-top live update: `ViewportCommand::WindowLevel` on settings change
 - [ ] Panel height constants: fine-tune by measuring actual rendered heights
 
 **Done when:** side-by-side screenshot of egui and Tauri dashboards shows no obvious
@@ -230,9 +230,11 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 6 in progress. `theme.rs` module with all colour constants and `panel_frame()`
-> helper (dark fill, gradient top-line, TL/BR corner brackets). All 10 panels wrapped
-> in panel frames with correct per-panel accent colours. Drag handle added at top of
-> main window via `ViewportCommand::StartDrag`. ScrollArea removed — direct layout with
-> `compute_window_height()` sizing. Default text colour set to `#b8cce8`. Core-index
-> bug in CPU per-core bars fixed. Opacity and always-on-top live-update deferred.
+> Phase 6 complete (one item deferred). `theme.rs` with all colour constants and
+> `panel_frame()` helper. All 10 panels wrapped with per-panel accent colours. Drag
+> handle at top via `ViewportCommand::StartDrag`. Outer `ScrollArea` removed — direct
+> layout with `compute_window_height()` sizing (window resizes when panels are toggled
+> or profile changes). Always-on-top live update via `ViewportCommand::WindowLevel` on
+> settings save. Default text colour `#b8cce8`. Deferred: wgpu transparency
+> investigation (opacity works via `clear_color()` but not fully validated). Panel
+> height constants need fine-tuning by measuring actual rendered heights in the live app.

@@ -1,4 +1,4 @@
-use egui::{Color32, CornerRadius, Frame, Margin, Rect, Sense, Stroke, Ui, Vec2};
+use egui::{Color32, CornerRadius, Frame, Margin, Rect, Sense, Stroke, Ui, Vec2, pos2};
 
 // ── Panel accent colours (from panel-base.css) ────────────────────────────────
 pub const C_ACCENT: Color32 = Color32::from_rgb(0x00, 0xc8, 0xff); // CPU, Header
@@ -20,6 +20,13 @@ pub const C_DIM: Color32 = Color32::from_rgb(0x2e, 0x3d, 0x5a);
 pub const PANEL_FILL: Color32 = Color32::from_rgb(11, 13, 18);
 pub const PANEL_BORDER: Color32 = Color32::from_rgb(22, 28, 42);
 
+/// Panel section title size (e.g. "CPU LOAD", "GPU LOAD").
+/// Must stay above Body (14 px) so titles read as headings.
+pub const FONT_PANEL_TITLE: f32 = 17.0;
+
+/// Colour for panel section titles — near-white for clear visual weight.
+pub const C_PANEL_TITLE: Color32 = Color32::from_rgb(0xe4, 0xee, 0xfa);
+
 /// Height of the drag handle strip at the top of the main window (logical px).
 pub const DRAG_HANDLE_H: f32 = 14.0;
 
@@ -28,12 +35,36 @@ pub const PANEL_HEADER_H: f32 = 105.0;
 /// Minimum content height for all data panels (CPU, GPU, RAM, Net, Disk, etc.).
 pub const PANEL_DATA_H: f32 = 200.0;
 
+/// Draw a filled upward-pointing triangle (↑ substitute — Ubuntu font subset lacks U+2191).
+pub fn arrow_up(ui: &mut Ui, size: f32, color: Color32) {
+  let (resp, painter) = ui.allocate_painter(Vec2::new(size * 0.7, size), Sense::hover());
+  let r = resp.rect;
+  let cx = r.center().x;
+  painter.add(egui::Shape::convex_polygon(
+    vec![pos2(cx, r.top()), pos2(r.right(), r.bottom()), pos2(r.left(), r.bottom())],
+    color,
+    Stroke::NONE,
+  ));
+}
+
+/// Draw a filled downward-pointing triangle (↓ substitute — Ubuntu font subset lacks U+2193).
+pub fn arrow_down(ui: &mut Ui, size: f32, color: Color32) {
+  let (resp, painter) = ui.allocate_painter(Vec2::new(size * 0.7, size), Sense::hover());
+  let r = resp.rect;
+  let cx = r.center().x;
+  painter.add(egui::Shape::convex_polygon(
+    vec![pos2(r.left(), r.top()), pos2(r.right(), r.top()), pos2(cx, r.bottom())],
+    color,
+    Stroke::NONE,
+  ));
+}
+
 /// Draw a thin (4 px high) progress bar with dark background.
 pub fn thin_bar(ui: &mut Ui, frac: f32, width: f32, color: Color32) {
   const H: f32 = 4.0;
   let (resp, painter) = ui.allocate_painter(Vec2::new(width, H), Sense::hover());
   let r = resp.rect;
-  painter.rect_filled(r, 0.0, Color32::from_gray(28));
+  painter.rect_filled(r, 0.0, Color32::from_gray(42));
   let fw = frac.clamp(0.0, 1.0) * r.width();
   if fw > 0.5 {
     painter.rect_filled(Rect::from_min_size(r.min, Vec2::new(fw, r.height())), 0.0, color);

@@ -15,8 +15,11 @@ pub fn draw(ui: &mut Ui, stats: &PollStats) {
       if stats.ram_total > 0 { (stats.ram_used as f32) / (stats.ram_total as f32) } else { 0.0 };
     let pct = (frac * 100.0) as u8;
 
-    // Header
-    ui.label(RichText::new("RAM USAGE").strong().color(theme::C_TEXT).size(13.0));
+    // Header + spec (like CPU model / GPU model below title)
+    ui.label(RichText::new("RAM USAGE").strong().color(theme::C_PANEL_TITLE).size(theme::FONT_PANEL_TITLE));
+    if !stats.ram_spec.is_empty() {
+      ui.label(RichText::new(&stats.ram_spec).small().color(theme::C_TEXT_MUTED));
+    }
 
     // Large number
     ui.horizontal(|ui| {
@@ -27,18 +30,14 @@ pub fn draw(ui: &mut Ui, stats: &PollStats) {
       });
     });
 
-    // Spec + optional temperature on one row
-    ui.horizontal(|ui| {
-      if let Some(t) = stats.ram_temp {
-        let tc = temp_color(Some(t), 60, 70);
+    // Optional temperature row
+    if let Some(t) = stats.ram_temp {
+      let tc = temp_color(Some(t), 60, 70);
+      ui.horizontal(|ui| {
         ui.label(RichText::new("TEMP").small().color(theme::C_STAT_LABEL));
         ui.label(RichText::new(format!("{t:.0}°C")).color(tc));
-        ui.add_space(12.0);
-      }
-      if !stats.ram_spec.is_empty() {
-        ui.label(RichText::new(&stats.ram_spec).small().color(theme::C_TEXT_MUTED));
-      }
-    });
+      });
+    }
 
     // Push MEM bar to the bottom of the panel.
     let cursor_after_meta = ui.cursor().top();
@@ -49,7 +48,8 @@ pub fn draw(ui: &mut Ui, stats: &PollStats) {
 
     ui.horizontal(|ui| {
       ui.label(RichText::new("MEM").small().color(theme::C_STAT_LABEL));
-      let bar_w = (ui.available_width() - 32.0).max(4.0);
+      // Reserve space for "100%" label (~30 px) + auto gap (~8 px) at 12 px Small.
+      let bar_w = (ui.available_width() - 44.0).max(4.0);
       theme::thin_bar(ui, frac, bar_w, theme::C_RAM);
       ui.label(RichText::new(format!("{pct}%")).small().color(theme::C_RAM));
     });

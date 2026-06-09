@@ -18,7 +18,7 @@ pub fn draw(ui: &mut Ui, uptime_secs: u64) {
     ui.horizontal(|ui| {
       ui.label(
         RichText::new(now.format("%A").to_string().to_uppercase())
-          .size(15.0)
+          .size(16.0)
           .color(theme::C_GRN),
       );
       ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

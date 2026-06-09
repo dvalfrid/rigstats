@@ -114,7 +114,6 @@ pub struct PollStats {
 
 // ── Profile window dimensions ─────────────────────────────────────────────────
 
-
 fn profile_to_size(profile: &str) -> [f32; 2] {
   match profile {
     "portrait-xl" => [450.0, 1920.0],
@@ -134,6 +133,27 @@ fn profile_to_size(profile: &str) -> [f32; 2] {
     "portrait-4k-side" => [506.0, 2160.0],
     _ => [400.0, 780.0],
   }
+}
+
+/// Estimated window height for the given visible panels.
+///
+/// Values are calibrated estimates (content + frame inner margin 16 px).
+/// Fine-tune by measuring actual rendered heights in the live app.
+fn compute_window_height(visible_panels: &[String]) -> f32 {
+  // panel_frame inner_margin: Margin::symmetric(12, 8) → 8 top + 8 bottom = 16 px.
+  const V_MARGIN: f32 = 16.0;
+  let header_h = theme::PANEL_HEADER_H + V_MARGIN; // 121
+  let data_h   = theme::PANEL_DATA_H   + V_MARGIN; // 216
+  let n = visible_panels.len();
+  let mut h = theme::DRAG_HANDLE_H;
+  for key in visible_panels {
+    h += match key.as_str() {
+      "header" | "clock" => header_h,
+      _ => data_h,
+    };
+  }
+  // add_space(6.0) follows every panel in the render loop.
+  h + (n as f32 * 6.0)
 }
 
 // ── Windows monitor enumeration ───────────────────────────────────────────────
@@ -278,9 +298,6 @@ struct RigStatsApp {
   net_dn_spark: Sparkline,
   // Brand textures (loaded once at startup)
   textures: brand::Textures,
-  // Disk page state
-  disk_page: usize,
-  disk_page_tick: u32,
   // Secondary windows
   settings_open: Arc<AtomicBool>,
   about_open: Arc<AtomicBool>,
@@ -329,8 +346,6 @@ impl RigStatsApp {
       net_up_spark: Sparkline::new(60),
       net_dn_spark: Sparkline::new(60),
       textures,
-      disk_page: 0,
-      disk_page_tick: 0,
       settings_open: Arc::new(AtomicBool::new(false)),
       about_open: Arc::new(AtomicBool::new(false)),
       status_open: Arc::new(AtomicBool::new(false)),
@@ -370,14 +385,20 @@ impl eframe::App for RigStatsApp {
       self.latest = stats;
     }
 
-    // Handle tray commands forwarded by the background polling thread.
     // Apply settings saved from the settings window.
     if self.settings_reload.swap(false, Ordering::Relaxed) {
       let s = self.current_settings.lock().unwrap();
       self.visible_panels = s.visible_panels.clone();
       self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
-      let [w, h] = profile_to_size(&s.dashboard_profile);
+      let level = match s.window_layer.as_str() {
+        "on_top" => egui::WindowLevel::AlwaysOnTop,
+        "behind" => egui::WindowLevel::AlwaysOnBottom,
+        _ => egui::WindowLevel::Normal,
+      };
+      let [w, _] = profile_to_size(&s.dashboard_profile);
+      let h = compute_window_height(&self.visible_panels);
       ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+      ui.ctx().send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
     }
 
     // Handle tray commands forwarded by the background polling thread.
@@ -498,13 +519,6 @@ impl eframe::App for RigStatsApp {
       );
     }
 
-    // Reset disk page if drive count changed.
-    let page_total = self.latest.disk_drives.len().div_ceil(3);
-    if self.disk_page >= page_total.max(1) {
-      self.disk_page = 0;
-      self.disk_page_tick = 0;
-    }
-
     // Drag handle — thin invisible strip at top for moving the borderless window.
     let drag_w = {
       let w = ui.available_width();
@@ -533,7 +547,7 @@ impl eframe::App for RigStatsApp {
     // Panels in the order defined by visible_panels (respects user reordering).
     let panels_to_draw = self.visible_panels.clone();
     let mut new_preferred_gpu: Option<String> = None;
-    egui::ScrollArea::vertical().show(ui, |ui| { for panel in &panels_to_draw {
+    for panel in &panels_to_draw {
       match panel.as_str() {
         "header" => panels::header::draw(ui, &self.latest, &self.textures),
         "clock" => panels::clock::draw(ui, self.latest.uptime_secs),
@@ -548,7 +562,7 @@ impl eframe::App for RigStatsApp {
           panels::net::draw(ui, &self.latest, &self.net_up_spark, &self.net_dn_spark)
         }
         "disk" => {
-          panels::disk::draw(ui, &self.latest, &mut self.disk_page, &mut self.disk_page_tick)
+          panels::disk::draw(ui, &self.latest)
         }
         "motherboard" => panels::motherboard::draw(ui, &self.latest),
         "process" => panels::process::draw(ui, &self.latest),
@@ -556,7 +570,17 @@ impl eframe::App for RigStatsApp {
         _ => {}
       }
       ui.add_space(6.0);
-    } }); // end ScrollArea
+    }
+    // Fit window height to actual rendered content every frame so no black gap
+    // appears regardless of panel set, spacing, or egui version.
+    let used_h = ui.min_rect().height();
+    if used_h > 10.0 {
+      let [w, _] = profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
+      ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+        egui::Vec2::new(w - 2.0, used_h),
+      ));
+    }
+
     if let Some(new_pref) = new_preferred_gpu {
       *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
       let mut s = self.current_settings.lock().unwrap();
@@ -637,10 +661,14 @@ async fn poll_loop(
         .with_cpu(CpuRefreshKind::new().with_cpu_usage().with_frequency())
         .with_memory(MemoryRefreshKind::everything()),
     );
-    sys.refresh_processes();
+    sys.refresh_processes_specifics(sysinfo::ProcessRefreshKind::new().with_cpu().with_memory().with_disk_usage());
 
     let cpu_load = sys.global_cpu_info().cpu_usage() as u8;
-    let cpu_freq_mhz = sys.global_cpu_info().frequency() as f64;
+    // global_cpu_info().frequency() returns 0 on Windows in sysinfo 0.30; use per-core average.
+    let cpu_freq_mhz = {
+      let cpus = sys.cpus();
+      if cpus.is_empty() { 0.0 } else { cpus.iter().map(|c| c.frequency() as f64).sum::<f64>() / cpus.len() as f64 }
+    };
     let cpu_cores: Vec<u8> = sys.cpus().iter().map(|c| c.cpu_usage() as u8).collect();
     let uptime_secs = System::uptime();
 
@@ -672,6 +700,12 @@ async fn poll_loop(
     let now = Instant::now();
     let elapsed = now.duration_since(last_net_instant).as_secs_f64().max(0.5);
     last_net_instant = now;
+
+    // disk_usage().read_bytes / written_bytes are per-tick deltas from sysinfo processes.
+    let total_read_bytes: u64 = sys.processes().values().map(|p| p.disk_usage().read_bytes).sum();
+    let total_write_bytes: u64 = sys.processes().values().map(|p| p.disk_usage().written_bytes).sum();
+    let disk_read_mbps = total_read_bytes as f64 / elapsed / 1_048_576.0;
+    let disk_write_mbps = total_write_bytes as f64 / elapsed / 1_048_576.0;
     networks.refresh();
     let mut best_iface = "--".to_string();
     let mut best_up = 0.0f64;
@@ -759,8 +793,8 @@ async fn poll_loop(
       net_down_mbps: best_down,
       net_iface: best_iface,
       net_ping_ms: ping_ms,
-      disk_read_mbps: lhm_data.as_ref().map(|l| l.disk_read).unwrap_or(0.0),
-      disk_write_mbps: lhm_data.as_ref().map(|l| l.disk_write).unwrap_or(0.0),
+      disk_read_mbps,
+      disk_write_mbps,
       disk_drives,
       mb_fans: lhm_data.as_ref().map(|l| l.mb_fans.clone()).unwrap_or_default(),
       mb_temps: lhm_data.as_ref().map(|l| l.mb_temps.clone()).unwrap_or_default(),
@@ -794,13 +828,14 @@ async fn poll_loop(
 fn main() {
   let dir = app_data_dir();
   debug::reset_debug_log(&dir);
-  debug::append_debug_log(&dir, "rigstats-egui starting (Phase 4)");
+  debug::append_debug_log(&dir, "rigstats-egui starting (Phase 6)");
 
   let s = settings::load_settings(&dir);
   let visible_panels = s.visible_panels.clone();
   let opacity = s.opacity.clamp(0.1, 1.0) as f32;
   let always_on_top = s.window_layer == "on_top";
-  let [win_w, win_h] = profile_to_size(&s.dashboard_profile);
+  let [win_w, _] = profile_to_size(&s.dashboard_profile);
+  let win_h = compute_window_height(&visible_panels);
   let [pos_x, pos_y] = pick_window_position();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -817,7 +852,7 @@ fn main() {
 
   let mut viewport = egui::ViewportBuilder::default()
     .with_title("RigStats")
-    .with_inner_size([win_w, win_h])
+    .with_inner_size([win_w - 2.0, win_h])
     .with_position([pos_x, pos_y])
     .with_decorations(false)
     .with_transparent(true);
@@ -838,6 +873,21 @@ fn main() {
       // Default text colour matches Tauri --text: #b8cce8
       visuals.override_text_color = Some(theme::C_TEXT);
       cc.egui_ctx.set_visuals(visuals);
+
+      // Larger font sizes for readability on a portrait monitor.
+      {
+        use egui::{FontFamily, FontId, TextStyle};
+        let mut style = (*cc.egui_ctx.global_style()).clone();
+        style.text_styles = [
+          (TextStyle::Small, FontId::new(12.0, FontFamily::Proportional)),
+          (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
+          (TextStyle::Button, FontId::new(14.0, FontFamily::Proportional)),
+          (TextStyle::Heading, FontId::new(18.0, FontFamily::Proportional)),
+          (TextStyle::Monospace, FontId::new(13.0, FontFamily::Monospace)),
+        ]
+        .into();
+        cc.egui_ctx.set_global_style(style);
+      }
 
       let tray = build_tray();
       let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
