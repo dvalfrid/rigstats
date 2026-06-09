@@ -32,25 +32,24 @@ pub fn draw(ui: &mut Ui, stats: &PollStats) {
     ui.add_space(4.0);
 
     // Read / Write columns — same layout as NET UP / DOWN.
-    if stats.lhm_connected {
-      ui.columns(2, |cols| {
-        cols[0].horizontal(|ui| {
-          theme::arrow_up(ui, 12.0, theme::C_PUR);
-          ui.add_space(2.0);
-          ui.label(RichText::new("READ").small().color(theme::C_PUR));
-        });
-        cols[0]
-          .label(RichText::new(fmt_speed(stats.disk_read_mbps)).size(20.0).color(Color32::WHITE));
-
-        cols[1].horizontal(|ui| {
-          theme::arrow_down(ui, 12.0, theme::C_TEXT_MUTED);
-          ui.add_space(2.0);
-          ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
-        });
-        cols[1]
-          .label(RichText::new(fmt_speed(stats.disk_write_mbps)).size(20.0).color(Color32::WHITE));
+    // Values come from sysinfo process-delta, available regardless of LHM.
+    ui.columns(2, |cols| {
+      cols[0].horizontal(|ui| {
+        theme::arrow_up(ui, 12.0, theme::C_PUR);
+        ui.add_space(2.0);
+        ui.label(RichText::new("READ").small().color(theme::C_PUR));
       });
-    }
+      cols[0]
+        .label(RichText::new(fmt_speed(stats.disk_read_mbps)).size(20.0).color(Color32::WHITE));
+
+      cols[1].horizontal(|ui| {
+        theme::arrow_down(ui, 12.0, theme::C_TEXT_MUTED);
+        ui.add_space(2.0);
+        ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
+      });
+      cols[1]
+        .label(RichText::new(fmt_speed(stats.disk_write_mbps)).size(20.0).color(Color32::WHITE));
+    });
 
     if drives.is_empty() {
       ui.label(RichText::new("no drives").small().color(theme::C_TEXT_MUTED));

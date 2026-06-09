@@ -144,9 +144,14 @@ the dashboard reacts to changes immediately.
   - Text: `C_TEXT` (`#b8cce8`) default, `C_TEXT_MUTED` for secondary labels,
     `C_STAT_LABEL` for grid column headers
 - [x] Per-panel visual review against live screenshot — all 10 panels verified
-- [ ] Opacity: `clear_color()` alpha works; wgpu transparency investigation deferred
+- [x] Opacity: `SetLayeredWindowAttributes(LWA_ALPHA)` applies whole-window opacity.
+  Window created without `with_transparent(true)` (avoids `WS_EX_NOREDIRECTIONBITMAP`
+  conflict). `clear_color()` returns opaque; LWA_ALPHA set on first `ui()` frame and
+  re-applied on settings change. Matches Tauri CSS `opacity:` behaviour (entire window
+  at the chosen opacity level, not just the background).
 - [x] Always-on-top live update: `ViewportCommand::WindowLevel` on settings change
-- [ ] Panel height constants: fine-tune by measuring actual rendered heights
+- [x] Panel height constants: live-resize via `ui.min_rect().height()` every frame
+  eliminates any residual gap; static constants only affect the cold start size.
 
 **Done when:** side-by-side screenshot of egui and Tauri dashboards shows no obvious
 visual differences in layout, colours, or typography.
@@ -230,11 +235,13 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 6 complete (one item deferred). `theme.rs` with all colour constants and
-> `panel_frame()` helper. All 10 panels wrapped with per-panel accent colours. Drag
-> handle at top via `ViewportCommand::StartDrag`. Outer `ScrollArea` removed — direct
-> layout with `compute_window_height()` sizing (window resizes when panels are toggled
-> or profile changes). Always-on-top live update via `ViewportCommand::WindowLevel` on
-> settings save. Default text colour `#b8cce8`. Deferred: wgpu transparency
-> investigation (opacity works via `clear_color()` but not fully validated). Panel
-> height constants need fine-tuning by measuring actual rendered heights in the live app.
+> Phase 6 complete. `theme.rs` with all colour constants and `panel_frame()` helper.
+> All 10 panels wrapped with per-panel accent colours. Drag handle at top via
+> `ViewportCommand::StartDrag`. Live window-height resize every frame via
+> `ui.min_rect().height()` (no black gap). Always-on-top live update via
+> `ViewportCommand::WindowLevel` on settings save. Default text colour `#b8cce8`.
+> Opacity via `SetLayeredWindowAttributes(LWA_ALPHA)` — whole-window transparency
+> matching Tauri CSS opacity behaviour. Header logo fills full panel height; CPU/GPU
+> title+model stacked beside logo; RAM spec under title; Disk READ/WRITE always shown
+> from sysinfo; triangles replace missing Unicode arrows; Motherboard FAN|SENSOR|RAIL
+> three-column layout; Process absolute-x painter columns; Battery uses thin_bar.

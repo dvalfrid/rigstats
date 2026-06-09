@@ -1,12 +1,6 @@
-use egui::{Color32, ProgressBar, RichText, Ui};
+use egui::{Color32, RichText, Ui};
 
-use crate::theme;
-use crate::PollStats;
-
-fn safe_bar_width(ui: &Ui) -> f32 {
-  let w = ui.available_width();
-  if w.is_finite() && w > 0.0 { w } else { ui.ctx().content_rect().width().max(1.0) }
-}
+use crate::{theme, PollStats};
 
 fn charge_color(pct: u8, charging: bool) -> Color32 {
   if charging {
@@ -56,8 +50,8 @@ pub fn draw(ui: &mut Ui, stats: &PollStats) {
       }
     });
 
-    let bw = safe_bar_width(ui);
-    ui.add(ProgressBar::new(frac).desired_width(bw).fill(color));
+    let bw = (ui.available_width()).max(4.0);
+    theme::thin_bar(ui, frac, bw, color);
 
     if let Some(mins) = stats.battery_time_mins {
       let h = mins / 60;
