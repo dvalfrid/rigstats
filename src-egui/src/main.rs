@@ -12,7 +12,7 @@ mod windows;
 use eframe::egui;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, settings};
 use spark::Sparkline;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -372,6 +372,14 @@ struct RigStatsApp {
     /// Guards the one-time initial hide of the main window when the app
     /// starts with floating_mode already enabled.
     initial_floating_applied: bool,
+    /// Tracks which floating panel viewports have already had their initial
+    /// position applied.  Once a panel is in this set, `with_position` is
+    /// NOT included in the ViewportBuilder — the OS owns the position from
+    /// that point on, which prevents the builder diff from continuously
+    /// sending SetOuterPosition and causing sub-pixel blur.
+    /// Cleared whenever floating mode transitions from off → on so positions
+    /// are restored from the saved layout on next activation.
+    panels_positioned: HashSet<String>,
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     floating_mode_arc: Arc<AtomicBool>,
     // ── Shared live data for floating panel closures ────────────────────────
@@ -447,6 +455,7 @@ impl RigStatsApp {
             positions_dirty: Arc::new(AtomicBool::new(false)),
             float_new_pref_gpu: Arc::new(Mutex::new(None)),
             initial_floating_applied: false,
+            panels_positioned: HashSet::new(),
             floating_mode_arc,
             latest_arc: Arc::new(Mutex::new(PollStats::default())),
             cpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
@@ -531,6 +540,9 @@ impl eframe::App for RigStatsApp {
             // ticked by eframe, so the floating panels would not update.
             if was_floating != self.floating_mode {
                 if self.floating_mode {
+                    // Clear positioned-set so restored positions are re-applied
+                    // from the saved layout the first time each panel is shown.
+                    self.panels_positioned.clear();
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                         egui::Pos2::new(-32000.0, -32000.0),
                     ));
@@ -880,7 +892,7 @@ impl RigStatsApp {
     /// parent frame — no deferred callbacks, no separate event loops.  The parent
     /// ticks at ~1 fps (via `request_repaint_after(1 s)` in `update()`), so all
     /// panels naturally update at ~1 fps without any Win32 tricks.
-    fn render_floating_panels(&self, ui: &mut egui::Ui) {
+    fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
         let profile_w = profile_to_size(&s.dashboard_profile)[0];
         let on_top = s.window_layer == "on_top";
@@ -905,13 +917,25 @@ impl RigStatsApp {
             let panel_w = profile_w * scale;
             let initial_h = panel_initial_h(&key) * scale;
 
+            // Only set window position on first creation.  After that the OS
+            // owns the position (via drag); re-sending with_position every frame
+            // causes egui to diff-and-dispatch SetOuterPosition continuously,
+            // which fights the OS and produces sub-pixel blur.
+            let needs_position = !self.panels_positioned.contains(&key);
+            if needs_position {
+                self.panels_positioned.insert(key.clone());
+            }
+
             let mut vp_builder = egui::ViewportBuilder::default()
                 .with_title(format!("RigStats \u{2014} {}", panel_label(&key)))
                 .with_inner_size([panel_w, initial_h])
-                .with_position(init_pos)
                 .with_decorations(false)
                 .with_resizable(false)
                 .with_taskbar(false);
+
+            if needs_position {
+                vp_builder = vp_builder.with_position(init_pos);
+            }
 
             if on_top {
                 vp_builder = vp_builder.with_always_on_top();
@@ -937,7 +961,8 @@ impl RigStatsApp {
 
                     // ── Track window position for persistence ─────────────────
                     if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
-                        let new_pos = [outer.left(), outer.top()];
+                        // Round to integer logical pixels to avoid sub-pixel oscillation.
+                        let new_pos = [outer.left().round(), outer.top().round()];
                         let mut pos = positions_arc.lock().unwrap();
                         let stored = pos
                             .entry(key.clone())
@@ -999,12 +1024,19 @@ impl RigStatsApp {
                                 *new_pref_arc.lock().unwrap() = Some(p);
                             }
 
-                            // Auto-resize height to content every frame.
-                            let used_h = ui.min_rect().height();
+                            // Auto-resize height to content, but only when it actually
+                            // changes — sending InnerSize every frame causes sub-pixel
+                            // jitter that makes the panel blurry after dragging.
+                            let used_h = ui.min_rect().height().round();
                             if used_h > 10.0 {
-                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                                    egui::Vec2::new(panel_w, used_h),
-                                ));
+                                let current_h = ctx
+                                    .input(|i| i.viewport().inner_rect)
+                                    .map_or(0.0, |r| r.height().round());
+                                if (used_h - current_h).abs() > 0.5 {
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                        egui::Vec2::new(panel_w, used_h),
+                                    ));
+                                }
                             }
 
                             // Apply opacity to this panel's OS window.

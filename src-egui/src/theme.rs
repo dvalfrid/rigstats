@@ -35,6 +35,9 @@ pub const PANEL_HEADER_H: f32 = 105.0;
 /// Minimum content height for all data panels (CPU, GPU, RAM, Net, Disk, etc.).
 pub const PANEL_DATA_H: f32 = 200.0;
 
+/// Shared ring gauge diameter used by CPU and GPU panels (keeps them visually consistent).
+pub const RING_SIZE: f32 = 64.0;
+
 /// Draw a filled upward-pointing triangle (↑ substitute — Ubuntu font subset lacks U+2191).
 pub fn arrow_up(ui: &mut Ui, size: f32, color: Color32) {
     let (resp, painter) = ui.allocate_painter(Vec2::new(size * 0.7, size), Sense::hover());

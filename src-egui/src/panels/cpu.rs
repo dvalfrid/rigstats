@@ -7,7 +7,6 @@ use crate::tempcolor::temp_color;
 use crate::theme;
 use crate::PollStats;
 
-const RING_SIZE: f32 = 80.0;
 const SPARK_H: f32 = 36.0;
 
 // Fixed column widths for per-core bar rows (at 12 px Small).
@@ -22,7 +21,6 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
         let tc = temp_color(stats.cpu_temp, 80, 90);
 
         // Header: title + model name stacked vertically on the left; logo right-aligned.
-        // The logo is in a sibling column so its height does not inflate the title→model gap.
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
@@ -54,12 +52,10 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
         });
 
         // Ring gauge + metadata side by side.
-        // ui.horizontal() uses left_to_right(Align::Center) internally — items are
-        // vertically centred within the row height (= RING_SIZE), which is correct.
         ui.horizontal(|ui| {
             ring::show(
                 ui,
-                RING_SIZE,
+                theme::RING_SIZE,
                 load_frac,
                 theme::C_ACCENT,
                 &format!("{}%", stats.cpu_load),
@@ -97,24 +93,34 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
 
         ui.add_space(6.0);
 
-        // Per-core bars — two fixed-width columns so labels/values never shift.
+        // Per-core bars — two fixed-width columns, 2 rows visible, scrollable.
         if !stats.cpu_cores.is_empty() {
             let cores = &stats.cpu_cores;
             let avail = ui.available_width();
-            // 6 widgets, 5 auto-gaps (8 px each): 2*(LBL+VAL) + 5*8 = 132 + 40 = 172 fixed
+            // 6 widgets, 5 auto-gaps (~8 px each): 2*(LBL+VAL) + 5*8 = 132 + 40 = 172 fixed
             let bar_w = ((avail - 172.0) / 2.0).max(4.0);
+
+            // Hard-allocate exactly 2 rows of vertical space in the parent layout,
+            // then render the ScrollArea inside that fixed region. This avoids
+            // relying solely on max_height, which can be overridden by set_min_height.
+            let row_gap = 2.0_f32;
+            let scroll_h = CORE_ROW_H * 2.0 + row_gap; // 34 px
+            let (outer_rect, _) =
+                ui.allocate_exact_size(Vec2::new(avail, scroll_h), egui::Sense::hover());
+
+            let mut inner_ui =
+                ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
 
             egui::ScrollArea::vertical()
                 .id_salt("cpu_cores")
-                .max_height(2.0 * CORE_ROW_H + 4.0)
-                .show(ui, |ui| {
-                    ui.spacing_mut().item_spacing.y = 2.0;
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+                .show(&mut inner_ui, |ui| {
+                    ui.style_mut().spacing.item_spacing.y = row_gap;
                     for (row, pair) in cores.chunks(2).enumerate() {
                         ui.horizontal(|ui| {
                             for (col, &load) in pair.iter().enumerate() {
                                 let idx = row * 2 + col;
 
-                                // Right-aligned label in fixed box
                                 ui.allocate_ui_with_layout(
                                     Vec2::new(CORE_LBL_W, CORE_ROW_H),
                                     egui::Layout::right_to_left(egui::Align::Center),
@@ -129,7 +135,6 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
 
                                 theme::thin_bar(ui, load as f32 / 100.0, bar_w, theme::C_ACCENT);
 
-                                // Right-aligned value so all values end at the same x edge
                                 ui.allocate_ui_with_layout(
                                     Vec2::new(CORE_VAL_W, CORE_ROW_H),
                                     egui::Layout::right_to_left(egui::Align::Center),
@@ -141,15 +146,16 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
                                         );
                                     },
                                 );
-
-                                let _ = col; // suppress unused-variable warning for last col
                             }
                         });
                     }
                 });
         }
 
-        ui.add_space(4.0);
+        // Push sparkline to the bottom of the panel (same pattern as NET/RAM/DISK).
+        let cursor_y = ui.cursor().top();
+        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
+        ui.add_space(filler);
         spark.draw(ui, SPARK_H, theme::C_ACCENT);
     });
 }

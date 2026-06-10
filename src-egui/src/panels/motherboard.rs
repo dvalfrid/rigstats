@@ -134,5 +134,12 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                     });
                 });
         }
+
+        // Fill remaining space to reach PANEL_DATA_H (same pattern as NET/RAM/DISK).
+        let cursor_y = ui.cursor().top();
+        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top())).max(0.0);
+        if filler > 0.0 {
+            ui.add_space(filler);
+        }
     });
 }

@@ -7,7 +7,6 @@ use crate::tempcolor::{color_unknown, temp_color};
 use crate::theme;
 use crate::PollStats;
 
-const RING_SIZE: f32 = 80.0;
 const SPARK_H: f32 = 36.0;
 
 // Fixed column widths for bar rows — all four rows share the same grid.
@@ -117,7 +116,7 @@ pub fn draw(
         };
 
         ui.horizontal(|ui| {
-            ring::show(ui, RING_SIZE, load_frac, ring_color, &ring_label);
+            ring::show(ui, theme::RING_SIZE, load_frac, ring_color, &ring_label);
             ui.add_space(12.0);
 
             let temp_s = stats
@@ -276,7 +275,10 @@ pub fn draw(
             );
         }
 
-        ui.add_space(4.0);
+        // Push sparkline to the bottom of the panel (same pattern as NET/RAM/DISK).
+        let cursor_y = ui.cursor().top();
+        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
+        ui.add_space(filler);
         spark.draw(ui, SPARK_H, theme::C_AMD);
     });
 
