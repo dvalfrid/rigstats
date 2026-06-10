@@ -1,28 +1,32 @@
 //! Win32 helpers for "Always Behind" floating-panel mode.
 //!
-//! On Windows, `WindowLevel::AlwaysOnBottom` only sets the Z-order at window
-//! creation time.  A mouse click still sends WM_ACTIVATE, which brings the
-//! window to the foreground.  The correct fix is two-fold:
+//! `SC_MOVE` (the Win32 move-drag command egui uses for `StartDrag`) requires
+//! the target window to be active.  `WS_EX_NOACTIVATE` prevents activation, so
+//! dragging a "behind" panel is a two-step process:
 //!
-//! 1. `WS_EX_NOACTIVATE` — prevents the window from being activated on click,
-//!    so it never jumps to the foreground.
-//! 2. Periodic `SetWindowPos(HWND_BOTTOM)` — keeps the Z-order correct even
-//!    when other windows are manipulated.
+//! 1. `prepare_for_drag` — removes `WS_EX_NOACTIVATE` and activates the window
+//!    momentarily so `SC_MOVE` can run its modal loop.
+//! 2. `apply_behind` — called on the first frame after the drag finishes
+//!    (primary button released) to re-add `WS_EX_NOACTIVATE` and push the
+//!    window back to `HWND_BOTTOM`.
 //!
-//! Both operations are idempotent and cheap; calling `apply_behind` every
-//! frame (60 Hz) adds negligible overhead.
+//! All operations are idempotent; `FindWindowW` lookup is O(windows) but
+//! harmless at the frequency we call it (once on drag-start, then once per
+//! frame while idle in behind-mode).
 
 #![allow(unsafe_code)]
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use winapi::um::winuser::{
-    FindWindowW, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE, HWND_BOTTOM,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
+    FindWindowW, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
+    GWL_EXSTYLE, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
 };
 
-fn to_wide_nul(s: &str) -> Vec<u16> {
-    OsStr::new(s).encode_wide().chain(Some(0)).collect()
+fn find_hwnd(title: &str) -> winapi::shared::windef::HWND {
+    let title_w: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
+    // SAFETY: title_w is null-terminated, first arg NULL means any class.
+    unsafe { FindWindowW(std::ptr::null(), title_w.as_ptr()) }
 }
 
 /// Enforce "always behind" on the window whose title matches `title`.
@@ -30,23 +34,18 @@ fn to_wide_nul(s: &str) -> Vec<u16> {
 /// * Sets `WS_EX_NOACTIVATE` so clicking the window does not activate it.
 /// * Calls `SetWindowPos(HWND_BOTTOM)` to keep it behind all normal windows.
 ///
-/// Uses `FindWindowW` to look up the HWND from the title each call; returns
-/// silently if the window does not exist yet.
+/// Call this every frame while the panel is idle (not being dragged).
 pub fn apply_behind(title: &str) {
-    let title_w = to_wide_nul(title);
-    // SAFETY: title_w is null-terminated, first arg NULL means any class.
-    let hwnd = unsafe { FindWindowW(std::ptr::null(), title_w.as_ptr()) };
+    let hwnd = find_hwnd(title);
     if hwnd.is_null() {
         return;
     }
     unsafe {
-        // Add WS_EX_NOACTIVATE if not already present.
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let desired = ex_style | WS_EX_NOACTIVATE as isize;
         if ex_style != desired {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
-        // Push to bottom of Z-order without activating.
         SetWindowPos(
             hwnd,
             HWND_BOTTOM,
@@ -59,12 +58,17 @@ pub fn apply_behind(title: &str) {
     }
 }
 
-/// Remove `WS_EX_NOACTIVATE` when switching away from "behind" mode so the
-/// window can be activated normally again.
-#[allow(dead_code)]
-pub fn remove_no_activate(title: &str) {
-    let title_w = to_wide_nul(title);
-    let hwnd = unsafe { FindWindowW(std::ptr::null(), title_w.as_ptr()) };
+/// Prepare the window for a user-initiated drag.
+///
+/// `SC_MOVE` (used by `ViewportCommand::StartDrag`) requires the window to be
+/// active.  `WS_EX_NOACTIVATE` prevents that, so we must:
+///  1. Strip `WS_EX_NOACTIVATE` so the window can be activated.
+///  2. Call `SetForegroundWindow` to activate it immediately.
+///
+/// `apply_behind` will re-add `WS_EX_NOACTIVATE` and push to `HWND_BOTTOM`
+/// once the drag finishes (primary button released).
+pub fn prepare_for_drag(title: &str) {
+    let hwnd = find_hwnd(title);
     if hwnd.is_null() {
         return;
     }
@@ -74,5 +78,6 @@ pub fn remove_no_activate(title: &str) {
         if ex_style != desired {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
+        SetForegroundWindow(hwnd);
     }
 }

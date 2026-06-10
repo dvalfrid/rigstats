@@ -1087,13 +1087,14 @@ impl RigStatsApp {
                     }
 
                     // ── "Always Behind" enforcement ───────────────────────────
-                    // egui's AlwaysOnBottom only sets Z-order at creation.  A
-                    // click still sends WM_ACTIVATE and Windows lifts the window
-                    // to the foreground.  Fix:
-                    //   1. Re-send ViewportCommand every frame so egui/winit
-                    //      calls SetWindowPos(HWND_BOTTOM) continuously.
-                    //   2. Win32: set WS_EX_NOACTIVATE so clicks don't activate.
-                    if is_behind {
+                    // SC_MOVE (StartDrag) requires the window to be active.
+                    // WS_EX_NOACTIVATE prevents activation, so we only enforce
+                    // "behind" when the primary button is NOT pressed on this
+                    // panel.  prepare_for_drag() strips WS_EX_NOACTIVATE and
+                    // activates the window just before sending StartDrag, then
+                    // apply_behind() re-arms on the next idle frame.
+                    let primary_down = ctx.input(|i| i.pointer.primary_down());
+                    if is_behind && !primary_down {
                         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                             egui::WindowLevel::AlwaysOnBottom,
                         ));
@@ -1108,23 +1109,40 @@ impl RigStatsApp {
                             // ── Drag handle ───────────────────────────────────
                             let locked = lock_arc.load(Ordering::Relaxed);
                             let drag_w = ui.available_width().max(1.0);
-                            // When locked: Sense::hover() so egui never captures a drag
-                            // interaction on this widget.  Leaving Sense::drag() active
-                            // while locked means egui can record a stale drag-ID from a
-                            // padlock-click, which then blocks the first real drag after
-                            // unlock (until something resets egui's interaction state).
-                            let drag_sense = if locked {
-                                egui::Sense::hover()
-                            } else {
-                                egui::Sense::drag()
-                            };
+                            // Always allocate with hover sense — we bypass egui's drag
+                            // state machine entirely (see below).
                             let (drag_rect, drag_resp) = ui.allocate_exact_size(
                                 egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
-                                drag_sense,
+                                egui::Sense::hover(),
                             );
-                            // drag_started() fires only on the first frame of a new drag,
-                            // so we send exactly one StartDrag per OS drag operation.
-                            if !locked && drag_resp.drag_started() {
+                            // Manual drag detection: primary_pressed() is true only on the
+                            // single frame the button actually transitions down.  This is
+                            // immune to egui's drag-state getting stuck when an external
+                            // window is dragged over the panel (winit drops the mouse-up in
+                            // that case, leaving egui thinking the button is still held —
+                            // drag_started() then never fires again until a dialog resets
+                            // the state).  By reading raw pointer state we avoid that
+                            // entirely.
+                            let hover_pos = ctx.input(|i| i.pointer.hover_pos());
+                            let just_pressed = ctx.input(|i| i.pointer.primary_pressed());
+                            let in_drag_strip = hover_pos
+                                .map(|p| drag_rect.contains(p))
+                                .unwrap_or(false);
+                            // Exclude the right 18 px (padlock zone) from the drag trigger.
+                            let padlock_zone_x = drag_rect.right() - 18.0;
+                            let in_padlock = hover_pos
+                                .map(|p| p.x >= padlock_zone_x)
+                                .unwrap_or(false);
+                            if !locked && just_pressed && in_drag_strip && !in_padlock {
+                                // In "behind" mode the window has WS_EX_NOACTIVATE which
+                                // prevents SC_MOVE from working.  Strip it and bring the
+                                // window to the foreground so the OS drag loop can run.
+                                // apply_behind() re-arms on the next idle frame (when
+                                // primary_down is false again).
+                                #[cfg(windows)]
+                                if is_behind {
+                                    win32_behind::prepare_for_drag(&win_title);
+                                }
                                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                             }
 
