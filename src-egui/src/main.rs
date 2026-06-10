@@ -516,7 +516,7 @@ impl RigStatsApp {
             settings_win: Arc::new(Mutex::new(
                 windows::settings::SettingsWindow::from_settings(&init_settings),
             )),
-            status_win: Arc::new(Mutex::new(windows::status::StatusState::load(&dir))),
+            status_win: Arc::new(Mutex::new(windows::status::StatusState::load(&dir, false))),
             updater_win,
             updater_busy: Arc::new(AtomicBool::new(false)),
             current_settings,
@@ -659,7 +659,7 @@ impl eframe::App for RigStatsApp {
                 }
                 TrayCmd::OpenStatus => {
                     *self.status_win.lock().unwrap() =
-                        windows::status::StatusState::load(&self.dir);
+                        windows::status::StatusState::load(&self.dir, self.latest.lhm_connected);
                     self.status_open.store(true, Ordering::Relaxed);
                     self.status_focus.store(true, Ordering::Relaxed);
                 }
@@ -819,14 +819,15 @@ impl eframe::App for RigStatsApp {
             let state = self.status_win.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(520.0, 500.0);
+            let [px, py] = dialog_center(680.0, 720.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
+            let lhm_connected = self.latest.lhm_connected;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Status")
-                    .with_inner_size([520.0, 500.0])
+                    .with_inner_size([680.0, 720.0])
                     .with_position([px, py])
                     .with_taskbar(false)
                     .with_always_on_top(),
@@ -835,7 +836,7 @@ impl eframe::App for RigStatsApp {
                     {
                         found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Status");
                     }
-                    windows::status::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dir);
+                    windows::status::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dir, lhm_connected);
                 },
             );
             #[cfg(windows)]
@@ -1549,28 +1550,38 @@ async fn poll_loop(
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
         .unwrap_or_default();
+    debug::append_debug_log(&dir, &format!("hardware: ram_spec={ram_spec}"));
     let disk_model_map: HashMap<String, String> =
         tokio::task::spawn_blocking(hardware::detect_disk_model_map)
             .await
             .unwrap_or_default();
+    debug::append_debug_log(
+        &dir,
+        &format!("hardware: disk_model_map entries={}", disk_model_map.len()),
+    );
     let ping_target = hardware::detect_ping_target();
+    debug::append_debug_log(&dir, &format!("hardware: ping_target={ping_target}"));
     let mb_board: Option<String> = tokio::task::spawn_blocking(hardware::detect_motherboard_name)
         .await
         .ok()
         .flatten();
+    debug::append_debug_log(&dir, &format!("hardware: mb_board={mb_board:?}"));
     let model_name: String = tokio::task::spawn_blocking(hardware::detect_model_name)
         .await
         .ok()
         .flatten()
         .unwrap_or_default();
+    debug::append_debug_log(&dir, &format!("hardware: model_name={model_name}"));
     let system_brand: String = tokio::task::spawn_blocking(hardware::detect_system_brand)
         .await
         .unwrap_or_default();
+    debug::append_debug_log(&dir, &format!("hardware: system_brand={system_brand}"));
     let gpu_name: String = tokio::task::spawn_blocking(hardware::detect_gpu_name)
         .await
         .ok()
         .flatten()
         .unwrap_or_default();
+    debug::append_debug_log(&dir, &format!("hardware: gpu_name={gpu_name}"));
 
     let mut sys = System::new();
     sys.refresh_cpu();
@@ -1580,6 +1591,8 @@ async fn poll_loop(
         .map(|c| c.brand().to_string())
         .unwrap_or_default();
     let hostname = System::host_name().unwrap_or_else(|| "—".to_string());
+    debug::append_debug_log(&dir, &format!("hardware: cpu_model={cpu_model}"));
+    debug::append_debug_log(&dir, &format!("hardware: hostname={hostname}"));
 
     let mut disks = Disks::new_with_refreshed_list();
     let mut networks = Networks::new_with_refreshed_list();
@@ -1590,6 +1603,7 @@ async fn poll_loop(
     type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
     let mut last_battery: Option<(Instant, BatteryCache)> = None;
     let mut last_prune_day: Option<u64> = None;
+    let mut first_tick_logged = false;
 
     loop {
         sys.refresh_specifics(
@@ -1717,10 +1731,29 @@ async fn poll_loop(
                 .map(|(t, _)| t.elapsed().as_secs_f64() >= 10.0)
                 .unwrap_or(true);
             if stale {
-                let result = tokio::task::spawn_blocking(hardware::sample_battery_wmi)
-                    .await
-                    .ok()
-                    .flatten();
+                let result = match tokio::task::spawn_blocking(hardware::sample_battery_wmi).await {
+                    Ok(result) => result,
+                    Err(err) => {
+                        debug::append_debug_log(
+                            &dir,
+                            &format!("battery: sample_battery_wmi join error: {err}"),
+                        );
+                        None
+                    }
+                };
+                if result.is_none() {
+                    match tokio::task::spawn_blocking(hardware::probe_wmi_status).await {
+                        Ok(Err(err)) => debug::append_debug_log(
+                            &dir,
+                            &format!("battery: WMI probe failed after battery read miss: {err}"),
+                        ),
+                        Err(err) => debug::append_debug_log(
+                            &dir,
+                            &format!("battery: probe_wmi_status join error: {err}"),
+                        ),
+                        Ok(Ok(())) => {}
+                    }
+                }
                 last_battery = result.as_ref().map(|d| (Instant::now(), *d));
                 match result {
                     Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
@@ -1816,6 +1849,13 @@ async fn poll_loop(
         };
 
         let _ = tx.send(stats.clone());
+        if !first_tick_logged {
+            debug::append_debug_log(
+                &dir,
+                &format!("poll: first tick complete lhm_connected={lhm_connected}"),
+            );
+            first_tick_logged = true;
+        }
 
         // CSV logging — reads settings each tick so changes take effect immediately.
         let (log_enabled, retention_days) = {
@@ -1854,6 +1894,19 @@ fn main() {
     let [win_w, _] = profile_to_size(&s.dashboard_profile);
     let win_h = compute_window_height(&visible_panels);
     let [pos_x, pos_y] = pick_window_position();
+    debug::append_debug_log(
+        &dir,
+        &format!(
+            "settings: profile={} panels={} opacity={opacity:.2} floating_mode={}",
+            s.dashboard_profile,
+            visible_panels.join(","),
+            s.floating_mode
+        ),
+    );
+    debug::append_debug_log(
+        &dir,
+        &format!("window: initial_position=({pos_x:.1}, {pos_y:.1})"),
+    );
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

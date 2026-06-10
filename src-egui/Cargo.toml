@@ -20,6 +20,8 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rfd = "0.15"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi"] }
