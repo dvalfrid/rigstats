@@ -1108,11 +1108,23 @@ impl RigStatsApp {
                             // ── Drag handle ───────────────────────────────────
                             let locked = lock_arc.load(Ordering::Relaxed);
                             let drag_w = ui.available_width().max(1.0);
+                            // When locked: Sense::hover() so egui never captures a drag
+                            // interaction on this widget.  Leaving Sense::drag() active
+                            // while locked means egui can record a stale drag-ID from a
+                            // padlock-click, which then blocks the first real drag after
+                            // unlock (until something resets egui's interaction state).
+                            let drag_sense = if locked {
+                                egui::Sense::hover()
+                            } else {
+                                egui::Sense::drag()
+                            };
                             let (drag_rect, drag_resp) = ui.allocate_exact_size(
                                 egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
-                                egui::Sense::drag(),
+                                drag_sense,
                             );
-                            if !locked && drag_resp.dragged() {
+                            // drag_started() fires only on the first frame of a new drag,
+                            // so we send exactly one StartDrag per OS drag operation.
+                            if !locked && drag_resp.drag_started() {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                             }
 
