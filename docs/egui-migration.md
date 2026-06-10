@@ -181,14 +181,56 @@ each with their own GPU swap chain.
 ### Phase 8 — Autostart, logging, auto-update ✅ testable
 *Goal: operational features at parity.*
 
-- [ ] Autostart: reuse `autostart.rs` (registry, unchanged)
-- [ ] Stats CSV logging: reuse `logging.rs` (unchanged)
-- [ ] Log pruning: reuse existing prune logic
+- [x] Autostart: reuse `autostart.rs` (registry, unchanged)
+- [x] Stats CSV logging: reuse `logging.rs` (unchanged) — wired into `poll_loop` via
+  `poll_stats_to_log_payload()`; reads `logging_enabled` from shared settings arc each tick
+- [x] Log pruning: reuse existing prune logic — runs once per calendar day inside `poll_loop`
 - [ ] Auto-update: implement with `self_update` crate or direct GitHub API check
   (tauri-plugin-updater is gone; fetch `latest.json`, compare versions, download NSIS installer)
 
-**Done when:** autostart toggles correctly, CSV logging writes rows, update check
-finds new versions and can install them.
+#### Tray parity (complete alongside logging)
+
+The egui tray is missing several items compared to the Tauri version:
+
+- [x] Add **"Toggle Floating Mode"** menu item — toggles `floating_mode` in settings and
+  triggers the same mode-switch logic as the Settings checkbox
+- [x] Add **"Start Recording" / "Stop Recording"** menu item — toggles `logging_enabled`
+  in settings; label flips dynamically based on current state
+- [x] **Recording indicator** — swap tray icon to `tray-recording.png` (red-dot variant)
+  when logging is active; restore normal icon when stopped; update tooltip to
+  `"RigStats — Recording"` / `"RigStats"` accordingly
+- [x] **Left single-click** on tray icon → show/hide main window (previously double-click)
+
+#### Dialog & secondary window review pass
+
+*Done after logging/tray are wired (so the updater window is reviewed in its final state,
+not the Phase 5 stub.)*
+
+This is a combined **functionality audit + visual polish pass** — missing features are
+implemented here, not deferred. Go through every secondary window and compare against the
+Tauri version for:
+- [ ] **Settings** — all four tabs: Dashboard, Panels, Alerts, Appearance
+  - Floating mode toggle and lock/scale controls visible/functional
+  - Drag-to-reorder panels works correctly
+  - All threshold fields present; battery direction (drops-below) correct
+  - Autostart toggle wired (Phase 8 prerequisite)
+  - Logging toggle and retention field wired (Phase 8 prerequisite)
+  - Opacity slider live-previews on the main window
+  - Profile selector covers all valid profiles
+- [ ] **About** — version string, description, "Open log folder" button functional
+- [ ] **Status** — debug log viewer shows live content, sensor service status correct,
+  Refresh button works
+- [ ] **Updater** — version display, "Check for Updates" button triggers real HTTP check
+  (Phase 8 prerequisite), changelog rendered, install flow functional
+- [ ] Visual consistency across all windows: fonts, colours, spacing match dashboard style
+- [ ] All windows position sensibly relative to the tray icon or screen centre
+- [ ] **Tray context menu dark mode** — call `SetPreferredAppMode(AllowDark)` via
+  `uxtheme.dll` ordinal 135 at startup so Windows renders the OS context menu in dark
+  mode when the system theme is dark (undocumented but standard Win32 approach)
+
+**Done when:** autostart toggles correctly, CSV logging writes rows and can be toggled
+from the tray with icon feedback, all four secondary windows are functionally and visually
+complete, and update check finds new versions and can install them.
 
 ---
 

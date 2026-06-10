@@ -41,7 +41,9 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                 ui.allocate_ui_with_layout(
                     Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| { theme::arrow_up(ui, 10.0, theme::C_PUR); },
+                    |ui| {
+                        theme::arrow_up(ui, 10.0, theme::C_PUR);
+                    },
                 );
                 ui.label(RichText::new("READ").small().color(theme::C_PUR));
             });
@@ -62,7 +64,9 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                 ui.allocate_ui_with_layout(
                     Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| { theme::arrow_down(ui, 10.0, theme::C_TEXT_MUTED); },
+                    |ui| {
+                        theme::arrow_down(ui, 10.0, theme::C_TEXT_MUTED);
+                    },
                 );
                 ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
             });

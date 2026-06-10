@@ -129,7 +129,9 @@ pub fn draw(
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| { theme::arrow_up(ui, 10.0, theme::C_GRN); },
+                    |ui| {
+                        theme::arrow_up(ui, 10.0, theme::C_GRN);
+                    },
                 );
                 ui.label(RichText::new("UP").small().color(theme::C_GRN));
             });
@@ -151,7 +153,9 @@ pub fn draw(
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| { theme::arrow_down(ui, 10.0, theme::C_NET_DOWN); },
+                    |ui| {
+                        theme::arrow_down(ui, 10.0, theme::C_NET_DOWN);
+                    },
                 );
                 ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
             });

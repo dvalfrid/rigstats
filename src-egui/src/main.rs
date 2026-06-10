@@ -12,7 +12,7 @@ mod win_opacity;
 mod windows;
 
 use eframe::egui;
-use rigstats_backend::{debug, hardware, lhm, lhm_process, settings};
+use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use spark::Sparkline;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
-    Icon, TrayIconBuilder,
+    Icon, MouseButton, MouseButtonState, TrayIconBuilder,
 };
 
 /// Commands sent from the tray-polling thread to the UI thread.
@@ -32,6 +32,8 @@ enum TrayCmd {
     OpenAbout,
     OpenStatus,
     OpenUpdater,
+    ToggleFloating,
+    ToggleRecording,
 }
 
 fn app_data_dir() -> PathBuf {
@@ -234,13 +236,16 @@ fn pick_window_position() -> [f32; 2] {
 // ── Tray icon ─────────────────────────────────────────────────────────────────
 
 struct Tray {
-    _icon: tray_icon::TrayIcon,
+    icon: tray_icon::TrayIcon,
     show_id: tray_icon::menu::MenuId,
     settings_id: tray_icon::menu::MenuId,
     about_id: tray_icon::menu::MenuId,
     status_id: tray_icon::menu::MenuId,
     updater_id: tray_icon::menu::MenuId,
     quit_id: tray_icon::menu::MenuId,
+    floating_id: tray_icon::menu::MenuId,
+    recording_id: tray_icon::menu::MenuId,
+    recording_item: tray_icon::menu::MenuItem,
 }
 
 fn load_tray_icon() -> Icon {
@@ -250,8 +255,15 @@ fn load_tray_icon() -> Icon {
     Icon::from_rgba(img.into_raw(), w, h).expect("tray icon rgba")
 }
 
-fn build_tray() -> Tray {
+fn build_tray(logging_enabled: bool) -> Tray {
     let show_item = MenuItem::new("Show / Hide", true, None);
+    let floating_item = MenuItem::new("Toggle Floating Mode", true, None);
+    let recording_label = if logging_enabled {
+        "Stop Recording"
+    } else {
+        "Start Recording"
+    };
+    let recording_item = MenuItem::new(recording_label, true, None);
     let settings_item = MenuItem::new("Settings", true, None);
     let about_item = MenuItem::new("About", true, None);
     let status_item = MenuItem::new("Status", true, None);
@@ -259,6 +271,8 @@ fn build_tray() -> Tray {
     let quit_item = MenuItem::new("Quit", true, None);
 
     let show_id = show_item.id().clone();
+    let floating_id = floating_item.id().clone();
+    let recording_id = recording_item.id().clone();
     let settings_id = settings_item.id().clone();
     let about_id = about_item.id().clone();
     let status_id = status_item.id().clone();
@@ -267,6 +281,8 @@ fn build_tray() -> Tray {
 
     let menu = Menu::new();
     let _ = menu.append(&show_item);
+    let _ = menu.append(&floating_item);
+    let _ = menu.append(&recording_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -275,22 +291,68 @@ fn build_tray() -> Tray {
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&quit_item);
 
-    let icon = load_tray_icon();
+    let icon = if logging_enabled {
+        let bytes = include_bytes!("../../assets/tray-recording.png");
+        let img = image::load_from_memory(bytes)
+            .expect("tray-recording.png")
+            .to_rgba8();
+        let (w, h) = img.dimensions();
+        Icon::from_rgba(img.into_raw(), w, h).expect("tray recording icon rgba")
+    } else {
+        load_tray_icon()
+    };
+    let tooltip = if logging_enabled {
+        "RigStats \u{2014} Recording"
+    } else {
+        "RigStats"
+    };
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_icon(icon)
-        .with_tooltip("RigStats")
+        .with_tooltip(tooltip)
         .build()
         .expect("tray icon");
 
     Tray {
-        _icon: tray_icon,
+        icon: tray_icon,
         show_id,
         settings_id,
         about_id,
         status_id,
         updater_id,
         quit_id,
+        floating_id,
+        recording_id,
+        recording_item,
+    }
+}
+
+impl Tray {
+    fn set_recording(&self, enabled: bool) {
+        let label = if enabled {
+            "Stop Recording"
+        } else {
+            "Start Recording"
+        };
+        self.recording_item.set_text(label);
+        let bytes: &[u8] = if enabled {
+            include_bytes!("../../assets/tray-recording.png")
+        } else {
+            include_bytes!("../../assets/tray.png")
+        };
+        if let Ok(img) = image::load_from_memory(bytes) {
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            if let Ok(icon) = Icon::from_rgba(rgba.into_raw(), w, h) {
+                let _ = self.icon.set_icon(Some(icon));
+            }
+        }
+        let tooltip = if enabled {
+            "RigStats \u{2014} Recording"
+        } else {
+            "RigStats"
+        };
+        let _ = self.icon.set_tooltip(Some(tooltip));
     }
 }
 
@@ -328,7 +390,7 @@ struct RigStatsApp {
     latest: PollStats,
     visible_panels: Vec<String>,
     opacity: f32,
-    _tray: Tray,
+    tray: Tray,
     window_visible: bool,
     // Sparklines
     cpu_spark: Sparkline,
@@ -428,7 +490,7 @@ impl RigStatsApp {
             latest: PollStats::default(),
             visible_panels,
             opacity,
-            _tray: tray,
+            tray,
             window_visible: true,
             cpu_spark: Sparkline::new(60),
             gpu_spark: Sparkline::new(60),
@@ -459,9 +521,7 @@ impl RigStatsApp {
             floating_positions: Arc::new(Mutex::new(init_positions)),
             positions_dirty: Arc::new(AtomicBool::new(false)),
             float_new_pref_gpu: Arc::new(Mutex::new(None)),
-            floating_lock_arc: Arc::new(AtomicBool::new(
-                init_settings.floating_panels_locked,
-            )),
+            floating_lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
             initial_floating_applied: false,
             panels_positioned: HashSet::new(),
             floating_mode_arc,
@@ -551,15 +611,17 @@ impl eframe::App for RigStatsApp {
                     // Clear positioned-set so restored positions are re-applied
                     // from the saved layout the first time each panel is shown.
                     self.panels_positioned.clear();
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                        egui::Pos2::new(-32000.0, -32000.0),
-                    ));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                            -32000.0, -32000.0,
+                        )));
                 } else {
                     // Restore to the correct portrait monitor position.
                     let [px, py] = pick_window_position();
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                        egui::Pos2::new(px, py),
-                    ));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                            px, py,
+                        )));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
                 }
@@ -595,6 +657,50 @@ impl eframe::App for RigStatsApp {
                 TrayCmd::OpenUpdater => {
                     self.updater_open.store(true, Ordering::Relaxed);
                     self.updater_focus.store(true, Ordering::Relaxed);
+                }
+                TrayCmd::ToggleFloating => {
+                    let new_mode = {
+                        let mut s = self.current_settings.lock().unwrap();
+                        s.floating_mode = !s.floating_mode;
+                        let _ = settings::persist_settings(&self.dir, &s);
+                        s.floating_mode
+                    };
+                    let was_floating = self.floating_mode;
+                    self.floating_mode = new_mode;
+                    self.floating_mode_arc.store(new_mode, Ordering::Relaxed);
+                    if was_floating != new_mode {
+                        if new_mode {
+                            self.panels_positioned.clear();
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                    egui::Pos2::new(-32000.0, -32000.0),
+                                ));
+                        } else {
+                            let [px, py] = pick_window_position();
+                            let s = self.current_settings.lock().unwrap();
+                            let [w, _] = profile_to_size(&s.dashboard_profile);
+                            let h = compute_window_height(&self.visible_panels);
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                                    egui::Pos2::new(px, py),
+                                ));
+                            ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                egui::Vec2::new(w, h),
+                            ));
+                        }
+                    }
+                }
+                TrayCmd::ToggleRecording => {
+                    let (new_enabled, retention_days) = {
+                        let mut s = self.current_settings.lock().unwrap();
+                        s.logging_enabled = !s.logging_enabled;
+                        let _ = settings::persist_settings(&self.dir, &s);
+                        (s.logging_enabled, s.log_retention_days)
+                    };
+                    if new_enabled {
+                        logging::prune_old_logs(&self.dir, retention_days);
+                    }
+                    self.tray.set_recording(new_enabled);
                 }
             }
         }
@@ -639,7 +745,14 @@ impl eframe::App for RigStatsApp {
                         found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Settings");
                     }
                     windows::settings::show(
-                        child_ui.ctx(), &mctx, &open, &focus, &state, &dir, &saved, &reload,
+                        child_ui.ctx(),
+                        &mctx,
+                        &open,
+                        &focus,
+                        &state,
+                        &dir,
+                        &saved,
+                        &reload,
                     );
                 },
             );
@@ -768,9 +881,10 @@ impl eframe::App for RigStatsApp {
         if !self.initial_floating_applied {
             self.initial_floating_applied = true;
             if self.floating_mode {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
-                    egui::Pos2::new(-32000.0, -32000.0),
-                ));
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                        -32000.0, -32000.0,
+                    )));
             }
         }
 
@@ -920,12 +1034,7 @@ fn panel_accent(key: &str) -> egui::Color32 {
 /// * **locked**: symmetric arch, both shackle arms enter the body.
 /// * **unlocked**: arch is lifted with a clear gap; only the right arm reaches
 ///   the body — the left end hangs free, clearly showing the lock is open.
-fn draw_padlock(
-    painter: &egui::Painter,
-    center: egui::Pos2,
-    locked: bool,
-    color: egui::Color32,
-) {
+fn draw_padlock(painter: &egui::Painter, center: egui::Pos2, locked: bool, color: egui::Color32) {
     let body_w = 8.0_f32;
     let body_h = 4.5_f32;
     let sr = 2.6_f32; // shackle half-width = radius of semicircle
@@ -1017,10 +1126,10 @@ impl RigStatsApp {
 
             let init_pos: [f32; 2] = {
                 let positions = self.floating_positions.lock().unwrap();
-                positions.get(&key).copied().unwrap_or([
-                    100.0 + idx as f32 * 20.0,
-                    80.0 + idx as f32 * 30.0,
-                ])
+                positions
+                    .get(&key)
+                    .copied()
+                    .unwrap_or([100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0])
             };
 
             let panel_w = profile_w * scale;
@@ -1075,9 +1184,7 @@ impl RigStatsApp {
                         // Round to integer logical pixels to avoid sub-pixel oscillation.
                         let new_pos = [outer.left().round(), outer.top().round()];
                         let mut pos = positions_arc.lock().unwrap();
-                        let stored = pos
-                            .entry(key.clone())
-                            .or_insert([f32::NAN, f32::NAN]);
+                        let stored = pos.entry(key.clone()).or_insert([f32::NAN, f32::NAN]);
                         if ((*stored)[0] - new_pos[0]).abs() > 0.5
                             || ((*stored)[1] - new_pos[1]).abs() > 0.5
                         {
@@ -1125,14 +1232,12 @@ impl RigStatsApp {
                             // entirely.
                             let hover_pos = ctx.input(|i| i.pointer.hover_pos());
                             let just_pressed = ctx.input(|i| i.pointer.primary_pressed());
-                            let in_drag_strip = hover_pos
-                                .map(|p| drag_rect.contains(p))
-                                .unwrap_or(false);
+                            let in_drag_strip =
+                                hover_pos.map(|p| drag_rect.contains(p)).unwrap_or(false);
                             // Exclude the right 18 px (padlock zone) from the drag trigger.
                             let padlock_zone_x = drag_rect.right() - 18.0;
-                            let in_padlock = hover_pos
-                                .map(|p| p.x >= padlock_zone_x)
-                                .unwrap_or(false);
+                            let in_padlock =
+                                hover_pos.map(|p| p.x >= padlock_zone_x).unwrap_or(false);
                             if !locked && just_pressed && in_drag_strip && !in_padlock {
                                 // In "behind" mode the window has WS_EX_NOACTIVATE which
                                 // prevents SC_MOVE from working.  Strip it and bring the
@@ -1148,8 +1253,7 @@ impl RigStatsApp {
 
                             // Padlock click region (right 16 px of drag strip).
                             let padlock_cx = drag_rect.right() - 9.0;
-                            let padlock_center =
-                                egui::pos2(padlock_cx, drag_rect.center().y);
+                            let padlock_center = egui::pos2(padlock_cx, drag_rect.center().y);
                             let padlock_hit = egui::Rect::from_center_size(
                                 padlock_center,
                                 egui::Vec2::new(16.0, theme::DRAG_HANDLE_H),
@@ -1198,8 +1302,7 @@ impl RigStatsApp {
                                 "clock" => panels::clock::draw(ui, stats.uptime_secs, 1.0),
                                 "cpu" => panels::cpu::draw(ui, stats, cspark, tex, 1.0),
                                 "gpu" => {
-                                    new_pref =
-                                        panels::gpu::draw(ui, stats, gspark, tex, 1.0);
+                                    new_pref = panels::gpu::draw(ui, stats, gspark, tex, 1.0);
                                 }
                                 "ram" => panels::ram::draw(ui, stats, 1.0),
                                 "net" => panels::net::draw(ui, stats, nuspark, ndspark, 1.0),
@@ -1232,8 +1335,7 @@ impl RigStatsApp {
                             // Apply opacity to this panel's OS window.
                             #[cfg(windows)]
                             {
-                                let title =
-                                    format!("RigStats \u{2014} {}", panel_label(&key));
+                                let title = format!("RigStats \u{2014} {}", panel_label(&key));
                                 let hwnd = win_opacity::find_hwnd(&title);
                                 win_opacity::set_opacity(hwnd, opacity);
                             }
@@ -1277,12 +1379,100 @@ fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f
     })
 }
 
+// ── Logging helpers ───────────────────────────────────────────────────────────
+
+fn poll_stats_to_log_payload(s: &PollStats) -> rigstats_backend::stats::StatsPayload {
+    use rigstats_backend::stats::{
+        BatteryStats, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats,
+        ProcessEntry, RamStats, StatsPayload,
+    };
+    StatsPayload {
+        cpu: CpuStats {
+            load: s.cpu_load,
+            cores: s.cpu_cores.clone(),
+            temp: s.cpu_temp,
+            freq: s.cpu_freq_mhz,
+            power: s.cpu_power,
+        },
+        gpu: GpuStats {
+            name: Some(s.gpu_name.clone()),
+            load: s.gpu_load,
+            temp: s.gpu_temp,
+            hotspot: s.gpu_hotspot,
+            freq: s.gpu_freq_mhz,
+            mem_freq: s.gpu_mem_freq_mhz,
+            vram_used: s.gpu_vram_used_mb,
+            vram_total: s.gpu_vram_total_mb,
+            fan_speed: s.gpu_fan,
+            power: s.gpu_power,
+            d3d_3d: s.gpu_d3d_3d,
+            d3d_vdec: s.gpu_d3d_vdec,
+            available_gpus: s.gpu_devices.clone(),
+        },
+        ram: RamStats {
+            total: s.ram_total,
+            used: s.ram_used,
+            free: s.ram_total.saturating_sub(s.ram_used),
+            spec: s.ram_spec.clone(),
+            details: String::new(),
+            temp: s.ram_temp,
+        },
+        net: NetStats {
+            up: s.net_up_mbps,
+            down: s.net_down_mbps,
+            iface: s.net_iface.clone(),
+            ping_ms: s.net_ping_ms,
+        },
+        disk: DiskStats {
+            read: s.disk_read_mbps,
+            write: s.disk_write_mbps,
+            drives: s
+                .disk_drives
+                .iter()
+                .map(|d| DiskDrive {
+                    fs: d.fs.clone(),
+                    size: d.total,
+                    used: d.used,
+                    pct: d.pct,
+                    temp: d.temp,
+                })
+                .collect(),
+        },
+        motherboard: MotherboardStats {
+            fans: s.mb_fans.clone(),
+            temps: s.mb_temps.clone(),
+            voltages: s.mb_voltages.clone(),
+            chip: s.mb_chip.clone(),
+            board: s.mb_board.clone(),
+        },
+        battery: BatteryStats {
+            present: s.battery_present,
+            charge_pct: s.battery_charge_pct,
+            charging: s.battery_charging,
+            time_remaining_mins: s.battery_time_mins,
+            power_w: s.battery_power_w,
+        },
+        top_processes: s
+            .processes
+            .iter()
+            .map(|p| ProcessEntry {
+                name: p.name.clone(),
+                cpu: p.cpu,
+                mem_mb: p.mem_mb,
+            })
+            .collect(),
+        system_uptime_secs: s.uptime_secs,
+        lhm_connected: s.lhm_connected,
+    }
+}
+
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
 async fn poll_loop(
     tx: mpsc::SyncSender<PollStats>,
     dir: PathBuf,
     preferred_gpu: Arc<Mutex<Option<String>>>,
+    settings_arc: Arc<Mutex<settings::Settings>>,
 ) {
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
@@ -1327,6 +1517,7 @@ async fn poll_loop(
     let mut last_ping: Option<(Instant, Option<f64>)> = None;
     type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
     let mut last_battery: Option<(Instant, BatteryCache)> = None;
+    let mut last_prune_day: Option<u64> = None;
 
     loop {
         sys.refresh_specifics(
@@ -1552,7 +1743,23 @@ async fn poll_loop(
             lhm_connected,
         };
 
-        let _ = tx.send(stats);
+        let _ = tx.send(stats.clone());
+
+        // CSV logging — reads settings each tick so changes take effect immediately.
+        let (log_enabled, retention_days) = {
+            let s = settings_arc.lock().unwrap();
+            (s.logging_enabled, s.log_retention_days)
+        };
+        if log_enabled {
+            let payload = poll_stats_to_log_payload(&stats);
+            let _ = logging::append_stats_row(&payload, &dir);
+            let today = logging::unix_now_secs() / 86400;
+            if last_prune_day != Some(today) {
+                logging::prune_old_logs(&dir, retention_days);
+                last_prune_day = Some(today);
+            }
+        }
+
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
@@ -1579,10 +1786,12 @@ fn main() {
 
     let preferred_gpu_arc: Arc<Mutex<Option<String>>> =
         Arc::new(Mutex::new(s.preferred_gpu.clone()));
+    let current_settings_shared = Arc::new(Mutex::new(settings::load_settings(&dir)));
     let (tx, rx) = mpsc::sync_channel::<PollStats>(4);
     let dir_clone = dir.clone();
     let pref_poll = preferred_gpu_arc.clone();
-    runtime.spawn(async move { poll_loop(tx, dir_clone, pref_poll).await });
+    let settings_poll = current_settings_shared.clone();
+    runtime.spawn(async move { poll_loop(tx, dir_clone, pref_poll, settings_poll).await });
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("RigStats")
@@ -1641,7 +1850,7 @@ fn main() {
                 cc.egui_ctx.set_global_style(style);
             }
 
-            let tray = build_tray();
+            let tray = build_tray(s.logging_enabled);
             let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
 
             // Spawn a thread that polls tray events at 50 ms intervals and wakes the
@@ -1654,6 +1863,8 @@ fn main() {
             let about_id = tray.about_id.clone();
             let status_id = tray.status_id.clone();
             let updater_id = tray.updater_id.clone();
+            let floating_id = tray.floating_id.clone();
+            let recording_id = tray.recording_id.clone();
             std::thread::spawn(move || loop {
                 let mut repaint = false;
                 if let Ok(ev) = MenuEvent::receiver().try_recv() {
@@ -1676,6 +1887,10 @@ fn main() {
                         std::process::exit(0);
                     } else if ev.id == show_id {
                         Some(TrayCmd::Toggle)
+                    } else if ev.id == floating_id {
+                        Some(TrayCmd::ToggleFloating)
+                    } else if ev.id == recording_id {
+                        Some(TrayCmd::ToggleRecording)
                     } else if ev.id == settings_id {
                         Some(TrayCmd::OpenSettings)
                     } else if ev.id == about_id {
@@ -1692,8 +1907,13 @@ fn main() {
                         repaint = true;
                     }
                 }
-                if let Ok(ev) = tray_icon::TrayIconEvent::receiver().try_recv() {
-                    if matches!(ev, tray_icon::TrayIconEvent::DoubleClick { .. }) {
+                if let Ok(tray_icon::TrayIconEvent::Click {
+                    button,
+                    button_state,
+                    ..
+                }) = tray_icon::TrayIconEvent::receiver().try_recv()
+                {
+                    if button == MouseButton::Left && button_state == MouseButtonState::Up {
                         let _ = tray_tx.send(TrayCmd::Toggle);
                         repaint = true;
                     }
@@ -1704,30 +1924,24 @@ fn main() {
                 std::thread::sleep(Duration::from_millis(50));
             });
 
-            let current_settings = Arc::new(Mutex::new(settings::load_settings(&dir)));
+            let current_settings = current_settings_shared;
             let settings_reload = Arc::new(AtomicBool::new(false));
             let dir_arc = Arc::new(dir.clone());
             let textures = brand::Textures::load(&cc.egui_ctx);
 
-            // Heartbeat thread: drives both the parent and each deferred panel viewport
-            // at ~1 fps. The parent window is off-screen and gets no WM_PAINT from Windows,
-            // so ctx.request_repaint() wakes it (to re-register show_viewport_deferred
-            // callbacks). Deferred panel viewports have their own OS windows on screen but
             // Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
             // active.  With `show_viewport_immediate`, all panels are rendered
             // synchronously as part of the parent frame, so one `request_repaint()`
             // per second is enough to drive all panel updates.
             let fm_arc_hb = Arc::new(AtomicBool::new(
-                settings::load_settings(&dir).floating_mode,
+                current_settings.lock().unwrap().floating_mode,
             ));
             let ctx_hb = cc.egui_ctx.clone();
             let fm_arc_hb2 = fm_arc_hb.clone();
-            std::thread::spawn(move || {
-                loop {
-                    std::thread::sleep(Duration::from_millis(950));
-                    if fm_arc_hb2.load(Ordering::Relaxed) {
-                        ctx_hb.request_repaint();
-                    }
+            std::thread::spawn(move || loop {
+                std::thread::sleep(Duration::from_millis(950));
+                if fm_arc_hb2.load(Ordering::Relaxed) {
+                    ctx_hb.request_repaint();
                 }
             });
 

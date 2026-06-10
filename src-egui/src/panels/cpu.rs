@@ -108,8 +108,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
             let (outer_rect, _) =
                 ui.allocate_exact_size(Vec2::new(avail, scroll_h), egui::Sense::hover());
 
-            let mut inner_ui =
-                ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
+            let mut inner_ui = ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
 
             egui::ScrollArea::vertical()
                 .id_salt("cpu_cores")
