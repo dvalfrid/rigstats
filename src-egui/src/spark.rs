@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use egui::{Color32, Mesh, Pos2, Sense, Shape, Stroke, Ui, Vec2};
 
+#[derive(Clone)]
 pub struct Sparkline {
     values: VecDeque<f32>,
 }

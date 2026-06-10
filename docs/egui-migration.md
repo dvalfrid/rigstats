@@ -161,12 +161,14 @@ visual differences in layout, colours, or typography.
 ### Phase 7 — Floating mode ✅ testable
 *Goal: independent per-panel windows.*
 
-- [ ] Each visible panel → separate egui viewport (or `eframe` child window)
-- [ ] Lock-positions toggle
-- [ ] Positions persisted in settings (`panel_layouts`)
-- [ ] Scale factor (`floating_panel_scale`) applied
-- [ ] Main window hidden when floating mode is active
-- [ ] Prewarm: windows created hidden at startup so first toggle is instant
+- [x] Each visible panel → separate egui viewport via `show_viewport_deferred()`
+- [x] Lock-positions toggle (`floating_panels_locked` setting)
+- [x] Positions persisted in settings (`panel_layouts`), updated on drag, loaded at startup
+- [x] Scale factor (`floating_panel_scale` 0.4–1.0) applied to window width/height
+- [x] Main window hidden when floating mode is active; still drives the data loop
+- [x] GPU preference changes propagated from floating GPU panel back to main app
+- [ ] Prewarm: windows created hidden at startup (deferred — egui viewports appear
+      instantly on first `show_viewport_deferred()` call, no meaningful lag)
 
 **Done when:** floating mode works with independent draggable panels, positions
 survive app restart.
@@ -235,13 +237,12 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 6 complete. `theme.rs` with all colour constants and `panel_frame()` helper.
-> All 10 panels wrapped with per-panel accent colours. Drag handle at top via
-> `ViewportCommand::StartDrag`. Live window-height resize every frame via
-> `ui.min_rect().height()` (no black gap). Always-on-top live update via
-> `ViewportCommand::WindowLevel` on settings save. Default text colour `#b8cce8`.
-> Opacity via `SetLayeredWindowAttributes(LWA_ALPHA)` — whole-window transparency
-> matching Tauri CSS opacity behaviour. Header logo fills full panel height; CPU/GPU
-> title+model stacked beside logo; RAM spec under title; Disk READ/WRITE always shown
-> from sysinfo; triangles replace missing Unicode arrows; Motherboard FAN|SENSOR|RAIL
-> three-column layout; Process absolute-x painter columns; Battery uses thin_bar.
+> Phase 7 complete. Floating mode: each visible panel rendered as its own borderless
+> egui viewport via `show_viewport_deferred()`. Main window hidden when floating mode
+> is active (`ViewportCommand::Visible(false)`); data loop continues running.
+> Per-panel drag handles (disabled when locked). Positions tracked each frame via
+> `Arc<Mutex<HashMap>>` + dirty flag, persisted to `panel_layouts` in settings at
+> most once per tick. Scale factor from `floating_panel_scale` (0.4–1.0) applied
+> to window width and height. GPU preference clicks in floating GPU panel propagated
+> back to main app. Settings Dashboard tab: lock checkbox + scale slider shown when
+> floating mode is enabled.

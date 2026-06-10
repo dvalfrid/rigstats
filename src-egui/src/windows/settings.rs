@@ -185,11 +185,34 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         &mut draft.floating_mode,
         "Open each panel as its own window",
     );
-    ui.label(
-        egui::RichText::new("Floating mode will be fully implemented in a future update.")
+
+    if draft.floating_mode {
+        ui.add_space(8.0);
+        ui.checkbox(&mut draft.floating_panels_locked, "Lock panel positions");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label("Scale:");
+            let mut scale = draft.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            if ui
+                .add(
+                    egui::Slider::new(&mut scale, 0.4_f32..=1.0_f32)
+                        .step_by(0.05)
+                        .show_value(true),
+                )
+                .changed()
+            {
+                draft.floating_panel_scale = scale as f64;
+            }
+        });
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(
+                "Use tray \u{2192} Settings to toggle floating mode when the main window is hidden.",
+            )
             .small()
             .color(egui::Color32::from_gray(130)),
-    );
+        );
+    }
 }
 
 // ── Panels tab ────────────────────────────────────────────────────────────────

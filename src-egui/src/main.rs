@@ -291,6 +291,32 @@ fn build_tray() -> Tray {
     }
 }
 
+// ── Panel helpers ─────────────────────────────────────────────────────────────
+
+fn panel_label(key: &str) -> &'static str {
+    match key {
+        "header" => "Header",
+        "clock" => "Clock",
+        "cpu" => "CPU",
+        "gpu" => "GPU",
+        "ram" => "RAM",
+        "net" => "Network",
+        "disk" => "Disk",
+        "motherboard" => "Motherboard",
+        "process" => "Processes",
+        "battery" => "Battery",
+        _ => "Panel",
+    }
+}
+
+/// Initial window height estimate for a panel (content + frame inner margin 16 px).
+fn panel_initial_h(key: &str) -> f32 {
+    match key {
+        "header" | "clock" => theme::PANEL_HEADER_H + 16.0,
+        _ => theme::PANEL_DATA_H + 16.0,
+    }
+}
+
 // ── eframe application ────────────────────────────────────────────────────────
 
 struct RigStatsApp {
@@ -329,6 +355,22 @@ struct RigStatsApp {
     // Win32 HWND stored as isize for window-level opacity (SetLayeredWindowAttributes).
     // Found via FindWindowW on the first ui() frame; 0 until then.
     hwnd: isize,
+    // ── Floating mode ──────────────────────────────────────────────────────
+    floating_mode: bool,
+    floating_panels_locked: bool,
+    floating_panel_scale: f32,
+    /// Last-known screen positions for each panel key, keyed by panel key.
+    /// Loaded from settings at startup; updated on drag; persisted on change.
+    floating_positions: Arc<Mutex<HashMap<String, [f32; 2]>>>,
+    /// Set true inside a floating panel viewport when its position changes.
+    /// Consumed in `ui()` to debounce settings writes to once per tick.
+    positions_dirty: Arc<AtomicBool>,
+    /// Receives a new preferred-GPU name when the user clicks a GPU dot
+    /// inside the floating GPU panel viewport.
+    float_new_pref_gpu: Arc<Mutex<Option<String>>>,
+    /// Guards the one-time initial hide of the main window when the app
+    /// starts with floating_mode already enabled.
+    initial_floating_applied: bool,
 }
 
 impl RigStatsApp {
@@ -346,6 +388,11 @@ impl RigStatsApp {
         preferred_gpu: Arc<Mutex<Option<String>>>,
     ) -> Self {
         let init_settings = current_settings.lock().unwrap().clone();
+        let init_positions: HashMap<String, [f32; 2]> = init_settings
+            .panel_layouts
+            .iter()
+            .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
+            .collect();
         Self {
             receiver,
             tray_rx,
@@ -377,6 +424,13 @@ impl RigStatsApp {
             preferred_gpu,
             dir,
             hwnd: 0,
+            floating_mode: init_settings.floating_mode,
+            floating_panels_locked: init_settings.floating_panels_locked,
+            floating_panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
+            floating_positions: Arc::new(Mutex::new(init_positions)),
+            positions_dirty: Arc::new(AtomicBool::new(false)),
+            float_new_pref_gpu: Arc::new(Mutex::new(None)),
+            initial_floating_applied: false,
         }
     }
 }
@@ -423,14 +477,25 @@ impl eframe::App for RigStatsApp {
                 "behind" => egui::WindowLevel::AlwaysOnBottom,
                 _ => egui::WindowLevel::Normal,
             };
+            let was_floating = self.floating_mode;
+            self.floating_mode = s.floating_mode;
+            self.floating_panels_locked = s.floating_panels_locked;
+            self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             let [w, _] = profile_to_size(&s.dashboard_profile);
             let h = compute_window_height(&self.visible_panels);
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+            // Only resize/reposition the main window when in fixed (non-floating) mode.
+            if !self.floating_mode {
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+            }
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
             #[cfg(windows)]
             win_opacity::set_opacity(self.hwnd, self.opacity);
+            // Toggle main window visibility when floating mode changes.
+            if was_floating != self.floating_mode {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(!self.floating_mode));
+            }
         }
 
         // Handle tray commands forwarded by the background polling thread.
@@ -555,100 +620,311 @@ impl eframe::App for RigStatsApp {
             );
         }
 
-        // Drag handle — thin invisible strip at top for moving the borderless window.
-        let drag_w = {
-            let w = ui.available_width();
-            if w.is_finite() && w > 0.0 {
-                w
-            } else {
-                ui.ctx().content_rect().width().max(1.0)
-            }
-        };
-        let (drag_rect, drag_resp) = ui.allocate_exact_size(
-            egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
-            egui::Sense::drag(),
-        );
-        if drag_resp.dragged() {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
-        }
-        if drag_resp.hovered() {
-            let painter = ui.painter();
-            let cy = drag_rect.center().y;
-            let cx = drag_rect.center().x;
-            for i in [-5.0f32, 0.0, 5.0] {
-                painter.circle_filled(
-                    egui::Pos2::new(cx + i, cy),
-                    1.5,
-                    egui::Color32::from_gray(160),
-                );
+        // On the first frame: hide main window when floating mode is already enabled.
+        if !self.initial_floating_applied {
+            self.initial_floating_applied = true;
+            if self.floating_mode {
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::Visible(false));
             }
         }
 
-        // Panels in the order defined by visible_panels (respects user reordering).
-        let panels_to_draw = self.visible_panels.clone();
-        let mut new_preferred_gpu: Option<String> = None;
-        for panel in &panels_to_draw {
-            match panel.as_str() {
-                // Panels always render at full opacity; window-level transparency is
-                // applied by SetLayeredWindowAttributes (win_opacity module).
-                "header" => panels::header::draw(ui, &self.latest, &self.textures, 1.0),
-                "clock" => panels::clock::draw(ui, self.latest.uptime_secs, 1.0),
-                "cpu" => panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures, 1.0),
-                "gpu" => {
-                    if let Some(p) =
-                        panels::gpu::draw(ui, &self.latest, &self.gpu_spark, &self.textures, 1.0)
-                    {
-                        new_preferred_gpu = Some(p);
-                    }
+        let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
+            || self.about_open.load(Ordering::Relaxed)
+            || self.status_open.load(Ordering::Relaxed)
+            || self.updater_open.load(Ordering::Relaxed);
+
+        if self.floating_mode {
+            // ── Floating mode — each panel in its own borderless viewport ─────
+            self.render_floating_panels(ui);
+
+            // Persist positions when any panel was dragged.
+            if self.positions_dirty.swap(false, Ordering::Relaxed) {
+                self.persist_floating_positions();
+            }
+
+            // Apply GPU preference change made from the floating GPU panel.
+            if let Some(new_pref) = self.float_new_pref_gpu.lock().unwrap().take() {
+                *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
+                let mut s = self.current_settings.lock().unwrap();
+                s.preferred_gpu = Some(new_pref);
+                let _ = settings::persist_settings(&self.dir, &s);
+            }
+        } else {
+            // ── Fixed mode — all panels in one portrait window ────────────────
+
+            // Drag handle — thin invisible strip at top for moving the borderless window.
+            let drag_w = {
+                let w = ui.available_width();
+                if w.is_finite() && w > 0.0 {
+                    w
+                } else {
+                    ui.ctx().content_rect().width().max(1.0)
                 }
-                "ram" => panels::ram::draw(ui, &self.latest, 1.0),
-                "net" => panels::net::draw(
-                    ui,
-                    &self.latest,
-                    &self.net_up_spark,
-                    &self.net_dn_spark,
-                    1.0,
-                ),
-                "disk" => panels::disk::draw(ui, &self.latest, 1.0),
-                "motherboard" => panels::motherboard::draw(ui, &self.latest, 1.0),
-                "process" => panels::process::draw(ui, &self.latest, 1.0),
-                "battery" => panels::battery::draw(ui, &self.latest, 1.0),
-                _ => {}
+            };
+            let (drag_rect, drag_resp) = ui.allocate_exact_size(
+                egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
+                egui::Sense::drag(),
+            );
+            if drag_resp.dragged() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
             }
-            ui.add_space(6.0);
-        }
-        // Fit window height to actual rendered content every frame so no black gap
-        // appears regardless of panel set, spacing, or egui version.
-        let used_h = ui.min_rect().height();
-        if used_h > 10.0 {
-            let [w, _] = profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                    w - 2.0,
-                    used_h,
-                )));
-        }
+            if drag_resp.hovered() {
+                let painter = ui.painter();
+                let cy = drag_rect.center().y;
+                let cx = drag_rect.center().x;
+                for i in [-5.0f32, 0.0, 5.0] {
+                    painter.circle_filled(
+                        egui::Pos2::new(cx + i, cy),
+                        1.5,
+                        egui::Color32::from_gray(160),
+                    );
+                }
+            }
 
-        if let Some(new_pref) = new_preferred_gpu {
-            *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
-            let mut s = self.current_settings.lock().unwrap();
-            s.preferred_gpu = Some(new_pref);
-            let _ = settings::persist_settings(&self.dir, &s);
+            // Panels in the order defined by visible_panels (respects user reordering).
+            let panels_to_draw = self.visible_panels.clone();
+            let mut new_preferred_gpu: Option<String> = None;
+            for panel in &panels_to_draw {
+                match panel.as_str() {
+                    // Panels always render at full opacity; window-level transparency is
+                    // applied by SetLayeredWindowAttributes (win_opacity module).
+                    "header" => panels::header::draw(ui, &self.latest, &self.textures, 1.0),
+                    "clock" => panels::clock::draw(ui, self.latest.uptime_secs, 1.0),
+                    "cpu" => {
+                        panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures, 1.0)
+                    }
+                    "gpu" => {
+                        if let Some(p) = panels::gpu::draw(
+                            ui,
+                            &self.latest,
+                            &self.gpu_spark,
+                            &self.textures,
+                            1.0,
+                        ) {
+                            new_preferred_gpu = Some(p);
+                        }
+                    }
+                    "ram" => panels::ram::draw(ui, &self.latest, 1.0),
+                    "net" => panels::net::draw(
+                        ui,
+                        &self.latest,
+                        &self.net_up_spark,
+                        &self.net_dn_spark,
+                        1.0,
+                    ),
+                    "disk" => panels::disk::draw(ui, &self.latest, 1.0),
+                    "motherboard" => panels::motherboard::draw(ui, &self.latest, 1.0),
+                    "process" => panels::process::draw(ui, &self.latest, 1.0),
+                    "battery" => panels::battery::draw(ui, &self.latest, 1.0),
+                    _ => {}
+                }
+                ui.add_space(6.0);
+            }
+            // Fit window height to actual rendered content every frame so no black gap
+            // appears regardless of panel set, spacing, or egui version.
+            let used_h = ui.min_rect().height();
+            if used_h > 10.0 {
+                let [w, _] =
+                    profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                        w - 2.0,
+                        used_h,
+                    )));
+            }
+
+            if let Some(new_pref) = new_preferred_gpu {
+                *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
+                let mut s = self.current_settings.lock().unwrap();
+                s.preferred_gpu = Some(new_pref);
+                let _ = settings::persist_settings(&self.dir, &s);
+            }
         }
 
         // Repaint faster when a secondary window is open so it closes within ~100 ms
         // of the user clicking X/Save/Cancel (the open flag is set in the callback
         // which runs after ui(), so the NEXT frame sees open=false and stops calling
         // show_viewport_deferred, which is what actually destroys the viewport).
-        let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
-            || self.about_open.load(Ordering::Relaxed)
-            || self.status_open.load(Ordering::Relaxed)
-            || self.updater_open.load(Ordering::Relaxed);
         ui.ctx().request_repaint_after(if any_dialog_open {
             Duration::from_millis(100)
         } else {
             Duration::from_secs(1)
         });
+    }
+}
+
+// ── Floating panel helpers ────────────────────────────────────────────────────
+
+impl RigStatsApp {
+    /// Register a deferred viewport for every visible panel. Called each frame
+    /// when `floating_mode` is true. Each viewport renders exactly one panel,
+    /// has its own drag handle (unless locked), and tracks its position for
+    /// persistence.
+    fn render_floating_panels(&self, ui: &mut egui::Ui) {
+        let s = self.current_settings.lock().unwrap();
+        let profile_w = profile_to_size(&s.dashboard_profile)[0];
+        let on_top = s.window_layer == "on_top";
+        let scale = self.floating_panel_scale;
+        drop(s);
+
+        let locked = self.floating_panels_locked;
+        let latest = self.latest.clone();
+        let textures = self.textures.clone();
+        let cpu_spark = self.cpu_spark.clone();
+        let gpu_spark = self.gpu_spark.clone();
+        let net_up_spark = self.net_up_spark.clone();
+        let net_dn_spark = self.net_dn_spark.clone();
+        let panels_to_draw = self.visible_panels.clone();
+
+        for (idx, panel_key) in panels_to_draw.iter().enumerate() {
+            let key = panel_key.clone();
+
+            let init_pos: [f32; 2] = {
+                let positions = self.floating_positions.lock().unwrap();
+                positions.get(&key).copied().unwrap_or([
+                    100.0 + idx as f32 * 20.0,
+                    80.0 + idx as f32 * 30.0,
+                ])
+            };
+
+            let panel_w = profile_w * scale;
+            let initial_h = panel_initial_h(&key) * scale;
+
+            let mut vp_builder = egui::ViewportBuilder::default()
+                .with_title(format!("RigStats — {}", panel_label(&key)))
+                .with_inner_size([panel_w, initial_h])
+                .with_position(init_pos)
+                .with_decorations(false)
+                .with_resizable(false);
+
+            if on_top {
+                vp_builder = vp_builder.with_always_on_top();
+            }
+
+            // Clone captures for the closure (all 'static — no self reference).
+            let stats = latest.clone();
+            let tex = textures.clone();
+            let cspark = cpu_spark.clone();
+            let gspark = gpu_spark.clone();
+            let nuspark = net_up_spark.clone();
+            let ndspark = net_dn_spark.clone();
+            let positions_arc = self.floating_positions.clone();
+            let dirty = self.positions_dirty.clone();
+            let new_pref_arc = self.float_new_pref_gpu.clone();
+            let key_c = key.clone();
+
+            ui.ctx().show_viewport_deferred(
+                egui::ViewportId::from_hash_of(format!("float_{key}")),
+                vp_builder,
+                move |ctx, _class| {
+                    // ── Track window position for persistence ─────────────────
+                    if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
+                        let new_pos = [outer.left(), outer.top()];
+                        let mut pos = positions_arc.lock().unwrap();
+                        let stored = pos
+                            .entry(key_c.clone())
+                            .or_insert([f32::NAN, f32::NAN]);
+                        if ((*stored)[0] - new_pos[0]).abs() > 0.5
+                            || ((*stored)[1] - new_pos[1]).abs() > 0.5
+                        {
+                            *stored = new_pos;
+                            dirty.store(true, Ordering::Relaxed);
+                        }
+                    }
+
+                    #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::none().fill(theme::PANEL_FILL))
+                        .show(ctx, |ui| {
+                            // ── Drag handle ───────────────────────────────────
+                            let drag_w = ui.available_width().max(1.0);
+                            let (drag_rect, drag_resp) = ui.allocate_exact_size(
+                                egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
+                                egui::Sense::drag(),
+                            );
+                            if !locked && drag_resp.dragged() {
+                                ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                            }
+                            if drag_resp.hovered() && !locked {
+                                let painter = ui.painter();
+                                let cy = drag_rect.center().y;
+                                let cx = drag_rect.center().x;
+                                for i in [-5.0f32, 0.0, 5.0] {
+                                    painter.circle_filled(
+                                        egui::Pos2::new(cx + i, cy),
+                                        1.5,
+                                        egui::Color32::from_gray(160),
+                                    );
+                                }
+                            }
+
+                            // ── Panel content ─────────────────────────────────
+                            let mut new_pref: Option<String> = None;
+                            match key_c.as_str() {
+                                "header" => {
+                                    panels::header::draw(ui, &stats, &tex, 1.0)
+                                }
+                                "clock" => {
+                                    panels::clock::draw(ui, stats.uptime_secs, 1.0)
+                                }
+                                "cpu" => {
+                                    panels::cpu::draw(ui, &stats, &cspark, &tex, 1.0)
+                                }
+                                "gpu" => {
+                                    new_pref =
+                                        panels::gpu::draw(ui, &stats, &gspark, &tex, 1.0);
+                                }
+                                "ram" => panels::ram::draw(ui, &stats, 1.0),
+                                "net" => {
+                                    panels::net::draw(
+                                        ui, &stats, &nuspark, &ndspark, 1.0,
+                                    )
+                                }
+                                "disk" => panels::disk::draw(ui, &stats, 1.0),
+                                "motherboard" => {
+                                    panels::motherboard::draw(ui, &stats, 1.0)
+                                }
+                                "process" => panels::process::draw(ui, &stats, 1.0),
+                                "battery" => panels::battery::draw(ui, &stats, 1.0),
+                                _ => {}
+                            }
+
+                            if let Some(p) = new_pref {
+                                *new_pref_arc.lock().unwrap() = Some(p);
+                            }
+
+                            // Auto-resize height to content every frame.
+                            let used_h = ui.min_rect().height();
+                            if used_h > 10.0 {
+                                ctx.send_viewport_cmd(
+                                    egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                                        panel_w, used_h,
+                                    )),
+                                );
+                            }
+
+                            ctx.request_repaint_after(Duration::from_secs(1));
+                        });
+                },
+            );
+        }
+    }
+
+    /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
+    fn persist_floating_positions(&self) {
+        let positions = self.floating_positions.lock().unwrap();
+        let mut s = self.current_settings.lock().unwrap();
+        for (key, &[x, y]) in positions.iter() {
+            s.panel_layouts.insert(
+                key.clone(),
+                settings::PanelLayout {
+                    x: x as i32,
+                    y: y as i32,
+                },
+            );
+        }
+        let _ = settings::persist_settings(&self.dir, &s);
     }
 }
 

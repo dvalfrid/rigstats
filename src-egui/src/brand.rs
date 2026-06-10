@@ -1,5 +1,6 @@
 use egui::{Context, TextureHandle, TextureOptions};
 
+#[derive(Clone)]
 pub struct Textures {
     pub rog: TextureHandle,
     pub amd: TextureHandle,
