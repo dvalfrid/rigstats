@@ -10,7 +10,7 @@ use winapi::{
     shared::windef::HWND,
     um::winuser::{
         FindWindowW, GetWindowLongW, SetLayeredWindowAttributes, SetWindowLongW, GWL_EXSTYLE,
-        LWA_ALPHA, WS_EX_LAYERED,
+        LWA_ALPHA, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
     },
 };
 
@@ -49,5 +49,27 @@ pub fn set_opacity(hwnd: isize, opacity: f32) {
             SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED as i32);
         }
         SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+    }
+}
+
+/// Show or hide the window in the Windows taskbar and alt-tab list.
+///
+/// `visible = false`: adds `WS_EX_TOOLWINDOW`, removes `WS_EX_APPWINDOW`.
+/// `visible = true`: removes `WS_EX_TOOLWINDOW`, adds `WS_EX_APPWINDOW`.
+///
+/// Used to hide the off-screen driver window in floating mode.
+pub fn set_taskbar_visible(hwnd: isize, visible: bool) {
+    if hwnd == 0 {
+        return;
+    }
+    let hwnd = hwnd as HWND;
+    unsafe {
+        let style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        let new_style = if visible {
+            (style & !(WS_EX_TOOLWINDOW as i32)) | WS_EX_APPWINDOW as i32
+        } else {
+            (style & !(WS_EX_APPWINDOW as i32)) | WS_EX_TOOLWINDOW as i32
+        };
+        SetWindowLongW(hwnd, GWL_EXSTYLE, new_style);
     }
 }

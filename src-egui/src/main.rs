@@ -476,6 +476,10 @@ impl eframe::App for RigStatsApp {
             self.hwnd = win_opacity::find_hwnd("RigStats");
             if self.hwnd != 0 {
                 win_opacity::set_opacity(self.hwnd, self.opacity);
+                // If floating mode was active at startup, hide parent from taskbar/alt-tab.
+                if self.floating_mode {
+                    win_opacity::set_taskbar_visible(self.hwnd, false);
+                }
             }
         }
 
@@ -527,13 +531,15 @@ impl eframe::App for RigStatsApp {
             win_opacity::set_opacity(self.hwnd, self.opacity);
             // Toggle main window position when floating mode changes.
             // We move it off-screen instead of hiding it — a hidden window is not
-            // ticked by eframe, so show_viewport_deferred would stop being called
-            // and all floating panels would freeze.
+            // ticked by eframe, so the floating panels would not update.
             if was_floating != self.floating_mode {
                 if self.floating_mode {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                         egui::Pos2::new(-32000.0, -32000.0),
                     ));
+                    // Hide from taskbar/alt-tab while acting as off-screen driver.
+                    #[cfg(windows)]
+                    win_opacity::set_taskbar_visible(self.hwnd, false);
                 } else {
                     // Restore to the correct portrait monitor position.
                     let [px, py] = pick_window_position();
@@ -542,6 +548,9 @@ impl eframe::App for RigStatsApp {
                     ));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                    // Restore taskbar/alt-tab visibility.
+                    #[cfg(windows)]
+                    win_opacity::set_taskbar_visible(self.hwnd, true);
                 }
             }
         }
@@ -592,7 +601,7 @@ impl eframe::App for RigStatsApp {
             let reload = self.settings_reload.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(560.0, 600.0);
-            ui.ctx().show_viewport_deferred(
+            ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Settings")
@@ -600,9 +609,9 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_always_on_top(),
-                move |ctx, _class| {
+                |child_ui, _class| {
                     windows::settings::show(
-                        ctx, &mctx, &open, &focus, &state, &dir, &saved, &reload,
+                        child_ui.ctx(), &mctx, &open, &focus, &state, &dir, &saved, &reload,
                     );
                 },
             );
@@ -614,7 +623,7 @@ impl eframe::App for RigStatsApp {
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(360.0, 280.0);
-            ui.ctx().show_viewport_deferred(
+            ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
                     .with_title("About RigStats")
@@ -622,8 +631,8 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_always_on_top(),
-                move |ctx, _class| {
-                    windows::about::show(ctx, &mctx, &open, &focus, &dir);
+                |child_ui, _class| {
+                    windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir);
                 },
             );
         }
@@ -635,15 +644,15 @@ impl eframe::App for RigStatsApp {
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(520.0, 500.0);
-            ui.ctx().show_viewport_deferred(
+            ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Status")
                     .with_inner_size([520.0, 500.0])
                     .with_position([px, py])
                     .with_always_on_top(),
-                move |ctx, _class| {
-                    windows::status::show(ctx, &mctx, &open, &focus, &state, &dir);
+                |child_ui, _class| {
+                    windows::status::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dir);
                 },
             );
         }
@@ -654,7 +663,7 @@ impl eframe::App for RigStatsApp {
             let state = self.updater_win.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(340.0, 220.0);
-            ui.ctx().show_viewport_deferred(
+            ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Updates")
@@ -662,8 +671,8 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_always_on_top(),
-                move |ctx, _class| {
-                    windows::updater::show(ctx, &mctx, &open, &focus, &state);
+                |child_ui, _class| {
+                    windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state);
                 },
             );
         }
@@ -1304,6 +1313,12 @@ fn main() {
         .with_decorations(false);
     if always_on_top {
         viewport = viewport.with_always_on_top();
+    }
+    // When floating mode is active at startup, the main window moves off-screen and
+    // acts only as a driver for the floating panel viewports.  Hide it from the
+    // taskbar and alt-tab list so it is invisible to the user.
+    if s.floating_mode {
+        viewport = viewport.with_taskbar(false);
     }
 
     let options = eframe::NativeOptions {
