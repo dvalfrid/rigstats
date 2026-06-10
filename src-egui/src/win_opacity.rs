@@ -9,8 +9,8 @@
 use winapi::{
     shared::windef::HWND,
     um::winuser::{
-        FindWindowW, GetWindowLongW, SetLayeredWindowAttributes, SetWindowLongW, GWL_EXSTYLE,
-        LWA_ALPHA, WS_EX_APPWINDOW, WS_EX_LAYERED, WS_EX_TOOLWINDOW,
+        FindWindowW, GetWindowLongW, SetForegroundWindow, SetLayeredWindowAttributes,
+        SetWindowLongW, GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
     },
 };
 
@@ -52,24 +52,14 @@ pub fn set_opacity(hwnd: isize, opacity: f32) {
     }
 }
 
-/// Show or hide the window in the Windows taskbar and alt-tab list.
-///
-/// `visible = false`: adds `WS_EX_TOOLWINDOW`, removes `WS_EX_APPWINDOW`.
-/// `visible = true`: removes `WS_EX_TOOLWINDOW`, adds `WS_EX_APPWINDOW`.
-///
-/// Used to hide the off-screen driver window in floating mode.
-pub fn set_taskbar_visible(hwnd: isize, visible: bool) {
+/// Bring the window to the foreground using Win32 SetForegroundWindow.
+/// Used after show_viewport_immediate to ensure newly opened dialogs get focus.
+/// Requires AllowSetForegroundWindow to have been called previously in the tray thread.
+pub fn bring_to_foreground(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
-    let hwnd = hwnd as HWND;
     unsafe {
-        let style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        let new_style = if visible {
-            (style & !(WS_EX_TOOLWINDOW as i32)) | WS_EX_APPWINDOW as i32
-        } else {
-            (style & !(WS_EX_APPWINDOW as i32)) | WS_EX_TOOLWINDOW as i32
-        };
-        SetWindowLongW(hwnd, GWL_EXSTYLE, new_style);
+        SetForegroundWindow(hwnd as HWND);
     }
 }

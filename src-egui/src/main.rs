@@ -476,10 +476,6 @@ impl eframe::App for RigStatsApp {
             self.hwnd = win_opacity::find_hwnd("RigStats");
             if self.hwnd != 0 {
                 win_opacity::set_opacity(self.hwnd, self.opacity);
-                // If floating mode was active at startup, hide parent from taskbar/alt-tab.
-                if self.floating_mode {
-                    win_opacity::set_taskbar_visible(self.hwnd, false);
-                }
             }
         }
 
@@ -537,9 +533,6 @@ impl eframe::App for RigStatsApp {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                         egui::Pos2::new(-32000.0, -32000.0),
                     ));
-                    // Hide from taskbar/alt-tab while acting as off-screen driver.
-                    #[cfg(windows)]
-                    win_opacity::set_taskbar_visible(self.hwnd, false);
                 } else {
                     // Restore to the correct portrait monitor position.
                     let [px, py] = pick_window_position();
@@ -548,9 +541,6 @@ impl eframe::App for RigStatsApp {
                     ));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-                    // Restore taskbar/alt-tab visibility.
-                    #[cfg(windows)]
-                    win_opacity::set_taskbar_visible(self.hwnd, true);
                 }
             }
         }
@@ -601,6 +591,7 @@ impl eframe::App for RigStatsApp {
             let reload = self.settings_reload.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(560.0, 600.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
@@ -608,6 +599,7 @@ impl eframe::App for RigStatsApp {
                     .with_inner_size([560.0, 600.0])
                     .with_position([px, py])
                     .with_resizable(false)
+                    .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
                     windows::settings::show(
@@ -615,6 +607,14 @@ impl eframe::App for RigStatsApp {
                     );
                 },
             );
+            // After the window exists, force it to the foreground via Win32.
+            // ViewportCommand::Focus is unreliable for immediate viewports;
+            // direct SetForegroundWindow is guaranteed to work here since
+            // AllowSetForegroundWindow(ASFW_ANY) was called by the tray thread.
+            #[cfg(windows)]
+            if wants_focus {
+                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Settings"));
+            }
         }
 
         if self.about_open.load(Ordering::Relaxed) {
@@ -623,6 +623,7 @@ impl eframe::App for RigStatsApp {
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(360.0, 280.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
@@ -630,11 +631,16 @@ impl eframe::App for RigStatsApp {
                     .with_inner_size([360.0, 280.0])
                     .with_position([px, py])
                     .with_resizable(false)
+                    .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
                     windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir);
                 },
             );
+            #[cfg(windows)]
+            if wants_focus {
+                win_opacity::bring_to_foreground(win_opacity::find_hwnd("About RigStats"));
+            }
         }
 
         if self.status_open.load(Ordering::Relaxed) {
@@ -644,17 +650,23 @@ impl eframe::App for RigStatsApp {
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(520.0, 500.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Status")
                     .with_inner_size([520.0, 500.0])
                     .with_position([px, py])
+                    .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
                     windows::status::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dir);
                 },
             );
+            #[cfg(windows)]
+            if wants_focus {
+                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Status"));
+            }
         }
 
         if self.updater_open.load(Ordering::Relaxed) {
@@ -663,6 +675,7 @@ impl eframe::App for RigStatsApp {
             let state = self.updater_win.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(340.0, 220.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
@@ -670,11 +683,16 @@ impl eframe::App for RigStatsApp {
                     .with_inner_size([340.0, 220.0])
                     .with_position([px, py])
                     .with_resizable(false)
+                    .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state);
                 },
             );
+            #[cfg(windows)]
+            if wants_focus {
+                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Updates"));
+            }
         }
 
         // On the first frame: move main window off-screen when floating mode is active.
@@ -855,7 +873,8 @@ impl RigStatsApp {
                 .with_inner_size([panel_w, initial_h])
                 .with_position(init_pos)
                 .with_decorations(false)
-                .with_resizable(false);
+                .with_resizable(false)
+                .with_taskbar(false);
 
             if on_top {
                 vp_builder = vp_builder.with_always_on_top();
@@ -1310,13 +1329,11 @@ fn main() {
         .with_title("RigStats")
         .with_inner_size([win_w - 2.0, win_h])
         .with_position([pos_x, pos_y])
-        .with_decorations(false);
+        .with_decorations(false)
+        .with_taskbar(false); // app is tray-only, never show in taskbar
     if always_on_top {
         viewport = viewport.with_always_on_top();
     }
-    // When floating mode is active at startup, the main window moves off-screen and
-    // acts only as a driver for the floating panel viewports.  Hide it from the
-    // taskbar and alt-tab list so it is invisible to the user.
     if s.floating_mode {
         viewport = viewport.with_taskbar(false);
     }
