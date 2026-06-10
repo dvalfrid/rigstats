@@ -592,6 +592,7 @@ impl eframe::App for RigStatsApp {
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(560.0, 600.0);
             let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
@@ -602,18 +603,26 @@ impl eframe::App for RigStatsApp {
                     .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
+                    // Capture HWND while we're inside the callback — window definitely exists here.
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Settings");
+                    }
                     windows::settings::show(
                         child_ui.ctx(), &mctx, &open, &focus, &state, &dir, &saved, &reload,
                     );
                 },
             );
-            // After the window exists, force it to the foreground via Win32.
-            // ViewportCommand::Focus is unreliable for immediate viewports;
-            // direct SetForegroundWindow is guaranteed to work here since
-            // AllowSetForegroundWindow(ASFW_ANY) was called by the tray thread.
+            // Bring dialog to foreground now that we have the HWND.
+            // If found_hwnd == 0 the window wasn't ready yet; restore the focus flag
+            // so we retry on the next frame (which fires within 100 ms since a dialog is open).
             #[cfg(windows)]
             if wants_focus {
-                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Settings"));
+                if found_hwnd != 0 {
+                    win_opacity::bring_to_foreground(found_hwnd);
+                } else {
+                    focus.store(true, Ordering::Relaxed);
+                }
             }
         }
 
@@ -624,6 +633,7 @@ impl eframe::App for RigStatsApp {
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(360.0, 280.0);
             let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
@@ -634,12 +644,20 @@ impl eframe::App for RigStatsApp {
                     .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("About RigStats");
+                    }
                     windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir);
                 },
             );
             #[cfg(windows)]
             if wants_focus {
-                win_opacity::bring_to_foreground(win_opacity::find_hwnd("About RigStats"));
+                if found_hwnd != 0 {
+                    win_opacity::bring_to_foreground(found_hwnd);
+                } else {
+                    focus.store(true, Ordering::Relaxed);
+                }
             }
         }
 
@@ -651,6 +669,7 @@ impl eframe::App for RigStatsApp {
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(520.0, 500.0);
             let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
@@ -660,12 +679,20 @@ impl eframe::App for RigStatsApp {
                     .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Status");
+                    }
                     windows::status::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dir);
                 },
             );
             #[cfg(windows)]
             if wants_focus {
-                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Status"));
+                if found_hwnd != 0 {
+                    win_opacity::bring_to_foreground(found_hwnd);
+                } else {
+                    focus.store(true, Ordering::Relaxed);
+                }
             }
         }
 
@@ -676,6 +703,7 @@ impl eframe::App for RigStatsApp {
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(340.0, 220.0);
             let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
@@ -686,12 +714,20 @@ impl eframe::App for RigStatsApp {
                     .with_taskbar(false)
                     .with_always_on_top(),
                 |child_ui, _class| {
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Updates");
+                    }
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state);
                 },
             );
             #[cfg(windows)]
             if wants_focus {
-                win_opacity::bring_to_foreground(win_opacity::find_hwnd("RigStats \u{2014} Updates"));
+                if found_hwnd != 0 {
+                    win_opacity::bring_to_foreground(found_hwnd);
+                } else {
+                    focus.store(true, Ordering::Relaxed);
+                }
             }
         }
 
@@ -1398,16 +1434,19 @@ fn main() {
             std::thread::spawn(move || loop {
                 let mut repaint = false;
                 if let Ok(ev) = MenuEvent::receiver().try_recv() {
-                    // Grant all processes foreground rights immediately while our process is
-                    // still active from the tray-menu interaction.  This allows the subsequent
-                    // ViewportCommand::Focus (sent on the first callback frame of each dialog)
-                    // to call SetForegroundWindow successfully — without this call Windows blocks
-                    // focus changes from background processes.
+                    // Use the foreground rights that come with the tray-menu interaction.
+                    // We immediately bring the (off-screen) parent window to the foreground
+                    // so that our process owns foreground when the dialog is created a few
+                    // milliseconds later.  Without this the dialog window would be created
+                    // as a background window and SetForegroundWindow would be refused.
                     #[cfg(windows)]
                     #[allow(unsafe_code)]
                     unsafe {
-                        winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32);
-                        // ASFW_ANY
+                        winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
+                        let parent_hwnd = win_opacity::find_hwnd("RigStats");
+                        if parent_hwnd != 0 {
+                            winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
+                        }
                     }
 
                     let cmd = if ev.id == quit_id {
