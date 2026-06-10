@@ -371,6 +371,18 @@ struct RigStatsApp {
     /// Guards the one-time initial hide of the main window when the app
     /// starts with floating_mode already enabled.
     initial_floating_applied: bool,
+    // ── Shared live data for floating panel closures ────────────────────────
+    // Panel viewport closures are `'static + move` and only get fresh data
+    // when the parent `show_viewport_deferred` call is re-executed.  When
+    // the main window is hidden, the parent may not run every second, so
+    // these Arc<Mutex<>> copies are updated in the recv loop and read
+    // directly inside each panel closure — giving live data on every render
+    // regardless of whether the parent just ran.
+    latest_arc: Arc<Mutex<PollStats>>,
+    cpu_spark_arc: Arc<Mutex<Sparkline>>,
+    gpu_spark_arc: Arc<Mutex<Sparkline>>,
+    net_up_spark_arc: Arc<Mutex<Sparkline>>,
+    net_dn_spark_arc: Arc<Mutex<Sparkline>>,
 }
 
 impl RigStatsApp {
@@ -431,6 +443,11 @@ impl RigStatsApp {
             positions_dirty: Arc::new(AtomicBool::new(false)),
             float_new_pref_gpu: Arc::new(Mutex::new(None)),
             initial_floating_applied: false,
+            latest_arc: Arc::new(Mutex::new(PollStats::default())),
+            cpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
+            gpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
+            net_up_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
+            net_dn_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
         }
     }
 }
@@ -460,11 +477,21 @@ impl eframe::App for RigStatsApp {
 
         // Pull latest stats from poll thread; push to sparklines only on new data.
         while let Ok(stats) = self.receiver.try_recv() {
-            self.cpu_spark.push(stats.cpu_load as f32);
-            self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
-            self.net_up_spark.push(stats.net_up_mbps as f32);
-            self.net_dn_spark.push(stats.net_down_mbps as f32);
+            let cpu_v = stats.cpu_load as f32;
+            let gpu_v = stats.gpu_load.unwrap_or(0.0) as f32;
+            let nu_v = stats.net_up_mbps as f32;
+            let nd_v = stats.net_down_mbps as f32;
+            self.cpu_spark.push(cpu_v);
+            self.gpu_spark.push(gpu_v);
+            self.net_up_spark.push(nu_v);
+            self.net_dn_spark.push(nd_v);
             self.latest = stats;
+            // Sync Arc copies so floating panel closures always have live data.
+            *self.latest_arc.lock().unwrap() = self.latest.clone();
+            self.cpu_spark_arc.lock().unwrap().push(cpu_v);
+            self.gpu_spark_arc.lock().unwrap().push(gpu_v);
+            self.net_up_spark_arc.lock().unwrap().push(nu_v);
+            self.net_dn_spark_arc.lock().unwrap().push(nd_v);
         }
 
         // Apply settings saved from the settings window.
@@ -492,9 +519,24 @@ impl eframe::App for RigStatsApp {
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
             #[cfg(windows)]
             win_opacity::set_opacity(self.hwnd, self.opacity);
-            // Toggle main window visibility when floating mode changes.
+            // Toggle main window position when floating mode changes.
+            // We move it off-screen instead of hiding it — a hidden window is not
+            // ticked by eframe, so show_viewport_deferred would stop being called
+            // and all floating panels would freeze.
             if was_floating != self.floating_mode {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(!self.floating_mode));
+                if self.floating_mode {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                        egui::Pos2::new(-32000.0, -32000.0),
+                    ));
+                } else {
+                    // Restore to the correct portrait monitor position.
+                    let [px, py] = pick_window_position();
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                        egui::Pos2::new(px, py),
+                    ));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                }
             }
         }
 
@@ -620,12 +662,16 @@ impl eframe::App for RigStatsApp {
             );
         }
 
-        // On the first frame: hide main window when floating mode is already enabled.
+        // On the first frame: move main window off-screen when floating mode is active.
+        // We NEVER use Visible(false) in floating mode because a hidden window is not
+        // ticked by eframe — show_viewport_deferred would stop being called and all
+        // floating panels would freeze.
         if !self.initial_floating_applied {
             self.initial_floating_applied = true;
             if self.floating_mode {
-                ui.ctx()
-                    .send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::OuterPosition(
+                    egui::Pos2::new(-32000.0, -32000.0),
+                ));
             }
         }
 
@@ -769,12 +815,7 @@ impl RigStatsApp {
         drop(s);
 
         let locked = self.floating_panels_locked;
-        let latest = self.latest.clone();
         let textures = self.textures.clone();
-        let cpu_spark = self.cpu_spark.clone();
-        let gpu_spark = self.gpu_spark.clone();
-        let net_up_spark = self.net_up_spark.clone();
-        let net_dn_spark = self.net_dn_spark.clone();
         let panels_to_draw = self.visible_panels.clone();
 
         for (idx, panel_key) in panels_to_draw.iter().enumerate() {
@@ -802,13 +843,14 @@ impl RigStatsApp {
                 vp_builder = vp_builder.with_always_on_top();
             }
 
-            // Clone captures for the closure (all 'static — no self reference).
-            let stats = latest.clone();
+            // Arc clones — panel closure reads live data on every render, not a
+            // stale snapshot captured at registration time.
+            let latest_arc = self.latest_arc.clone();
+            let cspark_arc = self.cpu_spark_arc.clone();
+            let gspark_arc = self.gpu_spark_arc.clone();
+            let nuspark_arc = self.net_up_spark_arc.clone();
+            let ndspark_arc = self.net_dn_spark_arc.clone();
             let tex = textures.clone();
-            let cspark = cpu_spark.clone();
-            let gspark = gpu_spark.clone();
-            let nuspark = net_up_spark.clone();
-            let ndspark = net_dn_spark.clone();
             let positions_arc = self.floating_positions.clone();
             let dirty = self.positions_dirty.clone();
             let new_pref_arc = self.float_new_pref_gpu.clone();
@@ -832,6 +874,13 @@ impl RigStatsApp {
                             dirty.store(true, Ordering::Relaxed);
                         }
                     }
+
+                    // Read live data from shared Arcs (never stale).
+                    let stats = latest_arc.lock().unwrap().clone();
+                    let cspark = cspark_arc.lock().unwrap().clone();
+                    let gspark = gspark_arc.lock().unwrap().clone();
+                    let nuspark = nuspark_arc.lock().unwrap().clone();
+                    let ndspark = ndspark_arc.lock().unwrap().clone();
 
                     #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
                     egui::CentralPanel::default()
@@ -862,9 +911,7 @@ impl RigStatsApp {
                             // ── Panel content ─────────────────────────────────
                             let mut new_pref: Option<String> = None;
                             match key_c.as_str() {
-                                "header" => {
-                                    panels::header::draw(ui, &stats, &tex, 1.0)
-                                }
+                                "header" => panels::header::draw(ui, &stats, &tex, 1.0),
                                 "clock" => {
                                     panels::clock::draw(ui, stats.uptime_secs, 1.0)
                                 }
@@ -876,11 +923,9 @@ impl RigStatsApp {
                                         panels::gpu::draw(ui, &stats, &gspark, &tex, 1.0);
                                 }
                                 "ram" => panels::ram::draw(ui, &stats, 1.0),
-                                "net" => {
-                                    panels::net::draw(
-                                        ui, &stats, &nuspark, &ndspark, 1.0,
-                                    )
-                                }
+                                "net" => panels::net::draw(
+                                    ui, &stats, &nuspark, &ndspark, 1.0,
+                                ),
                                 "disk" => panels::disk::draw(ui, &stats, 1.0),
                                 "motherboard" => {
                                     panels::motherboard::draw(ui, &stats, 1.0)
@@ -904,9 +949,24 @@ impl RigStatsApp {
                                 );
                             }
 
+                            // Request own repaint after 1 s. The parent schedules us
+                            // via request_repaint_after_for so this is a backup only.
                             ctx.request_repaint_after(Duration::from_secs(1));
                         });
                 },
+            );
+
+            // Explicitly schedule each child viewport's repaint from the parent.
+            // This is the reliable trigger: show_viewport_deferred registers the
+            // callback but does NOT automatically schedule a repaint for the child.
+            // Without this, a non-focused child that has no OS events would rely on
+            // its own request_repaint_after — which requires the child's closure to
+            // have already run at least once. By scheduling from the parent every
+            // frame, we guarantee steady 1-s updates for all panels regardless of
+            // focus or OS event delivery.
+            ui.ctx().request_repaint_after_for(
+                Duration::from_secs(1),
+                egui::ViewportId::from_hash_of(format!("float_{key}")),
             );
         }
     }
