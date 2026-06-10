@@ -34,34 +34,19 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
         );
         ui.add_space(4.0);
 
-        // Read / Write columns — same layout as NET UP / DOWN.
-        // Values come from sysinfo process-delta, available regardless of LHM.
-        const NUMBER_W: f32 = 52.0;
+        const NUMBER_W: f32 = 40.0;
         ui.columns(2, |cols| {
-            cols[0].horizontal(|ui| {
-                theme::arrow_up(ui, 12.0, theme::C_PUR);
-                ui.add_space(2.0);
-                ui.label(RichText::new("READ").small().color(theme::C_PUR));
-            });
             let (val, unit) = fmt_speed_parts(stats.disk_read_mbps);
             cols[0].horizontal(|ui| {
                 ui.allocate_ui_with_layout(
-                    Vec2::new(NUMBER_W, 24.0),
+                    Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
-                    },
+                    |ui| { theme::arrow_up(ui, 10.0, theme::C_PUR); },
                 );
-                ui.label(RichText::new(unit).size(20.0).color(Color32::WHITE));
+                ui.label(RichText::new("READ").small().color(theme::C_PUR));
             });
-
-            cols[1].horizontal(|ui| {
-                theme::arrow_down(ui, 12.0, theme::C_TEXT_MUTED);
-                ui.add_space(2.0);
-                ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
-            });
-            let (val, unit) = fmt_speed_parts(stats.disk_write_mbps);
-            cols[1].horizontal(|ui| {
+            cols[0].horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
                 ui.allocate_ui_with_layout(
                     Vec2::new(NUMBER_W, 24.0),
                     egui::Layout::right_to_left(egui::Align::Center),
@@ -69,7 +54,28 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                         ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).size(20.0).color(Color32::WHITE));
+                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
+            });
+
+            let (val, unit) = fmt_speed_parts(stats.disk_write_mbps);
+            cols[1].horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(NUMBER_W, 14.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| { theme::arrow_down(ui, 10.0, theme::C_TEXT_MUTED); },
+                );
+                ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
+            });
+            cols[1].horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.allocate_ui_with_layout(
+                    Vec2::new(NUMBER_W, 24.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
+                    },
+                );
+                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
             });
         });
 

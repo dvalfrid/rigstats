@@ -121,50 +121,50 @@ pub fn draw(
         );
         ui.add_space(4.0);
 
-        // UP (green ↑) and DOWN (blue ↓) side by side in two columns.
-        // NUMBER_W reserves a fixed right-aligned box for the digits so the
-        // unit label (Kbps/Mbps/Gbps) stays at a constant x-position even as
-        // the digit count changes.
-        const NUMBER_W: f32 = 52.0;
+        const NUMBER_W: f32 = 40.0;
         ui.columns(2, |cols| {
-            // UP column
+            let (val, unit) = fmt_mbps_parts(stats.net_up_mbps);
+            // Arrow right-aligned in NUMBER_W box, then "UP" starts at fixed x.
             cols[0].horizontal(|ui| {
-                theme::arrow_up(ui, 12.0, theme::C_GRN);
-                ui.add_space(2.0);
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(NUMBER_W, 14.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| { theme::arrow_up(ui, 10.0, theme::C_GRN); },
+                );
                 ui.label(RichText::new("UP").small().color(theme::C_GRN));
             });
-            let (val, unit) = fmt_mbps_parts(stats.net_up_mbps);
+            // Number right-aligned in same NUMBER_W box, unit starts at same x.
             cols[0].horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(NUMBER_W, 24.0),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(
-                            RichText::new(&val).size(20.0).color(egui::Color32::WHITE),
-                        );
+                        ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).size(20.0).color(egui::Color32::WHITE));
+                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
             });
 
-            // DOWN column
-            cols[1].horizontal(|ui| {
-                theme::arrow_down(ui, 12.0, theme::C_NET_DOWN);
-                ui.add_space(2.0);
-                ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
-            });
             let (val, unit) = fmt_mbps_parts(stats.net_down_mbps);
             cols[1].horizontal(|ui| {
                 ui.allocate_ui_with_layout(
+                    egui::Vec2::new(NUMBER_W, 14.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| { theme::arrow_down(ui, 10.0, theme::C_NET_DOWN); },
+                );
+                ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
+            });
+            cols[1].horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.allocate_ui_with_layout(
                     egui::Vec2::new(NUMBER_W, 24.0),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(
-                            RichText::new(&val).size(20.0).color(egui::Color32::WHITE),
-                        );
+                        ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).size(20.0).color(egui::Color32::WHITE));
+                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
             });
         });
 
