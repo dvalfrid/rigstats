@@ -158,20 +158,22 @@ visual differences in layout, colours, or typography.
 
 ---
 
-### Phase 7 — Floating mode ✅ testable
+### Phase 7 — Floating mode ✅ complete
 *Goal: independent per-panel windows.*
 
-- [x] Each visible panel → separate egui viewport via `show_viewport_deferred()`
+- [x] Each visible panel → separate egui viewport via `show_viewport_immediate()`
 - [x] Lock-positions toggle (`floating_panels_locked` setting)
 - [x] Positions persisted in settings (`panel_layouts`), updated on drag, loaded at startup
 - [x] Scale factor (`floating_panel_scale` 0.4–1.0) applied to window width/height
-- [x] Main window hidden when floating mode is active; still drives the data loop
+- [x] Main window moved off-screen when floating mode is active; heartbeat thread drives repaints
 - [x] GPU preference changes propagated from floating GPU panel back to main app
-- [ ] Prewarm: windows created hidden at startup (deferred — egui viewports appear
-      instantly on first `show_viewport_deferred()` call, no meaningful lag)
+- [x] Window-level opacity applied to all floating panel HWNDs
+- [x] All panels update every ~1s regardless of focus or OS events
 
-**Done when:** floating mode works with independent draggable panels, positions
-survive app restart.
+**Architecture note:** `show_viewport_immediate` is used (not `show_viewport_deferred`) so all
+panels are rendered synchronously in the parent's frame. A heartbeat thread wakes the parent
+every 900 ms → parent renders all panels → live data on every tick. Known: ~5–6 % CPU in
+floating mode vs ~1 % in fixed mode — repaint throttling is a Phase 8 optimization.
 
 ---
 
@@ -237,12 +239,13 @@ finds new versions and can install them.
 
 ## Current status
 
-> Phase 7 complete. Floating mode: each visible panel rendered as its own borderless
-> egui viewport via `show_viewport_deferred()`. Main window hidden when floating mode
-> is active (`ViewportCommand::Visible(false)`); data loop continues running.
-> Per-panel drag handles (disabled when locked). Positions tracked each frame via
-> `Arc<Mutex<HashMap>>` + dirty flag, persisted to `panel_layouts` in settings at
-> most once per tick. Scale factor from `floating_panel_scale` (0.4–1.0) applied
-> to window width and height. GPU preference clicks in floating GPU panel propagated
-> back to main app. Settings Dashboard tab: lock checkbox + scale slider shown when
-> floating mode is enabled.
+> **Phase 7 complete.** Floating mode: each visible panel rendered as its own borderless
+> egui viewport via `show_viewport_immediate()`. Main window moved off-screen (not hidden —
+> hidden windows are not ticked by eframe). A heartbeat thread fires `request_repaint()`
+> every 900 ms so the parent runs and all panels update synchronously. Per-panel drag
+> handles (disabled when locked). Positions tracked via `Arc<Mutex<HashMap>>` + dirty flag,
+> persisted to `panel_layouts` in settings. Scale factor from `floating_panel_scale` (0.4–1.0).
+> Opacity applied to each panel's HWND via `FindWindowW` + `SetLayeredWindowAttributes`.
+> GPU preference clicks in floating GPU panel propagated back to main app.
+> Settings Dashboard tab: lock checkbox + scale slider shown when floating mode is enabled.
+> Known issue: ~5–6 % CPU in floating mode (vs ~1 % fixed) — optimization pending.
