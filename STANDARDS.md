@@ -174,6 +174,21 @@ All visual values live in `:root` in `index.html` as CSS custom properties:
 
 ---
 
+## egui (secondary windows)
+
+All secondary windows must follow the dialog design system documented in [CLAUDE.md — egui dialog design system](CLAUDE.md#egui-dialog-design-system). Key rules:
+
+- **Three-panel layout:** `TopBottomPanel::top` (hero) → `TopBottomPanel::bottom` (footer) → `CentralPanel` (content).
+- **Surface colour:** `Color32::from_gray(38)` for all three panels — uniform dialog background.
+- **Inset colour:** `Color32::from_gray(27)` for scroll areas and content wells — no border stroke, fill difference is the only visual cue.
+- **No visible frame borders** inside dialogs — use fill tone differences, not strokes, to separate regions.
+- **Section labels** (`"What's New"`, tab headings, etc.) are free `ui.label()` calls — never wrapped in a frame.
+- **Buttons:** always use `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` / `theme::dialog_btn_secondary_disabled`. Layout with `right_to_left` — primary action on the far right.
+- **Frame API:** use `egui::Frame::new()` — `Frame::none()` is deprecated in egui 0.34.
+- **Mutex pattern:** extract all view data from the guard into local variables before any `show()` call; `drop(guard)` before applying mutations.
+
+---
+
 ## AI‑generated code
 
 AI assistants such as Claude or GitHub Copilot may be used during development, but all generated code must follow the same standards as human‑written code. To ensure consistency and maintainability, AI‑generated code must adhere to the following rules:

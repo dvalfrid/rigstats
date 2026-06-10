@@ -215,16 +215,16 @@ fn is_hex(s: &str) -> bool {
 
 // ── Notes renderer ────────────────────────────────────────────────────────────
 
-const C_TEXT: egui::Color32 = egui::Color32::from_rgb(184, 204, 232);
-const C_DATE: egui::Color32 = egui::Color32::from_gray(120);
-const C_FEATURES: egui::Color32 = egui::Color32::from_rgb(80, 190, 80);
-const C_BUG_FIXES: egui::Color32 = egui::Color32::from_rgb(210, 170, 50);
-const C_OTHER_SECTION: egui::Color32 = egui::Color32::from_gray(140);
-const C_ITEM: egui::Color32 = egui::Color32::from_gray(185);
-const C_HASH: egui::Color32 = egui::Color32::from_rgb(100, 160, 210);
-const C_BAR_FEAT: egui::Color32 = egui::Color32::from_rgb(60, 160, 80);
-const C_BAR_FIX: egui::Color32 = egui::Color32::from_rgb(190, 150, 40);
-const C_BAR_OTHER: egui::Color32 = egui::Color32::from_rgb(40, 150, 180);
+const C_TEXT: egui::Color32 = egui::Color32::from_rgb(155, 180, 210);
+const C_DATE: egui::Color32 = egui::Color32::from_gray(128);
+const C_FEATURES: egui::Color32 = egui::Color32::from_rgb(70, 162, 88);
+const C_BUG_FIXES: egui::Color32 = egui::Color32::from_rgb(182, 152, 64);
+const C_OTHER_SECTION: egui::Color32 = egui::Color32::from_gray(128);
+const C_ITEM: egui::Color32 = egui::Color32::from_gray(162);
+const C_HASH: egui::Color32 = egui::Color32::from_rgb(86, 142, 188);
+const C_BAR_FEAT: egui::Color32 = egui::Color32::from_rgb(50, 136, 70);
+const C_BAR_FIX: egui::Color32 = egui::Color32::from_rgb(162, 130, 48);
+const C_BAR_OTHER: egui::Color32 = egui::Color32::from_rgb(36, 132, 158);
 
 fn section_color(kind: SectionKind) -> egui::Color32 {
     match kind {
@@ -323,7 +323,41 @@ fn render_item(ui: &mut egui::Ui, item: &NoteItem, bar: egui::Color32) {
     });
 }
 
+// ── Changelog area ────────────────────────────────────────────────────────────
+
+/// Slightly lighter than egui's default dark background (~gray 27) — gives
+/// a subtle tonal difference without a visible frame border.
+const CL_SCROLL_FILL: egui::Color32 = egui::Color32::from_gray(27);
+const CL_HEADER_TEXT: egui::Color32 = egui::Color32::from_gray(140);
+
+fn render_changelog_panel(ui: &mut egui::Ui, entries: &[ReleaseEntry], scroll_h: f32) {
+    // "What's New" — free label, part of the dialog, not inside any frame.
+    ui.label(
+        egui::RichText::new("What's New")
+            .size(11.0)
+            .strong()
+            .color(CL_HEADER_TEXT),
+    );
+    ui.add_space(5.0);
+
+    // Scroll area with a subtly different fill tone — no border stroke.
+    egui::Frame::new()
+        .fill(CL_SCROLL_FILL)
+        .corner_radius(egui::CornerRadius::same(4))
+        .show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .max_height(scroll_h)
+                .show(ui, |ui| {
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin::symmetric(10, 6))
+                        .show(ui, |ui| render_notes(ui, entries));
+                });
+        });
+}
+
 // ── Window ────────────────────────────────────────────────────────────────────
+
+const C_BG_PANEL: egui::Color32 = egui::Color32::from_gray(38);
 
 #[allow(deprecated)]
 pub fn show(
@@ -337,181 +371,202 @@ pub fn show(
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
 
-    egui::CentralPanel::default().show(ctx, |ui| {
-        let mut state = state.lock().unwrap();
+    // Collect action flags — avoids holding the MutexGuard across UI closures.
+    let mut action_close = false;
+    let mut action_check = false;
+    let mut action_install: Option<PathBuf> = None;
 
-        // ── Heading ───────────────────────────────────────────────────────
-        let (heading, heading_color) = match &state.status {
-            UpdateStatus::Ready { info, .. } => (
-                format!("v{} Available", info.version),
-                egui::Color32::from_rgb(100, 220, 100),
-            ),
-            UpdateStatus::UpToDate => ("Up to Date".to_string(), C_TEXT),
-            UpdateStatus::Error(_) => ("Update Error".to_string(), egui::Color32::RED),
-            _ => ("Updates".to_string(), C_TEXT),
-        };
-        ui.label(
-            egui::RichText::new(&heading)
-                .size(22.0)
-                .strong()
-                .color(heading_color),
-        );
-        ui.add_space(4.0);
+    let st = state.lock().unwrap();
 
-        egui::Grid::new("updater_info")
-            .num_columns(2)
-            .min_col_width(80.0)
-            .spacing([8.0, 4.0])
-            .show(ui, |ui| {
-                ui.label(egui::RichText::new("Installed:").color(C_DATE));
-                ui.label(format!("v{VERSION}"));
-                ui.end_row();
-            });
+    // Extract everything we need for display while the guard is held.
+    let (heading, heading_color) = match &st.status {
+        UpdateStatus::Ready { info, .. } => (
+            format!("v{} Available", info.version),
+            egui::Color32::from_rgb(88, 200, 88),
+        ),
+        UpdateStatus::UpToDate => ("Up to Date".to_string(), C_TEXT),
+        UpdateStatus::Error(_) => ("Update Error".to_string(), egui::Color32::from_rgb(220, 80, 80)),
+        _ => ("Updates".to_string(), C_TEXT),
+    };
 
-        ui.add_space(8.0);
-        ui.separator();
-        ui.add_space(8.0);
+    let installed_row: Option<String> = match &st.status {
+        UpdateStatus::Ready { .. } => Some(format!("v{VERSION}")),
+        _ => None,
+    };
 
-        // ── State-specific content ────────────────────────────────────────
-        match &state.status {
-            UpdateStatus::Idle => {
-                ui.label(
-                    egui::RichText::new("Check for a newer version of RigStats.").color(C_DATE),
-                );
-                ui.add_space(8.0);
-                ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_primary(ui, "Check for Updates").clicked() {
-                        state.status = UpdateStatus::Checking;
-                    }
-                });
-            }
+    let status_below: Option<&str> = match &st.status {
+        UpdateStatus::UpToDate => Some("You are running the latest version."),
+        _ => None,
+    };
 
-            UpdateStatus::Checking => {
+    // ── Hero (top) ────────────────────────────────────────────────────────────
+    egui::TopBottomPanel::top("updater_hero")
+        .frame(
+            egui::Frame::none()
+                .fill(C_BG_PANEL)
+                .inner_margin(egui::Margin { left: 14, right: 14, top: 14, bottom: 12 })
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
+                )),
+        )
+        .show_separator_line(true)
+        .show(ctx, |ui| {
+            ui.label(
+                egui::RichText::new(&heading)
+                    .size(22.0)
+                    .strong()
+                    .color(heading_color),
+            );
+            if let Some(ver) = &installed_row {
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label("Checking for updates…");
+                    ui.label(egui::RichText::new("Installed:").color(C_DATE));
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(ver.as_str()).color(C_TEXT));
                 });
             }
+        });
 
-            UpdateStatus::Downloading { downloaded, total } => {
-                ui.label("Downloading update…");
-                ui.add_space(8.0);
-                if *total > 0 {
-                    let progress = *downloaded as f32 / *total as f32;
-                    ui.add(egui::ProgressBar::new(progress).show_percentage());
-                    ui.add_space(4.0);
+    // ── Footer (bottom) ───────────────────────────────────────────────────────
+    egui::TopBottomPanel::bottom("updater_footer")
+        .frame(
+            egui::Frame::none()
+                .fill(C_BG_PANEL)
+                .inner_margin(egui::Margin { left: 12, right: 12, top: 8, bottom: 10 })
+                .stroke(egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
+                )),
+        )
+        .show_separator_line(true)
+        .show(ctx, |ui| {
+            if let Some(msg) = status_below {
+                ui.label(egui::RichText::new(msg).small().color(C_DATE));
+                ui.add_space(6.0);
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                match &st.status {
+                    UpdateStatus::Ready { installer_path, .. } => {
+                        let path = installer_path.clone();
+                        if theme::dialog_btn_primary(ui, "Install Now").clicked() {
+                            action_install = Some(path);
+                        }
+                        ui.add_space(6.0);
+                        if theme::dialog_btn_secondary(ui, "Later").clicked() {
+                            action_close = true;
+                        }
+                    }
+                    UpdateStatus::UpToDate => {
+                        if theme::dialog_btn_primary(ui, "Close").clicked() {
+                            action_close = true;
+                        }
+                        ui.add_space(6.0);
+                        theme::dialog_btn_secondary_disabled(ui, "Update Now");
+                    }
+                    UpdateStatus::Idle => {
+                        if theme::dialog_btn_primary(ui, "Check for Updates").clicked() {
+                            action_check = true;
+                        }
+                    }
+                    UpdateStatus::Error(_) => {
+                        if theme::dialog_btn_primary(ui, "Try again").clicked() {
+                            action_check = true;
+                        }
+                    }
+                    _ => {}
+                }
+            });
+        });
+
+    // ── Central content ───────────────────────────────────────────────────────
+    egui::CentralPanel::default()
+        .frame(
+            egui::Frame::new()
+                .fill(egui::Color32::from_gray(38))
+                .inner_margin(egui::Margin::same(10)),
+        )
+        .show(ctx, |ui| {
+            match &st.status {
+                UpdateStatus::Ready { info, .. } => {
+                    let new_notes = info.notes.clone();
+                    let combined = if new_notes.is_empty() {
+                        BUNDLED_CHANGELOG.to_string()
+                    } else {
+                        format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
+                    };
+                    let entries = parse_notes(&combined);
+                    render_changelog_panel(ui, &entries, ui.available_height());
+                }
+                UpdateStatus::UpToDate => {
+                    let entries = parse_notes(BUNDLED_CHANGELOG);
+                    render_changelog_panel(ui, &entries, ui.available_height());
+                }
+                UpdateStatus::Idle => {
                     ui.label(
-                        egui::RichText::new(format!(
-                            "{:.1} / {:.1} MB",
-                            *downloaded as f32 / 1_048_576.0,
-                            *total as f32 / 1_048_576.0,
-                        ))
-                        .small()
-                        .color(C_DATE),
+                        egui::RichText::new("Check for a newer version of RigStats.")
+                            .color(C_DATE),
                     );
-                } else {
-                    ui.add(egui::ProgressBar::new(0.0).animate(true));
-                    ui.add_space(4.0);
+                }
+                UpdateStatus::Checking => {
+                    ui.horizontal(|ui| {
+                        ui.spinner();
+                        ui.label("Checking for updates…");
+                    });
+                }
+                UpdateStatus::Downloading { downloaded, total } => {
+                    ui.label("Downloading update…");
+                    ui.add_space(8.0);
+                    if *total > 0 {
+                        let progress = *downloaded as f32 / *total as f32;
+                        ui.add(egui::ProgressBar::new(progress).show_percentage());
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{:.1} / {:.1} MB",
+                                *downloaded as f32 / 1_048_576.0,
+                                *total as f32 / 1_048_576.0,
+                            ))
+                            .small()
+                            .color(C_DATE),
+                        );
+                    } else {
+                        ui.add(egui::ProgressBar::new(0.0).animate(true));
+                        ui.add_space(4.0);
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{:.1} MB downloaded",
+                                *downloaded as f32 / 1_048_576.0,
+                            ))
+                            .small()
+                            .color(C_DATE),
+                        );
+                    }
+                }
+                UpdateStatus::Error(e) => {
                     ui.label(
-                        egui::RichText::new(format!(
-                            "{:.1} MB downloaded",
-                            *downloaded as f32 / 1_048_576.0,
-                        ))
-                        .small()
-                        .color(C_DATE),
+                        egui::RichText::new(format!("Error: {e}"))
+                            .color(egui::Color32::from_rgb(220, 80, 80)),
                     );
                 }
             }
+        });
 
-            UpdateStatus::Ready {
-                info,
-                installer_path,
-            } => {
-                // New version notes prepended to the full bundled history
-                let new_notes = info.notes.clone();
-                let path = installer_path.clone();
-                let combined = if new_notes.is_empty() {
-                    BUNDLED_CHANGELOG.to_string()
-                } else {
-                    format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
-                };
+    drop(st); // Release lock before applying actions.
 
-                ui.label(
-                    egui::RichText::new("What's New")
-                        .small()
-                        .strong()
-                        .color(C_DATE),
-                );
-                ui.add_space(4.0);
-
-                const FOOTER_H: f32 = 44.0;
-                let notes_h = (ui.available_height() - FOOTER_H).max(40.0);
-                let entries = parse_notes(&combined);
-                egui::ScrollArea::vertical()
-                    .max_height(notes_h)
-                    .show(ui, |ui| render_notes(ui, &entries));
-
-                ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_primary(ui, "Install Now").clicked() {
-                        if let Err(e) = update_check::launch_installer(&path) {
-                            state.status = UpdateStatus::Error(e);
-                        }
-                    }
-                    ui.add_space(8.0);
-                    if theme::dialog_btn_secondary(ui, "Later").clicked() {
-                        open.store(false, Ordering::Relaxed);
-                        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-                    }
-                });
-            }
-
-            UpdateStatus::UpToDate => {
-                ui.label(
-                    egui::RichText::new("You are running the latest version.")
-                        .small()
-                        .color(C_DATE),
-                );
-                ui.add_space(6.0);
-                ui.label(
-                    egui::RichText::new("What's New")
-                        .small()
-                        .strong()
-                        .color(C_DATE),
-                );
-                ui.add_space(4.0);
-
-                const FOOTER_H: f32 = 44.0;
-                let notes_h = (ui.available_height() - FOOTER_H).max(40.0);
-                let entries = parse_notes(BUNDLED_CHANGELOG);
-                egui::ScrollArea::vertical()
-                    .max_height(notes_h)
-                    .show(ui, |ui| render_notes(ui, &entries));
-
-                ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_primary(ui, "Close").clicked() {
-                        open.store(false, Ordering::Relaxed);
-                        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-                    }
-                    ui.add_space(8.0);
-                    theme::dialog_btn_secondary_disabled(ui, "Update Now");
-                });
-            }
-
-            UpdateStatus::Error(e) => {
-                ui.label(egui::RichText::new(format!("Error: {e}")).color(egui::Color32::RED));
-                ui.add_space(8.0);
-                ui.separator();
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_primary(ui, "Try again").clicked() {
-                        state.status = UpdateStatus::Checking;
-                    }
-                });
-            }
+    // ── Apply actions ─────────────────────────────────────────────────────────
+    if action_check {
+        state.lock().unwrap().status = UpdateStatus::Checking;
+    }
+    if let Some(path) = action_install {
+        if let Err(e) = update_check::launch_installer(&path) {
+            state.lock().unwrap().status = UpdateStatus::Error(e);
         }
-    });
+    }
+    if action_close {
+        open.store(false, Ordering::Relaxed);
+        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+    }
 
     if ctx.input(|i| i.viewport().close_requested()) {
         open.store(false, Ordering::Relaxed);
