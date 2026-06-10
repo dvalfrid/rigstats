@@ -946,6 +946,16 @@ impl RigStatsApp {
                         });
                 },
             );
+
+            // Apply window-level opacity to this panel's OS window.
+            // The HWND is looked up by title after show_viewport_immediate so the
+            // window is guaranteed to exist. FindWindowW is fast — no caching needed.
+            #[cfg(windows)]
+            {
+                let title = format!("RigStats \u{2014} {}", panel_label(&key));
+                let hwnd = win_opacity::find_hwnd(&title);
+                win_opacity::set_opacity(hwnd, self.opacity);
+            }
         }
     }
 
