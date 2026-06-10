@@ -5,6 +5,7 @@ mod ring;
 mod spark;
 mod tempcolor;
 mod theme;
+mod update_check;
 #[cfg(windows)]
 mod win32_behind;
 #[cfg(windows)]
@@ -412,6 +413,8 @@ struct RigStatsApp {
     settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
     status_win: Arc<Mutex<windows::status::StatusState>>,
     updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
+    // true while a manual check/download is in flight (prevents double-trigger)
+    updater_busy: Arc<AtomicBool>,
     // Shared settings (updated on save, applied each frame)
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
@@ -477,6 +480,9 @@ impl RigStatsApp {
         textures: brand::Textures,
         preferred_gpu: Arc<Mutex<Option<String>>>,
         floating_mode_arc: Arc<AtomicBool>,
+        updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
+        updater_open: Arc<AtomicBool>,
+        updater_focus: Arc<AtomicBool>,
     ) -> Self {
         let init_settings = current_settings.lock().unwrap().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -500,16 +506,17 @@ impl RigStatsApp {
             settings_open: Arc::new(AtomicBool::new(false)),
             about_open: Arc::new(AtomicBool::new(false)),
             status_open: Arc::new(AtomicBool::new(false)),
-            updater_open: Arc::new(AtomicBool::new(false)),
+            updater_open,
             settings_focus: Arc::new(AtomicBool::new(false)),
             about_focus: Arc::new(AtomicBool::new(false)),
             status_focus: Arc::new(AtomicBool::new(false)),
-            updater_focus: Arc::new(AtomicBool::new(false)),
+            updater_focus,
             settings_win: Arc::new(Mutex::new(
                 windows::settings::SettingsWindow::from_settings(&init_settings),
             )),
             status_win: Arc::new(Mutex::new(windows::status::StatusState::load(&dir))),
-            updater_win: Arc::new(Mutex::new(windows::updater::UpdaterState::default())),
+            updater_win,
+            updater_busy: Arc::new(AtomicBool::new(false)),
             current_settings,
             settings_reload,
             preferred_gpu,
@@ -844,14 +851,14 @@ impl eframe::App for RigStatsApp {
             let focus = self.updater_focus.clone();
             let state = self.updater_win.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(340.0, 220.0);
+            let [px, py] = dialog_center(400.0, 300.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Updates")
-                    .with_inner_size([340.0, 220.0])
+                    .with_inner_size([400.0, 300.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -871,6 +878,69 @@ impl eframe::App for RigStatsApp {
                 } else {
                     focus.store(true, Ordering::Relaxed);
                 }
+            }
+
+            // When the window sets status to Checking (manual button click),
+            // kick off a check+download task on the tokio runtime.
+            let is_checking = matches!(
+                self.updater_win.lock().unwrap().status,
+                windows::updater::UpdateStatus::Checking
+            );
+            if is_checking && !self.updater_busy.swap(true, Ordering::Relaxed) {
+                let win = self.updater_win.clone();
+                let busy = self.updater_busy.clone();
+                let ctx = ui.ctx().clone();
+                tokio::spawn(async move {
+                    let result = tokio::task::spawn_blocking(update_check::check)
+                        .await
+                        .unwrap_or_else(|_| Err("task panic".to_string()));
+                    match result {
+                        Ok(Some(info)) => {
+                            let version = info.version.clone();
+                            let url = info.url.clone();
+                            let dest = update_check::installer_temp_path(&version);
+                            {
+                                let mut s = win.lock().unwrap();
+                                s.status = windows::updater::UpdateStatus::Downloading {
+                                    downloaded: 0,
+                                    total: 0,
+                                };
+                            }
+                            ctx.request_repaint();
+                            let win2 = win.clone();
+                            let ctx2 = ctx.clone();
+                            let dest2 = dest.clone();
+                            let dl_result = tokio::task::spawn_blocking(move || {
+                                update_check::download(&url, &dest2, |downloaded, total| {
+                                    let mut s = win2.lock().unwrap();
+                                    s.status = windows::updater::UpdateStatus::Downloading {
+                                        downloaded,
+                                        total,
+                                    };
+                                    ctx2.request_repaint();
+                                })
+                            })
+                            .await
+                            .unwrap_or_else(|_| Err("download task panic".to_string()));
+                            let mut s = win.lock().unwrap();
+                            s.status = match dl_result {
+                                Ok(()) => windows::updater::UpdateStatus::Ready {
+                                    info,
+                                    installer_path: dest,
+                                },
+                                Err(e) => windows::updater::UpdateStatus::Error(e),
+                            };
+                        }
+                        Ok(None) => {
+                            win.lock().unwrap().status = windows::updater::UpdateStatus::UpToDate;
+                        }
+                        Err(e) => {
+                            win.lock().unwrap().status = windows::updater::UpdateStatus::Error(e);
+                        }
+                    }
+                    ctx.request_repaint();
+                    busy.store(false, Ordering::Relaxed);
+                });
             }
         }
 
@@ -1945,6 +2015,77 @@ fn main() {
                 }
             });
 
+            // Background auto-update check: fires 10 s after startup, then every 6 h.
+            // When a newer version is found and downloaded, opens the updater window.
+            let updater_win_bg: Arc<Mutex<windows::updater::UpdaterState>> =
+                Arc::new(Mutex::new(windows::updater::UpdaterState::default()));
+            let updater_open_bg = Arc::new(AtomicBool::new(false));
+            let updater_focus_bg = Arc::new(AtomicBool::new(false));
+            {
+                let win = updater_win_bg.clone();
+                let open = updater_open_bg.clone();
+                let focus = updater_focus_bg.clone();
+                let ctx = cc.egui_ctx.clone();
+                runtime.spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(10)).await;
+                    loop {
+                        let result = tokio::task::spawn_blocking(update_check::check)
+                            .await
+                            .unwrap_or_else(|_| Err("task panic".to_string()));
+                        match result {
+                            Ok(Some(info)) => {
+                                let version = info.version.clone();
+                                let url = info.url.clone();
+                                let dest = update_check::installer_temp_path(&version);
+                                {
+                                    let mut s = win.lock().unwrap();
+                                    s.status = windows::updater::UpdateStatus::Downloading {
+                                        downloaded: 0,
+                                        total: 0,
+                                    };
+                                }
+                                ctx.request_repaint();
+                                let win2 = win.clone();
+                                let ctx2 = ctx.clone();
+                                let dest2 = dest.clone();
+                                let dl_result = tokio::task::spawn_blocking(move || {
+                                    update_check::download(&url, &dest2, |downloaded, total| {
+                                        let mut s = win2.lock().unwrap();
+                                        s.status = windows::updater::UpdateStatus::Downloading {
+                                            downloaded,
+                                            total,
+                                        };
+                                        ctx2.request_repaint();
+                                    })
+                                })
+                                .await
+                                .unwrap_or_else(|_| Err("download task panic".to_string()));
+                                match dl_result {
+                                    Ok(()) => {
+                                        let mut s = win.lock().unwrap();
+                                        s.status = windows::updater::UpdateStatus::Ready {
+                                            info,
+                                            installer_path: dest,
+                                        };
+                                        drop(s);
+                                        open.store(true, Ordering::Relaxed);
+                                        focus.store(true, Ordering::Relaxed);
+                                        ctx.request_repaint();
+                                    }
+                                    Err(e) => {
+                                        win.lock().unwrap().status =
+                                            windows::updater::UpdateStatus::Error(e);
+                                    }
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(_) => {}
+                        }
+                        tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+                    }
+                });
+            }
+
             Ok(Box::new(RigStatsApp::new(
                 rx,
                 tray_rx,
@@ -1957,6 +2098,9 @@ fn main() {
                 textures,
                 preferred_gpu_arc,
                 fm_arc_hb,
+                updater_win_bg,
+                updater_open_bg,
+                updater_focus_bg,
             )))
         }),
     )

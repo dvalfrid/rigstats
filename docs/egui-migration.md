@@ -185,8 +185,11 @@ each with their own GPU swap chain.
 - [x] Stats CSV logging: reuse `logging.rs` (unchanged) — wired into `poll_loop` via
   `poll_stats_to_log_payload()`; reads `logging_enabled` from shared settings arc each tick
 - [x] Log pruning: reuse existing prune logic — runs once per calendar day inside `poll_loop`
-- [ ] Auto-update: implement with `self_update` crate or direct GitHub API check
-  (tauri-plugin-updater is gone; fetch `latest.json`, compare versions, download NSIS installer)
+- [x] Auto-update: `update_check.rs` — fetches `latest.json`, compares semver, downloads
+  NSIS installer to `%TEMP%` with progress callback, launches installer on confirm.
+  Background task checks on startup (10 s delay) and every 6 h; opens updater window
+  automatically when download completes. Manual check via "Check for Updates" button
+  in the updater window triggers the same check+download flow with live progress bar.
 
 #### Tray parity (complete alongside logging)
 
