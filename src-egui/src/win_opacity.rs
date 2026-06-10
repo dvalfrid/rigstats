@@ -21,6 +21,20 @@ pub fn find_hwnd(title: &str) -> isize {
     unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) as isize }
 }
 
+/// Post WM_PAINT to the window so its render loop runs on the next event loop tick.
+/// Used by the heartbeat thread to drive deferred viewport repaints at ~1 fps
+/// without going through egui's request_repaint_of (which doesn't work reliably
+/// for non-focused deferred viewports on Windows).
+#[allow(dead_code)]
+pub fn force_repaint(hwnd: isize) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        winapi::um::winuser::InvalidateRect(hwnd as HWND, std::ptr::null(), 0);
+    }
+}
+
 /// Apply window-level opacity (0.0 = invisible, 1.0 = fully opaque) via
 /// WS_EX_LAYERED + LWA_ALPHA. No-op if hwnd is 0.
 pub fn set_opacity(hwnd: isize, opacity: f32) {

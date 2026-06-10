@@ -809,10 +809,13 @@ impl eframe::App for RigStatsApp {
 // ── Floating panel helpers ────────────────────────────────────────────────────
 
 impl RigStatsApp {
-    /// Render an immediate viewport for every visible panel. Called each frame
-    /// when `floating_mode` is true. Each viewport renders exactly one panel
-    /// synchronously in the parent's render call — when the parent ticks (driven
-    /// by the heartbeat thread), all panels update regardless of focus or OS events.
+    /// Render every visible panel as its own borderless OS window using
+    /// `show_viewport_immediate`.  Called each frame when `floating_mode` is true.
+    ///
+    /// `show_viewport_immediate` renders each child synchronously as part of the
+    /// parent frame — no deferred callbacks, no separate event loops.  The parent
+    /// ticks at ~1 fps (via `request_repaint_after(1 s)` in `update()`), so all
+    /// panels naturally update at ~1 fps without any Win32 tricks.
     fn render_floating_panels(&self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
         let profile_w = profile_to_size(&s.dashboard_profile)[0];
@@ -821,15 +824,8 @@ impl RigStatsApp {
         drop(s);
 
         let locked = self.floating_panels_locked;
-        let textures = self.textures.clone();
         let panels_to_draw = self.visible_panels.clone();
-
-        // Clone live data once per frame — no Arc locking inside each closure.
-        let stats = self.latest.clone();
-        let cspark = self.cpu_spark.clone();
-        let gspark = self.gpu_spark.clone();
-        let nuspark = self.net_up_spark.clone();
-        let ndspark = self.net_dn_spark.clone();
+        let opacity = self.opacity;
 
         for (idx, panel_key) in panels_to_draw.iter().enumerate() {
             let key = panel_key.clone();
@@ -846,7 +842,7 @@ impl RigStatsApp {
             let initial_h = panel_initial_h(&key) * scale;
 
             let mut vp_builder = egui::ViewportBuilder::default()
-                .with_title(format!("RigStats — {}", panel_label(&key)))
+                .with_title(format!("RigStats \u{2014} {}", panel_label(&key)))
                 .with_inner_size([panel_w, initial_h])
                 .with_position(init_pos)
                 .with_decorations(false)
@@ -856,28 +852,30 @@ impl RigStatsApp {
                 vp_builder = vp_builder.with_always_on_top();
             }
 
-            // Per-closure captures — only what's needed for this panel.
-            let stats = stats.clone();
-            let cspark = cspark.clone();
-            let gspark = gspark.clone();
-            let nuspark = nuspark.clone();
-            let ndspark = ndspark.clone();
-            let tex = textures.clone();
-            let positions_arc = self.floating_positions.clone();
-            let dirty = self.positions_dirty.clone();
-            let new_pref_arc = self.float_new_pref_gpu.clone();
-            let key_c = key.clone();
+            // `show_viewport_immediate` is FnMut with no Send/'static bound —
+            // we can borrow self fields directly instead of going through Arc.
+            let positions_arc = &self.floating_positions;
+            let dirty = &self.positions_dirty;
+            let new_pref_arc = &self.float_new_pref_gpu;
+            let stats = &self.latest;
+            let cspark = &self.cpu_spark;
+            let gspark = &self.gpu_spark;
+            let nuspark = &self.net_up_spark;
+            let ndspark = &self.net_dn_spark;
+            let tex = &self.textures;
 
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("float_{key}")),
                 vp_builder,
-                move |ctx, _class| {
+                |child_ui, _class| {
+                    let ctx = child_ui.ctx();
+
                     // ── Track window position for persistence ─────────────────
                     if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
                         let new_pos = [outer.left(), outer.top()];
                         let mut pos = positions_arc.lock().unwrap();
                         let stored = pos
-                            .entry(key_c.clone())
+                            .entry(key.clone())
                             .or_insert([f32::NAN, f32::NAN]);
                         if ((*stored)[0] - new_pos[0]).abs() > 0.5
                             || ((*stored)[1] - new_pos[1]).abs() > 0.5
@@ -915,20 +913,20 @@ impl RigStatsApp {
 
                             // ── Panel content ─────────────────────────────────
                             let mut new_pref: Option<String> = None;
-                            match key_c.as_str() {
-                                "header" => panels::header::draw(ui, &stats, &tex, 1.0),
+                            match key.as_str() {
+                                "header" => panels::header::draw(ui, stats, tex, 1.0),
                                 "clock" => panels::clock::draw(ui, stats.uptime_secs, 1.0),
-                                "cpu" => panels::cpu::draw(ui, &stats, &cspark, &tex, 1.0),
+                                "cpu" => panels::cpu::draw(ui, stats, cspark, tex, 1.0),
                                 "gpu" => {
                                     new_pref =
-                                        panels::gpu::draw(ui, &stats, &gspark, &tex, 1.0);
+                                        panels::gpu::draw(ui, stats, gspark, tex, 1.0);
                                 }
-                                "ram" => panels::ram::draw(ui, &stats, 1.0),
-                                "net" => panels::net::draw(ui, &stats, &nuspark, &ndspark, 1.0),
-                                "disk" => panels::disk::draw(ui, &stats, 1.0),
-                                "motherboard" => panels::motherboard::draw(ui, &stats, 1.0),
-                                "process" => panels::process::draw(ui, &stats, 1.0),
-                                "battery" => panels::battery::draw(ui, &stats, 1.0),
+                                "ram" => panels::ram::draw(ui, stats, 1.0),
+                                "net" => panels::net::draw(ui, stats, nuspark, ndspark, 1.0),
+                                "disk" => panels::disk::draw(ui, stats, 1.0),
+                                "motherboard" => panels::motherboard::draw(ui, stats, 1.0),
+                                "process" => panels::process::draw(ui, stats, 1.0),
+                                "battery" => panels::battery::draw(ui, stats, 1.0),
                                 _ => {}
                             }
 
@@ -943,19 +941,18 @@ impl RigStatsApp {
                                     egui::Vec2::new(panel_w, used_h),
                                 ));
                             }
+
+                            // Apply opacity to this panel's OS window.
+                            #[cfg(windows)]
+                            {
+                                let title =
+                                    format!("RigStats \u{2014} {}", panel_label(&key));
+                                let hwnd = win_opacity::find_hwnd(&title);
+                                win_opacity::set_opacity(hwnd, opacity);
+                            }
                         });
                 },
             );
-
-            // Apply window-level opacity to this panel's OS window.
-            // The HWND is looked up by title after show_viewport_immediate so the
-            // window is guaranteed to exist. FindWindowW is fast — no caching needed.
-            #[cfg(windows)]
-            {
-                let title = format!("RigStats \u{2014} {}", panel_label(&key));
-                let hwnd = win_opacity::find_hwnd(&title);
-                win_opacity::set_opacity(hwnd, self.opacity);
-            }
         }
     }
 
@@ -1418,12 +1415,14 @@ fn main() {
             let dir_arc = Arc::new(dir.clone());
             let textures = brand::Textures::load(&cc.egui_ctx);
 
-            // Heartbeat thread: when floating mode is active the main window is
-            // moved off-screen and receives no WM_PAINT from Windows.  Without
-            // an external kick, eframe would never call ui() again and all child
-            // viewports (show_viewport_deferred) would freeze.  This thread
-            // calls request_repaint() every second so ui() runs even off-screen,
-            // keeping show_viewport_deferred alive and driving child repaints.
+            // Heartbeat thread: drives both the parent and each deferred panel viewport
+            // at ~1 fps. The parent window is off-screen and gets no WM_PAINT from Windows,
+            // so ctx.request_repaint() wakes it (to re-register show_viewport_deferred
+            // callbacks). Deferred panel viewports have their own OS windows on screen but
+            // Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
+            // active.  With `show_viewport_immediate`, all panels are rendered
+            // synchronously as part of the parent frame, so one `request_repaint()`
+            // per second is enough to drive all panel updates.
             let fm_arc_hb = Arc::new(AtomicBool::new(
                 settings::load_settings(&dir).floating_mode,
             ));
@@ -1431,14 +1430,8 @@ fn main() {
             let fm_arc_hb2 = fm_arc_hb.clone();
             std::thread::spawn(move || {
                 loop {
-                    std::thread::sleep(Duration::from_millis(900));
+                    std::thread::sleep(Duration::from_millis(950));
                     if fm_arc_hb2.load(Ordering::Relaxed) {
-                        // Wake the parent so ui() runs and show_viewport_deferred
-                        // re-registers callbacks for each visible child panel.
-                        // The parent then immediately calls request_repaint_of for
-                        // each child — we do NOT call it here because doing so for
-                        // viewport IDs that are not yet registered causes egui to
-                        // create blank default viewports (empty white windows).
                         ctx_hb.request_repaint();
                     }
                 }
