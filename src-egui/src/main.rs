@@ -6,6 +6,8 @@ mod spark;
 mod tempcolor;
 mod theme;
 #[cfg(windows)]
+mod win32_behind;
+#[cfg(windows)]
 mod win_opacity;
 mod windows;
 
@@ -369,6 +371,9 @@ struct RigStatsApp {
     /// Receives a new preferred-GPU name when the user clicks a GPU dot
     /// inside the floating GPU panel viewport.
     float_new_pref_gpu: Arc<Mutex<Option<String>>>,
+    /// Live lock state toggled from the padlock icon in the drag handle.
+    /// Propagated back to `floating_panels_locked` and persisted in `update()`.
+    floating_lock_arc: Arc<AtomicBool>,
     /// Guards the one-time initial hide of the main window when the app
     /// starts with floating_mode already enabled.
     initial_floating_applied: bool,
@@ -454,6 +459,9 @@ impl RigStatsApp {
             floating_positions: Arc::new(Mutex::new(init_positions)),
             positions_dirty: Arc::new(AtomicBool::new(false)),
             float_new_pref_gpu: Arc::new(Mutex::new(None)),
+            floating_lock_arc: Arc::new(AtomicBool::new(
+                init_settings.floating_panels_locked,
+            )),
             initial_floating_applied: false,
             panels_positioned: HashSet::new(),
             floating_mode_arc,
@@ -589,6 +597,15 @@ impl eframe::App for RigStatsApp {
                     self.updater_focus.store(true, Ordering::Relaxed);
                 }
             }
+        }
+
+        // Sync floating lock state toggled by padlock icon in drag handle.
+        let arc_locked = self.floating_lock_arc.load(Ordering::Relaxed);
+        if arc_locked != self.floating_panels_locked {
+            self.floating_panels_locked = arc_locked;
+            let mut s = self.current_settings.lock().unwrap();
+            s.floating_panels_locked = arc_locked;
+            let _ = settings::persist_settings(&self.dir, &s);
         }
 
         // ── Secondary windows ─────────────────────────────────────────────────
@@ -884,6 +901,95 @@ impl eframe::App for RigStatsApp {
 
 // ── Floating panel helpers ────────────────────────────────────────────────────
 
+/// Returns the accent colour for a given floating panel key.
+fn panel_accent(key: &str) -> egui::Color32 {
+    match key {
+        "gpu" => theme::C_AMD,
+        "ram" => theme::C_RAM,
+        "net" => theme::C_GRN,
+        "disk" => theme::C_PUR,
+        "motherboard" => theme::C_MB,
+        "process" => theme::C_PROC,
+        "battery" => theme::C_GRN,
+        _ => theme::C_ACCENT, // cpu, header, clock
+    }
+}
+
+/// Draw a padlock icon centred on `center` (fits inside a ~10 × 12 px area).
+///
+/// * **locked**: symmetric arch, both shackle arms enter the body.
+/// * **unlocked**: arch is lifted with a clear gap; only the right arm reaches
+///   the body — the left end hangs free, clearly showing the lock is open.
+fn draw_padlock(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    locked: bool,
+    color: egui::Color32,
+) {
+    let body_w = 8.0_f32;
+    let body_h = 4.5_f32;
+    let sr = 2.6_f32; // shackle half-width = radius of semicircle
+    let stroke = egui::Stroke::new(1.5, color);
+
+    // Body — filled rect in the lower portion.
+    let body_cy = center.y + 2.2;
+    painter.rect_filled(
+        egui::Rect::from_center_size(
+            egui::pos2(center.x, body_cy),
+            egui::Vec2::new(body_w, body_h),
+        ),
+        1.0,
+        color,
+    );
+
+    let body_top = body_cy - body_h / 2.0;
+    let left_x = center.x - sr;
+    let right_x = center.x + sr;
+
+    if locked {
+        // Arch sits tightly on body; both arms just touch body_top.
+        let arc_cy = body_top - sr;
+        painter.line_segment(
+            [egui::pos2(left_x, body_top), egui::pos2(left_x, arc_cy)],
+            stroke,
+        );
+        painter.line_segment(
+            [egui::pos2(right_x, body_top), egui::pos2(right_x, arc_cy)],
+            stroke,
+        );
+        let pts: Vec<egui::Pos2> = (0..=10)
+            .map(|i| {
+                let a = std::f32::consts::PI * i as f32 / 10.0;
+                egui::pos2(center.x - sr * a.sin(), arc_cy - sr * a.cos())
+            })
+            .collect();
+        painter.add(egui::Shape::line(pts, stroke));
+    } else {
+        // Arch is raised well above body — clear gap shows it is open.
+        // Only the right arm extends down to body_top; left end hangs free.
+        let arc_cy = body_top - sr * 2.6; // raised ~2.5× compared to locked
+        painter.line_segment(
+            [egui::pos2(right_x, body_top), egui::pos2(right_x, arc_cy)],
+            stroke,
+        );
+        // Left arm: short stub at arc end (makes the opening obvious).
+        painter.line_segment(
+            [
+                egui::pos2(left_x, arc_cy),
+                egui::pos2(left_x, arc_cy + sr * 0.7),
+            ],
+            stroke,
+        );
+        let pts: Vec<egui::Pos2> = (0..=10)
+            .map(|i| {
+                let a = std::f32::consts::PI * i as f32 / 10.0;
+                egui::pos2(center.x - sr * a.sin(), arc_cy - sr * a.cos())
+            })
+            .collect();
+        painter.add(egui::Shape::line(pts, stroke));
+    }
+}
+
 impl RigStatsApp {
     /// Render every visible panel as its own borderless OS window using
     /// `show_viewport_immediate`.  Called each frame when `floating_mode` is true.
@@ -895,11 +1001,14 @@ impl RigStatsApp {
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
         let profile_w = profile_to_size(&s.dashboard_profile)[0];
-        let on_top = s.window_layer == "on_top";
+        let window_level = match s.window_layer.as_str() {
+            "on_top" => egui::WindowLevel::AlwaysOnTop,
+            "behind" => egui::WindowLevel::AlwaysOnBottom,
+            _ => egui::WindowLevel::Normal,
+        };
         let scale = self.floating_panel_scale;
         drop(s);
 
-        let locked = self.floating_panels_locked;
         let panels_to_draw = self.visible_panels.clone();
         let opacity = self.opacity;
 
@@ -931,14 +1040,15 @@ impl RigStatsApp {
                 .with_inner_size([panel_w, initial_h])
                 .with_decorations(false)
                 .with_resizable(false)
-                .with_taskbar(false);
+                .with_taskbar(false)
+                .with_window_level(window_level);
+
+            // Capture title string for Win32 FindWindowW lookup inside the callback.
+            let win_title = format!("RigStats \u{2014} {}", panel_label(&key));
+            let is_behind = window_level == egui::WindowLevel::AlwaysOnBottom;
 
             if needs_position {
                 vp_builder = vp_builder.with_position(init_pos);
-            }
-
-            if on_top {
-                vp_builder = vp_builder.with_always_on_top();
             }
 
             // `show_viewport_immediate` is FnMut with no Send/'static bound —
@@ -946,6 +1056,7 @@ impl RigStatsApp {
             let positions_arc = &self.floating_positions;
             let dirty = &self.positions_dirty;
             let new_pref_arc = &self.float_new_pref_gpu;
+            let lock_arc = &self.floating_lock_arc;
             let stats = &self.latest;
             let cspark = &self.cpu_spark;
             let gspark = &self.gpu_spark;
@@ -975,11 +1086,27 @@ impl RigStatsApp {
                         }
                     }
 
+                    // ── "Always Behind" enforcement ───────────────────────────
+                    // egui's AlwaysOnBottom only sets Z-order at creation.  A
+                    // click still sends WM_ACTIVATE and Windows lifts the window
+                    // to the foreground.  Fix:
+                    //   1. Re-send ViewportCommand every frame so egui/winit
+                    //      calls SetWindowPos(HWND_BOTTOM) continuously.
+                    //   2. Win32: set WS_EX_NOACTIVATE so clicks don't activate.
+                    if is_behind {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                            egui::WindowLevel::AlwaysOnBottom,
+                        ));
+                        #[cfg(windows)]
+                        win32_behind::apply_behind(&win_title);
+                    }
+
                     #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
                     egui::CentralPanel::default()
                         .frame(egui::Frame::none().fill(theme::PANEL_FILL))
                         .show(ctx, |ui| {
                             // ── Drag handle ───────────────────────────────────
+                            let locked = lock_arc.load(Ordering::Relaxed);
                             let drag_w = ui.available_width().max(1.0);
                             let (drag_rect, drag_resp) = ui.allocate_exact_size(
                                 egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
@@ -988,6 +1115,28 @@ impl RigStatsApp {
                             if !locked && drag_resp.dragged() {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                             }
+
+                            // Padlock click region (right 16 px of drag strip).
+                            let padlock_cx = drag_rect.right() - 9.0;
+                            let padlock_center =
+                                egui::pos2(padlock_cx, drag_rect.center().y);
+                            let padlock_hit = egui::Rect::from_center_size(
+                                padlock_center,
+                                egui::Vec2::new(16.0, theme::DRAG_HANDLE_H),
+                            );
+                            let padlock_resp = ui.interact(
+                                padlock_hit,
+                                ui.id().with("padlock"),
+                                egui::Sense::click(),
+                            );
+                            if padlock_resp.clicked() {
+                                lock_arc.store(!locked, Ordering::Relaxed);
+                            }
+                            if padlock_resp.hovered() {
+                                ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                            }
+
+                            // Drag-handle dots (only when unlocked + hovered).
                             if drag_resp.hovered() && !locked {
                                 let painter = ui.painter();
                                 let cy = drag_rect.center().y;
@@ -1000,6 +1149,17 @@ impl RigStatsApp {
                                     );
                                 }
                             }
+
+                            // Padlock icon — accent colour for this panel when locked, dim otherwise.
+                            let accent = panel_accent(&key);
+                            let padlock_color = if locked {
+                                accent
+                            } else if padlock_resp.hovered() {
+                                egui::Color32::from_gray(130)
+                            } else {
+                                egui::Color32::from_gray(55)
+                            };
+                            draw_padlock(ui.painter(), padlock_center, locked, padlock_color);
 
                             // ── Panel content ─────────────────────────────────
                             let mut new_pref: Option<String> = None;
