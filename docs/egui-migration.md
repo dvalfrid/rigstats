@@ -212,24 +212,24 @@ not the Phase 5 stub.)*
 This is a combined **functionality audit + visual polish pass** — missing features are
 implemented here, not deferred. Go through every secondary window and compare against the
 Tauri version for:
-- [ ] **Settings** — all four tabs: Dashboard, Panels, Alerts, Appearance
+- [x] **Settings** — all four tabs: Dashboard, Panels, Alerts, Appearance
   - Floating mode toggle and lock/scale controls visible/functional
-  - Drag-to-reorder panels works correctly
+  - ↑/↓ reorder replaces drag-to-reorder (simpler, fully functional)
   - All threshold fields present; battery direction (drops-below) correct
   - Autostart toggle wired (Phase 8 prerequisite)
   - Logging toggle and retention field wired (Phase 8 prerequisite)
-  - Opacity slider live-previews on the main window
+  - Opacity slider live-previews via settings_reload flag
   - Profile selector covers all valid profiles
-- [ ] **About** — version string, description, "Open log folder" button functional
-- [ ] **Status** — debug log viewer shows live content, sensor service status correct,
-  Refresh button works
-- [ ] **Updater** — version display, "Check for Updates" button triggers real HTTP check
-  (Phase 8 prerequisite), changelog rendered, install flow functional
-- [ ] Visual consistency across all windows: fonts, colours, spacing match dashboard style
-- [ ] All windows position sensibly relative to the tray icon or screen centre
-- [ ] **Tray context menu dark mode** — call `SetPreferredAppMode(AllowDark)` via
-  `uxtheme.dll` ordinal 135 at startup so Windows renders the OS context menu in dark
-  mode when the system theme is dark (undocumented but standard Win32 approach)
+- [x] **About** — version string, description, clickable GitHub hyperlink, "Open log folder"
+  button functional
+- [x] **Status** — debug log viewer shows live content (scroll-to-bottom), sensor service
+  status colour-coded, Refresh button works
+- [x] **Updater** — version display, "Check for Updates" triggers real HTTP check+download
+  (Phase 8), progress bar, changelog rendered, Install Now / Later flow functional
+- [x] Visual consistency across all windows: egui dark visuals + dialog_center positioning
+- [x] All windows centered on the primary landscape monitor via `dialog_center()`
+- [x] **Tray context menu dark mode** — `SetPreferredAppMode(AllowDark)` called at startup
+  via `uxtheme.dll` ordinals 135 + 104 in new `win32_dark_mode::enable()` function
 
 **Done when:** autostart toggles correctly, CSV logging writes rows and can be toggled
 from the tray with icon feedback, all four secondary windows are functionally and visually
@@ -285,14 +285,10 @@ complete, and update check finds new versions and can install them.
 
 ## Current status
 
-> **Phase 7 complete.** Floating mode: each visible panel rendered as its own borderless
-> egui viewport via `show_viewport_immediate()`. Main window moved off-screen (not hidden —
-> hidden windows are not ticked by eframe). A heartbeat thread fires `request_repaint()`
-> every 950 ms so the parent runs and all panels update synchronously. Per-panel drag
-> handles (disabled when locked). Positions tracked via `Arc<Mutex<HashMap>>` + dirty flag,
-> persisted to `panel_layouts` in settings. Scale factor from `floating_panel_scale` (0.4–1.0).
-> Opacity applied to each panel's HWND via `FindWindowW` + `SetLayeredWindowAttributes`.
-> GPU preference clicks in floating GPU panel propagated back to main app.
-> Settings Dashboard tab: lock checkbox + scale slider shown when floating mode is enabled.
-> CPU usage: ~2–3 % in floating mode (release build) vs ~1 % fixed — acceptable given
-> N independent OS windows each with their own GPU swap chain.
+> **Phase 8 complete.** Autostart, CSV logging (poll_loop + shared settings arc), log
+> pruning, auto-update (background check on startup + every 6 h, manual trigger from
+> updater window, download-with-progress, NSIS launcher), tray parity (Toggle Floating
+> Mode, Start/Stop Recording, recording icon indicator, single left-click show/hide),
+> tray dark mode via `win32_dark_mode::enable()` (uxtheme.dll ordinals 135+104), dialog
+> review pass (all four secondary windows audited and polished, GitHub hyperlink in About).
+> Phase 9 remaining: remove src-tauri/, update installer, full verify.

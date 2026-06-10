@@ -149,6 +149,100 @@ fn draw_accent_line(painter: &egui::Painter, rect: egui::Rect, accent: Color32, 
     painter.add(egui::Shape::mesh(mesh));
 }
 
+// ── Dialog button components ──────────────────────────────────────────────────
+//
+// All secondary windows (Settings, About, Status, Updater) must use these helpers
+// instead of raw `ui.button()`. They apply Windows 11-style hover/active state by
+// temporarily overriding `ui.visuals_mut().widgets.*` inside a `ui.scope()`, which
+// keeps the override local and does not leak to surrounding UI.
+//
+// Usage:
+//   if theme::dialog_btn_primary(ui, "OK").clicked() { ... }
+//   if theme::dialog_btn_secondary(ui, "Cancel").clicked() { ... }
+//   theme::dialog_btn_secondary_disabled(ui, "Update Now"); // grayed out, unclickable
+//
+// Button layout convention: use `ui.with_layout(right_to_left, ...)` so the primary
+// action sits on the far right and secondary actions are to its left.  Add
+// `ui.separator()` immediately before the button row.
+
+const DBTN_PRIMARY: Color32 = Color32::from_rgb(0, 120, 212);
+const DBTN_PRIMARY_HOV: Color32 = Color32::from_rgb(26, 134, 219);
+const DBTN_PRIMARY_ACT: Color32 = Color32::from_rgb(0, 108, 190);
+const DBTN_PRIMARY_BORDER: Color32 = Color32::from_rgb(0, 90, 170);
+const DBTN_SEC: Color32 = Color32::from_gray(52);
+const DBTN_SEC_HOV: Color32 = Color32::from_gray(65);
+const DBTN_SEC_ACT: Color32 = Color32::from_gray(42);
+const DBTN_SEC_BORDER: Color32 = Color32::from_gray(88);
+const DBTN_MIN_SIZE: Vec2 = Vec2::new(90.0, 26.0);
+const DBTN_RADIUS: u8 = 4;
+
+fn with_btn_visuals<R>(
+    ui: &mut Ui,
+    fill: Color32,
+    fill_hov: Color32,
+    fill_act: Color32,
+    border: Color32,
+    f: impl FnOnce(&mut Ui) -> R,
+) -> R {
+    ui.scope(|ui| {
+        let cr = CornerRadius::same(DBTN_RADIUS);
+        let w = &mut ui.visuals_mut().widgets;
+        w.inactive.bg_fill = fill;
+        w.inactive.weak_bg_fill = fill;
+        w.inactive.bg_stroke = Stroke::new(1.0, border);
+        w.inactive.corner_radius = cr;
+        w.hovered.bg_fill = fill_hov;
+        w.hovered.weak_bg_fill = fill_hov;
+        w.hovered.bg_stroke = Stroke::new(1.0, border);
+        w.hovered.corner_radius = cr;
+        w.active.bg_fill = fill_act;
+        w.active.weak_bg_fill = fill_act;
+        w.active.bg_stroke = Stroke::new(1.0, border);
+        w.active.corner_radius = cr;
+        f(ui)
+    })
+    .inner
+}
+
+/// Windows 11-style primary button (blue `#0078D4`, white text, hover `#1A86DB`).
+pub fn dialog_btn_primary(ui: &mut Ui, label: &str) -> egui::Response {
+    with_btn_visuals(
+        ui,
+        DBTN_PRIMARY,
+        DBTN_PRIMARY_HOV,
+        DBTN_PRIMARY_ACT,
+        DBTN_PRIMARY_BORDER,
+        |ui| {
+            ui.visuals_mut().override_text_color = Some(Color32::WHITE);
+            ui.add(egui::Button::new(label).min_size(DBTN_MIN_SIZE))
+        },
+    )
+}
+
+/// Windows 11-style secondary button (gray with border, hover lightens fill).
+pub fn dialog_btn_secondary(ui: &mut Ui, label: &str) -> egui::Response {
+    with_btn_visuals(
+        ui,
+        DBTN_SEC,
+        DBTN_SEC_HOV,
+        DBTN_SEC_ACT,
+        DBTN_SEC_BORDER,
+        |ui| ui.add(egui::Button::new(label).min_size(DBTN_MIN_SIZE)),
+    )
+}
+
+/// Disabled variant of the secondary button (grayed out, unclickable).
+pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str) {
+    with_btn_visuals(
+        ui,
+        DBTN_SEC,
+        DBTN_SEC,
+        DBTN_SEC,
+        DBTN_SEC_BORDER,
+        |ui| ui.add_enabled(false, egui::Button::new(label).min_size(DBTN_MIN_SIZE)),
+    );
+}
+
 /// Small L-shaped brackets at TL and BR corners of the panel.
 fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
     let bracket_a = (128.0 * opacity) as u8;

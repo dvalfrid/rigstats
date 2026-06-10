@@ -133,6 +133,24 @@ This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardw
 
 `src-tauri` builds and runs independently; existing npm scripts remain valid. The egui binary reads settings from the same `%APPDATA%\se.codeby.rigstats\` directory as the Tauri app. The sidecar pipe only accepts one client at a time, so LHM data (temps, GPU) is only available in egui when the Tauri app is not running.
 
+### egui binary (`src-egui/src/`)
+
+Key source files:
+
+- **`main.rs`** — entry point: monitor selection, tray setup, settings load, poll thread, eframe `run_native`.
+- **`theme.rs`** — shared constants and helpers for **both** panel cards and dialog windows:
+  - Panel accent colours, text colours, `panel_frame()`, sparkline/bar helpers.
+  - **Dialog button API** (Windows 11-style with proper hover/active state):
+    - `theme::dialog_btn_primary(ui, label)` — blue `#0078D4`, white text; hover lightens to `#1A86DB`, pressed darkens. Use for the main action (OK, Save, Install Now, Close, Check for Updates).
+    - `theme::dialog_btn_secondary(ui, label)` — gray fill `#343434` with border; hover lightens. Use for cancel/dismiss actions (Cancel, Later).
+    - `theme::dialog_btn_secondary_disabled(ui, label)` — same gray, non-interactive. Use for grayed-out actions (Update Now when already up-to-date).
+  - **Button layout rule:** wrap button rows in `ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| { ... })`. Primary action is added first (lands on the right), secondary after (lands to its left). Always place `ui.separator()` immediately before the button row.
+  - Implementation detail: hover/active colours work by temporarily overriding `ui.visuals_mut().widgets.{inactive,hovered,active}` inside a `ui.scope()` closure — the scope prevents the override from leaking to surrounding UI.
+- **`panels/`** — one file per panel (`cpu.rs`, `gpu.rs`, etc.), each rendering inside `theme::panel_frame()`.
+- **`windows/`** — one file per secondary window (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`). All use `egui::show_viewport_deferred` and are centered via `dialog_center()` in `main.rs`.
+- **`update_check.rs`** — `check()` fetches `latest.json`, compares semver. `BUNDLED_CHANGELOG` bundles `../../CHANGELOG.md` at compile time (same content as Tauri's bundled resource).
+- **`win32_dark_mode.rs`** — calls `uxtheme.dll` ordinals 135 (`SetPreferredAppMode(AllowDark)`) + 104 (`RefreshImmersiveColorPolicyState`) at startup so the OS-drawn tray context menu respects dark mode.
+
 ### Data flow
 
 ```text

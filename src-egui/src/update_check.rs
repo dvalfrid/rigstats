@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 const LATEST_JSON_URL: &str =
     "https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json";
 
+/// Full version history bundled at compile time from CHANGELOG.md.
+pub const BUNDLED_CHANGELOG: &str = include_str!("../../CHANGELOG.md");
+
 #[derive(Debug, Deserialize)]
 struct LatestManifest {
     version: String,
@@ -19,9 +22,16 @@ pub struct UpdateInfo {
     pub url: String,
 }
 
-/// Returns `Some(UpdateInfo)` when the remote version is strictly newer than
-/// `current_version`, or `None` when already up to date.
-pub fn check() -> Result<Option<UpdateInfo>, String> {
+/// Result of a version check.
+pub enum CheckResult {
+    /// Already on the latest version.
+    UpToDate,
+    /// A newer version is available.
+    UpdateAvailable(UpdateInfo),
+}
+
+/// Fetch `latest.json` and compare against the current build version.
+pub fn check() -> Result<CheckResult, String> {
     let resp = ureq::get(LATEST_JSON_URL)
         .call()
         .map_err(|e| format!("HTTP error: {e}"))?;
@@ -32,9 +42,10 @@ pub fn check() -> Result<Option<UpdateInfo>, String> {
 
     let remote = &manifest.version;
     let current = env!("CARGO_PKG_VERSION");
+    let notes = manifest.notes.unwrap_or_default();
 
     if !is_newer(remote, current) {
-        return Ok(None);
+        return Ok(CheckResult::UpToDate);
     }
 
     let url = manifest
@@ -45,9 +56,9 @@ pub fn check() -> Result<Option<UpdateInfo>, String> {
         .map(str::to_owned)
         .ok_or_else(|| "No windows-x86_64 URL in manifest".to_string())?;
 
-    Ok(Some(UpdateInfo {
+    Ok(CheckResult::UpdateAvailable(UpdateInfo {
         version: remote.clone(),
-        notes: manifest.notes.unwrap_or_default(),
+        notes,
         url,
     }))
 }
@@ -96,7 +107,6 @@ pub fn launch_installer(path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to launch installer: {e}"))
 }
 
-/// Returns `true` when `remote` is strictly newer than `current` (simple semver X.Y.Z).
 fn is_newer(remote: &str, current: &str) -> bool {
     parse_semver(remote) > parse_semver(current)
 }

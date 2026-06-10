@@ -29,9 +29,10 @@ pub fn show(
             ui.add_space(12.0);
             ui.label("Gaming rig stats dashboard for secondary display.");
             ui.add_space(6.0);
-            ui.label(
+            ui.hyperlink_to(
                 egui::RichText::new("github.com/dvalfrid/rigstats")
                     .color(egui::Color32::from_rgb(80, 160, 220)),
+                "https://github.com/dvalfrid/rigstats",
             );
             ui.add_space(4.0);
             ui.label(

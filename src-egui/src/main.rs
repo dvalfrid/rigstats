@@ -9,6 +9,8 @@ mod update_check;
 #[cfg(windows)]
 mod win32_behind;
 #[cfg(windows)]
+mod win32_dark_mode;
+#[cfg(windows)]
 mod win_opacity;
 mod windows;
 
@@ -851,14 +853,14 @@ impl eframe::App for RigStatsApp {
             let focus = self.updater_focus.clone();
             let state = self.updater_win.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(400.0, 300.0);
+            let [px, py] = dialog_center(490.0, 560.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Updates")
-                    .with_inner_size([400.0, 300.0])
+                    .with_title("RigStats Update")
+                    .with_inner_size([490.0, 560.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -866,7 +868,7 @@ impl eframe::App for RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Updates");
+                        found_hwnd = win_opacity::find_hwnd("RigStats Update");
                     }
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state);
                 },
@@ -895,7 +897,7 @@ impl eframe::App for RigStatsApp {
                         .await
                         .unwrap_or_else(|_| Err("task panic".to_string()));
                     match result {
-                        Ok(Some(info)) => {
+                        Ok(update_check::CheckResult::UpdateAvailable(info)) => {
                             let version = info.version.clone();
                             let url = info.url.clone();
                             let dest = update_check::installer_temp_path(&version);
@@ -931,7 +933,7 @@ impl eframe::App for RigStatsApp {
                                 Err(e) => windows::updater::UpdateStatus::Error(e),
                             };
                         }
-                        Ok(None) => {
+                        Ok(update_check::CheckResult::UpToDate) => {
                             win.lock().unwrap().status = windows::updater::UpdateStatus::UpToDate;
                         }
                         Err(e) => {
@@ -1837,6 +1839,10 @@ async fn poll_loop(
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
+    // Opt the process into dark mode for OS-drawn UI elements (tray context menu).
+    #[cfg(windows)]
+    win32_dark_mode::enable();
+
     let dir = app_data_dir();
     debug::reset_debug_log(&dir);
     debug::append_debug_log(&dir, "rigstats-egui starting (Phase 6)");
@@ -2033,7 +2039,7 @@ fn main() {
                             .await
                             .unwrap_or_else(|_| Err("task panic".to_string()));
                         match result {
-                            Ok(Some(info)) => {
+                            Ok(update_check::CheckResult::UpdateAvailable(info)) => {
                                 let version = info.version.clone();
                                 let url = info.url.clone();
                                 let dest = update_check::installer_temp_path(&version);
@@ -2078,7 +2084,7 @@ fn main() {
                                     }
                                 }
                             }
-                            Ok(None) => {}
+                            Ok(update_check::CheckResult::UpToDate) => {}
                             Err(_) => {}
                         }
                         tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
