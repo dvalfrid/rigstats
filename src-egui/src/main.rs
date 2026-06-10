@@ -371,6 +371,8 @@ struct RigStatsApp {
     /// Guards the one-time initial hide of the main window when the app
     /// starts with floating_mode already enabled.
     initial_floating_applied: bool,
+    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
+    floating_mode_arc: Arc<AtomicBool>,
     // ── Shared live data for floating panel closures ────────────────────────
     // Panel viewport closures are `'static + move` and only get fresh data
     // when the parent `show_viewport_deferred` call is re-executed.  When
@@ -398,6 +400,7 @@ impl RigStatsApp {
         dir: Arc<PathBuf>,
         textures: brand::Textures,
         preferred_gpu: Arc<Mutex<Option<String>>>,
+        floating_mode_arc: Arc<AtomicBool>,
     ) -> Self {
         let init_settings = current_settings.lock().unwrap().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -443,6 +446,7 @@ impl RigStatsApp {
             positions_dirty: Arc::new(AtomicBool::new(false)),
             float_new_pref_gpu: Arc::new(Mutex::new(None)),
             initial_floating_applied: false,
+            floating_mode_arc,
             latest_arc: Arc::new(Mutex::new(PollStats::default())),
             cpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
             gpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
@@ -506,6 +510,8 @@ impl eframe::App for RigStatsApp {
             };
             let was_floating = self.floating_mode;
             self.floating_mode = s.floating_mode;
+            self.floating_mode_arc
+                .store(self.floating_mode, Ordering::Relaxed);
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             let [w, _] = profile_to_size(&s.dashboard_profile);
@@ -803,10 +809,10 @@ impl eframe::App for RigStatsApp {
 // ── Floating panel helpers ────────────────────────────────────────────────────
 
 impl RigStatsApp {
-    /// Register a deferred viewport for every visible panel. Called each frame
-    /// when `floating_mode` is true. Each viewport renders exactly one panel,
-    /// has its own drag handle (unless locked), and tracks its position for
-    /// persistence.
+    /// Render an immediate viewport for every visible panel. Called each frame
+    /// when `floating_mode` is true. Each viewport renders exactly one panel
+    /// synchronously in the parent's render call — when the parent ticks (driven
+    /// by the heartbeat thread), all panels update regardless of focus or OS events.
     fn render_floating_panels(&self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
         let profile_w = profile_to_size(&s.dashboard_profile)[0];
@@ -817,6 +823,13 @@ impl RigStatsApp {
         let locked = self.floating_panels_locked;
         let textures = self.textures.clone();
         let panels_to_draw = self.visible_panels.clone();
+
+        // Clone live data once per frame — no Arc locking inside each closure.
+        let stats = self.latest.clone();
+        let cspark = self.cpu_spark.clone();
+        let gspark = self.gpu_spark.clone();
+        let nuspark = self.net_up_spark.clone();
+        let ndspark = self.net_dn_spark.clone();
 
         for (idx, panel_key) in panels_to_draw.iter().enumerate() {
             let key = panel_key.clone();
@@ -843,20 +856,19 @@ impl RigStatsApp {
                 vp_builder = vp_builder.with_always_on_top();
             }
 
-            // Arc clones — panel closure reads live data on every render, not a
-            // stale snapshot captured at registration time.
-            let latest_arc = self.latest_arc.clone();
-            let cspark_arc = self.cpu_spark_arc.clone();
-            let gspark_arc = self.gpu_spark_arc.clone();
-            let nuspark_arc = self.net_up_spark_arc.clone();
-            let ndspark_arc = self.net_dn_spark_arc.clone();
+            // Per-closure captures — only what's needed for this panel.
+            let stats = stats.clone();
+            let cspark = cspark.clone();
+            let gspark = gspark.clone();
+            let nuspark = nuspark.clone();
+            let ndspark = ndspark.clone();
             let tex = textures.clone();
             let positions_arc = self.floating_positions.clone();
             let dirty = self.positions_dirty.clone();
             let new_pref_arc = self.float_new_pref_gpu.clone();
             let key_c = key.clone();
 
-            ui.ctx().show_viewport_deferred(
+            ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("float_{key}")),
                 vp_builder,
                 move |ctx, _class| {
@@ -874,13 +886,6 @@ impl RigStatsApp {
                             dirty.store(true, Ordering::Relaxed);
                         }
                     }
-
-                    // Read live data from shared Arcs (never stale).
-                    let stats = latest_arc.lock().unwrap().clone();
-                    let cspark = cspark_arc.lock().unwrap().clone();
-                    let gspark = gspark_arc.lock().unwrap().clone();
-                    let nuspark = nuspark_arc.lock().unwrap().clone();
-                    let ndspark = ndspark_arc.lock().unwrap().clone();
 
                     #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
                     egui::CentralPanel::default()
@@ -912,24 +917,16 @@ impl RigStatsApp {
                             let mut new_pref: Option<String> = None;
                             match key_c.as_str() {
                                 "header" => panels::header::draw(ui, &stats, &tex, 1.0),
-                                "clock" => {
-                                    panels::clock::draw(ui, stats.uptime_secs, 1.0)
-                                }
-                                "cpu" => {
-                                    panels::cpu::draw(ui, &stats, &cspark, &tex, 1.0)
-                                }
+                                "clock" => panels::clock::draw(ui, stats.uptime_secs, 1.0),
+                                "cpu" => panels::cpu::draw(ui, &stats, &cspark, &tex, 1.0),
                                 "gpu" => {
                                     new_pref =
                                         panels::gpu::draw(ui, &stats, &gspark, &tex, 1.0);
                                 }
                                 "ram" => panels::ram::draw(ui, &stats, 1.0),
-                                "net" => panels::net::draw(
-                                    ui, &stats, &nuspark, &ndspark, 1.0,
-                                ),
+                                "net" => panels::net::draw(ui, &stats, &nuspark, &ndspark, 1.0),
                                 "disk" => panels::disk::draw(ui, &stats, 1.0),
-                                "motherboard" => {
-                                    panels::motherboard::draw(ui, &stats, 1.0)
-                                }
+                                "motherboard" => panels::motherboard::draw(ui, &stats, 1.0),
                                 "process" => panels::process::draw(ui, &stats, 1.0),
                                 "battery" => panels::battery::draw(ui, &stats, 1.0),
                                 _ => {}
@@ -942,31 +939,12 @@ impl RigStatsApp {
                             // Auto-resize height to content every frame.
                             let used_h = ui.min_rect().height();
                             if used_h > 10.0 {
-                                ctx.send_viewport_cmd(
-                                    egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                                        panel_w, used_h,
-                                    )),
-                                );
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::Vec2::new(panel_w, used_h),
+                                ));
                             }
-
-                            // Request own repaint after 1 s. The parent schedules us
-                            // via request_repaint_after_for so this is a backup only.
-                            ctx.request_repaint_after(Duration::from_secs(1));
                         });
                 },
-            );
-
-            // Explicitly schedule each child viewport's repaint from the parent.
-            // This is the reliable trigger: show_viewport_deferred registers the
-            // callback but does NOT automatically schedule a repaint for the child.
-            // Without this, a non-focused child that has no OS events would rely on
-            // its own request_repaint_after — which requires the child's closure to
-            // have already run at least once. By scheduling from the parent every
-            // frame, we guarantee steady 1-s updates for all panels regardless of
-            // focus or OS event delivery.
-            ui.ctx().request_repaint_after_for(
-                Duration::from_secs(1),
-                egui::ViewportId::from_hash_of(format!("float_{key}")),
             );
         }
     }
@@ -1430,6 +1408,32 @@ fn main() {
             let dir_arc = Arc::new(dir.clone());
             let textures = brand::Textures::load(&cc.egui_ctx);
 
+            // Heartbeat thread: when floating mode is active the main window is
+            // moved off-screen and receives no WM_PAINT from Windows.  Without
+            // an external kick, eframe would never call ui() again and all child
+            // viewports (show_viewport_deferred) would freeze.  This thread
+            // calls request_repaint() every second so ui() runs even off-screen,
+            // keeping show_viewport_deferred alive and driving child repaints.
+            let fm_arc_hb = Arc::new(AtomicBool::new(
+                settings::load_settings(&dir).floating_mode,
+            ));
+            let ctx_hb = cc.egui_ctx.clone();
+            let fm_arc_hb2 = fm_arc_hb.clone();
+            std::thread::spawn(move || {
+                loop {
+                    std::thread::sleep(Duration::from_millis(900));
+                    if fm_arc_hb2.load(Ordering::Relaxed) {
+                        // Wake the parent so ui() runs and show_viewport_deferred
+                        // re-registers callbacks for each visible child panel.
+                        // The parent then immediately calls request_repaint_of for
+                        // each child — we do NOT call it here because doing so for
+                        // viewport IDs that are not yet registered causes egui to
+                        // create blank default viewports (empty white windows).
+                        ctx_hb.request_repaint();
+                    }
+                }
+            });
+
             Ok(Box::new(RigStatsApp::new(
                 rx,
                 tray_rx,
@@ -1441,6 +1445,7 @@ fn main() {
                 dir_arc,
                 textures,
                 preferred_gpu_arc,
+                fm_arc_hb,
             )))
         }),
     )
