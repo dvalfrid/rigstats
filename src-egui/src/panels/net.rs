@@ -8,13 +8,15 @@ use crate::PollStats;
 
 const SPARK_H: f32 = 40.0;
 
-fn fmt_mbps(v: f64) -> String {
+/// Split into (number_string, unit_string) so the caller can right-align
+/// the number in a fixed-width box while the unit starts at a fixed position.
+fn fmt_mbps_parts(v: f64) -> (String, &'static str) {
     if v >= 1000.0 {
-        format!("{:.2} Gbps", v / 1000.0)
+        (format!("{:.2}", v / 1000.0), "Gbps")
     } else if v >= 1.0 {
-        format!("{v:.1} Mbps")
+        (format!("{v:.1}"), "Mbps")
     } else {
-        format!("{:.0} Kbps", v * 1000.0)
+        (format!("{:.0}", v * 1000.0), "Kbps")
     }
 }
 
@@ -120,6 +122,10 @@ pub fn draw(
         ui.add_space(4.0);
 
         // UP (green ↑) and DOWN (blue ↓) side by side in two columns.
+        // NUMBER_W reserves a fixed right-aligned box for the digits so the
+        // unit label (Kbps/Mbps/Gbps) stays at a constant x-position even as
+        // the digit count changes.
+        const NUMBER_W: f32 = 52.0;
         ui.columns(2, |cols| {
             // UP column
             cols[0].horizontal(|ui| {
@@ -127,11 +133,19 @@ pub fn draw(
                 ui.add_space(2.0);
                 ui.label(RichText::new("UP").small().color(theme::C_GRN));
             });
-            cols[0].label(
-                RichText::new(fmt_mbps(stats.net_up_mbps))
-                    .size(20.0)
-                    .color(egui::Color32::WHITE),
-            );
+            let (val, unit) = fmt_mbps_parts(stats.net_up_mbps);
+            cols[0].horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(NUMBER_W, 24.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(
+                            RichText::new(&val).size(20.0).color(egui::Color32::WHITE),
+                        );
+                    },
+                );
+                ui.label(RichText::new(unit).size(20.0).color(egui::Color32::WHITE));
+            });
 
             // DOWN column
             cols[1].horizontal(|ui| {
@@ -139,11 +153,19 @@ pub fn draw(
                 ui.add_space(2.0);
                 ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
             });
-            cols[1].label(
-                RichText::new(fmt_mbps(stats.net_down_mbps))
-                    .size(20.0)
-                    .color(egui::Color32::WHITE),
-            );
+            let (val, unit) = fmt_mbps_parts(stats.net_down_mbps);
+            cols[1].horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    egui::Vec2::new(NUMBER_W, 24.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(
+                            RichText::new(&val).size(20.0).color(egui::Color32::WHITE),
+                        );
+                    },
+                );
+                ui.label(RichText::new(unit).size(20.0).color(egui::Color32::WHITE));
+            });
         });
 
         ui.add_space(4.0);

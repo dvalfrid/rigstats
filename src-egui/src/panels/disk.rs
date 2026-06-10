@@ -11,13 +11,13 @@ const ROW_H: f32 = 14.0;
 const ROW_GAP: f32 = 2.0;
 const MAX_VISIBLE: usize = 3;
 
-fn fmt_speed(mb: f64) -> String {
+fn fmt_speed_parts(mb: f64) -> (String, &'static str) {
     if mb >= 1000.0 {
-        format!("{:.2} GB/s", mb / 1000.0)
+        (format!("{:.2}", mb / 1000.0), "GB/s")
     } else if mb >= 1.0 {
-        format!("{mb:.1} MB/s")
+        (format!("{mb:.1}"), "MB/s")
     } else {
-        format!("{:.0} KB/s", mb * 1000.0)
+        (format!("{:.0}", mb * 1000.0), "KB/s")
     }
 }
 
@@ -36,28 +36,41 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
 
         // Read / Write columns — same layout as NET UP / DOWN.
         // Values come from sysinfo process-delta, available regardless of LHM.
+        const NUMBER_W: f32 = 52.0;
         ui.columns(2, |cols| {
             cols[0].horizontal(|ui| {
                 theme::arrow_up(ui, 12.0, theme::C_PUR);
                 ui.add_space(2.0);
                 ui.label(RichText::new("READ").small().color(theme::C_PUR));
             });
-            cols[0].label(
-                RichText::new(fmt_speed(stats.disk_read_mbps))
-                    .size(20.0)
-                    .color(Color32::WHITE),
-            );
+            let (val, unit) = fmt_speed_parts(stats.disk_read_mbps);
+            cols[0].horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(NUMBER_W, 24.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
+                    },
+                );
+                ui.label(RichText::new(unit).size(20.0).color(Color32::WHITE));
+            });
 
             cols[1].horizontal(|ui| {
                 theme::arrow_down(ui, 12.0, theme::C_TEXT_MUTED);
                 ui.add_space(2.0);
                 ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
             });
-            cols[1].label(
-                RichText::new(fmt_speed(stats.disk_write_mbps))
-                    .size(20.0)
-                    .color(Color32::WHITE),
-            );
+            let (val, unit) = fmt_speed_parts(stats.disk_write_mbps);
+            cols[1].horizontal(|ui| {
+                ui.allocate_ui_with_layout(
+                    Vec2::new(NUMBER_W, 24.0),
+                    egui::Layout::right_to_left(egui::Align::Center),
+                    |ui| {
+                        ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
+                    },
+                );
+                ui.label(RichText::new(unit).size(20.0).color(Color32::WHITE));
+            });
         });
 
         if drives.is_empty() {
