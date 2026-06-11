@@ -445,6 +445,7 @@ pub fn show(
 
     let mut action_refresh = false;
     let mut action_collect_diag = false;
+    let mut action_open_folder = false;
     let mut action_close = false;
 
     let st = state.lock().unwrap().clone();
@@ -485,6 +486,10 @@ pub fn show(
                 if theme::dialog_btn_secondary(ui, "Collect Diagnostics…").clicked() {
                     action_collect_diag = true;
                 }
+                ui.add_space(4.0);
+                if theme::dialog_btn_secondary(ui, "Open Folder").clicked() {
+                    action_open_folder = true;
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if theme::dialog_btn_secondary(ui, "Close").clicked() {
                         action_close = true;
@@ -517,6 +522,11 @@ pub fn show(
 
     if action_refresh {
         *state.lock().unwrap() = StatusState::load(dir.as_ref(), pipe_connected);
+    }
+    if action_open_folder {
+        let _ = std::process::Command::new("explorer")
+            .arg(dir.as_ref())
+            .spawn();
     }
     if action_collect_diag {
         collect_and_open_diagnostics(dir.as_ref());

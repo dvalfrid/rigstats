@@ -790,7 +790,7 @@ impl eframe::App for RigStatsApp {
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
                     .with_title("About RigStats")
-                    .with_inner_size([360.0, 280.0])
+                    .with_inner_size([380.0, 420.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
