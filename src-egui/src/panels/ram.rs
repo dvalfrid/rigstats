@@ -13,7 +13,7 @@ pub fn draw(
     warn: u8,
     crit: u8,
     th: &theme::AppTheme,
-) {
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let used_gb = stats.ram_used as f64 / GIB;
@@ -76,5 +76,5 @@ pub fn draw(
             theme::thin_bar(ui, frac, bar_w, theme::C_RAM);
             ui.label(RichText::new(format!("{pct}%")).small().color(theme::C_RAM));
         });
-    });
+    })
 }

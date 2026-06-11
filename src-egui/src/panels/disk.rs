@@ -28,7 +28,7 @@ pub fn draw(
     warn: u8,
     crit: u8,
     th: &theme::AppTheme,
-) {
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let drives = &stats.disk_drives;
@@ -158,5 +158,5 @@ pub fn draw(
                     });
                 }
             });
-    });
+    })
 }

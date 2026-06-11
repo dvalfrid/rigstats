@@ -28,7 +28,7 @@ fn power_color(w: f64, charging: bool, th: &theme::AppTheme) -> Color32 {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.label(
@@ -75,5 +75,5 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) 
                     .color(power_color(w, charging, th)),
             );
         }
-    });
+    })
 }

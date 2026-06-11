@@ -110,7 +110,7 @@ pub fn draw(
     dn_spark: &Sparkline,
     opacity: f32,
     th: &theme::AppTheme,
-) {
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
 
@@ -205,5 +205,5 @@ pub fn draw(
             theme::C_GRN,
             theme::C_NET_DOWN,
         );
-    });
+    })
 }

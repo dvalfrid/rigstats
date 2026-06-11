@@ -258,6 +258,18 @@ fn load_tray_icon() -> Icon {
     Icon::from_rgba(img.into_raw(), w, h).expect("tray icon rgba")
 }
 
+/// Load tray.png as egui IconData for dialog viewport windows.
+fn load_app_icon() -> egui::IconData {
+    let bytes = include_bytes!("../../assets/tray.png");
+    let img = image::load_from_memory(bytes).expect("tray.png").to_rgba8();
+    let (w, h) = img.dimensions();
+    egui::IconData {
+        rgba: img.into_raw(),
+        width: w,
+        height: h,
+    }
+}
+
 fn build_tray(logging_enabled: bool) -> Tray {
     let show_item = MenuItem::new("Show / Hide", true, None);
     let floating_item = MenuItem::new("Toggle Floating Mode", true, None);
@@ -783,6 +795,7 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
+                    .with_icon(load_app_icon())
                     .with_always_on_top(),
                 |child_ui, _class| {
                     // Capture HWND while we're inside the callback — window definitely exists here.
@@ -831,6 +844,7 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
+                    .with_icon(load_app_icon())
                     .with_always_on_top(),
                 |child_ui, _class| {
                     #[cfg(windows)]
@@ -867,6 +881,7 @@ impl eframe::App for RigStatsApp {
                     .with_inner_size([680.0, 720.0])
                     .with_position([px, py])
                     .with_taskbar(false)
+                    .with_icon(load_app_icon())
                     .with_always_on_top(),
                 |child_ui, _class| {
                     #[cfg(windows)]
@@ -910,6 +925,7 @@ impl eframe::App for RigStatsApp {
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
+                    .with_icon(load_app_icon())
                     .with_always_on_top(),
                 |child_ui, _class| {
                     #[cfg(windows)]
@@ -1062,17 +1078,31 @@ impl eframe::App for RigStatsApp {
             // Panels in the order defined by visible_panels (respects user reordering).
             let panels_to_draw = self.visible_panels.clone();
             let mut new_preferred_gpu: Option<String> = None;
+            // Extract update version once per frame (cheap lock read).
+            let update_ver: Option<String> = {
+                use windows::updater::UpdateStatus;
+                let st = self.updater_win.lock().unwrap();
+                if let UpdateStatus::Ready { info, .. } = &st.status {
+                    Some(info.version.clone())
+                } else {
+                    None
+                }
+            };
             for panel in &panels_to_draw {
                 match panel.as_str() {
                     // Panels always render at full opacity; window-level transparency is
                     // applied by SetLayeredWindowAttributes (win_opacity module).
                     "header" => {
-                        panels::header::draw(ui, &self.latest, &self.textures, 1.0, &self.app_theme)
+                        let _ = panels::header::draw(ui, &self.latest, &self.textures, 1.0, &self.app_theme);
                     }
                     "clock" => {
-                        panels::clock::draw(ui, self.latest.uptime_secs, 1.0, &self.app_theme)
+                        let _ = panels::clock::draw(ui, self.latest.uptime_secs, 1.0, &self.app_theme, update_ver.as_deref());
+                        // Badge click → open updater dialog.
+                        if ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater"))).unwrap_or(false) {
+                            self.updater_open.store(true, Ordering::Relaxed);
+                        }
                     }
-                    "cpu" => panels::cpu::draw(
+                    "cpu" => { let _ = panels::cpu::draw(
                         ui,
                         &self.latest,
                         &self.cpu_spark,
@@ -1081,7 +1111,7 @@ impl eframe::App for RigStatsApp {
                         self.thresholds.cpu.0,
                         self.thresholds.cpu.1,
                         &self.app_theme,
-                    ),
+                    ); }
                     "gpu" => {
                         if let Some(p) = panels::gpu::draw(
                             ui,
@@ -1094,44 +1124,44 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.gpu.1,
                             self.thresholds.gpu_hotspot.0,
                             self.thresholds.gpu_hotspot.1,
-                        ) {
+                        ).0 {
                             new_preferred_gpu = Some(p);
                         }
                     }
-                    "ram" => panels::ram::draw(
+                    "ram" => { let _ = panels::ram::draw(
                         ui,
                         &self.latest,
                         1.0,
                         self.thresholds.ram.0,
                         self.thresholds.ram.1,
                         &self.app_theme,
-                    ),
-                    "net" => panels::net::draw(
+                    ); }
+                    "net" => { let _ = panels::net::draw(
                         ui,
                         &self.latest,
                         &self.net_up_spark,
                         &self.net_dn_spark,
                         1.0,
                         &self.app_theme,
-                    ),
-                    "disk" => panels::disk::draw(
+                    ); }
+                    "disk" => { let _ = panels::disk::draw(
                         ui,
                         &self.latest,
                         1.0,
                         self.thresholds.disk.0,
                         self.thresholds.disk.1,
                         &self.app_theme,
-                    ),
-                    "motherboard" => panels::motherboard::draw(
+                    ); }
+                    "motherboard" => { let _ = panels::motherboard::draw(
                         ui,
                         &self.latest,
                         1.0,
                         self.thresholds.mb.0,
                         self.thresholds.mb.1,
                         &self.app_theme,
-                    ),
-                    "process" => panels::process::draw(ui, &self.latest, 1.0, &self.app_theme),
-                    "battery" => panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme),
+                    ); }
+                    "process" => { let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme); }
+                    "battery" => { let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme); }
                     _ => {}
                 }
                 ui.add_space(6.0);
@@ -1172,19 +1202,6 @@ impl eframe::App for RigStatsApp {
 // ── Floating panel helpers ────────────────────────────────────────────────────
 
 /// Returns the accent colour for a given floating panel key.
-fn panel_accent(key: &str) -> egui::Color32 {
-    match key {
-        "gpu" => theme::C_AMD,
-        "ram" => theme::C_RAM,
-        "net" => theme::C_GRN,
-        "disk" => theme::C_PUR,
-        "motherboard" => theme::C_MB,
-        "process" => theme::C_PROC,
-        "battery" => theme::C_GRN,
-        _ => theme::C_ACCENT, // cpu, header, clock
-    }
-}
-
 /// Draw a padlock icon centred on `center` (fits inside a ~10 × 12 px area).
 ///
 /// * **locked**: symmetric arch, both shackle arms enter the body.
@@ -1329,6 +1346,16 @@ impl RigStatsApp {
             let ndspark = &self.net_dn_spark;
             let tex = &self.textures;
             let app_theme = self.app_theme;
+            let float_update_ver: Option<String> = {
+                use windows::updater::UpdateStatus;
+                let st = self.updater_win.lock().unwrap();
+                if let UpdateStatus::Ready { info, .. } = &st.status {
+                    Some(info.version.clone())
+                } else {
+                    None
+                }
+            };
+            let updater_open_arc = &self.updater_open;
 
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("float_{key}")),
@@ -1370,37 +1397,80 @@ impl RigStatsApp {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::none().fill(theme::PANEL_FILL))
                         .show(ctx, |ui| {
-                            // ── Drag handle ───────────────────────────────────
+                            // ── Drag & lock state ─────────────────────────────
                             let locked = lock_arc.load(Ordering::Relaxed);
-                            let drag_w = ui.available_width().max(1.0);
-                            // Always allocate with hover sense — we bypass egui's drag
-                            // state machine entirely (see below).
-                            let (drag_rect, drag_resp) = ui.allocate_exact_size(
-                                egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
-                                egui::Sense::hover(),
-                            );
-                            // Manual drag detection: primary_pressed() is true only on the
-                            // single frame the button actually transitions down.  This is
-                            // immune to egui's drag-state getting stuck when an external
-                            // window is dragged over the panel (winit drops the mouse-up in
-                            // that case, leaving egui thinking the button is still held —
-                            // drag_started() then never fires again until a dialog resets
-                            // the state).  By reading raw pointer state we avoid that
-                            // entirely.
                             let hover_pos = ctx.input(|i| i.pointer.hover_pos());
                             let just_pressed = ctx.input(|i| i.pointer.primary_pressed());
-                            let in_drag_strip =
-                                hover_pos.map(|p| drag_rect.contains(p)).unwrap_or(false);
-                            // Exclude the right 18 px (padlock zone) from the drag trigger.
-                            let padlock_zone_x = drag_rect.right() - 18.0;
-                            let in_padlock =
-                                hover_pos.map(|p| p.x >= padlock_zone_x).unwrap_or(false);
-                            if !locked && just_pressed && in_drag_strip && !in_padlock {
-                                // In "behind" mode the window has WS_EX_NOACTIVATE which
-                                // prevents SC_MOVE from working.  Strip it and bring the
-                                // window to the foreground so the OS drag loop can run.
-                                // apply_behind() re-arms on the next idle frame (when
-                                // primary_down is false again).
+
+                            // ── Panel content ─────────────────────────────────
+                            // Each draw() returns the panel's outer Rect so we can
+                            // overlay the drag dots and padlock without extra height.
+                            let mut new_pref: Option<String> = None;
+                            let panel_rect = match key.as_str() {
+                                "header" => panels::header::draw(ui, stats, tex, 1.0, &app_theme),
+                                "clock" => {
+                                    let r = panels::clock::draw(ui, stats.uptime_secs, 1.0, &app_theme, float_update_ver.as_deref());
+                                    if ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater"))).unwrap_or(false) {
+                                        updater_open_arc.store(true, Ordering::Relaxed);
+                                    }
+                                    r
+                                }
+                                "cpu" => panels::cpu::draw(
+                                    ui, stats, cspark, tex, 1.0,
+                                    self.thresholds.cpu.0, self.thresholds.cpu.1, &app_theme,
+                                ),
+                                "gpu" => {
+                                    let r = panels::gpu::draw(
+                                        ui, stats, gspark, tex, 1.0, &app_theme,
+                                        self.thresholds.gpu.0, self.thresholds.gpu.1,
+                                        self.thresholds.gpu_hotspot.0, self.thresholds.gpu_hotspot.1,
+                                    );
+                                    new_pref = r.0;
+                                    r.1
+                                }
+                                "ram" => panels::ram::draw(
+                                    ui, stats, 1.0,
+                                    self.thresholds.ram.0, self.thresholds.ram.1, &app_theme,
+                                ),
+                                "net" => panels::net::draw(ui, stats, nuspark, ndspark, 1.0, &app_theme),
+                                "disk" => panels::disk::draw(
+                                    ui, stats, 1.0,
+                                    self.thresholds.disk.0, self.thresholds.disk.1, &app_theme,
+                                ),
+                                "motherboard" => panels::motherboard::draw(
+                                    ui, stats, 1.0,
+                                    self.thresholds.mb.0, self.thresholds.mb.1, &app_theme,
+                                ),
+                                "process" => panels::process::draw(ui, stats, 1.0, &app_theme),
+                                "battery" => panels::battery::draw(ui, stats, 1.0, &app_theme),
+                                _ => egui::Rect::NOTHING,
+                            };
+
+                            if let Some(p) = new_pref {
+                                *new_pref_arc.lock().unwrap() = Some(p);
+                            }
+
+                            // ── Drag zone: top 24 px of the panel inner area ──
+                            // inner_margin top = 8 px; title row is ~20 px tall,
+                            // so top+24 covers the title row comfortably.
+                            let drag_zone = egui::Rect::from_min_max(
+                                panel_rect.min,
+                                egui::pos2(panel_rect.right(), panel_rect.top() + 24.0),
+                            );
+                            // Padlock hit area: right 20 px of the drag zone.
+                            let padlock_cx = drag_zone.right() - 14.0;
+                            let padlock_cy = drag_zone.center().y;
+                            let padlock_center = egui::pos2(padlock_cx, padlock_cy);
+                            let padlock_hit = egui::Rect::from_center_size(
+                                padlock_center,
+                                egui::Vec2::new(22.0, drag_zone.height()),
+                            );
+
+                            let in_drag_zone = hover_pos.map(|p| drag_zone.contains(p)).unwrap_or(false);
+                            let in_padlock = hover_pos.map(|p| padlock_hit.contains(p)).unwrap_or(false);
+
+                            // Drag trigger (whole drag zone minus padlock area).
+                            if !locked && just_pressed && in_drag_zone && !in_padlock {
                                 #[cfg(windows)]
                                 if is_behind {
                                     win32_behind::prepare_for_drag(&win_title);
@@ -1408,13 +1478,7 @@ impl RigStatsApp {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                             }
 
-                            // Padlock click region (right 16 px of drag strip).
-                            let padlock_cx = drag_rect.right() - 9.0;
-                            let padlock_center = egui::pos2(padlock_cx, drag_rect.center().y);
-                            let padlock_hit = egui::Rect::from_center_size(
-                                padlock_center,
-                                egui::Vec2::new(16.0, theme::DRAG_HANDLE_H),
-                            );
+                            // Padlock interaction.
                             let padlock_resp = ui.interact(
                                 padlock_hit,
                                 ui.id().with("padlock"),
@@ -1427,97 +1491,32 @@ impl RigStatsApp {
                                 ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
                             }
 
-                            // Drag-handle dots (only when unlocked + hovered).
-                            if drag_resp.hovered() && !locked {
-                                let painter = ui.painter();
-                                let cy = drag_rect.center().y;
-                                let cx = drag_rect.center().x;
+                            // ── Overlay: dots + padlock painted on the panel ──
+                            let painter = ui.painter();
+
+                            // Three dots (centre of drag zone, left of middle)
+                            // shown only when unlocked and hovering the drag zone.
+                            if in_drag_zone && !locked {
+                                let cy = drag_zone.center().y;
+                                let cx = drag_zone.center().x;
                                 for i in [-5.0f32, 0.0, 5.0] {
                                     painter.circle_filled(
-                                        egui::Pos2::new(cx + i, cy),
+                                        egui::pos2(cx + i, cy),
                                         1.5,
                                         egui::Color32::from_gray(160),
                                     );
                                 }
                             }
 
-                            // Padlock icon — accent colour for this panel when locked, dim otherwise.
-                            let accent = panel_accent(&key);
+                            // Padlock icon — always visible in top-right of panel.
                             let padlock_color = if locked {
-                                accent
+                                app_theme.accent
                             } else if padlock_resp.hovered() {
                                 egui::Color32::from_gray(130)
                             } else {
                                 egui::Color32::from_gray(55)
                             };
-                            draw_padlock(ui.painter(), padlock_center, locked, padlock_color);
-
-                            // ── Panel content ─────────────────────────────────
-                            let mut new_pref: Option<String> = None;
-                            match key.as_str() {
-                                "header" => panels::header::draw(ui, stats, tex, 1.0, &app_theme),
-                                "clock" => {
-                                    panels::clock::draw(ui, stats.uptime_secs, 1.0, &app_theme)
-                                }
-                                "cpu" => panels::cpu::draw(
-                                    ui,
-                                    stats,
-                                    cspark,
-                                    tex,
-                                    1.0,
-                                    self.thresholds.cpu.0,
-                                    self.thresholds.cpu.1,
-                                    &app_theme,
-                                ),
-                                "gpu" => {
-                                    new_pref = panels::gpu::draw(
-                                        ui,
-                                        stats,
-                                        gspark,
-                                        tex,
-                                        1.0,
-                                        &app_theme,
-                                        self.thresholds.gpu.0,
-                                        self.thresholds.gpu.1,
-                                        self.thresholds.gpu_hotspot.0,
-                                        self.thresholds.gpu_hotspot.1,
-                                    );
-                                }
-                                "ram" => panels::ram::draw(
-                                    ui,
-                                    stats,
-                                    1.0,
-                                    self.thresholds.ram.0,
-                                    self.thresholds.ram.1,
-                                    &app_theme,
-                                ),
-                                "net" => {
-                                    panels::net::draw(ui, stats, nuspark, ndspark, 1.0, &app_theme)
-                                }
-                                "disk" => panels::disk::draw(
-                                    ui,
-                                    stats,
-                                    1.0,
-                                    self.thresholds.disk.0,
-                                    self.thresholds.disk.1,
-                                    &app_theme,
-                                ),
-                                "motherboard" => panels::motherboard::draw(
-                                    ui,
-                                    stats,
-                                    1.0,
-                                    self.thresholds.mb.0,
-                                    self.thresholds.mb.1,
-                                    &app_theme,
-                                ),
-                                "process" => panels::process::draw(ui, stats, 1.0, &app_theme),
-                                "battery" => panels::battery::draw(ui, stats, 1.0, &app_theme),
-                                _ => {}
-                            }
-
-                            if let Some(p) = new_pref {
-                                *new_pref_arc.lock().unwrap() = Some(p);
-                            }
+                            draw_padlock(painter, padlock_center, locked, padlock_color);
 
                             // Auto-resize height to content, but only when it actually
                             // changes — sending InnerSize every frame causes sub-pixel

@@ -66,7 +66,7 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
     );
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) -> egui::Rect {
     // Derive inner_w from the outer UI's max_rect — set once by window width, never changes.
     let inner_w = ui.max_rect().width() - FRAME_H_MARGIN;
 
@@ -109,5 +109,5 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) 
         if filler > 0.0 {
             ui.add_space(filler);
         }
-    });
+    })
 }

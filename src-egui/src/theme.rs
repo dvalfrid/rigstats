@@ -110,7 +110,6 @@ pub const C_RAM: Color32 = Color32::from_rgb(0xff, 0xb3, 0x00); // RAM
 pub const C_GRN: Color32 = Color32::from_rgb(0x39, 0xff, 0x88); // Net, Clock, Battery
 pub const C_PUR: Color32 = Color32::from_rgb(0xbf, 0x7f, 0xff); // Disk
 pub const C_PROC: Color32 = Color32::from_rgb(0xff, 0x9f, 0x2f); // Process
-pub const C_MB: Color32 = Color32::from_rgb(0x3a, 0x99, 0xb8); // Motherboard
 pub const C_NET_DOWN: Color32 = Color32::from_rgb(0x3a, 0xa5, 0xff); // Network DOWN
 
 // ── Text colours ─────────────────────────────────────────────────────────────
@@ -201,7 +200,13 @@ fn premul(color: Color32, opacity: f32) -> Color32 {
 /// Wrap `add_contents` in a styled panel card.
 /// `opacity` (0.0–1.0) is baked into all fills, borders, and decorations so
 /// the panel blends correctly over the transparent window background.
-pub fn panel_frame(ui: &mut Ui, opacity: f32, th: &AppTheme, add_contents: impl FnOnce(&mut Ui)) {
+/// Returns the outer bounding rect of the card (useful for overlay painting).
+pub fn panel_frame(
+    ui: &mut Ui,
+    opacity: f32,
+    th: &AppTheme,
+    add_contents: impl FnOnce(&mut Ui),
+) -> egui::Rect {
     let frame = Frame {
         inner_margin: Margin::symmetric(12, 8),
         outer_margin: Margin::ZERO,
@@ -217,6 +222,7 @@ pub fn panel_frame(ui: &mut Ui, opacity: f32, th: &AppTheme, add_contents: impl 
 
     draw_accent_line(painter, rect, th.accent, opacity);
     draw_corner_brackets(painter, rect, th.accent, opacity);
+    rect
 }
 
 /// Horizontal gradient line at the top edge: transparent → accent → transparent.

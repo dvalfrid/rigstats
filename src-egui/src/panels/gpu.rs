@@ -42,10 +42,10 @@ pub fn draw(
     crit: u8,
     hotspot_warn: u8,
     hotspot_crit: u8,
-) -> Option<String> {
+) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
 
-    theme::panel_frame(ui, opacity, th, |ui| {
+    let rect = theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
@@ -284,5 +284,5 @@ pub fn draw(
         spark.draw(ui, SPARK_H, theme::C_AMD);
     });
 
-    new_gpu
+    (new_gpu, rect)
 }

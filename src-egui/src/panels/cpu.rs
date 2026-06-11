@@ -24,7 +24,7 @@ pub fn draw(
     warn: u8,
     crit: u8,
     th: &theme::AppTheme,
-) {
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let load_frac = stats.cpu_load as f32 / 100.0;
@@ -166,5 +166,5 @@ pub fn draw(
         let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
         ui.add_space(filler);
         spark.draw(ui, SPARK_H, theme::C_ACCENT);
-    });
+    })
 }

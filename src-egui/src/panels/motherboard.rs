@@ -21,7 +21,7 @@ pub fn draw(
     warn: u8,
     crit: u8,
     th: &theme::AppTheme,
-) {
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.horizontal(|ui| {
@@ -134,5 +134,5 @@ pub fn draw(
         if filler > 0.0 {
             ui.add_space(filler);
         }
-    });
+    })
 }
