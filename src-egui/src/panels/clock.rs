@@ -2,7 +2,13 @@ use egui::{RichText, Ui};
 
 use crate::theme;
 
-pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32, th: &theme::AppTheme, update_version: Option<&str>) -> egui::Rect {
+pub fn draw(
+    ui: &mut Ui,
+    uptime_secs: u64,
+    opacity: f32,
+    th: &theme::AppTheme,
+    update_version: Option<&str>,
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_HEADER_H);
         let now = chrono::Local::now();
@@ -66,7 +72,8 @@ pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32, th: &theme::AppTheme, u
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
             if resp.clicked() {
-                ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("open_updater"), true));
+                ui.ctx()
+                    .data_mut(|d| d.insert_temp(egui::Id::new("open_updater"), true));
             }
         }
     })

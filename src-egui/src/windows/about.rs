@@ -79,11 +79,9 @@ pub fn show(
                 );
                 ui.add_space(8.0);
                 ui.label(
-                    egui::RichText::new(
-                        "Hardware stats dashboard for portrait secondary monitors",
-                    )
-                    .size(12.0)
-                    .color(egui::Color32::from_gray(128)),
+                    egui::RichText::new("Hardware stats dashboard for portrait secondary monitors")
+                        .size(12.0)
+                        .color(egui::Color32::from_gray(128)),
                 );
             });
         });
@@ -147,11 +145,7 @@ pub fn show(
             // Built with card — wrapping text, no horizontal overflow
             card_frame().show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                ui.label(
-                    egui::RichText::new("Built with")
-                        .size(11.0)
-                        .color(C_LABEL),
-                );
+                ui.label(egui::RichText::new("Built with").size(11.0).color(C_LABEL));
                 ui.add_space(6.0);
                 ui.label(
                     egui::RichText::new(

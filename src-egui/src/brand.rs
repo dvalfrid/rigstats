@@ -20,36 +20,44 @@ pub struct Textures {
 impl Textures {
     pub fn load(ctx: &Context) -> Self {
         Self {
-            rog:       load_png(ctx, "rog",       include_bytes!("../assets/ROG_logo_red.png")),
-            amd:       load_png(ctx, "amd",       include_bytes!("../assets/AMD-Radeon-Ryzen-Symbol.png")),
-            nvidia:    load_png(ctx, "nvidia",    include_bytes!("../assets/nvidia.png")),
-            intel:     load_png(ctx, "intel",     include_bytes!("../assets/intel.png")),
-            msi:       load_png(ctx, "msi",       include_bytes!("../assets/msi.png")),
+            rog: load_png(ctx, "rog", include_bytes!("../assets/ROG_logo_red.png")),
+            amd: load_png(
+                ctx,
+                "amd",
+                include_bytes!("../assets/AMD-Radeon-Ryzen-Symbol.png"),
+            ),
+            nvidia: load_png(ctx, "nvidia", include_bytes!("../assets/nvidia.png")),
+            intel: load_png(ctx, "intel", include_bytes!("../assets/intel.png")),
+            msi: load_png(ctx, "msi", include_bytes!("../assets/msi.png")),
             alienware: load_png(ctx, "alienware", include_bytes!("../assets/Alienware.png")),
-            razer:     load_png(ctx, "razer",     include_bytes!("../assets/Razer.png")),
-            legion:    load_png(ctx, "legion",    include_bytes!("../assets/Lenovo-Legion.png")),
-            omen:      load_png(ctx, "omen",      include_bytes!("../assets/HP-Omen.png")),
-            aorus:     load_png(ctx, "aorus",     include_bytes!("../assets/AORUS-Gigabyte.png")),
-            gigabyte:  load_png(ctx, "gigabyte",  include_bytes!("../assets/gigabyte.png")),
-            predator:  load_png(ctx, "predator",  include_bytes!("../assets/Acer-Predator.png")),
-            taurus:    load_png(ctx, "taurus",    include_bytes!("../assets/taurus.png")),
+            razer: load_png(ctx, "razer", include_bytes!("../assets/Razer.png")),
+            legion: load_png(ctx, "legion", include_bytes!("../assets/Lenovo-Legion.png")),
+            omen: load_png(ctx, "omen", include_bytes!("../assets/HP-Omen.png")),
+            aorus: load_png(ctx, "aorus", include_bytes!("../assets/AORUS-Gigabyte.png")),
+            gigabyte: load_png(ctx, "gigabyte", include_bytes!("../assets/gigabyte.png")),
+            predator: load_png(
+                ctx,
+                "predator",
+                include_bytes!("../assets/Acer-Predator.png"),
+            ),
+            taurus: load_png(ctx, "taurus", include_bytes!("../assets/taurus.png")),
         }
     }
 
     /// Brand logo for the rig header. Returns None when no image exists for this brand.
     pub fn rig_logo(&self, brand: &str) -> Option<&TextureHandle> {
         match brand {
-            "rog" | "asus-rog"     => Some(&self.rog),
-            "msi"                  => Some(&self.msi),
-            "alienware"            => Some(&self.alienware),
-            "razer"                => Some(&self.razer),
-            "legion"               => Some(&self.legion),
-            "omen"                 => Some(&self.omen),
-            "aorus"                => Some(&self.aorus),
-            "gigabyte"             => Some(&self.gigabyte),
-            "predator"             => Some(&self.predator),
-            "taurus"               => Some(&self.taurus),
-            _                      => None,
+            "rog" | "asus-rog" => Some(&self.rog),
+            "msi" => Some(&self.msi),
+            "alienware" => Some(&self.alienware),
+            "razer" => Some(&self.razer),
+            "legion" => Some(&self.legion),
+            "omen" => Some(&self.omen),
+            "aorus" => Some(&self.aorus),
+            "gigabyte" => Some(&self.gigabyte),
+            "predator" => Some(&self.predator),
+            "taurus" => Some(&self.taurus),
+            _ => None,
         }
     }
 

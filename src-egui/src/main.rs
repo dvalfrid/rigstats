@@ -172,30 +172,48 @@ fn compute_window_height(visible_panels: &[String]) -> f32 {
 mod win_monitor {
     use winapi::shared::minwindef::LPARAM;
     use winapi::shared::windef::{HDC, HMONITOR, LPRECT};
+    use winapi::um::shellscalingapi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
     use winapi::um::winuser::EnumDisplayMonitors;
 
-    /// Returns (left, top, right, bottom) for every connected display.
+    struct MonitorData {
+        rects: Vec<(i32, i32, i32, i32)>,
+    }
+
+    /// Returns (left, top, right, bottom) for every connected display in **logical pixels**.
+    /// Physical pixel coordinates from EnumDisplayMonitors are divided by the monitor's
+    /// effective DPI scale so that egui window positions (which are in logical pixels) land
+    /// on the correct screen position regardless of per-monitor DPI scaling.
     #[allow(unsafe_code)]
     pub fn list() -> Vec<(i32, i32, i32, i32)> {
         #[allow(unsafe_code)]
-        unsafe extern "system" fn callback(_: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
-            let v = &mut *(data as *mut Vec<(i32, i32, i32, i32)>);
+        unsafe extern "system" fn callback(hm: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
+            let d = &mut *(data as *mut MonitorData);
             let r = *lp;
-            v.push((r.left, r.top, r.right, r.bottom));
+            let mut dpi_x: u32 = 96;
+            let mut dpi_y: u32 = 96;
+            let _ = GetDpiForMonitor(hm, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
+            let sx = dpi_x as f32 / 96.0;
+            let sy = dpi_y as f32 / 96.0;
+            d.rects.push((
+                (r.left as f32 / sx) as i32,
+                (r.top as f32 / sy) as i32,
+                (r.right as f32 / sx) as i32,
+                (r.bottom as f32 / sy) as i32,
+            ));
             1
         }
 
-        let mut rects: Vec<(i32, i32, i32, i32)> = Vec::new();
+        let mut data = MonitorData { rects: Vec::new() };
         #[allow(unsafe_code)]
         unsafe {
             EnumDisplayMonitors(
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
                 Some(callback),
-                &mut rects as *mut _ as LPARAM,
+                &mut data as *mut _ as LPARAM,
             );
         }
-        rects
+        data.rects
     }
 }
 
@@ -1093,25 +1111,43 @@ impl eframe::App for RigStatsApp {
                     // Panels always render at full opacity; window-level transparency is
                     // applied by SetLayeredWindowAttributes (win_opacity module).
                     "header" => {
-                        let _ = panels::header::draw(ui, &self.latest, &self.textures, 1.0, &self.app_theme);
+                        let _ = panels::header::draw(
+                            ui,
+                            &self.latest,
+                            &self.textures,
+                            1.0,
+                            &self.app_theme,
+                        );
                     }
                     "clock" => {
-                        let _ = panels::clock::draw(ui, self.latest.uptime_secs, 1.0, &self.app_theme, update_ver.as_deref());
+                        let _ = panels::clock::draw(
+                            ui,
+                            self.latest.uptime_secs,
+                            1.0,
+                            &self.app_theme,
+                            update_ver.as_deref(),
+                        );
                         // Badge click → open updater dialog.
-                        if ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater"))).unwrap_or(false) {
+                        if ui
+                            .ctx()
+                            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
+                            .unwrap_or(false)
+                        {
                             self.updater_open.store(true, Ordering::Relaxed);
                         }
                     }
-                    "cpu" => { let _ = panels::cpu::draw(
-                        ui,
-                        &self.latest,
-                        &self.cpu_spark,
-                        &self.textures,
-                        1.0,
-                        self.thresholds.cpu.0,
-                        self.thresholds.cpu.1,
-                        &self.app_theme,
-                    ); }
+                    "cpu" => {
+                        let _ = panels::cpu::draw(
+                            ui,
+                            &self.latest,
+                            &self.cpu_spark,
+                            &self.textures,
+                            1.0,
+                            self.thresholds.cpu.0,
+                            self.thresholds.cpu.1,
+                            &self.app_theme,
+                        );
+                    }
                     "gpu" => {
                         if let Some(p) = panels::gpu::draw(
                             ui,
@@ -1124,44 +1160,58 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.gpu.1,
                             self.thresholds.gpu_hotspot.0,
                             self.thresholds.gpu_hotspot.1,
-                        ).0 {
+                        )
+                        .0
+                        {
                             new_preferred_gpu = Some(p);
                         }
                     }
-                    "ram" => { let _ = panels::ram::draw(
-                        ui,
-                        &self.latest,
-                        1.0,
-                        self.thresholds.ram.0,
-                        self.thresholds.ram.1,
-                        &self.app_theme,
-                    ); }
-                    "net" => { let _ = panels::net::draw(
-                        ui,
-                        &self.latest,
-                        &self.net_up_spark,
-                        &self.net_dn_spark,
-                        1.0,
-                        &self.app_theme,
-                    ); }
-                    "disk" => { let _ = panels::disk::draw(
-                        ui,
-                        &self.latest,
-                        1.0,
-                        self.thresholds.disk.0,
-                        self.thresholds.disk.1,
-                        &self.app_theme,
-                    ); }
-                    "motherboard" => { let _ = panels::motherboard::draw(
-                        ui,
-                        &self.latest,
-                        1.0,
-                        self.thresholds.mb.0,
-                        self.thresholds.mb.1,
-                        &self.app_theme,
-                    ); }
-                    "process" => { let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme); }
-                    "battery" => { let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme); }
+                    "ram" => {
+                        let _ = panels::ram::draw(
+                            ui,
+                            &self.latest,
+                            1.0,
+                            self.thresholds.ram.0,
+                            self.thresholds.ram.1,
+                            &self.app_theme,
+                        );
+                    }
+                    "net" => {
+                        let _ = panels::net::draw(
+                            ui,
+                            &self.latest,
+                            &self.net_up_spark,
+                            &self.net_dn_spark,
+                            1.0,
+                            &self.app_theme,
+                        );
+                    }
+                    "disk" => {
+                        let _ = panels::disk::draw(
+                            ui,
+                            &self.latest,
+                            1.0,
+                            self.thresholds.disk.0,
+                            self.thresholds.disk.1,
+                            &self.app_theme,
+                        );
+                    }
+                    "motherboard" => {
+                        let _ = panels::motherboard::draw(
+                            ui,
+                            &self.latest,
+                            1.0,
+                            self.thresholds.mb.0,
+                            self.thresholds.mb.1,
+                            &self.app_theme,
+                        );
+                    }
+                    "process" => {
+                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme);
+                    }
+                    "battery" => {
+                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme);
+                    }
                     _ => {}
                 }
                 ui.add_space(6.0);
@@ -1409,37 +1459,76 @@ impl RigStatsApp {
                             let panel_rect = match key.as_str() {
                                 "header" => panels::header::draw(ui, stats, tex, 1.0, &app_theme),
                                 "clock" => {
-                                    let r = panels::clock::draw(ui, stats.uptime_secs, 1.0, &app_theme, float_update_ver.as_deref());
-                                    if ui.ctx().data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater"))).unwrap_or(false) {
+                                    let r = panels::clock::draw(
+                                        ui,
+                                        stats.uptime_secs,
+                                        1.0,
+                                        &app_theme,
+                                        float_update_ver.as_deref(),
+                                    );
+                                    if ui
+                                        .ctx()
+                                        .data_mut(|d| {
+                                            d.remove_temp::<bool>(egui::Id::new("open_updater"))
+                                        })
+                                        .unwrap_or(false)
+                                    {
                                         updater_open_arc.store(true, Ordering::Relaxed);
                                     }
                                     r
                                 }
                                 "cpu" => panels::cpu::draw(
-                                    ui, stats, cspark, tex, 1.0,
-                                    self.thresholds.cpu.0, self.thresholds.cpu.1, &app_theme,
+                                    ui,
+                                    stats,
+                                    cspark,
+                                    tex,
+                                    1.0,
+                                    self.thresholds.cpu.0,
+                                    self.thresholds.cpu.1,
+                                    &app_theme,
                                 ),
                                 "gpu" => {
                                     let r = panels::gpu::draw(
-                                        ui, stats, gspark, tex, 1.0, &app_theme,
-                                        self.thresholds.gpu.0, self.thresholds.gpu.1,
-                                        self.thresholds.gpu_hotspot.0, self.thresholds.gpu_hotspot.1,
+                                        ui,
+                                        stats,
+                                        gspark,
+                                        tex,
+                                        1.0,
+                                        &app_theme,
+                                        self.thresholds.gpu.0,
+                                        self.thresholds.gpu.1,
+                                        self.thresholds.gpu_hotspot.0,
+                                        self.thresholds.gpu_hotspot.1,
                                     );
                                     new_pref = r.0;
                                     r.1
                                 }
                                 "ram" => panels::ram::draw(
-                                    ui, stats, 1.0,
-                                    self.thresholds.ram.0, self.thresholds.ram.1, &app_theme,
+                                    ui,
+                                    stats,
+                                    1.0,
+                                    self.thresholds.ram.0,
+                                    self.thresholds.ram.1,
+                                    &app_theme,
                                 ),
-                                "net" => panels::net::draw(ui, stats, nuspark, ndspark, 1.0, &app_theme),
+                                "net" => {
+                                    panels::net::draw(ui, stats, nuspark, ndspark, 1.0, &app_theme)
+                                }
                                 "disk" => panels::disk::draw(
-                                    ui, stats, 1.0,
-                                    self.thresholds.disk.0, self.thresholds.disk.1, &app_theme,
+                                    ui,
+                                    stats,
+                                    1.0,
+                                    self.thresholds.disk.0,
+                                    self.thresholds.disk.1,
+                                    &app_theme,
                                 ),
                                 "motherboard" => panels::motherboard::draw(
-                                    ui, stats, 1.0,
-                                    self.thresholds.mb.0, self.thresholds.mb.1, &app_theme,
+                                    ui,
+                                    stats,
+                                    1.0,
+                                    self.thresholds.mb.0,
+                                    self.thresholds.mb.1,
+                                    &app_theme,
                                 ),
                                 "process" => panels::process::draw(ui, stats, 1.0, &app_theme),
                                 "battery" => panels::battery::draw(ui, stats, 1.0, &app_theme),
@@ -1466,8 +1555,10 @@ impl RigStatsApp {
                                 egui::Vec2::new(22.0, drag_zone.height()),
                             );
 
-                            let in_drag_zone = hover_pos.map(|p| drag_zone.contains(p)).unwrap_or(false);
-                            let in_padlock = hover_pos.map(|p| padlock_hit.contains(p)).unwrap_or(false);
+                            let in_drag_zone =
+                                hover_pos.map(|p| drag_zone.contains(p)).unwrap_or(false);
+                            let in_padlock =
+                                hover_pos.map(|p| padlock_hit.contains(p)).unwrap_or(false);
 
                             // Drag trigger (whole drag zone minus padlock area).
                             if !locked && just_pressed && in_drag_zone && !in_padlock {

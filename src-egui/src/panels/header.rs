@@ -28,7 +28,13 @@ fn brand_subtitle(brand: &str) -> &'static str {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures, opacity: f32, th: &theme::AppTheme) -> egui::Rect {
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    tex: &Textures,
+    opacity: f32,
+    th: &theme::AppTheme,
+) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_HEADER_H);
 

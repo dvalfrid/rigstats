@@ -457,6 +457,31 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
                 });
             });
         });
+
+        if draft.floating_mode {
+            ui.add_space(8.0);
+            inner_row().show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Panel Scale").size(12.0).color(C_MUTED));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{:.0}%",
+                                draft.floating_panel_scale * 100.0
+                            ))
+                            .size(12.0)
+                            .color(C_TEXT),
+                        );
+                        let scale = &mut draft.floating_panel_scale;
+                        let slider = egui::Slider::new(scale, 0.4..=1.0)
+                            .show_value(false)
+                            .trailing_fill(true);
+                        ui.add(slider);
+                    });
+                });
+            });
+        }
     });
 
     // Stats Logging

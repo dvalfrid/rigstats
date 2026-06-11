@@ -66,6 +66,8 @@ Section "RIGStats" SecMain
   SectionIn RO
 
   SetOutPath "$INSTDIR"
+  ; Remove old Tauri binary name if upgrading from pre-egui version.
+  Delete "$INSTDIR\rigstats.exe"
   File "target\release\rigstats-egui.exe"
   File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe"
   File "CHANGELOG.md"

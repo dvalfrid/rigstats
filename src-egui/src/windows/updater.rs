@@ -385,7 +385,10 @@ pub fn show(
             egui::Color32::from_rgb(88, 200, 88),
         ),
         UpdateStatus::UpToDate => ("Up to Date".to_string(), C_TEXT),
-        UpdateStatus::Error(_) => ("Update Error".to_string(), egui::Color32::from_rgb(220, 80, 80)),
+        UpdateStatus::Error(_) => (
+            "Update Error".to_string(),
+            egui::Color32::from_rgb(220, 80, 80),
+        ),
         _ => ("Updates".to_string(), C_TEXT),
     };
 
@@ -404,7 +407,12 @@ pub fn show(
         .frame(
             egui::Frame::none()
                 .fill(C_BG_PANEL)
-                .inner_margin(egui::Margin { left: 14, right: 14, top: 14, bottom: 12 })
+                .inner_margin(egui::Margin {
+                    left: 14,
+                    right: 14,
+                    top: 14,
+                    bottom: 12,
+                })
                 .stroke(egui::Stroke::new(
                     1.0,
                     egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
@@ -433,7 +441,12 @@ pub fn show(
         .frame(
             egui::Frame::none()
                 .fill(C_BG_PANEL)
-                .inner_margin(egui::Margin { left: 12, right: 12, top: 8, bottom: 10 })
+                .inner_margin(egui::Margin {
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom: 10,
+                })
                 .stroke(egui::Stroke::new(
                     1.0,
                     egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
@@ -445,8 +458,9 @@ pub fn show(
                 ui.label(egui::RichText::new(msg).small().color(C_DATE));
                 ui.add_space(6.0);
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                match &st.status {
+            ui.with_layout(
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| match &st.status {
                     UpdateStatus::Ready { installer_path, .. } => {
                         let path = installer_path.clone();
                         if theme::dialog_btn_primary(ui, "Install Now").clicked() {
@@ -475,8 +489,8 @@ pub fn show(
                         }
                     }
                     _ => {}
-                }
-            });
+                },
+            );
         });
 
     // ── Central content ───────────────────────────────────────────────────────
@@ -486,69 +500,66 @@ pub fn show(
                 .fill(egui::Color32::from_gray(38))
                 .inner_margin(egui::Margin::same(10)),
         )
-        .show(ctx, |ui| {
-            match &st.status {
-                UpdateStatus::Ready { info, .. } => {
-                    let new_notes = info.notes.clone();
-                    let combined = if new_notes.is_empty() {
-                        BUNDLED_CHANGELOG.to_string()
-                    } else {
-                        format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
-                    };
-                    let entries = parse_notes(&combined);
-                    render_changelog_panel(ui, &entries, ui.available_height());
-                }
-                UpdateStatus::UpToDate => {
-                    let entries = parse_notes(BUNDLED_CHANGELOG);
-                    render_changelog_panel(ui, &entries, ui.available_height());
-                }
-                UpdateStatus::Idle => {
+        .show(ctx, |ui| match &st.status {
+            UpdateStatus::Ready { info, .. } => {
+                let new_notes = info.notes.clone();
+                let combined = if new_notes.is_empty() {
+                    BUNDLED_CHANGELOG.to_string()
+                } else {
+                    format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
+                };
+                let entries = parse_notes(&combined);
+                render_changelog_panel(ui, &entries, ui.available_height());
+            }
+            UpdateStatus::UpToDate => {
+                let entries = parse_notes(BUNDLED_CHANGELOG);
+                render_changelog_panel(ui, &entries, ui.available_height());
+            }
+            UpdateStatus::Idle => {
+                ui.label(
+                    egui::RichText::new("Check for a newer version of RigStats.").color(C_DATE),
+                );
+            }
+            UpdateStatus::Checking => {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label("Checking for updates…");
+                });
+            }
+            UpdateStatus::Downloading { downloaded, total } => {
+                ui.label("Downloading update…");
+                ui.add_space(8.0);
+                if *total > 0 {
+                    let progress = *downloaded as f32 / *total as f32;
+                    ui.add(egui::ProgressBar::new(progress).show_percentage());
+                    ui.add_space(4.0);
                     ui.label(
-                        egui::RichText::new("Check for a newer version of RigStats.")
-                            .color(C_DATE),
+                        egui::RichText::new(format!(
+                            "{:.1} / {:.1} MB",
+                            *downloaded as f32 / 1_048_576.0,
+                            *total as f32 / 1_048_576.0,
+                        ))
+                        .small()
+                        .color(C_DATE),
+                    );
+                } else {
+                    ui.add(egui::ProgressBar::new(0.0).animate(true));
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{:.1} MB downloaded",
+                            *downloaded as f32 / 1_048_576.0,
+                        ))
+                        .small()
+                        .color(C_DATE),
                     );
                 }
-                UpdateStatus::Checking => {
-                    ui.horizontal(|ui| {
-                        ui.spinner();
-                        ui.label("Checking for updates…");
-                    });
-                }
-                UpdateStatus::Downloading { downloaded, total } => {
-                    ui.label("Downloading update…");
-                    ui.add_space(8.0);
-                    if *total > 0 {
-                        let progress = *downloaded as f32 / *total as f32;
-                        ui.add(egui::ProgressBar::new(progress).show_percentage());
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "{:.1} / {:.1} MB",
-                                *downloaded as f32 / 1_048_576.0,
-                                *total as f32 / 1_048_576.0,
-                            ))
-                            .small()
-                            .color(C_DATE),
-                        );
-                    } else {
-                        ui.add(egui::ProgressBar::new(0.0).animate(true));
-                        ui.add_space(4.0);
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "{:.1} MB downloaded",
-                                *downloaded as f32 / 1_048_576.0,
-                            ))
-                            .small()
-                            .color(C_DATE),
-                        );
-                    }
-                }
-                UpdateStatus::Error(e) => {
-                    ui.label(
-                        egui::RichText::new(format!("Error: {e}"))
-                            .color(egui::Color32::from_rgb(220, 80, 80)),
-                    );
-                }
+            }
+            UpdateStatus::Error(e) => {
+                ui.label(
+                    egui::RichText::new(format!("Error: {e}"))
+                        .color(egui::Color32::from_rgb(220, 80, 80)),
+                );
             }
         });
 

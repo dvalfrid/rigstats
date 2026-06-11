@@ -100,7 +100,12 @@ fn status_badge(ui: &mut egui::Ui, ok: bool) {
     egui::Frame::new()
         .fill(fill)
         .corner_radius(egui::CornerRadius::same(4))
-        .inner_margin(egui::Margin { left: 6, right: 6, top: 2, bottom: 2 })
+        .inner_margin(egui::Margin {
+            left: 6,
+            right: 6,
+            top: 2,
+            bottom: 2,
+        })
         .show(ui, |ui| {
             ui.label(
                 egui::RichText::new(text)
@@ -128,11 +133,29 @@ fn render_diagnostics(ui: &mut egui::Ui, state: &StatusState) {
                 ui.label(egui::RichText::new("Pipe").size(11.0).color(C_MUTED));
                 ui.end_row();
                 let svc_color = if state.service_running { C_GOOD } else { C_BAD };
-                let svc_text = if state.service_running { "RUNNING" } else { "STOPPED" };
-                ui.label(egui::RichText::new(svc_text).size(13.0).strong().color(svc_color));
+                let svc_text = if state.service_running {
+                    "RUNNING"
+                } else {
+                    "STOPPED"
+                };
+                ui.label(
+                    egui::RichText::new(svc_text)
+                        .size(13.0)
+                        .strong()
+                        .color(svc_color),
+                );
                 let pipe_color = if state.pipe_connected { C_GOOD } else { C_BAD };
-                let pipe_text = if state.pipe_connected { "Connected" } else { "Disconnected" };
-                ui.label(egui::RichText::new(pipe_text).size(13.0).strong().color(pipe_color));
+                let pipe_text = if state.pipe_connected {
+                    "Connected"
+                } else {
+                    "Disconnected"
+                };
+                ui.label(
+                    egui::RichText::new(pipe_text)
+                        .size(13.0)
+                        .strong()
+                        .color(pipe_color),
+                );
                 ui.end_row();
             });
 
@@ -156,8 +179,18 @@ fn render_dependencies(ui: &mut egui::Ui, state: &StatusState) {
                 sensor_ver.as_str(),
                 state.service_running,
             ),
-            ("sysinfo", "CPU, RAM, disk, network stats", DEP_SYSINFO_VER, true),
-            ("wmi", "Windows hardware metadata", DEP_WMI_VER, state.wmi_ok),
+            (
+                "sysinfo",
+                "CPU, RAM, disk, network stats",
+                DEP_SYSINFO_VER,
+                true,
+            ),
+            (
+                "wmi",
+                "Windows hardware metadata",
+                DEP_WMI_VER,
+                state.wmi_ok,
+            ),
         ];
         for (i, (name, desc, ver, ok)) in deps.iter().enumerate() {
             if i > 0 {
@@ -203,9 +236,8 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         .save_file()
         .ok_or_else(|| std::io::Error::other("cancelled"))?;
 
-    let manifest = format!(
-        "{{\n  \"collected_at_unix\": {ts},\n  \"rigstats_version\": \"{VERSION}\"\n}}"
-    );
+    let manifest =
+        format!("{{\n  \"collected_at_unix\": {ts},\n  \"rigstats_version\": \"{VERSION}\"\n}}");
 
     let debug_log = std::fs::read(dir.join("rigstats-debug.log"))
         .unwrap_or_else(|_| b"(log file not found)".to_vec());
@@ -340,8 +372,7 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
 
     let zip_file = std::fs::File::create(&out_path)?;
     let mut writer = zip::ZipWriter::new(zip_file);
-    let opts = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
+    let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
     let entries: &[(&str, &[u8])] = &[
         ("manifest.json", manifest.as_bytes()),
@@ -452,11 +483,12 @@ pub fn show(
 
     // ── Hero ──────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("status_hero")
-        .frame(
-            egui::Frame::new()
-                .fill(C_BG)
-                .inner_margin(egui::Margin { left: 14, right: 14, top: 14, bottom: 12 }),
-        )
+        .frame(egui::Frame::new().fill(C_BG).inner_margin(egui::Margin {
+            left: 14,
+            right: 14,
+            top: 14,
+            bottom: 12,
+        }))
         .show_separator_line(true)
         .show(ctx, |ui| {
             ui.label(
@@ -475,11 +507,12 @@ pub fn show(
 
     // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("status_footer")
-        .frame(
-            egui::Frame::new()
-                .fill(C_BG)
-                .inner_margin(egui::Margin { left: 12, right: 12, top: 8, bottom: 10 }),
-        )
+        .frame(egui::Frame::new().fill(C_BG).inner_margin(egui::Margin {
+            left: 12,
+            right: 12,
+            top: 8,
+            bottom: 10,
+        }))
         .show_separator_line(true)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
