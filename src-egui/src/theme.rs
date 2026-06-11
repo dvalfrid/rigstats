@@ -170,10 +170,10 @@ pub fn arrow_down(ui: &mut Ui, size: f32, color: Color32) {
     ));
 }
 
-/// Draw a thin (4 px high) progress bar with dark background.
-pub fn thin_bar(ui: &mut Ui, frac: f32, width: f32, color: Color32) {
-    const H: f32 = 4.0;
-    let (resp, painter) = ui.allocate_painter(Vec2::new(width, H), Sense::hover());
+/// Draw a thin progress bar with dark background and manual content scale.
+pub fn thin_bar_scaled(ui: &mut Ui, frac: f32, width: f32, color: Color32, sc: f32) {
+    let h = 4.0 * sc;
+    let (resp, painter) = ui.allocate_painter(Vec2::new(width, h), Sense::hover());
     let r = resp.rect;
     painter.rect_filled(r, 0.0, Color32::from_gray(42));
     let fw = frac.clamp(0.0, 1.0) * r.width();
@@ -184,6 +184,36 @@ pub fn thin_bar(ui: &mut Ui, frac: f32, width: f32, color: Color32) {
             color,
         );
     }
+}
+
+/// Right-aligned label in a fixed-width slot.
+/// Eliminates the repetitive `allocate_ui_with_layout` pattern for metric labels.
+pub fn fixed_label_r(ui: &mut Ui, text: impl Into<egui::WidgetText>, width: f32, height: f32) {
+    ui.allocate_ui_with_layout(
+        Vec2::new(width, height),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            ui.label(text);
+        },
+    );
+}
+
+/// Compute how many pixels are available for a bar after subtracting fixed-width
+/// columns and the actual (non-scaled) egui item_spacing between them.
+///
+/// `fixed_w_sum` = sum of all non-bar column widths already multiplied by `sc`.
+/// `gaps`        = number of item_spacing gaps between columns.
+pub fn bar_avail(ui: &Ui, fixed_w_sum: f32, gaps: u32) -> f32 {
+    let sp = ui.spacing().item_spacing.x;
+    let avail = {
+        let w = ui.available_width();
+        if w.is_finite() && w > 0.0 {
+            w
+        } else {
+            ui.ctx().content_rect().width().max(1.0)
+        }
+    };
+    (avail - fixed_w_sum - sp * gaps as f32).max(4.0)
 }
 
 /// Premultiply `color` (assumed fully opaque) by `opacity`.
@@ -205,10 +235,11 @@ pub fn panel_frame(
     ui: &mut Ui,
     opacity: f32,
     th: &AppTheme,
+    sc: f32,
     add_contents: impl FnOnce(&mut Ui),
 ) -> egui::Rect {
     let frame = Frame {
-        inner_margin: Margin::symmetric(12, 8),
+        inner_margin: Margin::symmetric((12.0 * sc).round() as i8, (8.0 * sc).round() as i8),
         outer_margin: Margin::ZERO,
         corner_radius: CornerRadius::ZERO,
         fill: premul(PANEL_FILL, opacity),
@@ -216,7 +247,10 @@ pub fn panel_frame(
         ..Default::default()
     };
 
-    let fr = frame.show(ui, add_contents);
+    let fr = frame.show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        add_contents(ui);
+    });
     let rect = fr.response.rect;
     let painter = ui.painter();
 

@@ -110,96 +110,114 @@ pub fn draw(
     dn_spark: &Sparkline,
     opacity: f32,
     th: &theme::AppTheme,
+    sc: f32,
 ) -> egui::Rect {
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H);
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_DATA_H * sc);
 
         ui.label(
             RichText::new("NETWORK")
                 .strong()
                 .color(theme::C_PANEL_TITLE)
-                .size(theme::FONT_PANEL_TITLE),
+                .size(theme::FONT_PANEL_TITLE * sc),
         );
-        ui.add_space(4.0);
+        ui.add_space(4.0 * sc);
 
-        const NUMBER_W: f32 = 40.0;
+        let number_w = 68.0 * sc;
         ui.columns(2, |cols| {
             let (val, unit) = fmt_mbps_parts(stats.net_up_mbps);
             // Arrow right-aligned in NUMBER_W box, then "UP" starts at fixed x.
             cols[0].horizontal(|ui| {
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(NUMBER_W, 14.0),
+                    egui::Vec2::new(number_w, 14.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        theme::arrow_up(ui, 10.0, theme::C_GRN);
+                        theme::arrow_up(ui, 10.0 * sc, theme::C_GRN);
                     },
                 );
-                ui.label(RichText::new("UP").small().color(theme::C_GRN));
+                ui.label(RichText::new("UP").size(11.0 * sc).color(theme::C_GRN));
             });
             // Number right-aligned in same NUMBER_W box, unit starts at same x.
             cols[0].horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.spacing_mut().item_spacing.x = 4.0 * sc;
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(NUMBER_W, 24.0),
+                    egui::Vec2::new(number_w, 24.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
+                        ui.label(
+                            RichText::new(&val)
+                                .size(20.0 * sc)
+                                .color(egui::Color32::WHITE),
+                        );
                     },
                 );
-                ui.label(RichText::new(unit).small().color(th.text_muted));
+                ui.label(RichText::new(unit).size(11.0 * sc).color(th.text_muted));
             });
 
             let (val, unit) = fmt_mbps_parts(stats.net_down_mbps);
             cols[1].horizontal(|ui| {
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(NUMBER_W, 14.0),
+                    egui::Vec2::new(number_w, 14.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        theme::arrow_down(ui, 10.0, theme::C_NET_DOWN);
+                        theme::arrow_down(ui, 10.0 * sc, theme::C_NET_DOWN);
                     },
                 );
-                ui.label(RichText::new("DOWN").small().color(theme::C_NET_DOWN));
+                ui.label(
+                    RichText::new("DOWN")
+                        .size(11.0 * sc)
+                        .color(theme::C_NET_DOWN),
+                );
             });
             cols[1].horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.spacing_mut().item_spacing.x = 4.0 * sc;
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(NUMBER_W, 24.0),
+                    egui::Vec2::new(number_w, 24.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
+                        ui.label(
+                            RichText::new(&val)
+                                .size(20.0 * sc)
+                                .color(egui::Color32::WHITE),
+                        );
                     },
                 );
-                ui.label(RichText::new(unit).small().color(th.text_muted));
+                ui.label(RichText::new(unit).size(11.0 * sc).color(th.text_muted));
             });
         });
 
-        ui.add_space(4.0);
+        ui.add_space(4.0 * sc);
 
         // PING + IFACE — above the sparkline.
         ui.horizontal(|ui| {
             if let Some(p) = stats.net_ping_ms {
-                ui.label(RichText::new("PING").small().color(th.stat_label));
+                ui.label(RichText::new("PING").size(11.0 * sc).color(th.stat_label));
                 ui.label(
                     RichText::new(format!("{p:.0} ms"))
-                        .small()
+                        .size(11.0 * sc)
                         .color(theme::C_TEXT),
                 );
-                ui.add_space(12.0);
+                ui.add_space(12.0 * sc);
             }
             if !stats.net_iface.is_empty() {
-                ui.label(RichText::new("IFACE").small().color(th.stat_label));
-                ui.label(RichText::new(&stats.net_iface).small().color(theme::C_TEXT));
+                ui.label(RichText::new("IFACE").size(11.0 * sc).color(th.stat_label));
+                ui.label(
+                    RichText::new(&stats.net_iface)
+                        .size(11.0 * sc)
+                        .color(theme::C_TEXT),
+                );
             }
         });
 
         // Push sparkline to bottom using cursor tracking.
         let cursor_y = ui.cursor().top();
-        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
+        let filler =
+            (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()) - SPARK_H * sc).max(0.0);
         ui.add_space(filler);
 
         draw_dual(
             ui,
-            SPARK_H,
+            SPARK_H * sc,
             up_spark,
             dn_spark,
             theme::C_GRN,

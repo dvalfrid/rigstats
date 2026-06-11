@@ -24,9 +24,10 @@ pub fn draw(
     warn: u8,
     crit: u8,
     th: &theme::AppTheme,
+    sc: f32,
 ) -> egui::Rect {
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H);
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_DATA_H * sc);
         let load_frac = stats.cpu_load as f32 / 100.0;
         let tc = temp_color(stats.cpu_temp, warn, crit);
 
@@ -37,7 +38,7 @@ pub fn draw(
                     RichText::new("CPU LOAD")
                         .strong()
                         .color(theme::C_PANEL_TITLE)
-                        .size(theme::FONT_PANEL_TITLE),
+                        .size(theme::FONT_PANEL_TITLE * sc),
                 );
                 if !stats.cpu_model.is_empty() {
                     let model = &stats.cpu_model;
@@ -46,16 +47,16 @@ pub fn draw(
                     } else {
                         model
                     };
-                    ui.label(RichText::new(model).small().color(th.text_muted));
+                    ui.label(RichText::new(model).size(11.0 * sc).color(th.text_muted));
                 }
             });
             if let Some(logo) = tex.cpu_logo(&stats.cpu_model) {
                 let [lw, lh] = logo.size();
-                let scale = 38.0 / lh as f32;
-                let w = lw as f32 * scale;
+                let target_h = 38.0 * sc;
+                let w = lw as f32 * (target_h / lh as f32);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(6.0);
-                    let sized = egui::load::SizedTexture::new(logo.id(), Vec2::new(w, 38.0));
+                    ui.add_space(6.0 * sc);
+                    let sized = egui::load::SizedTexture::new(logo.id(), Vec2::new(w, target_h));
                     ui.add(egui::Image::new(sized));
                 });
             }
@@ -65,12 +66,12 @@ pub fn draw(
         ui.horizontal(|ui| {
             ring::show(
                 ui,
-                theme::RING_SIZE,
+                theme::RING_SIZE * sc,
                 load_frac,
                 theme::C_ACCENT,
                 &format!("{}%", stats.cpu_load),
             );
-            ui.add_space(16.0);
+            ui.add_space(16.0 * sc);
 
             let freq_str = if stats.cpu_freq_mhz > 0.0 {
                 format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
@@ -87,34 +88,38 @@ pub fn draw(
             ui.vertical(|ui| {
                 egui::Grid::new("cpu_meta")
                     .num_columns(3)
-                    .min_col_width(50.0)
+                    .min_col_width(50.0 * sc)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").small().color(th.stat_label));
-                        ui.label(RichText::new("FREQ").small().color(th.stat_label));
-                        ui.label(RichText::new("POWER").small().color(th.stat_label));
+                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
                         ui.end_row();
-                        ui.label(RichText::new(temp_str).color(tc));
-                        ui.label(RichText::new(freq_str).color(theme::C_TEXT));
-                        ui.label(RichText::new(power_str).color(theme::C_TEXT));
+                        ui.label(RichText::new(temp_str).size(14.0 * sc).color(tc));
+                        ui.label(RichText::new(freq_str).size(14.0 * sc).color(theme::C_TEXT));
+                        ui.label(
+                            RichText::new(power_str)
+                                .size(14.0 * sc)
+                                .color(theme::C_TEXT),
+                        );
                         ui.end_row();
                     });
             });
         });
 
-        ui.add_space(6.0);
+        ui.add_space(6.0 * sc);
 
         // Per-core bars — two fixed-width columns, 2 rows visible, scrollable.
         if !stats.cpu_cores.is_empty() {
             let cores = &stats.cpu_cores;
             let avail = ui.available_width();
             // 6 widgets, 5 auto-gaps (~8 px each): 2*(LBL+VAL) + 5*8 = 132 + 40 = 172 fixed
-            let bar_w = ((avail - 172.0) / 2.0).max(4.0);
+            let bar_w = ((avail - 172.0 * sc) / 2.0).max(4.0 * sc);
 
             // Hard-allocate exactly 2 rows of vertical space in the parent layout,
             // then render the ScrollArea inside that fixed region. This avoids
             // relying solely on max_height, which can be overridden by set_min_height.
-            let row_gap = 2.0_f32;
-            let scroll_h = CORE_ROW_H * 2.0 + row_gap; // 34 px
+            let row_gap = 2.0_f32 * sc;
+            let scroll_h = CORE_ROW_H * 2.0 * sc + row_gap;
             let (outer_rect, _) =
                 ui.allocate_exact_size(Vec2::new(avail, scroll_h), egui::Sense::hover());
 
@@ -131,26 +136,32 @@ pub fn draw(
                                 let idx = row * 2 + col;
 
                                 ui.allocate_ui_with_layout(
-                                    Vec2::new(CORE_LBL_W, CORE_ROW_H),
+                                    Vec2::new(CORE_LBL_W * sc, CORE_ROW_H * sc),
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
                                         ui.label(
                                             RichText::new(format!("C{idx}"))
-                                                .small()
+                                                .size(11.0 * sc)
                                                 .color(th.text_muted),
                                         );
                                     },
                                 );
 
-                                theme::thin_bar(ui, load as f32 / 100.0, bar_w, theme::C_ACCENT);
+                                theme::thin_bar_scaled(
+                                    ui,
+                                    load as f32 / 100.0,
+                                    bar_w,
+                                    theme::C_ACCENT,
+                                    sc,
+                                );
 
                                 ui.allocate_ui_with_layout(
-                                    Vec2::new(CORE_VAL_W, CORE_ROW_H),
+                                    Vec2::new(CORE_VAL_W * sc, CORE_ROW_H * sc),
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
                                         ui.label(
                                             RichText::new(format!("{load}%"))
-                                                .small()
+                                                .size(11.0 * sc)
                                                 .color(theme::C_TEXT),
                                         );
                                     },
@@ -163,8 +174,9 @@ pub fn draw(
 
         // Push sparkline to the bottom of the panel (same pattern as NET/RAM/DISK).
         let cursor_y = ui.cursor().top();
-        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
+        let filler =
+            (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()) - SPARK_H * sc).max(0.0);
         ui.add_space(filler);
-        spark.draw(ui, SPARK_H, theme::C_ACCENT);
+        spark.draw(ui, SPARK_H * sc, theme::C_ACCENT);
     })
 }

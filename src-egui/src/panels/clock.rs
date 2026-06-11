@@ -8,9 +8,10 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     update_version: Option<&str>,
+    sc: f32,
 ) -> egui::Rect {
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_HEADER_H);
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_HEADER_H * sc);
         let now = chrono::Local::now();
 
         // ── Main row: big time (left) + date/uptime stack (right) ────────────
@@ -18,18 +19,18 @@ pub fn draw(
             // Big time
             ui.label(
                 RichText::new(now.format("%H:%M:%S").to_string())
-                    .size(40.0)
+                    .size(40.0 * sc)
                     .color(egui::Color32::WHITE),
             );
 
             // Right column: date on top, uptime below
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.vertical(|ui| {
-                    ui.add_space(4.0);
+                    ui.add_space(4.0 * sc);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         ui.label(
                             RichText::new(now.format("%Y·%m·%d").to_string())
-                                .small()
+                                .size(11.0 * sc)
                                 .color(th.text_muted),
                         );
                     });
@@ -39,7 +40,7 @@ pub fn draw(
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         ui.label(
                             RichText::new(format!("UP {h:02}:{m:02}:{s:02}"))
-                                .small()
+                                .size(11.0 * sc)
                                 .color(theme::C_GRN),
                         );
                     });
@@ -50,7 +51,7 @@ pub fn draw(
         // ── Day name ─────────────────────────────────────────────────────────
         ui.label(
             RichText::new(now.format("%A").to_string().to_uppercase())
-                .size(15.0)
+                .size(15.0 * sc)
                 .color(theme::C_GRN),
         );
 
@@ -61,9 +62,9 @@ pub fn draw(
             let border_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
             let bg_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 26);
 
-            ui.add_space(4.0);
+            ui.add_space(4.0 * sc);
             let resp = ui.add(
-                egui::Button::new(RichText::new(&label).small().color(badge_color))
+                egui::Button::new(RichText::new(&label).size(11.0 * sc).color(badge_color))
                     .fill(bg_color)
                     .stroke(egui::Stroke::new(1.0, border_color))
                     .corner_radius(egui::CornerRadius::same(2)),

@@ -28,18 +28,28 @@ fn power_color(w: f64, charging: bool, th: &theme::AppTheme) -> Color32 {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) -> egui::Rect {
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H);
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    opacity: f32,
+    th: &theme::AppTheme,
+    sc: f32,
+) -> egui::Rect {
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_DATA_H * sc);
         ui.label(
             RichText::new("BATTERY")
                 .strong()
                 .color(theme::C_PANEL_TITLE)
-                .size(theme::FONT_PANEL_TITLE),
+                .size(theme::FONT_PANEL_TITLE * sc),
         );
 
         if !stats.battery_present {
-            ui.label(RichText::new("NO BATTERY").color(th.text_muted));
+            ui.label(
+                RichText::new("NO BATTERY")
+                    .size(14.0 * sc)
+                    .color(th.text_muted),
+            );
             return;
         }
 
@@ -49,21 +59,29 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) 
         let color = charge_color(charge, charging);
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("{charge}%")).color(color).size(22.0));
+            ui.label(
+                RichText::new(format!("{charge}%"))
+                    .color(color)
+                    .size(22.0 * sc),
+            );
             if charging {
-                ui.label(RichText::new("⚡ CHARGING").small().color(theme::C_ACCENT));
+                ui.label(
+                    RichText::new("⚡ CHARGING")
+                        .size(11.0 * sc)
+                        .color(theme::C_ACCENT),
+                );
             }
         });
 
-        let bw = (ui.available_width()).max(4.0);
-        theme::thin_bar(ui, frac, bw, color);
+        let bw = (ui.available_width()).max(4.0 * sc);
+        theme::thin_bar_scaled(ui, frac, bw, color, sc);
 
         if let Some(mins) = stats.battery_time_mins {
             let h = mins / 60;
             let m = mins % 60;
             ui.label(
                 RichText::new(format!("{h}h {m:02}m remaining"))
-                    .small()
+                    .size(11.0 * sc)
                     .color(th.text_muted),
             );
         }
@@ -71,7 +89,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) 
         if let Some(w) = stats.battery_power_w {
             ui.label(
                 RichText::new(format!("{w:.1} W"))
-                    .small()
+                    .size(11.0 * sc)
                     .color(power_color(w, charging, th)),
             );
         }

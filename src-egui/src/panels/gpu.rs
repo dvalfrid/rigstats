@@ -9,9 +9,7 @@ use crate::PollStats;
 
 const SPARK_H: f32 = 36.0;
 
-// Fixed column widths for bar rows — all four rows share the same grid.
-const LEFT_LBL_W: f32 = 32.0; // "GPU" / "3D"
-const RIGHT_LBL_W: f32 = 46.0; // "VRAM" / "VID"
+const LEFT_LBL_W: f32 = 32.0; // "VRAM" / "3D"
 const PCT_W: f32 = 36.0; // "100%"
 const SIZE_W: f32 = 80.0; // "10.0/16.0G"
 const ROW_H: f32 = 16.0;
@@ -20,12 +18,10 @@ fn fmt_opt(v: Option<f64>, unit: &str, decimals: usize) -> String {
     v.map_or(format!("--{unit}"), |x| format!("{x:.decimals$}{unit}"))
 }
 
-fn safe_bar_width(ui: &Ui) -> f32 {
-    let w = ui.available_width();
-    if w.is_finite() && w > 0.0 {
-        w
-    } else {
-        ui.ctx().content_rect().width().max(1.0)
+fn vram_frac(stats: &PollStats) -> f32 {
+    match (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb) {
+        (Some(used), Some(total)) if total > 0.0 => (used / total) as f32,
+        _ => 0.0,
     }
 }
 
@@ -40,17 +36,15 @@ pub fn draw(
     th: &theme::AppTheme,
     warn: u8,
     crit: u8,
-    hotspot_warn: u8,
-    hotspot_crit: u8,
+    sc: f32,
 ) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
 
-    let rect = theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H);
+    let rect = theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_DATA_H * sc);
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
         let tc = temp_color(stats.gpu_temp, warn, crit);
-        let htc = temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit);
         let ring_color = if stats.lhm_connected {
             theme::C_AMD
         } else {
@@ -70,20 +64,24 @@ pub fn draw(
                         RichText::new("GPU LOAD")
                             .strong()
                             .color(theme::C_PANEL_TITLE)
-                            .size(theme::FONT_PANEL_TITLE),
+                            .size(theme::FONT_PANEL_TITLE * sc),
                     );
                     if stats.gpu_devices.len() > 1 {
-                        ui.add_space(6.0);
-                        ui.spacing_mut().item_spacing.x = 3.0;
+                        ui.add_space(6.0 * sc);
+                        ui.spacing_mut().item_spacing.x = 3.0 * sc;
                         for (name, _vram) in &stats.gpu_devices {
                             let selected = name == &stats.gpu_name;
                             let (resp, painter) =
-                                ui.allocate_painter(Vec2::splat(10.0), Sense::click());
+                                ui.allocate_painter(Vec2::splat(10.0 * sc), Sense::click());
                             let center = resp.rect.center();
                             if selected {
-                                painter.circle_filled(center, 4.0, theme::C_AMD);
+                                painter.circle_filled(center, 4.0 * sc, theme::C_AMD);
                             } else {
-                                painter.circle_stroke(center, 3.5, Stroke::new(1.5, th.text_muted));
+                                painter.circle_stroke(
+                                    center,
+                                    3.5 * sc,
+                                    Stroke::new(1.5, th.text_muted),
+                                );
                             }
                             let resp = resp.on_hover_text(name.as_str());
                             if resp.clicked() {
@@ -95,16 +93,17 @@ pub fn draw(
                 if !stats.gpu_name.is_empty() {
                     let name = &stats.gpu_name;
                     let name = if name.len() > 44 { &name[..44] } else { name };
-                    ui.label(RichText::new(name).small().color(th.text_muted));
+                    ui.label(RichText::new(name).size(11.0 * sc).color(th.text_muted));
                 }
             });
             if let Some(logo) = tex.gpu_logo(&stats.gpu_name) {
                 let [lw, lh] = logo.size();
-                let scale = 38.0 / lh as f32;
-                let w = lw as f32 * scale;
+                let target_h = 38.0 * sc;
+                let w = lw as f32 * (target_h / lh as f32);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add_space(6.0);
-                    let sized = egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, 38.0));
+                    ui.add_space(6.0 * sc);
+                    let sized =
+                        egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, target_h));
                     ui.add(egui::Image::new(sized));
                 });
             }
@@ -118,170 +117,142 @@ pub fn draw(
         };
 
         ui.horizontal(|ui| {
-            ring::show(ui, theme::RING_SIZE, load_frac, ring_color, &ring_label);
-            ui.add_space(12.0);
+            ring::show(
+                ui,
+                theme::RING_SIZE * sc,
+                load_frac,
+                ring_color,
+                &ring_label,
+            );
+            ui.add_space(12.0 * sc);
 
             let temp_s = stats
                 .gpu_temp
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-            let hot_s = stats
-                .gpu_hotspot
-                .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-            let freq_s = fmt_opt(stats.gpu_freq_mhz, " MHz", 0);
+            let freq_s = fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2);
             let pwr_s = fmt_opt(stats.gpu_power, " W", 0);
-            let mem_s = fmt_opt(stats.gpu_mem_freq_mhz, " MHz", 0);
             let fan_s = fmt_opt(stats.gpu_fan, "%", 0);
 
+            // 4-column grid: TEMP | CORE FREQ | POWER | FAN
             ui.vertical(|ui| {
                 egui::Grid::new("gpu_meta")
-                    .num_columns(3)
-                    .min_col_width(44.0)
+                    .num_columns(4)
+                    .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").small().color(th.stat_label));
-                        ui.label(RichText::new("HOT SPOT").small().color(th.stat_label));
-                        ui.label(RichText::new("CORE CLK").small().color(th.stat_label));
+                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("FAN").size(11.0 * sc).color(th.stat_label));
                         ui.end_row();
-                        ui.label(RichText::new(&temp_s).color(tc));
-                        ui.label(RichText::new(&hot_s).color(htc));
-                        ui.label(RichText::new(&freq_s).color(theme::C_TEXT));
-                        ui.end_row();
-                        ui.label(RichText::new("POWER").small().color(th.stat_label));
-                        ui.label(RichText::new("MEM CLK").small().color(th.stat_label));
-                        ui.label(RichText::new("FAN").small().color(th.stat_label));
-                        ui.end_row();
-                        ui.label(RichText::new(&pwr_s).color(theme::C_TEXT));
-                        ui.label(RichText::new(&mem_s).color(theme::C_TEXT));
-                        ui.label(RichText::new(&fan_s).color(theme::C_TEXT));
+                        ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
+                        ui.label(RichText::new(&freq_s).size(14.0 * sc).color(theme::C_TEXT));
+                        ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(theme::C_TEXT));
+                        ui.label(RichText::new(&fan_s).size(14.0 * sc).color(theme::C_TEXT));
                         ui.end_row();
                     });
             });
         });
 
-        ui.add_space(4.0);
+        ui.add_space(4.0 * sc);
 
-        // ── Bar rows: GPU | VRAM and 3D | VID ────────────────────────────────────
-        // All four rows share the same 6-column grid so bars always align:
-        //   LEFT_LBL(32) · bar_L · PCT(36) · RIGHT_LBL(46) · bar_R · SIZE(80)
-        //   + 5 × item_spacing(8) = 234 overhead
-        let avail = safe_bar_width(ui);
-        let bar_pool = (avail - (LEFT_LBL_W + PCT_W + RIGHT_LBL_W + SIZE_W + 5.0 * 8.0)).max(16.0);
-        let bar_l = bar_pool * 0.5;
-        let bar_r = bar_pool * 0.5;
+        // ── Bar row: VRAM | 3D (same row, split 50/50 when 3D is active) ─────────
+        let has_d3d = stats.gpu_d3d_3d.is_some();
+        let sp = ui.spacing().item_spacing.x;
 
-        // Row: GPU load | VRAM
-        // Labels (LEFT_LBL_W, RIGHT_LBL_W) and values (PCT_W) are right-aligned so
-        // text is flush against the following bar regardless of string width.
-        ui.horizontal(|ui| {
-            ui.allocate_ui_with_layout(
-                Vec2::new(LEFT_LBL_W, ROW_H),
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.label(RichText::new("GPU").small().color(th.stat_label));
-                },
-            );
-            theme::thin_bar(ui, load_frac, bar_l, theme::C_AMD);
-            ui.allocate_ui_with_layout(
-                Vec2::new(PCT_W, ROW_H),
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.label(RichText::new(format!("{load:.0}%")).small().color(c));
-                },
-            );
-            ui.allocate_ui_with_layout(
-                Vec2::new(RIGHT_LBL_W, ROW_H),
-                egui::Layout::right_to_left(egui::Align::Center),
-                |ui| {
-                    ui.label(RichText::new("VRAM").small().color(th.stat_label));
-                },
-            );
-            if let (Some(used), Some(total)) = (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb) {
-                let vfrac = if total > 0.0 {
-                    (used / total) as f32
-                } else {
-                    0.0
-                };
-                theme::thin_bar(ui, vfrac, bar_r, theme::C_AMD);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(SIZE_W, ROW_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.label(
-                            RichText::new(format!("{:.1}/{:.1}G", used / 1024.0, total / 1024.0))
-                                .small()
-                                .color(th.text_muted),
-                        );
-                    },
-                );
-            } else {
-                theme::thin_bar(ui, 0.0, bar_r, theme::C_AMD);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(SIZE_W, ROW_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("--").small().color(theme::C_DIM));
-                    },
-                );
-            }
-        });
-
-        // Row: 3D | VID — identical column widths as GPU/VRAM row
-        if stats.gpu_d3d_3d.is_some() || stats.gpu_d3d_vdec.is_some() {
-            let d3d_frac = (stats.gpu_d3d_3d.unwrap_or(0.0) / 100.0) as f32;
-            let vid_frac = (stats.gpu_d3d_vdec.unwrap_or(0.0) / 100.0) as f32;
-            let d3d_s = stats
-                .gpu_d3d_3d
-                .map_or("--%".to_string(), |v| format!("{v:.0}%"));
-            let vid_s = stats
-                .gpu_d3d_vdec
-                .map_or("--%".to_string(), |v| format!("{v:.0}%"));
+        if has_d3d {
+            // Split: VRAM left half, 3D right half.
+            // Total: 2×(LBL + bar + PCT) + extra_gap + 4×item_spacing
+            let bar_half = theme::bar_avail(ui, (LEFT_LBL_W + PCT_W) * 2.0 * sc + 6.0 * sc, 5);
+            let bar_half = bar_half / 2.0;
 
             ui.horizontal(|ui| {
-                ui.allocate_ui_with_layout(
-                    Vec2::new(LEFT_LBL_W, ROW_H),
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("3D").small().color(th.stat_label));
-                    },
+                // VRAM
+                let vfrac = vram_frac(stats);
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new("VRAM").size(11.0 * sc).color(th.stat_label),
+                    LEFT_LBL_W * sc,
+                    ROW_H * sc,
                 );
-                theme::thin_bar(ui, d3d_frac, bar_l, theme::C_AMD);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(PCT_W, ROW_H),
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new(&d3d_s).small().color(theme::C_TEXT));
-                    },
+                theme::thin_bar_scaled(ui, vfrac, bar_half, theme::C_AMD, sc);
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new(format!("{:.0}%", vfrac * 100.0))
+                        .size(11.0 * sc)
+                        .color(c),
+                    PCT_W * sc,
+                    ROW_H * sc,
                 );
-                ui.allocate_ui_with_layout(
-                    Vec2::new(RIGHT_LBL_W, ROW_H),
-                    egui::Layout::right_to_left(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new("VID").small().color(th.stat_label));
-                    },
+
+                ui.add_space(6.0 * sc);
+
+                // 3D
+                let d3d = stats.gpu_d3d_3d.unwrap_or(0.0);
+                let d3d_frac = (d3d / 100.0) as f32;
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new("3D").size(11.0 * sc).color(th.stat_label),
+                    LEFT_LBL_W * sc,
+                    ROW_H * sc,
                 );
-                theme::thin_bar(ui, vid_frac, bar_r, theme::C_AMD);
-                ui.allocate_ui_with_layout(
-                    Vec2::new(SIZE_W, ROW_H),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.label(RichText::new(&vid_s).small().color(theme::C_TEXT));
-                    },
+                theme::thin_bar_scaled(ui, d3d_frac, bar_half, theme::C_AMD, sc);
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new(format!("{d3d:.0}%"))
+                        .size(11.0 * sc)
+                        .color(theme::C_TEXT),
+                    PCT_W * sc,
+                    ROW_H * sc,
                 );
             });
+        } else {
+            // Full-width VRAM bar: LBL + bar + PCT + SIZE + 3×spacing
+            let vram_bar_w = theme::bar_avail(ui, (LEFT_LBL_W + PCT_W + SIZE_W) * sc, 3);
+            let vfrac = vram_frac(stats);
+            ui.horizontal(|ui| {
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new("VRAM").size(11.0 * sc).color(th.stat_label),
+                    LEFT_LBL_W * sc,
+                    ROW_H * sc,
+                );
+                theme::thin_bar_scaled(ui, vfrac, vram_bar_w, theme::C_AMD, sc);
+                theme::fixed_label_r(
+                    ui,
+                    RichText::new(format!("{:.0}%", vfrac * 100.0))
+                        .size(11.0 * sc)
+                        .color(c),
+                    PCT_W * sc,
+                    ROW_H * sc,
+                );
+                if let (Some(used), Some(total)) = (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb)
+                {
+                    ui.label(
+                        RichText::new(format!("{:.1}/{:.1}G", used / 1024.0, total / 1024.0))
+                            .size(11.0 * sc)
+                            .color(th.text_muted),
+                    );
+                }
+            });
         }
+
+        // Suppress unused-variable warning for sp (only needed for split path removed above)
+        let _ = sp;
 
         if !stats.lhm_connected {
             ui.label(
                 RichText::new("LibreHardwareMonitor not running.")
-                    .small()
+                    .size(11.0 * sc)
                     .color(theme::C_DIM),
             );
         }
 
         // Push sparkline to the bottom of the panel (same pattern as NET/RAM/DISK).
         let cursor_y = ui.cursor().top();
-        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top()) - SPARK_H).max(2.0);
+        let filler =
+            (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()) - SPARK_H * sc).max(0.0);
         ui.add_space(filler);
-        spark.draw(ui, SPARK_H, theme::C_AMD);
+        spark.draw(ui, SPARK_H * sc, theme::C_AMD);
     });
 
     (new_gpu, rect)

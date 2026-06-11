@@ -34,27 +34,28 @@ pub fn draw(
     tex: &Textures,
     opacity: f32,
     th: &theme::AppTheme,
+    sc: f32,
 ) -> egui::Rect {
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_HEADER_H);
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_HEADER_H * sc);
 
         let subtitle = brand_subtitle(&stats.system_brand);
 
         // Single horizontal row spanning full panel height so the logo fills edge-to-edge.
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.add_space(6.0);
-                ui.label(RichText::new(subtitle).small().color(th.stat_label));
+                ui.add_space(6.0 * sc);
+                ui.label(RichText::new(subtitle).size(11.0 * sc).color(th.stat_label));
                 ui.label(
                     RichText::new(&stats.hostname)
-                        .size(36.0)
+                        .size(36.0 * sc)
                         .strong()
                         .color(egui::Color32::WHITE),
                 );
                 if !stats.model_name.is_empty() {
                     ui.label(
                         RichText::new(&stats.model_name)
-                            .size(16.0)
+                            .size(16.0 * sc)
                             .color(theme::C_ACCENT),
                     );
                 }
@@ -62,7 +63,7 @@ pub fn draw(
 
             if let Some(logo) = tex.rig_logo(&stats.system_brand) {
                 let [lw, lh] = logo.size();
-                let target_h = theme::PANEL_HEADER_H;
+                let target_h = theme::PANEL_HEADER_H * sc;
                 let w = lw as f32 * (target_h / lh as f32);
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let sized =

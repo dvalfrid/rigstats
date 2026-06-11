@@ -668,7 +668,8 @@ impl eframe::App for RigStatsApp {
                 .store(self.floating_mode, Ordering::Relaxed);
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
-            let [w, _] = profile_to_size(&s.dashboard_profile);
+            drop(s);
+            let [w, _] = profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
             let h = compute_window_height(&self.visible_panels);
             // Only resize/reposition the main window when in fixed (non-floating) mode.
             if !self.floating_mode {
@@ -1117,6 +1118,7 @@ impl eframe::App for RigStatsApp {
                             &self.textures,
                             1.0,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "clock" => {
@@ -1126,6 +1128,7 @@ impl eframe::App for RigStatsApp {
                             1.0,
                             &self.app_theme,
                             update_ver.as_deref(),
+                            1.0,
                         );
                         // Badge click → open updater dialog.
                         if ui
@@ -1146,6 +1149,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.cpu.0,
                             self.thresholds.cpu.1,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "gpu" => {
@@ -1158,8 +1162,7 @@ impl eframe::App for RigStatsApp {
                             &self.app_theme,
                             self.thresholds.gpu.0,
                             self.thresholds.gpu.1,
-                            self.thresholds.gpu_hotspot.0,
-                            self.thresholds.gpu_hotspot.1,
+                            1.0,
                         )
                         .0
                         {
@@ -1174,6 +1177,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.ram.0,
                             self.thresholds.ram.1,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "net" => {
@@ -1184,6 +1188,7 @@ impl eframe::App for RigStatsApp {
                             &self.net_dn_spark,
                             1.0,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "disk" => {
@@ -1194,6 +1199,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.disk.0,
                             self.thresholds.disk.1,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "motherboard" => {
@@ -1204,13 +1210,14 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.mb.0,
                             self.thresholds.mb.1,
                             &self.app_theme,
+                            1.0,
                         );
                     }
                     "process" => {
-                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme);
+                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, 1.0);
                     }
                     "battery" => {
-                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme);
+                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme, 1.0);
                     }
                     _ => {}
                 }
@@ -1406,6 +1413,11 @@ impl RigStatsApp {
                 }
             };
             let updater_open_arc = &self.updater_open;
+            // On the very first frame a viewport is shown, `outer_rect` reports the
+            // egui-default position (before the OS has honoured `with_position`).
+            // Saving that would overwrite the loaded position, so we skip tracking
+            // on the first frame — `needs_position` was true iff this is that frame.
+            let skip_pos_tracking = needs_position;
 
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of(format!("float_{key}")),
@@ -1414,16 +1426,19 @@ impl RigStatsApp {
                     let ctx = child_ui.ctx();
 
                     // ── Track window position for persistence ─────────────────
-                    if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
-                        // Round to integer logical pixels to avoid sub-pixel oscillation.
-                        let new_pos = [outer.left().round(), outer.top().round()];
-                        let mut pos = positions_arc.lock().unwrap();
-                        let stored = pos.entry(key.clone()).or_insert([f32::NAN, f32::NAN]);
-                        if ((*stored)[0] - new_pos[0]).abs() > 0.5
-                            || ((*stored)[1] - new_pos[1]).abs() > 0.5
-                        {
-                            *stored = new_pos;
-                            dirty.store(true, Ordering::Relaxed);
+                    if !skip_pos_tracking {
+                        if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
+                            let new_pos = [outer.left().round(), outer.top().round()];
+                            let mut pos = positions_arc.lock().unwrap();
+                            let stored = pos.entry(key.clone()).or_insert([f32::NAN, f32::NAN]);
+                            if stored[0].is_nan()
+                                || stored[1].is_nan()
+                                || ((*stored)[0] - new_pos[0]).abs() > 0.5
+                                || ((*stored)[1] - new_pos[1]).abs() > 0.5
+                            {
+                                *stored = new_pos;
+                                dirty.store(true, Ordering::Relaxed);
+                            }
                         }
                     }
 
@@ -1457,7 +1472,9 @@ impl RigStatsApp {
                             // overlay the drag dots and padlock without extra height.
                             let mut new_pref: Option<String> = None;
                             let panel_rect = match key.as_str() {
-                                "header" => panels::header::draw(ui, stats, tex, 1.0, &app_theme),
+                                "header" => {
+                                    panels::header::draw(ui, stats, tex, 1.0, &app_theme, scale)
+                                }
                                 "clock" => {
                                     let r = panels::clock::draw(
                                         ui,
@@ -1465,6 +1482,7 @@ impl RigStatsApp {
                                         1.0,
                                         &app_theme,
                                         float_update_ver.as_deref(),
+                                        scale,
                                     );
                                     if ui
                                         .ctx()
@@ -1486,6 +1504,7 @@ impl RigStatsApp {
                                     self.thresholds.cpu.0,
                                     self.thresholds.cpu.1,
                                     &app_theme,
+                                    scale,
                                 ),
                                 "gpu" => {
                                     let r = panels::gpu::draw(
@@ -1497,8 +1516,7 @@ impl RigStatsApp {
                                         &app_theme,
                                         self.thresholds.gpu.0,
                                         self.thresholds.gpu.1,
-                                        self.thresholds.gpu_hotspot.0,
-                                        self.thresholds.gpu_hotspot.1,
+                                        scale,
                                     );
                                     new_pref = r.0;
                                     r.1
@@ -1510,10 +1528,11 @@ impl RigStatsApp {
                                     self.thresholds.ram.0,
                                     self.thresholds.ram.1,
                                     &app_theme,
+                                    scale,
                                 ),
-                                "net" => {
-                                    panels::net::draw(ui, stats, nuspark, ndspark, 1.0, &app_theme)
-                                }
+                                "net" => panels::net::draw(
+                                    ui, stats, nuspark, ndspark, 1.0, &app_theme, scale,
+                                ),
                                 "disk" => panels::disk::draw(
                                     ui,
                                     stats,
@@ -1521,6 +1540,7 @@ impl RigStatsApp {
                                     self.thresholds.disk.0,
                                     self.thresholds.disk.1,
                                     &app_theme,
+                                    scale,
                                 ),
                                 "motherboard" => panels::motherboard::draw(
                                     ui,
@@ -1529,9 +1549,14 @@ impl RigStatsApp {
                                     self.thresholds.mb.0,
                                     self.thresholds.mb.1,
                                     &app_theme,
+                                    scale,
                                 ),
-                                "process" => panels::process::draw(ui, stats, 1.0, &app_theme),
-                                "battery" => panels::battery::draw(ui, stats, 1.0, &app_theme),
+                                "process" => {
+                                    panels::process::draw(ui, stats, 1.0, &app_theme, scale)
+                                }
+                                "battery" => {
+                                    panels::battery::draw(ui, stats, 1.0, &app_theme, scale)
+                                }
                                 _ => egui::Rect::NOTHING,
                             };
 
@@ -1585,8 +1610,7 @@ impl RigStatsApp {
                             // ── Overlay: dots + padlock painted on the panel ──
                             let painter = ui.painter();
 
-                            // Three dots (centre of drag zone, left of middle)
-                            // shown only when unlocked and hovering the drag zone.
+                            // Three dots — shown when unlocked and hovering the drag zone.
                             if in_drag_zone && !locked {
                                 let cy = drag_zone.center().y;
                                 let cx = drag_zone.center().x;
@@ -1599,15 +1623,29 @@ impl RigStatsApp {
                                 }
                             }
 
-                            // Padlock icon — always visible in top-right of panel.
-                            let padlock_color = if locked {
-                                app_theme.accent
-                            } else if padlock_resp.hovered() {
-                                egui::Color32::from_gray(130)
-                            } else {
-                                egui::Color32::from_gray(55)
-                            };
-                            draw_padlock(painter, padlock_center, locked, padlock_color);
+                            // Padlock: full icon on hover; tiny dot when locked + not hovering.
+                            if in_drag_zone {
+                                let padlock_color = if locked {
+                                    app_theme.accent
+                                } else if padlock_resp.hovered() {
+                                    egui::Color32::from_gray(130)
+                                } else {
+                                    egui::Color32::from_gray(100)
+                                };
+                                draw_padlock(painter, padlock_center, locked, padlock_color);
+                            } else if locked {
+                                // Subtle locked indicator when not hovering — just a small dot.
+                                painter.circle_filled(
+                                    padlock_center,
+                                    2.5,
+                                    egui::Color32::from_rgba_unmultiplied(
+                                        app_theme.accent.r(),
+                                        app_theme.accent.g(),
+                                        app_theme.accent.b(),
+                                        120,
+                                    ),
+                                );
+                            }
 
                             // Auto-resize height to content, but only when it actually
                             // changes — sending InnerSize every frame causes sub-pixel

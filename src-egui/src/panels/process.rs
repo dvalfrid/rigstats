@@ -1,4 +1,4 @@
-use egui::{pos2, Align2, Rect, RichText, Sense, Ui, Vec2};
+use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Ui, Vec2};
 
 use crate::theme;
 use crate::PollStats;
@@ -22,12 +22,22 @@ fn fmt_ram(mb: u64) -> String {
 /// Colors for [name, cpu, ram] columns.
 type RowColors = [egui::Color32; 3];
 
-fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors: RowColors) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, ROW_H), Sense::hover());
+fn paint_row(
+    ui: &mut Ui,
+    inner_w: f32,
+    name: &str,
+    cpu: &str,
+    ram: &str,
+    colors: RowColors,
+    sc: f32,
+) {
+    let row_h = ROW_H * sc;
+    let cell_pad = CELL_PAD * sc;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, row_h), Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
     }
-    let font_id = egui::TextStyle::Small.resolve(ui.style());
+    let font_id = FontId::proportional(11.0 * sc);
     let cy = rect.center().y;
     let x0 = rect.min.x;
 
@@ -37,7 +47,7 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
     // ram_w = col (implicitly from name_w + cpu_w to rect.max.x)
 
     // NAME — left-aligned with padding, clipped to name column
-    let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w - CELL_PAD, ROW_H));
+    let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w - cell_pad, row_h));
     ui.painter().with_clip_rect(name_clip).text(
         pos2(x0, cy),
         Align2::LEFT_CENTER,
@@ -47,7 +57,7 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
     );
 
     // CPU — right-aligned inside its quarter, with inner padding
-    let cpu_right = x0 + name_w + cpu_w - CELL_PAD;
+    let cpu_right = x0 + name_w + cpu_w - cell_pad;
     ui.painter().text(
         pos2(cpu_right, cy),
         Align2::RIGHT_CENTER,
@@ -58,7 +68,7 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
 
     // RAM — right-aligned flush to row right edge (with padding)
     ui.painter().text(
-        pos2(rect.max.x - CELL_PAD, cy),
+        pos2(rect.max.x - cell_pad, cy),
         Align2::RIGHT_CENTER,
         ram,
         font_id,
@@ -66,31 +76,41 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
     );
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) -> egui::Rect {
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    opacity: f32,
+    th: &theme::AppTheme,
+    sc: f32,
+) -> egui::Rect {
     // Derive inner_w from the outer UI's max_rect — set once by window width, never changes.
-    let inner_w = ui.max_rect().width() - FRAME_H_MARGIN;
+    let inner_w = ui.max_rect().width() - FRAME_H_MARGIN * sc;
 
-    theme::panel_frame(ui, opacity, th, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H);
+    theme::panel_frame(ui, opacity, th, sc, |ui| {
+        ui.set_min_height(theme::PANEL_DATA_H * sc);
         ui.allocate_space(Vec2::new(inner_w, 0.0));
 
         ui.label(
             RichText::new("PROCESSES")
                 .strong()
                 .color(theme::C_PANEL_TITLE)
-                .size(theme::FONT_PANEL_TITLE),
+                .size(theme::FONT_PANEL_TITLE * sc),
         );
 
         if stats.processes.is_empty() {
-            ui.label(RichText::new("no data").small().color(th.text_muted));
+            ui.label(
+                RichText::new("no data")
+                    .size(11.0 * sc)
+                    .color(th.text_muted),
+            );
             return;
         }
 
-        ui.add_space(2.0);
-        paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3]);
-        ui.add_space(2.0);
+        ui.add_space(2.0 * sc);
+        paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3], sc);
+        ui.add_space(2.0 * sc);
 
-        ui.spacing_mut().item_spacing.y = 3.0;
+        ui.spacing_mut().item_spacing.y = 3.0 * sc;
         for p in &stats.processes {
             let name = p.name.trim_end_matches(".exe");
             paint_row(
@@ -100,12 +120,13 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) 
                 &format!("{:.1}%", p.cpu),
                 &fmt_ram(p.mem_mb),
                 [theme::C_TEXT, theme::C_PROC, th.text_muted],
+                sc,
             );
         }
 
         // Fill remaining space to reach PANEL_DATA_H (same pattern as NET/RAM/DISK).
         let cursor_y = ui.cursor().top();
-        let filler = (theme::PANEL_DATA_H - (cursor_y - ui.min_rect().top())).max(0.0);
+        let filler = (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top())).max(0.0);
         if filler > 0.0 {
             ui.add_space(filler);
         }
