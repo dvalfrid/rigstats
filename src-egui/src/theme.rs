@@ -11,7 +11,15 @@ pub struct AppTheme {
 }
 
 /// All valid theme keys, in display order.
-pub const THEME_KEYS: &[&str] = &["dark-cyan", "amber", "green", "purple", "slate"];
+pub const THEME_KEYS: &[&str] = &[
+    "dark-cyan",
+    "amber",
+    "green",
+    "purple",
+    "slate",
+    "red",
+    "blue",
+];
 
 impl AppTheme {
     pub fn from_key(key: &str) -> Self {
@@ -20,7 +28,9 @@ impl AppTheme {
             "green" => Color32::from_rgb(0x39, 0xff, 0x88),
             "purple" => Color32::from_rgb(0xbf, 0x7f, 0xff),
             "slate" => Color32::from_rgb(0x90, 0xaa, 0xc4),
-            _ => Color32::from_rgb(0x00, 0xc8, 0xff),
+            "red" => Color32::from_rgb(0xff, 0x3a, 0x1f),
+            "blue" => Color32::from_rgb(0x40, 0x8c, 0xff),
+            _ => Color32::from_rgb(0x00, 0xc8, 0xff), // dark-cyan
         };
         Self::from_accent(accent)
     }

@@ -528,12 +528,12 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
                         ui.selectable_value(&mut draft.log_retention_days, days, label);
                     }
                 });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if theme::dialog_btn_secondary(ui, "Open Log Folder").clicked() {
+                    let _ = std::process::Command::new("explorer").arg(dir).spawn();
+                }
+            });
         });
-
-        ui.add_space(8.0);
-        if theme::dialog_btn_secondary(ui, "Open Log Folder").clicked() {
-            let _ = std::process::Command::new("explorer").arg(dir).spawn();
-        }
     });
 }
 
@@ -875,23 +875,14 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                         .size(12.0)
                         .color(C_TEXT),
                 );
-            });
-        });
-        let mut opacity = draft.opacity as f32;
-        if ui
-            .add(
-                egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
+                let mut opacity = draft.opacity as f32;
+                let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
                     .step_by(0.05)
-                    .show_value(false),
-            )
-            .changed()
-        {
-            draft.opacity = opacity as f64;
-        }
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Transparent").size(10.0).color(C_MUTED));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("Solid").size(10.0).color(C_MUTED));
+                    .show_value(false)
+                    .trailing_fill(true);
+                if ui.add(slider).changed() {
+                    draft.opacity = opacity as f64;
+                }
             });
         });
 

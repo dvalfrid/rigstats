@@ -2203,9 +2203,10 @@ fn main() {
         options,
         Box::new(|cc| {
             let mut visuals = egui::Visuals::dark();
-            // Suppress egui's built-in panel/window backgrounds; clear_color provides the base fill.
+            // Suppress egui's built-in panel backgrounds; clear_color provides the base fill.
             visuals.panel_fill = egui::Color32::TRANSPARENT;
-            visuals.window_fill = egui::Color32::TRANSPARENT;
+            // Popups (ComboBox, tooltips) use window_fill — keep it solid so they're readable.
+            visuals.window_fill = egui::Color32::from_gray(28);
             // Default text colour matches Tauri --text: #b8cce8
             visuals.override_text_color = Some(theme::C_TEXT);
             cc.egui_ctx.set_visuals(visuals);
