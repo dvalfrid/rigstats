@@ -144,6 +144,12 @@ the dashboard reacts to changes immediately.
   - Text: `C_TEXT` (`#b8cce8`) default, `C_TEXT_MUTED` for secondary labels,
     `C_STAT_LABEL` for grid column headers
 - [x] Per-panel visual review against live screenshot — all 10 panels verified
+- [x] **Theme system** — `AppTheme` struct in `theme.rs` with 5 presets matching Tauri `themes.js`:
+  `dark-cyan`, `amber`, `green`, `purple`, `slate`. HSL math (`rgb_to_hue`, `hsl_to_rgb`)
+  derives `stat_label` (h,32%,64%), `text_muted` (h,20%,55%), `mb_accent` (h,40%,52%) from
+  accent colour. `theme` field added to `Settings`. All panels receive `th: &AppTheme`; accent
+  line, corner brackets, padlock, and stat colours all follow the selected theme.
+  Live preview: Settings → Appearance tab combo triggers `settings_reload` immediately.
 - [x] Opacity: `SetLayeredWindowAttributes(LWA_ALPHA)` applies whole-window opacity.
   Window created without `with_transparent(true)` (avoids `WS_EX_NOREDIRECTIONBITMAP`
   conflict). `clear_color()` returns opaque; LWA_ALPHA set on first `ui()` frame and
@@ -237,6 +243,30 @@ complete, and update check finds new versions and can install them.
 
 ---
 
+### Polish pass — UX & visual parity ✅ complete
+*Goal: egui app feels polished and matches Tauri quality bar.*
+
+- [x] **Drag dots + padlock inside panel** — overlay painted with `ui.painter()` on the top 24 px
+  of `panel_rect` (returned by `panel_frame()`). Separate drag strip removed. Padlock hit zone
+  uses `ui.interact()` on right 22 px of drag zone. Padlock colour follows `app_theme.accent`
+  so it respects the active theme.
+- [x] **Dialog window icons** — `load_app_icon()` loads `assets/tray.png` as `egui::IconData`;
+  applied to Settings, About, Status, and Updater viewports via `.with_icon()`.
+- [x] **Update badge on clock panel** — green clickable badge ("⬆ UPDATE vX.Y.Z AVAILABLE")
+  appears below the day name when `UpdateStatus::Ready`. Click stores `open_updater: true`
+  via `ui.ctx().data_mut()` temp storage; caller (`main.rs`) reads and opens updater viewport.
+  Works in both fixed and floating mode.
+- [x] **Clock panel layout** — redesigned for visual balance: 40pt time (left), date + uptime
+  right-aligned in a stacked column (right), day name (THURSDAY) on its own row below.
+- [x] **Brand logos** — 13 logos processed and stored in `src-egui/assets/` (not `frontend/assets/`):
+  ROG, AMD, NVIDIA, Intel, MSI, Alienware, Razer, Lenovo Legion, HP Omen, AORUS, Gigabyte,
+  Acer Predator, Taurus. White backgrounds flood-filled to transparent; all logos auto-cropped
+  with 6 px padding. `brand.rs` updated to embed from `src-egui/assets/`; `rig_logo()` covers
+  all 13 brands.
+- [x] **"Log Folder" button** — Status dialog "Open Folder" renamed to "Log Folder".
+
+---
+
 ### Phase 9 — Remove Tauri, ship ✅ testable
 *Goal: clean build with no WebView2 dependency.*
 
@@ -285,10 +315,8 @@ complete, and update check finds new versions and can install them.
 
 ## Current status
 
-> **Phase 8 complete.** Autostart, CSV logging (poll_loop + shared settings arc), log
-> pruning, auto-update (background check on startup + every 6 h, manual trigger from
-> updater window, download-with-progress, NSIS launcher), tray parity (Toggle Floating
-> Mode, Start/Stop Recording, recording icon indicator, single left-click show/hide),
-> tray dark mode via `win32_dark_mode::enable()` (uxtheme.dll ordinals 135+104), dialog
-> review pass (all four secondary windows audited and polished, GitHub hyperlink in About).
-> Phase 9 remaining: remove src-tauri/, update installer, full verify.
+> **Polish pass complete.** Theme system (5 presets, live preview), drag dots + padlock merged
+> inside panels (painter overlay), dialog icons (tray.png for all 4 viewports), update badge
+> on clock panel (clickable, opens updater), clock panel layout balance, brand logos for all
+> 13 brands in `src-egui/assets/` with transparent backgrounds.
+> Phase 9 next: remove src-tauri/, update installer, full verify.
