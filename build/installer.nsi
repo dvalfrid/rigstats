@@ -19,6 +19,9 @@
 Unicode True
 SetCompressor /SOLID lzma
 
+; Change working directory to repo root so all paths are relative to it.
+!cd ..
+
 !ifndef VERSION
   !define VERSION "0.0.0"
 !endif
