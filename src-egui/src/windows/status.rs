@@ -487,7 +487,7 @@ pub fn show(
                     action_collect_diag = true;
                 }
                 ui.add_space(4.0);
-                if theme::dialog_btn_secondary(ui, "Open Folder").clicked() {
+                if theme::dialog_btn_secondary(ui, "Log Folder").clicked() {
                     action_open_folder = true;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
