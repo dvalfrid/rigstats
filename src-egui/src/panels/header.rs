@@ -28,8 +28,8 @@ fn brand_subtitle(brand: &str) -> &'static str {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures, opacity: f32) {
-    theme::panel_frame(ui, theme::C_ACCENT, opacity, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures, opacity: f32, th: &theme::AppTheme) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_HEADER_H);
 
         let subtitle = brand_subtitle(&stats.system_brand);
@@ -38,7 +38,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, tex: &Textures, opacity: f32) {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.add_space(6.0);
-                ui.label(RichText::new(subtitle).small().color(theme::C_STAT_LABEL));
+                ui.label(RichText::new(subtitle).small().color(th.stat_label));
                 ui.label(
                     RichText::new(&stats.hostname)
                         .size(36.0)

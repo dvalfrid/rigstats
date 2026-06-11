@@ -81,6 +81,9 @@ pub struct Settings {
   /// Panel alpha in the range [0.0, 1.0].
   #[serde(default = "default_opacity")]
   pub opacity: f64,
+  /// Active colour theme key (e.g. `"dark-cyan"`).
+  #[serde(default = "default_theme")]
+  pub theme: String,
   /// User-defined model label shown in the header panel.
   #[serde(default = "default_model_name")]
   pub model_name: String,
@@ -113,9 +116,6 @@ pub struct Settings {
   /// Whether to send notifications when a CRITICAL threshold is crossed.
   #[serde(default = "default_true")]
   pub notify_on_crit: bool,
-  /// Active colour theme key (e.g. `"dark-cyan"`).
-  #[serde(default = "default_theme")]
-  pub theme: String,
   /// Open each visible panel as its own frameless window instead of one portrait window.
   #[serde(default)]
   pub floating_mode: bool,
@@ -221,6 +221,7 @@ impl Default for Settings {
   fn default() -> Self {
     Self {
       opacity: default_opacity(),
+      theme: default_theme(),
       model_name: default_model_name(),
       dashboard_profile: default_dashboard_profile(),
       always_on_top: false,
@@ -231,7 +232,6 @@ impl Default for Settings {
       alert_cooldown_secs: default_alert_cooldown_secs(),
       notify_on_warn: true,
       notify_on_crit: true,
-      theme: default_theme(),
       floating_mode: false,
       floating_panel_scale: default_floating_panel_scale(),
       panel_layouts: HashMap::new(),

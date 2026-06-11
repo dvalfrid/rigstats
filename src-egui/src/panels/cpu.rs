@@ -14,8 +14,18 @@ const CORE_LBL_W: f32 = 30.0; // "C16"
 const CORE_VAL_W: f32 = 36.0; // "100%"
 const CORE_ROW_H: f32 = 16.0;
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, opacity: f32, warn: u8, crit: u8) {
-    theme::panel_frame(ui, theme::C_ACCENT, opacity, |ui| {
+#[allow(clippy::too_many_arguments)]
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    spark: &Sparkline,
+    tex: &Textures,
+    opacity: f32,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let load_frac = stats.cpu_load as f32 / 100.0;
         let tc = temp_color(stats.cpu_temp, warn, crit);
@@ -36,7 +46,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
                     } else {
                         model
                     };
-                    ui.label(RichText::new(model).small().color(theme::C_TEXT_MUTED));
+                    ui.label(RichText::new(model).small().color(th.text_muted));
                 }
             });
             if let Some(logo) = tex.cpu_logo(&stats.cpu_model) {
@@ -79,9 +89,9 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
                     .num_columns(3)
                     .min_col_width(50.0)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("FREQ").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("POWER").small().color(theme::C_STAT_LABEL));
+                        ui.label(RichText::new("TEMP").small().color(th.stat_label));
+                        ui.label(RichText::new("FREQ").small().color(th.stat_label));
+                        ui.label(RichText::new("POWER").small().color(th.stat_label));
                         ui.end_row();
                         ui.label(RichText::new(temp_str).color(tc));
                         ui.label(RichText::new(freq_str).color(theme::C_TEXT));
@@ -127,7 +137,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, spark: &Sparkline, tex: &Textures, o
                                         ui.label(
                                             RichText::new(format!("C{idx}"))
                                                 .small()
-                                                .color(theme::C_TEXT_MUTED),
+                                                .color(th.text_muted),
                                         );
                                     },
                                 );

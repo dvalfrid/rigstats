@@ -2,8 +2,8 @@ use egui::{RichText, Ui};
 
 use crate::theme;
 
-pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32) {
-    theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
+pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32, th: &theme::AppTheme) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_HEADER_H);
         let now = chrono::Local::now();
 
@@ -25,7 +25,7 @@ pub fn draw(ui: &mut Ui, uptime_secs: u64, opacity: f32) {
                 ui.label(
                     RichText::new(now.format("%Y·%m·%d").to_string())
                         .small()
-                        .color(theme::C_TEXT_MUTED),
+                        .color(th.text_muted),
                 );
             });
         });

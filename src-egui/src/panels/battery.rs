@@ -15,9 +15,9 @@ fn charge_color(pct: u8, charging: bool) -> Color32 {
     }
 }
 
-fn power_color(w: f64, charging: bool) -> Color32 {
+fn power_color(w: f64, charging: bool, th: &theme::AppTheme) -> Color32 {
     if charging {
-        return theme::C_TEXT_MUTED;
+        return th.text_muted;
     }
     if w < 12.0 {
         theme::C_GRN
@@ -28,8 +28,8 @@ fn power_color(w: f64, charging: bool) -> Color32 {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
-    theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.label(
             RichText::new("BATTERY")
@@ -39,7 +39,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
         );
 
         if !stats.battery_present {
-            ui.label(RichText::new("NO BATTERY").color(theme::C_TEXT_MUTED));
+            ui.label(RichText::new("NO BATTERY").color(th.text_muted));
             return;
         }
 
@@ -64,7 +64,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
             ui.label(
                 RichText::new(format!("{h}h {m:02}m remaining"))
                     .small()
-                    .color(theme::C_TEXT_MUTED),
+                    .color(th.text_muted),
             );
         }
 
@@ -72,7 +72,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
             ui.label(
                 RichText::new(format!("{w:.1} W"))
                     .small()
-                    .color(power_color(w, charging)),
+                    .color(power_color(w, charging, th)),
             );
         }
     });

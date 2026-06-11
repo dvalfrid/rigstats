@@ -14,8 +14,15 @@ fn short_label(label: &str) -> String {
     label.chars().take(8).collect()
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
-    theme::panel_frame(ui, theme::C_MB, opacity, |ui| {
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    opacity: f32,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.horizontal(|ui| {
             ui.label(
@@ -27,11 +34,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
         });
 
         if let Some(ref board) = stats.mb_board {
-            ui.label(
-                RichText::new(board.as_str())
-                    .small()
-                    .color(theme::C_TEXT_MUTED),
-            );
+            ui.label(RichText::new(board.as_str()).small().color(th.text_muted));
         }
         if let Some(ref chip) = stats.mb_chip {
             ui.label(RichText::new(chip.as_str()).small().color(theme::C_DIM));
@@ -53,23 +56,19 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                                 .num_columns(2)
                                 .min_col_width(24.0)
                                 .show(&mut cols[0], |ui| {
-                                    ui.label(
-                                        RichText::new("FAN").small().color(theme::C_STAT_LABEL),
-                                    );
-                                    ui.label(
-                                        RichText::new("RPM").small().color(theme::C_STAT_LABEL),
-                                    );
+                                    ui.label(RichText::new("FAN").small().color(th.mb_accent));
+                                    ui.label(RichText::new("RPM").small().color(th.mb_accent));
                                     ui.end_row();
                                     for (label, rpm) in &stats.mb_fans {
                                         ui.label(
                                             RichText::new(short_label(label))
                                                 .small()
-                                                .color(theme::C_TEXT_MUTED),
+                                                .color(th.text_muted),
                                         );
                                         ui.label(
                                             RichText::new(format!("{rpm:.0}"))
                                                 .small()
-                                                .color(theme::C_MB),
+                                                .color(th.mb_accent),
                                         );
                                         ui.end_row();
                                     }
@@ -82,18 +81,14 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                                 .num_columns(2)
                                 .min_col_width(24.0)
                                 .show(&mut cols[1], |ui| {
-                                    ui.label(
-                                        RichText::new("SENSOR").small().color(theme::C_STAT_LABEL),
-                                    );
-                                    ui.label(
-                                        RichText::new("°C").small().color(theme::C_STAT_LABEL),
-                                    );
+                                    ui.label(RichText::new("SENSOR").small().color(th.mb_accent));
+                                    ui.label(RichText::new("°C").small().color(th.mb_accent));
                                     ui.end_row();
                                     for (label, t) in &stats.mb_temps {
                                         ui.label(
                                             RichText::new(short_label(label))
                                                 .small()
-                                                .color(theme::C_TEXT_MUTED),
+                                                .color(th.text_muted),
                                         );
                                         ui.label(
                                             RichText::new(format!("{t:.0}"))
@@ -111,16 +106,14 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                                 .num_columns(2)
                                 .min_col_width(24.0)
                                 .show(&mut cols[2], |ui| {
-                                    ui.label(
-                                        RichText::new("RAIL").small().color(theme::C_STAT_LABEL),
-                                    );
-                                    ui.label(RichText::new("V").small().color(theme::C_STAT_LABEL));
+                                    ui.label(RichText::new("RAIL").small().color(th.mb_accent));
+                                    ui.label(RichText::new("V").small().color(th.mb_accent));
                                     ui.end_row();
                                     for (label, v) in &stats.mb_voltages {
                                         ui.label(
                                             RichText::new(short_label(label))
                                                 .small()
-                                                .color(theme::C_TEXT_MUTED),
+                                                .color(th.text_muted),
                                         );
                                         ui.label(
                                             RichText::new(format!("{v:.2}"))

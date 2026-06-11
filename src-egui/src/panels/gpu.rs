@@ -37,6 +37,7 @@ pub fn draw(
     spark: &Sparkline,
     tex: &Textures,
     opacity: f32,
+    th: &theme::AppTheme,
     warn: u8,
     crit: u8,
     hotspot_warn: u8,
@@ -44,7 +45,7 @@ pub fn draw(
 ) -> Option<String> {
     let mut new_gpu: Option<String> = None;
 
-    theme::panel_frame(ui, theme::C_AMD, opacity, |ui| {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
@@ -82,11 +83,7 @@ pub fn draw(
                             if selected {
                                 painter.circle_filled(center, 4.0, theme::C_AMD);
                             } else {
-                                painter.circle_stroke(
-                                    center,
-                                    3.5,
-                                    Stroke::new(1.5, theme::C_TEXT_MUTED),
-                                );
+                                painter.circle_stroke(center, 3.5, Stroke::new(1.5, th.text_muted));
                             }
                             let resp = resp.on_hover_text(name.as_str());
                             if resp.clicked() {
@@ -98,7 +95,7 @@ pub fn draw(
                 if !stats.gpu_name.is_empty() {
                     let name = &stats.gpu_name;
                     let name = if name.len() > 44 { &name[..44] } else { name };
-                    ui.label(RichText::new(name).small().color(theme::C_TEXT_MUTED));
+                    ui.label(RichText::new(name).small().color(th.text_muted));
                 }
             });
             if let Some(logo) = tex.gpu_logo(&stats.gpu_name) {
@@ -140,17 +137,17 @@ pub fn draw(
                     .num_columns(3)
                     .min_col_width(44.0)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("HOT SPOT").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("CORE CLK").small().color(theme::C_STAT_LABEL));
+                        ui.label(RichText::new("TEMP").small().color(th.stat_label));
+                        ui.label(RichText::new("HOT SPOT").small().color(th.stat_label));
+                        ui.label(RichText::new("CORE CLK").small().color(th.stat_label));
                         ui.end_row();
                         ui.label(RichText::new(&temp_s).color(tc));
                         ui.label(RichText::new(&hot_s).color(htc));
                         ui.label(RichText::new(&freq_s).color(theme::C_TEXT));
                         ui.end_row();
-                        ui.label(RichText::new("POWER").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("MEM CLK").small().color(theme::C_STAT_LABEL));
-                        ui.label(RichText::new("FAN").small().color(theme::C_STAT_LABEL));
+                        ui.label(RichText::new("POWER").small().color(th.stat_label));
+                        ui.label(RichText::new("MEM CLK").small().color(th.stat_label));
+                        ui.label(RichText::new("FAN").small().color(th.stat_label));
                         ui.end_row();
                         ui.label(RichText::new(&pwr_s).color(theme::C_TEXT));
                         ui.label(RichText::new(&mem_s).color(theme::C_TEXT));
@@ -179,7 +176,7 @@ pub fn draw(
                 Vec2::new(LEFT_LBL_W, ROW_H),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
-                    ui.label(RichText::new("GPU").small().color(theme::C_STAT_LABEL));
+                    ui.label(RichText::new("GPU").small().color(th.stat_label));
                 },
             );
             theme::thin_bar(ui, load_frac, bar_l, theme::C_AMD);
@@ -194,7 +191,7 @@ pub fn draw(
                 Vec2::new(RIGHT_LBL_W, ROW_H),
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
-                    ui.label(RichText::new("VRAM").small().color(theme::C_STAT_LABEL));
+                    ui.label(RichText::new("VRAM").small().color(th.stat_label));
                 },
             );
             if let (Some(used), Some(total)) = (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb) {
@@ -211,7 +208,7 @@ pub fn draw(
                         ui.label(
                             RichText::new(format!("{:.1}/{:.1}G", used / 1024.0, total / 1024.0))
                                 .small()
-                                .color(theme::C_TEXT_MUTED),
+                                .color(th.text_muted),
                         );
                     },
                 );
@@ -243,7 +240,7 @@ pub fn draw(
                     Vec2::new(LEFT_LBL_W, ROW_H),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(RichText::new("3D").small().color(theme::C_STAT_LABEL));
+                        ui.label(RichText::new("3D").small().color(th.stat_label));
                     },
                 );
                 theme::thin_bar(ui, d3d_frac, bar_l, theme::C_AMD);
@@ -258,7 +255,7 @@ pub fn draw(
                     Vec2::new(RIGHT_LBL_W, ROW_H),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        ui.label(RichText::new("VID").small().color(theme::C_STAT_LABEL));
+                        ui.label(RichText::new("VID").small().color(th.stat_label));
                     },
                 );
                 theme::thin_bar(ui, vid_frac, bar_r, theme::C_AMD);

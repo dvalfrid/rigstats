@@ -109,8 +109,9 @@ pub fn draw(
     up_spark: &Sparkline,
     dn_spark: &Sparkline,
     opacity: f32,
+    th: &theme::AppTheme,
 ) {
-    theme::panel_frame(ui, theme::C_GRN, opacity, |ui| {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
 
         ui.label(
@@ -145,7 +146,7 @@ pub fn draw(
                         ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
+                ui.label(RichText::new(unit).small().color(th.text_muted));
             });
 
             let (val, unit) = fmt_mbps_parts(stats.net_down_mbps);
@@ -168,7 +169,7 @@ pub fn draw(
                         ui.label(RichText::new(&val).size(20.0).color(egui::Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
+                ui.label(RichText::new(unit).small().color(th.text_muted));
             });
         });
 
@@ -177,7 +178,7 @@ pub fn draw(
         // PING + IFACE — above the sparkline.
         ui.horizontal(|ui| {
             if let Some(p) = stats.net_ping_ms {
-                ui.label(RichText::new("PING").small().color(theme::C_STAT_LABEL));
+                ui.label(RichText::new("PING").small().color(th.stat_label));
                 ui.label(
                     RichText::new(format!("{p:.0} ms"))
                         .small()
@@ -186,7 +187,7 @@ pub fn draw(
                 ui.add_space(12.0);
             }
             if !stats.net_iface.is_empty() {
-                ui.label(RichText::new("IFACE").small().color(theme::C_STAT_LABEL));
+                ui.label(RichText::new("IFACE").small().color(th.stat_label));
                 ui.label(RichText::new(&stats.net_iface).small().color(theme::C_TEXT));
             }
         });

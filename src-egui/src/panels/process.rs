@@ -66,11 +66,11 @@ fn paint_row(ui: &mut Ui, inner_w: f32, name: &str, cpu: &str, ram: &str, colors
     );
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, th: &theme::AppTheme) {
     // Derive inner_w from the outer UI's max_rect — set once by window width, never changes.
     let inner_w = ui.max_rect().width() - FRAME_H_MARGIN;
 
-    theme::panel_frame(ui, theme::C_PROC, opacity, |ui| {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.allocate_space(Vec2::new(inner_w, 0.0));
 
@@ -82,12 +82,12 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
         );
 
         if stats.processes.is_empty() {
-            ui.label(RichText::new("no data").small().color(theme::C_TEXT_MUTED));
+            ui.label(RichText::new("no data").small().color(th.text_muted));
             return;
         }
 
         ui.add_space(2.0);
-        paint_row(ui, inner_w, "NAME", "CPU", "RAM", [theme::C_STAT_LABEL; 3]);
+        paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3]);
         ui.add_space(2.0);
 
         ui.spacing_mut().item_spacing.y = 3.0;
@@ -99,7 +99,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                 name,
                 &format!("{:.1}%", p.cpu),
                 &fmt_ram(p.mem_mb),
-                [theme::C_TEXT, theme::C_PROC, theme::C_TEXT_MUTED],
+                [theme::C_TEXT, theme::C_PROC, th.text_muted],
             );
         }
 

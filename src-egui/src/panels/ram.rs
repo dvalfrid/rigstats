@@ -6,8 +6,15 @@ use crate::PollStats;
 
 const GIB: f64 = 1_073_741_824.0;
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
-    theme::panel_frame(ui, theme::C_RAM, opacity, |ui| {
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    opacity: f32,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let used_gb = stats.ram_used as f64 / GIB;
         let total_gb = stats.ram_total as f64 / GIB;
@@ -26,11 +33,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                 .size(theme::FONT_PANEL_TITLE),
         );
         if !stats.ram_spec.is_empty() {
-            ui.label(
-                RichText::new(&stats.ram_spec)
-                    .small()
-                    .color(theme::C_TEXT_MUTED),
-            );
+            ui.label(RichText::new(&stats.ram_spec).small().color(th.text_muted));
         }
 
         // Large number
@@ -45,7 +48,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                 ui.label(
                     RichText::new(format!("/ {total_gb:.0} GB"))
                         .size(18.0)
-                        .color(theme::C_TEXT_MUTED),
+                        .color(th.text_muted),
                 );
             });
         });
@@ -54,7 +57,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
         if let Some(t) = stats.ram_temp {
             let tc = temp_color(Some(t), warn, crit);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("TEMP").small().color(theme::C_STAT_LABEL));
+                ui.label(RichText::new("TEMP").small().color(th.stat_label));
                 ui.label(RichText::new(format!("{t:.0}°C")).color(tc));
             });
         }
@@ -67,7 +70,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
         ui.add_space(filler);
 
         ui.horizontal(|ui| {
-            ui.label(RichText::new("MEM").small().color(theme::C_STAT_LABEL));
+            ui.label(RichText::new("MEM").small().color(th.stat_label));
             // Reserve space for "100%" label (~30 px) + auto gap (~8 px) at 12 px Small.
             let bar_w = (ui.available_width() - 44.0).max(4.0);
             theme::thin_bar(ui, frac, bar_w, theme::C_RAM);

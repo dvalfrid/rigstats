@@ -21,8 +21,15 @@ fn fmt_speed_parts(mb: f64) -> (String, &'static str) {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
-    theme::panel_frame(ui, theme::C_PUR, opacity, |ui| {
+pub fn draw(
+    ui: &mut Ui,
+    stats: &PollStats,
+    opacity: f32,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+) {
+    theme::panel_frame(ui, opacity, th, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let drives = &stats.disk_drives;
 
@@ -56,7 +63,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                         ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
+                ui.label(RichText::new(unit).small().color(th.text_muted));
             });
 
             let (val, unit) = fmt_speed_parts(stats.disk_write_mbps);
@@ -65,10 +72,10 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                     Vec2::new(NUMBER_W, 14.0),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
-                        theme::arrow_down(ui, 10.0, theme::C_TEXT_MUTED);
+                        theme::arrow_down(ui, 10.0, th.text_muted);
                     },
                 );
-                ui.label(RichText::new("WRITE").small().color(theme::C_TEXT_MUTED));
+                ui.label(RichText::new("WRITE").small().color(th.text_muted));
             });
             cols[1].horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0;
@@ -79,16 +86,12 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                         ui.label(RichText::new(&val).size(20.0).color(Color32::WHITE));
                     },
                 );
-                ui.label(RichText::new(unit).small().color(theme::C_TEXT_MUTED));
+                ui.label(RichText::new(unit).small().color(th.text_muted));
             });
         });
 
         if drives.is_empty() {
-            ui.label(
-                RichText::new("no drives")
-                    .small()
-                    .color(theme::C_TEXT_MUTED),
-            );
+            ui.label(RichText::new("no drives").small().color(th.text_muted));
             return;
         }
 
@@ -144,7 +147,9 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let (s, c) = match drive.temp {
-                                    Some(t) => (format!("{t:.0}°C"), temp_color(Some(t), warn, crit)),
+                                    Some(t) => {
+                                        (format!("{t:.0}°C"), temp_color(Some(t), warn, crit))
+                                    }
                                     None => ("--".to_string(), theme::C_DIM),
                                 };
                                 ui.label(RichText::new(s).small().color(c));

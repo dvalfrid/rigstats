@@ -1,5 +1,108 @@
 use egui::{pos2, Color32, CornerRadius, Frame, Margin, Rect, Sense, Stroke, Ui, Vec2};
 
+/// Per-frame colour theme — derived from the accent colour via HSL.
+/// Passed to every panel `draw()` so text label colours reflect the active theme.
+#[derive(Clone, Copy, PartialEq)]
+pub struct AppTheme {
+    pub accent: Color32,
+    pub stat_label: Color32,
+    pub text_muted: Color32,
+    pub mb_accent: Color32,
+}
+
+/// All valid theme keys, in display order.
+pub const THEME_KEYS: &[&str] = &["dark-cyan", "amber", "green", "purple", "slate"];
+
+impl AppTheme {
+    pub fn from_key(key: &str) -> Self {
+        let accent = match key {
+            "amber" => Color32::from_rgb(0xff, 0xb3, 0x00),
+            "green" => Color32::from_rgb(0x39, 0xff, 0x88),
+            "purple" => Color32::from_rgb(0xbf, 0x7f, 0xff),
+            "slate" => Color32::from_rgb(0x90, 0xaa, 0xc4),
+            _ => Color32::from_rgb(0x00, 0xc8, 0xff),
+        };
+        Self::from_accent(accent)
+    }
+
+    fn from_accent(accent: Color32) -> Self {
+        let h = rgb_to_hue(accent.r(), accent.g(), accent.b());
+        Self {
+            accent,
+            stat_label: hsl_to_rgb(h, 32.0, 64.0),
+            text_muted: hsl_to_rgb(h, 20.0, 55.0),
+            mb_accent: hsl_to_rgb(h, 40.0, 52.0),
+        }
+    }
+}
+
+impl Default for AppTheme {
+    fn default() -> Self {
+        Self::from_key("dark-cyan")
+    }
+}
+
+/// Extract hue (0–360) from an RGB color.
+fn rgb_to_hue(r: u8, g: u8, b: u8) -> f32 {
+    let r = r as f32 / 255.0;
+    let g = g as f32 / 255.0;
+    let b = b as f32 / 255.0;
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let d = max - min;
+    if d < 1e-6 {
+        return 0.0;
+    }
+    let h = if max == r {
+        ((g - b) / d).rem_euclid(6.0)
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    h * 60.0
+}
+
+/// Convert HSL (h: 0–360, s: 0–100, l: 0–100) to Color32.
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Color32 {
+    let hn = h / 360.0;
+    let sn = s / 100.0;
+    let ln = l / 100.0;
+    if sn < 1e-6 {
+        let v = (ln * 255.0) as u8;
+        return Color32::from_rgb(v, v, v);
+    }
+    let q = if ln < 0.5 {
+        ln * (1.0 + sn)
+    } else {
+        ln + sn - ln * sn
+    };
+    let p = 2.0 * ln - q;
+    let r = hue2rgb(p, q, hn + 1.0 / 3.0);
+    let g = hue2rgb(p, q, hn);
+    let b = hue2rgb(p, q, hn - 1.0 / 3.0);
+    Color32::from_rgb((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+}
+
+fn hue2rgb(p: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
+    if t < 1.0 / 6.0 {
+        return p + (q - p) * 6.0 * t;
+    }
+    if t < 0.5 {
+        return q;
+    }
+    if t < 2.0 / 3.0 {
+        return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+    }
+    p
+}
+
 // ── Panel accent colours (from panel-base.css) ────────────────────────────────
 pub const C_ACCENT: Color32 = Color32::from_rgb(0x00, 0xc8, 0xff); // CPU, Header
 pub const C_AMD: Color32 = Color32::from_rgb(0xff, 0x3a, 0x1f); // GPU
@@ -12,8 +115,6 @@ pub const C_NET_DOWN: Color32 = Color32::from_rgb(0x3a, 0xa5, 0xff); // Network 
 
 // ── Text colours ─────────────────────────────────────────────────────────────
 pub const C_TEXT: Color32 = Color32::from_rgb(0xb8, 0xcc, 0xe8);
-pub const C_TEXT_MUTED: Color32 = Color32::from_rgb(0x5b, 0x8f, 0xa3);
-pub const C_STAT_LABEL: Color32 = Color32::from_rgb(0x70, 0xb0, 0xc8);
 pub const C_DIM: Color32 = Color32::from_rgb(0x2e, 0x3d, 0x5a);
 
 // ── Panel card colours ────────────────────────────────────────────────────────
@@ -100,7 +201,7 @@ fn premul(color: Color32, opacity: f32) -> Color32 {
 /// Wrap `add_contents` in a styled panel card.
 /// `opacity` (0.0–1.0) is baked into all fills, borders, and decorations so
 /// the panel blends correctly over the transparent window background.
-pub fn panel_frame(ui: &mut Ui, accent: Color32, opacity: f32, add_contents: impl FnOnce(&mut Ui)) {
+pub fn panel_frame(ui: &mut Ui, opacity: f32, th: &AppTheme, add_contents: impl FnOnce(&mut Ui)) {
     let frame = Frame {
         inner_margin: Margin::symmetric(12, 8),
         outer_margin: Margin::ZERO,
@@ -114,8 +215,8 @@ pub fn panel_frame(ui: &mut Ui, accent: Color32, opacity: f32, add_contents: imp
     let rect = fr.response.rect;
     let painter = ui.painter();
 
-    draw_accent_line(painter, rect, accent, opacity);
-    draw_corner_brackets(painter, rect, accent, opacity);
+    draw_accent_line(painter, rect, th.accent, opacity);
+    draw_corner_brackets(painter, rect, th.accent, opacity);
 }
 
 /// Horizontal gradient line at the top edge: transparent → accent → transparent.
@@ -233,14 +334,9 @@ pub fn dialog_btn_secondary(ui: &mut Ui, label: &str) -> egui::Response {
 
 /// Disabled variant of the secondary button (grayed out, unclickable).
 pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str) {
-    with_btn_visuals(
-        ui,
-        DBTN_SEC,
-        DBTN_SEC,
-        DBTN_SEC,
-        DBTN_SEC_BORDER,
-        |ui| ui.add_enabled(false, egui::Button::new(label).min_size(DBTN_MIN_SIZE)),
-    );
+    with_btn_visuals(ui, DBTN_SEC, DBTN_SEC, DBTN_SEC, DBTN_SEC_BORDER, |ui| {
+        ui.add_enabled(false, egui::Button::new(label).min_size(DBTN_MIN_SIZE))
+    });
 }
 
 /// Small L-shaped brackets at TL and BR corners of the panel.

@@ -107,7 +107,9 @@ fn detect_battery_present() -> bool {
 // ── Frames ────────────────────────────────────────────────────────────────────
 
 fn dialog_frame() -> egui::Frame {
-    egui::Frame::new().fill(C_BG).inner_margin(egui::Margin::same(0))
+    egui::Frame::new()
+        .fill(C_BG)
+        .inner_margin(egui::Margin::same(0))
 }
 
 fn card_frame() -> egui::Frame {
@@ -142,7 +144,8 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
     if ui.is_rect_visible(rect) {
         let bg = if *on { C_TOGGLE_ON } else { C_TOGGLE_OFF };
         let r = (rect.height() / 2.0) as u8;
-        ui.painter().rect_filled(rect, egui::CornerRadius::same(r), bg);
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(r), bg);
         let cx = if *on {
             rect.right() - rect.height() / 2.0
         } else {
@@ -165,10 +168,8 @@ fn drag_handle(ui: &mut egui::Ui) {
         let stroke = egui::Stroke::new(1.5, C_MUTED);
         for dy in [-4.0_f32, 0.0, 4.0] {
             let y = rect.center().y + dy;
-            ui.painter().line_segment(
-                [egui::pos2(cx - 5.0, y), egui::pos2(cx + 5.0, y)],
-                stroke,
-            );
+            ui.painter()
+                .line_segment([egui::pos2(cx - 5.0, y), egui::pos2(cx + 5.0, y)], stroke);
         }
     }
 }
@@ -180,12 +181,10 @@ fn tab_btn(ui: &mut egui::Ui, label: &str, active: bool) -> bool {
         let cr = egui::CornerRadius::same(5);
         if active {
             ui.visuals_mut().widgets.inactive.bg_fill = C_TAB_ACTIVE;
-            ui.visuals_mut().widgets.inactive.fg_stroke =
-                egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
+            ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
             ui.visuals_mut().widgets.hovered.bg_fill = C_TAB_ACTIVE;
-            ui.visuals_mut().widgets.hovered.fg_stroke =
-                egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
+            ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
             ui.visuals_mut().widgets.hovered.corner_radius = cr;
             ui.visuals_mut().widgets.active.corner_radius = cr;
         } else {
@@ -193,8 +192,7 @@ fn tab_btn(ui: &mut egui::Ui, label: &str, active: bool) -> bool {
             ui.visuals_mut().widgets.inactive.bg_stroke =
                 egui::Stroke::new(1.0, egui::Color32::from_gray(60));
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
-            ui.visuals_mut().widgets.hovered.bg_fill =
-                egui::Color32::from_gray(48);
+            ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_gray(48);
             ui.visuals_mut().widgets.hovered.corner_radius = cr;
             ui.visuals_mut().widgets.active.corner_radius = cr;
         }
@@ -249,7 +247,12 @@ pub fn show(
 
     // ── Hero ──────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("settings_hero")
-        .frame(dialog_frame().inner_margin(egui::Margin { left: 16, right: 16, top: 14, bottom: 12 }))
+        .frame(dialog_frame().inner_margin(egui::Margin {
+            left: 16,
+            right: 16,
+            top: 14,
+            bottom: 12,
+        }))
         .show_separator_line(true)
         .show(ctx, |ui| {
             ui.label(
@@ -262,7 +265,12 @@ pub fn show(
 
     // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("settings_footer")
-        .frame(dialog_frame().inner_margin(egui::Margin { left: 14, right: 14, top: 8, bottom: 12 }))
+        .frame(dialog_frame().inner_margin(egui::Margin {
+            left: 14,
+            right: 14,
+            top: 8,
+            bottom: 12,
+        }))
         .show_separator_line(true)
         .show(ctx, |ui| {
             let err = state.lock().unwrap().error.clone();
@@ -294,11 +302,19 @@ pub fn show(
             // Tab bar
             egui::Frame::new()
                 .fill(C_BG)
-                .inner_margin(egui::Margin { left: 14, right: 14, top: 8, bottom: 8 })
+                .inner_margin(egui::Margin {
+                    left: 14,
+                    right: 14,
+                    top: 8,
+                    bottom: 8,
+                })
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 4.0;
-                        for (i, lbl) in ["Dashboard", "Panels", "Alerts", "Appearance"].iter().enumerate() {
+                        for (i, lbl) in ["Dashboard", "Panels", "Alerts", "Appearance"]
+                            .iter()
+                            .enumerate()
+                        {
                             if tab_btn(ui, lbl, st.tab == i) {
                                 st.tab = i;
                             }
@@ -337,7 +353,7 @@ pub fn show(
     // Live preview: push draft to main app on every change (before save/cancel).
     // window_layer is the only excluded field — it's applied on Save only since
     // it's a window-level hint that doesn't need instant feedback.
-    // Everything else (opacity, panels, profile, floating_mode, etc.) previews live.
+    // Everything else (opacity, theme, panels, profile, floating_mode, etc.) previews live.
     {
         let mut st = state.lock().unwrap();
         if st.draft != st.last_preview {
@@ -425,7 +441,11 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("Floating Mode").size(13.0).color(C_TEXT));
+                    ui.label(
+                        egui::RichText::new("Floating Mode")
+                            .size(13.0)
+                            .color(C_TEXT),
+                    );
                     ui.label(
                         egui::RichText::new("Each panel opens as a separate frameless window")
                             .size(11.0)
@@ -449,7 +469,11 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new("Enable Logging").size(13.0).color(C_TEXT));
+                    ui.label(
+                        egui::RichText::new("Enable Logging")
+                            .size(13.0)
+                            .color(C_TEXT),
+                    );
                     ui.label(
                         egui::RichText::new("Saves one CSV row per second to the app data folder")
                             .size(11.0)
@@ -493,11 +517,7 @@ fn arrow_btn(ui: &mut egui::Ui, down: bool) -> egui::Response {
     let size = egui::vec2(20.0, 20.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     if ui.is_rect_visible(rect) {
-        let color = if resp.hovered() {
-            C_TEXT
-        } else {
-            C_MUTED
-        };
+        let color = if resp.hovered() { C_TEXT } else { C_MUTED };
         let cx = rect.center().x;
         let tri = if down {
             vec![
@@ -585,8 +605,11 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                         }
                     }
                     if visible && !unavailable {
-                        let idx =
-                            draft.visible_panels.iter().position(|p| p == key).unwrap_or(0);
+                        let idx = draft
+                            .visible_panels
+                            .iter()
+                            .position(|p| p == key)
+                            .unwrap_or(0);
                         ui.add_space(6.0);
                         if idx + 1 < vis_count {
                             if arrow_btn(ui, true).clicked() {
@@ -616,9 +639,15 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                 // Re-insert at the natural ALL_PANELS position rather than appending.
                 // Find the first panel that comes AFTER `key` in ALL_PANELS and is
                 // already visible — insert before it.
-                let all_idx = ALL_PANELS.iter().position(|(k, _)| *k == key).unwrap_or(usize::MAX);
+                let all_idx = ALL_PANELS
+                    .iter()
+                    .position(|(k, _)| *k == key)
+                    .unwrap_or(usize::MAX);
                 let insert_at = draft.visible_panels.iter().position(|p| {
-                    let pi = ALL_PANELS.iter().position(|(k, _)| k == p).unwrap_or(usize::MAX);
+                    let pi = ALL_PANELS
+                        .iter()
+                        .position(|(k, _)| k == p)
+                        .unwrap_or(usize::MAX);
                     pi > all_idx
                 });
                 match insert_at {
@@ -654,7 +683,11 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         inner_row().show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Notify on Critical").size(13.0).color(C_TEXT));
+                ui.label(
+                    egui::RichText::new("Notify on Critical")
+                        .size(13.0)
+                        .color(C_TEXT),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     toggle_switch(ui, &mut draft.notify_on_crit);
                 });
@@ -667,7 +700,11 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
             ui.add_space(8.0);
             let mut secs = draft.alert_cooldown_secs as i32;
             if ui
-                .add(egui::DragValue::new(&mut secs).range(60..=3600).suffix(" s"))
+                .add(
+                    egui::DragValue::new(&mut secs)
+                        .range(60..=3600)
+                        .suffix(" s"),
+                )
                 .changed()
             {
                 draft.alert_cooldown_secs = secs.max(60) as u64;
@@ -687,7 +724,11 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         ui.add_space(8.0);
 
         // Temperature section
-        ui.label(egui::RichText::new("Temperature °C").size(11.0).color(C_MUTED));
+        ui.label(
+            egui::RichText::new("Temperature °C")
+                .size(11.0)
+                .color(C_MUTED),
+        );
         ui.add_space(4.0);
 
         // Column headers
@@ -695,21 +736,37 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_sized(
                     [44.0, 16.0],
-                    egui::Label::new(egui::RichText::new("Crit").size(11.0).strong().color(C_CRIT)),
+                    egui::Label::new(
+                        egui::RichText::new("Crit")
+                            .size(11.0)
+                            .strong()
+                            .color(C_CRIT),
+                    ),
                 );
                 ui.add_space(4.0);
                 ui.add_sized(
                     [44.0, 16.0],
-                    egui::Label::new(egui::RichText::new("Warn").size(11.0).strong().color(C_WARN)),
+                    egui::Label::new(
+                        egui::RichText::new("Warn")
+                            .size(11.0)
+                            .strong()
+                            .color(C_WARN),
+                    ),
                 );
             });
         });
 
-        for &(key, label) in &[("cpu", "CPU"), ("gpu", "GPU"), ("ram", "RAM"), ("disk", "Disk")] {
-            let entry = draft
-                .thresholds
-                .entry(key.to_string())
-                .or_insert_with(|| settings::default_thresholds().remove(key).unwrap_or_default());
+        for &(key, label) in &[
+            ("cpu", "CPU"),
+            ("gpu", "GPU"),
+            ("ram", "RAM"),
+            ("disk", "Disk"),
+        ] {
+            let entry = draft.thresholds.entry(key.to_string()).or_insert_with(|| {
+                settings::default_thresholds()
+                    .remove(key)
+                    .unwrap_or_default()
+            });
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(label).size(13.0).color(C_TEXT));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -721,7 +778,11 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         }
 
         ui.add_space(8.0);
-        ui.label(egui::RichText::new("Battery % (below)").size(11.0).color(C_MUTED));
+        ui.label(
+            egui::RichText::new("Battery % (below)")
+                .size(11.0)
+                .color(C_MUTED),
+        );
         ui.add_space(4.0);
 
         let bat = draft
@@ -784,7 +845,11 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Opacity").size(12.0).color(C_MUTED));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new(format!("{pct}%")).size(12.0).color(C_TEXT));
+                ui.label(
+                    egui::RichText::new(format!("{pct}%"))
+                        .size(12.0)
+                        .color(C_TEXT),
+                );
             });
         });
         let mut opacity = draft.opacity as f32;
@@ -811,7 +876,11 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
 
         // Window Layer
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Window Layer").size(12.0).color(C_MUTED));
+            ui.label(
+                egui::RichText::new("Window Layer")
+                    .size(12.0)
+                    .color(C_MUTED),
+            );
             ui.add_space(8.0);
             let layer_label = match draft.window_layer.as_str() {
                 "on_top" => "Always on Top",
@@ -847,7 +916,9 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(
-                        egui::RichText::new("Launch at Startup").size(13.0).color(C_TEXT),
+                        egui::RichText::new("Launch at Startup")
+                            .size(13.0)
+                            .color(C_TEXT),
                     );
                     ui.label(
                         egui::RichText::new("Starts with Windows · LHM connects automatically")
@@ -862,18 +933,23 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         });
     });
 
-    // Theme card (placeholder — theme system not yet implemented)
     card_frame().show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         section_label(ui, "Theme");
         ui.add_space(8.0);
-        let w = ui.available_width();
-        egui::ComboBox::from_id_salt("theme_combo")
-            .selected_text("Dark Cyan (default)")
-            .width(w)
-            .show_ui(ui, |ui| {
-                let _ = ui.selectable_label(true, "Dark Cyan (default)");
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Theme").color(theme::C_TEXT));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let current = draft.theme.clone();
+                egui::ComboBox::from_id_salt("theme_select")
+                    .selected_text(current.as_str())
+                    .width(130.0)
+                    .show_ui(ui, |ui| {
+                        for key in theme::THEME_KEYS {
+                            ui.selectable_value(&mut draft.theme, key.to_string(), *key);
+                        }
+                    });
             });
+        });
     });
 }
-
