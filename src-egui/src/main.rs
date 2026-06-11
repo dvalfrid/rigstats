@@ -2014,7 +2014,7 @@ fn main() {
 
     let dir = app_data_dir();
     debug::reset_debug_log(&dir);
-    debug::append_debug_log(&dir, "rigstats-egui starting (Phase 6)");
+    debug::append_debug_log(&dir, "rigstats-egui starting");
 
     let s = settings::load_settings(&dir);
     let visible_panels = s.visible_panels.clone();
