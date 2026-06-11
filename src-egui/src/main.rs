@@ -145,15 +145,22 @@ fn profile_to_size(profile: &str) -> [f32; 2] {
     }
 }
 
-/// Estimated window height for the given visible panels.
+/// Content scale for a profile. Uses portrait-xl (450 px) as the 1.0 reference.
+/// Narrow profiles (side panels) scale down; wider profiles stay at 1.0.
+fn profile_scale(profile: &str) -> f32 {
+    const REF_W: f32 = 450.0;
+    (profile_to_size(profile)[0] / REF_W).clamp(0.4, 1.0)
+}
+
+/// Estimated window height for the given visible panels at scale `sc`.
 ///
 /// Values are calibrated estimates (content + frame inner margin 16 px).
 /// Fine-tune by measuring actual rendered heights in the live app.
-fn compute_window_height(visible_panels: &[String]) -> f32 {
+fn compute_window_height(visible_panels: &[String], sc: f32) -> f32 {
     // panel_frame inner_margin: Margin::symmetric(12, 8) → 8 top + 8 bottom = 16 px.
     const V_MARGIN: f32 = 16.0;
-    let header_h = theme::PANEL_HEADER_H + V_MARGIN; // 121
-    let data_h = theme::PANEL_DATA_H + V_MARGIN; // 216
+    let header_h = (theme::PANEL_HEADER_H + V_MARGIN) * sc;
+    let data_h = (theme::PANEL_DATA_H + V_MARGIN) * sc;
     let n = visible_panels.len();
     let mut h = theme::DRAG_HANDLE_H;
     for key in visible_panels {
@@ -162,8 +169,8 @@ fn compute_window_height(visible_panels: &[String]) -> f32 {
             _ => data_h,
         };
     }
-    // add_space(6.0) follows every panel in the render loop.
-    h + (n as f32 * 6.0)
+    // add_space(6.0 * sc) follows every panel in the render loop.
+    h + (n as f32 * 6.0 * sc)
 }
 
 // ── Windows monitor enumeration ───────────────────────────────────────────────
@@ -619,6 +626,10 @@ impl eframe::App for RigStatsApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Sub-pixel layout values are expected when sc < 1.0 (side profiles).
+        ui.ctx()
+            .global_style_mut(|s| s.debug.show_unaligned = false);
+
         // On the first frame: locate the HWND and apply the initial window opacity.
         #[cfg(windows)]
         if self.hwnd == 0 {
@@ -669,8 +680,14 @@ impl eframe::App for RigStatsApp {
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             drop(s);
-            let [w, _] = profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
-            let h = compute_window_height(&self.visible_panels);
+            let profile = self
+                .current_settings
+                .lock()
+                .unwrap()
+                .dashboard_profile
+                .clone();
+            let [w, _] = profile_to_size(&profile);
+            let h = compute_window_height(&self.visible_panels, profile_scale(&profile));
             // Only resize/reposition the main window when in fixed (non-floating) mode.
             if !self.floating_mode {
                 ui.ctx()
@@ -756,7 +773,10 @@ impl eframe::App for RigStatsApp {
                             let [px, py] = pick_window_position();
                             let s = self.current_settings.lock().unwrap();
                             let [w, _] = profile_to_size(&s.dashboard_profile);
-                            let h = compute_window_height(&self.visible_panels);
+                            let h = compute_window_height(
+                                &self.visible_panels,
+                                profile_scale(&s.dashboard_profile),
+                            );
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                                     egui::Pos2::new(px, py),
@@ -1096,6 +1116,7 @@ impl eframe::App for RigStatsApp {
 
             // Panels in the order defined by visible_panels (respects user reordering).
             let panels_to_draw = self.visible_panels.clone();
+            let sc = profile_scale(&self.current_settings.lock().unwrap().dashboard_profile);
             let mut new_preferred_gpu: Option<String> = None;
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
@@ -1118,7 +1139,7 @@ impl eframe::App for RigStatsApp {
                             &self.textures,
                             1.0,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "clock" => {
@@ -1128,7 +1149,7 @@ impl eframe::App for RigStatsApp {
                             1.0,
                             &self.app_theme,
                             update_ver.as_deref(),
-                            1.0,
+                            sc,
                         );
                         // Badge click → open updater dialog.
                         if ui
@@ -1149,7 +1170,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.cpu.0,
                             self.thresholds.cpu.1,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "gpu" => {
@@ -1162,7 +1183,7 @@ impl eframe::App for RigStatsApp {
                             &self.app_theme,
                             self.thresholds.gpu.0,
                             self.thresholds.gpu.1,
-                            1.0,
+                            sc,
                         )
                         .0
                         {
@@ -1177,7 +1198,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.ram.0,
                             self.thresholds.ram.1,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "net" => {
@@ -1188,7 +1209,7 @@ impl eframe::App for RigStatsApp {
                             &self.net_dn_spark,
                             1.0,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "disk" => {
@@ -1199,7 +1220,7 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.disk.0,
                             self.thresholds.disk.1,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "motherboard" => {
@@ -1210,18 +1231,18 @@ impl eframe::App for RigStatsApp {
                             self.thresholds.mb.0,
                             self.thresholds.mb.1,
                             &self.app_theme,
-                            1.0,
+                            sc,
                         );
                     }
                     "process" => {
-                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, 1.0);
+                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
                     }
                     "battery" => {
-                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme, 1.0);
+                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
                     }
                     _ => {}
                 }
-                ui.add_space(6.0);
+                ui.add_space((6.0 * sc).round());
             }
             // Fit window height to actual rendered content every frame so no black gap
             // appears regardless of panel set, spacing, or egui version.
@@ -1339,7 +1360,6 @@ impl RigStatsApp {
     /// panels naturally update at ~1 fps without any Win32 tricks.
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
-        let profile_w = profile_to_size(&s.dashboard_profile)[0];
         let window_level = match s.window_layer.as_str() {
             "on_top" => egui::WindowLevel::AlwaysOnTop,
             "behind" => egui::WindowLevel::AlwaysOnBottom,
@@ -1362,7 +1382,7 @@ impl RigStatsApp {
                     .unwrap_or([100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0])
             };
 
-            let panel_w = profile_w * scale;
+            let panel_w = 450.0 * scale;
             let initial_h = panel_initial_h(&key) * scale;
 
             // Only set window position on first creation.  After that the OS
@@ -2149,7 +2169,7 @@ fn main() {
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
     let always_on_top = s.window_layer == "on_top";
     let [win_w, _] = profile_to_size(&s.dashboard_profile);
-    let win_h = compute_window_height(&visible_panels);
+    let win_h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
     let [pos_x, pos_y] = pick_window_position();
     debug::append_debug_log(
         &dir,

@@ -29,6 +29,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Stream Deck integration | 🔲 Planned |
 | Landscape monitor support | 🔲 Planned |
 | UI performance — lighter rendering strategy | 🔲 Planned |
+| Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 
 ---
 
@@ -786,6 +787,55 @@ task, no HTTP, no external process lifecycle to manage.
 - Root `Cargo.toml` workspace covers all three crates; existing Tauri npm scripts unaffected.
 
 **Remaining phases:** 2 (panels + sparklines) → 3 (all panels) → 4 (tray, window placement) → 5 (settings windows) → 6 (floating mode) → 7 (autostart, logging, auto-update) → 8 (remove Tauri, ship).
+
+---
+
+## Background-only transparency (per-pixel alpha) ⏭
+
+**Goal:** Make panel backgrounds transparent to the desktop wallpaper while keeping text, numbers, labels, graphs, and borders fully opaque — a "frosted glass" style where only the dark fill fades through.
+
+**Current behaviour:** The opacity slider uses `SetLayeredWindowAttributes` with `LWA_ALPHA`, which scales every pixel equally. Lowering opacity makes text, sparklines, and borders semi-transparent alongside the background — not the desired effect.
+
+### What was investigated
+
+All four approaches below were implemented and tested; all failed to achieve selective background transparency.
+
+#### 1. `with_transparent(true)` + wgpu D3D12 (eframe default renderer)
+
+eframe exposes a `with_transparent(true)` `NativeOptions` flag that requests per-pixel alpha compositing. On Windows this requires `DXGI_ALPHA_MODE_PREMULTIPLIED` on the swap chain. The wgpu D3D12 backend does not set this up — `CompositeAlphaMode::PreMultiplied` is not supported without an underlying DirectComposition (DComp) surface. The flag silently falls back to `CompositeAlphaMode::Auto` (effectively Opaque). Setting `clear_color` to `[0, 0, 0, 0]` produced solid black rather than transparent, because DWM never received premultiplied alpha data.
+
+#### 2. glow (OpenGL) backend
+
+Switched eframe to `glow` renderer (software OpenGL). Same outcome — per-pixel alpha compositing still failed. The glow backend on Windows does not use DirectComposition either, so DWM receives no per-pixel alpha information from the swap chain.
+
+#### 3. `LWA_COLORKEY` with `PANEL_FILL` colour `(11, 13, 18)`
+
+`SetLayeredWindowAttributes` with `LWA_COLORKEY` keys out a specific colour (makes pixels with that exact COLORREF value fully transparent). The panel background fill is `Color32 { r: 11, g: 13, b: 18 }`. The key did not match: the D3D12 swap chain operates in sRGB colour space, so the framebuffer may store gamma-corrected byte values that differ from the intended COLORREF. The colour key produced no transparency effect.
+
+#### 4. `LWA_COLORKEY` with pure black `RGB(0, 0, 0)`
+
+Black is gamma-invariant (`0^n = 0`) so the stored framebuffer bytes match the COLORREF exactly. This did key out black pixels — but it made *everything* black transparent: panel content areas, shadow regions, sparkline valleys, and dark label text all disappeared. The combined effect was unusable. Additionally, all non-keyed pixels were uniformly dimmed by `LWA_ALPHA` when both flags are combined.
+
+### Why Tauri worked
+
+The previous Tauri frontend achieved background-only transparency successfully. WebView2 (the Chromium-based renderer embedded in Tauri) uses **DirectComposition** internally. DComp creates swap chains via `IDXGIFactory2::CreateSwapChainForComposition` with `DXGI_ALPHA_MODE_PREMULTIPLIED`, and presents them to DWM through a composition tree. DWM then composites the window using per-pixel alpha from the swap chain, so pixels with `alpha = 0` are fully transparent while fully-opaque pixels (text, borders, graphs) are unaffected.
+
+### Path forward
+
+Background-only transparency requires **custom Win32 DirectComposition integration**. The steps are:
+
+1. Create a `IDCompositionDevice` (via `DCompositionCreateDevice`)
+2. Create the DXGI swap chain for composition: `IDXGIFactory2::CreateSwapChainForComposition` with `DXGI_ALPHA_MODE_PREMULTIPLIED` in `DXGI_SWAP_CHAIN_DESC1`
+3. Bind the swap chain to a DComp visual and set it as the root visual on the window
+4. Render clear color as `[r, g, b, 0.0]` (premultiplied alpha — black transparent background) and UI content at `alpha = 1.0`
+5. Commit the DComp transaction each frame
+
+This is non-trivial and requires either:
+
+- **A custom eframe/wgpu patch** that hooks in DComp before swap chain creation, or
+- **A completely custom Win32 rendering path** that bypasses eframe's window setup
+
+The effort is significant (estimated 1–2 weeks of Win32 graphics work) and carries risk: the DComp surface owner must be the same process and thread that creates the egui window, making it hard to layer on top of eframe's existing setup. This feature is deprioritised until the rest of the egui migration is stable.
 
 ---
 

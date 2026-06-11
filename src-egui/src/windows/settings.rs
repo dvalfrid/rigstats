@@ -417,19 +417,41 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
         section_label(ui, "Display Profile");
         ui.add_space(8.0);
         let w = ui.available_width();
-        let current = ALL_PROFILES
-            .iter()
-            .find(|(k, _)| *k == draft.dashboard_profile.as_str())
-            .map(|(_, l)| *l)
-            .unwrap_or(draft.dashboard_profile.as_str());
-        egui::ComboBox::from_id_salt("profile_combo")
-            .selected_text(current)
-            .width(w)
-            .show_ui(ui, |ui| {
-                for &(key, label) in ALL_PROFILES {
-                    ui.selectable_value(&mut draft.dashboard_profile, key.to_string(), label);
-                }
-            });
+        if draft.floating_mode {
+            let current = ALL_PROFILES
+                .iter()
+                .find(|(k, _)| *k == draft.dashboard_profile.as_str())
+                .map(|(_, l)| *l)
+                .unwrap_or(draft.dashboard_profile.as_str());
+            egui::Frame::new()
+                .fill(egui::Color32::from_gray(50))
+                .corner_radius(egui::CornerRadius::same(4))
+                .inner_margin(egui::Margin::symmetric(8, 4))
+                .show(ui, |ui| {
+                    ui.set_min_width(w - 16.0);
+                    ui.label(egui::RichText::new(current).size(13.0).color(C_MUTED));
+                });
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("Not used in floating mode")
+                    .size(11.0)
+                    .color(C_MUTED),
+            );
+        } else {
+            let current = ALL_PROFILES
+                .iter()
+                .find(|(k, _)| *k == draft.dashboard_profile.as_str())
+                .map(|(_, l)| l.to_string())
+                .unwrap_or_else(|| draft.dashboard_profile.clone());
+            egui::ComboBox::from_id_salt("profile_combo")
+                .selected_text(current)
+                .width(w)
+                .show_ui(ui, |ui| {
+                    for &(key, label) in ALL_PROFILES {
+                        ui.selectable_value(&mut draft.dashboard_profile, key.to_string(), label);
+                    }
+                });
+        }
     });
 
     // Layout

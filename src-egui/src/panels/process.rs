@@ -31,7 +31,7 @@ fn paint_row(
     colors: RowColors,
     sc: f32,
 ) {
-    let row_h = ROW_H * sc;
+    let row_h = (ROW_H * sc).round();
     let cell_pad = CELL_PAD * sc;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, row_h), Sense::hover());
     if !ui.is_rect_visible(rect) {
@@ -106,11 +106,11 @@ pub fn draw(
             return;
         }
 
-        ui.add_space(2.0 * sc);
+        ui.add_space((2.0 * sc).round());
         paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3], sc);
-        ui.add_space(2.0 * sc);
+        ui.add_space((2.0 * sc).round());
 
-        ui.spacing_mut().item_spacing.y = 3.0 * sc;
+        ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
         for p in &stats.processes {
             let name = p.name.trim_end_matches(".exe");
             paint_row(
@@ -126,7 +126,9 @@ pub fn draw(
 
         // Fill remaining space to reach PANEL_DATA_H (same pattern as NET/RAM/DISK).
         let cursor_y = ui.cursor().top();
-        let filler = (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top())).max(0.0);
+        let filler = (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()))
+            .max(0.0)
+            .round();
         if filler > 0.0 {
             ui.add_space(filler);
         }
