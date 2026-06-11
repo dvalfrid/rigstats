@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 // --- Panel layout ----------------------------------------------------------
 
 /// Saved screen position for a single floating panel window.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelLayout {
   pub x: i32,
@@ -22,7 +22,7 @@ pub struct PanelLayout {
 /// Semantics differ by component type:
 /// - Temperature (cpu/gpu/ram/disk): fires when reading **exceeds** the threshold.
 /// - Battery: fires when charge % **drops below** the threshold (warn > crit).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ComponentThresholds {
   pub warn: Option<u8>,
   pub crit: Option<u8>,
@@ -75,7 +75,7 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
 
 // --- Settings struct -------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
   /// Panel alpha in the range [0.0, 1.0].

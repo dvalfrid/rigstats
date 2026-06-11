@@ -68,6 +68,8 @@ const C_CRIT: egui::Color32 = egui::Color32::from_rgb(220, 60, 60);
 
 pub struct SettingsWindow {
     pub draft: settings::Settings,
+    pub original: settings::Settings,
+    last_preview: settings::Settings,
     pub tab: usize,
     pub error: Option<String>,
     pub battery_present: bool,
@@ -78,6 +80,8 @@ impl SettingsWindow {
         let mut draft = s.clone();
         draft.autostart_enabled = autostart::is_run_key_present();
         Self {
+            original: draft.clone(),
+            last_preview: draft.clone(),
             draft,
             tab: 0,
             error: None,
@@ -329,6 +333,23 @@ pub fn show(
         });
 
     // ── Apply deferred actions ────────────────────────────────────────────────
+
+    // Live preview: push draft to main app on every change (before save/cancel).
+    // window_layer is the only excluded field — it's applied on Save only since
+    // it's a window-level hint that doesn't need instant feedback.
+    // Everything else (opacity, panels, profile, floating_mode, etc.) previews live.
+    {
+        let mut st = state.lock().unwrap();
+        if st.draft != st.last_preview {
+            st.last_preview = st.draft.clone();
+            let mut preview = st.draft.clone();
+            preview.window_layer = st.original.window_layer.clone();
+            *saved.lock().unwrap() = preview;
+            reload.store(true, Ordering::Relaxed);
+            main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+        }
+    }
+
     if action_save {
         let mut st = state.lock().unwrap();
         let autostart_result = if st.draft.autostart_enabled {
@@ -339,6 +360,7 @@ pub fn show(
         let save_result = settings::persist_settings(dir.as_ref(), &st.draft);
         match (save_result, autostart_result) {
             (Ok(()), Ok(())) => {
+                // Push the full draft (including window_layer, profile, etc.) to main app.
                 *saved.lock().unwrap() = st.draft.clone();
                 reload.store(true, Ordering::Relaxed);
                 st.error = None;
@@ -351,10 +373,20 @@ pub fn show(
         }
     }
     if action_cancel {
+        // Revert live preview back to original.
+        let st = state.lock().unwrap();
+        *saved.lock().unwrap() = st.original.clone();
+        reload.store(true, Ordering::Relaxed);
+        drop(st);
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
     if ctx.input(|i| i.viewport().close_requested()) {
+        // Treat window-close as cancel (revert preview).
+        let st = state.lock().unwrap();
+        *saved.lock().unwrap() = st.original.clone();
+        reload.store(true, Ordering::Relaxed);
+        drop(st);
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
@@ -490,7 +522,7 @@ fn arrow_btn(ui: &mut egui::Ui, down: bool) -> egui::Response {
 
 fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_present: bool) {
     ui.label(
-        egui::RichText::new("Drag to reorder · toggle to show/hide")
+        egui::RichText::new("Use arrows to reorder · toggle to show/hide")
             .size(11.0)
             .color(C_MUTED),
     );
@@ -523,8 +555,9 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
             let label_color = if unavailable { C_MUTED } else { C_TEXT };
 
             ui.horizontal(|ui| {
+                ui.add_space(6.0);
                 drag_handle(ui);
-                ui.add_space(4.0);
+                ui.add_space(6.0);
                 ui.label(egui::RichText::new(label).size(13.0).color(label_color));
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -552,7 +585,8 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                         }
                     }
                     if visible && !unavailable {
-                        let idx = draft.visible_panels.iter().position(|p| p == key).unwrap_or(0);
+                        let idx =
+                            draft.visible_panels.iter().position(|p| p == key).unwrap_or(0);
                         ui.add_space(6.0);
                         if idx + 1 < vis_count {
                             if arrow_btn(ui, true).clicked() {
@@ -569,7 +603,7 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                             ui.add_space(20.0);
                         }
                     } else if visible {
-                        ui.add_space(46.0); // keep alignment
+                        ui.add_space(46.0);
                     }
                 });
             });
@@ -579,7 +613,18 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
     if let Some((key, add)) = toggle {
         if add {
             if !draft.visible_panels.contains(&key) {
-                draft.visible_panels.push(key);
+                // Re-insert at the natural ALL_PANELS position rather than appending.
+                // Find the first panel that comes AFTER `key` in ALL_PANELS and is
+                // already visible — insert before it.
+                let all_idx = ALL_PANELS.iter().position(|(k, _)| *k == key).unwrap_or(usize::MAX);
+                let insert_at = draft.visible_panels.iter().position(|p| {
+                    let pi = ALL_PANELS.iter().position(|(k, _)| k == p).unwrap_or(usize::MAX);
+                    pi > all_idx
+                });
+                match insert_at {
+                    Some(i) => draft.visible_panels.insert(i, key),
+                    None => draft.visible_panels.push(key),
+                }
             }
         } else {
             draft.visible_panels.retain(|p| p != &key);

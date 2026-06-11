@@ -466,6 +466,53 @@ struct RigStatsApp {
     gpu_spark_arc: Arc<Mutex<Sparkline>>,
     net_up_spark_arc: Arc<Mutex<Sparkline>>,
     net_dn_spark_arc: Arc<Mutex<Sparkline>>,
+    /// Live thresholds for temperature colour coding — updated on settings reload.
+    thresholds: PanelThresholds,
+    /// Shared thresholds for floating panel closures (`'static + move`).
+    thresholds_arc: Arc<Mutex<PanelThresholds>>,
+}
+
+/// Per-component warn/crit thresholds (°C) used for temperature colour coding.
+#[derive(Clone)]
+struct PanelThresholds {
+    cpu: (u8, u8),
+    gpu: (u8, u8),
+    gpu_hotspot: (u8, u8),
+    ram: (u8, u8),
+    disk: (u8, u8),
+    mb: (u8, u8),
+}
+
+impl Default for PanelThresholds {
+    fn default() -> Self {
+        Self {
+            cpu: (80, 90),
+            gpu: (80, 90),
+            gpu_hotspot: (90, 105),
+            ram: (60, 70),
+            disk: (50, 60),
+            mb: (70, 90),
+        }
+    }
+}
+
+impl PanelThresholds {
+    fn from_settings(s: &settings::Settings) -> Self {
+        let get = |key: &str, default: (u8, u8)| -> (u8, u8) {
+            s.thresholds.get(key).map_or(default, |t| {
+                (t.warn.unwrap_or(default.0), t.crit.unwrap_or(default.1))
+            })
+        };
+        let def = Self::default();
+        Self {
+            cpu: get("cpu", def.cpu),
+            gpu: get("gpu", def.gpu),
+            gpu_hotspot: def.gpu_hotspot, // not user-configurable
+            ram: get("ram", def.ram),
+            disk: get("disk", def.disk),
+            mb: def.mb, // not user-configurable
+        }
+    }
 }
 
 impl RigStatsApp {
@@ -539,6 +586,8 @@ impl RigStatsApp {
             gpu_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
             net_up_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
             net_dn_spark_arc: Arc::new(Mutex::new(Sparkline::new(60))),
+            thresholds: PanelThresholds::from_settings(&init_settings),
+            thresholds_arc: Arc::new(Mutex::new(PanelThresholds::from_settings(&init_settings))),
         }
     }
 }
@@ -588,8 +637,19 @@ impl eframe::App for RigStatsApp {
         // Apply settings saved from the settings window.
         if self.settings_reload.swap(false, Ordering::Relaxed) {
             let s = self.current_settings.lock().unwrap();
+            let prev_visible = self.visible_panels.clone();
             self.visible_panels = s.visible_panels.clone();
+            // Any panel that was visible before but is now hidden must be removed
+            // from panels_positioned so its saved position is re-applied when it
+            // reappears (e.g. after cancel reverts a live preview toggle).
+            for key in &prev_visible {
+                if !self.visible_panels.contains(key) {
+                    self.panels_positioned.remove(key);
+                }
+            }
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
+            self.thresholds = PanelThresholds::from_settings(&s);
+            *self.thresholds_arc.lock().unwrap() = self.thresholds.clone();
             let level = match s.window_layer.as_str() {
                 "on_top" => egui::WindowLevel::AlwaysOnTop,
                 "behind" => egui::WindowLevel::AlwaysOnBottom,
@@ -1024,7 +1084,7 @@ impl eframe::App for RigStatsApp {
                     "header" => panels::header::draw(ui, &self.latest, &self.textures, 1.0),
                     "clock" => panels::clock::draw(ui, self.latest.uptime_secs, 1.0),
                     "cpu" => {
-                        panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures, 1.0)
+                        panels::cpu::draw(ui, &self.latest, &self.cpu_spark, &self.textures, 1.0, self.thresholds.cpu.0, self.thresholds.cpu.1)
                     }
                     "gpu" => {
                         if let Some(p) = panels::gpu::draw(
@@ -1033,11 +1093,15 @@ impl eframe::App for RigStatsApp {
                             &self.gpu_spark,
                             &self.textures,
                             1.0,
+                            self.thresholds.gpu.0,
+                            self.thresholds.gpu.1,
+                            self.thresholds.gpu_hotspot.0,
+                            self.thresholds.gpu_hotspot.1,
                         ) {
                             new_preferred_gpu = Some(p);
                         }
                     }
-                    "ram" => panels::ram::draw(ui, &self.latest, 1.0),
+                    "ram" => panels::ram::draw(ui, &self.latest, 1.0, self.thresholds.ram.0, self.thresholds.ram.1),
                     "net" => panels::net::draw(
                         ui,
                         &self.latest,
@@ -1045,8 +1109,8 @@ impl eframe::App for RigStatsApp {
                         &self.net_dn_spark,
                         1.0,
                     ),
-                    "disk" => panels::disk::draw(ui, &self.latest, 1.0),
-                    "motherboard" => panels::motherboard::draw(ui, &self.latest, 1.0),
+                    "disk" => panels::disk::draw(ui, &self.latest, 1.0, self.thresholds.disk.0, self.thresholds.disk.1),
+                    "motherboard" => panels::motherboard::draw(ui, &self.latest, 1.0, self.thresholds.mb.0, self.thresholds.mb.1),
                     "process" => panels::process::draw(ui, &self.latest, 1.0),
                     "battery" => panels::battery::draw(ui, &self.latest, 1.0),
                     _ => {}
@@ -1373,14 +1437,14 @@ impl RigStatsApp {
                             match key.as_str() {
                                 "header" => panels::header::draw(ui, stats, tex, 1.0),
                                 "clock" => panels::clock::draw(ui, stats.uptime_secs, 1.0),
-                                "cpu" => panels::cpu::draw(ui, stats, cspark, tex, 1.0),
+                                "cpu" => panels::cpu::draw(ui, stats, cspark, tex, 1.0, self.thresholds.cpu.0, self.thresholds.cpu.1),
                                 "gpu" => {
-                                    new_pref = panels::gpu::draw(ui, stats, gspark, tex, 1.0);
+                                    new_pref = panels::gpu::draw(ui, stats, gspark, tex, 1.0, self.thresholds.gpu.0, self.thresholds.gpu.1, self.thresholds.gpu_hotspot.0, self.thresholds.gpu_hotspot.1);
                                 }
-                                "ram" => panels::ram::draw(ui, stats, 1.0),
+                                "ram" => panels::ram::draw(ui, stats, 1.0, self.thresholds.ram.0, self.thresholds.ram.1),
                                 "net" => panels::net::draw(ui, stats, nuspark, ndspark, 1.0),
-                                "disk" => panels::disk::draw(ui, stats, 1.0),
-                                "motherboard" => panels::motherboard::draw(ui, stats, 1.0),
+                                "disk" => panels::disk::draw(ui, stats, 1.0, self.thresholds.disk.0, self.thresholds.disk.1),
+                                "motherboard" => panels::motherboard::draw(ui, stats, 1.0, self.thresholds.mb.0, self.thresholds.mb.1),
                                 "process" => panels::process::draw(ui, stats, 1.0),
                                 "battery" => panels::battery::draw(ui, stats, 1.0),
                                 _ => {}

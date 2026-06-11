@@ -14,7 +14,7 @@ fn short_label(label: &str) -> String {
     label.chars().take(8).collect()
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
     theme::panel_frame(ui, theme::C_MB, opacity, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         ui.horizontal(|ui| {
@@ -98,7 +98,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                                         ui.label(
                                             RichText::new(format!("{t:.0}"))
                                                 .small()
-                                                .color(temp_color(Some(*t), 70, 90)),
+                                                .color(temp_color(Some(*t), warn, crit)),
                                         );
                                         ui.end_row();
                                     }

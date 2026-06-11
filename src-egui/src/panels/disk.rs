@@ -21,7 +21,7 @@ fn fmt_speed_parts(mb: f64) -> (String, &'static str) {
     }
 }
 
-pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
+pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32, warn: u8, crit: u8) {
     theme::panel_frame(ui, theme::C_PUR, opacity, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H);
         let drives = &stats.disk_drives;
@@ -144,7 +144,7 @@ pub fn draw(ui: &mut Ui, stats: &PollStats, opacity: f32) {
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let (s, c) = match drive.temp {
-                                    Some(t) => (format!("{t:.0}°C"), temp_color(Some(t), 50, 60)),
+                                    Some(t) => (format!("{t:.0}°C"), temp_color(Some(t), warn, crit)),
                                     None => ("--".to_string(), theme::C_DIM),
                                 };
                                 ui.label(RichText::new(s).small().color(c));

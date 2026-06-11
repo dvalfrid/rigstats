@@ -30,12 +30,17 @@ fn safe_bar_width(ui: &Ui) -> f32 {
 }
 
 /// Returns `Some(gpu_name)` if the user clicked a GPU selector dot.
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
     spark: &Sparkline,
     tex: &Textures,
     opacity: f32,
+    warn: u8,
+    crit: u8,
+    hotspot_warn: u8,
+    hotspot_crit: u8,
 ) -> Option<String> {
     let mut new_gpu: Option<String> = None;
 
@@ -43,8 +48,8 @@ pub fn draw(
         ui.set_min_height(theme::PANEL_DATA_H);
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
-        let tc = temp_color(stats.gpu_temp, 80, 90);
-        let htc = temp_color(stats.gpu_hotspot, 90, 105);
+        let tc = temp_color(stats.gpu_temp, warn, crit);
+        let htc = temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit);
         let ring_color = if stats.lhm_connected {
             theme::C_AMD
         } else {
