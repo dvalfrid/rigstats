@@ -2142,7 +2142,7 @@ fn main() {
 
     let dir = app_data_dir();
     debug::reset_debug_log(&dir);
-    debug::append_debug_log(&dir, "rigstats-egui starting");
+    debug::append_debug_log(&dir, "rigstats starting");
 
     let s = settings::load_settings(&dir);
     let visible_panels = s.visible_panels.clone();
@@ -2181,6 +2181,7 @@ fn main() {
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("RigStats")
+        .with_icon(load_app_icon())
         .with_inner_size([win_w - 2.0, win_h])
         .with_position([pos_x, pos_y])
         .with_decorations(false)

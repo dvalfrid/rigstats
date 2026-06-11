@@ -1,6 +1,6 @@
 ; RIGStats NSIS installer
 ; Produces a per-machine installer that:
-;   - Installs rigstats-egui.exe + rigstats-sensor.exe + PawnIO driver
+;   - Installs rigstats.exe + rigstats-sensor.exe + PawnIO driver
 ;   - Registers the sensor service (LocalSystem, auto-start)
 ;   - Creates Start Menu shortcut and uninstaller
 ;
@@ -8,7 +8,7 @@
 ;   makensis /DVERSION=1.25.0 build\installer.nsi
 ;
 ; Required files relative to repo root:
-;   target\release\rigstats-egui.exe
+;   target\release\rigstats.exe
 ;   sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe
 ;   build\pawnio\PawnIO.sys
 ;   build\pawnio\pawnio.inf
@@ -68,7 +68,7 @@ Section "RIGStats" SecMain
   SetOutPath "$INSTDIR"
   ; Remove old Tauri binary name if upgrading from pre-egui version.
   Delete "$INSTDIR\rigstats.exe"
-  File "target\release\rigstats-egui.exe"
+  File "target\release\rigstats.exe"
   File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe"
   File "CHANGELOG.md"
 
@@ -114,7 +114,7 @@ Section "RIGStats" SecMain
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
     "UninstallString"  "$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
-    "DisplayIcon"      "$INSTDIR\rigstats-egui.exe"
+    "DisplayIcon"      "$INSTDIR\rigstats.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
     "Publisher"        "codeby.se"
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
@@ -123,7 +123,7 @@ Section "RIGStats" SecMain
     "NoRepair"         1
 
   CreateDirectory "$SMPROGRAMS\RIGStats"
-  CreateShortcut "$SMPROGRAMS\RIGStats\RIGStats.lnk" "$INSTDIR\rigstats-egui.exe"
+  CreateShortcut "$SMPROGRAMS\RIGStats\RIGStats.lnk" "$INSTDIR\rigstats.exe"
   CreateShortcut "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk" "$INSTDIR\uninstall.exe"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
@@ -136,10 +136,10 @@ Section "Uninstall"
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
 
   ; Kill the main app if running.
-  nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats-egui.exe >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats.exe >NUL 2>&1'
   Sleep 1000
 
-  Delete "$INSTDIR\rigstats-egui.exe"
+  Delete "$INSTDIR\rigstats.exe"
   Delete "$INSTDIR\rigstats-sensor.exe"
   Delete "$INSTDIR\CHANGELOG.md"
   Delete "$INSTDIR\uninstall.exe"
