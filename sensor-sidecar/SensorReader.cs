@@ -116,6 +116,7 @@ public static class SensorReader
                     break;
                 case SensorType.Power:
                     if (s.Name is "GPU Package" or "GPU Power") power = s.Value;
+                    else if (power is null && s.Name == "GPU Core") power = s.Value; // AMD iGPU fallback
                     break;
                 case SensorType.Fan:
                     fan = s.Value;
