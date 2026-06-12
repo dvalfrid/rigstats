@@ -62,7 +62,11 @@ jobs:
         run: npm run build
 
       - name: Install NSIS
-        run: choco install nsis --no-progress -y
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          $nsis = (Get-ChildItem "C:\Program Files*\NSIS\makensis.exe" | Select-Object -First 1).DirectoryName
+          echo "$nsis" >> $env:GITHUB_PATH
 
       - name: Build NSIS installer
         shell: pwsh
