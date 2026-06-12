@@ -139,6 +139,18 @@ Section "RIGStats" SecMain
   CreateShortcut "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk" "$INSTDIR\uninstall.exe"
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
+
+  ; ── Write install log to ProgramData for diagnostics ─────────────────────
+  ReadEnvStr $8 PROGRAMDATA
+  CreateDirectory "$8\se.codeby.rigstats"
+  FileOpen $9 "$8\se.codeby.rigstats\rigstats-install.log" w
+  FileWrite $9 "version=${VERSION}$\r$\n"
+  FileWrite $9 "install_dir=$INSTDIR$\r$\n"
+  FileWrite $9 "pawnio_exit=$R0$\r$\n"
+  FileWrite $9 "pawnio_output=$R1$\r$\n"
+  FileWrite $9 "service_create_exit=$4$\r$\n"
+  FileWrite $9 "service_start_exit=$6$\r$\n"
+  FileClose $9
 SectionEnd
 
 ; ── Optional: desktop shortcut ────────────────────────────────────────────────
