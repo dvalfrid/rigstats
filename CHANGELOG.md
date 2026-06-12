@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.28.0](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.28.0) (2026-06-12)
+
+
+### Features
+
+* add desktop shortcut option and launch-on-finish to installer ([c78b2f6](https://github.com/dvalfrid/rigstats/commit/c78b2f6a365138912525fe8a44b12aaaa4ee1eba))
+
+
+### Bug Fixes
+
+* catch panics in update thread, show error in UI instead of crashing ([5800554](https://github.com/dvalfrid/rigstats/commit/5800554d457a2b6c904bfcebd37ce5bbbed2563d))
+* show changelog in idle state, replace tokio::spawn with std::thread ([a753178](https://github.com/dvalfrid/rigstats/commit/a7531780ca261c4e02c7bfbb23583c6a5a6078ef))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
