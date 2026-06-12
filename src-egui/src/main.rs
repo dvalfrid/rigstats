@@ -243,6 +243,32 @@ fn dialog_center(w: f32, h: f32) -> [f32; 2] {
     [100.0, 100.0]
 }
 
+/// Returns `pos` if it is within any currently connected monitor (allowing 60 px
+/// overhang so a panel that straddles a monitor edge is still considered visible),
+/// otherwise returns `fallback`.  Call this before applying a saved floating-panel
+/// position so panels that were left on a disconnected monitor snap back on-screen.
+fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
+    #[cfg(windows)]
+    {
+        let monitors = win_monitor::list();
+        let margin = 60.0_f32;
+        for (l, t, r, b) in monitors {
+            let (fl, ft, fr, fb) = (
+                l as f32 - margin,
+                t as f32 - margin,
+                r as f32 + margin,
+                b as f32 + margin,
+            );
+            if pos[0] >= fl && pos[0] <= fr && pos[1] >= ft && pos[1] <= fb {
+                return pos;
+            }
+        }
+        fallback
+    }
+    #[cfg(not(windows))]
+    pos
+}
+
 /// Returns (x, y) position for the window — top-left of the best portrait monitor.
 /// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
 fn pick_window_position() -> [f32; 2] {
@@ -430,6 +456,8 @@ struct RigStatsApp {
     latest: PollStats,
     visible_panels: Vec<String>,
     opacity: f32,
+    /// Cached from settings — "on_top", "behind", or "normal".
+    window_layer: String,
     tray: Tray,
     window_visible: bool,
     // Sparklines
@@ -495,6 +523,10 @@ struct RigStatsApp {
     thresholds: PanelThresholds,
     /// Active panel theme derived from `Settings.theme`.
     app_theme: theme::AppTheme,
+    /// When > 0, re-applies WindowLevel + opacity for this many more frames.
+    /// Used after floating→non-floating transitions where winit may reset the
+    /// window level when the window is moved back on-screen.
+    reapply_window_props_frames: u8,
 }
 
 /// Per-component warn/crit thresholds (°C) used for temperature colour coding.
@@ -576,6 +608,7 @@ impl RigStatsApp {
             latest: PollStats::default(),
             visible_panels,
             opacity,
+            window_layer: init_settings.window_layer.clone(),
             tray,
             window_visible: true,
             cpu_spark: Sparkline::new(60),
@@ -614,6 +647,11 @@ impl RigStatsApp {
             floating_mode_arc,
             thresholds: PanelThresholds::from_settings(&init_settings),
             app_theme: theme::AppTheme::from_key(&init_settings.theme),
+            // Apply WindowLevel + opacity for the first few frames at startup when in
+            // non-floating mode: the viewport builder only handles "on_top", so "behind"
+            // must be sent via viewport command, and opacity needs a valid HWND which
+            // may not be available until after the first paint.
+            reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
         }
     }
 }
@@ -642,6 +680,26 @@ impl eframe::App for RigStatsApp {
             self.hwnd = win_opacity::find_hwnd("RigStats");
             if self.hwnd != 0 {
                 win_opacity::set_opacity(self.hwnd, self.opacity);
+            }
+        }
+
+        // Re-apply WindowLevel + opacity for a few frames after a floating→non-floating
+        // transition, because winit may reset the window level when it processes the move.
+        if self.reapply_window_props_frames > 0 {
+            self.reapply_window_props_frames -= 1;
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                    Self::window_level_from_layer(&self.window_layer),
+                ));
+            #[cfg(windows)]
+            {
+                win_opacity::set_opacity(self.hwnd, self.opacity);
+                // For "behind" mode, also enforce HWND_BOTTOM directly — ViewportCommand
+                // alone is not reliable on Windows. Only needed at startup/transition;
+                // normal operation won't bring the window back to front on its own.
+                if self.window_layer == "behind" && !self.floating_mode {
+                    win32_behind::keep_behind("RigStats");
+                }
             }
         }
 
@@ -674,11 +732,7 @@ impl eframe::App for RigStatsApp {
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
             self.thresholds = PanelThresholds::from_settings(&s);
             self.app_theme = theme::AppTheme::from_key(&s.theme);
-            let level = match s.window_layer.as_str() {
-                "on_top" => egui::WindowLevel::AlwaysOnTop,
-                "behind" => egui::WindowLevel::AlwaysOnBottom,
-                _ => egui::WindowLevel::Normal,
-            };
+            self.window_layer = s.window_layer.clone();
             let was_floating = self.floating_mode;
             self.floating_mode = s.floating_mode;
             self.floating_mode_arc
@@ -700,7 +754,9 @@ impl eframe::App for RigStatsApp {
                     .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
             }
             ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
+                .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                    Self::window_level_from_layer(&self.window_layer),
+                ));
             #[cfg(windows)]
             win_opacity::set_opacity(self.hwnd, self.opacity);
             // Toggle main window position when floating mode changes.
@@ -783,6 +839,15 @@ impl eframe::App for RigStatsApp {
                                 &self.visible_panels,
                                 profile_scale(&s.dashboard_profile),
                             );
+                            drop(s);
+                            // Apply level + opacity BEFORE moving on-screen so they are
+                            // already in effect when the window becomes visible.
+                            ui.ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                                    Self::window_level_from_layer(&self.window_layer),
+                                ));
+                            #[cfg(windows)]
+                            win_opacity::set_opacity(self.hwnd, self.opacity);
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                                     egui::Pos2::new(px, py),
@@ -790,6 +855,9 @@ impl eframe::App for RigStatsApp {
                             ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
                                 egui::Vec2::new(w, h),
                             ));
+                            // Re-apply for the next few frames as winit may reset the
+                            // window level when it processes the move event.
+                            self.reapply_window_props_frames = 4;
                         }
                     }
                 }
@@ -1107,6 +1175,11 @@ impl eframe::App for RigStatsApp {
             if drag_resp.dragged() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
             }
+            // After drag ends in "behind" mode, the window was activated for SC_MOVE
+            // and is now in front. Push it back behind on the next few frames.
+            if drag_resp.drag_stopped() && self.window_layer == "behind" {
+                self.reapply_window_props_frames = 4;
+            }
             if drag_resp.hovered() {
                 let painter = ui.painter();
                 let cy = drag_rect.center().y;
@@ -1367,6 +1440,14 @@ fn draw_padlock(painter: &egui::Painter, center: egui::Pos2, locked: bool, color
 }
 
 impl RigStatsApp {
+    fn window_level_from_layer(layer: &str) -> egui::WindowLevel {
+        match layer {
+            "on_top" => egui::WindowLevel::AlwaysOnTop,
+            "behind" => egui::WindowLevel::AlwaysOnBottom,
+            _ => egui::WindowLevel::Normal,
+        }
+    }
+
     /// Render every visible panel as its own borderless OS window using
     /// `show_viewport_immediate`.  Called each frame when `floating_mode` is true.
     ///
@@ -1376,11 +1457,7 @@ impl RigStatsApp {
     /// panels naturally update at ~1 fps without any Win32 tricks.
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock().unwrap();
-        let window_level = match s.window_layer.as_str() {
-            "on_top" => egui::WindowLevel::AlwaysOnTop,
-            "behind" => egui::WindowLevel::AlwaysOnBottom,
-            _ => egui::WindowLevel::Normal,
-        };
+        let window_level = Self::window_level_from_layer(&s.window_layer);
         let scale = self.floating_panel_scale;
         drop(s);
 
@@ -1391,11 +1468,10 @@ impl RigStatsApp {
             let key = panel_key.clone();
 
             let init_pos: [f32; 2] = {
+                let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
                 let positions = self.floating_positions.lock().unwrap();
-                positions
-                    .get(&key)
-                    .copied()
-                    .unwrap_or([100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0])
+                let saved = positions.get(&key).copied().unwrap_or(default_pos);
+                guard_panel_position(saved, default_pos)
             };
 
             let panel_w = 450.0 * scale;

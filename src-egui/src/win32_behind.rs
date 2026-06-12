@@ -35,6 +35,8 @@ fn find_hwnd(title: &str) -> winapi::shared::windef::HWND {
 /// * Calls `SetWindowPos(HWND_BOTTOM)` to keep it behind all normal windows.
 ///
 /// Call this every frame while the panel is idle (not being dragged).
+/// **Only use for floating panels** — for the main non-floating window use
+/// `keep_behind` instead, which omits `WS_EX_NOACTIVATE` so dragging works.
 pub fn apply_behind(title: &str) {
     let hwnd = find_hwnd(title);
     if hwnd.is_null() {
@@ -79,5 +81,26 @@ pub fn prepare_for_drag(title: &str) {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
         SetForegroundWindow(hwnd);
+    }
+}
+
+/// Keep the main non-floating window behind all normal windows without setting
+/// `WS_EX_NOACTIVATE`.  Unlike `apply_behind`, this preserves the window's
+/// ability to be activated — which is required for `SC_MOVE` (StartDrag) to work.
+pub fn keep_behind(title: &str) {
+    let hwnd = find_hwnd(title);
+    if hwnd.is_null() {
+        return;
+    }
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            HWND_BOTTOM,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
     }
 }
