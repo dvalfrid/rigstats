@@ -7,8 +7,7 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         "package.json",
-        "src-tauri/Cargo.toml",
-        "src-tauri/tauri.conf.json"
+        "src-egui/Cargo.toml"
       ]
     }
   }

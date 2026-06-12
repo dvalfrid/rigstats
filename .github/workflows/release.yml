@@ -44,7 +44,7 @@ jobs:
       - name: Cache Rust build output
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: src-egui
 
       - name: Cache NuGet packages
         uses: actions/cache@v4
@@ -58,8 +58,14 @@ jobs:
       - name: Run verification
         run: npm run verify
 
-      - name: Build installer
+      - name: Build release binary + sidecar
         run: npm run build
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          $version = ($env:RELEASE_TAG -replace '^v', '')
+          & makensis /DVERSION=$version build\installer.nsi
 
       - name: Sign installer
         uses: azure/trusted-signing-action@v0
@@ -70,31 +76,23 @@ jobs:
           endpoint: https://neu.codesigning.azure.net/
           trusted-signing-account-name: rigstats-codesign
           certificate-profile-name: RIGStats
-          files-folder: src-tauri/target/release/bundle/nsis
+          files-folder: target\release
           files-folder-filter: exe
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
 
-      - name: Sign update bundle (Tauri updater signature)
-        shell: pwsh
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          $exePath = (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1).FullName
-          npx @tauri-apps/cli signer sign -k "$env:TAURI_SIGNING_PRIVATE_KEY" -p "$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD" $exePath
-
       - name: Generate latest.json update manifest
         shell: pwsh
         run: |
-          $exePath = (Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1).FullName
-          $sigPath  = "$exePath.sig"
-          $sig      = (Get-Content $sigPath -Raw).Trim()
           $version  = ($env:RELEASE_TAG -replace '^v', '')
+          $exePath  = (Get-ChildItem "target\release\RIGStats_*_x64-setup.exe" | Select-Object -First 1).FullName
           $basename = Split-Path $exePath -Leaf
           $pubDate  = (Get-Date -AsUTC -Format "yyyy-MM-ddTHH:mm:ssZ")
           $repoUrl  = "https://github.com/dvalfrid/rigstats"
+
+          # Compute SHA256 checksum (no Tauri minisign — we use SHA256 in latest.json)
+          $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
 
           # Extract this version's section from CHANGELOG.md for in-app display.
           $changelogMd = Get-Content "CHANGELOG.md" -Raw
@@ -108,8 +106,8 @@ jobs:
             pub_date = $pubDate
             platforms = [ordered]@{
               "windows-x86_64" = [ordered]@{
-                signature = $sig
-                url       = "${repoUrl}/releases/download/$env:RELEASE_TAG/${basename}"
+                sha256 = $hash
+                url    = "${repoUrl}/releases/download/$env:RELEASE_TAG/${basename}"
               }
             }
           } | ConvertTo-Json -Depth 5
@@ -123,5 +121,5 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           fail_on_unmatched_files: true
           files: |
-            src-tauri/target/release/bundle/nsis/*.exe
+            target\release\RIGStats_*_x64-setup.exe
             latest.json

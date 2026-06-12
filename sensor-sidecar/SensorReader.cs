@@ -93,7 +93,8 @@ public static class SensorReader
     {
         float? load = null, temp = null, hotspot = null, coreClock = null,
                memClock = null, power = null, fan = null,
-               vramUsed = null, vramTotal = null, d3d3d = null, d3dVdec = null;
+               vramUsed = null, vramTotal = null, d3d3d = null, d3dVdec = null,
+               gpuCorePower = null, gpuSocPower = null;
 
         foreach (var s in hw.Sensors)
         {
@@ -116,6 +117,8 @@ public static class SensorReader
                     break;
                 case SensorType.Power:
                     if (s.Name is "GPU Package" or "GPU Power") power = s.Value;
+                    else if (s.Name == "GPU Core") gpuCorePower = s.Value;
+                    else if (s.Name == "GPU SoC") gpuSocPower = s.Value;
                     break;
                 case SensorType.Fan:
                     fan = s.Value;
@@ -136,6 +139,10 @@ public static class SensorReader
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault(p => p.StartsWith("gpu", StringComparison.OrdinalIgnoreCase))
             ?? "gpu";
+
+        // AMD iGPU fallback: no GPU Package/Power — sum Core + SoC instead
+        if (power is null && (gpuCorePower.HasValue || gpuSocPower.HasValue))
+            power = (gpuCorePower ?? 0f) + (gpuSocPower ?? 0f);
 
         return new GpuDevice(hw.Name, family, load, temp, hotspot, coreClock, memClock,
                              power, fan, vramUsed, vramTotal, d3d3d, d3dVdec);

@@ -30,25 +30,39 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Rust build output
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: src-egui
 
-      - name: Install dependencies
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
+
+      - name: Install Node dependencies
         run: npm ci
 
       - name: Run verification
         run: npm run verify
 
-      - name: Build installer
+      - name: Build release binary + sidecar
         run: npm run build
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          $version = (Get-Content "src-egui/Cargo.toml" | Select-String 'version = "').ToString().Trim() -replace '.*version = "([^"]+)".*', '$1'
+          & makensis /DVERSION=$version build\installer.nsi
 
       - name: Upload NSIS installer
         uses: actions/upload-artifact@v4
         with:
           name: rigstats-nsis
-          path: src-tauri/target/release/bundle/nsis/*.exe
+          path: target\release\RIGStats_*_x64-setup.exe
           if-no-files-found: error
 

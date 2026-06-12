@@ -15,11 +15,23 @@
 
 ## Overview
 
-RIGStats is a Windows-only Tauri v2 desktop app that displays live hardware
-telemetry on a secondary portrait monitor. The frontend is vanilla ES modules
-served directly by Tauri — no bundler or framework. The backend is Rust and
-uses three data sources: a managed sensor sidecar (GPU/sensor data via named
-pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
+RIGStats is a Windows-only **egui** desktop app (`src-egui/`) that displays
+live hardware telemetry on a secondary portrait monitor. The UI is rendered
+natively via eframe/wgpu — no WebView2, no JavaScript at runtime. The backend
+is Rust and uses three data sources: a managed sensor sidecar (GPU/sensor data
+via named pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at
+startup).
+
+The repository is a Cargo workspace with two members:
+
+| Crate | Path | Role |
+| --- | --- | --- |
+| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no Tauri coupling |
+| `rigstats-egui` | `src-egui/` | Production binary — eframe app, all panels, tray, settings windows |
+
+The `frontend/` directory contains the legacy Tauri JS frontend. It is **not
+loaded at runtime** but is kept for the vitest unit test suite which tests pure
+logic helpers (`tempColors.js`, `vendorBranding.js`, panel formatters).
 
 ---
 
@@ -29,27 +41,24 @@ pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at startup).
 rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
     └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
             └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
-                    └─► lhm.rs  pipe client → LhmData
+                    └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
 
 sysinfo crate           CPU load/freq, RAM, disk, network, processes
 wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
 
-    └─► commands.rs     get_stats() assembles StatsPayload every tick
-            └─► Tauri IPC  invoke("get-stats")
-                    └─► app.js  tick() every 1 s
-                            ├─► panel modules update DOM          (portrait mode)
-                            └─► invoke("broadcast-stats")         (floating mode)
-                                    └─► app.emit per panel window
-                                            └─► panel-host.js updates DOM
+    └─► poll_loop (src-egui/main.rs): get_stats() → PollStats → mpsc::Sender
+            └─► egui UI thread: receives PollStats each 1 s tick
+                    ├─► panel draw() calls (portrait mode — single window)
+                    └─► panel draw() calls (floating mode — one viewport per panel)
 ```
 
 **Tick rate:** 1 second. The sidecar pushes one JSON line per second; on
 failure the last successful sample is reused so the UI never resets to `--`.
 
-**Floating mode broadcast:** In floating mode the main window (hidden) still
-runs `get-stats` and then calls `broadcast-stats`. The backend emits
-`stats-broadcast` to each open `panel-{key}` window individually — settings,
-about, status, and updater windows are never targeted.
+**Floating mode:** Each visible panel is rendered in its own `egui` deferred
+viewport (a separate OS window). The main window is moved off-screen (`-32000,
+-32000`) rather than hidden so egui continues ticking. Panel positions are
+persisted to settings on change via a dirty-flag debounce.
 
 ---
 
@@ -57,33 +66,44 @@ about, status, and updater windows are never targeted.
 
 ```text
 rig-dashboard/
-├── frontend/
-│   ├── index.html          Main dashboard (portrait mode)
-│   ├── panel-{key}.html    One HTML file per floating panel (9 total)
-│   ├── settings.html
-│   ├── status.html
-│   ├── about.html
-│   ├── updater.html
-│   ├── panel-base.css      Shared styles for all floating panel windows
-│   ├── assets/
-│   └── renderer/
-│       ├── panels/         One JS module per panel
-│       ├── panel-host.js   Shared entry for floating panel windows
-│       └── *.js            Shared utilities and entry scripts
+├── src-egui/               egui binary (rigstats.exe)
+│   ├── src/
+│   │   ├── main.rs         Entry point, poll thread, eframe run_native, PollStats
+│   │   ├── theme.rs        AppTheme, colours, panel_frame(), dialog button API
+│   │   ├── brand.rs        Brand logo PNG loading
+│   │   ├── tempcolor.rs    temp_color() — value → green/yellow/red
+│   │   ├── ring.rs         Ring gauge renderer
+│   │   ├── spark.rs        Sparkline ring buffer
+│   │   ├── update_check.rs Update detection, download, installer launch
+│   │   ├── win_opacity.rs  SetLayeredWindowAttributes wrapper
+│   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
+│   │   ├── panels/         One file per panel (cpu, gpu, ram, net, disk, …)
+│   │   └── windows/        Secondary windows (settings, about, status, updater)
+│   ├── assets/             Embedded PNGs (brand logos, tray icon)
+│   └── Cargo.toml
+├── rigstats-backend/       Shared Rust lib — no Tauri coupling
+│   └── src/
+│       ├── stats.rs        StatsPayload and all sub-structs, HardwareInfo, AppState
+│       ├── hardware.rs     WMI/PowerShell hardware detection at startup
+│       ├── lhm.rs          Named pipe client → LhmData; GPU selection
+│       ├── lhm_process.rs  LHM connection state tracking
+│       ├── monitor.rs      Display profiles, panel key validation
+│       ├── settings.rs     Settings struct, JSON persistence, atomic_write
+│       ├── autostart.rs    Windows startup registry management
+│       ├── logging.rs      Stats CSV logging
+│       └── debug.rs        Debug log helpers
 ├── sensor-sidecar/         .NET 10 C# sidecar (rigstats-sensor.exe)
-│   ├── Program.cs          Entry point, pipe server loop, UpdateVisitor
+│   ├── Program.cs          Entry point, pipe server loop
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
-│   ├── app.manifest        requireAdministrator manifest
 │   └── sensor-sidecar.csproj
-├── src-tauri/
-│   ├── src/                Rust source (one module per concern)
-│   ├── Cargo.toml
-│   └── tauri.conf.json
+├── frontend/               Legacy Tauri JS frontend — NOT loaded at runtime
+│   └── renderer/           Kept for vitest unit tests (pure logic helpers)
 ├── docs/
 ├── website/
-├── assets/
+├── assets/                 Screenshot PNGs for website/README
 └── build/
-    └── installer.nsh
+    ├── installer.nsi       NSIS installer script
+    └── pawnio/             Signed PawnIO kernel driver files
 ```
 
 ---
@@ -92,22 +112,33 @@ rig-dashboard/
 
 ### Quick reference
 
+**`rigstats-backend/src/`** — shared lib, no Tauri coupling:
+
 | Module | Responsibility |
 | --- | --- |
-| `main.rs` | Tauri builder, tray, lifecycle, startup orchestration |
-| `stats.rs` | Shared state (`HardwareInfo` + `AppState`) and all payload structs |
-| `commands.rs` | `#[tauri::command]` handlers — thin wrappers only |
+| `stats.rs` | `StatsPayload` and all sub-structs; `HardwareInfo` (startup constants) and `AppState` (per-tick state) |
 | `hardware.rs` | WMI/PowerShell hardware detection at startup |
 | `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
-| `lhm_process.rs` | LHM scheduled-task query helpers (task details, connection state tracking) |
+| `lhm_process.rs` | LHM connection state tracking, 30 s log throttle |
 | `monitor.rs` | Display profiles, monitor selection, panel key validation |
-| `settings.rs` | Settings struct, JSON persistence |
-| `windows.rs` | Secondary window creation and tray-anchored positioning |
-| `updater.rs` | Background update checks and install flow |
-| `autostart.rs` | Windows startup registry management |
-| `diagnostics.rs` | Diagnostics ZIP export |
+| `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
+| `autostart.rs` | Windows startup registry management (HKCU run key) |
 | `logging.rs` | Stats CSV logging — `append_stats_row`, `prune_old_logs`, `current_log_path` |
-| `debug.rs` | Debug log helpers (no deps on other modules) |
+| `debug.rs` | Debug log helpers — no deps on other modules |
+
+**`src-egui/src/`** — egui binary:
+
+| Module | Responsibility |
+| --- | --- |
+| `main.rs` | Entry point, poll thread, eframe `run_native`, `PollStats`, `PanelThresholds`, tray |
+| `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API |
+| `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
+| `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
+| `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
+| `win_opacity.rs` | `SetLayeredWindowAttributes` wrapper for window-level opacity |
+| `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
+| `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect` |
+| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs` |
 
 ### Module details
 
@@ -388,6 +419,10 @@ No dependencies on other crate modules — safe to import from anywhere.
 ---
 
 ## Frontend Modules
+
+> **Note:** The `frontend/` directory is legacy Tauri JS code. It is **not
+> loaded at runtime** by the egui binary. The modules below are kept because
+> their pure-logic helpers are covered by the vitest unit test suite.
 
 ### Quick reference
 

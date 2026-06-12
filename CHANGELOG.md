@@ -8,6 +8,29 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
+
+
+### Features
+
+* **engine:** replace Tauri/WebView2 with native egui — eliminates WebView2 idle CPU overhead entirely ([28a41e6](https://github.com/dvalfrid/rigstats/commit/28a41e6dc))
+* **battery:** new battery panel — charge %, status, time remaining, power draw with warn/crit colour coding ([e5bfb6c](https://github.com/dvalfrid/rigstats/commit/e5bfb6c25))
+* **floating:** floating panel mode — detach any panel as its own borderless window, drag freely, lock positions ([1e3c9e1](https://github.com/dvalfrid/rigstats/commit/1e3c9e19f))
+* **themes:** five colour presets — Dark Cyan, Dark Purple, Dark Amber, Dark Teal, Dark Rose with live preview ([1ef8a6d](https://github.com/dvalfrid/rigstats/commit/1ef8a6d1))
+* **profiles:** side-monitor profiles (FHD/QHD/4K side) with automatic content scaling ([75305e6](https://github.com/dvalfrid/rigstats/commit/75305e60e))
+* **settings:** redesigned four-tab settings dialog — Dashboard, Panels, Alerts, Appearance ([cac5fc9](https://github.com/dvalfrid/rigstats/commit/cac5fc9e7))
+* **alerts:** dual battery thresholds — charge % (alert below) and power draw W (alert above, discharge only) ([e5bfb6c](https://github.com/dvalfrid/rigstats/commit/e5bfb6c25))
+* **gpu:** AMD iGPU support — sums GPU Core + GPU SoC power for accurate total wattage ([d1f3fb1](https://github.com/dvalfrid/rigstats/commit/d1f3fb19e))
+* **updater:** background download with progress, in-app changelog display ([f38a673](https://github.com/dvalfrid/rigstats/commit/f38a673dc))
+* **brands:** brand logo support for ROG, MSI, Alienware, Razer, Legion, HP Omen, AORUS, Gigabyte, Predator, Taurus ([926d69e](https://github.com/dvalfrid/rigstats/commit/926d69e09))
+
+
+### Bug Fixes
+
+* **floating:** panels stay behind other windows via WS\_EX\_NOACTIVATE and Win32 SetWindowPos ([ceb8ae2](https://github.com/dvalfrid/rigstats/commit/ceb8ae282))
+* **opacity:** window-level opacity via SetLayeredWindowAttributes replaces broken per-pixel alpha ([8661d36](https://github.com/dvalfrid/rigstats/commit/8661d36f7))
+* **cpu:** core bars layout — natural label width eliminates dead space at column left edge ([e5bfb6c](https://github.com/dvalfrid/rigstats/commit/e5bfb6c25))
+
 ## [1.26.0](https://github.com/dvalfrid/rigstats/compare/v1.25.1...v1.26.0) (2026-06-08)
 
 
