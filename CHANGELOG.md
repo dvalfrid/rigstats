@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.1](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.27.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* install NSIS in release workflow, remove removed egui Style::debug ([7c405bf](https://github.com/dvalfrid/rigstats/commit/7c405bf31182c80f33b5746456774b3e31fc1f64))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
