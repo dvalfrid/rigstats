@@ -483,10 +483,10 @@ pub fn show(
                             action_check = true;
                         }
                     }
-                    UpdateStatus::Error(_) => {
-                        if theme::dialog_btn_primary(ui, "Try again").clicked() {
-                            action_check = true;
-                        }
+                    UpdateStatus::Error(_)
+                        if theme::dialog_btn_primary(ui, "Try again").clicked() =>
+                    {
+                        action_check = true;
                     }
                     _ => {}
                 },
