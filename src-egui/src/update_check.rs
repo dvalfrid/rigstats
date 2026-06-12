@@ -101,12 +101,39 @@ pub fn installer_temp_path(version: &str) -> PathBuf {
     std::env::temp_dir().join(format!("rigstats-update-v{version}.exe"))
 }
 
-/// Launches the downloaded NSIS installer (triggers Windows UAC).
+/// Launches the downloaded NSIS installer via ShellExecuteW with "runas"
+/// so Windows shows the UAC elevation prompt, and /S for silent install.
+#[allow(unsafe_code)]
 pub fn launch_installer(path: &Path) -> Result<(), String> {
-    std::process::Command::new(path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("Failed to launch installer: {e}"))
+    use std::os::windows::ffi::OsStrExt;
+
+    let path_wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let verb: Vec<u16> = "runas\0".encode_utf16().collect();
+    let params: Vec<u16> = "/S\0".encode_utf16().collect();
+
+    let result = unsafe {
+        winapi::um::shellapi::ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            path_wide.as_ptr(),
+            params.as_ptr(),
+            std::ptr::null(),
+            winapi::um::winuser::SW_SHOWNORMAL,
+        )
+    };
+
+    if result as usize > 32 {
+        Ok(())
+    } else {
+        Err(format!(
+            "Failed to launch installer (ShellExecuteW returned {})",
+            result as usize
+        ))
+    }
 }
 
 fn is_newer(remote: &str, current: &str) -> bool {

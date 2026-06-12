@@ -141,6 +141,11 @@ Section "RIGStats" SecMain
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
+  ; ── Auto-launch after silent (in-app) update ─────────────────────────────
+  ; Manual installs use the finish-page "Launch RIGStats" checkbox instead.
+  IfSilent 0 +2
+    ExecShell "open" "$INSTDIR\rigstats.exe"
+
   ; ── Write install log to ProgramData for diagnostics ─────────────────────
   ReadEnvStr $8 PROGRAMDATA
   CreateDirectory "$8\se.codeby.rigstats"
