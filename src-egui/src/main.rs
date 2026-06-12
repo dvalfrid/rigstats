@@ -692,7 +692,15 @@ impl eframe::App for RigStatsApp {
                     Self::window_level_from_layer(&self.window_layer),
                 ));
             #[cfg(windows)]
-            win_opacity::set_opacity(self.hwnd, self.opacity);
+            {
+                win_opacity::set_opacity(self.hwnd, self.opacity);
+                // For "behind" mode, also enforce HWND_BOTTOM directly — ViewportCommand
+                // alone is not reliable on Windows. Only needed at startup/transition;
+                // normal operation won't bring the window back to front on its own.
+                if self.window_layer == "behind" && !self.floating_mode {
+                    win32_behind::keep_behind("RigStats");
+                }
+            }
         }
 
         // Pull latest stats from poll thread; push to sparklines only on new data.
@@ -1150,15 +1158,6 @@ impl eframe::App for RigStatsApp {
             }
         } else {
             // ── Fixed mode — all panels in one portrait window ────────────────
-            // In "behind" mode, re-enforce HWND_BOTTOM every frame via Win32 so
-            // the window stays behind all normal windows (ViewportCommand::WindowLevel
-            // alone is not reliable on Windows for AlwaysOnBottom).
-            // Use keep_behind (not apply_behind) to avoid WS_EX_NOACTIVATE which
-            // would break StartDrag on this window.
-            #[cfg(windows)]
-            if self.window_layer == "behind" {
-                win32_behind::keep_behind("RigStats");
-            }
 
             // Drag handle — thin invisible strip at top for moving the borderless window.
             let drag_w = {
@@ -1175,6 +1174,11 @@ impl eframe::App for RigStatsApp {
             );
             if drag_resp.dragged() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
+            }
+            // After drag ends in "behind" mode, the window was activated for SC_MOVE
+            // and is now in front. Push it back behind on the next few frames.
+            if drag_resp.drag_stopped() && self.window_layer == "behind" {
+                self.reapply_window_props_frames = 4;
             }
             if drag_resp.hovered() {
                 let painter = ui.painter();
