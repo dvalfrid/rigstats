@@ -1076,45 +1076,58 @@ impl eframe::App for RigStatsApp {
                 let busy = self.updater_busy.clone();
                 let ctx = ui.ctx().clone();
                 std::thread::spawn(move || {
-                    let result = update_check::check();
-                    match result {
-                        Ok(update_check::CheckResult::UpdateAvailable(info)) => {
-                            let version = info.version.clone();
-                            let url = info.url.clone();
-                            let dest = update_check::installer_temp_path(&version);
-                            {
-                                let mut s = win.lock().unwrap();
-                                s.status = windows::updater::UpdateStatus::Downloading {
-                                    downloaded: 0,
-                                    total: 0,
-                                };
-                            }
-                            ctx.request_repaint();
-                            let win2 = win.clone();
-                            let ctx2 = ctx.clone();
-                            let dl_result =
-                                update_check::download(&url, &dest, |downloaded, total| {
-                                    let mut s = win2.lock().unwrap();
-                                    s.status = windows::updater::UpdateStatus::Downloading {
-                                        downloaded,
-                                        total,
+                    let thread_result =
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            let result = update_check::check();
+                            match result {
+                                Ok(update_check::CheckResult::UpdateAvailable(info)) => {
+                                    let version = info.version.clone();
+                                    let url = info.url.clone();
+                                    let dest = update_check::installer_temp_path(&version);
+                                    {
+                                        let mut s = win.lock().unwrap();
+                                        s.status = windows::updater::UpdateStatus::Downloading {
+                                            downloaded: 0,
+                                            total: 0,
+                                        };
+                                    }
+                                    ctx.request_repaint();
+                                    let win2 = win.clone();
+                                    let ctx2 = ctx.clone();
+                                    let dl_result =
+                                        update_check::download(&url, &dest, |downloaded, total| {
+                                            let mut s = win2.lock().unwrap();
+                                            s.status =
+                                                windows::updater::UpdateStatus::Downloading {
+                                                    downloaded,
+                                                    total,
+                                                };
+                                            ctx2.request_repaint();
+                                        });
+                                    let mut s = win.lock().unwrap();
+                                    s.status = match dl_result {
+                                        Ok(()) => windows::updater::UpdateStatus::Ready {
+                                            info,
+                                            installer_path: dest,
+                                        },
+                                        Err(e) => windows::updater::UpdateStatus::Error(e),
                                     };
-                                    ctx2.request_repaint();
-                                });
-                            let mut s = win.lock().unwrap();
-                            s.status = match dl_result {
-                                Ok(()) => windows::updater::UpdateStatus::Ready {
-                                    info,
-                                    installer_path: dest,
-                                },
-                                Err(e) => windows::updater::UpdateStatus::Error(e),
-                            };
-                        }
-                        Ok(update_check::CheckResult::UpToDate) => {
-                            win.lock().unwrap().status = windows::updater::UpdateStatus::UpToDate;
-                        }
-                        Err(e) => {
-                            win.lock().unwrap().status = windows::updater::UpdateStatus::Error(e);
+                                }
+                                Ok(update_check::CheckResult::UpToDate) => {
+                                    win.lock().unwrap().status =
+                                        windows::updater::UpdateStatus::UpToDate;
+                                }
+                                Err(e) => {
+                                    win.lock().unwrap().status =
+                                        windows::updater::UpdateStatus::Error(e);
+                                }
+                            }
+                        }));
+                    if let Err(_panic) = thread_result {
+                        if let Ok(mut s) = win.lock() {
+                            s.status = windows::updater::UpdateStatus::Error(
+                                "Update check failed unexpectedly".to_string(),
+                            );
                         }
                     }
                     ctx.request_repaint();
