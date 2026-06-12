@@ -732,6 +732,41 @@ existing portrait ones.
 
 ---
 
+## Remove Node.js / npm infrastructure 🔲
+
+**Background:** Node.js was introduced for the Tauri build pipeline and JS
+frontend. Since the egui migration (v1.27.0), the app is pure Rust at runtime.
+The `frontend/renderer/` JS files are legacy code that is never loaded by the
+egui binary.
+
+Node.js is currently kept for three reasons:
+
+1. **vitest** — unit tests for logic helpers in `frontend/renderer/` (tempColors,
+   vendorBranding, panel formatters). Most of this logic now has Rust equivalents
+   with their own tests; `vendorBranding.js` is the only file with non-duplicated
+   test coverage.
+2. **ESLint** — lints JS files that are not used at runtime.
+3. **markdownlint-cli2** and **lefthook** — tooling that could be replaced with
+   Rust-native alternatives or removed.
+
+### What needs to happen
+
+- Port `vendorBranding.js` brand-key mapping to Rust (or remove it if the
+  `brand.rs` logo loader already covers the same logic) and add Rust tests.
+- Delete `frontend/renderer/` entirely, or keep only non-JS assets.
+- Remove `package.json`, `node_modules`, `vitest.config.js`, `.eslintrc.*`,
+  `lefthook.yml`.
+- Rewrite `.github/workflows/verify.yml` and `build.yml` to use `cargo` and
+  `dotnet` directly instead of `npm run verify` / `npm run build`.
+- Update `CLAUDE.md`, `STANDARDS.md`, and this file to remove all npm/Node
+  references.
+
+### When to do this
+
+After v1.27.0 is stable in production. Not a blocker for any feature work.
+
+---
+
 ## LHM stability — sensor sidecar replaces HTTP LHM ✅
 
 **Implemented in v1.21.0.**
