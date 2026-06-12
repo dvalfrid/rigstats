@@ -516,9 +516,8 @@ pub fn show(
                 render_changelog_panel(ui, &entries, ui.available_height());
             }
             UpdateStatus::Idle => {
-                ui.label(
-                    egui::RichText::new("Check for a newer version of RigStats.").color(C_DATE),
-                );
+                let entries = parse_notes(BUNDLED_CHANGELOG);
+                render_changelog_panel(ui, &entries, ui.available_height());
             }
             UpdateStatus::Checking => {
                 ui.horizontal(|ui| {

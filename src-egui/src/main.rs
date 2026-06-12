@@ -1064,7 +1064,9 @@ impl eframe::App for RigStatsApp {
             }
 
             // When the window sets status to Checking (manual button click),
-            // kick off a check+download task on the tokio runtime.
+            // kick off check+download on a plain OS thread — update_check is
+            // synchronous and tokio::spawn is not safe to call from the egui
+            // UI thread (which is not inside a tokio async context).
             let is_checking = matches!(
                 self.updater_win.lock().unwrap().status,
                 windows::updater::UpdateStatus::Checking
@@ -1073,10 +1075,8 @@ impl eframe::App for RigStatsApp {
                 let win = self.updater_win.clone();
                 let busy = self.updater_busy.clone();
                 let ctx = ui.ctx().clone();
-                tokio::spawn(async move {
-                    let result = tokio::task::spawn_blocking(update_check::check)
-                        .await
-                        .unwrap_or_else(|_| Err("task panic".to_string()));
+                std::thread::spawn(move || {
+                    let result = update_check::check();
                     match result {
                         Ok(update_check::CheckResult::UpdateAvailable(info)) => {
                             let version = info.version.clone();
@@ -1092,19 +1092,15 @@ impl eframe::App for RigStatsApp {
                             ctx.request_repaint();
                             let win2 = win.clone();
                             let ctx2 = ctx.clone();
-                            let dest2 = dest.clone();
-                            let dl_result = tokio::task::spawn_blocking(move || {
-                                update_check::download(&url, &dest2, |downloaded, total| {
+                            let dl_result =
+                                update_check::download(&url, &dest, |downloaded, total| {
                                     let mut s = win2.lock().unwrap();
                                     s.status = windows::updater::UpdateStatus::Downloading {
                                         downloaded,
                                         total,
                                     };
                                     ctx2.request_repaint();
-                                })
-                            })
-                            .await
-                            .unwrap_or_else(|_| Err("download task panic".to_string()));
+                                });
                             let mut s = win.lock().unwrap();
                             s.status = match dl_result {
                                 Ok(()) => windows::updater::UpdateStatus::Ready {
