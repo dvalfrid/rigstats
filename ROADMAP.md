@@ -28,7 +28,8 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Total system power consumption | 🔲 Planned |
 | Stream Deck integration | 🔲 Planned |
 | Landscape monitor support | 🔲 Planned |
-| UI performance — lighter rendering strategy | 🔲 Planned |
+| egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
+| UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 
 ---
@@ -772,7 +773,7 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
-## egui migration — replace Tauri/WebView2 with native egui 🔲
+## egui migration — replace Tauri/WebView2 with native egui ✅
 
 **Background:** WebView2 (Chromium) costs 2–4 % CPU at idle due to its internal render loop, even though the dashboard only updates once per second. Replacing the frontend with egui + `ctx.request_repaint_after(Duration::from_secs(1))` allows the process to sleep completely between repaints.
 
@@ -786,7 +787,7 @@ task, no HTTP, no external process lifecycle to manage.
 - Verified: window shows live CPU %, GPU %, RAM, LHM pipe state. CPU idle ~0.5 % in debug build.
 - Root `Cargo.toml` workspace covers all three crates; existing Tauri npm scripts unaffected.
 
-**Remaining phases:** 2 (panels + sparklines) → 3 (all panels) → 4 (tray, window placement) → 5 (settings windows) → 6 (floating mode) → 7 (autostart, logging, auto-update) → 8 (remove Tauri, ship).
+**All 8 phases complete.** Shipped as v1.27.0. The egui binary (`rigstats.exe`) replaces Tauri entirely — `src-tauri/` removed. CPU idle reduced from ~2–4 % (WebView2) to ~0 % between repaints. All panels, floating mode, settings, auto-updater, tray, and brand logos are fully implemented in egui/eframe.
 
 ---
 
