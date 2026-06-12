@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.28.0](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.28.0) (2026-06-12)
+
+
+### Features
+
+* silent install with auto-restart for in-app updates ([262f693](https://github.com/dvalfrid/rigstats/commit/262f69347096fc79e21f8341d90b01ccf0684cb3))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
