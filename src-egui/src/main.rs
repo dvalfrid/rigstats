@@ -243,6 +243,32 @@ fn dialog_center(w: f32, h: f32) -> [f32; 2] {
     [100.0, 100.0]
 }
 
+/// Returns `pos` if it is within any currently connected monitor (allowing 60 px
+/// overhang so a panel that straddles a monitor edge is still considered visible),
+/// otherwise returns `fallback`.  Call this before applying a saved floating-panel
+/// position so panels that were left on a disconnected monitor snap back on-screen.
+fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
+    #[cfg(windows)]
+    {
+        let monitors = win_monitor::list();
+        let margin = 60.0_f32;
+        for (l, t, r, b) in monitors {
+            let (fl, ft, fr, fb) = (
+                l as f32 - margin,
+                t as f32 - margin,
+                r as f32 + margin,
+                b as f32 + margin,
+            );
+            if pos[0] >= fl && pos[0] <= fr && pos[1] >= ft && pos[1] <= fb {
+                return pos;
+            }
+        }
+        fallback
+    }
+    #[cfg(not(windows))]
+    pos
+}
+
 /// Returns (x, y) position for the window — top-left of the best portrait monitor.
 /// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
 fn pick_window_position() -> [f32; 2] {
@@ -1391,11 +1417,10 @@ impl RigStatsApp {
             let key = panel_key.clone();
 
             let init_pos: [f32; 2] = {
+                let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
                 let positions = self.floating_positions.lock().unwrap();
-                positions
-                    .get(&key)
-                    .copied()
-                    .unwrap_or([100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0])
+                let saved = positions.get(&key).copied().unwrap_or(default_pos);
+                guard_panel_position(saved, default_pos)
             };
 
             let panel_w = 450.0 * scale;
