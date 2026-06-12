@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.1](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.27.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* install NSIS in build workflow before makensis step ([3162966](https://github.com/dvalfrid/rigstats/commit/3162966606b846675bdddc7f49a1a6df1217f6df))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
