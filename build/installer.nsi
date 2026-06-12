@@ -39,6 +39,12 @@ RequestExecutionLevel admin
 !define MUI_UNICON "assets\icon.ico"
 !define MUI_ABORTWARNING
 
+!define MUI_COMPONENTSPAGE_SMALLDESC
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_TEXT "Launch RIGStats"
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchRIGStats
+
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
@@ -47,6 +53,12 @@ RequestExecutionLevel admin
 !insertmacro MUI_UNPAGE_INSTFILES
 
 !insertmacro MUI_LANGUAGE "English"
+
+; Launch RIGStats without the installer's elevated token so the app
+; runs with normal user privileges (expected for a tray application).
+Function LaunchRIGStats
+  Exec '"$INSTDIR\rigstats.exe"'
+FunctionEnd
 
 ; ── Pre-install ────────────────────────────────────────────────────────────────
 Function .onInit
@@ -129,6 +141,11 @@ Section "RIGStats" SecMain
   WriteUninstaller "$INSTDIR\uninstall.exe"
 SectionEnd
 
+; ── Optional: desktop shortcut ────────────────────────────────────────────────
+Section /o "Desktop Shortcut" SecDesktop
+  CreateShortcut "$DESKTOP\RIGStats.lnk" "$INSTDIR\rigstats.exe"
+SectionEnd
+
 ; ── Uninstaller ────────────────────────────────────────────────────────────────
 Section "Uninstall"
   nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
@@ -146,6 +163,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\pawnio"
   RMDir "$INSTDIR"
 
+  Delete "$DESKTOP\RIGStats.lnk"
   Delete "$SMPROGRAMS\RIGStats\RIGStats.lnk"
   Delete "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk"
   RMDir  "$SMPROGRAMS\RIGStats"
