@@ -2,8 +2,10 @@ use serde::Deserialize;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const LATEST_JSON_URL: &str =
-    "https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json";
+const LATEST_JSON_URL: &str = match option_env!("RIGSTATS_UPDATE_URL") {
+    Some(url) => url,
+    None => "https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json",
+};
 
 /// Full version history bundled at compile time from CHANGELOG.md.
 pub const BUNDLED_CHANGELOG: &str = include_str!("../../CHANGELOG.md");
