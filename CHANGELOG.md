@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.1](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.27.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* remove egui Style::debug field removed in 0.30+ ([febe539](https://github.com/dvalfrid/rigstats/commit/febe5392dbc92f38c967334fae6dd5feb6a4a113))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
