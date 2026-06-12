@@ -379,4 +379,15 @@ mod tests {
     assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"recovered":true}"#);
     assert!(!path.with_extension("json.tmp").exists());
   }
+
+  #[test]
+  fn default_thresholds_includes_battery_charge_and_power_keys() {
+    let t = super::default_thresholds();
+    let bat = t.get("battery").expect("battery key missing");
+    assert_eq!(bat.warn, Some(20), "battery warn should be 20 %");
+    assert_eq!(bat.crit, Some(10), "battery crit should be 10 %");
+    let pwr = t.get("battery_power").expect("battery_power key missing");
+    assert_eq!(pwr.warn, Some(15), "battery_power warn should be 15 W");
+    assert_eq!(pwr.crit, Some(25), "battery_power crit should be 25 W");
+  }
 }

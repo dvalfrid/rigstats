@@ -147,3 +147,80 @@ pub fn draw(
         });
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tempcolor;
+    use crate::theme::AppTheme;
+
+    fn theme() -> AppTheme {
+        AppTheme::from_key("dark-cyan")
+    }
+
+    // --- charge_color --------------------------------------------------------
+
+    #[test]
+    fn charge_color_charging_returns_accent_regardless_of_pct() {
+        assert_eq!(charge_color(5, true, 20, 10), theme::C_ACCENT);
+        assert_eq!(charge_color(100, true, 20, 10), theme::C_ACCENT);
+    }
+
+    #[test]
+    fn charge_color_above_warn_is_green() {
+        assert_eq!(charge_color(50, false, 20, 10), tempcolor::color_ok());
+        assert_eq!(charge_color(20, false, 20, 10), tempcolor::color_ok());
+    }
+
+    #[test]
+    fn charge_color_between_crit_and_warn_is_yellow() {
+        assert_eq!(charge_color(15, false, 20, 10), tempcolor::color_warn());
+        assert_eq!(charge_color(10, false, 20, 10), tempcolor::color_warn());
+    }
+
+    #[test]
+    fn charge_color_below_crit_is_red() {
+        assert_eq!(charge_color(9, false, 20, 10), tempcolor::color_hot());
+        assert_eq!(charge_color(0, false, 20, 10), tempcolor::color_hot());
+    }
+
+    // --- power_color ---------------------------------------------------------
+
+    #[test]
+    fn power_color_charging_returns_muted() {
+        let th = theme();
+        assert_eq!(power_color(50.0, true, 15, 25, &th), th.text_muted);
+    }
+
+    #[test]
+    fn power_color_below_warn_is_green() {
+        let th = theme();
+        assert_eq!(power_color(10.0, false, 15, 25, &th), tempcolor::color_ok());
+    }
+
+    #[test]
+    fn power_color_between_warn_and_crit_is_yellow() {
+        let th = theme();
+        assert_eq!(
+            power_color(15.0, false, 15, 25, &th),
+            tempcolor::color_warn()
+        );
+        assert_eq!(
+            power_color(20.0, false, 15, 25, &th),
+            tempcolor::color_warn()
+        );
+    }
+
+    #[test]
+    fn power_color_at_or_above_crit_is_red() {
+        let th = theme();
+        assert_eq!(
+            power_color(25.0, false, 15, 25, &th),
+            tempcolor::color_hot()
+        );
+        assert_eq!(
+            power_color(40.0, false, 15, 25, &th),
+            tempcolor::color_hot()
+        );
+    }
+}
