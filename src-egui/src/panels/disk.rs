@@ -172,3 +172,43 @@ pub fn draw(
             });
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fmt_speed_parts;
+
+    #[test]
+    fn below_one_mb_formats_as_kb() {
+        let (v, u) = fmt_speed_parts(0.5);
+        assert_eq!(u, "KB/s");
+        assert_eq!(v, "500");
+    }
+
+    #[test]
+    fn one_mb_formats_as_mb() {
+        let (v, u) = fmt_speed_parts(1.0);
+        assert_eq!(u, "MB/s");
+        assert_eq!(v, "1.0");
+    }
+
+    #[test]
+    fn below_1000_mb_formats_as_mb() {
+        let (v, u) = fmt_speed_parts(512.3);
+        assert_eq!(u, "MB/s");
+        assert_eq!(v, "512.3");
+    }
+
+    #[test]
+    fn at_1000_mb_formats_as_gb() {
+        let (v, u) = fmt_speed_parts(1000.0);
+        assert_eq!(u, "GB/s");
+        assert_eq!(v, "1.00");
+    }
+
+    #[test]
+    fn above_1000_mb_formats_as_gb() {
+        let (v, u) = fmt_speed_parts(2500.0);
+        assert_eq!(u, "GB/s");
+        assert_eq!(v, "2.50");
+    }
+}

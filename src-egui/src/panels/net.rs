@@ -225,3 +225,43 @@ pub fn draw(
         );
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fmt_mbps_parts;
+
+    #[test]
+    fn below_one_mbps_formats_as_kbps() {
+        let (v, u) = fmt_mbps_parts(0.5);
+        assert_eq!(u, "Kbps");
+        assert_eq!(v, "500");
+    }
+
+    #[test]
+    fn one_mbps_formats_as_mbps() {
+        let (v, u) = fmt_mbps_parts(1.0);
+        assert_eq!(u, "Mbps");
+        assert_eq!(v, "1.0");
+    }
+
+    #[test]
+    fn below_1000_mbps_formats_as_mbps() {
+        let (v, u) = fmt_mbps_parts(350.7);
+        assert_eq!(u, "Mbps");
+        assert_eq!(v, "350.7");
+    }
+
+    #[test]
+    fn at_1000_mbps_formats_as_gbps() {
+        let (v, u) = fmt_mbps_parts(1000.0);
+        assert_eq!(u, "Gbps");
+        assert_eq!(v, "1.00");
+    }
+
+    #[test]
+    fn above_1000_mbps_formats_as_gbps() {
+        let (v, u) = fmt_mbps_parts(2400.0);
+        assert_eq!(u, "Gbps");
+        assert_eq!(v, "2.40");
+    }
+}

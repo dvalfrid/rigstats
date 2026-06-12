@@ -134,3 +134,25 @@ pub fn draw(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fmt_ram;
+
+    #[test]
+    fn below_1gb_shows_mb() {
+        assert_eq!(fmt_ram(512), "512M");
+        assert_eq!(fmt_ram(1023), "1023M");
+    }
+
+    #[test]
+    fn exactly_1gb_shows_gb() {
+        assert_eq!(fmt_ram(1024), "1.0G");
+    }
+
+    #[test]
+    fn above_1gb_shows_gb_with_one_decimal() {
+        assert_eq!(fmt_ram(2048), "2.0G");
+        assert_eq!(fmt_ram(1536), "1.5G");
+    }
+}

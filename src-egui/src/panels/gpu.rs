@@ -257,3 +257,21 @@ pub fn draw(
 
     (new_gpu, rect)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::fmt_opt;
+
+    #[test]
+    fn fmt_opt_some_formats_with_unit_and_decimals() {
+        assert_eq!(fmt_opt(Some(72.0), "°C", 0), "72°C");
+        assert_eq!(fmt_opt(Some(1234.0), "MHz", 0), "1234MHz");
+        assert_eq!(fmt_opt(Some(8.5), "W", 1), "8.5W");
+    }
+
+    #[test]
+    fn fmt_opt_none_returns_dash_with_unit() {
+        assert_eq!(fmt_opt(None, "°C", 0), "--°C");
+        assert_eq!(fmt_opt(None, "W", 1), "--W");
+    }
+}

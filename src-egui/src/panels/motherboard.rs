@@ -158,3 +158,32 @@ pub fn draw(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::short_label;
+
+    #[test]
+    fn temperature_number_becomes_t_prefix() {
+        assert_eq!(short_label("Temperature #1"), "T1");
+        assert_eq!(short_label("Temperature #12"), "T12");
+    }
+
+    #[test]
+    fn fan_number_becomes_f_prefix() {
+        assert_eq!(short_label("Fan #1"), "F1");
+        assert_eq!(short_label("Fan #3"), "F3");
+    }
+
+    #[test]
+    fn short_label_passes_through_short_names() {
+        assert_eq!(short_label("CPU"), "CPU");
+        assert_eq!(short_label("+12V"), "+12V");
+    }
+
+    #[test]
+    fn long_label_truncated_to_8_chars() {
+        assert_eq!(short_label("VCORE_SOC"), "VCORE_SO");
+        assert_eq!(short_label("123456789"), "12345678");
+    }
+}

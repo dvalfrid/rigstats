@@ -24,3 +24,43 @@ pub fn temp_color(value: Option<f64>, warn: u8, crit: u8) -> Color32 {
         Some(_) => color_ok(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn none_returns_unknown() {
+        assert_eq!(temp_color(None, 80, 90), color_unknown());
+    }
+
+    #[test]
+    fn zero_returns_unknown() {
+        assert_eq!(temp_color(Some(0.0), 80, 90), color_unknown());
+    }
+
+    #[test]
+    fn below_warn_is_green() {
+        assert_eq!(temp_color(Some(70.0), 80, 90), color_ok());
+    }
+
+    #[test]
+    fn at_warn_is_yellow() {
+        assert_eq!(temp_color(Some(80.0), 80, 90), color_warn());
+    }
+
+    #[test]
+    fn between_warn_and_crit_is_yellow() {
+        assert_eq!(temp_color(Some(85.0), 80, 90), color_warn());
+    }
+
+    #[test]
+    fn at_crit_is_red() {
+        assert_eq!(temp_color(Some(90.0), 80, 90), color_hot());
+    }
+
+    #[test]
+    fn above_crit_is_red() {
+        assert_eq!(temp_color(Some(100.0), 80, 90), color_hot());
+    }
+}
