@@ -2,7 +2,7 @@
 // Detects which panel this window hosts from the Tauri window label,
 // subscribes to the stats-broadcast app event, and drives updates.
 
-import { IS_DESKTOP, backend } from './environment.js';
+import { IS_DESKTOP, backend, logPermissionError } from './environment.js';
 import { startClock, setUptimeFromSeconds } from './clock.js';
 import { createHistory, pushHistory, drawSpark, drawDoubleSpark } from './spark.js';
 import { initCpuPanel, updateCpuPanel } from './panels/cpu.js';
@@ -118,6 +118,7 @@ async function syncWindowScaling() {
       return;
     }
   } catch (_e) {
+    logPermissionError(_e, `${panelKey}:innerSize`);
     // Fall through to DOM dimensions.
   }
   applyWindowScaling(window.innerWidth, window.innerHeight);
@@ -224,9 +225,9 @@ function scheduleSavePosition() {
       const pos = await currentWindow.outerPosition();
       backend.invoke('save-panel-positions', {
         positions: { [panelKey]: { x: pos.x, y: pos.y } },
-      }).catch(() => {});
+      }).catch((err) => logPermissionError(err, `${panelKey}:save-panel-positions`));
     } catch (_e) {
-      // Position unavailable — skip silently.
+      logPermissionError(_e, `${panelKey}:outerPosition`);
     }
   }, 500);
 }
@@ -328,7 +329,8 @@ async function start() {
 
   // Save position after each move (debounced).
   if (currentWindow?.listen) {
-    currentWindow.listen('tauri://moved', scheduleSavePosition).catch(() => {});
+    currentWindow.listen('tauri://move', scheduleSavePosition)
+      .catch((err) => logPermissionError(err, `${panelKey}:listen(tauri://move)`));
   }
   window.addEventListener('resize', () => { syncWindowScaling(); });
 

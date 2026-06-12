@@ -8,7 +8,7 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
-## [1.26.0](https://github.com/dvalfrid/rigstats/compare/v1.25.0...v1.26.0) (2026-06-12)
+## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
 ### Features
@@ -30,6 +30,26 @@ This project follows Semantic Versioning:
 * **floating:** panels stay behind other windows via WS\_EX\_NOACTIVATE and Win32 SetWindowPos ([ceb8ae2](https://github.com/dvalfrid/rigstats/commit/ceb8ae282))
 * **opacity:** window-level opacity via SetLayeredWindowAttributes replaces broken per-pixel alpha ([8661d36](https://github.com/dvalfrid/rigstats/commit/8661d36f7))
 * **cpu:** core bars layout — natural label width eliminates dead space at column left edge ([e5bfb6c](https://github.com/dvalfrid/rigstats/commit/e5bfb6c25))
+
+## [1.26.0](https://github.com/dvalfrid/rigstats/compare/v1.25.1...v1.26.0) (2026-06-08)
+
+
+### Features
+
+* surface Tauri capability-denied errors instead of swallowing them ([f17793d](https://github.com/dvalfrid/rigstats/commit/f17793dc5025056c9ea5df03744f2274eee88025))
+
+
+### Bug Fixes
+
+* floating panel positions never saved after drag ([7580971](https://github.com/dvalfrid/rigstats/commit/75809711188e521a32b84174748dd277ed1b03c1))
+* grant outer-position permission to panel windows so drag positions save correctly ([1673afa](https://github.com/dvalfrid/rigstats/commit/1673afa8ec849b11dd9603a521b765f56631a2dd))
+
+## [1.25.1](https://github.com/dvalfrid/rigstats/compare/v1.25.0...v1.25.1) (2026-06-08)
+
+
+### Bug Fixes
+
+* improve floating panel position diagnostics for bug reports ([70756c8](https://github.com/dvalfrid/rigstats/commit/70756c801072fa1782a63c03c465e71e65a2cda8))
 
 ## [1.25.0](https://github.com/dvalfrid/rigstats/compare/v1.24.0...v1.25.0) (2026-06-06)
 

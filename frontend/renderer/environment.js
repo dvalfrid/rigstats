@@ -38,4 +38,15 @@ const backend = {
   },
 };
 
-export { backend, IS_DESKTOP, IS_TAURI };
+// Logs capability/permission errors that would otherwise be silently swallowed.
+// Only fires for "not allowed" responses from Tauri's ACL system — transient
+// errors (position unavailable, IPC timeout, etc.) are intentionally ignored.
+function logPermissionError(err, context) {
+  const msg = String(err);
+  if (!msg.includes('not allowed') && !msg.toLowerCase().includes('permission denied')) return;
+  const line = `[capability-denied] ${context}: ${msg.split('\n')[0]}`;
+  console.error(line);
+  if (IS_TAURI) tauriInvoke('log_frontend_error', { message: line }).catch(() => {});
+}
+
+export { backend, IS_DESKTOP, IS_TAURI, logPermissionError };

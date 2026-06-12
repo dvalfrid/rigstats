@@ -393,7 +393,7 @@ No dependencies on other crate modules — safe to import from anywhere.
 
 | Module | Responsibility |
 | --- | --- |
-| `environment.js` | Tauri detection, `backend` wrapper, `IS_DESKTOP` flag |
+| `environment.js` | Tauri detection, `backend` wrapper, `IS_DESKTOP` flag, `logPermissionError` |
 | `app.js` | 1 s poll loop, settings/events, panel orchestration |
 | `systemInfo.js` | Hostname, CPU/GPU model strings, brand logo |
 | `clock.js` | Time, day, date, uptime |

@@ -367,19 +367,22 @@
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, toggle floating mode to scatter panels freely, toggle always-on-top mode, enable launch at startup, configure temperature alert thresholds, choose a colour theme, and choose which panels to show — drag them to set the order.</p>
+            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, toggle floating mode to scatter panels freely, toggle always-on-top mode, enable launch at startup, configure temperature and battery alert thresholds, choose a colour theme, and choose which panels to show — drag them to set the order.</p>
             <ul>
               <li>Opacity slider (live preview)</li>
               <li>Display profile selector</li>
               <li>Floating mode toggle — independent draggable panel windows</li>
+              <li>Floating panel scale (40–100%)</li>
+              <li>Lock floating panel positions</li>
               <li>Always-on-top toggle</li>
               <li>Launch at Startup toggle</li>
               <li>Editable model name</li>
               <li>Colour theme — Dark Cyan, Amber, Green, Purple, Slate (live preview)</li>
               <li>Panel visibility toggles with drag-to-reorder</li>
-              <li>Warning &amp; critical temperature thresholds (CPU, GPU, RAM, Disk)</li>
+              <li>Warning &amp; critical thresholds (CPU, GPU, RAM, Disk temperatures; Battery charge %)</li>
               <li>Notification enable/disable per alert level</li>
               <li>Configurable alert cooldown</li>
+              <li>Stats CSV logging with configurable retention</li>
             </ul>
           </div>
         </article>
@@ -390,7 +393,7 @@
           </div>
           <div class="dialog-body">
             <h3>Status</h3>
-            <p>Runtime health view for every data source. Shows the LibreHardwareMonitor scheduled task state, dependency health indicators, the live debug log, and last successful refresh time.</p>
+            <p>Runtime health view for every data source. Shows the rigstats-sensor Windows Service state, dependency health indicators, the live debug log, and last successful refresh time.</p>
             <ul>
               <li>Dependency health indicators</li>
               <li>Live debug log viewer</li>
