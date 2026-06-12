@@ -2256,7 +2256,9 @@ async fn poll_loop(
         };
         if log_enabled {
             let payload = poll_stats_to_log_payload(&stats);
-            let _ = logging::append_stats_row(&payload, &dir);
+            if let Err(e) = logging::append_stats_row(&payload, &dir) {
+                debug::append_debug_log(&dir, &format!("logging: csv write error — {e}"));
+            }
             let today = logging::unix_now_secs() / 86400;
             if last_prune_day != Some(today) {
                 logging::prune_old_logs(&dir, retention_days);

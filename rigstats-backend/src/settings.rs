@@ -271,8 +271,18 @@ pub fn load_settings(dir: &Path) -> Settings {
   // On parse/read failure, return defaults to keep startup robust.
   let path = settings_path(dir);
   let mut settings = match fs::read_to_string(&path) {
-    Ok(raw) => serde_json::from_str::<Settings>(&raw).unwrap_or_default(),
-    Err(_) => Settings::default(),
+    Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
+      Ok(s) => s,
+      Err(e) => {
+        crate::debug::append_debug_log(dir, &format!("settings: parse error — {e}, using defaults"));
+        Settings::default()
+      }
+    },
+    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
+    Err(e) => {
+      crate::debug::append_debug_log(dir, &format!("settings: read error — {e}, using defaults"));
+      Settings::default()
+    }
   };
 
   // Migrate always_on_top bool → window_layer string (pre-1.24 settings files).
