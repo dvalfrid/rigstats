@@ -61,6 +61,9 @@ jobs:
       - name: Build release binary + sidecar
         run: npm run build
 
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
+
       - name: Build NSIS installer
         shell: pwsh
         run: |
