@@ -674,10 +674,6 @@ impl eframe::App for RigStatsApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // Sub-pixel layout values are expected when sc < 1.0 (side profiles).
-        ui.ctx()
-            .global_style_mut(|s| s.debug.show_unaligned = false);
-
         // On the first frame: locate the HWND and apply the initial window opacity.
         #[cfg(windows)]
         if self.hwnd == 0 {
