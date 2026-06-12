@@ -62,7 +62,8 @@ FunctionEnd
 
 ; ── Pre-install ────────────────────────────────────────────────────────────────
 Function .onInit
-  ; Stop sensor service before overwriting files.
+  ; Stop the running app and sensor service before overwriting files.
+  nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats.exe >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
   Sleep 3000
   ; Kill old LHM artefacts from pre-sidecar versions (< 1.20).
