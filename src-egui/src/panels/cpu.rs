@@ -9,8 +9,7 @@ use crate::PollStats;
 
 const SPARK_H: f32 = 36.0;
 
-// Fixed column widths for per-core bar rows (at 12 px Small).
-const CORE_LBL_W: f32 = 30.0; // "C16"
+// Fixed column width for per-core value label (at 12 px Small).
 const CORE_VAL_W: f32 = 36.0; // "100%"
 const CORE_ROW_H: f32 = 16.0;
 
@@ -108,16 +107,10 @@ pub fn draw(
 
         ui.add_space(6.0 * sc);
 
-        // Per-core bars — two fixed-width columns, 2 rows visible, scrollable.
+        // Per-core bars — two equal columns, 2 rows visible, scrollable.
         if !stats.cpu_cores.is_empty() {
             let cores = &stats.cpu_cores;
             let avail = ui.available_width();
-            // 6 widgets, 5 auto-gaps (~8 px each): 2*(LBL+VAL) + 5*8 = 132 + 40 = 172 fixed
-            let bar_w = ((avail - 172.0 * sc) / 2.0).max(4.0 * sc);
-
-            // Hard-allocate exactly 2 rows of vertical space in the parent layout,
-            // then render the ScrollArea inside that fixed region. This avoids
-            // relying solely on max_height, which can be overridden by set_min_height.
             let row_gap = 2.0_f32 * sc;
             let scroll_h = CORE_ROW_H * 2.0 * sc + row_gap;
             let (outer_rect, _) =
@@ -131,41 +124,42 @@ pub fn draw(
                 .show(&mut inner_ui, |ui| {
                     ui.style_mut().spacing.item_spacing.y = row_gap;
                     for (row, pair) in cores.chunks(2).enumerate() {
-                        ui.horizontal(|ui| {
-                            for (col, &load) in pair.iter().enumerate() {
+                        // ui.columns() splits width exactly 50/50 — each column
+                        // computes its own bar_w from its actual available width,
+                        // guaranteeing symmetric layout regardless of scale or scrollbar.
+                        ui.columns(2, |cols| {
+                            for (col, (col_ui, &load)) in
+                                cols.iter_mut().zip(pair.iter()).enumerate()
+                            {
                                 let idx = row * 2 + col;
-
-                                ui.allocate_ui_with_layout(
-                                    Vec2::new(CORE_LBL_W * sc, CORE_ROW_H * sc),
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new(format!("C{idx}"))
-                                                .size(11.0 * sc)
-                                                .color(th.text_muted),
-                                        );
-                                    },
-                                );
-
-                                theme::thin_bar_scaled(
-                                    ui,
-                                    load as f32 / 100.0,
-                                    bar_w,
-                                    theme::C_ACCENT,
-                                    sc,
-                                );
-
-                                ui.allocate_ui_with_layout(
-                                    Vec2::new(CORE_VAL_W * sc, CORE_ROW_H * sc),
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        ui.label(
-                                            RichText::new(format!("{load}%"))
-                                                .size(11.0 * sc)
-                                                .color(theme::C_TEXT),
-                                        );
-                                    },
-                                );
+                                col_ui.horizontal(|ui| {
+                                    // Label with natural text width — no fixed slot,
+                                    // so the bar starts flush after the text (no dead
+                                    // space at the left edge of the column).
+                                    ui.label(
+                                        RichText::new(format!("C{idx}"))
+                                            .size(11.0 * sc)
+                                            .color(th.text_muted),
+                                    );
+                                    let gap = ui.spacing().item_spacing.x;
+                                    let bar_w = (ui.available_width() - CORE_VAL_W * sc - gap)
+                                        .max(4.0 * sc);
+                                    theme::thin_bar_scaled(
+                                        ui,
+                                        load as f32 / 100.0,
+                                        bar_w,
+                                        theme::C_ACCENT,
+                                        sc,
+                                    );
+                                    theme::fixed_label_r(
+                                        ui,
+                                        RichText::new(format!("{load}%"))
+                                            .size(11.0 * sc)
+                                            .color(theme::C_TEXT),
+                                        CORE_VAL_W * sc,
+                                        CORE_ROW_H * sc,
+                                    );
+                                });
                             }
                         });
                     }

@@ -9,7 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cargo build --manifest-path src-egui/Cargo.toml
 
 # Run egui binary directly
-.\target\debug\rigstats-egui.exe
+.\target\debug\rigstats.exe
+
+# Restart the app reliably (Windows locks the exe while it runs — kill by PID first)
+# Step 1: kill by PID (Stop-Process -Name may silently fail)
+Stop-Process -Id (Get-Process rigstats -ErrorAction Stop).Id -Force
+# Step 2: build (cargo will fail silently if exe is still locked)
+cargo build --manifest-path src-egui/Cargo.toml
+# Step 3: VERIFY the exe timestamp changed before launching — if not, the process was still running
+Start-Process .\target\debug\rigstats.exe
 
 # Check egui + backend for errors
 cargo check --manifest-path src-egui/Cargo.toml

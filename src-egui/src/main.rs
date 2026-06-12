@@ -506,6 +506,8 @@ struct PanelThresholds {
     ram: (u8, u8),
     disk: (u8, u8),
     mb: (u8, u8),
+    battery: (u8, u8),
+    battery_power: (u8, u8),
 }
 
 impl Default for PanelThresholds {
@@ -517,6 +519,8 @@ impl Default for PanelThresholds {
             ram: (60, 70),
             disk: (50, 60),
             mb: (70, 90),
+            battery: (20, 10),
+            battery_power: (15, 25),
         }
     }
 }
@@ -536,6 +540,8 @@ impl PanelThresholds {
             ram: get("ram", def.ram),
             disk: get("disk", def.disk),
             mb: def.mb, // not user-configurable
+            battery: get("battery", def.battery),
+            battery_power: get("battery_power", def.battery_power),
         }
     }
 }
@@ -1238,7 +1244,17 @@ impl eframe::App for RigStatsApp {
                         let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
                     }
                     "battery" => {
-                        let _ = panels::battery::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
+                        let _ = panels::battery::draw(
+                            ui,
+                            &self.latest,
+                            1.0,
+                            &self.app_theme,
+                            sc,
+                            self.thresholds.battery.0,
+                            self.thresholds.battery.1,
+                            self.thresholds.battery_power.0,
+                            self.thresholds.battery_power.1,
+                        );
                     }
                     _ => {}
                 }
@@ -1574,9 +1590,17 @@ impl RigStatsApp {
                                 "process" => {
                                     panels::process::draw(ui, stats, 1.0, &app_theme, scale)
                                 }
-                                "battery" => {
-                                    panels::battery::draw(ui, stats, 1.0, &app_theme, scale)
-                                }
+                                "battery" => panels::battery::draw(
+                                    ui,
+                                    stats,
+                                    1.0,
+                                    &app_theme,
+                                    scale,
+                                    self.thresholds.battery.0,
+                                    self.thresholds.battery.1,
+                                    self.thresholds.battery_power.0,
+                                    self.thresholds.battery_power.1,
+                                ),
                                 _ => egui::Rect::NOTHING,
                             };
 

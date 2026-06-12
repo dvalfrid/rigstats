@@ -618,7 +618,7 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
             if i > 0 {
                 ui.add(egui::Separator::default().spacing(1.0));
             }
-            let unavailable = key == "battery" && !battery_present;
+            let unavailable = key == "battery" && !battery_present && cfg!(not(debug_assertions));
             let label_color = if unavailable { C_MUTED } else { C_TEXT };
 
             ui.horizontal(|ui| {
@@ -764,21 +764,13 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         });
     });
 
-    // Thresholds card
+    // Thresholds card — compact flat table, units/direction inline in row labels
     card_frame().show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         section_label(ui, "Thresholds (blank to disable)");
-        ui.add_space(8.0);
+        ui.add_space(6.0);
 
-        // Temperature section
-        ui.label(
-            egui::RichText::new("Temperature °C")
-                .size(11.0)
-                .color(C_MUTED),
-        );
-        ui.add_space(4.0);
-
-        // Column headers
+        // Shared Warn / Crit header
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_sized(
@@ -803,35 +795,43 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
             });
         });
 
+        // Temperature rows — unit inline as muted suffix
         for &(key, label) in &[
             ("cpu", "CPU"),
             ("gpu", "GPU"),
             ("ram", "RAM"),
             ("disk", "Disk"),
         ] {
-            let entry = draft.thresholds.entry(key.to_string()).or_insert_with(|| {
+            let e = draft.thresholds.entry(key.to_string()).or_insert_with(|| {
                 settings::default_thresholds()
                     .remove(key)
                     .unwrap_or_default()
             });
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(label).size(13.0).color(C_TEXT));
+                ui.label(egui::RichText::new("°C").size(11.0).color(C_MUTED));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    threshold_field(ui, &mut entry.crit);
+                    threshold_field(ui, &mut e.crit);
                     ui.add_space(4.0);
-                    threshold_field(ui, &mut entry.warn);
+                    threshold_field(ui, &mut e.warn);
                 });
             });
         }
 
-        ui.add_space(8.0);
+        // Thin divider + battery description
+        ui.add_space(3.0);
+        ui.add(egui::Separator::default().spacing(1.0));
+        ui.add_space(4.0);
         ui.label(
-            egui::RichText::new("Battery % (below)")
-                .size(11.0)
-                .color(C_MUTED),
+            egui::RichText::new(
+                "Charge: alert when % drops below · Power: alert when W exceeds (discharge only)",
+            )
+            .size(10.0)
+            .color(C_MUTED),
         );
         ui.add_space(4.0);
 
+        // Battery charge % — fires when charge drops BELOW threshold
         let bat = draft
             .thresholds
             .entry("battery".to_string())
@@ -841,11 +841,29 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                     .unwrap_or_default()
             });
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Battery").size(13.0).color(C_TEXT));
+            ui.label(egui::RichText::new("Charge %").size(13.0).color(C_TEXT));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 threshold_field(ui, &mut bat.crit);
                 ui.add_space(4.0);
                 threshold_field(ui, &mut bat.warn);
+            });
+        });
+
+        // Battery power W — fires when draw exceeds threshold (discharge only)
+        let bat_pwr = draft
+            .thresholds
+            .entry("battery_power".to_string())
+            .or_insert_with(|| {
+                settings::default_thresholds()
+                    .remove("battery_power")
+                    .unwrap_or_default()
+            });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Power W").size(13.0).color(C_TEXT));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                threshold_field(ui, &mut bat_pwr.crit);
+                ui.add_space(4.0);
+                threshold_field(ui, &mut bat_pwr.warn);
             });
         });
     });

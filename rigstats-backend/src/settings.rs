@@ -60,11 +60,19 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
       },
     ),
     (
-      // Battery fires when charge % DROPS BELOW the threshold (warn > crit).
+      // Battery charge: fires when % drops BELOW threshold (warn > crit).
       "battery",
       ComponentThresholds {
         warn: Some(20),
         crit: Some(10),
+      },
+    ),
+    (
+      // Battery power draw: fires when watts exceed threshold (warn < crit).
+      "battery_power",
+      ComponentThresholds {
+        warn: Some(15),
+        crit: Some(25),
       },
     ),
   ]
