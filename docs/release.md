@@ -4,16 +4,19 @@
 
 The repository includes `.github/workflows/verify.yml`.
 
-It runs on Windows for push and pull requests and executes:
+It runs on Windows for every push and pull request and executes:
 
-- `npm run prepare:sidecar` (publishes the .NET sensor sidecar)
-- `cargo test`
-- `cargo check`
+- `npm run prepare:sidecar` (publishes the .NET sensor sidecar as a self-contained exe)
+- `cargo test --manifest-path rigstats-backend/Cargo.toml`
+- `cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings`
+- `cargo fmt --check`
+- `npm run lint` (ESLint)
+- `npm run lint:md` (markdownlint)
 - `vitest run`
 
 To require it before merge:
 
-1. Open GitHub repository Settings -> Branches
+1. Open GitHub repository Settings → Branches
 2. Add a branch protection rule for `main`
 3. Enable pull requests before merging
 4. Enable required status checks
@@ -23,23 +26,22 @@ To require it before merge:
 
 The repository includes `.github/workflows/build.yml`.
 
-It:
+It runs on every push to `main` (and can be triggered manually) and:
 
-- installs dependencies
 - runs `npm run verify`
-- runs `npm run build`
-- uploads generated NSIS installer as a GitHub Actions artifact
+- runs `npm run build` (publishes sidecar + builds release egui binary)
+- builds the NSIS installer
+- uploads the installer as a GitHub Actions artifact (`rigstats-nsis`)
 
-Use it by either:
+To download the built installer without triggering a release:
 
-1. pushing to `main`, or
-2. running it manually from GitHub Actions -> Build -> Run workflow
-
-After completion, download the installer from the workflow run's Artifacts section.
+1. Open GitHub → Actions → Build
+2. Click the latest run
+3. Download `rigstats-nsis` from the Artifacts section
 
 ## Automated Changelog + Versioning
 
-The repository now uses Release Please:
+The repository uses [Release Please](https://github.com/googleapis/release-please):
 
 - Workflow: `.github/workflows/release-please.yml`
 - Config: `release-please-config.json`
@@ -47,71 +49,122 @@ The repository now uses Release Please:
 
 What it does:
 
-- reads commits on `main`
-- opens/updates a release PR
-- updates `CHANGELOG.md`
-- bumps versions in:
-  - `package.json`
-  - `src-tauri/Cargo.toml`
-  - `src-tauri/tauri.conf.json`
-- when the release PR is merged, it creates tag + GitHub Release automatically
+- Reads Conventional Commits on `main`
+- Opens/updates a release PR
+- Updates `CHANGELOG.md`
+- Bumps versions in `package.json` and `src-egui/Cargo.toml` (marked with `# x-release-please-version`)
+- When the release PR is merged, creates tag + GitHub Release and triggers `release.yml`
 
 ## Release Assets
 
 Installer publishing is handled by `.github/workflows/release.yml`.
 
-It runs when a GitHub Release is published and:
+It runs when a GitHub Release is published (or manually via `workflow_dispatch` with an existing tag) and:
 
-- runs verification (including sidecar publish)
-- builds the NSIS installer (sidecar exe is bundled automatically)
+- runs `npm run verify`
+- builds the NSIS installer
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
-- **signs the installer with the Tauri minisign key** (`@tauri-apps/cli signer sign`) — must happen after Azure signing so the signature covers the final PE
-- **generates `latest.json`** — extracts the current version's section from `CHANGELOG.md` and embeds it in the `notes` field; the updater dialog uses this to show release notes before installing
-- uploads the `.exe` and `latest.json` to the published GitHub Release
+- **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field
+- uploads the `.exe` and `latest.json` to the GitHub Release
 
-The `latest.json` endpoint (`https://github.com/dvalfrid/rigstats/releases/latest/download/latest.json`) is polled by `tauri-plugin-updater` on every running instance.
-
-### Signing keys
-
-Two separate signing mechanisms are used:
+### Signing
 
 | Key | Purpose | Where stored |
 | --- | --- | --- |
 | Azure Trusted Signing | Authenticode (SmartScreen trust, Windows installer) | GitHub Actions secrets: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` |
-| Tauri minisign keypair | Update integrity (Tauri updater verifies before install) | GitHub Actions secrets: `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` |
 
-To regenerate the Tauri keypair:
+### Manual re-run
 
-```bash
-npx @tauri-apps/cli signer generate -w ./rigstats-update.key
-```
+If the release build fails or needs to be re-run for an existing tag:
 
-Copy the printed public key to `src-tauri/tauri.conf.json` → `plugins.updater.pubkey`.
-
-Manual run option:
-
-1. Open GitHub -> Actions -> `Release`
+1. Open GitHub → Actions → Release
 2. Click `Run workflow`
-3. Enter the existing tag (for example `v1.0.0`)
+3. Enter the existing tag (e.g. `v1.27.0`)
 4. Run
 
-This rebuilds the installer for that tag and attaches it to the same release.
+## Day-To-Day Process
 
-## Commit Style (Important)
+1. Develop normally and merge PRs to `main`.
+2. Release Please keeps one release PR updated automatically.
+3. When ready to release, merge the release PR.
+4. GitHub creates the tag/release and `release.yml` attaches the signed installer.
 
-For best changelog quality, use Conventional Commits, for example:
+## Commit Style
+
+Use [Conventional Commits](https://www.conventionalcommits.org/) for best changelog quality:
 
 - `feat: add manual GPU sensor override`
 - `fix: handle missing LHM network throughput`
 - `docs: update release instructions`
 - `chore: bump vitest`
 
-## Day-To-Day Process (Simple)
+---
 
-1. Develop normally and merge PRs to `main`.
-2. Release Please keeps one release PR updated automatically.
-3. When you want to release, merge that release PR.
-4. GitHub will create the new tag/release and the release workflow will attach the installer.
+## Testing an Installer Before Release
 
-The sensor sidecar version is determined by the NuGet package reference in
-`sensor-sidecar/sensor-sidecar.csproj` (`LibreHardwareMonitorLib`).
+Before merging the release PR, test the full installer flow using the artifact
+from `build.yml` and a test `latest.json` to verify the in-app updater
+end-to-end without publishing a real release.
+
+### Step 1 — Get the installer artifact
+
+Run `build.yml` on `main` (or let it run automatically after merge),
+then download the `rigstats-nsis` artifact from the Actions run.
+
+### Step 2 — Upload to a GitHub pre-release
+
+Create a GitHub Release marked as **pre-release** (not published) and upload the
+installer `.exe`. Copy the direct download URL — you will need it in step 3.
+Pre-releases are never returned by `/releases/latest/`, so the live update
+endpoint is unaffected.
+
+### Step 3 — Create a test `latest.json`
+
+Create a file with version set **one patch higher** than the build (e.g. `1.27.1`
+if the app is `1.27.0`) so `is_newer` returns `true` against the running build:
+
+```json
+{
+  "version": "1.27.1",
+  "notes": "## [1.27.1] — Update flow test\n\n### Bug Fixes\n* verify end-to-end update works",
+  "pub_date": "2026-06-12T12:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "sha256": "test",
+      "url": "https://github.com/dvalfrid/rigstats/releases/download/v1.27.0-test/RIGStats_1.27.0_x64-setup.exe"
+    }
+  }
+}
+```
+
+Upload this file as a **GitHub Gist** and copy the Raw URL.
+
+### Step 4 — Build a test binary pointing at the Gist
+
+Set `RIGSTATS_UPDATE_URL` before building. The `option_env!` macro bakes the
+URL in at compile time; production builds (where the variable is not set) always
+use the real GitHub URL.
+
+```powershell
+$env:RIGSTATS_UPDATE_URL = "https://gist.githubusercontent.com/dvalfrid/<id>/raw/latest.json"
+cargo build --manifest-path src-egui/Cargo.toml
+.\target\debug\rigstats.exe
+```
+
+### Step 5 — Run through the update flow
+
+1. Open the test app → tray icon → **Check for Updates**
+   - ✅ Dialog shows "v1.27.1 available" with the changelog text from `notes`
+2. Click **Update Now**
+   - ✅ Download progress bar advances
+   - ✅ Windows UAC prompt appears for the installer
+   - ✅ NSIS installer runs (accept UAC to proceed)
+3. After install completes:
+   - ✅ `rigstats.exe` updated on disk
+   - ✅ `rigstats-sensor` Windows Service is running
+   - ✅ App starts and previous settings are intact
+
+### Step 6 — Clean up
+
+- Delete the pre-release and the Gist.
+- Remove the env var: `Remove-Item Env:\RIGSTATS_UPDATE_URL`
