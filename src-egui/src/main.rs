@@ -527,6 +527,9 @@ struct RigStatsApp {
     /// Used after floating→non-floating transitions where winit may reset the
     /// window level when the window is moved back on-screen.
     reapply_window_props_frames: u8,
+    /// Last [w, h] sent via InnerSize — avoids spurious resize events when
+    /// only opacity or theme changed (which would cause a visible jump).
+    last_applied_window_size: Option<[f32; 2]>,
 }
 
 /// Per-component warn/crit thresholds (°C) used for temperature colour coding.
@@ -652,6 +655,7 @@ impl RigStatsApp {
             // must be sent via viewport command, and opacity needs a valid HWND which
             // may not be available until after the first paint.
             reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
+            last_applied_window_size: None,
         }
     }
 }
@@ -748,10 +752,16 @@ impl eframe::App for RigStatsApp {
                 .clone();
             let [w, _] = profile_to_size(&profile);
             let h = compute_window_height(&self.visible_panels, profile_scale(&profile));
-            // Only resize/reposition the main window when in fixed (non-floating) mode.
+            // Only resize the main window when in fixed mode AND the size actually changed.
+            // Sending InnerSize every settings-reload (e.g. opacity slider drag) causes a
+            // visible jump even when the dimensions are identical.
             if !self.floating_mode {
-                ui.ctx()
-                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                let new_size = [w, h];
+                if self.last_applied_window_size != Some(new_size) {
+                    self.last_applied_window_size = Some(new_size);
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                }
             }
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
