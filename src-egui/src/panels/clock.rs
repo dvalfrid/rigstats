@@ -2,6 +2,13 @@ use egui::{RichText, Ui};
 
 use crate::theme;
 
+pub(crate) fn format_uptime(secs: u64) -> String {
+    let h = secs / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    format!("UP {h:02}:{m:02}:{s:02}")
+}
+
 pub fn draw(
     ui: &mut Ui,
     uptime_secs: u64,
@@ -34,12 +41,9 @@ pub fn draw(
                                 .color(th.text_muted),
                         );
                     });
-                    let h = uptime_secs / 3600;
-                    let m = (uptime_secs % 3600) / 60;
-                    let s = uptime_secs % 60;
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         ui.label(
-                            RichText::new(format!("UP {h:02}:{m:02}:{s:02}"))
+                            RichText::new(format_uptime(uptime_secs))
                                 .size(11.0 * sc)
                                 .color(theme::C_GRN),
                         );
@@ -78,4 +82,34 @@ pub fn draw(
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_seconds() {
+        assert_eq!(format_uptime(0), "UP 00:00:00");
+    }
+
+    #[test]
+    fn one_minute_one_second() {
+        assert_eq!(format_uptime(61), "UP 00:01:01");
+    }
+
+    #[test]
+    fn one_hour() {
+        assert_eq!(format_uptime(3600), "UP 01:00:00");
+    }
+
+    #[test]
+    fn hours_exceed_24() {
+        assert_eq!(format_uptime(90000), "UP 25:00:00");
+    }
+
+    #[test]
+    fn zero_padding() {
+        assert_eq!(format_uptime(3661), "UP 01:01:01");
+    }
 }

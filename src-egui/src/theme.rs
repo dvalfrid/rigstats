@@ -389,6 +389,86 @@ pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str) {
     });
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn approx_eq(a: u8, b: u8, tol: u8) -> bool {
+        a.abs_diff(b) <= tol
+    }
+
+    fn color_approx_eq(a: Color32, b: Color32, tol: u8) -> bool {
+        approx_eq(a.r(), b.r(), tol) && approx_eq(a.g(), b.g(), tol) && approx_eq(a.b(), b.b(), tol)
+    }
+
+    #[test]
+    fn hue_of_red() {
+        assert!((rgb_to_hue(255, 0, 0) - 0.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn hue_of_green() {
+        assert!((rgb_to_hue(0, 255, 0) - 120.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn hue_of_blue() {
+        assert!((rgb_to_hue(0, 0, 255) - 240.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn hue_of_achromatic_is_zero() {
+        assert_eq!(rgb_to_hue(128, 128, 128), 0.0);
+    }
+
+    #[test]
+    fn hsl_red() {
+        let c = hsl_to_rgb(0.0, 100.0, 50.0);
+        assert!(color_approx_eq(c, Color32::from_rgb(255, 0, 0), 2));
+    }
+
+    #[test]
+    fn hsl_achromatic_is_gray() {
+        let c = hsl_to_rgb(0.0, 0.0, 50.0);
+        assert_eq!(c.r(), c.g());
+        assert_eq!(c.g(), c.b());
+    }
+
+    #[test]
+    fn round_trip_dark_cyan() {
+        let accent = Color32::from_rgb(0x00, 0xc8, 0xff);
+        let h = rgb_to_hue(accent.r(), accent.g(), accent.b());
+        // Hue should be in the cyan range (175–200°)
+        assert!(h > 170.0 && h < 210.0, "hue={h}");
+        // Round-trip: HSL with S=100, L=50 should recover a similar blue-cyan
+        let back = hsl_to_rgb(h, 100.0, 50.0);
+        assert!(color_approx_eq(back, accent, 20));
+    }
+
+    #[test]
+    fn theme_keys_contains_all_presets() {
+        assert_eq!(THEME_KEYS.len(), 7);
+        assert!(THEME_KEYS.contains(&"dark-cyan"));
+        assert!(THEME_KEYS.contains(&"amber"));
+        assert!(THEME_KEYS.contains(&"purple"));
+    }
+
+    #[test]
+    fn from_key_unknown_falls_back_to_dark_cyan() {
+        let a = AppTheme::from_key("nonexistent");
+        let b = AppTheme::from_key("dark-cyan");
+        assert_eq!(a.accent, b.accent);
+    }
+
+    #[test]
+    fn derived_colors_differ_from_accent() {
+        let th = AppTheme::from_key("amber");
+        // stat_label and text_muted must be desaturated vs accent
+        assert_ne!(th.stat_label, th.accent);
+        assert_ne!(th.text_muted, th.accent);
+    }
+}
+
 /// Small L-shaped brackets at TL and BR corners of the panel.
 fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
     let bracket_a = (128.0 * opacity) as u8;

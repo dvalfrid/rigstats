@@ -89,6 +89,50 @@ impl Sparkline {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_fills_with_zeros() {
+        let s = Sparkline::new(10);
+        assert!(s.values().iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn new_length_matches_capacity() {
+        let s = Sparkline::new(80);
+        assert_eq!(s.values().len(), 80);
+    }
+
+    #[test]
+    fn push_evicts_oldest() {
+        let mut s = Sparkline::new(3);
+        s.push(5.0);
+        let v: Vec<f32> = s.values().iter().copied().collect();
+        assert_eq!(v, vec![0.0, 0.0, 5.0]);
+    }
+
+    #[test]
+    fn push_maintains_length() {
+        let mut s = Sparkline::new(5);
+        for i in 0..20 {
+            s.push(i as f32);
+        }
+        assert_eq!(s.values().len(), 5);
+    }
+
+    #[test]
+    fn push_multiple_preserves_order() {
+        let mut s = Sparkline::new(3);
+        s.push(1.0);
+        s.push(2.0);
+        s.push(3.0);
+        let v: Vec<f32> = s.values().iter().copied().collect();
+        assert_eq!(v, vec![1.0, 2.0, 3.0]);
+    }
+}
+
 pub fn premul_color(c: Color32, a: u8) -> Color32 {
     let af = a as u32;
     Color32::from_rgba_premultiplied(

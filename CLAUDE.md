@@ -32,13 +32,11 @@ dotnet build sensor-sidecar/sensor-sidecar.csproj
 # Publish sensor sidecar as single-file self-contained exe (release)
 dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release
 
-# Run frontend unit tests only
+# Run Rust tests (egui binary + backend)
 npm test
-
-# Run Rust tests only (requires Windows for most tests)
 cargo test --manifest-path rigstats-backend/Cargo.toml
 
-# Full verification: publish sidecar + Rust tests + clippy + fmt check + frontend tests
+# Full verification: publish sidecar + Rust tests + clippy + fmt check + markdown lint
 npm run verify
 
 # Production build (egui release binary + sidecar)
@@ -52,12 +50,6 @@ npm run prepare:sidecar
 > `rigstats-sensor` Windows Service is running, because the service holds the exe
 > open. Stop it first (`sc.exe stop rigstats-sensor` in an elevated terminal),
 > then run verify, then restart the service.
-
-Run a single frontend test file with vitest:
-
-```bash
-npx vitest run frontend/renderer/tempColors.test.js
-```
 
 Run a single Rust test:
 
@@ -77,12 +69,6 @@ npm run fmt:rs:check
 # Rust clippy
 npm run clippy
 
-# Lint JavaScript
-npm run lint
-
-# Auto-fix JavaScript
-npm run lint:fix
-
 # Lint Markdown
 npm run lint:md
 ```
@@ -96,10 +82,9 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 | Changed | Run |
 | --- | --- |
 | Any Rust file | `npm run fmt:rs` then `npm run clippy` |
-| Any `.js` file | `npm run lint` |
 | Any `.md` file | `npm run lint:md` |
 | Any `sensor-sidecar/*.cs` file | `dotnet build sensor-sidecar/sensor-sidecar.csproj` |
-| Logic in Rust or JS | `npm test` (or the single-file variant) |
+| Logic in Rust | `npm test` |
 | Unsure | `npm run verify` (runs everything, including markdown lint) |
 
 ## Documentation and website updates
@@ -116,7 +101,6 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 These four files must be consistent with the code at all times. Check all four before declaring a task done.
 
 - `npm run clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
-- `npm run lint` must exit clean — fix all errors and warnings before finishing.
 - If `fmt:rs` modifies files, include those changes in the same commit.
 - If a check fails, fix the issue. Do not skip checks or add `#[allow(...)]` without a clear reason documented in the code.
 
@@ -126,7 +110,7 @@ Prefer the simplest solution that solves the problem. Before implementing, ask: 
 
 ## Architecture Overview
 
-This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardware telemetry on a secondary portrait monitor. It has no bundler/build step for the frontend — vanilla JS ES modules are served directly from `frontend/`.
+This is a **Windows-only** egui desktop app ("RIGStats") that displays hardware telemetry on a secondary portrait monitor. There is no web frontend — all UI is native Rust/egui.
 
 The repo is a Cargo workspace (`Cargo.toml` at root) with two members:
 

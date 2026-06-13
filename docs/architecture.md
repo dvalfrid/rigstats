@@ -6,7 +6,6 @@
 - [Data Flow](#data-flow)
 - [File Structure](#file-structure)
 - [Backend Modules](#backend-modules)
-- [Frontend Modules](#frontend-modules)
 - [Dashboard Panels](#dashboard-panels)
 - [Diagnostics Export](#diagnostics-export)
 - [Design Decisions](#design-decisions)
@@ -28,10 +27,6 @@ The repository is a Cargo workspace with two members:
 | --- | --- | --- |
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no framework coupling |
 | `rigstats-egui` | `src-egui/` | Production binary — eframe app, all panels, tray, settings windows |
-
-The `frontend/` directory contains the legacy Tauri JS frontend. It is **not
-loaded at runtime** but is kept for the vitest unit test suite which tests pure
-logic helpers (`tempColors.js`, `vendorBranding.js`, panel formatters).
 
 ---
 
@@ -96,8 +91,6 @@ rig-dashboard/
 │   ├── Program.cs          Entry point, pipe server loop
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
 │   └── sensor-sidecar.csproj
-├── frontend/               Legacy Tauri JS frontend — NOT loaded at runtime
-│   └── renderer/           Kept for vitest unit tests (pure logic helpers)
 ├── docs/
 ├── website/
 ├── assets/                 Screenshot PNGs for website/README
@@ -374,87 +367,6 @@ in sync with Windows Settings → Apps → Startup.
 No dependencies on other crate modules — safe to import from anywhere.
 
 ---
-
-## Frontend Modules
-
-> **Note:** The `frontend/` directory is legacy Tauri JS code. It is **not
-> loaded at runtime** by the egui binary. The modules below are kept because
-> their pure-logic helpers are covered by the vitest unit test suite.
-
-### Quick reference
-
-| Module | Responsibility |
-| --- | --- |
-| `environment.js` | Tauri detection, `backend` wrapper, `IS_DESKTOP` flag, `logPermissionError` |
-| `app.js` | 1 s poll loop, settings/events, panel orchestration |
-| `systemInfo.js` | Hostname, CPU/GPU model strings, brand logo |
-| `clock.js` | Time, day, date, uptime |
-| `spark.js` | Sparkline ring buffer and canvas drawing |
-| `tempColors.js` | Temperature → colour threshold mapping |
-| `vendorBranding.js` | Brand key → logo asset + label (pure, testable) |
-| `simulator.js` | Synthetic stats for browser-mode development |
-| `themes.js` | CSS custom property application for colour themes |
-| `panels/*.js` | One module per panel (see Dashboard Panels) |
-| `panel-host.js` | Shared entry for floating panel windows — detects panel from window label, subscribes to `stats-broadcast`, saves positions on move |
-| `settings.js` | Settings window — four-tab segmented UI (Dashboard · Panels · Alerts · Appearance); active tab persisted in `localStorage`; warning alerts permanently off, only Critical has a toggle |
-| `about.js` | About window entry script |
-| `status.js` | Status window entry script |
-| `updater.js` | Updates & Changelog window entry script |
-
-### Module details
-
-#### `app.js`
-
-Main dashboard orchestrator:
-
-- Drives the 1 s `tick()` poll loop (skips if previous tick is still in flight)
-- Validates `StatsPayload` before rendering to avoid UI resets on malformed data
-- Calls `applyThresholds(s)` from the `get-settings` response at startup and
-  from every `apply-thresholds` event after `save_settings`
-- `applyVisiblePanels` hides/shows panels and reorders them in the DOM via
-  `appendChild` to match the saved order
-- Resizes the window to the height of the visible panels after each reorder
-
-#### `spark.js`
-
-- `createHistory(n)` — creates a ring buffer of size `n` for all series
-- `drawSpark` — single-series sparkline on a canvas element
-- `drawDoubleSpark` — two series on a shared scale, used by network
-  (upload=green, download=cyan) and disk (read=purple, write=pink)
-
-#### `panels/`
-
-Each panel exports one `update*Panel(stats, ...)` function called from
-`app.js` every tick.
-
-| Panel module | Key behaviour |
-| --- | --- |
-| `cpu.js` | Ring gauge, per-core bar list (scrollable), sparkline |
-| `gpu.js` | Ring gauge, 3×2 metadata grid (TEMP, HOT SPOT, CORE CLK, MEM CLK, POWER, FAN), VRAM + GPU load bars, one optional D3D row (3D + VID side by side) hidden when both fields are `null`, and compact selector dots that persist preferred GPU via `set_gpu_preference` |
-| `ram.js` | Usage bar, spec metadata, DIMM temperature |
-| `network.js` | Upload/download values, dual-series sparkline |
-| `disk.js` | Paginates 3 drives per page every 5 ticks when > 3 drives present |
-| `motherboard.js` | Three-column layout: fans / temps / voltages; `shortLabel()` maps `"Temperature #N"` → `"TN"` |
-| `process.js` | Top 8 processes: name (`.exe` stripped, 16 char max), CPU %, RAM. Names are HTML-escaped before `innerHTML` insertion. `truncateName` and `formatRam` exported for unit tests. |
-| `battery.js` | Charge % (big number), dynamic bar colour (accent=charging, green >50 %, amber 20–50 %, red <20 %), status (CHARGING / DISCHARGING), time remaining, live power draw (W) colour-coded by rate (green <12 W, amber 12–20 W, red >20 W, no colour when charging). Shows "NO BATTERY" when `present == false` (desktops). |
-| `clock.js` | Time, weekday, date |
-
-#### `settings.js`
-
-- `panelOrder` tracks all panels (visible + hidden) in user-defined sequence
-- `hiddenPanels` is a `Set` of unchecked keys
-- Drag-to-reorder uses the Pointer Events API with `setPointerCapture` instead
-  of the HTML5 Drag API (which shows a prohibition cursor inside WebView2)
-- Floating mode preview toggles are serialized in the renderer to avoid
-  overlapping IPC transitions; the latest requested state is queued
-- Floating panel scale slider previews are sent via `preview-floating-scale`
-  and restored on cancel
-
-#### `updater.js`
-
-Invokes `check-for-update` on load, renders release notes from `latest.json`
-combined with the bundled `CHANGELOG.md`, and drives the `install-update`
-download + progress flow.
 
 ---
 
