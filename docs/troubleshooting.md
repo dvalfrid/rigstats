@@ -139,7 +139,7 @@ cargo build --manifest-path src-egui/Cargo.toml
 Build a new installer after:
 
 ```powershell
-npm run build
+cargo xtask build
 ```
 
 ## Ghost Entries in "Other System Tray Icons"

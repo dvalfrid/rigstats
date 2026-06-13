@@ -4,15 +4,12 @@
 
 The repository includes `.github/workflows/verify.yml`.
 
-It runs on Windows for every push and pull request and executes:
+It runs on Windows for every push and pull request and executes `cargo xtask verify`:
 
-- `npm run prepare:sidecar` (publishes the .NET sensor sidecar as a self-contained exe)
-- `cargo test --manifest-path rigstats-backend/Cargo.toml`
-- `cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings`
+- Publishes the .NET sensor sidecar
+- `cargo test` on `rigstats-backend` and `src-egui`
+- `cargo clippy -- -D warnings`
 - `cargo fmt --check`
-- `npm run lint` (ESLint)
-- `npm run lint:md` (markdownlint)
-- `vitest run`
 
 To require it before merge:
 
@@ -28,8 +25,8 @@ The repository includes `.github/workflows/build.yml`.
 
 It runs on every push to `main` (and can be triggered manually) and:
 
-- runs `npm run verify`
-- runs `npm run build` (publishes sidecar + builds release egui binary)
+- runs `cargo xtask verify`
+- runs `cargo xtask build` (publishes sidecar + builds release egui binary)
 - builds the NSIS installer
 - uploads the installer as a GitHub Actions artifact (`rigstats-nsis`)
 
@@ -52,7 +49,7 @@ What it does:
 - Reads Conventional Commits on `main`
 - Opens/updates a release PR
 - Updates `CHANGELOG.md`
-- Bumps versions in `package.json` and `src-egui/Cargo.toml` (marked with `# x-release-please-version`)
+- Bumps versions in `src-egui/Cargo.toml` (marked with `# x-release-please-version`)
 - When the release PR is merged, creates tag + GitHub Release and triggers `release.yml`
 
 ## Release Assets
@@ -61,7 +58,8 @@ Installer publishing is handled by `.github/workflows/release.yml`.
 
 It runs when a GitHub Release is published (or manually via `workflow_dispatch` with an existing tag) and:
 
-- runs `npm run verify`
+- runs `cargo xtask verify`
+- runs `cargo xtask build`
 - builds the NSIS installer
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
 - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field
@@ -96,7 +94,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) for best change
 - `feat: add manual GPU sensor override`
 - `fix: handle missing LHM network throughput`
 - `docs: update release instructions`
-- `chore: bump vitest`
+- `chore: update dependencies`
 
 ---
 
