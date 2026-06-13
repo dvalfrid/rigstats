@@ -149,7 +149,7 @@ Windows stores one tray icon entry per unique exe path. Old entries from dev bui
 Run the cleanup script (no elevation needed — run as the same user that runs RIGStats):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
+pwsh -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
 ```
 
 The script ([`tools/clean-tray-ghosts.ps1`](../tools/clean-tray-ghosts.ps1)) finds all RIGStats-related tray entries, shows what it will keep vs delete, asks for confirmation, then restarts Explorer.
