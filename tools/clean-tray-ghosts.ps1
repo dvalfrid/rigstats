@@ -12,7 +12,7 @@ $rigstats = $all | Where-Object {
 }
 
 if (-not $rigstats) {
-    Write-Host "Inga RIGStats-poster hittades."
+    Write-Host "No RIGStats entries found."
     exit 0
 }
 
@@ -35,28 +35,28 @@ foreach ($entry in $rigstats) {
 }
 
 Write-Host ""
-Write-Host "=== BEHÅLLER ===" -ForegroundColor Green
+Write-Host "=== KEEP ===" -ForegroundColor Green
 $keep | ForEach-Object { Write-Host "  $($_.Id): $($_.Exe)" }
 
 Write-Host ""
-Write-Host "=== RADERAR ===" -ForegroundColor Yellow
+Write-Host "=== DELETE ===" -ForegroundColor Yellow
 $delete | ForEach-Object { Write-Host "  $($_.Id): $($_.Exe)" }
 
 if (-not $delete) {
     Write-Host ""
-    Write-Host "Inget att radera." -ForegroundColor Green
+    Write-Host "Nothing to delete." -ForegroundColor Green
     exit 0
 }
 
 Write-Host ""
-$confirm = Read-Host "Fortsätt? (j/n)"
-if ($confirm -ne "j") {
-    Write-Host "Avbrutet."
+$confirm = Read-Host "Continue? (y/n)"
+if ($confirm -ne "y") {
+    Write-Host "Aborted."
     exit 0
 }
 
 Write-Host ""
-Write-Host "Stoppar Explorer..."
+Write-Host "Stopping Explorer..."
 Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 1500
 
@@ -64,10 +64,10 @@ foreach ($entry in $delete) {
     $path = "$base\$($entry.Id)"
     if (Test-Path $path) {
         Remove-Item $path -Recurse -Force
-        Write-Host "Borttagen: $($entry.Id) ($($entry.Exe))" -ForegroundColor Green
+        Write-Host "Removed: $($entry.Id) ($($entry.Exe))" -ForegroundColor Green
     }
 }
 
 Start-Process explorer
 Write-Host ""
-Write-Host "Klart. Kontrollera Settings -> Personalization -> Taskbar -> Other system tray icons." -ForegroundColor Cyan
+Write-Host "Done. Check Settings -> Personalization -> Taskbar -> Other system tray icons." -ForegroundColor Cyan
