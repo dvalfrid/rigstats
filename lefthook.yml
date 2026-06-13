@@ -2,10 +2,10 @@ pre-commit:
   commands:
     fmt-rs:
       glob: "{src-egui,rigstats-backend}/**/*.rs"
-      run: npm run fmt:rs:check
+      run: cargo xtask fmt-check
     clippy:
       glob: "{src-egui,rigstats-backend}/**/*.rs"
-      run: cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings
+      run: cargo xtask clippy
     lint-md:
       glob: "*.md"
-      run: npm run lint:md
+      run: cargo xtask lint-md

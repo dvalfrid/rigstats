@@ -1,3 +1,4 @@
 [workspace]
-members = ["src-egui", "rigstats-backend"]
+members = ["src-egui", "rigstats-backend", "xtask"]
+default-members = ["src-egui", "rigstats-backend"]
 resolver = "2"

@@ -47,11 +47,11 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Run verification
-        run: npm run verify
+      - name: Run verify pipeline
+        run: cargo xtask verify
 
       - name: Build release binary + sidecar
-        run: npm run build
+        run: cargo xtask build
 
       - name: Install NSIS
         shell: pwsh
@@ -72,4 +72,3 @@ jobs:
           name: rigstats-nsis
           path: target\release\RIGStats_*_x64-setup.exe
           if-no-files-found: error
-

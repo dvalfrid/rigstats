@@ -56,10 +56,10 @@ jobs:
         run: npm ci
 
       - name: Run verification
-        run: npm run verify
+        run: cargo xtask verify
 
       - name: Build release binary + sidecar
-        run: npm run build
+        run: cargo xtask build
 
       - name: Install NSIS
         shell: pwsh

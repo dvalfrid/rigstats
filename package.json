@@ -1,22 +1,9 @@
 {
   "name": "rig-dashboard",
-  "version": "1.27.1",
-  "description": "Gaming rig stats dashboard for secondary display",
+  "description": "Tool dependencies — build is handled by cargo xtask",
   "scripts": {
-    "prepare:sidecar": "dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release",
-    "build:egui": "cargo build --release --manifest-path src-egui/Cargo.toml",
-    "build": "npm run prepare:sidecar && npm run build:egui",
-    "test": "cargo test --manifest-path src-egui/Cargo.toml",
-    "lint:md": "markdownlint-cli2 \"*.md\"",
-    "fmt:rs": "cargo fmt --manifest-path src-egui/Cargo.toml",
-    "fmt:rs:check": "cargo fmt --manifest-path src-egui/Cargo.toml -- --check",
-    "clippy": "cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings",
-    "verify": "npm run prepare:sidecar && cargo test --manifest-path rigstats-backend/Cargo.toml && cargo test --manifest-path src-egui/Cargo.toml && cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings && npm run fmt:rs:check && npm run lint:md",
     "prepare": "lefthook install"
   },
-  "keywords": [],
-  "author": "Daniel",
-  "license": "MIT",
   "devDependencies": {
     "lefthook": "^2.1.4",
     "markdownlint-cli2": "^0.21.0"

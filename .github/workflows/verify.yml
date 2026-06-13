@@ -44,4 +44,4 @@ jobs:
         run: npm ci
 
       - name: Run verify pipeline
-        run: npm run verify
+        run: cargo xtask verify
