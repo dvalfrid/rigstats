@@ -3,7 +3,6 @@
 ## Requirements
 
 - Windows 10/11 (x64)
-- Node.js LTS: <https://nodejs.org>
 - Rust: <https://rustup.rs>
 - .NET 10 SDK: `winget install Microsoft.DotNet.SDK.10`
 - Visual Studio 2022 Build Tools with Desktop development with C++
@@ -23,34 +22,32 @@ The repo does not check in the sidecar binary. It is built from source as part o
 the build pipeline:
 
 ```powershell
-npm run prepare:sidecar   # dotnet publish → sensor-sidecar/bin/Release/.../publish/
-npm run build             # calls prepare:sidecar, then cargo build --release + makensis
+cargo xtask build   # dotnet publish sidecar + cargo build --release
 ```
 
 The published exe is bundled into the NSIS installer automatically.
 
 ## Local Development
 
-1. Extract or clone the repo, for example to:
-
-   ```text
-   C:\Users\YourName\rig-dashboard\
-   ```
-
-2. Open a terminal in the project folder.
-3. Install dependencies:
+1. Clone the repo:
 
    ```powershell
-   npm install
+   git clone https://github.com/dvalfrid/rigstats
+   cd rigstats
    ```
 
-4. Start development mode:
+2. Install git hooks (run once after cloning):
 
    ```powershell
-   npm start
+   cargo xtask setup
    ```
 
-The egui binary will compile and the dashboard window will open.
+3. Build and run the debug binary:
+
+   ```powershell
+   cargo build --manifest-path src-egui/Cargo.toml
+   .\target\debug\rigstats.exe
+   ```
 
 ## Display Profiles
 
@@ -74,32 +71,30 @@ Built-in profiles:
 | `portrait-qhd-side` | 338×1440 | Landscape monitor sidebar |
 | `portrait-4k-side` | 506×2160 | Landscape monitor sidebar |
 
-How it works:
-
-- The app loads your saved profile at startup
-- The backend resizes the main window to that profile size
-- Monitor targeting prefers an exact resolution match for that profile
-- If no exact match exists, the selected size is still applied and the window can be moved manually
-
-You can change the profile in the Settings window.
+The active profile is changed in Settings → Display Profile.
 
 ## Local Builds
 
 Build an installable release with:
 
 ```powershell
-npm run build
+cargo xtask build
 ```
 
-This publishes the sensor sidecar, compiles the Rust binary in release mode, and runs `makensis` to produce the installer.
+This publishes the sensor sidecar, compiles the Rust binary in release mode.
+Then build the NSIS installer:
 
-On first run this can take 5 to 10 minutes because Rust dependencies are compiled.
+```powershell
+$version = "1.27.1"
+makensis /DVERSION=$version build\installer.nsi
+```
 
-Output goes to:
+On first run this can take 5–10 minutes because Rust dependencies are compiled.
+
+Output:
 
 ```text
-target\release\
-  RIGStats_1.0.0_x64-setup.exe
+target\release\RIGStats_1.x.x_x64-setup.exe
 ```
 
 Default install location:
@@ -112,7 +107,9 @@ C:\Program Files\RIGStats\
 
 Launch at startup is configured directly in the app — no manual steps required.
 
-Open the Settings window (right-click the tray icon → Settings) and enable the **Launch at Startup** toggle. The app registers itself under `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run` and keeps the `StartupApproved\Run` entry in sync so the toggle reflects the actual state shown in Windows Settings → Apps → Startup.
+Open the Settings window (right-click the tray icon → Settings) and enable the
+**Launch at Startup** toggle. The app registers itself under
+`HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Run`.
 
 The sensor sidecar (`rigstats-sensor` Windows Service) is installed and started
 by the NSIS installer during setup.

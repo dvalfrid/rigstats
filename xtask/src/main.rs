@@ -95,10 +95,28 @@ fn task_fmt(check: bool) -> Result<(), String> {
 }
 
 fn task_setup() -> Result<(), String> {
-    // Install lefthook binary if not already present
     if Command::new("lefthook").arg("--version").status().is_err() {
-        println!("Installing lefthook...");
-        run(Command::new("cargo").args(["install", "lefthook"]))?;
+        println!("lefthook not found — installing via winget...");
+        if run(Command::new("winget").args([
+            "install",
+            "--id",
+            "evilmartians.lefthook",
+            "-e",
+            "--accept-package-agreements",
+            "--accept-source-agreements",
+        ]))
+        .is_ok()
+        {
+            println!("Installed. Open a new terminal and run `cargo xtask setup` again.");
+            return Ok(());
+        }
+        return Err(
+            "Could not install lefthook automatically.\n\
+             Install manually and re-run:\n\
+             \n  winget install evilmartians.lefthook\
+             \n  scoop install lefthook"
+                .to_owned(),
+        );
     }
     run(Command::new("lefthook").arg("install"))?;
     println!("Git hooks installed.");
