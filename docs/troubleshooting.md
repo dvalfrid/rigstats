@@ -142,6 +142,20 @@ Build a new installer after:
 npm run build
 ```
 
+## Ghost Entries in "Other System Tray Icons"
+
+Windows stores one tray icon entry per unique exe path. Old entries from dev builds, renamed binaries, or previous Tauri installs linger even after those exes are gone.
+
+Run the cleanup script (no elevation needed — run as the same user that runs RIGStats):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
+```
+
+The script ([`tools/clean-tray-ghosts.ps1`](../tools/clean-tray-ghosts.ps1)) finds all RIGStats-related tray entries, shows what it will keep vs delete, asks for confirmation, then restarts Explorer.
+
+After it runs, check **Settings → Personalization → Taskbar → Other system tray icons** — only one RIGStats entry should remain.
+
 ## Display Still Goes To Sleep
 
 Display sleep blocking is not currently implemented in the app.
