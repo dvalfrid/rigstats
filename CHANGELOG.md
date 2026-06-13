@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.1](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.27.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* correct exe metadata shown in Task Manager and system tray settings ([9784f4e](https://github.com/dvalfrid/rigstats/commit/9784f4e983582dc3a3b6da54a0b4cba7cc877320))
+
 ## [1.27.0](https://github.com/dvalfrid/rigstats/compare/v1.26.0...v1.27.0) (2026-06-12)
 
 
