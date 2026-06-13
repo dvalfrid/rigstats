@@ -368,9 +368,9 @@ fn build_tray(logging_enabled: bool) -> Tray {
         load_tray_icon()
     };
     let tooltip = if logging_enabled {
-        "RigStats \u{2014} Recording"
+        "RIGStats \u{2014} Recording"
     } else {
-        "RigStats"
+        "RIGStats"
     };
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
@@ -414,9 +414,9 @@ impl Tray {
             }
         }
         let tooltip = if enabled {
-            "RigStats \u{2014} Recording"
+            "RIGStats \u{2014} Recording"
         } else {
-            "RigStats"
+            "RIGStats"
         };
         let _ = self.icon.set_tooltip(Some(tooltip));
     }
