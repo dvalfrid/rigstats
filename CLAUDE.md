@@ -22,34 +22,29 @@ Start-Process .\target\debug\rigstats.exe
 # Check egui + backend for errors
 cargo check --manifest-path src-egui/Cargo.toml
 
-# Clippy on backend + egui
-cargo clippy --manifest-path rigstats-backend/Cargo.toml -- -D warnings
-cargo clippy --manifest-path src-egui/Cargo.toml -- -D warnings
-
 # Build sensor sidecar (debug, requires .NET 10 SDK)
 dotnet build sensor-sidecar/sensor-sidecar.csproj
 
-# Publish sensor sidecar as single-file self-contained exe (release)
-dotnet publish sensor-sidecar/sensor-sidecar.csproj -c Release
-
 # Run Rust tests (egui binary + backend)
-npm test
-cargo test --manifest-path rigstats-backend/Cargo.toml
+cargo xtask test
 
-# Full verification: publish sidecar + Rust tests + clippy + fmt check + markdown lint
-npm run verify
+# Full verification: sidecar + Rust tests + clippy + fmt check
+cargo xtask verify
 
 # Production build (egui release binary + sidecar)
-npm run build
-
-# Publish sensor sidecar as single-file exe (required before npm run build)
-npm run prepare:sidecar
+cargo xtask build
 ```
 
-> **Local dev note:** `npm run verify` and `npm run prepare:sidecar` fail if the
+> **Local dev note:** `cargo xtask verify` and `cargo xtask build` fail if the
 > `rigstats-sensor` Windows Service is running, because the service holds the exe
 > open. Stop it first (`sc.exe stop rigstats-sensor` in an elevated terminal),
 > then run verify, then restart the service.
+
+First-time setup (install git hooks):
+
+```bash
+cargo xtask setup
+```
 
 Run a single Rust test:
 
@@ -61,16 +56,13 @@ cargo test --manifest-path rigstats-backend/Cargo.toml classify_system_brand
 
 ```bash
 # Format Rust (modifies files)
-npm run fmt:rs
+cargo xtask fmt
 
 # Check Rust formatting without modifying (CI)
-npm run fmt:rs:check
+cargo xtask fmt-check
 
-# Rust clippy
-npm run clippy
-
-# Lint Markdown
-npm run lint:md
+# Clippy
+cargo xtask clippy
 ```
 
 See [STANDARDS.md](STANDARDS.md) for the full code standards.
@@ -81,11 +73,10 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 
 | Changed | Run |
 | --- | --- |
-| Any Rust file | `npm run fmt:rs` then `npm run clippy` |
-| Any `.md` file | `npm run lint:md` |
+| Any Rust file | `cargo xtask fmt` then `cargo xtask clippy` |
 | Any `sensor-sidecar/*.cs` file | `dotnet build sensor-sidecar/sensor-sidecar.csproj` |
-| Logic in Rust | `npm test` |
-| Unsure | `npm run verify` (runs everything, including markdown lint) |
+| Logic in Rust | `cargo xtask test` |
+| Unsure | `cargo xtask verify` |
 
 ## Documentation and website updates
 
@@ -100,8 +91,8 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 
 These four files must be consistent with the code at all times. Check all four before declaring a task done.
 
-- `npm run clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
-- If `fmt:rs` modifies files, include those changes in the same commit.
+- `cargo xtask clippy` is configured with `-D warnings` — zero warnings is the bar, not a goal.
+- If `cargo xtask fmt` modifies files, include those changes in the same commit.
 - If a check fails, fix the issue. Do not skip checks or add `#[allow(...)]` without a clear reason documented in the code.
 
 ## Design philosophy

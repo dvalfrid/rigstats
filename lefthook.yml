@@ -6,6 +6,3 @@ pre-commit:
     clippy:
       glob: "{src-egui,rigstats-backend}/**/*.rs"
       run: cargo xtask clippy
-    lint-md:
-      glob: "*.md"
-      run: cargo xtask lint-md

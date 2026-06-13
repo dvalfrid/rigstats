@@ -23,12 +23,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -39,9 +33,6 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
-
-      - name: Install Node dependencies
-        run: npm ci
 
       - name: Run verify pipeline
         run: cargo xtask verify

@@ -32,12 +32,6 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -51,9 +45,6 @@ jobs:
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Run verification
         run: cargo xtask verify

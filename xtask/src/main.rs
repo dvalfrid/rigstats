@@ -12,7 +12,7 @@ fn main() {
         "clippy" => task_clippy(),
         "fmt" => task_fmt(false),
         "fmt-check" => task_fmt(true),
-        "lint-md" => task_lint_md(),
+        "setup" => task_setup(),
         "verify" => task_verify(),
         _ => {
             eprintln!("Unknown task: `{task}`");
@@ -22,8 +22,8 @@ fn main() {
             eprintln!("  clippy     — clippy with -D warnings");
             eprintln!("  fmt        — format Rust code (modifies files)");
             eprintln!("  fmt-check  — check Rust formatting without modifying");
-            eprintln!("  lint-md    — lint Markdown files");
-            eprintln!("  verify     — full pipeline (sidecar + tests + clippy + fmt-check + lint-md)");
+            eprintln!("  setup      — install lefthook git hooks (run once after cloning)");
+            eprintln!("  verify     — full pipeline (sidecar + tests + clippy + fmt-check)");
             exit(1);
         }
     };
@@ -94,14 +94,15 @@ fn task_fmt(check: bool) -> Result<(), String> {
     run(&mut cmd)
 }
 
-fn task_lint_md() -> Result<(), String> {
-    // markdownlint-cli2 is installed via npm; on Windows the shim is npx.cmd
-    #[cfg(windows)]
-    let npx = "npx.cmd";
-    #[cfg(not(windows))]
-    let npx = "npx";
-
-    run(Command::new(npx).args(["markdownlint-cli2", "*.md"]))
+fn task_setup() -> Result<(), String> {
+    // Install lefthook binary if not already present
+    if Command::new("lefthook").arg("--version").status().is_err() {
+        println!("Installing lefthook...");
+        run(Command::new("cargo").args(["install", "lefthook"]))?;
+    }
+    run(Command::new("lefthook").arg("install"))?;
+    println!("Git hooks installed.");
+    Ok(())
 }
 
 fn task_verify() -> Result<(), String> {
@@ -137,9 +138,6 @@ fn task_verify() -> Result<(), String> {
         "--",
         "--check",
     ]))?;
-
-    println!("── markdown lint ───────────────────────────────────────────────");
-    task_lint_md()?;
 
     println!("── all checks passed ───────────────────────────────────────────");
     Ok(())
