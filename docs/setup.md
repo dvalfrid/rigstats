@@ -7,7 +7,7 @@
 - Rust: <https://rustup.rs>
 - .NET 10 SDK: `winget install Microsoft.DotNet.SDK.10`
 - Visual Studio 2022 Build Tools with Desktop development with C++
-- Tauri CLI (installed automatically via `npm install`)
+- NSIS (for building the installer): `choco install nsis -y`
 
 ## Sensor Sidecar
 
@@ -24,7 +24,7 @@ the build pipeline:
 
 ```powershell
 npm run prepare:sidecar   # dotnet publish → sensor-sidecar/bin/Release/.../publish/
-npm run build             # calls prepare:sidecar, then tauri build
+npm run build             # calls prepare:sidecar, then cargo build --release + makensis
 ```
 
 The published exe is bundled into the NSIS installer automatically.
@@ -50,7 +50,7 @@ The published exe is bundled into the NSIS installer automatically.
    npm start
    ```
 
-The Tauri backend will compile and the dashboard window will open.
+The egui binary will compile and the dashboard window will open.
 
 ## Display Profiles
 
@@ -91,16 +91,15 @@ Build an installable release with:
 npm run build
 ```
 
-This publishes the sensor sidecar and then runs `tauri build`.
+This publishes the sensor sidecar, compiles the Rust binary in release mode, and runs `makensis` to produce the installer.
 
 On first run this can take 5 to 10 minutes because Rust dependencies are compiled.
 
 Output goes to:
 
 ```text
-src-tauri\target\release\bundle\
-  nsis\
-    RIGStats_1.0.0_x64-setup.exe
+target\release\
+  RIGStats_1.0.0_x64-setup.exe
 ```
 
 Default install location:

@@ -28,7 +28,7 @@ diagnostics ZIP (Status → Collect Diagnostics).
 
 ## Can I Change Which Display Is Used?
 
-Yes. Adjust the display targeting logic in `pick_target_monitor()` in `src-tauri/src/monitor.rs`.
+Yes. Adjust the display targeting logic in `pick_monitor()` in `rigstats-backend/src/monitor.rs`.
 
 The dashboard first targets the selected profile resolution, then falls back gracefully.
 
@@ -123,19 +123,20 @@ CPU temp, fan speeds, disk temps, etc. — exactly as the app uses them.
 When a sensor always shows `--`, check whether the relevant field is `null`
 here. If it is, the mismatch is in `sensor-sidecar/SensorReader.cs` (the C#
 extraction logic). If the field is present but the wrong value appears in the
-UI, the mismatch is in `src-tauri/src/lhm.rs` (the Rust selection logic).
+UI, the mismatch is in `rigstats-backend/src/lhm.rs` (the Rust selection logic).
 
 Check `sidecar-log.txt` for service start/stop events and connection errors.
 
-## How Do I Update The UI Without Rebuilding?
+## How Do I Change The UI?
 
-Edit files under `frontend/` and run:
+The dashboard is a native egui app — all UI is Rust code in `src-egui/src/`. Edit the relevant file and rebuild:
 
 ```powershell
-npm start
+cargo build --manifest-path src-egui/Cargo.toml
+.\target\debug\rigstats.exe
 ```
 
-Build a new installer later with:
+Build a new installer after:
 
 ```powershell
 npm run build

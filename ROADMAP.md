@@ -732,6 +732,37 @@ existing portrait ones.
 
 ---
 
+## Post-update success notification 🔲
+
+**Background:** When the NSIS installer runs silently (in-app update), the old
+app is killed and restarted without any feedback. The old Tauri-based app showed
+a "RigStats Update" dialog confirming the update succeeded.
+
+### Approach (flag-file pattern)
+
+1. **NSIS installer** — when running silently (`IfSilent`), write
+   `%PROGRAMDATA%\se.codeby.rigstats\post-update.txt` containing the new version
+   number, before launching `rigstats.exe`.
+
+2. **Startup check** (`src-egui/src/main.rs`) — after loading settings and before
+   `eframe::run_native`, check for the flag file. If found: read version, delete
+   file, set `updater_win.status = UpdateStatus::JustUpdated { version }`, set
+   `updater_open = true`.
+
+3. **Updater dialog** (`src-egui/src/windows/updater.rs`) — add
+   `UpdateStatus::JustUpdated { version: String }` variant. Renders "Updated to
+   v{version}" in green in the hero, changelog in the central panel, and a single
+   "Close" button in the footer — same layout as `UpToDate`.
+
+PROGRAMDATA is used (not APPDATA) because the installer runs elevated and APPDATA
+would point to the admin profile, not the current user.
+
+### When to do this
+
+Next polish pass after v1.27.0 is confirmed stable.
+
+---
+
 ## Remove Node.js / npm infrastructure 🔲
 
 **Background:** Node.js was introduced for the Tauri build pipeline and JS

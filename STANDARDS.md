@@ -32,7 +32,7 @@ Run `npm run lint` and `npm run fmt:rs:check` before every commit.
 
 ## Rust
 
-Configured via [rustfmt.toml](src-tauri/rustfmt.toml) and `[lints]` in [Cargo.toml](src-tauri/Cargo.toml).
+Configured via `[lints]` in each crate's `Cargo.toml` (`src-egui/Cargo.toml`, `rigstats-backend/Cargo.toml`).
 
 ### Rust formatting
 
@@ -67,7 +67,7 @@ pub fn detect_gpu_name() -> Option<String> { ... }
 
 ### Rust error handling
 
-- Return `Result<T, String>` from Tauri commands (Tauri serialises the String error to the frontend)
+- Return `Result<T, String>` from fallible functions (consistent with the rest of the codebase)
 - Prefer `unwrap_or_else` over `unwrap` for graceful fallback
 - `expect()` is acceptable at startup for genuinely fatal conditions
 - Log errors via `append_debug_log` — never `eprintln!` or `dbg!` in production code
@@ -81,7 +81,7 @@ pub fn detect_gpu_name() -> Option<String> { ... }
 ### Module structure
 
 Keep modules focused on a single responsibility — see [CLAUDE.md](CLAUDE.md) for the module overview.
-`#[tauri::command]` functions belong in `commands.rs`, not in domain modules.
+Keep domain logic in `rigstats-backend/` — `src-egui/` contains only UI and wiring, not business logic.
 
 ---
 
@@ -107,7 +107,7 @@ Configured via [eslint.config.mjs](eslint.config.mjs). Run `npm run lint:fix` fo
 
 ### Modules
 
-- All files use ES modules (`import`/`export`) — no global state via `window.x` except where the Tauri bridge requires it
+- All files use ES modules (`import`/`export`) — no global state via `window.x`
 - One file = one responsibility
 - Export only what is needed externally — internal helpers are not exported
 
@@ -197,7 +197,7 @@ AI assistants such as Claude or GitHub Copilot may be used during development, b
 - Generated Rust code must compile without warnings under the project’s lint configuration.
 - Follow all naming, formatting, and module‑structure rules defined in this document.
 - Do not introduce new crates without explicit approval; prefer existing dependencies.
-- Error handling must follow project conventions (e.g., Result<T, String> for Tauri commands, no unwrap() in production paths).
+- Error handling must follow project conventions (e.g., Result<T, String> for fallible functions, no unwrap() in production paths).
 - Generated JavaScript must follow the ESLint configuration and formatting rules.
 - All AI‑generated code must be reviewed with the same scrutiny as human‑written code.
 - AI should not restructure modules, rename files, or change architecture unless explicitly instructed.

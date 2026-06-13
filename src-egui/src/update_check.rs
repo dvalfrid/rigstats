@@ -113,7 +113,7 @@ pub fn launch_installer(path: &Path) -> Result<(), String> {
         .chain(std::iter::once(0))
         .collect();
     let verb: Vec<u16> = "runas\0".encode_utf16().collect();
-    let params: Vec<u16> = "/S\0".encode_utf16().collect();
+    let params: Vec<u16> = "/autoupdate\0".encode_utf16().collect();
 
     let result = unsafe {
         winapi::um::shellapi::ShellExecuteW(

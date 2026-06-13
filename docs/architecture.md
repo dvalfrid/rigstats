@@ -26,7 +26,7 @@ The repository is a Cargo workspace with two members:
 
 | Crate | Path | Role |
 | --- | --- | --- |
-| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no Tauri coupling |
+| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no framework coupling |
 | `rigstats-egui` | `src-egui/` | Production binary — eframe app, all panels, tray, settings windows |
 
 The `frontend/` directory contains the legacy Tauri JS frontend. It is **not
@@ -144,31 +144,16 @@ rig-dashboard/
 
 #### `main.rs`
 
-Tauri builder, tray icon, and lifecycle. Registers two managed state types at
-startup: `HardwareInfo` (one-time WMI/sysinfo hardware detection) and `AppState`
-(per-tick runtime state). Picks the best monitor for the profile and starts LHM.
-Spawns two background tasks:
-
-- **`spawn_wmi_retry`** — re-runs WMI detection for any fields that returned
-  fallback values at startup (e.g. WMI not yet ready). Retries up to 3 times
-  at 30 s / 60 s / 120 s; emits `hardware-refreshed` to the renderer when a
-  field is resolved so static labels update without a page reload.
-- **`updater::spawn_background_check`** — checks for updates every 6 hours
-  (first check after 10 s).
+Entry point: monitor selection, system tray setup, settings load, poll thread, and `eframe::run_native`. Starts a tokio runtime for the background auto-update check (first check after 10 s, then every 6 h). The poll thread calls `get_stats()` once per second and sends `StatsPayload` to the UI thread via `mpsc::Sender`. On startup, checks for `--just-updated=VERSION` argument (set by the NSIS in-app updater) and opens the updater dialog in `JustUpdated` state if present.
 
 #### `stats.rs`
 
 Defines two shared state structs and all serializable payload structs sent to
 the frontend.
 
-**`HardwareInfo`** — startup-detected constants registered once and never
-mutated: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`,
-`system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
-Registered with `app.manage(HardwareInfo { ... })`.
+**`HardwareInfo`** — startup-detected constants, held behind a `Mutex` and read once at poll-thread start: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`, `system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
 
-**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`,
-`settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`,
-`last_lhm`, `last_alert`, `last_battery_sample`.
+**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`, `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`, `last_lhm`, `last_alert`, `last_battery_sample`.
 
 **Payload structs:**
 
@@ -188,34 +173,6 @@ Registered with `app.manage(HardwareInfo { ... })`.
 `StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU usage
 and capped at 8 entries before serialisation.
 
-#### `commands.rs`
-
-Thin `#[tauri::command]` handlers only — no business logic. Each handler
-delegates to a domain module.
-
-`get_stats()` is the main tick handler. Per call it:
-
-1. Fetches a fresh LHM sample (falls back to last good sample on failure)
-2. Reads `settings.preferred_gpu` and passes it into LHM parsing
-3. Calls `system.refresh_cpu()`, `refresh_memory()`, `refresh_processes()`
-4. Collects disk throughput and drive metadata
-5. Computes network throughput delta over elapsed time
-6. Refreshes ping (cached, re-measured every 5 s)
-7. Refreshes battery via WMI (cached, re-sampled every 10 s)
-8. Assembles `StatsPayload` including top 8 processes sorted by CPU
-9. Checks temperature thresholds and fires tray notifications if due
-
-Floating mode commands:
-
-| Command | Purpose |
-| --- | --- |
-| `toggle_floating_mode(enabled)` | Persists the setting, emits `apply-floating-mode`, and routes window transitions through `spawn_sync_floating_panels` / `close_floating_panels` with a mutex guard to serialize rapid toggles |
-| `toggle_floating_lock` | Flips `floating_panels_locked`, persists immediately, and emits `floating-lock-changed` to all open panel windows |
-| `preview_floating_scale(scale)` | Applies floating panel scale preview (`0.4..=1.0`) and re-syncs floating windows when floating mode is active |
-| `set_gpu_preference(gpu_name)` | Persists the user-selected GPU name used by LHM extraction on subsequent ticks |
-| `broadcast_stats(stats)` | Emits `stats-broadcast` to each open `panel-{key}` window; takes `serde_json::Value` to avoid needing `Deserialize` on `StatsPayload` |
-| `save_panel_positions(positions)` | Merges `HashMap<key, PanelLayout>` into `settings.panel_layouts` and persists |
-| `open_settings_window` | Opens the settings window from a floating panel's context menu |
 
 #### `hardware.rs`
 
@@ -547,7 +504,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
 | `environment.txt` | env vars + Windows registry | Arch, build number, hostname |
 | `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
-| `displays.json` | Tauri monitor list | Resolution, position, scale, fit score, which was selected |
+| `displays.json` | Monitor list from `pick_monitor()` | Resolution, position, scale, fit score, which was selected |
 
 ### `sysinfo.json` — key fields
 
@@ -598,18 +555,6 @@ thread). Produces a self-contained ZIP for bug reports.
   highest value, selecting the dGPU over iGPU on multi-GPU systems without
   hardcoding device names.
 
-### Frontend architecture
-
-- **No bundler or framework** — vanilla ES modules served directly by Tauri's
-  asset server. `frontend/` is the Tauri web root.
-- **Panel reordering** uses CSS flexbox + DOM `appendChild`, not CSS grid, so
-  panels can be reordered without any layout recalculation.
-- **Drag-to-reorder** in Settings uses the Pointer Events API with
-  `setPointerCapture` instead of the HTML5 Drag API, which shows a prohibition
-  cursor inside WebView2.
-- **Process names** are HTML-escaped before `innerHTML` insertion in
-  `process.js` to prevent rendering breakage from adversarial process names.
-
 ### Reliability and correctness
 
 - **Sidecar fallback** — the last successful sample is kept in memory so the UI
@@ -628,35 +573,11 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### Window placement
 
-- `pick_target_monitor` never calls `set_fullscreen` — borderless positioning
-  via `set_size` + `set_decorations(false)` + `set_position` is sufficient.
-- `set_decorations(false)` is always called *after* `set_size` because
-  Windows `SetWindowPos` can restore `WS_CAPTION`/`WS_THICKFRAME`.
-- `set_position` compensates for the DWM invisible resize border
-  (`inset = inner_position − outer_position`) so content lands flush with the
-  monitor edge.
-- `pick_target_monitor` is called only when the profile *changes* in
-  `save_settings`. Calling it unconditionally causes a ~3 px drift on every
-  save due to the DWM inset compensation.
-- `on_window_event` re-applies `set_decorations(false)` on every `Moved` event
-  for **all** windows (not just `"main"`), because Windows can re-enable the
-  title bar when any borderless window crosses a DPI boundary.
+- `pick_monitor` scores each attached display against the active profile resolution and selects the best fit; the egui window is positioned at the monitor's top-left origin.
+- The egui window is borderless and undecorated — `eframe::NativeOptions` sets `decorated: false` and `transparent: true`.
 
 ### Floating mode
 
-- **Stats delivery** — the hidden main window runs `get-stats` once per second
-  as normal, then calls `broadcast-stats`. The backend iterates `all_panel_keys`
-  and emits `stats-broadcast` directly to each open `panel-{key}` window. This
-  keeps exactly one IPC round-trip per tick regardless of how many panels are open.
-- **Drag on transparent windows** — `data-tauri-drag-region` is unreliable on
-  transparent borderless WebView2 windows. `panel-host.js` instead calls
-  `invoke("start-window-drag")` explicitly on `pointerdown` (capture phase),
-  guarding against interactive elements and scrollable regions.
-- **Sync vs launch** — `sync_floating_panels` reconciles the current window set
-  against settings without teardown, enabling live preview of panel
-  visibility changes in Settings. `launch_floating_panels` only creates
-  windows that do not yet exist.
-- **Position persistence** — `panel-host.js` reads `currentWindow.outerPosition()`
-  500 ms after each `tauri://moved` event and persists it via `save-panel-positions`.
-  Positions are stored as raw `outer_position` values; DWM inset compensation is
-  re-applied by `launch_floating_panels` at next startup.
+- **Stats delivery** — the single egui window receives `StatsPayload` from the poll thread via `mpsc::Receiver` and passes data to each panel's `draw()` call. No separate broadcast needed.
+- **Drag** — panels in floating mode render a drag-zone overlay (three dots + padlock icon) painted directly onto the panel rect via `ui.painter()`. A click on the padlock toggles lock state via an egui temp-data key `"toggle_lock"`.
+- **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key) and written to `rigstats-settings.json` on every `Save` in Settings.

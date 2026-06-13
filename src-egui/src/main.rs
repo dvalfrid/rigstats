@@ -2476,6 +2476,20 @@ fn main() {
                 Arc::new(Mutex::new(windows::updater::UpdaterState::default()));
             let updater_open_bg = Arc::new(AtomicBool::new(false));
             let updater_focus_bg = Arc::new(AtomicBool::new(false));
+
+            // Check for --just-updated=VERSION argument passed by the NSIS /autoupdate installer.
+            if let Some(version) = std::env::args()
+                .find(|a| a.starts_with("--just-updated="))
+                .and_then(|a| a.split_once('=').map(|x| x.1.to_owned()))
+            {
+                if !version.is_empty() {
+                    updater_win_bg.lock().unwrap().status =
+                        windows::updater::UpdateStatus::JustUpdated { version };
+                    updater_open_bg.store(true, Ordering::Relaxed);
+                    updater_focus_bg.store(true, Ordering::Relaxed);
+                }
+            }
+
             {
                 let win = updater_win_bg.clone();
                 let open = updater_open_bg.clone();

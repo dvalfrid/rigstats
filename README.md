@@ -5,7 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/dvalfrid/rigstats?label=release)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![License](https://img.shields.io/github/license/dvalfrid/rigstats)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
-[![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app)
+[![egui](https://img.shields.io/badge/egui-0.34-4A90D9?logo=rust&logoColor=white)](https://github.com/emilk/egui)
 
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
@@ -21,7 +21,7 @@
 
 ## Overview
 
-RIGStats is a Windows desktop dashboard built with Tauri v2. It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
+RIGStats is a Windows desktop dashboard built with egui (native Rust UI, no WebView). It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
 
 ## Screens
 
@@ -306,10 +306,10 @@ The ZIP is purely a local file that you choose whether to share.
 
 | Component | Role |
 | --- | --- |
-| **Tauri v2** | App framework (native window, IPC, system tray, auto-update) |
+| **egui / eframe** | Native UI (panels, settings, tray, all windows) |
 | **Rust / sysinfo** | CPU, RAM, disk, network data |
-| **LibreHardwareMonitor** | GPU/CPU sensors, disk/network throughput |
-| **HTML / CSS / JS** | Dashboard UI (renderer) |
+| **LibreHardwareMonitor** | GPU/CPU sensors, disk temperatures, fan speeds |
+| **.NET / sensor sidecar** | Windows Service that streams LHM data over a named pipe |
 
 ---
 
@@ -348,7 +348,7 @@ The ZIP is purely a local file that you choose whether to share.
 
 - Computer name, CPU model, and GPU model are detected automatically at startup
 - Display sleep is not currently blocked by the app
-- The app targets Windows 10/11 and Tauri v2
+- The app targets Windows 10/11 and requires no runtime (native egui binary)
 
 ## License
 

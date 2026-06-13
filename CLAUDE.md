@@ -120,6 +120,10 @@ These four files must be consistent with the code at all times. Check all four b
 - If `fmt:rs` modifies files, include those changes in the same commit.
 - If a check fails, fix the issue. Do not skip checks or add `#[allow(...)]` without a clear reason documented in the code.
 
+## Design philosophy
+
+Prefer the simplest solution that solves the problem. Before implementing, ask: is there a direct approach that avoids the complexity entirely? Flag files, shared state, and extra IPC are often signs that a simpler path exists. Question existing plans — a plan being written down is not a reason to follow it if a cleaner alternative is obvious.
+
 ## Architecture Overview
 
 This is a **Windows-only** Tauri v2 desktop app ("RigStats") that displays hardware telemetry on a secondary portrait monitor. It has no bundler/build step for the frontend — vanilla JS ES modules are served directly from `frontend/`.

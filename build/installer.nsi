@@ -34,6 +34,9 @@ RequestExecutionLevel admin
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
+
+Var /GLOBAL AutoUpdate
 
 !define MUI_ICON "assets\icon.ico"
 !define MUI_UNICON "assets\icon.ico"
@@ -44,9 +47,12 @@ RequestExecutionLevel admin
 !define MUI_FINISHPAGE_RUN_TEXT "Launch RIGStats"
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchRIGStats
 
+!define MUI_PAGE_CUSTOMFUNCTION_PRE ComponentsPre
 !insertmacro MUI_PAGE_COMPONENTS
+!define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPre
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_PAGE_CUSTOMFUNCTION_PRE FinishPre
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -62,6 +68,13 @@ FunctionEnd
 
 ; ── Pre-install ────────────────────────────────────────────────────────────────
 Function .onInit
+  ; Detect /autoupdate flag: show progress window but skip wizard pages.
+  ${GetOptions} $CMDLINE "/autoupdate" $R0
+  ${IfNot} ${Errors}
+    StrCpy $AutoUpdate 1
+    SetAutoClose true
+  ${EndIf}
+
   ; Stop the running app and sensor service before overwriting files.
   nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats.exe >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
@@ -72,6 +85,25 @@ Function .onInit
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "LibreHardwareMonitor" >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C taskkill /F /IM LibreHardwareMonitor.exe >NUL 2>&1'
   Sleep 1000
+FunctionEnd
+
+; ── Page skip functions (used when /autoupdate is passed) ──────────────────────
+Function ComponentsPre
+  ${If} $AutoUpdate == 1
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Function DirectoryPre
+  ${If} $AutoUpdate == 1
+    Abort
+  ${EndIf}
+FunctionEnd
+
+Function FinishPre
+  ${If} $AutoUpdate == 1
+    Abort
+  ${EndIf}
 FunctionEnd
 
 ; ── Main section ───────────────────────────────────────────────────────────────
@@ -141,11 +173,6 @@ Section "RIGStats" SecMain
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
-  ; ── Auto-launch after silent (in-app) update ─────────────────────────────
-  ; Manual installs use the finish-page "Launch RIGStats" checkbox instead.
-  IfSilent 0 +2
-    ExecShell "open" "$INSTDIR\rigstats.exe"
-
   ; ── Write install log to ProgramData for diagnostics ─────────────────────
   ReadEnvStr $8 PROGRAMDATA
   CreateDirectory "$8\se.codeby.rigstats"
@@ -157,6 +184,12 @@ Section "RIGStats" SecMain
   FileWrite $9 "service_create_exit=$4$\r$\n"
   FileWrite $9 "service_start_exit=$6$\r$\n"
   FileClose $9
+
+  ; ── Auto-launch with update notification (in-app /autoupdate installs only) ──
+  ; Manual installs use the finish-page "Launch RIGStats" checkbox instead.
+  ${If} $AutoUpdate == 1
+    Exec '"$INSTDIR\rigstats.exe" "--just-updated=${VERSION}"'
+  ${EndIf}
 SectionEnd
 
 ; ── Optional: desktop shortcut ────────────────────────────────────────────────

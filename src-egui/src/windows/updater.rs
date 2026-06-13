@@ -24,6 +24,10 @@ pub enum UpdateStatus {
     },
     /// Already on the latest version.
     UpToDate,
+    /// App was just updated; shown automatically on first launch after install.
+    JustUpdated {
+        version: String,
+    },
     Error(String),
 }
 
@@ -385,6 +389,10 @@ pub fn show(
             egui::Color32::from_rgb(88, 200, 88),
         ),
         UpdateStatus::UpToDate => ("Up to Date".to_string(), C_TEXT),
+        UpdateStatus::JustUpdated { version } => (
+            format!("Updated to v{version}"),
+            egui::Color32::from_rgb(88, 200, 88),
+        ),
         UpdateStatus::Error(_) => (
             "Update Error".to_string(),
             egui::Color32::from_rgb(220, 80, 80),
@@ -394,6 +402,7 @@ pub fn show(
 
     let installed_row: Option<String> = match &st.status {
         UpdateStatus::Ready { .. } => Some(format!("v{VERSION}")),
+        UpdateStatus::JustUpdated { version } => Some(format!("v{version}")),
         _ => None,
     };
 
@@ -471,7 +480,7 @@ pub fn show(
                             action_close = true;
                         }
                     }
-                    UpdateStatus::UpToDate => {
+                    UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } => {
                         if theme::dialog_btn_primary(ui, "Close").clicked() {
                             action_close = true;
                         }
@@ -511,7 +520,7 @@ pub fn show(
                 let entries = parse_notes(&combined);
                 render_changelog_panel(ui, &entries, ui.available_height());
             }
-            UpdateStatus::UpToDate => {
+            UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } => {
                 let entries = parse_notes(BUNDLED_CHANGELOG);
                 render_changelog_panel(ui, &entries, ui.available_height());
             }
