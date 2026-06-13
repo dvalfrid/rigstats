@@ -248,15 +248,15 @@ Product-line names (Alienware, Legion, OMEN, Predator, AORUS) take priority over
 
 | Logo | Brand | Detected when |
 | --- | --- | --- |
-| <img src="frontend/assets/ROG_logo_red.png" width="48"> | **ROG (ASUS)** | Manufacturer contains `ASUS`, `ROG`, or `Republic of Gamers` |
-| <img src="frontend/assets/msi.png" width="48"> | **MSI** | Manufacturer contains `MSI`, `Micro-Star`, or `Micro Star` |
-| <img src="frontend/assets/Alienware.png" width="48"> | **Alienware** | System name / model contains `Alienware` |
-| <img src="frontend/assets/Razer.png" width="48"> | **Razer** | Manufacturer contains `Razer` |
-| <img src="frontend/assets/Lenovo-Legion.png" width="48"> | **Lenovo Legion** | System name / model contains `Legion` |
-| <img src="frontend/assets/HP-Omen.png" width="48"> | **HP OMEN** | System name / model contains `OMEN` |
-| <img src="frontend/assets/Acer-Predator.png" width="48"> | **Acer Predator** | System name / model contains `Predator` |
-| <img src="frontend/assets/AORUS-Gigabyte.png" width="48"> | **AORUS** | System name / model contains `AORUS` |
-| <img src="frontend/assets/gigabyte.png" width="48"> | **Gigabyte** | Manufacturer contains `Gigabyte` |
+| <img src="src-egui/assets/ROG_logo_red.png" width="48"> | **ROG (ASUS)** | Manufacturer contains `ASUS`, `ROG`, or `Republic of Gamers` |
+| <img src="src-egui/assets/msi.png" width="48"> | **MSI** | Manufacturer contains `MSI`, `Micro-Star`, or `Micro Star` |
+| <img src="src-egui/assets/Alienware.png" width="48"> | **Alienware** | System name / model contains `Alienware` |
+| <img src="src-egui/assets/Razer.png" width="48"> | **Razer** | Manufacturer contains `Razer` |
+| <img src="src-egui/assets/Lenovo-Legion.png" width="48"> | **Lenovo Legion** | System name / model contains `Legion` |
+| <img src="src-egui/assets/HP-Omen.png" width="48"> | **HP OMEN** | System name / model contains `OMEN` |
+| <img src="src-egui/assets/Acer-Predator.png" width="48"> | **Acer Predator** | System name / model contains `Predator` |
+| <img src="src-egui/assets/AORUS-Gigabyte.png" width="48"> | **AORUS** | System name / model contains `AORUS` |
+| <img src="src-egui/assets/gigabyte.png" width="48"> | **Gigabyte** | Manufacturer contains `Gigabyte` |
 
 #### CPU architecture fallback logos
 
@@ -264,8 +264,8 @@ If no brand logo matches, the detected CPU model string is used to show an archi
 
 | Logo | Architecture | Detected when |
 | --- | --- | --- |
-| <img src="frontend/assets/intel.png" width="48"> | **Intel** | CPU model contains `Intel`, `Core i`, `Xeon`, or `Arc` |
-| <img src="frontend/assets/AMD-Radeon-Ryzen-Symbol.png" width="48"> | **AMD** | CPU model contains `AMD`, `Ryzen`, `Athlon`, or `EPYC` |
+| <img src="src-egui/assets/intel.png" width="48"> | **Intel** | CPU model contains `Intel`, `Core i`, `Xeon`, or `Arc` |
+| <img src="src-egui/assets/AMD-Radeon-Ryzen-Symbol.png" width="48"> | **AMD** | CPU model contains `AMD`, `Ryzen`, `Athlon`, or `EPYC` |
 
 Other recognized brands (ASRock, Corsair, NZXT, Dell, Lenovo, HP, Acer) fall through to the CPU
 architecture fallback. Fully unknown systems show nothing.
@@ -315,25 +315,26 @@ The ZIP is purely a local file that you choose whether to share.
 
 ## Quick Start
 
-1. Install dependencies:
+1. Install git hooks (run once after cloning):
 
    ```powershell
-   npm install
+   cargo xtask setup
    ```
 
-2. Start development mode:
+2. Build and run the debug binary:
 
    ```powershell
-   npm start
+   cargo build --manifest-path src-egui/Cargo.toml
+   .\target\debug\rigstats.exe
    ```
 
-3. Build installer:
+3. Build a release installer:
 
    ```powershell
-   npm run build
+   cargo xtask build
    ```
 
-  The sensor sidecar exe is bundled automatically — no separate download required.
+   The sensor sidecar exe is bundled automatically — no separate download required.
 
 ## Documentation
 
