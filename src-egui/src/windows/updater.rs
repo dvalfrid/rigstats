@@ -34,13 +34,53 @@ pub enum UpdateStatus {
 
 pub struct UpdaterState {
     pub status: UpdateStatus,
+    /// Cached parsed changelog: (key, entries). Avoids re-parsing the whole
+    /// CHANGELOG every frame (notably during scroll, which repaints at input
+    /// rate). The key is derived from the current status so the cache is
+    /// rebuilt only when the displayed notes actually change.
+    notes_cache: Option<(u64, Vec<ReleaseEntry>)>,
 }
 
 impl Default for UpdaterState {
     fn default() -> Self {
         Self {
             status: UpdateStatus::Idle,
+            notes_cache: None,
         }
+    }
+}
+
+impl UpdaterState {
+    /// Ensure `notes_cache` holds the parsed changelog for the current status.
+    /// Returns `true` if the current status renders a changelog panel.
+    fn ensure_changelog_cache(&mut self) -> bool {
+        use std::hash::{Hash, Hasher};
+        let key: u64 = match &self.status {
+            UpdateStatus::Ready { info, .. } => {
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                1u8.hash(&mut h);
+                info.notes.hash(&mut h);
+                h.finish()
+            }
+            UpdateStatus::UpToDate | UpdateStatus::Idle | UpdateStatus::JustUpdated { .. } => 2,
+            // Checking / Downloading / Error: no changelog panel.
+            _ => return false,
+        };
+        if self.notes_cache.as_ref().map(|(k, _)| *k) != Some(key) {
+            let entries = match &self.status {
+                UpdateStatus::Ready { info, .. } => {
+                    let combined = if info.notes.is_empty() {
+                        BUNDLED_CHANGELOG.to_string()
+                    } else {
+                        format!("{}\n\n{BUNDLED_CHANGELOG}", info.notes)
+                    };
+                    parse_notes(&combined)
+                }
+                _ => parse_notes(BUNDLED_CHANGELOG),
+            };
+            self.notes_cache = Some((key, entries));
+        }
+        true
     }
 }
 
@@ -378,7 +418,10 @@ pub fn show(
     let mut action_check = false;
     let mut action_install: Option<PathBuf> = None;
 
-    let st = state.lock_safe();
+    let mut st = state.lock_safe();
+
+    // Parse the changelog at most once per status change (not every frame).
+    st.ensure_changelog_cache();
 
     // Extract everything we need for display while the guard is held.
     let (heading, heading_color) = match &st.status {
@@ -502,23 +545,13 @@ pub fn show(
                 .inner_margin(egui::Margin::same(10)),
         )
         .show(ctx, |ui| match &st.status {
-            UpdateStatus::Ready { info, .. } => {
-                let new_notes = info.notes.clone();
-                let combined = if new_notes.is_empty() {
-                    BUNDLED_CHANGELOG.to_string()
-                } else {
-                    format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
-                };
-                let entries = parse_notes(&combined);
-                render_changelog_panel(ui, dc, &entries, ui.available_height());
-            }
-            UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } => {
-                let entries = parse_notes(BUNDLED_CHANGELOG);
-                render_changelog_panel(ui, dc, &entries, ui.available_height());
-            }
-            UpdateStatus::Idle => {
-                let entries = parse_notes(BUNDLED_CHANGELOG);
-                render_changelog_panel(ui, dc, &entries, ui.available_height());
+            UpdateStatus::Ready { .. }
+            | UpdateStatus::UpToDate
+            | UpdateStatus::JustUpdated { .. }
+            | UpdateStatus::Idle => {
+                if let Some((_, entries)) = &st.notes_cache {
+                    render_changelog_panel(ui, dc, entries, ui.available_height());
+                }
             }
             UpdateStatus::Checking => {
                 ui.horizontal(|ui| {
