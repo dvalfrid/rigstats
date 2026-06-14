@@ -300,6 +300,111 @@ fn draw_accent_line(painter: &egui::Painter, rect: egui::Rect, accent: Color32, 
     painter.add(egui::Shape::mesh(mesh));
 }
 
+// ── Dialog colour theme ───────────────────────────────────────────────────────
+
+/// Colour palette for dialog windows (Settings, About, Status, Updater).
+/// Two factory functions cover the two cases: `dark()` for the existing
+/// dark palette and `light()` for OS light-mode.  Pass `&DialogColors` to
+/// every dialog `show()` function instead of using module-level `const`s.
+#[derive(Clone, Copy)]
+pub struct DialogColors {
+    pub is_dark: bool,
+    // Surfaces
+    pub bg: Color32,          // dialog background
+    pub card: Color32,        // content card fill
+    pub card_border: Color32, // content card border
+    pub inner: Color32,       // inner-row bg (settings toggle rows)
+    pub inset: Color32,       // deepest inset bg (log/scroll areas)
+    // Text
+    pub text: Color32,      // primary text
+    pub muted: Color32,     // secondary/hint text
+    pub label: Color32,     // small section label
+    pub title: Color32,     // dialog heading
+    pub link: Color32,      // hyperlink colour
+    pub item: Color32,      // changelog list item text
+    pub item_hash: Color32, // commit hash text
+    // Interactive
+    pub toggle_on: Color32,
+    pub toggle_off: Color32,
+    pub tab_active: Color32,
+    pub tab_active_text: Color32,
+    pub btn_sec_fill: Color32,
+    pub btn_sec_hover: Color32,
+    pub btn_sec_border: Color32,
+    pub btn_sec_text: Color32,
+}
+
+impl DialogColors {
+    pub fn dark() -> Self {
+        Self {
+            is_dark: true,
+            bg: Color32::from_gray(38),
+            card: Color32::from_gray(27),
+            card_border: Color32::from_gray(55),
+            inner: Color32::from_gray(33),
+            inset: Color32::from_gray(22),
+            text: Color32::from_rgb(155, 180, 210),
+            muted: Color32::from_gray(115),
+            label: Color32::from_gray(140),
+            title: Color32::from_rgb(210, 220, 235),
+            link: Color32::from_rgb(80, 160, 220),
+            item: Color32::from_gray(162),
+            item_hash: Color32::from_rgb(86, 142, 188),
+            toggle_on: Color32::from_rgb(0, 188, 212),
+            toggle_off: Color32::from_gray(55),
+            tab_active: Color32::from_rgb(0, 188, 212),
+            tab_active_text: Color32::from_gray(15),
+            btn_sec_fill: Color32::from_gray(52),
+            btn_sec_hover: Color32::from_gray(65),
+            btn_sec_border: Color32::from_gray(88),
+            btn_sec_text: C_TEXT,
+        }
+    }
+
+    pub fn light() -> Self {
+        Self {
+            is_dark: false,
+            bg: Color32::from_gray(245),
+            card: Color32::from_gray(232),
+            card_border: Color32::from_gray(200),
+            inner: Color32::from_gray(220),
+            inset: Color32::from_gray(215),
+            text: Color32::from_rgb(30, 45, 70),
+            muted: Color32::from_gray(90),
+            label: Color32::from_gray(65),
+            title: Color32::from_rgb(15, 30, 55),
+            link: Color32::from_rgb(0, 90, 180),
+            item: Color32::from_gray(55),
+            item_hash: Color32::from_rgb(0, 90, 160),
+            toggle_on: Color32::from_rgb(0, 140, 180),
+            toggle_off: Color32::from_gray(185),
+            tab_active: Color32::from_rgb(0, 140, 180),
+            tab_active_text: Color32::WHITE,
+            btn_sec_fill: Color32::from_gray(215),
+            btn_sec_hover: Color32::from_gray(200),
+            btn_sec_border: Color32::from_gray(160),
+            btn_sec_text: Color32::from_rgb(30, 45, 70),
+        }
+    }
+
+    /// Apply egui native widget visuals matching this palette to `ctx`.
+    /// No-op if `ctx` is already in the correct dark/light mode — avoids the
+    /// per-frame repaint loop that causes jerky window dragging.
+    pub fn apply_to_ctx(&self, ctx: &egui::Context) {
+        if ctx.global_style().visuals.dark_mode == self.is_dark {
+            return;
+        }
+        let mut vis = if self.is_dark {
+            egui::Visuals::dark()
+        } else {
+            egui::Visuals::light()
+        };
+        // Keep popups/combo-box drops solid and matching the dialog surface.
+        vis.window_fill = self.bg;
+        ctx.set_visuals(vis);
+    }
+}
+
 // ── Dialog button components ──────────────────────────────────────────────────
 //
 // All secondary windows (Settings, About, Status, Updater) must use these helpers
@@ -320,10 +425,7 @@ const DBTN_PRIMARY: Color32 = Color32::from_rgb(0, 120, 212);
 const DBTN_PRIMARY_HOV: Color32 = Color32::from_rgb(26, 134, 219);
 const DBTN_PRIMARY_ACT: Color32 = Color32::from_rgb(0, 108, 190);
 const DBTN_PRIMARY_BORDER: Color32 = Color32::from_rgb(0, 90, 170);
-const DBTN_SEC: Color32 = Color32::from_gray(52);
-const DBTN_SEC_HOV: Color32 = Color32::from_gray(65);
-const DBTN_SEC_ACT: Color32 = Color32::from_gray(42);
-const DBTN_SEC_BORDER: Color32 = Color32::from_gray(88);
+const DBTN_SEC_ACT_DARKEN: u8 = 10; // how much to darken fill for active state
 const DBTN_MIN_SIZE: Vec2 = Vec2::new(90.0, 26.0);
 const DBTN_RADIUS: u8 = 4;
 
@@ -370,21 +472,31 @@ pub fn dialog_btn_primary(ui: &mut Ui, label: &str) -> egui::Response {
     )
 }
 
-/// Windows 11-style secondary button (gray with border, hover lightens fill).
-pub fn dialog_btn_secondary(ui: &mut Ui, label: &str) -> egui::Response {
-    with_btn_visuals(
-        ui,
-        DBTN_SEC,
-        DBTN_SEC_HOV,
-        DBTN_SEC_ACT,
-        DBTN_SEC_BORDER,
-        |ui| ui.add(egui::Button::new(label).min_size(DBTN_MIN_SIZE)),
-    )
+/// Windows 11-style secondary button — colours adapt to `dc` (dark or light mode).
+pub fn dialog_btn_secondary(ui: &mut Ui, label: &str, dc: &DialogColors) -> egui::Response {
+    let fill = dc.btn_sec_fill;
+    let hover = dc.btn_sec_hover;
+    // Active: darken by clamped subtraction on each channel
+    let act = Color32::from_rgb(
+        fill.r().saturating_sub(DBTN_SEC_ACT_DARKEN),
+        fill.g().saturating_sub(DBTN_SEC_ACT_DARKEN),
+        fill.b().saturating_sub(DBTN_SEC_ACT_DARKEN),
+    );
+    let border = dc.btn_sec_border;
+    let text_col = dc.btn_sec_text;
+    with_btn_visuals(ui, fill, hover, act, border, |ui| {
+        ui.visuals_mut().override_text_color = Some(text_col);
+        ui.add(egui::Button::new(label).min_size(DBTN_MIN_SIZE))
+    })
 }
 
 /// Disabled variant of the secondary button (grayed out, unclickable).
-pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str) {
-    with_btn_visuals(ui, DBTN_SEC, DBTN_SEC, DBTN_SEC, DBTN_SEC_BORDER, |ui| {
+pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str, dc: &DialogColors) {
+    let fill = dc.btn_sec_fill;
+    let border = dc.btn_sec_border;
+    let text_col = dc.btn_sec_text;
+    with_btn_visuals(ui, fill, fill, fill, border, |ui| {
+        ui.visuals_mut().override_text_color = Some(text_col);
         ui.add_enabled(false, egui::Button::new(label).min_size(DBTN_MIN_SIZE))
     });
 }

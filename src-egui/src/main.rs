@@ -523,6 +523,13 @@ struct RigStatsApp {
     thresholds: PanelThresholds,
     /// Active panel theme derived from `Settings.theme`.
     app_theme: theme::AppTheme,
+    /// Colour palette for dialog windows — switches between dark/light based on OS theme.
+    dialog_colors: theme::DialogColors,
+    /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
+    os_dark_mode: bool,
+    /// Whether any dialog was open last frame; used to restore dark visuals when the
+    /// last dialog closes (avoids calling set_visuals every frame).
+    any_dialog_open_prev: bool,
     /// When > 0, re-applies WindowLevel + opacity for this many more frames.
     /// Used after floating→non-floating transitions where winit may reset the
     /// window level when the window is moved back on-screen.
@@ -650,6 +657,31 @@ impl RigStatsApp {
             floating_mode_arc,
             thresholds: PanelThresholds::from_settings(&init_settings),
             app_theme: theme::AppTheme::from_key(&init_settings.theme),
+            os_dark_mode: {
+                #[cfg(windows)]
+                {
+                    win32_dark_mode::is_system_dark_mode()
+                }
+                #[cfg(not(windows))]
+                {
+                    true
+                }
+            },
+            dialog_colors: {
+                #[cfg(windows)]
+                {
+                    if win32_dark_mode::is_system_dark_mode() {
+                        theme::DialogColors::dark()
+                    } else {
+                        theme::DialogColors::light()
+                    }
+                }
+                #[cfg(not(windows))]
+                {
+                    theme::DialogColors::dark()
+                }
+            },
+            any_dialog_open_prev: false,
             // Apply WindowLevel + opacity for the first few frames at startup when in
             // non-floating mode: the viewport builder only handles "on_top", so "behind"
             // must be sent via viewport command, and opacity needs a valid HWND which
@@ -700,6 +732,20 @@ impl eframe::App for RigStatsApp {
                 if self.window_layer == "behind" && !self.floating_mode {
                     win32_behind::keep_behind("RigStats");
                 }
+            }
+        }
+
+        // Detect OS dark/light mode changes and refresh dialog colours accordingly.
+        #[cfg(windows)]
+        {
+            let dark = win32_dark_mode::is_system_dark_mode();
+            if dark != self.os_dark_mode {
+                self.os_dark_mode = dark;
+                self.dialog_colors = if dark {
+                    theme::DialogColors::dark()
+                } else {
+                    theme::DialogColors::light()
+                };
             }
         }
 
@@ -894,6 +940,23 @@ impl eframe::App for RigStatsApp {
         // ── Secondary windows ─────────────────────────────────────────────────
 
         let main_ctx = ui.ctx().clone();
+        let dc = self.dialog_colors;
+
+        // When the last dialog closes, restore the main-window dark visuals.
+        // We only call set_visuals on the transition frame (not every frame) to
+        // avoid the repaint loop that causes jerky window dragging in light mode.
+        let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
+            || self.about_open.load(Ordering::Relaxed)
+            || self.status_open.load(Ordering::Relaxed)
+            || self.updater_open.load(Ordering::Relaxed);
+        if !any_dialog_open && self.any_dialog_open_prev {
+            let mut vis = egui::Visuals::dark();
+            vis.panel_fill = egui::Color32::TRANSPARENT;
+            vis.window_fill = egui::Color32::from_gray(28);
+            vis.override_text_color = Some(theme::C_TEXT);
+            ui.ctx().set_visuals(vis);
+        }
+        self.any_dialog_open_prev = any_dialog_open;
 
         if self.settings_open.load(Ordering::Relaxed) {
             let open = self.settings_open.clone();
@@ -931,9 +994,12 @@ impl eframe::App for RigStatsApp {
                         &dir,
                         &saved,
                         &reload,
+                        &dc,
                     );
                 },
             );
+            #[cfg(windows)]
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
             // Bring dialog to foreground now that we have the HWND.
             // If found_hwnd == 0 the window wasn't ready yet; restore the focus flag
             // so we retry on the next frame (which fires within 100 ms since a dialog is open).
@@ -970,9 +1036,11 @@ impl eframe::App for RigStatsApp {
                     {
                         found_hwnd = win_opacity::find_hwnd("About RigStats");
                     }
-                    windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir);
+                    windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir, &dc);
                 },
             );
+            #[cfg(windows)]
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
             #[cfg(windows)]
             if wants_focus {
                 if found_hwnd != 0 {
@@ -1015,9 +1083,12 @@ impl eframe::App for RigStatsApp {
                         &state,
                         &dir,
                         lhm_connected,
+                        &dc,
                     );
                 },
             );
+            #[cfg(windows)]
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
             #[cfg(windows)]
             if wants_focus {
                 if found_hwnd != 0 {
@@ -1051,9 +1122,11 @@ impl eframe::App for RigStatsApp {
                     {
                         found_hwnd = win_opacity::find_hwnd("RigStats Update");
                     }
-                    windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state);
+                    windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dc);
                 },
             );
+            #[cfg(windows)]
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
             #[cfg(windows)]
             if wants_focus {
                 if found_hwnd != 0 {
@@ -1149,11 +1222,6 @@ impl eframe::App for RigStatsApp {
                     )));
             }
         }
-
-        let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
-            || self.about_open.load(Ordering::Relaxed)
-            || self.status_open.load(Ordering::Relaxed)
-            || self.updater_open.load(Ordering::Relaxed);
 
         if self.floating_mode {
             // ── Floating mode — each panel in its own borderless viewport ─────
@@ -1369,15 +1437,12 @@ impl eframe::App for RigStatsApp {
             }
         }
 
-        // Repaint faster when a secondary window is open so it closes within ~100 ms
-        // of the user clicking X/Save/Cancel (the open flag is set in the callback
-        // which runs after ui(), so the NEXT frame sees open=false and stops calling
-        // show_viewport_immediate, which is what actually destroys the viewport).
-        ui.ctx().request_repaint_after(if any_dialog_open {
-            Duration::from_millis(100)
-        } else {
-            Duration::from_secs(1)
-        });
+        // Idle repaint rate: 1 fps regardless of whether a dialog is open.
+        // Interaction responsiveness (hover, click, drag) is driven by OS input events
+        // which wake eframe immediately — request_repaint_after only matters when idle.
+        // All dialogs call main_ctx.request_repaint_of(ROOT) on close, so the
+        // show_viewport_immediate cleanup on the next frame is already fast.
+        ui.ctx().request_repaint_after(Duration::from_secs(1));
     }
 }
 

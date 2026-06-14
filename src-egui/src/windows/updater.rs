@@ -1,4 +1,4 @@
-use crate::theme;
+use crate::theme::{self, DialogColors};
 use crate::update_check::{self, UpdateInfo, BUNDLED_CHANGELOG};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -219,13 +219,10 @@ fn is_hex(s: &str) -> bool {
 
 // ── Notes renderer ────────────────────────────────────────────────────────────
 
-const C_TEXT: egui::Color32 = egui::Color32::from_rgb(155, 180, 210);
-const C_DATE: egui::Color32 = egui::Color32::from_gray(128);
+// Semantic section colours — work on both dark and light backgrounds.
 const C_FEATURES: egui::Color32 = egui::Color32::from_rgb(70, 162, 88);
 const C_BUG_FIXES: egui::Color32 = egui::Color32::from_rgb(182, 152, 64);
 const C_OTHER_SECTION: egui::Color32 = egui::Color32::from_gray(128);
-const C_ITEM: egui::Color32 = egui::Color32::from_gray(162);
-const C_HASH: egui::Color32 = egui::Color32::from_rgb(86, 142, 188);
 const C_BAR_FEAT: egui::Color32 = egui::Color32::from_rgb(50, 136, 70);
 const C_BAR_FIX: egui::Color32 = egui::Color32::from_rgb(162, 130, 48);
 const C_BAR_OTHER: egui::Color32 = egui::Color32::from_rgb(36, 132, 158);
@@ -246,21 +243,21 @@ fn bar_color(kind: SectionKind) -> egui::Color32 {
     }
 }
 
-fn render_notes(ui: &mut egui::Ui, entries: &[ReleaseEntry]) {
+fn render_notes(ui: &mut egui::Ui, dc: &DialogColors, entries: &[ReleaseEntry]) {
     if entries.is_empty() {
         ui.label(
             egui::RichText::new("No release notes available.")
                 .small()
-                .color(C_DATE),
+                .color(dc.muted),
         );
         return;
     }
 
     for entry in entries {
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(&entry.version).strong().color(C_TEXT));
+            ui.label(egui::RichText::new(&entry.version).strong().color(dc.text));
             if !entry.date.is_empty() {
-                ui.label(egui::RichText::new(&entry.date).small().color(C_DATE));
+                ui.label(egui::RichText::new(&entry.date).small().color(dc.muted));
             }
         });
         ui.add_space(2.0);
@@ -273,7 +270,7 @@ fn render_notes(ui: &mut egui::Ui, entries: &[ReleaseEntry]) {
             );
 
             for item in &section.items {
-                render_item(ui, item, bar_color(section.kind));
+                render_item(ui, dc, item, bar_color(section.kind));
             }
             ui.add_space(2.0);
         }
@@ -282,7 +279,7 @@ fn render_notes(ui: &mut egui::Ui, entries: &[ReleaseEntry]) {
     }
 }
 
-fn render_item(ui: &mut egui::Ui, item: &NoteItem, bar: egui::Color32) {
+fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui::Color32) {
     let bar_w = 3.0;
     let gap = 6.0;
     let text_w = (ui.available_width() - bar_w - gap - 4.0).max(10.0);
@@ -299,7 +296,7 @@ fn render_item(ui: &mut egui::Ui, item: &NoteItem, bar: egui::Color32) {
                 &item.text,
                 0.0,
                 egui::text::TextFormat {
-                    color: C_ITEM,
+                    color: dc.item,
                     font_id: egui::FontId::proportional(12.0),
                     ..Default::default()
                 },
@@ -309,7 +306,7 @@ fn render_item(ui: &mut egui::Ui, item: &NoteItem, bar: egui::Color32) {
                     &format!(" ({hash})"),
                     0.0,
                     egui::text::TextFormat {
-                        color: C_HASH,
+                        color: dc.item_hash,
                         font_id: egui::FontId::monospace(11.0),
                         ..Default::default()
                     },
@@ -329,24 +326,24 @@ fn render_item(ui: &mut egui::Ui, item: &NoteItem, bar: egui::Color32) {
 
 // ── Changelog area ────────────────────────────────────────────────────────────
 
-/// Slightly lighter than egui's default dark background (~gray 27) — gives
-/// a subtle tonal difference without a visible frame border.
-const CL_SCROLL_FILL: egui::Color32 = egui::Color32::from_gray(27);
-const CL_HEADER_TEXT: egui::Color32 = egui::Color32::from_gray(140);
-
-fn render_changelog_panel(ui: &mut egui::Ui, entries: &[ReleaseEntry], scroll_h: f32) {
+fn render_changelog_panel(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    entries: &[ReleaseEntry],
+    scroll_h: f32,
+) {
     // "What's New" — free label, part of the dialog, not inside any frame.
     ui.label(
         egui::RichText::new("What's New")
             .size(11.0)
             .strong()
-            .color(CL_HEADER_TEXT),
+            .color(dc.label),
     );
     ui.add_space(5.0);
 
-    // Scroll area with a subtly different fill tone — no border stroke.
+    // Scroll area with inset fill — no border stroke.
     egui::Frame::new()
-        .fill(CL_SCROLL_FILL)
+        .fill(dc.inset)
         .corner_radius(egui::CornerRadius::same(4))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
@@ -354,14 +351,12 @@ fn render_changelog_panel(ui: &mut egui::Ui, entries: &[ReleaseEntry], scroll_h:
                 .show(ui, |ui| {
                     egui::Frame::new()
                         .inner_margin(egui::Margin::symmetric(10, 6))
-                        .show(ui, |ui| render_notes(ui, entries));
+                        .show(ui, |ui| render_notes(ui, dc, entries));
                 });
         });
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
-
-const C_BG_PANEL: egui::Color32 = egui::Color32::from_gray(38);
 
 #[allow(deprecated)]
 pub fn show(
@@ -370,7 +365,9 @@ pub fn show(
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
     state: &Arc<Mutex<UpdaterState>>,
+    dc: &DialogColors,
 ) {
+    dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
@@ -388,7 +385,7 @@ pub fn show(
             format!("v{} Available", info.version),
             egui::Color32::from_rgb(88, 200, 88),
         ),
-        UpdateStatus::UpToDate => ("Up to Date".to_string(), C_TEXT),
+        UpdateStatus::UpToDate => ("Up to Date".to_string(), dc.text),
         UpdateStatus::JustUpdated { version } => (
             format!("Updated to v{version}"),
             egui::Color32::from_rgb(88, 200, 88),
@@ -397,7 +394,7 @@ pub fn show(
             "Update Error".to_string(),
             egui::Color32::from_rgb(220, 80, 80),
         ),
-        _ => ("Updates".to_string(), C_TEXT),
+        _ => ("Updates".to_string(), dc.text),
     };
 
     let installed_row: Option<String> = match &st.status {
@@ -415,17 +412,14 @@ pub fn show(
     egui::TopBottomPanel::top("updater_hero")
         .frame(
             egui::Frame::none()
-                .fill(C_BG_PANEL)
+                .fill(dc.bg)
                 .inner_margin(egui::Margin {
                     left: 14,
                     right: 14,
                     top: 14,
                     bottom: 12,
                 })
-                .stroke(egui::Stroke::new(
-                    1.0,
-                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
-                )),
+                .stroke(egui::Stroke::new(1.0, dc.card_border)),
         )
         .show_separator_line(true)
         .show(ctx, |ui| {
@@ -438,9 +432,9 @@ pub fn show(
             if let Some(ver) = &installed_row {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Installed:").color(C_DATE));
+                    ui.label(egui::RichText::new("Installed:").color(dc.muted));
                     ui.add_space(4.0);
-                    ui.label(egui::RichText::new(ver.as_str()).color(C_TEXT));
+                    ui.label(egui::RichText::new(ver.as_str()).color(dc.text));
                 });
             }
         });
@@ -449,22 +443,19 @@ pub fn show(
     egui::TopBottomPanel::bottom("updater_footer")
         .frame(
             egui::Frame::none()
-                .fill(C_BG_PANEL)
+                .fill(dc.bg)
                 .inner_margin(egui::Margin {
                     left: 12,
                     right: 12,
                     top: 8,
                     bottom: 10,
                 })
-                .stroke(egui::Stroke::new(
-                    1.0,
-                    egui::Color32::from_rgba_unmultiplied(255, 255, 255, 20),
-                )),
+                .stroke(egui::Stroke::new(1.0, dc.card_border)),
         )
         .show_separator_line(true)
         .show(ctx, |ui| {
             if let Some(msg) = status_below {
-                ui.label(egui::RichText::new(msg).small().color(C_DATE));
+                ui.label(egui::RichText::new(msg).small().color(dc.muted));
                 ui.add_space(6.0);
             }
             ui.with_layout(
@@ -476,7 +467,7 @@ pub fn show(
                             action_install = Some(path);
                         }
                         ui.add_space(6.0);
-                        if theme::dialog_btn_secondary(ui, "Later").clicked() {
+                        if theme::dialog_btn_secondary(ui, "Later", dc).clicked() {
                             action_close = true;
                         }
                     }
@@ -485,7 +476,7 @@ pub fn show(
                             action_close = true;
                         }
                         ui.add_space(6.0);
-                        theme::dialog_btn_secondary_disabled(ui, "Update Now");
+                        theme::dialog_btn_secondary_disabled(ui, "Update Now", dc);
                     }
                     UpdateStatus::Idle => {
                         if theme::dialog_btn_primary(ui, "Check for Updates").clicked() {
@@ -506,7 +497,7 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(
             egui::Frame::new()
-                .fill(egui::Color32::from_gray(38))
+                .fill(dc.bg)
                 .inner_margin(egui::Margin::same(10)),
         )
         .show(ctx, |ui| match &st.status {
@@ -518,15 +509,15 @@ pub fn show(
                     format!("{new_notes}\n\n{BUNDLED_CHANGELOG}")
                 };
                 let entries = parse_notes(&combined);
-                render_changelog_panel(ui, &entries, ui.available_height());
+                render_changelog_panel(ui, dc, &entries, ui.available_height());
             }
             UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } => {
                 let entries = parse_notes(BUNDLED_CHANGELOG);
-                render_changelog_panel(ui, &entries, ui.available_height());
+                render_changelog_panel(ui, dc, &entries, ui.available_height());
             }
             UpdateStatus::Idle => {
                 let entries = parse_notes(BUNDLED_CHANGELOG);
-                render_changelog_panel(ui, &entries, ui.available_height());
+                render_changelog_panel(ui, dc, &entries, ui.available_height());
             }
             UpdateStatus::Checking => {
                 ui.horizontal(|ui| {
@@ -548,7 +539,7 @@ pub fn show(
                             *total as f32 / 1_048_576.0,
                         ))
                         .small()
-                        .color(C_DATE),
+                        .color(dc.muted),
                     );
                 } else {
                     ui.add(egui::ProgressBar::new(0.0).animate(true));
@@ -559,7 +550,7 @@ pub fn show(
                             *downloaded as f32 / 1_048_576.0,
                         ))
                         .small()
-                        .color(C_DATE),
+                        .color(dc.muted),
                     );
                 }
             }

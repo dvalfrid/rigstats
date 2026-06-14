@@ -1,4 +1,4 @@
-use crate::theme;
+use crate::theme::{self, DialogColors};
 use rigstats_backend::{autostart, debug, settings};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,20 +47,7 @@ const LOG_RETENTION_OPTIONS: &[(u32, &str)] = &[
     (90, "90 days"),
 ];
 
-// ── Colour tokens ─────────────────────────────────────────────────────────────
-
-const C_BG: egui::Color32 = egui::Color32::from_gray(38);
-const C_CARD: egui::Color32 = egui::Color32::from_gray(27);
-const C_CARD_BORDER: egui::Color32 = egui::Color32::from_gray(55);
-const C_TEXT: egui::Color32 = egui::Color32::from_rgb(155, 180, 210);
-const C_MUTED: egui::Color32 = egui::Color32::from_gray(115);
-const C_LABEL: egui::Color32 = egui::Color32::from_gray(140);
-const C_TITLE: egui::Color32 = egui::Color32::from_rgb(210, 220, 235);
-const C_INNER: egui::Color32 = egui::Color32::from_gray(33);
-const C_TOGGLE_ON: egui::Color32 = egui::Color32::from_rgb(0, 188, 212);
-const C_TOGGLE_OFF: egui::Color32 = egui::Color32::from_gray(55);
-const C_TAB_ACTIVE: egui::Color32 = egui::Color32::from_rgb(0, 188, 212);
-const C_TAB_ACTIVE_TEXT: egui::Color32 = egui::Color32::from_gray(15);
+// Semantic alert colours — independent of light/dark mode.
 const C_WARN: egui::Color32 = egui::Color32::from_rgb(255, 180, 30);
 const C_CRIT: egui::Color32 = egui::Color32::from_rgb(220, 60, 60);
 
@@ -106,35 +93,40 @@ fn detect_battery_present() -> bool {
 
 // ── Frames ────────────────────────────────────────────────────────────────────
 
-fn dialog_frame() -> egui::Frame {
+fn dialog_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
-        .fill(C_BG)
+        .fill(dc.bg)
         .inner_margin(egui::Margin::same(0))
 }
 
-fn card_frame() -> egui::Frame {
+fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
-        .fill(C_CARD)
-        .stroke(egui::Stroke::new(1.0, C_CARD_BORDER))
+        .fill(dc.card)
+        .stroke(egui::Stroke::new(1.0, dc.card_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(12, 8))
 }
 
-fn inner_row() -> egui::Frame {
+fn inner_row(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
-        .fill(C_INNER)
+        .fill(dc.inner)
         .corner_radius(egui::CornerRadius::same(4))
         .inner_margin(egui::Margin::symmetric(10, 6))
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-fn section_label(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(11.0).strong().color(C_LABEL));
+fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(11.0)
+            .strong()
+            .color(dc.label),
+    );
 }
 
 /// Cyan toggle switch.
-fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
+fn toggle_switch(ui: &mut egui::Ui, dc: &DialogColors, on: &mut bool) -> egui::Response {
     let desired = egui::vec2(44.0, 24.0);
     let (rect, mut resp) = ui.allocate_exact_size(desired, egui::Sense::click());
     if resp.clicked() {
@@ -142,7 +134,7 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
         resp.mark_changed();
     }
     if ui.is_rect_visible(rect) {
-        let bg = if *on { C_TOGGLE_ON } else { C_TOGGLE_OFF };
+        let bg = if *on { dc.toggle_on } else { dc.toggle_off };
         let r = (rect.height() / 2.0) as u8;
         ui.painter()
             .rect_filled(rect, egui::CornerRadius::same(r), bg);
@@ -161,11 +153,11 @@ fn toggle_switch(ui: &mut egui::Ui, on: &mut bool) -> egui::Response {
 }
 
 /// Draw three horizontal lines as a drag-handle icon (font-independent).
-fn drag_handle(ui: &mut egui::Ui) {
+fn drag_handle(ui: &mut egui::Ui, dc: &DialogColors) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 20.0), egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let cx = rect.center().x;
-        let stroke = egui::Stroke::new(1.5, C_MUTED);
+        let stroke = egui::Stroke::new(1.5, dc.muted);
         for dy in [-4.0_f32, 0.0, 4.0] {
             let y = rect.center().y + dy;
             ui.painter()
@@ -175,28 +167,28 @@ fn drag_handle(ui: &mut egui::Ui) {
 }
 
 /// Styled tab button. Returns true when clicked.
-fn tab_btn(ui: &mut egui::Ui, label: &str, active: bool) -> bool {
+fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool) -> bool {
     let mut clicked = false;
     ui.scope(|ui| {
         let cr = egui::CornerRadius::same(5);
         if active {
-            ui.visuals_mut().widgets.inactive.bg_fill = C_TAB_ACTIVE;
-            ui.visuals_mut().widgets.inactive.fg_stroke = egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
+            ui.visuals_mut().widgets.inactive.bg_fill = dc.tab_active;
+            ui.visuals_mut().widgets.inactive.fg_stroke =
+                egui::Stroke::new(1.0, dc.tab_active_text);
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
-            ui.visuals_mut().widgets.hovered.bg_fill = C_TAB_ACTIVE;
-            ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0, C_TAB_ACTIVE_TEXT);
+            ui.visuals_mut().widgets.hovered.bg_fill = dc.tab_active;
+            ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0, dc.tab_active_text);
             ui.visuals_mut().widgets.hovered.corner_radius = cr;
             ui.visuals_mut().widgets.active.corner_radius = cr;
         } else {
             ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-            ui.visuals_mut().widgets.inactive.bg_stroke =
-                egui::Stroke::new(1.0, egui::Color32::from_gray(60));
+            ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, dc.card_border);
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
-            ui.visuals_mut().widgets.hovered.bg_fill = egui::Color32::from_gray(48);
+            ui.visuals_mut().widgets.hovered.bg_fill = dc.card;
             ui.visuals_mut().widgets.hovered.corner_radius = cr;
             ui.visuals_mut().widgets.active.corner_radius = cr;
         }
-        let text_col = if active { C_TAB_ACTIVE_TEXT } else { C_TEXT };
+        let text_col = if active { dc.tab_active_text } else { dc.text };
         if ui
             .add_sized(
                 [128.0, 28.0],
@@ -237,7 +229,9 @@ pub fn show(
     dir: &Arc<PathBuf>,
     saved: &Arc<Mutex<settings::Settings>>,
     reload: &Arc<AtomicBool>,
+    dc: &DialogColors,
 ) {
+    dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
@@ -247,7 +241,7 @@ pub fn show(
 
     // ── Hero ──────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("settings_hero")
-        .frame(dialog_frame().inner_margin(egui::Margin {
+        .frame(dialog_frame(dc).inner_margin(egui::Margin {
             left: 16,
             right: 16,
             top: 14,
@@ -259,13 +253,13 @@ pub fn show(
                 egui::RichText::new("Settings")
                     .size(22.0)
                     .strong()
-                    .color(C_TITLE),
+                    .color(dc.title),
             );
         });
 
     // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("settings_footer")
-        .frame(dialog_frame().inner_margin(egui::Margin {
+        .frame(dialog_frame(dc).inner_margin(egui::Margin {
             left: 14,
             right: 14,
             top: 8,
@@ -283,7 +277,7 @@ pub fn show(
                 ui.add_space(4.0);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::dialog_btn_secondary(ui, "Cancel").clicked() {
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
                     action_cancel = true;
                 }
                 ui.add_space(6.0);
@@ -295,13 +289,13 @@ pub fn show(
 
     // ── Central: tab bar + scrollable content ─────────────────────────────────
     egui::CentralPanel::default()
-        .frame(dialog_frame())
+        .frame(dialog_frame(dc))
         .show(ctx, |ui| {
             let mut st = state.lock().unwrap();
 
             // Tab bar
             egui::Frame::new()
-                .fill(C_BG)
+                .fill(dc.bg)
                 .inner_margin(egui::Margin {
                     left: 14,
                     right: 14,
@@ -315,7 +309,7 @@ pub fn show(
                             .iter()
                             .enumerate()
                         {
-                            if tab_btn(ui, lbl, st.tab == i) {
+                            if tab_btn(ui, dc, lbl, st.tab == i) {
                                 st.tab = i;
                             }
                         }
@@ -329,7 +323,7 @@ pub fn show(
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     egui::Frame::new()
-                        .fill(C_BG)
+                        .fill(dc.bg)
                         .inner_margin(egui::Margin::symmetric(12, 8))
                         .show(ui, |ui| {
                             ui.set_min_width(ui.available_width());
@@ -338,10 +332,10 @@ pub fn show(
                             let battery_present = st.battery_present;
                             let draft = &mut st.draft;
                             match tab {
-                                0 => draw_dashboard(ui, draft, dir.as_ref()),
-                                1 => draw_panels(ui, draft, battery_present),
-                                2 => draw_alerts(ui, draft),
-                                3 => draw_appearance(ui, draft),
+                                0 => draw_dashboard(ui, dc, draft, dir.as_ref()),
+                                1 => draw_panels(ui, dc, draft, battery_present),
+                                2 => draw_alerts(ui, dc, draft),
+                                3 => draw_appearance(ui, dc, draft),
                                 _ => {}
                             }
                         });
@@ -410,11 +404,16 @@ pub fn show(
 
 // ── Dashboard tab ─────────────────────────────────────────────────────────────
 
-fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path) {
+fn draw_dashboard(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    draft: &mut settings::Settings,
+    dir: &Path,
+) {
     // Display Profile
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Display Profile");
+        section_label(ui, dc, "Display Profile");
         ui.add_space(8.0);
         let w = ui.available_width();
         if draft.floating_mode {
@@ -424,18 +423,18 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
                 .map(|(_, l)| *l)
                 .unwrap_or(draft.dashboard_profile.as_str());
             egui::Frame::new()
-                .fill(egui::Color32::from_gray(50))
+                .fill(dc.inner)
                 .corner_radius(egui::CornerRadius::same(4))
                 .inner_margin(egui::Margin::symmetric(8, 4))
                 .show(ui, |ui| {
                     ui.set_min_width(w - 16.0);
-                    ui.label(egui::RichText::new(current).size(13.0).color(C_MUTED));
+                    ui.label(egui::RichText::new(current).size(13.0).color(dc.muted));
                 });
             ui.add_space(4.0);
             ui.label(
                 egui::RichText::new("Not used in floating mode")
                     .size(11.0)
-                    .color(C_MUTED),
+                    .color(dc.muted),
             );
         } else {
             let current = ALL_PROFILES
@@ -455,37 +454,41 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
     });
 
     // Layout
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Layout");
+        section_label(ui, dc, "Layout");
         ui.add_space(8.0);
-        inner_row().show(ui, |ui| {
+        inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(
                         egui::RichText::new("Floating Mode")
                             .size(13.0)
-                            .color(C_TEXT),
+                            .color(dc.text),
                     );
                     ui.label(
                         egui::RichText::new("Each panel opens as a separate frameless window")
                             .size(11.0)
-                            .color(C_MUTED),
+                            .color(dc.muted),
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut draft.floating_mode);
+                    toggle_switch(ui, dc, &mut draft.floating_mode);
                 });
             });
         });
 
         if draft.floating_mode {
             ui.add_space(8.0);
-            inner_row().show(ui, |ui| {
+            inner_row(dc).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Panel Scale").size(12.0).color(C_MUTED));
+                    ui.label(
+                        egui::RichText::new("Panel Scale")
+                            .size(12.0)
+                            .color(dc.muted),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             egui::RichText::new(format!(
@@ -493,7 +496,7 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
                                 draft.floating_panel_scale * 100.0
                             ))
                             .size(12.0)
-                            .color(C_TEXT),
+                            .color(dc.text),
                         );
                         let scale = &mut draft.floating_panel_scale;
                         let slider = egui::Slider::new(scale, 0.4..=1.0)
@@ -507,35 +510,35 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
     });
 
     // Stats Logging
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Stats Logging");
+        section_label(ui, dc, "Stats Logging");
         ui.add_space(8.0);
 
-        inner_row().show(ui, |ui| {
+        inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(
                         egui::RichText::new("Enable Logging")
                             .size(13.0)
-                            .color(C_TEXT),
+                            .color(dc.text),
                     );
                     ui.label(
                         egui::RichText::new("Saves one CSV row per second to the app data folder")
                             .size(11.0)
-                            .color(C_MUTED),
+                            .color(dc.muted),
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut draft.logging_enabled);
+                    toggle_switch(ui, dc, &mut draft.logging_enabled);
                 });
             });
         });
 
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Retain for").size(12.0).color(C_MUTED));
+            ui.label(egui::RichText::new("Retain for").size(12.0).color(dc.muted));
             ui.add_space(8.0);
             let current = LOG_RETENTION_OPTIONS
                 .iter()
@@ -551,7 +554,7 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
                     }
                 });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::dialog_btn_secondary(ui, "Open Log Folder").clicked() {
+                if theme::dialog_btn_secondary(ui, "Open Log Folder", dc).clicked() {
                     let _ = std::process::Command::new("explorer").arg(dir).spawn();
                 }
             });
@@ -560,11 +563,11 @@ fn draw_dashboard(ui: &mut egui::Ui, draft: &mut settings::Settings, dir: &Path)
 }
 
 /// Small clickable reorder button with a painted triangle arrow.
-fn arrow_btn(ui: &mut egui::Ui, down: bool) -> egui::Response {
+fn arrow_btn(ui: &mut egui::Ui, dc: &DialogColors, down: bool) -> egui::Response {
     let size = egui::vec2(20.0, 20.0);
     let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
     if ui.is_rect_visible(rect) {
-        let color = if resp.hovered() { C_TEXT } else { C_MUTED };
+        let color = if resp.hovered() { dc.text } else { dc.muted };
         let cx = rect.center().x;
         let tri = if down {
             vec![
@@ -587,11 +590,16 @@ fn arrow_btn(ui: &mut egui::Ui, down: bool) -> egui::Response {
 
 // ── Panels tab ────────────────────────────────────────────────────────────────
 
-fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_present: bool) {
+fn draw_panels(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    draft: &mut settings::Settings,
+    battery_present: bool,
+) {
     ui.label(
         egui::RichText::new("Use arrows to reorder · toggle to show/hide")
             .size(11.0)
-            .color(C_MUTED),
+            .color(dc.muted),
     );
     ui.add_space(4.0);
 
@@ -612,18 +620,18 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
     let mut toggle: Option<(String, bool)> = None;
     let mut reorder: Option<(String, i32)> = None;
 
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         for (i, &(key, label, visible)) in ordered.iter().enumerate() {
             if i > 0 {
                 ui.add(egui::Separator::default().spacing(1.0));
             }
             let unavailable = key == "battery" && !battery_present && cfg!(not(debug_assertions));
-            let label_color = if unavailable { C_MUTED } else { C_TEXT };
+            let label_color = if unavailable { dc.muted } else { dc.text };
 
             ui.horizontal(|ui| {
                 ui.add_space(6.0);
-                drag_handle(ui);
+                drag_handle(ui, dc);
                 ui.add_space(6.0);
                 ui.label(egui::RichText::new(label).size(13.0).color(label_color));
 
@@ -637,17 +645,17 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                             ui.painter().rect_filled(
                                 rect,
                                 egui::CornerRadius::same(r),
-                                egui::Color32::from_gray(45),
+                                dc.toggle_off,
                             );
                             ui.painter().circle_filled(
                                 egui::pos2(rect.left() + rect.height() / 2.0, rect.center().y),
                                 rect.height() / 2.0 - 3.0,
-                                egui::Color32::from_gray(75),
+                                dc.muted,
                             );
                         }
                     } else {
                         let mut v = visible;
-                        if toggle_switch(ui, &mut v).changed() {
+                        if toggle_switch(ui, dc, &mut v).changed() {
                             toggle = Some((key.to_string(), v));
                         }
                     }
@@ -659,14 +667,14 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
                             .unwrap_or(0);
                         ui.add_space(6.0);
                         if idx + 1 < vis_count {
-                            if arrow_btn(ui, true).clicked() {
+                            if arrow_btn(ui, dc, true).clicked() {
                                 reorder = Some((key.to_string(), 1));
                             }
                         } else {
                             ui.add_space(20.0);
                         }
                         if idx > 0 {
-                            if arrow_btn(ui, false).clicked() {
+                            if arrow_btn(ui, dc, false).clicked() {
                                 reorder = Some((key.to_string(), -1));
                             }
                         } else {
@@ -720,30 +728,30 @@ fn draw_panels(ui: &mut egui::Ui, draft: &mut settings::Settings, battery_presen
 
 // ── Alerts tab ────────────────────────────────────────────────────────────────
 
-fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
+fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
     // Notifications card
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Notifications");
+        section_label(ui, dc, "Notifications");
         ui.add_space(8.0);
 
-        inner_row().show(ui, |ui| {
+        inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.label(
                     egui::RichText::new("Notify on Critical")
                         .size(13.0)
-                        .color(C_TEXT),
+                        .color(dc.text),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut draft.notify_on_crit);
+                    toggle_switch(ui, dc, &mut draft.notify_on_crit);
                 });
             });
         });
 
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Cooldown").size(12.0).color(C_MUTED));
+            ui.label(egui::RichText::new("Cooldown").size(12.0).color(dc.muted));
             ui.add_space(8.0);
             let mut secs = draft.alert_cooldown_secs as i32;
             if ui
@@ -757,7 +765,7 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                 draft.alert_cooldown_secs = secs.max(60) as u64;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if theme::dialog_btn_secondary(ui, "Test Notification").clicked() {
+                if theme::dialog_btn_secondary(ui, "Test Notification", dc).clicked() {
                     send_test_notification();
                 }
             });
@@ -765,9 +773,9 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
     });
 
     // Thresholds card — compact flat table, units/direction inline in row labels
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Thresholds (blank to disable)");
+        section_label(ui, dc, "Thresholds (blank to disable)");
         ui.add_space(6.0);
 
         // Shared Warn / Crit header
@@ -808,8 +816,8 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                     .unwrap_or_default()
             });
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(label).size(13.0).color(C_TEXT));
-                ui.label(egui::RichText::new("°C").size(11.0).color(C_MUTED));
+                ui.label(egui::RichText::new(label).size(13.0).color(dc.text));
+                ui.label(egui::RichText::new("°C").size(11.0).color(dc.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     threshold_field(ui, &mut e.crit);
                     ui.add_space(4.0);
@@ -827,7 +835,7 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                 "Charge: alert when % drops below · Power: alert when W exceeds (discharge only)",
             )
             .size(10.0)
-            .color(C_MUTED),
+            .color(dc.muted),
         );
         ui.add_space(4.0);
 
@@ -841,7 +849,7 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                     .unwrap_or_default()
             });
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Charge %").size(13.0).color(C_TEXT));
+            ui.label(egui::RichText::new("Charge %").size(13.0).color(dc.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 threshold_field(ui, &mut bat.crit);
                 ui.add_space(4.0);
@@ -859,7 +867,7 @@ fn draw_alerts(ui: &mut egui::Ui, draft: &mut settings::Settings) {
                     .unwrap_or_default()
             });
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Power W").size(13.0).color(C_TEXT));
+            ui.label(egui::RichText::new("Power W").size(13.0).color(dc.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 threshold_field(ui, &mut bat_pwr.crit);
                 ui.add_space(4.0);
@@ -886,34 +894,34 @@ fn send_test_notification() {
 
 // ── Appearance tab ────────────────────────────────────────────────────────────
 
-fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
+fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
     // Rig Name card
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Rig Name");
+        section_label(ui, dc, "Rig Name");
         ui.add_space(8.0);
         let w = ui.available_width();
         ui.add_sized(
             [w, 24.0],
-            egui::TextEdit::singleline(&mut draft.model_name).text_color(C_TEXT),
+            egui::TextEdit::singleline(&mut draft.model_name).text_color(dc.text),
         );
     });
 
     // Window card
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Window");
+        section_label(ui, dc, "Window");
         ui.add_space(8.0);
 
         // Opacity
         let pct = (draft.opacity * 100.0).round() as u32;
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Opacity").size(12.0).color(C_MUTED));
+            ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new(format!("{pct}%"))
                         .size(12.0)
-                        .color(C_TEXT),
+                        .color(dc.text),
                 );
                 let mut opacity = draft.opacity as f32;
                 let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
@@ -935,7 +943,7 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
             ui.label(
                 egui::RichText::new("Window Layer")
                     .size(12.0)
-                    .color(C_MUTED),
+                    .color(dc.muted),
             );
             ui.add_space(8.0);
             let layer_label = match draft.window_layer.as_str() {
@@ -967,34 +975,34 @@ fn draw_appearance(ui: &mut egui::Ui, draft: &mut settings::Settings) {
         ui.add_space(4.0);
 
         // Launch at Startup
-        inner_row().show(ui, |ui| {
+        inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.label(
                         egui::RichText::new("Launch at Startup")
                             .size(13.0)
-                            .color(C_TEXT),
+                            .color(dc.text),
                     );
                     ui.label(
                         egui::RichText::new("Starts with Windows · LHM connects automatically")
                             .size(11.0)
-                            .color(C_MUTED),
+                            .color(dc.muted),
                     );
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, &mut draft.autostart_enabled);
+                    toggle_switch(ui, dc, &mut draft.autostart_enabled);
                 });
             });
         });
     });
 
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, "Theme");
+        section_label(ui, dc, "Theme");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Theme").color(theme::C_TEXT));
+            ui.label(egui::RichText::new("Theme").color(dc.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let current = draft.theme.clone();
                 egui::ComboBox::from_id_salt("theme_select")

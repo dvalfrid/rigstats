@@ -1,4 +1,4 @@
-use crate::theme;
+use crate::theme::{self, DialogColors};
 use chrono::Local;
 use rigstats_backend::{debug, hardware};
 use std::fmt::Write as _;
@@ -51,35 +51,38 @@ fn query_service_running() -> bool {
         .unwrap_or(false)
 }
 
-// ── Colour tokens ─────────────────────────────────────────────────────────────
-
-const C_BG: egui::Color32 = egui::Color32::from_gray(38);
-const C_CARD: egui::Color32 = egui::Color32::from_gray(30);
-const C_CARD_BORDER: egui::Color32 = egui::Color32::from_gray(55);
-const C_LOG_FILL: egui::Color32 = egui::Color32::from_gray(22);
-const C_LABEL: egui::Color32 = egui::Color32::from_gray(140);
-const C_MUTED: egui::Color32 = egui::Color32::from_gray(115);
-const C_TEXT: egui::Color32 = egui::Color32::from_rgb(155, 180, 210);
+// Semantic status colours — independent of light/dark mode.
 const C_GOOD: egui::Color32 = egui::Color32::from_rgb(80, 190, 90);
 const C_BAD: egui::Color32 = egui::Color32::from_rgb(200, 70, 60);
 
 // ── Widget helpers ────────────────────────────────────────────────────────────
 
-fn card_frame() -> egui::Frame {
+fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
-        .fill(C_CARD)
-        .stroke(egui::Stroke::new(1.0, C_CARD_BORDER))
+        .fill(dc.card)
+        .stroke(egui::Stroke::new(1.0, dc.card_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(12, 10))
 }
 
-fn section_label(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text).size(11.0).strong().color(C_LABEL));
+fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
+    ui.label(
+        egui::RichText::new(text)
+            .size(11.0)
+            .strong()
+            .color(dc.label),
+    );
     ui.add_space(4.0);
 }
 
-fn meta_row(ui: &mut egui::Ui, label: &str, value: &str, value_color: egui::Color32) {
-    ui.label(egui::RichText::new(label).size(11.0).color(C_MUTED));
+fn meta_row(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    label: &str,
+    value: &str,
+    value_color: egui::Color32,
+) {
+    ui.label(egui::RichText::new(label).size(11.0).color(dc.muted));
     ui.label(egui::RichText::new(value).size(13.0).color(value_color));
 }
 
@@ -118,9 +121,9 @@ fn status_badge(ui: &mut egui::Ui, ok: bool) {
 
 // ── Section renderers ─────────────────────────────────────────────────────────
 
-fn render_diagnostics(ui: &mut egui::Ui, state: &StatusState) {
-    section_label(ui, "Diagnostics");
-    card_frame().show(ui, |ui| {
+fn render_diagnostics(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
+    section_label(ui, dc, "Diagnostics");
+    card_frame(dc).show(ui, |ui| {
         ui.set_width(ui.available_width());
 
         // Service + Pipe side by side
@@ -129,8 +132,8 @@ fn render_diagnostics(ui: &mut egui::Ui, state: &StatusState) {
             .min_col_width(180.0)
             .spacing([8.0, 2.0])
             .show(ui, |ui| {
-                ui.label(egui::RichText::new("Service").size(11.0).color(C_MUTED));
-                ui.label(egui::RichText::new("Pipe").size(11.0).color(C_MUTED));
+                ui.label(egui::RichText::new("Service").size(11.0).color(dc.muted));
+                ui.label(egui::RichText::new("Pipe").size(11.0).color(dc.muted));
                 ui.end_row();
                 let svc_color = if state.service_running { C_GOOD } else { C_BAD };
                 let svc_text = if state.service_running {
@@ -160,16 +163,22 @@ fn render_diagnostics(ui: &mut egui::Ui, state: &StatusState) {
             });
 
         ui.add_space(6.0);
-        meta_row(ui, "Debug Log Path", &state.log_path, C_TEXT);
+        meta_row(ui, dc, "Debug Log Path", &state.log_path, dc.text);
         ui.add_space(6.0);
-        meta_row(ui, "Last Successful Refresh", &state.last_refresh, C_TEXT);
+        meta_row(
+            ui,
+            dc,
+            "Last Successful Refresh",
+            &state.last_refresh,
+            dc.text,
+        );
     });
 }
 
-fn render_dependencies(ui: &mut egui::Ui, state: &StatusState) {
+fn render_dependencies(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
     ui.add_space(8.0);
-    section_label(ui, "Dependencies");
-    card_frame().show(ui, |ui| {
+    section_label(ui, dc, "Dependencies");
+    card_frame(dc).show(ui, |ui| {
         ui.set_width(ui.available_width());
         let sensor_ver = format!("LHM {DEP_LHM_VER}");
         let deps: [(&str, &str, &str, bool); 3] = [
@@ -198,13 +207,18 @@ fn render_dependencies(ui: &mut egui::Ui, state: &StatusState) {
             }
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(*name).size(13.0).strong().color(C_TEXT));
-                    ui.label(egui::RichText::new(*desc).size(11.0).color(C_MUTED));
+                    ui.label(
+                        egui::RichText::new(*name)
+                            .size(13.0)
+                            .strong()
+                            .color(dc.text),
+                    );
+                    ui.label(egui::RichText::new(*desc).size(11.0).color(dc.muted));
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     status_badge(ui, *ok);
                     ui.add_space(8.0);
-                    ui.label(egui::RichText::new(*ver).size(12.0).color(C_MUTED));
+                    ui.label(egui::RichText::new(*ver).size(12.0).color(dc.muted));
                 });
             });
         }
@@ -418,21 +432,21 @@ pub fn collect_and_open_diagnostics(dir: &Path) {
     }
 }
 
-fn render_debug_log(ui: &mut egui::Ui, log: &str, log_h: f32) {
+fn render_debug_log(ui: &mut egui::Ui, dc: &DialogColors, log: &str, log_h: f32) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
-        section_label(ui, "Debug Log");
+        section_label(ui, dc, "Debug Log");
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if theme::dialog_btn_secondary(ui, "Copy Log").clicked() {
+            if theme::dialog_btn_secondary(ui, "Copy Log", dc).clicked() {
                 ui.ctx().copy_text(log.to_string());
             }
         });
     });
 
-    card_frame().show(ui, |ui| {
+    card_frame(dc).show(ui, |ui| {
         ui.set_width(ui.available_width());
         egui::Frame::new()
-            .fill(C_LOG_FILL)
+            .fill(dc.inset)
             .corner_radius(egui::CornerRadius::same(4))
             .show(ui, |ui| {
                 egui::ScrollArea::vertical()
@@ -453,7 +467,7 @@ fn render_debug_log(ui: &mut egui::Ui, log: &str, log_h: f32) {
         ui.label(
             egui::RichText::new("Showing latest log lines from RigStats backend diagnostics.")
                 .size(11.0)
-                .color(C_MUTED),
+                .color(dc.muted),
         );
     });
 }
@@ -461,6 +475,7 @@ fn render_debug_log(ui: &mut egui::Ui, log: &str, log_h: f32) {
 // ── Window ────────────────────────────────────────────────────────────────────
 
 #[allow(deprecated)]
+#[allow(clippy::too_many_arguments)]
 pub fn show(
     ctx: &egui::Context,
     main_ctx: &egui::Context,
@@ -469,7 +484,9 @@ pub fn show(
     state: &Arc<Mutex<StatusState>>,
     dir: &Arc<PathBuf>,
     pipe_connected: bool,
+    dc: &DialogColors,
 ) {
+    dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
@@ -483,7 +500,7 @@ pub fn show(
 
     // ── Hero ──────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("status_hero")
-        .frame(egui::Frame::new().fill(C_BG).inner_margin(egui::Margin {
+        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
             left: 14,
             right: 14,
             top: 14,
@@ -495,19 +512,19 @@ pub fn show(
                 egui::RichText::new("Status")
                     .size(22.0)
                     .strong()
-                    .color(C_TEXT),
+                    .color(dc.text),
             );
             ui.add_space(2.0);
             ui.label(
                 egui::RichText::new("Diagnostics, debug log and dependency health.")
                     .size(12.0)
-                    .color(C_MUTED),
+                    .color(dc.muted),
             );
         });
 
     // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("status_footer")
-        .frame(egui::Frame::new().fill(C_BG).inner_margin(egui::Margin {
+        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
             left: 12,
             right: 12,
             top: 8,
@@ -516,15 +533,15 @@ pub fn show(
         .show_separator_line(true)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if theme::dialog_btn_secondary(ui, "Collect Diagnostics…").clicked() {
+                if theme::dialog_btn_secondary(ui, "Collect Diagnostics…", dc).clicked() {
                     action_collect_diag = true;
                 }
                 ui.add_space(4.0);
-                if theme::dialog_btn_secondary(ui, "Log Folder").clicked() {
+                if theme::dialog_btn_secondary(ui, "Log Folder", dc).clicked() {
                     action_open_folder = true;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_secondary(ui, "Close").clicked() {
+                    if theme::dialog_btn_secondary(ui, "Close", dc).clicked() {
                         action_close = true;
                     }
                     ui.add_space(6.0);
@@ -539,7 +556,7 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(
             egui::Frame::new()
-                .fill(C_BG)
+                .fill(dc.bg)
                 .inner_margin(egui::Margin::same(10)),
         )
         .show(ctx, |ui| {
@@ -548,9 +565,9 @@ pub fn show(
             const STATIC_H: f32 = 300.0;
             let log_h = (ui.available_height() - STATIC_H).max(80.0);
 
-            render_diagnostics(ui, &st);
-            render_dependencies(ui, &st);
-            render_debug_log(ui, &st.log, log_h);
+            render_diagnostics(ui, dc, &st);
+            render_dependencies(ui, dc, &st);
+            render_debug_log(ui, dc, &st.log, log_h);
         });
 
     if action_refresh {
