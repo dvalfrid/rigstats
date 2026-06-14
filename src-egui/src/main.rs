@@ -1541,11 +1541,10 @@ impl RigStatsApp {
         let scale = self.floating_panel_scale;
         drop(s);
 
-        let panels_to_draw = self.visible_panels.clone();
         let opacity = self.opacity;
 
-        for (idx, panel_key) in panels_to_draw.iter().enumerate() {
-            let key = panel_key.clone();
+        for idx in 0..self.visible_panels.len() {
+            let key = self.visible_panels[idx].clone();
 
             let init_pos: [f32; 2] = {
                 let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
@@ -1566,16 +1565,16 @@ impl RigStatsApp {
                 self.panels_positioned.insert(key.clone());
             }
 
+            // Title shared between ViewportBuilder and Win32 FindWindowW lookup.
+            let win_title = format!("RigStats \u{2014} {}", panel_label(&key));
             let mut vp_builder = egui::ViewportBuilder::default()
-                .with_title(format!("RigStats \u{2014} {}", panel_label(&key)))
+                .with_title(win_title.clone())
                 .with_inner_size([panel_w, initial_h])
                 .with_decorations(false)
                 .with_resizable(false)
                 .with_taskbar(false)
                 .with_window_level(window_level);
 
-            // Capture title string for Win32 FindWindowW lookup inside the callback.
-            let win_title = format!("RigStats \u{2014} {}", panel_label(&key));
             let is_behind = window_level == egui::WindowLevel::AlwaysOnBottom;
 
             if needs_position {
