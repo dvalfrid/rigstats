@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod brand;
+mod lock_ext;
 mod panels;
 mod ring;
 mod spark;
@@ -15,6 +16,7 @@ mod win_opacity;
 mod windows;
 
 use eframe::egui;
+use lock_ext::LockSafe;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use spark::Sparkline;
 use std::cell::RefCell;
@@ -630,7 +632,7 @@ impl RigStatsApp {
         updater_open: Arc<AtomicBool>,
         updater_focus: Arc<AtomicBool>,
     ) -> Self {
-        let init_settings = current_settings.lock().unwrap().clone();
+        let init_settings = current_settings.lock_safe().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
             .panel_layouts
             .iter()
@@ -790,7 +792,7 @@ impl eframe::App for RigStatsApp {
 
         // Apply settings saved from the settings window.
         if self.settings_reload.swap(false, Ordering::Relaxed) {
-            let s = self.current_settings.lock().unwrap();
+            let s = self.current_settings.lock_safe();
             let prev_visible = self.visible_panels.clone();
             self.visible_panels = s.visible_panels.clone();
             // Any panel that was visible before but is now hidden must be removed
@@ -872,8 +874,8 @@ impl eframe::App for RigStatsApp {
                 }
                 TrayCmd::OpenSettings => {
                     // Re-initialise draft from current settings each time the window opens.
-                    let s = self.current_settings.lock().unwrap().clone();
-                    *self.settings_win.lock().unwrap() =
+                    let s = self.current_settings.lock_safe().clone();
+                    *self.settings_win.lock_safe() =
                         windows::settings::SettingsWindow::from_settings(&s);
                     self.settings_open.store(true, Ordering::Relaxed);
                     self.settings_focus.store(true, Ordering::Relaxed);
@@ -883,7 +885,7 @@ impl eframe::App for RigStatsApp {
                     self.about_focus.store(true, Ordering::Relaxed);
                 }
                 TrayCmd::OpenStatus => {
-                    *self.status_win.lock().unwrap() =
+                    *self.status_win.lock_safe() =
                         windows::status::StatusState::load(&self.dir, self.latest.lhm_connected);
                     self.status_open.store(true, Ordering::Relaxed);
                     self.status_focus.store(true, Ordering::Relaxed);
@@ -894,7 +896,7 @@ impl eframe::App for RigStatsApp {
                 }
                 TrayCmd::ToggleFloating => {
                     let new_mode = {
-                        let mut s = self.current_settings.lock().unwrap();
+                        let mut s = self.current_settings.lock_safe();
                         s.floating_mode = !s.floating_mode;
                         let _ = settings::persist_settings(&self.dir, &s);
                         s.floating_mode
@@ -911,7 +913,7 @@ impl eframe::App for RigStatsApp {
                                 ));
                         } else {
                             let [px, py] = pick_window_position();
-                            let s = self.current_settings.lock().unwrap();
+                            let s = self.current_settings.lock_safe();
                             let [w, _] = profile_to_size(&s.dashboard_profile);
                             let h = compute_window_height(
                                 &self.visible_panels,
@@ -941,7 +943,7 @@ impl eframe::App for RigStatsApp {
                 }
                 TrayCmd::ToggleRecording => {
                     let (new_enabled, retention_days) = {
-                        let mut s = self.current_settings.lock().unwrap();
+                        let mut s = self.current_settings.lock_safe();
                         s.logging_enabled = !s.logging_enabled;
                         let _ = settings::persist_settings(&self.dir, &s);
                         (s.logging_enabled, s.log_retention_days)
@@ -958,7 +960,7 @@ impl eframe::App for RigStatsApp {
         let arc_locked = self.floating_lock_arc.load(Ordering::Relaxed);
         if arc_locked != self.floating_panels_locked {
             self.floating_panels_locked = arc_locked;
-            let mut s = self.current_settings.lock().unwrap();
+            let mut s = self.current_settings.lock_safe();
             s.floating_panels_locked = arc_locked;
             let _ = settings::persist_settings(&self.dir, &s);
         }
@@ -1167,7 +1169,7 @@ impl eframe::App for RigStatsApp {
             // synchronous and tokio::spawn is not safe to call from the egui
             // UI thread (which is not inside a tokio async context).
             let is_checking = matches!(
-                self.updater_win.lock().unwrap().status,
+                self.updater_win.lock_safe().status,
                 windows::updater::UpdateStatus::Checking
             );
             if is_checking && !self.updater_busy.swap(true, Ordering::Relaxed) {
@@ -1184,7 +1186,7 @@ impl eframe::App for RigStatsApp {
                                     let url = info.url.clone();
                                     let dest = update_check::installer_temp_path(&version);
                                     {
-                                        let mut s = win.lock().unwrap();
+                                        let mut s = win.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Downloading {
                                             downloaded: 0,
                                             total: 0,
@@ -1195,7 +1197,7 @@ impl eframe::App for RigStatsApp {
                                     let ctx2 = ctx.clone();
                                     let dl_result =
                                         update_check::download(&url, &dest, |downloaded, total| {
-                                            let mut s = win2.lock().unwrap();
+                                            let mut s = win2.lock_safe();
                                             s.status =
                                                 windows::updater::UpdateStatus::Downloading {
                                                     downloaded,
@@ -1203,7 +1205,7 @@ impl eframe::App for RigStatsApp {
                                                 };
                                             ctx2.request_repaint();
                                         });
-                                    let mut s = win.lock().unwrap();
+                                    let mut s = win.lock_safe();
                                     s.status = match dl_result {
                                         Ok(()) => windows::updater::UpdateStatus::Ready {
                                             info,
@@ -1213,11 +1215,11 @@ impl eframe::App for RigStatsApp {
                                     };
                                 }
                                 Ok(update_check::CheckResult::UpToDate) => {
-                                    win.lock().unwrap().status =
+                                    win.lock_safe().status =
                                         windows::updater::UpdateStatus::UpToDate;
                                 }
                                 Err(e) => {
-                                    win.lock().unwrap().status =
+                                    win.lock_safe().status =
                                         windows::updater::UpdateStatus::Error(e);
                                 }
                             }
@@ -1259,9 +1261,9 @@ impl eframe::App for RigStatsApp {
             }
 
             // Apply GPU preference change made from the floating GPU panel.
-            if let Some(new_pref) = self.float_new_pref_gpu.lock().unwrap().take() {
-                *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
-                let mut s = self.current_settings.lock().unwrap();
+            if let Some(new_pref) = self.float_new_pref_gpu.lock_safe().take() {
+                *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
+                let mut s = self.current_settings.lock_safe();
                 s.preferred_gpu = Some(new_pref);
                 let _ = settings::persist_settings(&self.dir, &s);
             }
@@ -1304,12 +1306,12 @@ impl eframe::App for RigStatsApp {
 
             // Panels in the order defined by visible_panels (respects user reordering).
             let panels_to_draw = self.visible_panels.clone();
-            let sc = profile_scale(&self.current_settings.lock().unwrap().dashboard_profile);
+            let sc = profile_scale(&self.current_settings.lock_safe().dashboard_profile);
             let mut new_preferred_gpu: Option<String> = None;
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
-                let st = self.updater_win.lock().unwrap();
+                let st = self.updater_win.lock_safe();
                 if let UpdateStatus::Ready { info, .. } = &st.status {
                     Some(info.version.clone())
                 } else {
@@ -1451,8 +1453,7 @@ impl eframe::App for RigStatsApp {
                 .unwrap_or(true);
             if used_h > 10.0 && changed {
                 self.last_fitted_height = Some(used_h);
-                let [w, _] =
-                    profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
+                let [w, _] = profile_to_size(&self.current_settings.lock_safe().dashboard_profile);
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
                         w - 2.0,
@@ -1461,8 +1462,8 @@ impl eframe::App for RigStatsApp {
             }
 
             if let Some(new_pref) = new_preferred_gpu {
-                *self.preferred_gpu.lock().unwrap() = Some(new_pref.clone());
-                let mut s = self.current_settings.lock().unwrap();
+                *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
+                let mut s = self.current_settings.lock_safe();
                 s.preferred_gpu = Some(new_pref);
                 let _ = settings::persist_settings(&self.dir, &s);
             }
@@ -1567,7 +1568,7 @@ impl RigStatsApp {
     /// ticks at ~1 fps (via `request_repaint_after(1 s)` in `update()`), so all
     /// panels naturally update at ~1 fps without any Win32 tricks.
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
-        let s = self.current_settings.lock().unwrap();
+        let s = self.current_settings.lock_safe();
         let window_level = Self::window_level_from_layer(&s.window_layer);
         let scale = self.floating_panel_scale;
         drop(s);
@@ -1579,7 +1580,7 @@ impl RigStatsApp {
 
             let init_pos: [f32; 2] = {
                 let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
-                let positions = self.floating_positions.lock().unwrap();
+                let positions = self.floating_positions.lock_safe();
                 let saved = positions.get(&key).copied().unwrap_or(default_pos);
                 guard_panel_position(saved, default_pos)
             };
@@ -1628,7 +1629,7 @@ impl RigStatsApp {
             let app_theme = self.app_theme;
             let float_update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
-                let st = self.updater_win.lock().unwrap();
+                let st = self.updater_win.lock_safe();
                 if let UpdateStatus::Ready { info, .. } = &st.status {
                     Some(info.version.clone())
                 } else {
@@ -1652,7 +1653,7 @@ impl RigStatsApp {
                     if !skip_pos_tracking {
                         if let Some(outer) = ctx.input(|i| i.viewport().outer_rect) {
                             let new_pos = [outer.left().round(), outer.top().round()];
-                            let mut pos = positions_arc.lock().unwrap();
+                            let mut pos = positions_arc.lock_safe();
                             let stored = pos.entry(key.clone()).or_insert([f32::NAN, f32::NAN]);
                             if stored[0].is_nan()
                                 || stored[1].is_nan()
@@ -1822,7 +1823,7 @@ impl RigStatsApp {
                             };
 
                             if let Some(p) = new_pref {
-                                *new_pref_arc.lock().unwrap() = Some(p);
+                                *new_pref_arc.lock_safe() = Some(p);
                             }
 
                             // ── Drag zone: top 24 px of the panel inner area ──
@@ -1938,8 +1939,8 @@ impl RigStatsApp {
 
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     fn persist_floating_positions(&self) {
-        let positions = self.floating_positions.lock().unwrap();
-        let mut s = self.current_settings.lock().unwrap();
+        let positions = self.floating_positions.lock_safe();
+        let mut s = self.current_settings.lock_safe();
         for (key, &[x, y]) in positions.iter() {
             s.panel_layouts.insert(
                 key.clone(),
@@ -2285,7 +2286,7 @@ async fn poll_loop(
             }
         };
 
-        let pref = preferred_gpu.lock().unwrap().clone();
+        let pref = preferred_gpu.lock_safe().clone();
         let lhm_data = lhm::fetch_lhm_pipe(&pipe, pref.as_deref(), &dir).await;
         let lhm_connected = lhm_data.is_some();
         lhm_process::track_lhm_connection_state(&dir, lhm_connected);
@@ -2377,7 +2378,7 @@ async fn poll_loop(
 
         // CSV logging — reads settings each tick so changes take effect immediately.
         let (log_enabled, retention_days) = {
-            let s = settings_arc.lock().unwrap();
+            let s = settings_arc.lock_safe();
             (s.logging_enabled, s.log_retention_days)
         };
         if log_enabled {
@@ -2584,9 +2585,7 @@ fn main() {
             // active.  With `show_viewport_immediate`, all panels are rendered
             // synchronously as part of the parent frame, so one `request_repaint()`
             // per second is enough to drive all panel updates.
-            let fm_arc_hb = Arc::new(AtomicBool::new(
-                current_settings.lock().unwrap().floating_mode,
-            ));
+            let fm_arc_hb = Arc::new(AtomicBool::new(current_settings.lock_safe().floating_mode));
             let ctx_hb = cc.egui_ctx.clone();
             let fm_arc_hb2 = fm_arc_hb.clone();
             std::thread::spawn(move || loop {
@@ -2609,7 +2608,7 @@ fn main() {
                 .and_then(|a| a.split_once('=').map(|x| x.1.to_owned()))
             {
                 if !version.is_empty() {
-                    updater_win_bg.lock().unwrap().status =
+                    updater_win_bg.lock_safe().status =
                         windows::updater::UpdateStatus::JustUpdated { version };
                     updater_open_bg.store(true, Ordering::Relaxed);
                     updater_focus_bg.store(true, Ordering::Relaxed);
@@ -2633,7 +2632,7 @@ fn main() {
                                 let url = info.url.clone();
                                 let dest = update_check::installer_temp_path(&version);
                                 {
-                                    let mut s = win.lock().unwrap();
+                                    let mut s = win.lock_safe();
                                     s.status = windows::updater::UpdateStatus::Downloading {
                                         downloaded: 0,
                                         total: 0,
@@ -2645,7 +2644,7 @@ fn main() {
                                 let dest2 = dest.clone();
                                 let dl_result = tokio::task::spawn_blocking(move || {
                                     update_check::download(&url, &dest2, |downloaded, total| {
-                                        let mut s = win2.lock().unwrap();
+                                        let mut s = win2.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Downloading {
                                             downloaded,
                                             total,
@@ -2657,7 +2656,7 @@ fn main() {
                                 .unwrap_or_else(|_| Err("download task panic".to_string()));
                                 match dl_result {
                                     Ok(()) => {
-                                        let mut s = win.lock().unwrap();
+                                        let mut s = win.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Ready {
                                             info,
                                             installer_path: dest,
@@ -2668,7 +2667,7 @@ fn main() {
                                         ctx.request_repaint();
                                     }
                                     Err(e) => {
-                                        win.lock().unwrap().status =
+                                        win.lock_safe().status =
                                             windows::updater::UpdateStatus::Error(e);
                                     }
                                 }

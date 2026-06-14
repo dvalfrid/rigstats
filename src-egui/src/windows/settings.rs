@@ -1,3 +1,4 @@
+use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use rigstats_backend::{autostart, debug, settings};
 use std::path::{Path, PathBuf};
@@ -267,7 +268,7 @@ pub fn show(
         }))
         .show_separator_line(true)
         .show(ctx, |ui| {
-            let err = state.lock().unwrap().error.clone();
+            let err = state.lock_safe().error.clone();
             if let Some(ref e) = err {
                 ui.label(
                     egui::RichText::new(e.as_str())
@@ -291,7 +292,7 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(dialog_frame(dc))
         .show(ctx, |ui| {
-            let mut st = state.lock().unwrap();
+            let mut st = state.lock_safe();
 
             // Tab bar
             egui::Frame::new()
@@ -349,19 +350,19 @@ pub fn show(
     // it's a window-level hint that doesn't need instant feedback.
     // Everything else (opacity, theme, panels, profile, floating_mode, etc.) previews live.
     {
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock_safe();
         if st.draft != st.last_preview {
             st.last_preview = st.draft.clone();
             let mut preview = st.draft.clone();
             preview.window_layer = st.original.window_layer.clone();
-            *saved.lock().unwrap() = preview;
+            *saved.lock_safe() = preview;
             reload.store(true, Ordering::Relaxed);
             main_ctx.request_repaint_of(egui::ViewportId::ROOT);
         }
     }
 
     if action_save {
-        let mut st = state.lock().unwrap();
+        let mut st = state.lock_safe();
         let autostart_result = if st.draft.autostart_enabled {
             autostart::register_autostart()
         } else {
@@ -371,7 +372,7 @@ pub fn show(
         match (save_result, autostart_result) {
             (Ok(()), Ok(())) => {
                 // Push the full draft (including window_layer, profile, etc.) to main app.
-                *saved.lock().unwrap() = st.draft.clone();
+                *saved.lock_safe() = st.draft.clone();
                 reload.store(true, Ordering::Relaxed);
                 st.error = None;
                 open.store(false, Ordering::Relaxed);
@@ -384,8 +385,8 @@ pub fn show(
     }
     if action_cancel {
         // Revert live preview back to original.
-        let st = state.lock().unwrap();
-        *saved.lock().unwrap() = st.original.clone();
+        let st = state.lock_safe();
+        *saved.lock_safe() = st.original.clone();
         reload.store(true, Ordering::Relaxed);
         drop(st);
         open.store(false, Ordering::Relaxed);
@@ -393,8 +394,8 @@ pub fn show(
     }
     if ctx.input(|i| i.viewport().close_requested()) {
         // Treat window-close as cancel (revert preview).
-        let st = state.lock().unwrap();
-        *saved.lock().unwrap() = st.original.clone();
+        let st = state.lock_safe();
+        *saved.lock_safe() = st.original.clone();
         reload.store(true, Ordering::Relaxed);
         drop(st);
         open.store(false, Ordering::Relaxed);

@@ -1,3 +1,4 @@
+use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use chrono::Local;
 use rigstats_backend::{debug, hardware};
@@ -496,7 +497,7 @@ pub fn show(
     let mut action_open_folder = false;
     let mut action_close = false;
 
-    let st = state.lock().unwrap().clone();
+    let st = state.lock_safe().clone();
 
     // ── Hero ──────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("status_hero")
@@ -571,7 +572,7 @@ pub fn show(
         });
 
     if action_refresh {
-        *state.lock().unwrap() = StatusState::load(dir.as_ref(), pipe_connected);
+        *state.lock_safe() = StatusState::load(dir.as_ref(), pipe_connected);
     }
     if action_open_folder {
         let _ = std::process::Command::new("explorer")

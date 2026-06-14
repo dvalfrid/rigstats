@@ -1,3 +1,4 @@
+use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::update_check::{self, UpdateInfo, BUNDLED_CHANGELOG};
 use std::path::PathBuf;
@@ -377,7 +378,7 @@ pub fn show(
     let mut action_check = false;
     let mut action_install: Option<PathBuf> = None;
 
-    let st = state.lock().unwrap();
+    let st = state.lock_safe();
 
     // Extract everything we need for display while the guard is held.
     let (heading, heading_color) = match &st.status {
@@ -566,11 +567,11 @@ pub fn show(
 
     // ── Apply actions ─────────────────────────────────────────────────────────
     if action_check {
-        state.lock().unwrap().status = UpdateStatus::Checking;
+        state.lock_safe().status = UpdateStatus::Checking;
     }
     if let Some(path) = action_install {
         if let Err(e) = update_check::launch_installer(&path) {
-            state.lock().unwrap().status = UpdateStatus::Error(e);
+            state.lock_safe().status = UpdateStatus::Error(e);
         }
     }
     if action_close {
