@@ -1763,6 +1763,12 @@ static LAST_PIPE_FAIL_LOG_SECS: std::sync::atomic::AtomicU64 = std::sync::atomic
 /// Persistent pipe reader stored in `AppState`.
 pub type LhmPipeReader = tokio::io::BufReader<tokio::net::windows::named_pipe::NamedPipeClient>;
 
+/// Upper bound on a single newline-delimited sidecar frame. A healthy sidecar
+/// emits a few KB of JSON per tick; anything past this indicates a buggy or
+/// runaway sidecar, so we drop the connection (and log) rather than keep
+/// buffering an unbounded line into memory.
+const MAX_PIPE_LINE_BYTES: usize = 256 * 1024;
+
 /// Reads one sensor sample from the sidecar named pipe.
 ///
 /// Reuses the existing connection when healthy; reconnects transparently on
@@ -1783,6 +1789,17 @@ pub async fn fetch_lhm_pipe(
     let res = tokio::time::timeout(std::time::Duration::from_millis(1200), reader.read_line(&mut line)).await;
     match res {
       Ok(Ok(n)) if n > 0 => {
+        if line.len() > MAX_PIPE_LINE_BYTES {
+          append_debug_log(
+            dir,
+            &format!(
+              "pipe: oversized frame ({} bytes, cap {MAX_PIPE_LINE_BYTES}) — dropping connection to resync",
+              line.len()
+            ),
+          );
+          *guard = None;
+          return None;
+        }
         return match serde_json::from_str::<SidecarPayload>(line.trim()) {
           Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
           Err(e) => {
@@ -1836,6 +1853,16 @@ pub async fn fetch_lhm_pipe(
 
   match res {
     Ok(Ok(n)) if n > 0 => {
+      if line.len() > MAX_PIPE_LINE_BYTES {
+        append_debug_log(
+          dir,
+          &format!(
+            "pipe: oversized frame ({} bytes, cap {MAX_PIPE_LINE_BYTES}) on first read — discarding connection",
+            line.len()
+          ),
+        );
+        return None;
+      }
       let data = match serde_json::from_str::<SidecarPayload>(line.trim()) {
         Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
         Err(e) => {

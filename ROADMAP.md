@@ -31,6 +31,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
+| Floating mode — reduce multi-window rendering cost | 🔲 Planned |
 
 ---
 
@@ -480,6 +481,105 @@ that re-stacks all open panel windows vertically on the chosen monitor in
   `collect_panels_to_monitor`
 - Group orientation toggle + "Detach from group" in the drag-handle context menu
 - "Collect panels" tray submenu with per-monitor options
+
+---
+
+## Floating mode — reduce multi-window rendering cost 🔲
+
+**Area:** Floating panel rendering (`src-egui/src/main.rs::render_floating_panels`)
+**Data source:** No new data required — pure rendering/architecture work
+
+### Problem
+
+In floating mode each visible panel is rendered as its **own borderless OS
+window** via `ctx.show_viewport_immediate()` (one viewport per panel key). With
+`show_viewport_immediate`, every child viewport is re-rendered **synchronously as
+part of the parent frame**: on each parent repaint we re-tessellate and present N
+separate swapchains (N = number of visible panels), plus the off-screen parent
+window itself still paints.
+
+Measured cost (debug build, 6 panels, `behind` layer, idle):
+
+| Mode | Process CPU |
+| --- | --- |
+| Fixed (single portrait window) | ~3 % total / ~0.5 % at true idle |
+| Floating (6 separate viewports) | ~24 % of one core (~1.5 % total) after the fixes below |
+
+Release builds are substantially cheaper (tessellation is the dominant cost and
+is ~5–20× faster optimised), but floating mode is still inherently several times
+more expensive than fixed mode because the work scales linearly with panel count.
+
+### Already done (don't redo these)
+
+These low-hanging wins are already merged — the remaining cost is structural:
+
+- **Behind-mode Z-order throttle** (`BehindEnforce` in `main.rs`): `behind`
+  panels used to re-assert `WindowLevel(AlwaysOnBottom)` + `SetWindowPos` every
+  frame, and because each `send_viewport_cmd`/`SetWindowPos` schedules a repaint
+  this span the panels at the monitor's full refresh rate. Now throttled to
+  creation + a 400 ms post-drag burst + ~1/s idle. This alone cut floating CPU
+  from ~5.6 % to ~1.5 % total. See `win32_behind.rs`.
+- **Per-frame `InnerSize` guard** (fixed mode): no longer dispatches a resize
+  command every frame.
+- **Idle repaint rate** is already 1 fps (heartbeat thread + `request_repaint_after(1 s)`).
+
+### Approaches to investigate (in rough preference order)
+
+1. **Switch to `show_viewport_deferred` for idle panels.**
+   Deferred viewports render on their **own** schedule rather than inside every
+   parent frame, so panels that haven't received new data don't get re-tessellated
+   when an unrelated panel repaints. The current code deliberately uses *immediate*
+   so the 1 fps parent heartbeat drives all panels in lockstep; a deferred design
+   would instead give each panel viewport its own `request_repaint_after(1 s)` and
+   push new stats via `ctx.request_repaint()` only when a fresh `PollStats` arrives.
+   Risk: deferred viewports run their own UI closure with no direct `&mut self`
+   borrow — shared state (`latest`, sparklines, thresholds, textures) must move
+   behind `Arc`/channels. This is the biggest change but the most correct fix.
+
+2. **Skip re-rendering panels whose data is unchanged.**
+   The poll loop emits one `PollStats` per second; between ticks nothing changes.
+   Track a per-panel content hash (or simply a "new data this tick" flag) and call
+   `request_repaint` only for the affected viewports. In immediate mode this is
+   awkward (all children render with the parent); pairs naturally with approach 1.
+
+3. **Stop painting the off-screen parent window.**
+   In floating mode the main window is parked at `(-32000, -32000)` but still
+   clears + presents a swapchain every frame (it can't use `Visible(false)` — a
+   hidden window isn't ticked, which would freeze the immediate children). Explore
+   whether the parent can present a 1×1 / minimal surface, or whether a deferred
+   design (approach 1) lets the parent stop ticking entirely once children own
+   their own repaint schedules.
+
+4. **Cache tessellated panel meshes.**
+   egui re-tessellates from scratch each frame. For static-ish panels a cached
+   `egui::Shape`/mesh keyed on content could skip tessellation. High effort, egui
+   doesn't expose this cleanly today — likely not worth it versus approach 1.
+
+### Scope / files
+
+- `src-egui/src/main.rs` — `render_floating_panels`, the heartbeat thread, the
+  `RigStatsApp` shared-state fields (would need `Arc`-wrapping for deferred mode).
+- `src-egui/src/win32_behind.rs` — behind-mode enforcement already throttled;
+  re-check interaction with a deferred design.
+- Panels themselves (`src-egui/src/panels/*.rs`) should need **no** changes —
+  they already take all inputs as `&` parameters and return an `egui::Rect`.
+
+### Acceptance criteria
+
+- Floating mode idle CPU materially lower than today (target: within ~2× of fixed
+  mode rather than ~8×), measured the same way (`TotalProcessorTime` delta over
+  10 s, debug build, 6 panels, `behind` layer).
+- No regression to: drag-to-move, padlock lock/unlock, per-panel position
+  persistence, `behind`/`on_top`/`normal` window layers, live settings preview,
+  or the GPU selector on the floating GPU panel.
+- 1 fps visual update rate preserved (no frozen panels after settings changes or
+  mode toggles).
+
+### When to do this
+
+After the current correctness/stability pass. This is a performance refinement,
+not a bug — floating mode is fully functional today, just heavier than fixed mode.
+Prioritise if users commonly run many floating panels on battery-powered laptops.
 
 ---
 

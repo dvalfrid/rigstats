@@ -898,7 +898,7 @@ impl eframe::App for RigStatsApp {
                     let new_mode = {
                         let mut s = self.current_settings.lock_safe();
                         s.floating_mode = !s.floating_mode;
-                        let _ = settings::persist_settings(&self.dir, &s);
+                        self.persist_settings_logged(&s);
                         s.floating_mode
                     };
                     let was_floating = self.floating_mode;
@@ -945,7 +945,7 @@ impl eframe::App for RigStatsApp {
                     let (new_enabled, retention_days) = {
                         let mut s = self.current_settings.lock_safe();
                         s.logging_enabled = !s.logging_enabled;
-                        let _ = settings::persist_settings(&self.dir, &s);
+                        self.persist_settings_logged(&s);
                         (s.logging_enabled, s.log_retention_days)
                     };
                     if new_enabled {
@@ -962,7 +962,7 @@ impl eframe::App for RigStatsApp {
             self.floating_panels_locked = arc_locked;
             let mut s = self.current_settings.lock_safe();
             s.floating_panels_locked = arc_locked;
-            let _ = settings::persist_settings(&self.dir, &s);
+            self.persist_settings_logged(&s);
         }
 
         // ── Secondary windows ─────────────────────────────────────────────────
@@ -1265,7 +1265,7 @@ impl eframe::App for RigStatsApp {
                 *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
                 let mut s = self.current_settings.lock_safe();
                 s.preferred_gpu = Some(new_pref);
-                let _ = settings::persist_settings(&self.dir, &s);
+                self.persist_settings_logged(&s);
             }
         } else {
             // ── Fixed mode — all panels in one portrait window ────────────────
@@ -1465,7 +1465,7 @@ impl eframe::App for RigStatsApp {
                 *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
                 let mut s = self.current_settings.lock_safe();
                 s.preferred_gpu = Some(new_pref);
-                let _ = settings::persist_settings(&self.dir, &s);
+                self.persist_settings_logged(&s);
             }
         }
 
@@ -1937,6 +1937,15 @@ impl RigStatsApp {
         }
     }
 
+    /// Persist settings to disk, logging any failure instead of swallowing it
+    /// silently — a failed write means the user loses settings/layout changes,
+    /// which should never pass unnoticed.
+    fn persist_settings_logged(&self, s: &settings::Settings) {
+        if let Err(e) = settings::persist_settings(&self.dir, s) {
+            debug::append_debug_log(&self.dir, &format!("settings: persist failed — {e}"));
+        }
+    }
+
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     fn persist_floating_positions(&self) {
         let positions = self.floating_positions.lock_safe();
@@ -1950,7 +1959,8 @@ impl RigStatsApp {
                 },
             );
         }
-        let _ = settings::persist_settings(&self.dir, &s);
+        drop(positions);
+        self.persist_settings_logged(&s);
     }
 }
 
@@ -2517,61 +2527,73 @@ fn main() {
             let updater_id = tray.updater_id.clone();
             let floating_id = tray.floating_id.clone();
             let recording_id = tray.recording_id.clone();
+            let dir_tray = dir.clone();
             std::thread::spawn(move || loop {
-                let mut repaint = false;
-                if let Ok(ev) = MenuEvent::receiver().try_recv() {
-                    // Use the foreground rights that come with the tray-menu interaction.
-                    // We immediately bring the (off-screen) parent window to the foreground
-                    // so that our process owns foreground when the dialog is created a few
-                    // milliseconds later.  Without this the dialog window would be created
-                    // as a background window and SetForegroundWindow would be refused.
-                    #[cfg(windows)]
-                    #[allow(unsafe_code)]
-                    unsafe {
-                        winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
-                        let parent_hwnd = win_opacity::find_hwnd("RigStats");
-                        if parent_hwnd != 0 {
-                            winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
+                // Guard each iteration: a panic in a tray/Win32 call must not
+                // silently kill this thread, or tray clicks would stop working
+                // for the rest of the session. Recover and log instead.
+                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let mut repaint = false;
+                    if let Ok(ev) = MenuEvent::receiver().try_recv() {
+                        // Use the foreground rights that come with the tray-menu interaction.
+                        // We immediately bring the (off-screen) parent window to the foreground
+                        // so that our process owns foreground when the dialog is created a few
+                        // milliseconds later.  Without this the dialog window would be created
+                        // as a background window and SetForegroundWindow would be refused.
+                        #[cfg(windows)]
+                        #[allow(unsafe_code)]
+                        unsafe {
+                            winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
+                            let parent_hwnd = win_opacity::find_hwnd("RigStats");
+                            if parent_hwnd != 0 {
+                                winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
+                            }
+                        }
+
+                        let cmd = if ev.id == quit_id {
+                            std::process::exit(0);
+                        } else if ev.id == show_id {
+                            Some(TrayCmd::Toggle)
+                        } else if ev.id == floating_id {
+                            Some(TrayCmd::ToggleFloating)
+                        } else if ev.id == recording_id {
+                            Some(TrayCmd::ToggleRecording)
+                        } else if ev.id == settings_id {
+                            Some(TrayCmd::OpenSettings)
+                        } else if ev.id == about_id {
+                            Some(TrayCmd::OpenAbout)
+                        } else if ev.id == status_id {
+                            Some(TrayCmd::OpenStatus)
+                        } else if ev.id == updater_id {
+                            Some(TrayCmd::OpenUpdater)
+                        } else {
+                            None
+                        };
+                        if let Some(c) = cmd {
+                            let _ = tray_tx.send(c);
+                            repaint = true;
                         }
                     }
-
-                    let cmd = if ev.id == quit_id {
-                        std::process::exit(0);
-                    } else if ev.id == show_id {
-                        Some(TrayCmd::Toggle)
-                    } else if ev.id == floating_id {
-                        Some(TrayCmd::ToggleFloating)
-                    } else if ev.id == recording_id {
-                        Some(TrayCmd::ToggleRecording)
-                    } else if ev.id == settings_id {
-                        Some(TrayCmd::OpenSettings)
-                    } else if ev.id == about_id {
-                        Some(TrayCmd::OpenAbout)
-                    } else if ev.id == status_id {
-                        Some(TrayCmd::OpenStatus)
-                    } else if ev.id == updater_id {
-                        Some(TrayCmd::OpenUpdater)
-                    } else {
-                        None
-                    };
-                    if let Some(c) = cmd {
-                        let _ = tray_tx.send(c);
-                        repaint = true;
+                    if let Ok(tray_icon::TrayIconEvent::Click {
+                        button,
+                        button_state,
+                        ..
+                    }) = tray_icon::TrayIconEvent::receiver().try_recv()
+                    {
+                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
+                            let _ = tray_tx.send(TrayCmd::Toggle);
+                            repaint = true;
+                        }
                     }
-                }
-                if let Ok(tray_icon::TrayIconEvent::Click {
-                    button,
-                    button_state,
-                    ..
-                }) = tray_icon::TrayIconEvent::receiver().try_recv()
-                {
-                    if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                        let _ = tray_tx.send(TrayCmd::Toggle);
-                        repaint = true;
+                    if repaint {
+                        ctx.request_repaint();
                     }
-                }
-                if repaint {
-                    ctx.request_repaint();
+                }));
+                if outcome.is_err() {
+                    debug::append_debug_log(
+                        &dir_tray,
+                        "tray: event handler panicked — thread recovered, continuing",
+                    );
                 }
                 std::thread::sleep(Duration::from_millis(50));
             });
@@ -2620,6 +2642,7 @@ fn main() {
                 let open = updater_open_bg.clone();
                 let focus = updater_focus_bg.clone();
                 let ctx = cc.egui_ctx.clone();
+                let dir_upd = dir.clone();
                 runtime.spawn(async move {
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     loop {
@@ -2673,7 +2696,12 @@ fn main() {
                                 }
                             }
                             Ok(update_check::CheckResult::UpToDate) => {}
-                            Err(_) => {}
+                            Err(e) => {
+                                debug::append_debug_log(
+                                    &dir_upd,
+                                    &format!("update-check: background check failed — {e}"),
+                                );
+                            }
                         }
                         tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
                     }
