@@ -47,7 +47,6 @@ impl Sparkline {
             return;
         }
 
-        // Dynamic scale: max of actual data, floor of 1.0 (matches JS: Math.max(...data, 1))
         let data_max = self.values.iter().cloned().fold(0.0f32, f32::max).max(1.0);
 
         // JS formula: y = height - 0.88 * (v/max) * height - 4  (4px bottom padding)
