@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.27.2](https://github.com/dvalfrid/rigstats/compare/v1.27.1...v1.27.2) (2026-06-14)
+
+
+### Bug Fixes
+
+* add Tauri minisign signature to latest.json for pre-1.26 clients ([d839a27](https://github.com/dvalfrid/rigstats/commit/d839a2704d96fa30a8991daa4d745cc719850619))
+* install lefthook via winget in cargo xtask setup, update docs/setup.md ([da16d4a](https://github.com/dvalfrid/rigstats/commit/da16d4a5c78ce109b14ce457dc5784c68f3b8a1d))
+
 ## [1.27.1](https://github.com/dvalfrid/rigstats/compare/v1.27.0...v1.27.1) (2026-06-13)
 
 
