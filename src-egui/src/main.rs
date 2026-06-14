@@ -537,6 +537,11 @@ struct RigStatsApp {
     /// Last [w, h] sent via InnerSize — avoids spurious resize events when
     /// only opacity or theme changed (which would cause a visible jump).
     last_applied_window_size: Option<[f32; 2]>,
+    /// Last content height fitted in fixed mode — avoids dispatching an
+    /// InnerSize viewport command every frame when the height is unchanged
+    /// (which during interaction runs at display refresh rate, causing
+    /// needless WM_SIZE churn and sub-pixel jitter).
+    last_fitted_height: Option<f32>,
 }
 
 /// Per-component warn/crit thresholds (°C) used for temperature colour coding.
@@ -688,6 +693,7 @@ impl RigStatsApp {
             // may not be available until after the first paint.
             reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
             last_applied_window_size: None,
+            last_fitted_height: None,
         }
     }
 }
@@ -1419,7 +1425,12 @@ impl eframe::App for RigStatsApp {
             // Fit window height to actual rendered content every frame so no black gap
             // appears regardless of panel set, spacing, or egui version.
             let used_h = ui.min_rect().height();
-            if used_h > 10.0 {
+            let changed = self
+                .last_fitted_height
+                .map(|h| (h - used_h).abs() > 0.5)
+                .unwrap_or(true);
+            if used_h > 10.0 && changed {
+                self.last_fitted_height = Some(used_h);
                 let [w, _] =
                     profile_to_size(&self.current_settings.lock().unwrap().dashboard_profile);
                 ui.ctx()
