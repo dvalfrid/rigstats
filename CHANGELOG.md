@@ -8,6 +8,27 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.28.0](https://github.com/dvalfrid/rigstats/compare/v1.27.2...v1.28.0) (2026-06-14)
+
+
+### Features
+
+* dialog theme adapts to OS light/dark mode dynamically ([8945891](https://github.com/dvalfrid/rigstats/commit/8945891ad54cae3310e9288af623a5de09c9467e))
+
+
+### Bug Fixes
+
+* **egui:** clip of bottom panel when switching floating to fixed mode ([e8b2ca8](https://github.com/dvalfrid/rigstats/commit/e8b2ca83b728cd9b832ddea7da43588baca18bb6))
+* **egui:** harden against silent failures and panics ([7ed655a](https://github.com/dvalfrid/rigstats/commit/7ed655a85fefd7a4bd2a5e338d5bd526d4bbc8a2))
+* **egui:** make shared Mutex locking poison-tolerant ([cef8223](https://github.com/dvalfrid/rigstats/commit/cef82239ee0e3f36e50f137ff86d00e5865d48b7))
+
+
+### Performance Improvements
+
+* **egui:** cache parsed changelog in updater dialog ([aa789f2](https://github.com/dvalfrid/rigstats/commit/aa789f28cea576d24c24d19bb3729f97750cb1fa))
+* **egui:** skip redundant InnerSize viewport command in fixed mode ([e0e2939](https://github.com/dvalfrid/rigstats/commit/e0e29397b589cceb03afea251419850798e019c0))
+* **egui:** throttle 'always behind' Z-order enforcement in floating mode ([d68fdef](https://github.com/dvalfrid/rigstats/commit/d68fdefa338007650d5aef48ca96adda6ad1592b))
+
 ## [1.27.2](https://github.com/dvalfrid/rigstats/compare/v1.27.1...v1.27.2) (2026-06-14)
 
 
