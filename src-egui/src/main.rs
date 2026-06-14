@@ -17,6 +17,7 @@ mod windows;
 use eframe::egui;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use spark::Sparkline;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -517,6 +518,13 @@ struct RigStatsApp {
     /// Cleared whenever floating mode transitions from off → on so positions
     /// are restored from the saved layout on next activation.
     panels_positioned: HashSet<String>,
+    /// Per-panel "always behind" enforcement state (key → last enforce time +
+    /// previous primary-button state). Used to throttle the Win32 Z-order
+    /// re-push so floating "behind" panels don't re-assert every frame — which
+    /// would create a SetWindowPos → repaint → SetWindowPos spin loop and burn
+    /// CPU. Enforcement happens on creation, in a short burst after a drag, and
+    /// then ~1/s as an idle safety net.
+    behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     floating_mode_arc: Arc<AtomicBool>,
     /// Live thresholds for temperature colour coding — updated on settings reload.
@@ -542,6 +550,17 @@ struct RigStatsApp {
     /// (which during interaction runs at display refresh rate, causing
     /// needless WM_SIZE churn and sub-pixel jitter).
     last_fitted_height: Option<f32>,
+}
+
+/// Per-panel state for throttling "always behind" Z-order enforcement.
+struct BehindEnforce {
+    /// When the panel was last pushed to the bottom of the Z-order.
+    last_enforce: Instant,
+    /// Primary-button state on the previous frame — used to detect drag release.
+    prev_primary_down: bool,
+    /// While `Instant::now() < force_until`, enforce every frame (short burst
+    /// after a drag finishes so the panel snaps back behind promptly).
+    force_until: Instant,
 }
 
 /// Per-component warn/crit thresholds (°C) used for temperature colour coding.
@@ -659,6 +678,7 @@ impl RigStatsApp {
             floating_lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
             initial_floating_applied: false,
             panels_positioned: HashSet::new(),
+            behind_enforce: RefCell::new(HashMap::new()),
             floating_mode_arc,
             thresholds: PanelThresholds::from_settings(&init_settings),
             app_theme: theme::AppTheme::from_key(&init_settings.theme),
@@ -1596,6 +1616,7 @@ impl RigStatsApp {
             // we can borrow self fields directly instead of going through Arc.
             let positions_arc = &self.floating_positions;
             let dirty = &self.positions_dirty;
+            let behind_enforce = &self.behind_enforce;
             let new_pref_arc = &self.float_new_pref_gpu;
             let lock_arc = &self.floating_lock_arc;
             let stats = &self.latest;
@@ -1650,14 +1671,44 @@ impl RigStatsApp {
                     // "behind" when the primary button is NOT pressed on this
                     // panel.  prepare_for_drag() strips WS_EX_NOACTIVATE and
                     // activates the window just before sending StartDrag, then
-                    // apply_behind() re-arms on the next idle frame.
+                    // apply_behind() re-arms once the drag finishes.
+                    //
+                    // Crucially we DON'T re-push every frame: send_viewport_cmd +
+                    // SetWindowPos each generate a fresh repaint, so re-asserting
+                    // unconditionally creates a spin loop that runs at the full
+                    // refresh rate (the cause of the floating-mode CPU spike).
+                    // Instead we enforce on creation, in a short burst after a
+                    // drag, and otherwise ~1/s as an idle safety net.
                     let primary_down = ctx.input(|i| i.pointer.primary_down());
-                    if is_behind && !primary_down {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-                            egui::WindowLevel::AlwaysOnBottom,
-                        ));
-                        #[cfg(windows)]
-                        win32_behind::apply_behind(&win_title);
+                    if is_behind {
+                        let now = Instant::now();
+                        let mut map = behind_enforce.borrow_mut();
+                        let st = map.entry(key.clone()).or_insert(BehindEnforce {
+                            last_enforce: now.checked_sub(Duration::from_secs(10)).unwrap_or(now),
+                            prev_primary_down: false,
+                            force_until: now,
+                        });
+                        let released = st.prev_primary_down && !primary_down;
+                        st.prev_primary_down = primary_down;
+                        if released {
+                            // Window was activated for the drag; snap it back for
+                            // a short burst so it settles behind reliably.
+                            st.force_until = now + Duration::from_millis(400);
+                        }
+                        let should_enforce = !primary_down
+                            && (needs_position
+                                || now < st.force_until
+                                || now.duration_since(st.last_enforce)
+                                    >= Duration::from_millis(750));
+                        if should_enforce {
+                            st.last_enforce = now;
+                            drop(map);
+                            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+                                egui::WindowLevel::AlwaysOnBottom,
+                            ));
+                            #[cfg(windows)]
+                            win32_behind::apply_behind(&win_title);
+                        }
                     }
 
                     #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
