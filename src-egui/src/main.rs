@@ -860,6 +860,12 @@ impl eframe::App for RigStatsApp {
                         )));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                    // Force the fit-to-content path to re-dispatch InnerSize next
+                    // fixed frame: compute_window_height is only an estimate and may
+                    // understate the real content height, which would otherwise clip
+                    // the bottom panel. Clearing the guard makes the next frame snap
+                    // the window to the true min_rect height.
+                    self.last_fitted_height = None;
                 }
             }
         }
@@ -935,6 +941,12 @@ impl eframe::App for RigStatsApp {
                             ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
                                 egui::Vec2::new(w, h),
                             ));
+                            // See note in the settings-reload transition: clear the
+                            // fit-to-content guard so the next fixed frame snaps the
+                            // window to the true content height instead of the
+                            // compute_window_height estimate (which can clip the
+                            // bottom panel).
+                            self.last_fitted_height = None;
                             // Re-apply for the next few frames as winit may reset the
                             // window level when it processes the move event.
                             self.reapply_window_props_frames = 4;
