@@ -8,6 +8,25 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.30.0](https://github.com/dvalfrid/rigstats/compare/v1.29.0...v1.30.0) (2026-06-15)
+
+
+### Features
+
+* **net:** add WAN ping, interface subtitle, and larger UP/DOWN numbers ([a03951d](https://github.com/dvalfrid/rigstats/commit/a03951de08db8002f1c53f3994c6b83982cb2081))
+
+
+### Bug Fixes
+
+* **sensor:** ensure single-file publish and install companion native DLLs ([289be45](https://github.com/dvalfrid/rigstats/commit/289be45de845f7adc2474f8b609e4b6924b10bd3))
+* **status:** load diagnostics off the UI thread to stop freezes ([69e2f74](https://github.com/dvalfrid/rigstats/commit/69e2f74506a624f38c2c3bdbd7699d08913ba976))
+* **tray:** remove Show/Hide and fix startup panel clipping ([7d25150](https://github.com/dvalfrid/rigstats/commit/7d2515096dbbf6211c1e00d176e4c2f5c0a5f60d))
+
+
+### Performance Improvements
+
+* **status:** run diagnostics collection off the UI thread; hide sc.exe console ([bf98584](https://github.com/dvalfrid/rigstats/commit/bf98584981c10afe51b63a5a1585599c8781e4fd))
+
 ## [1.29.0](https://github.com/dvalfrid/rigstats/compare/v1.28.0...v1.29.0) (2026-06-15)
 
 
