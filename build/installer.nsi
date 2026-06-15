@@ -115,6 +115,9 @@ Section "RIGStats" SecMain
   Delete "$INSTDIR\rigstats.exe"
   File "target\release\rigstats.exe"
   File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe"
+  ; Native libs that cannot be bundled into the single-file exe:
+  File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\MonoPosixHelper.dll"
+  File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\libMonoPosixHelper.dll"
   File "CHANGELOG.md"
 
   SetOutPath "$INSTDIR\pawnio"
@@ -209,6 +212,8 @@ Section "Uninstall"
 
   Delete "$INSTDIR\rigstats.exe"
   Delete "$INSTDIR\rigstats-sensor.exe"
+  Delete "$INSTDIR\MonoPosixHelper.dll"
+  Delete "$INSTDIR\libMonoPosixHelper.dll"
   Delete "$INSTDIR\CHANGELOG.md"
   Delete "$INSTDIR\uninstall.exe"
   RMDir /r "$INSTDIR\pawnio"

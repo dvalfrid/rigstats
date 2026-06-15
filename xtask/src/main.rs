@@ -57,6 +57,11 @@ fn task_build() -> Result<(), String> {
         "sensor-sidecar/sensor-sidecar.csproj",
         "-c",
         "Release",
+        "-r",
+        "win-x64",
+        "--self-contained",
+        "true",
+        "-p:PublishSingleFile=true",
     ]))?;
     run(Command::new("cargo").args([
         "build",
@@ -130,6 +135,11 @@ fn task_verify() -> Result<(), String> {
         "sensor-sidecar/sensor-sidecar.csproj",
         "-c",
         "Release",
+        "-r",
+        "win-x64",
+        "--self-contained",
+        "true",
+        "-p:PublishSingleFile=true",
     ]))?;
 
     println!("── test: rigstats-backend ──────────────────────────────────────");
