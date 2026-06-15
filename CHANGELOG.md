@@ -8,6 +8,20 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.29.0](https://github.com/dvalfrid/rigstats/compare/v1.28.0...v1.29.0) (2026-06-15)
+
+
+### Features
+
+* **gpu:** extend panel with hotspot, FAN/VDEC bars, and code cleanup ([600acaf](https://github.com/dvalfrid/rigstats/commit/600acafe65725f7cbd1b5f6f1b7ed474f5465178))
+
+
+### Bug Fixes
+
+* **diag:** improve diagnostics and fix dark mode for child accounts ([4882f61](https://github.com/dvalfrid/rigstats/commit/4882f61278146dd4507bd8453a470b84139ee26c))
+* **updater:** render commit hash links as clickable hyperlinks ([27b4012](https://github.com/dvalfrid/rigstats/commit/27b4012e013225b3b5fff9be86b379dde7e95bc7))
+* **updater:** render version headings as clickable hyperlinks ([53d18d0](https://github.com/dvalfrid/rigstats/commit/53d18d051aa696da66e2e400b1a7e55c63e04900))
+
 ## [1.28.0](https://github.com/dvalfrid/rigstats/compare/v1.27.2...v1.28.0) (2026-06-14)
 
 
