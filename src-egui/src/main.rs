@@ -28,12 +28,11 @@ use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
 use tray_icon::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
-    Icon, MouseButton, MouseButtonState, TrayIconBuilder,
+    Icon, TrayIconBuilder,
 };
 
 /// Commands sent from the tray-polling thread to the UI thread.
 enum TrayCmd {
-    Toggle,
     OpenSettings,
     OpenAbout,
     OpenStatus,
@@ -296,7 +295,6 @@ fn pick_window_position() -> [f32; 2] {
 
 struct Tray {
     icon: tray_icon::TrayIcon,
-    show_id: tray_icon::menu::MenuId,
     settings_id: tray_icon::menu::MenuId,
     about_id: tray_icon::menu::MenuId,
     status_id: tray_icon::menu::MenuId,
@@ -327,7 +325,6 @@ fn load_app_icon() -> egui::IconData {
 }
 
 fn build_tray(logging_enabled: bool) -> Tray {
-    let show_item = MenuItem::new("Show / Hide", true, None);
     let floating_item = MenuItem::new("Toggle Floating Mode", true, None);
     let recording_label = if logging_enabled {
         "Stop Recording"
@@ -341,7 +338,6 @@ fn build_tray(logging_enabled: bool) -> Tray {
     let updater_item = MenuItem::new("Check for Updates", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
-    let show_id = show_item.id().clone();
     let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
     let settings_id = settings_item.id().clone();
@@ -351,7 +347,6 @@ fn build_tray(logging_enabled: bool) -> Tray {
     let quit_id = quit_item.id().clone();
 
     let menu = Menu::new();
-    let _ = menu.append(&show_item);
     let _ = menu.append(&floating_item);
     let _ = menu.append(&recording_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
@@ -386,7 +381,6 @@ fn build_tray(logging_enabled: bool) -> Tray {
 
     Tray {
         icon: tray_icon,
-        show_id,
         settings_id,
         about_id,
         status_id,
@@ -464,7 +458,6 @@ struct RigStatsApp {
     /// Cached from settings — "on_top", "behind", or "normal".
     window_layer: String,
     tray: Tray,
-    window_visible: bool,
     // Sparklines
     cpu_spark: Sparkline,
     gpu_spark: Sparkline,
@@ -556,6 +549,12 @@ struct RigStatsApp {
     /// (which during interaction runs at display refresh rate, causing
     /// needless WM_SIZE churn and sub-pixel jitter).
     last_fitted_height: Option<f32>,
+    /// Counts down over the first docked frames after launch. Early `InnerSize`
+    /// viewport commands can be dropped before the window is fully realized,
+    /// which leaves the bottom panel clipped until the user toggles floating
+    /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
+    /// drive fast repaints) so the true content height reliably sticks.
+    startup_fit_frames: u8,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -650,7 +649,6 @@ impl RigStatsApp {
             opacity,
             window_layer: init_settings.window_layer.clone(),
             tray,
-            window_visible: true,
             cpu_spark: Sparkline::new(60),
             gpu_spark: Sparkline::new(60),
             net_up_spark: Sparkline::new(60),
@@ -722,6 +720,7 @@ impl RigStatsApp {
             reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
             last_applied_window_size: None,
             last_fitted_height: None,
+            startup_fit_frames: 12,
         }
     }
 }
@@ -879,11 +878,6 @@ impl eframe::App for RigStatsApp {
         // Handle tray commands forwarded by the background polling thread.
         while let Ok(cmd) = self.tray_rx.try_recv() {
             match cmd {
-                TrayCmd::Toggle => {
-                    self.window_visible = !self.window_visible;
-                    ui.ctx()
-                        .send_viewport_cmd(egui::ViewportCommand::Visible(self.window_visible));
-                }
                 TrayCmd::OpenSettings => {
                     // Re-initialise draft from current settings each time the window opens.
                     let s = self.current_settings.lock_safe().clone();
@@ -1476,6 +1470,16 @@ impl eframe::App for RigStatsApp {
             // Fit window height to actual rendered content every frame so no black gap
             // appears regardless of panel set, spacing, or egui version.
             let used_h = ui.min_rect().height();
+            // During the first frames after launch the window may not be fully
+            // realized, so early InnerSize commands can be dropped — which would
+            // leave the bottom panel clipped until the user toggles floating mode.
+            // Force a re-fit (and a fast repaint) for a handful of frames so the
+            // true content height always sticks at startup.
+            if self.startup_fit_frames > 0 {
+                self.startup_fit_frames -= 1;
+                self.last_fitted_height = None;
+                ui.ctx().request_repaint();
+            }
             let changed = self
                 .last_fitted_height
                 .map(|h| (h - used_h).abs() > 0.5)
@@ -2580,7 +2584,6 @@ fn main() {
             // with process::exit so it is never delayed by a missed repaint.
             let ctx = cc.egui_ctx.clone();
             let quit_id = tray.quit_id.clone();
-            let show_id = tray.show_id.clone();
             let settings_id = tray.settings_id.clone();
             let about_id = tray.about_id.clone();
             let status_id = tray.status_id.clone();
@@ -2613,8 +2616,6 @@ fn main() {
                         let cmd = if ev.id == quit_id {
                             debug::append_debug_log(&dir_tray, "shutdown: clean (tray quit)");
                             std::process::exit(0);
-                        } else if ev.id == show_id {
-                            Some(TrayCmd::Toggle)
                         } else if ev.id == floating_id {
                             Some(TrayCmd::ToggleFloating)
                         } else if ev.id == recording_id {
@@ -2635,17 +2636,9 @@ fn main() {
                             repaint = true;
                         }
                     }
-                    if let Ok(tray_icon::TrayIconEvent::Click {
-                        button,
-                        button_state,
-                        ..
-                    }) = tray_icon::TrayIconEvent::receiver().try_recv()
-                    {
-                        if button == MouseButton::Left && button_state == MouseButtonState::Up {
-                            let _ = tray_tx.send(TrayCmd::Toggle);
-                            repaint = true;
-                        }
-                    }
+                    // Drain tray-icon click events so they don't accumulate. We no
+                    // longer act on left-click — the dashboard is always visible.
+                    let _ = tray_icon::TrayIconEvent::receiver().try_recv();
                     if repaint {
                         ctx.request_repaint();
                     }
