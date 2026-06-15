@@ -484,6 +484,7 @@ struct RigStatsApp {
     updater_focus: Arc<AtomicBool>,
     settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
     status_win: Arc<Mutex<windows::status::StatusState>>,
+    status_refreshing: Arc<AtomicBool>,
     updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
     // true while a manual check/download is in flight (prevents double-trigger)
     updater_busy: Arc<AtomicBool>,
@@ -665,7 +666,8 @@ impl RigStatsApp {
             settings_win: Arc::new(Mutex::new(
                 windows::settings::SettingsWindow::from_settings(&init_settings),
             )),
-            status_win: Arc::new(Mutex::new(windows::status::StatusState::load(&dir, false))),
+            status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
+            status_refreshing: Arc::new(AtomicBool::new(false)),
             updater_win,
             updater_busy: Arc::new(AtomicBool::new(false)),
             current_settings,
@@ -893,10 +895,15 @@ impl eframe::App for RigStatsApp {
                     self.about_focus.store(true, Ordering::Relaxed);
                 }
                 TrayCmd::OpenStatus => {
-                    *self.status_win.lock_safe() =
-                        windows::status::StatusState::load(&self.dir, self.latest.lhm_connected);
                     self.status_open.store(true, Ordering::Relaxed);
                     self.status_focus.store(true, Ordering::Relaxed);
+                    windows::status::spawn_load(
+                        self.status_win.clone(),
+                        self.status_refreshing.clone(),
+                        self.dir.as_ref().clone(),
+                        self.latest.lhm_connected,
+                        ui.ctx().clone(),
+                    );
                 }
                 TrayCmd::OpenUpdater => {
                     self.updater_open.store(true, Ordering::Relaxed);
@@ -1097,6 +1104,7 @@ impl eframe::App for RigStatsApp {
             let open = self.status_open.clone();
             let focus = self.status_focus.clone();
             let state = self.status_win.clone();
+            let refreshing = self.status_refreshing.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(680.0, 720.0);
@@ -1123,6 +1131,7 @@ impl eframe::App for RigStatsApp {
                         &open,
                         &focus,
                         &state,
+                        &refreshing,
                         &dir,
                         lhm_connected,
                         &dc,

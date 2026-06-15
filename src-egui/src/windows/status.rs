@@ -42,6 +42,42 @@ impl StatusState {
             last_refresh: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
         }
     }
+
+    /// Cheap, non-blocking initial state shown until the first background
+    /// `load()` completes. `load()` spawns subprocesses (`sc.exe`) and runs
+    /// WMI/COM queries that can block for seconds, so it must never run on the
+    /// egui UI thread.
+    pub fn placeholder() -> Self {
+        Self {
+            log: "(loading…)".to_string(),
+            service_running: false,
+            pipe_connected: false,
+            wmi_ok: false,
+            log_path: String::new(),
+            last_refresh: String::new(),
+        }
+    }
+}
+
+/// Run `StatusState::load` on a background thread so the UI thread never blocks
+/// on `sc.exe` / WMI / PowerShell. Writes the result into `state` and requests a
+/// repaint when done. No-op if a load is already in flight.
+pub fn spawn_load(
+    state: Arc<Mutex<StatusState>>,
+    refreshing: Arc<AtomicBool>,
+    dir: PathBuf,
+    pipe_connected: bool,
+    ctx: egui::Context,
+) {
+    if refreshing.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    std::thread::spawn(move || {
+        let loaded = StatusState::load(&dir, pipe_connected);
+        *state.lock_safe() = loaded;
+        refreshing.store(false, Ordering::Relaxed);
+        ctx.request_repaint();
+    });
 }
 
 fn query_service_running() -> bool {
@@ -511,6 +547,7 @@ pub fn show(
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
     state: &Arc<Mutex<StatusState>>,
+    refreshing: &Arc<AtomicBool>,
     dir: &Arc<PathBuf>,
     pipe_connected: bool,
     dc: &DialogColors,
@@ -577,6 +614,15 @@ pub fn show(
                     if theme::dialog_btn_primary(ui, "Refresh").clicked() {
                         action_refresh = true;
                     }
+                    if refreshing.load(Ordering::Relaxed) {
+                        ui.add_space(6.0);
+                        ui.spinner();
+                        ui.label(
+                            egui::RichText::new("Refreshing…")
+                                .size(11.0)
+                                .color(dc.muted),
+                        );
+                    }
                 });
             });
         });
@@ -600,7 +646,13 @@ pub fn show(
         });
 
     if action_refresh {
-        *state.lock_safe() = StatusState::load(dir.as_ref(), pipe_connected);
+        spawn_load(
+            state.clone(),
+            refreshing.clone(),
+            dir.as_ref().clone(),
+            pipe_connected,
+            main_ctx.clone(),
+        );
     }
     if action_open_folder {
         let _ = std::process::Command::new("explorer")
