@@ -6,7 +6,7 @@ use crate::spark::Sparkline;
 use crate::theme;
 use crate::PollStats;
 
-const SPARK_H: f32 = 40.0;
+const SPARK_H: f32 = 50.0;
 
 /// Split into (number_string, unit_string) so the caller can right-align
 /// the number in a fixed-width box while the unit starts at a fixed position.
@@ -115,18 +115,27 @@ pub fn draw(
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H * sc);
 
+        // Title + interface subtitle (mirrors GPU/CPU model name pattern)
         ui.label(
             RichText::new("NETWORK")
                 .strong()
                 .color(theme::C_PANEL_TITLE)
                 .size(theme::FONT_PANEL_TITLE * sc),
         );
+        if !stats.net_iface.is_empty() {
+            ui.label(
+                RichText::new(&stats.net_iface)
+                    .size(11.0 * sc)
+                    .color(th.text_muted),
+            );
+        }
+
         ui.add_space(4.0 * sc);
 
+        // UP | DOWN — two columns with arrow, label, and number
         let number_w = 68.0 * sc;
         ui.columns(2, |cols| {
             let (val, unit) = fmt_mbps_parts(stats.net_up_mbps);
-            // Arrow right-aligned in NUMBER_W box, then "UP" starts at fixed x.
             cols[0].horizontal(|ui| {
                 ui.allocate_ui_with_layout(
                     egui::Vec2::new(number_w, 14.0 * sc),
@@ -137,16 +146,15 @@ pub fn draw(
                 );
                 ui.label(RichText::new("UP").size(11.0 * sc).color(theme::C_GRN));
             });
-            // Number right-aligned in same NUMBER_W box, unit starts at same x.
             cols[0].horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0 * sc;
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(number_w, 24.0 * sc),
+                    egui::Vec2::new(number_w, 28.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         ui.label(
                             RichText::new(&val)
-                                .size(20.0 * sc)
+                                .size(26.0 * sc)
                                 .color(egui::Color32::WHITE),
                         );
                     },
@@ -172,12 +180,12 @@ pub fn draw(
             cols[1].horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 4.0 * sc;
                 ui.allocate_ui_with_layout(
-                    egui::Vec2::new(number_w, 24.0 * sc),
+                    egui::Vec2::new(number_w, 28.0 * sc),
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         ui.label(
                             RichText::new(&val)
-                                .size(20.0 * sc)
+                                .size(26.0 * sc)
                                 .color(egui::Color32::WHITE),
                         );
                     },
@@ -188,25 +196,35 @@ pub fn draw(
 
         ui.add_space(4.0 * sc);
 
-        // PING + IFACE — above the sparkline.
+        // PING LAN + WAN — always visible, dimmed when unavailable
+        let lan_s = stats
+            .net_ping_ms
+            .map_or("-- ms".to_string(), |p| format!("{p:.1} ms"));
+        let wan_s = stats
+            .net_ping_wan_ms
+            .map_or("-- ms".to_string(), |p| format!("{p:.1} ms"));
         ui.horizontal(|ui| {
-            if let Some(p) = stats.net_ping_ms {
-                ui.label(RichText::new("PING").size(11.0 * sc).color(th.stat_label));
-                ui.label(
-                    RichText::new(format!("{p:.0} ms"))
-                        .size(11.0 * sc)
-                        .color(theme::C_TEXT),
-                );
-                ui.add_space(12.0 * sc);
-            }
-            if !stats.net_iface.is_empty() {
-                ui.label(RichText::new("IFACE").size(11.0 * sc).color(th.stat_label));
-                ui.label(
-                    RichText::new(&stats.net_iface)
-                        .size(11.0 * sc)
-                        .color(theme::C_TEXT),
-                );
-            }
+            ui.label(
+                RichText::new("LAN")
+                    .size(11.0 * sc)
+                    .color(theme::avail_color(&stats.net_ping_ms, th.stat_label)),
+            );
+            ui.label(
+                RichText::new(&lan_s)
+                    .size(11.0 * sc)
+                    .color(theme::avail_color(&stats.net_ping_ms, theme::C_TEXT)),
+            );
+            ui.add_space(12.0 * sc);
+            ui.label(
+                RichText::new("WAN")
+                    .size(11.0 * sc)
+                    .color(theme::avail_color(&stats.net_ping_wan_ms, th.stat_label)),
+            );
+            ui.label(
+                RichText::new(&wan_s)
+                    .size(11.0 * sc)
+                    .color(theme::avail_color(&stats.net_ping_wan_ms, theme::C_TEXT)),
+            );
         });
 
         // Push sparkline to bottom using cursor tracking.

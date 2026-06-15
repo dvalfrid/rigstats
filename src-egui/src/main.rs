@@ -95,6 +95,7 @@ pub struct PollStats {
     pub net_down_mbps: f64,
     pub net_iface: String,
     pub net_ping_ms: Option<f64>,
+    pub net_ping_wan_ms: Option<f64>,
     // Disk
     pub disk_read_mbps: f64,
     pub disk_write_mbps: f64,
@@ -2150,6 +2151,7 @@ async fn poll_loop(
 
     let mut last_net_instant = Instant::now();
     let mut last_ping: Option<(Instant, Option<f64>)> = None;
+    let mut last_ping_wan: Option<(Instant, Option<f64>)> = None;
     type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
     let mut last_battery: Option<(Instant, BatteryCache)> = None;
     let mut last_prune_day: Option<u64> = None;
@@ -2268,6 +2270,21 @@ async fn poll_loop(
                 last_ping.as_ref().and_then(|(_, v)| *v)
             }
         };
+        let ping_wan_ms = {
+            let stale = last_ping_wan
+                .as_ref()
+                .map(|(t, _)| t.elapsed().as_secs_f64() >= 5.0)
+                .unwrap_or(true);
+            if stale {
+                let measured = tokio::task::spawn_blocking(|| hardware::sample_ping_ms("1.1.1.1"))
+                    .await
+                    .unwrap_or(None);
+                last_ping_wan = Some((Instant::now(), measured));
+                measured
+            } else {
+                last_ping_wan.as_ref().and_then(|(_, v)| *v)
+            }
+        };
 
         let (
             battery_present,
@@ -2359,6 +2376,7 @@ async fn poll_loop(
             net_down_mbps: best_down,
             net_iface: best_iface,
             net_ping_ms: ping_ms,
+            net_ping_wan_ms: ping_wan_ms,
             disk_read_mbps,
             disk_write_mbps,
             disk_drives,
