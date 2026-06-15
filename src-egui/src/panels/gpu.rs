@@ -46,7 +46,9 @@ pub fn draw(
         ui.set_min_height(theme::PANEL_DATA_H * sc);
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
-        let tc = temp_color(stats.gpu_temp, warn, crit);
+        let tc = stats.gpu_temp.map_or(theme::C_UNAVAILABLE, |_| {
+            temp_color(stats.gpu_temp, warn, crit)
+        });
         let ring_color = if stats.lhm_connected {
             theme::C_AMD
         } else {
@@ -134,25 +136,45 @@ pub fn draw(
             let hotspot_s = stats
                 .gpu_hotspot
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-            let hotspot_c = temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit);
+            let hotspot_c = stats.gpu_hotspot.map_or(theme::C_UNAVAILABLE, |_| {
+                temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit)
+            });
             let freq_s = fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2);
             let pwr_s = fmt_opt(stats.gpu_power, " W", 0);
+            let freq_c = theme::avail_color(&stats.gpu_freq_mhz, theme::C_TEXT);
+            let pwr_c = theme::avail_color(&stats.gpu_power, theme::C_TEXT);
 
-            // 4-column grid: TEMP | HOTSPOT | FREQ | POWER
+            // 4-column grid: TEMP | HOT | FREQ | POWER
             ui.vertical(|ui| {
                 egui::Grid::new("gpu_meta")
                     .num_columns(4)
                     .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
-                        ui.label(RichText::new("HOT").size(11.0 * sc).color(th.stat_label));
-                        ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
-                        ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
+                        ui.label(
+                            RichText::new("TEMP")
+                                .size(11.0 * sc)
+                                .color(theme::avail_color(&stats.gpu_temp, th.stat_label)),
+                        );
+                        ui.label(
+                            RichText::new("HOT")
+                                .size(11.0 * sc)
+                                .color(theme::avail_color(&stats.gpu_hotspot, th.stat_label)),
+                        );
+                        ui.label(
+                            RichText::new("FREQ")
+                                .size(11.0 * sc)
+                                .color(theme::avail_color(&stats.gpu_freq_mhz, th.stat_label)),
+                        );
+                        ui.label(
+                            RichText::new("POWER")
+                                .size(11.0 * sc)
+                                .color(theme::avail_color(&stats.gpu_power, th.stat_label)),
+                        );
                         ui.end_row();
                         ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
                         ui.label(RichText::new(&hotspot_s).size(14.0 * sc).color(hotspot_c));
-                        ui.label(RichText::new(&freq_s).size(14.0 * sc).color(theme::C_TEXT));
-                        ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(theme::C_TEXT));
+                        ui.label(RichText::new(&freq_s).size(14.0 * sc).color(freq_c));
+                        ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(pwr_c));
                         ui.end_row();
                     });
             });
@@ -204,21 +226,9 @@ pub fn draw(
                 let d3d_frac = (stats.gpu_d3d_3d.unwrap_or(0.0) / 100.0) as f32;
                 let vdec_frac = (stats.gpu_d3d_vdec.unwrap_or(0.0) / 100.0) as f32;
                 let d3d_s = format!("{:.0}%", stats.gpu_d3d_3d.unwrap_or(0.0));
-                let vdec_dimmed = stats.gpu_d3d_vdec.is_none();
                 let vdec_s = stats
                     .gpu_d3d_vdec
                     .map_or("0%".to_string(), |v| format!("{v:.0}%"));
-                let vdec_dim_color = egui::Color32::from_gray(80);
-                let vdec_color = if vdec_dimmed {
-                    vdec_dim_color
-                } else {
-                    theme::C_TEXT
-                };
-                let vdec_label_color = if vdec_dimmed {
-                    vdec_dim_color
-                } else {
-                    th.stat_label
-                };
                 let fan_s = fmt_opt(stats.gpu_fan, "%", 0);
                 let fan_frac = (stats.gpu_fan.unwrap_or(0.0) / 100.0) as f32;
                 let vfrac = vram_frac(stats);
@@ -248,16 +258,16 @@ pub fn draw(
                         "FAN",
                         fan_frac,
                         &fan_s,
-                        th.stat_label,
-                        pct_color,
+                        theme::avail_color(&stats.gpu_fan, th.stat_label),
+                        theme::avail_color(&stats.gpu_fan, pct_color),
                     );
                     draw_bar_col(
                         &mut cols[1],
                         "VDEC",
                         vdec_frac,
                         &vdec_s,
-                        vdec_label_color,
-                        vdec_color,
+                        theme::avail_color(&stats.gpu_d3d_vdec, th.stat_label),
+                        theme::avail_color(&stats.gpu_d3d_vdec, theme::C_TEXT),
                     );
                 });
             } else {
@@ -297,14 +307,18 @@ pub fn draw(
                 inner_ui.horizontal(|ui| {
                     theme::fixed_label_r(
                         ui,
-                        RichText::new("FAN").size(11.0 * sc).color(th.stat_label),
+                        RichText::new("FAN")
+                            .size(11.0 * sc)
+                            .color(theme::avail_color(&stats.gpu_fan, th.stat_label)),
                         LEFT_LBL_W * sc,
                         ROW_H * sc,
                     );
                     theme::thin_bar_scaled(ui, fan_frac, fan_bar_w, theme::C_AMD, sc);
                     theme::fixed_label_r(
                         ui,
-                        RichText::new(&fan_s).size(11.0 * sc).color(pct_color),
+                        RichText::new(&fan_s)
+                            .size(11.0 * sc)
+                            .color(theme::avail_color(&stats.gpu_fan, pct_color)),
                         PCT_W * sc,
                         ROW_H * sc,
                     );

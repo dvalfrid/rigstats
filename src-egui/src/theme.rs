@@ -125,6 +125,21 @@ pub const C_NET_DOWN: Color32 = Color32::from_rgb(0x3a, 0xa5, 0xff); // Network 
 // ── Text colours ─────────────────────────────────────────────────────────────
 pub const C_TEXT: Color32 = Color32::from_rgb(0xb8, 0xcc, 0xe8);
 pub const C_DIM: Color32 = Color32::from_rgb(0x2e, 0x3d, 0x5a);
+/// Colour for sensors/fields not supported by the current hardware.
+/// Use via `avail_color` rather than directly.
+pub const C_UNAVAILABLE: Color32 = Color32::from_gray(80);
+
+/// Returns `active` when `val` is `Some`, `C_UNAVAILABLE` when `None`.
+///
+/// Call this for every stat label and value that maps to an `Option` field so
+/// that unsupported sensors dim consistently across all panels.
+pub fn avail_color<T>(val: &Option<T>, active: Color32) -> Color32 {
+    if val.is_some() {
+        active
+    } else {
+        C_UNAVAILABLE
+    }
+}
 
 // ── Panel card colours ────────────────────────────────────────────────────────
 pub const PANEL_FILL: Color32 = Color32::from_rgb(11, 13, 18);

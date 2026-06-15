@@ -119,6 +119,7 @@ Key source files:
 - **`main.rs`** — entry point: monitor selection, tray setup, settings load, poll thread, eframe `run_native`. Holds `PanelThresholds` struct (warn/crit pairs per component) initialized from `Settings` and updated on every settings reload, plus the live `AppTheme` derived from `Settings.theme` — both are passed directly to each panel `draw()` call so threshold colours and theme preview update immediately.
 - **`theme.rs`** — shared constants and helpers for **both** panel cards and dialog windows:
   - `AppTheme`, `THEME_KEYS`, HSL-derived label colours (`stat_label`, `text_muted`, `mb_accent`) from a single preset accent, plus panel accent colours, `panel_frame()`, and sparkline/bar helpers.
+  - **Sensor availability convention:** `C_UNAVAILABLE = gray(80)` is the colour for sensors not supported by the current hardware. `avail_color(val: &Option<T>, active: Color32) -> Color32` returns `active` when `Some`, `C_UNAVAILABLE` when `None`. Use this for every stat label and value in every panel so missing sensors dim consistently across the app.
   - **Dialog button API** (Windows 11-style with proper hover/active state):
     - `theme::dialog_btn_primary(ui, label)` — blue `#0078D4`, white text; hover lightens to `#1A86DB`, pressed darkens. Use for the main action (OK, Save, Install Now, Close, Check for Updates).
     - `theme::dialog_btn_secondary(ui, label)` — gray fill `#343434` with border; hover lightens. Use for cancel/dismiss actions (Cancel, Later).
