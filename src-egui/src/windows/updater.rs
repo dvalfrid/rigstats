@@ -331,29 +331,33 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui:
         ui.add_space(gap);
 
         let resp = ui.vertical(|ui| {
-            let mut job = egui::text::LayoutJob::default();
-            job.wrap.max_width = text_w;
-            job.append(
-                &item.text,
-                0.0,
-                egui::text::TextFormat {
-                    color: dc.item,
-                    font_id: egui::FontId::proportional(12.0),
-                    ..Default::default()
-                },
-            );
-            if let Some((hash, _)) = &item.hash {
-                job.append(
-                    &format!(" ({hash})"),
-                    0.0,
-                    egui::text::TextFormat {
-                        color: dc.item_hash,
-                        font_id: egui::FontId::monospace(11.0),
-                        ..Default::default()
-                    },
+            ui.horizontal_wrapped(|ui| {
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+                ui.set_max_width(text_w);
+
+                ui.label(
+                    egui::RichText::new(&item.text)
+                        .color(dc.item)
+                        .font(egui::FontId::proportional(12.0)),
                 );
-            }
-            ui.label(job);
+
+                if let Some((hash, url)) = &item.hash {
+                    if url.is_empty() {
+                        ui.label(
+                            egui::RichText::new(format!("({hash})"))
+                                .color(dc.item_hash)
+                                .font(egui::FontId::monospace(11.0)),
+                        );
+                    } else {
+                        ui.style_mut().visuals.hyperlink_color = dc.item_hash;
+                        ui.hyperlink_to(
+                            egui::RichText::new(format!("({hash})"))
+                                .font(egui::FontId::monospace(11.0)),
+                            url,
+                        );
+                    }
+                }
+            });
         });
 
         let bar_h = resp.response.rect.height().max(ph_h);
