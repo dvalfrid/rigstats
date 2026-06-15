@@ -95,6 +95,7 @@ enum SectionKind {
 
 struct ReleaseEntry {
     version: String,
+    version_url: Option<String>,
     date: String,
     sections: Vec<NoteSection>,
 }
@@ -125,13 +126,14 @@ fn parse_notes(markdown: &str) -> Vec<ReleaseEntry> {
                 entries.push(e);
             }
             let heading = line.trim_start_matches('#').trim();
-            let (version, date) = parse_version_date(heading);
+            let (version, version_url, date) = parse_version_date(heading);
             // Skip "Unreleased" section
             if version.to_lowercase().contains("unreleased") {
                 continue;
             }
             cur_entry = Some(ReleaseEntry {
                 version,
+                version_url,
                 date,
                 sections: Vec::new(),
             });
@@ -181,7 +183,11 @@ fn flush_section(entry: &mut Option<ReleaseEntry>, section: &mut Option<NoteSect
 }
 
 /// Parse `## v1.10.1 - 2026-03-26` or `## [1.25.0](url) (2026-03-26)` etc.
-fn parse_version_date(s: &str) -> (String, String) {
+/// Returns `(version, version_url, date)`.
+fn parse_version_date(s: &str) -> (String, Option<String>, String) {
+    // Extract URL from `[text](url)` before stripping.
+    let version_url = extract_md_link_url(s);
+
     let stripped = strip_md_links(s);
     let stripped = stripped.trim();
 
@@ -190,11 +196,26 @@ fn parse_version_date(s: &str) -> (String, String) {
         if let Some(idx) = stripped.find(sep) {
             let ver = stripped[..idx].trim().trim_start_matches('v');
             let date_raw = stripped[idx + sep.len()..].trim().trim_end_matches(')');
-            return (format!("v{ver}"), date_raw.to_string());
+            return (format!("v{ver}"), version_url, date_raw.to_string());
         }
     }
     let ver = stripped.trim_start_matches('v');
-    (format!("v{ver}"), String::new())
+    (format!("v{ver}"), version_url, String::new())
+}
+
+/// Extract the URL from the first `[text](url)` in `s`, if present.
+fn extract_md_link_url(s: &str) -> Option<String> {
+    let open = s.find('[')?;
+    let after_open = &s[open + 1..];
+    let close_bracket = after_open.find("](")?;
+    let after_bracket = &after_open[close_bracket + 2..];
+    let close_paren = after_bracket.find(')')?;
+    let url = &after_bracket[..close_paren];
+    if url.is_empty() {
+        None
+    } else {
+        Some(url.to_string())
+    }
 }
 
 /// Strip `[text](url)` → `text` throughout a string (UTF-8 safe).
@@ -296,7 +317,15 @@ fn render_notes(ui: &mut egui::Ui, dc: &DialogColors, entries: &[ReleaseEntry]) 
 
     for entry in entries {
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(&entry.version).strong().color(dc.text));
+            match &entry.version_url {
+                Some(url) => {
+                    ui.style_mut().visuals.hyperlink_color = dc.text;
+                    ui.hyperlink_to(egui::RichText::new(&entry.version).strong(), url);
+                }
+                None => {
+                    ui.label(egui::RichText::new(&entry.version).strong().color(dc.text));
+                }
+            }
             if !entry.date.is_empty() {
                 ui.label(egui::RichText::new(&entry.date).small().color(dc.muted));
             }
