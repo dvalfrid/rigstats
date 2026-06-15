@@ -281,13 +281,15 @@ The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a n
 | File in ZIP | Contents | Why it is needed |
 | --- | --- | --- |
 | `manifest.json` | Collection timestamp (Unix seconds), RIGStats version | Ties the report to a specific build |
-| `debug.log` | Full RIGStats debug log from disk | Startup sequence, LHM connectivity, error events |
+| `debug.log` | Full RIGStats debug log for the current session — starts with `settings dir`, `os_dark_mode`, settings summary, and all runtime events | Startup sequence, connectivity, settings save errors |
+| `debug-prev.log` | Debug log from the **previous** session — preserved across restarts | Captures the log from a session that crashed; ends with `shutdown: clean` if it closed normally, otherwise the last line before the crash is visible |
 | `settings.json` | Persisted user settings (opacity, profile, model name) | Rules out configuration-specific issues |
 | `sidecar-parsed.json` | Last sensor payload received from the sidecar pipe — GPU temps, CPU temp, fan speeds, disk temps, etc. | **Most important file for adding sensor support** — shows all extracted sensor values exactly as the app uses them |
 | `sensor-tree.txt` | Full LHM hardware and sensor tree as seen at the last sidecar service start — every hardware node, sub-hardware, sensor identifier, type, name, and value | Use this to find the exact identifier for a sensor that isn't being picked up by `SensorReader.cs` |
 | `hardware.json` | WMI/CIM snapshot: OS version, CPU (name, cores, max clock), GPU (name, VRAM, driver), motherboard (manufacturer, model, product, base board), RAM (capacity per stick, speed, type code, manufacturer, part number) | Hardware identification and brand detection |
 | `sidecar-service.txt` | Output of `sc query` and `sc qc` for the `rigstats-sensor` Windows Service | Diagnose sidecar autostart and service registration failures |
-| `environment.txt` | `PROCESSOR_ARCHITECTURE`, `COMPUTERNAME`, Windows build and display version | OS-level context for platform-specific bugs |
+| `environment.txt` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` | Identifies user account paths — essential for diagnosing child/standard account issues where APPDATA may be redirected |
+| `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats — errors and critical events only | Captures OS-level crash records that do not appear in the in-app debug log |
 | `sysinfo.json` | sysinfo snapshot: CPU brand, core count, memory totals, disk mount points, network interface names, detected RAM spec, ping target | Verify what `sysinfo` sees on the machine |
 | `displays.json` | All connected monitors: name, resolution, position, scale factor, portrait/landscape, fit score for the active profile, and which monitor was selected | Diagnose window placement and wrong-monitor issues |
 

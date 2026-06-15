@@ -152,7 +152,7 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`lhm_process.rs`** — `track_lhm_connection_state` (connect/disconnect logging, 30 s throttle).
 - **`logging.rs`** — CSV logging: `append_stats_row`, `prune_old_logs`, `current_log_path`, `ymd_from_unix`.
 - **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`. Key fields: `theme` (default `"dark-cyan"`), `thresholds: HashMap<String, ComponentThresholds>`, `panel_layouts`, `floating_mode`, `floating_panel_scale`, `logging_enabled`, `log_retention_days`. `settings_version` migration sentinel (0→1).
-- **`debug.rs`** — `append_debug_log`, `reset_debug_log`, `unix_now_secs`.
+- **`debug.rs`** — `append_debug_log`, `reset_debug_log` (rotates current log to `rigstats-debug-prev.log` before starting fresh — preserves crash evidence), `unix_now_secs`.
 - **`monitor.rs`** — Profile definitions, monitor selection, `compute_panels_logical_height`.
 - **`autostart.rs`** — Registry-based autostart (HKCU run key).
 
@@ -177,7 +177,7 @@ The Rust backend connects to `\\.\pipe\rigstats-sensors` with `.write(false)` (p
 
 ### Settings persistence
 
-Settings are stored in `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`. The debug log is at `rigstats-debug.log` in the same directory.
+Settings are stored in `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`. The debug log is at `rigstats-debug.log` in the same directory; the previous session's log is preserved as `rigstats-debug-prev.log` (see `reset_debug_log`).
 
 ### Testing
 

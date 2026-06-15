@@ -406,7 +406,8 @@ thread). Produces a self-contained ZIP for bug reports.
 | File | Source | Key fields |
 | --- | --- | --- |
 | `manifest.json` | inline | Unix timestamp + `CARGO_PKG_VERSION` |
-| `debug.log` | `std::fs::read(debug_log_path)` | Full startup + runtime log |
+| `debug.log` | `std::fs::read(debug_log_path)` | Current session: first lines always include `settings dir`, `os_dark_mode`, settings summary. Ends with `shutdown: clean` on normal exit. |
+| `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `AppState.settings` snapshot | All user settings |
 | `sidecar-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
@@ -414,7 +415,8 @@ thread). Produces a self-contained ZIP for bug reports.
 | `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
 | `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
-| `environment.txt` | env vars + Windows registry | Arch, build number, hostname |
+| `environment.txt` | `std::env::var` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` — exposes child/standard account path redirections |
+| `event-log.txt` | PowerShell `Get-WinEvent` | Windows Application Event Log: rigstats errors and critical events — catches OS-level crashes not recorded in the in-app log |
 | `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
 | `displays.json` | Monitor list from `pick_monitor()` | Resolution, position, scale, fit score, which was selected |
 
