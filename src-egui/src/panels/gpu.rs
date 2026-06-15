@@ -36,6 +36,8 @@ pub fn draw(
     th: &theme::AppTheme,
     warn: u8,
     crit: u8,
+    hotspot_warn: u8,
+    hotspot_crit: u8,
     sc: f32,
 ) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
@@ -50,8 +52,8 @@ pub fn draw(
         } else {
             color_unknown()
         };
-        let c = if stats.lhm_connected {
-            theme::C_AMD
+        let pct_color = if stats.lhm_connected {
+            theme::C_TEXT
         } else {
             color_unknown()
         };
@@ -109,7 +111,7 @@ pub fn draw(
             }
         });
 
-        // Ring LEFT + 3×2 metadata grid RIGHT.
+        // Ring LEFT + stats grid RIGHT.
         let ring_label = if stats.lhm_connected {
             format!("{load:.0}%")
         } else {
@@ -129,25 +131,28 @@ pub fn draw(
             let temp_s = stats
                 .gpu_temp
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
+            let hotspot_s = stats
+                .gpu_hotspot
+                .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
+            let hotspot_c = temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit);
             let freq_s = fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2);
             let pwr_s = fmt_opt(stats.gpu_power, " W", 0);
-            let fan_s = fmt_opt(stats.gpu_fan, "%", 0);
 
-            // 4-column grid: TEMP | CORE FREQ | POWER | FAN
+            // 4-column grid: TEMP | HOTSPOT | FREQ | POWER
             ui.vertical(|ui| {
                 egui::Grid::new("gpu_meta")
                     .num_columns(4)
                     .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
                         ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                        ui.label(RichText::new("HOT").size(11.0 * sc).color(th.stat_label));
                         ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
                         ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
-                        ui.label(RichText::new("FAN").size(11.0 * sc).color(th.stat_label));
                         ui.end_row();
                         ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
+                        ui.label(RichText::new(&hotspot_s).size(14.0 * sc).color(hotspot_c));
                         ui.label(RichText::new(&freq_s).size(14.0 * sc).color(theme::C_TEXT));
                         ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(theme::C_TEXT));
-                        ui.label(RichText::new(&fan_s).size(14.0 * sc).color(theme::C_TEXT));
                         ui.end_row();
                     });
             });
@@ -155,89 +160,157 @@ pub fn draw(
 
         ui.add_space(4.0 * sc);
 
-        // ── Bar row: VRAM | 3D (same row, split 50/50 when 3D is active) ─────────
-        let has_d3d = stats.gpu_d3d_3d.is_some();
-        let sp = ui.spacing().item_spacing.x;
+        // ── Bar section: 2 rows (VRAM+3D, FAN+VDEC) ─────────────────────────────
+        // Claim only what's available before the sparkline so the panel keeps its
+        // proportions at small scale. new_child clips bars that don't fit.
+        {
+            let has_d3d = stats.gpu_d3d_3d.is_some();
+            let max_bar_h = ROW_H * 2.0 * sc + ui.spacing().item_spacing.y;
+            let avail_for_bars =
+                (ui.available_height() - SPARK_H * sc - ui.spacing().item_spacing.y).max(0.0);
+            let container_h = avail_for_bars.min(max_bar_h);
+            let avail_w = ui.available_width();
+            let (outer_rect, _) =
+                ui.allocate_exact_size(Vec2::new(avail_w, container_h), Sense::hover());
+            let mut inner_ui = ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
 
-        if has_d3d {
-            // Split: VRAM left half, 3D right half.
-            // Total: 2×(LBL + bar + PCT) + extra_gap + 4×item_spacing
-            let bar_half = theme::bar_avail(ui, (LEFT_LBL_W + PCT_W) * 2.0 * sc + 6.0 * sc, 5);
-            let bar_half = bar_half / 2.0;
-
-            ui.horizontal(|ui| {
-                // VRAM
-                let vfrac = vram_frac(stats);
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new("VRAM").size(11.0 * sc).color(th.stat_label),
-                    LEFT_LBL_W * sc,
-                    ROW_H * sc,
-                );
-                theme::thin_bar_scaled(ui, vfrac, bar_half, theme::C_AMD, sc);
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new(format!("{:.0}%", vfrac * 100.0))
-                        .size(11.0 * sc)
-                        .color(c),
-                    PCT_W * sc,
-                    ROW_H * sc,
-                );
-
-                ui.add_space(6.0 * sc);
-
-                // 3D
-                let d3d = stats.gpu_d3d_3d.unwrap_or(0.0);
-                let d3d_frac = (d3d / 100.0) as f32;
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new("3D").size(11.0 * sc).color(th.stat_label),
-                    LEFT_LBL_W * sc,
-                    ROW_H * sc,
-                );
-                theme::thin_bar_scaled(ui, d3d_frac, bar_half, theme::C_AMD, sc);
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new(format!("{d3d:.0}%"))
-                        .size(11.0 * sc)
-                        .color(theme::C_TEXT),
-                    PCT_W * sc,
-                    ROW_H * sc,
-                );
-            });
-        } else {
-            // Full-width VRAM bar: LBL + bar + PCT + SIZE + 3×spacing
-            let vram_bar_w = theme::bar_avail(ui, (LEFT_LBL_W + PCT_W + SIZE_W) * sc, 3);
-            let vfrac = vram_frac(stats);
-            ui.horizontal(|ui| {
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new("VRAM").size(11.0 * sc).color(th.stat_label),
-                    LEFT_LBL_W * sc,
-                    ROW_H * sc,
-                );
-                theme::thin_bar_scaled(ui, vfrac, vram_bar_w, theme::C_AMD, sc);
-                theme::fixed_label_r(
-                    ui,
-                    RichText::new(format!("{:.0}%", vfrac * 100.0))
-                        .size(11.0 * sc)
-                        .color(c),
-                    PCT_W * sc,
-                    ROW_H * sc,
-                );
-                if let (Some(used), Some(total)) = (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb)
-                {
-                    ui.label(
-                        RichText::new(format!("{:.1}/{:.1}G", used / 1024.0, total / 1024.0))
-                            .size(11.0 * sc)
-                            .color(th.text_muted),
+            let draw_bar_col = |col_ui: &mut egui::Ui,
+                                label: &str,
+                                frac: f32,
+                                pct_s: &str,
+                                label_color: egui::Color32,
+                                text_color: egui::Color32| {
+                col_ui.horizontal(|ui| {
+                    let sp = ui.spacing().item_spacing.x;
+                    let bar_w =
+                        (ui.available_width() - (LEFT_LBL_W + PCT_W) * sc - 2.0 * sp).max(4.0 * sc);
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new(label).size(11.0 * sc).color(label_color),
+                        LEFT_LBL_W * sc,
+                        ROW_H * sc,
                     );
-                }
-            });
-        }
+                    theme::thin_bar_scaled(ui, frac, bar_w, theme::C_AMD, sc);
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new(pct_s).size(11.0 * sc).color(text_color),
+                        PCT_W * sc,
+                        ROW_H * sc,
+                    );
+                });
+            };
 
-        // Suppress unused-variable warning for sp (only needed for split path removed above)
-        let _ = sp;
+            if has_d3d {
+                let d3d_frac = (stats.gpu_d3d_3d.unwrap_or(0.0) / 100.0) as f32;
+                let vdec_frac = (stats.gpu_d3d_vdec.unwrap_or(0.0) / 100.0) as f32;
+                let d3d_s = format!("{:.0}%", stats.gpu_d3d_3d.unwrap_or(0.0));
+                let vdec_dimmed = stats.gpu_d3d_vdec.is_none();
+                let vdec_s = stats
+                    .gpu_d3d_vdec
+                    .map_or("0%".to_string(), |v| format!("{v:.0}%"));
+                let vdec_dim_color = egui::Color32::from_gray(80);
+                let vdec_color = if vdec_dimmed {
+                    vdec_dim_color
+                } else {
+                    theme::C_TEXT
+                };
+                let vdec_label_color = if vdec_dimmed {
+                    vdec_dim_color
+                } else {
+                    th.stat_label
+                };
+                let fan_s = fmt_opt(stats.gpu_fan, "%", 0);
+                let fan_frac = (stats.gpu_fan.unwrap_or(0.0) / 100.0) as f32;
+                let vfrac = vram_frac(stats);
+                let vram_s = format!("{:.0}%", vfrac * 100.0);
+
+                inner_ui.columns(2, |cols| {
+                    draw_bar_col(
+                        &mut cols[0],
+                        "VRAM",
+                        vfrac,
+                        &vram_s,
+                        th.stat_label,
+                        pct_color,
+                    );
+                    draw_bar_col(
+                        &mut cols[1],
+                        "3D",
+                        d3d_frac,
+                        &d3d_s,
+                        th.stat_label,
+                        theme::C_TEXT,
+                    );
+                });
+                inner_ui.columns(2, |cols| {
+                    draw_bar_col(
+                        &mut cols[0],
+                        "FAN",
+                        fan_frac,
+                        &fan_s,
+                        th.stat_label,
+                        pct_color,
+                    );
+                    draw_bar_col(
+                        &mut cols[1],
+                        "VDEC",
+                        vdec_frac,
+                        &vdec_s,
+                        vdec_label_color,
+                        vdec_color,
+                    );
+                });
+            } else {
+                let vfrac = vram_frac(stats);
+                let fan_frac = (stats.gpu_fan.unwrap_or(0.0) / 100.0) as f32;
+                let fan_s = fmt_opt(stats.gpu_fan, "%", 0);
+
+                let vram_bar_w = theme::bar_avail(&inner_ui, (LEFT_LBL_W + PCT_W + SIZE_W) * sc, 3);
+                inner_ui.horizontal(|ui| {
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new("VRAM").size(11.0 * sc).color(th.stat_label),
+                        LEFT_LBL_W * sc,
+                        ROW_H * sc,
+                    );
+                    theme::thin_bar_scaled(ui, vfrac, vram_bar_w, theme::C_AMD, sc);
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new(format!("{:.0}%", vfrac * 100.0))
+                            .size(11.0 * sc)
+                            .color(pct_color),
+                        PCT_W * sc,
+                        ROW_H * sc,
+                    );
+                    if let (Some(used), Some(total)) =
+                        (stats.gpu_vram_used_mb, stats.gpu_vram_total_mb)
+                    {
+                        ui.label(
+                            RichText::new(format!("{:.1}/{:.1}G", used / 1024.0, total / 1024.0))
+                                .size(11.0 * sc)
+                                .color(th.text_muted),
+                        );
+                    }
+                });
+
+                let fan_bar_w = theme::bar_avail(&inner_ui, (LEFT_LBL_W + PCT_W) * sc, 2);
+                inner_ui.horizontal(|ui| {
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new("FAN").size(11.0 * sc).color(th.stat_label),
+                        LEFT_LBL_W * sc,
+                        ROW_H * sc,
+                    );
+                    theme::thin_bar_scaled(ui, fan_frac, fan_bar_w, theme::C_AMD, sc);
+                    theme::fixed_label_r(
+                        ui,
+                        RichText::new(&fan_s).size(11.0 * sc).color(pct_color),
+                        PCT_W * sc,
+                        ROW_H * sc,
+                    );
+                });
+            }
+        }
 
         if !stats.lhm_connected {
             ui.label(

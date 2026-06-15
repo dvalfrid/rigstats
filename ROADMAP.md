@@ -151,22 +151,12 @@ The GPU panel currently shows load, temperature, VRAM used/total, and core clock
 LHM exposes several additional metrics that are already present in the flat sensor
 tree but not yet surfaced in the UI.
 
-**What to add:**
-
-- **Hotspot temperature** — junction/hotspot reading (AMD `GPU Hot Spot`, NVIDIA
-  `GPU Hot Spot Temperature`) alongside the existing package temp
-- **Power draw vs. power limit** — actual GPU power (W) and the board power limit
-  so users can see how close to the limit the card is running
-- **Memory controller load %** — separate from shader load; indicates VRAM
-  bandwidth pressure
-- **Memory clock** — VRAM frequency, useful when debugging memory throttling
-
-**Scope:**
-
-- Extend `LhmData` / `GpuStats` structs with the new fields (`Option<f32>` to
-  handle cards that do not expose every sensor)
-- Update `lhm.rs` GPU extraction to collect the additional sensor types
-- Expand `panels/gpu.js` to render the new rows; hide rows whose value is `null`
+**Implemented.** Stats grid extended to four columns: TEMP · HOT · FREQ · POWER. Hotspot
+temperature is coloured with its own warn/crit thresholds (90 °C / 105 °C defaults). Bar
+section now shows two rows — VRAM + 3D (left/right) and FAN + VDEC (left/right) — when D3D
+data is present; VDEC is rendered dimmed at 0 % when the driver does not expose a VDEC
+sensor. Without D3D data, VRAM and FAN display full-width. Panel proportions are preserved at
+all scale factors via `allocate_exact_size` + `new_child` clipping.
 
 ---
 
