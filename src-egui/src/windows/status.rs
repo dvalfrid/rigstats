@@ -81,9 +81,7 @@ pub fn spawn_load(
 }
 
 fn query_service_running() -> bool {
-    std::process::Command::new("sc.exe")
-        .args(["query", "rigstats-sensor"])
-        .output()
+    rigstats_backend::debug::run_hidden_command("sc.exe", &["query", "rigstats-sensor"])
         .map(|o| String::from_utf8_lossy(&o.stdout).contains("RUNNING"))
         .unwrap_or(false)
 }
@@ -497,6 +495,21 @@ pub fn collect_and_open_diagnostics(dir: &Path) {
     }
 }
 
+/// Run diagnostics collection on a background thread. The save dialog, multiple
+/// PowerShell/WMI/`sc.exe` probes and zip writing easily block for several
+/// seconds, so this must never run on the egui UI thread. No-op if a collection
+/// is already in flight.
+pub fn spawn_collect(collecting: Arc<AtomicBool>, dir: PathBuf, ctx: egui::Context) {
+    if collecting.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    std::thread::spawn(move || {
+        collect_and_open_diagnostics(&dir);
+        collecting.store(false, Ordering::Relaxed);
+        ctx.request_repaint();
+    });
+}
+
 fn render_debug_log(ui: &mut egui::Ui, dc: &DialogColors, log: &str, log_h: f32) {
     ui.add_space(8.0);
     ui.horizontal(|ui| {
@@ -548,6 +561,7 @@ pub fn show(
     needs_focus: &Arc<AtomicBool>,
     state: &Arc<Mutex<StatusState>>,
     refreshing: &Arc<AtomicBool>,
+    collecting: &Arc<AtomicBool>,
     dir: &Arc<PathBuf>,
     pipe_connected: bool,
     dc: &DialogColors,
@@ -599,8 +613,18 @@ pub fn show(
         .show_separator_line(true)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if theme::dialog_btn_secondary(ui, "Collect Diagnostics…", dc).clicked() {
+                let collect_busy = collecting.load(Ordering::Relaxed);
+                let collect_label = if collect_busy {
+                    "Collecting…"
+                } else {
+                    "Collect Diagnostics…"
+                };
+                if theme::dialog_btn_secondary(ui, collect_label, dc).clicked() && !collect_busy {
                     action_collect_diag = true;
+                }
+                if collect_busy {
+                    ui.add_space(4.0);
+                    ui.spinner();
                 }
                 ui.add_space(4.0);
                 if theme::dialog_btn_secondary(ui, "Log Folder", dc).clicked() {
@@ -660,7 +684,7 @@ pub fn show(
             .spawn();
     }
     if action_collect_diag {
-        collect_and_open_diagnostics(dir.as_ref());
+        spawn_collect(collecting.clone(), dir.as_ref().clone(), main_ctx.clone());
     }
     if action_close {
         open.store(false, Ordering::Relaxed);

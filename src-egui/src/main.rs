@@ -485,6 +485,7 @@ struct RigStatsApp {
     settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
     status_win: Arc<Mutex<windows::status::StatusState>>,
     status_refreshing: Arc<AtomicBool>,
+    status_collecting: Arc<AtomicBool>,
     updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
     // true while a manual check/download is in flight (prevents double-trigger)
     updater_busy: Arc<AtomicBool>,
@@ -668,6 +669,7 @@ impl RigStatsApp {
             )),
             status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
             status_refreshing: Arc::new(AtomicBool::new(false)),
+            status_collecting: Arc::new(AtomicBool::new(false)),
             updater_win,
             updater_busy: Arc::new(AtomicBool::new(false)),
             current_settings,
@@ -1105,6 +1107,7 @@ impl eframe::App for RigStatsApp {
             let focus = self.status_focus.clone();
             let state = self.status_win.clone();
             let refreshing = self.status_refreshing.clone();
+            let collecting = self.status_collecting.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(680.0, 720.0);
@@ -1132,6 +1135,7 @@ impl eframe::App for RigStatsApp {
                         &focus,
                         &state,
                         &refreshing,
+                        &collecting,
                         &dir,
                         lhm_connected,
                         &dc,
