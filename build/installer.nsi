@@ -115,9 +115,11 @@ Section "RIGStats" SecMain
   Delete "$INSTDIR\rigstats.exe"
   File "target\release\rigstats.exe"
   File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe"
-  ; Native libs that cannot be bundled into the single-file exe:
-  File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\MonoPosixHelper.dll"
-  File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\libMonoPosixHelper.dll"
+  ; Native libs that may be emitted alongside the single-file exe depending on
+  ; the .NET runtime pack. They are Unix P/Invoke helpers never loaded on
+  ; Windows, so /nonfatal keeps the build working whether or not they appear.
+  File /nonfatal "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\MonoPosixHelper.dll"
+  File /nonfatal "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\libMonoPosixHelper.dll"
   File "CHANGELOG.md"
 
   SetOutPath "$INSTDIR\pawnio"
