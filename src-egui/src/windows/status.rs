@@ -257,6 +257,9 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
     let debug_log = std::fs::read(dir.join("rigstats-debug.log"))
         .unwrap_or_else(|_| b"(log file not found)".to_vec());
 
+    let debug_log_prev = std::fs::read(dir.join("rigstats-debug-prev.log"))
+        .unwrap_or_else(|_| b"(no previous session log)".to_vec());
+
     let settings_json = std::fs::read_to_string(dir.join("rigstats-settings.json"))
         .map(|s| {
             serde_json::from_str::<serde_json::Value>(&s)
@@ -337,6 +340,11 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
             "NUMBER_OF_PROCESSORS",
             "COMPUTERNAME",
             "SystemRoot",
+            "USERNAME",
+            "USERDOMAIN",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
         ];
         vars.iter()
             .map(|v| {
@@ -383,6 +391,24 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         .unwrap_or_default()
     };
 
+    // Recent Application Event Log entries for rigstats (crashes, errors).
+    let event_log_txt = run_ps_capture(
+        "try { \
+          $evts = Get-WinEvent -FilterHashtable @{LogName='Application';ProviderName='rigstats*';Level=1,2} \
+            -MaxEvents 50 -EA Stop | \
+            Select-Object TimeCreated,Id,LevelDisplayName,Message; \
+          if ($evts) { $evts | Format-List | Out-String } else { 'No rigstats error events found.' } \
+        } catch { \
+          try { \
+            $evts2 = Get-WinEvent -FilterHashtable @{LogName='Application';Level=1,2} \
+              -MaxEvents 100 -EA Stop | \
+              Where-Object { $_.Message -match 'rigstats' } | \
+              Select-Object TimeCreated,Id,LevelDisplayName,Message; \
+            if ($evts2) { $evts2 | Format-List | Out-String } else { 'No rigstats-related Application errors found.' } \
+          } catch { \"Event log query failed: $_\" } \
+        }",
+    );
+
     // ── Write ZIP ─────────────────────────────────────────────────────────────
 
     let zip_file = std::fs::File::create(&out_path)?;
@@ -392,6 +418,7 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
     let entries: &[(&str, &[u8])] = &[
         ("manifest.json", manifest.as_bytes()),
         ("debug.log", &debug_log),
+        ("debug-prev.log", &debug_log_prev),
         ("install.log", &install_log),
         ("settings.json", settings_json.as_bytes()),
         ("sidecar-log.txt", &sidecar_log),
@@ -400,6 +427,7 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         ("hardware.json", hardware_json.as_bytes()),
         ("environment.txt", env_txt.as_bytes()),
         ("sysinfo.json", sysinfo_json.as_bytes()),
+        ("event-log.txt", event_log_txt.as_bytes()),
     ];
 
     for (name, data) in entries {

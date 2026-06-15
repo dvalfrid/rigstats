@@ -379,7 +379,9 @@ pub fn show(
                 main_ctx.request_repaint_of(egui::ViewportId::ROOT);
             }
             (Err(e), _) | (Ok(()), Err(e)) => {
-                st.error = Some(format!("Save failed: {e}"));
+                let msg = format!("Save failed: {e}");
+                debug::append_debug_log(dir.as_ref(), &format!("settings: {msg}"));
+                st.error = Some(msg);
             }
         }
     }

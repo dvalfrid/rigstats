@@ -38,11 +38,19 @@ pub fn debug_log_path(dir: &Path) -> PathBuf {
   dir.join("rigstats-debug.log")
 }
 
-/// Truncates the debug log at startup so each session starts with a clean file.
+/// Rotates the debug log at startup so crash data from the previous session is preserved.
+///
+/// The existing `rigstats-debug.log` is renamed to `rigstats-debug-prev.log` before
+/// a fresh log is created, so a crash in the previous run does not wipe its own evidence.
 pub fn reset_debug_log(dir: &Path) {
   let path = debug_log_path(dir);
+  let prev_path = dir.join("rigstats-debug-prev.log");
   if let Some(parent) = path.parent() {
     let _ = create_dir_all(parent);
+  }
+  // Rename current log to prev (silently ignore if it doesn't exist yet).
+  if path.exists() {
+    let _ = std::fs::rename(&path, &prev_path);
   }
   let _ = OpenOptions::new().create(true).write(true).truncate(true).open(path);
 }

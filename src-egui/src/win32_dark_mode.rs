@@ -10,9 +10,10 @@
 //! dialog window after finding its HWND so that the title bar matches the dark
 //! dialog content even when the OS system theme is set to light mode.
 //!
-//! `is_system_dark_mode` queries uxtheme.dll ordinal 132 (`ShouldSystemUseDarkMode`)
-//! to detect the current OS light/dark preference.  Returns `true` for dark, `false`
-//! for light.  Fallback is `true` when the ordinal is unavailable.
+//! `is_system_dark_mode` reads `AppsUseLightTheme` from the current user's HKCU
+//! registry key — the authoritative per-user dark/light setting on Windows 10/11,
+//! correctly handled for child/standard accounts.  Falls back to uxtheme.dll ordinal
+//! 132 (`ShouldSystemUseDarkMode`) if the registry key is absent.
 
 #![allow(unsafe_code)]
 
@@ -44,11 +45,23 @@ pub fn enable() {
     unsafe { FreeLibrary(lib) };
 }
 
-/// Returns `true` if the OS system theme is dark, `false` if light.
-/// Queries uxtheme.dll ordinal 132 (`ShouldSystemUseDarkMode`).
-/// Fallback is `true` (dark) when the ordinal is unavailable.
-/// LoadLibrary is cached by the OS loader so calling this once per second is fine.
+/// Returns `true` if the current user's OS theme is dark, `false` if light.
+///
+/// Reads `HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize\AppsUseLightTheme`
+/// first — this is the authoritative per-user registry value (0 = dark, 1 = light).
+/// Falls back to uxtheme.dll ordinal 132 (`ShouldSystemUseDarkMode`) if the key is
+/// absent, and ultimately returns `true` (dark) if neither source is available.
+///
+/// The registry path is correct for all Windows 10/11 accounts including child/standard
+/// users where the uxtheme ordinal may reflect the system default rather than the
+/// individual user's preference.
 pub fn is_system_dark_mode() -> bool {
+    // ── 1. Per-user registry (most reliable) ─────────────────────────────────
+    if let Some(v) = read_apps_use_light_theme_hkcu() {
+        return v == 0; // 0 = dark, 1 = light
+    }
+
+    // ── 2. Fallback: uxtheme.dll ordinal 132 ─────────────────────────────────
     let lib_name = b"uxtheme.dll\0";
     let lib = unsafe { LoadLibraryA(lib_name.as_ptr().cast()) };
     if lib.is_null() {
@@ -66,6 +79,47 @@ pub fn is_system_dark_mode() -> bool {
     };
     unsafe { FreeLibrary(lib) };
     result
+}
+
+/// Read `AppsUseLightTheme` DWORD from HKCU Personalize key.
+/// Returns `Some(0)` for dark, `Some(1)` for light, `None` if absent or unreadable.
+fn read_apps_use_light_theme_hkcu() -> Option<u32> {
+    use winapi::shared::winerror::ERROR_SUCCESS;
+    use winapi::um::winnt::{KEY_READ, REG_DWORD};
+    use winapi::um::winreg::{RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY_CURRENT_USER};
+
+    let subkey: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize\0"
+        .encode_utf16()
+        .collect();
+    let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
+
+    let mut hkey = std::ptr::null_mut();
+    let open_res =
+        unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut hkey) };
+    if open_res as u32 != ERROR_SUCCESS {
+        return None;
+    }
+
+    let mut data: u32 = 0;
+    let mut data_size = std::mem::size_of::<u32>() as u32;
+    let mut reg_type: u32 = 0;
+    let query_res = unsafe {
+        RegQueryValueExW(
+            hkey,
+            value_name.as_ptr(),
+            std::ptr::null_mut(),
+            &mut reg_type,
+            &mut data as *mut u32 as *mut u8,
+            &mut data_size,
+        )
+    };
+    unsafe { RegCloseKey(hkey) };
+
+    if query_res as u32 == ERROR_SUCCESS && reg_type == REG_DWORD {
+        Some(data)
+    } else {
+        None
+    }
 }
 
 /// Set the DWM title bar theme for the given HWND.

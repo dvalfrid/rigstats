@@ -1385,6 +1385,8 @@ impl eframe::App for RigStatsApp {
                             &self.app_theme,
                             self.thresholds.gpu.0,
                             self.thresholds.gpu.1,
+                            self.thresholds.gpu_hotspot.0,
+                            self.thresholds.gpu_hotspot.1,
                             sc,
                         )
                         .0
@@ -1782,6 +1784,8 @@ impl RigStatsApp {
                                         &app_theme,
                                         self.thresholds.gpu.0,
                                         self.thresholds.gpu.1,
+                                        self.thresholds.gpu_hotspot.0,
+                                        self.thresholds.gpu_hotspot.1,
                                         scale,
                                     );
                                     new_pref = r.0;
@@ -2429,6 +2433,13 @@ fn main() {
     let dir = app_data_dir();
     debug::reset_debug_log(&dir);
     debug::append_debug_log(&dir, "rigstats starting");
+    debug::append_debug_log(&dir, &format!("settings dir: {}", dir.display()));
+
+    #[cfg(windows)]
+    {
+        let dark = win32_dark_mode::is_system_dark_mode();
+        debug::append_debug_log(&dir, &format!("os_dark_mode: {dark}"));
+    }
 
     let s = settings::load_settings(&dir);
     let visible_panels = s.visible_panels.clone();
@@ -2563,6 +2574,7 @@ fn main() {
                         }
 
                         let cmd = if ev.id == quit_id {
+                            debug::append_debug_log(&dir_tray, "shutdown: clean (tray quit)");
                             std::process::exit(0);
                         } else if ev.id == show_id {
                             Some(TrayCmd::Toggle)
@@ -2740,5 +2752,6 @@ fn main() {
     )
     .expect("eframe");
 
+    debug::append_debug_log(&dir, "shutdown: clean");
     runtime.shutdown_background();
 }
