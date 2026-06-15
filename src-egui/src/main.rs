@@ -89,6 +89,7 @@ pub struct PollStats {
     pub ram_used: u64,
     pub ram_total: u64,
     pub ram_spec: String,
+    pub ram_details: String,
     // Network
     pub net_up_mbps: f64,
     pub net_down_mbps: f64,
@@ -2096,6 +2097,10 @@ async fn poll_loop(
         .await
         .unwrap_or_default();
     debug::append_debug_log(&dir, &format!("hardware: ram_spec={ram_spec}"));
+    let ram_details = tokio::task::spawn_blocking(hardware::detect_ram_details)
+        .await
+        .unwrap_or_default();
+    debug::append_debug_log(&dir, &format!("hardware: ram_details={ram_details}"));
     let disk_model_map: HashMap<String, String> =
         tokio::task::spawn_blocking(hardware::detect_disk_model_map)
             .await
@@ -2349,6 +2354,7 @@ async fn poll_loop(
             ram_used: sys.used_memory(),
             ram_total: sys.total_memory(),
             ram_spec: ram_spec.clone(),
+            ram_details: ram_details.clone(),
             net_up_mbps: best_up,
             net_down_mbps: best_down,
             net_iface: best_iface,
