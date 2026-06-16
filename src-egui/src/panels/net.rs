@@ -199,10 +199,10 @@ pub fn draw(
         // PING LAN + WAN — always visible, dimmed when unavailable
         let lan_s = stats
             .net_ping_ms
-            .map_or("-- ms".to_string(), |p| format!("{p:.1} ms"));
+            .map_or("-- ms".to_string(), |p| format!("{p:.2} ms"));
         let wan_s = stats
             .net_ping_wan_ms
-            .map_or("-- ms".to_string(), |p| format!("{p:.1} ms"));
+            .map_or("-- ms".to_string(), |p| format!("{p:.2} ms"));
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("LAN")

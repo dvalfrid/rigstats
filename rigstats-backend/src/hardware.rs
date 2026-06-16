@@ -848,43 +848,24 @@ pub fn detect_ping_target() -> String {
   }
 }
 
-fn parse_ping_output_ms(output: &str) -> Option<f64> {
-  let mut numbers = Vec::new();
-  let mut current = String::new();
-
-  for ch in output.chars() {
-    if ch.is_ascii_digit() {
-      current.push(ch);
-    } else if !current.is_empty() {
-      if let Ok(v) = current.parse::<f64>() {
-        numbers.push(v);
-      }
-      current.clear();
-    }
-  }
-
-  if !current.is_empty() {
-    if let Ok(v) = current.parse::<f64>() {
-      numbers.push(v);
-    }
-  }
-
-  // Windows ping summary ends with the average latency in ms.
-  numbers.last().copied()
-}
-
-/// Sends a single ICMP ping and returns the round-trip time in milliseconds.
 pub fn sample_ping_ms(target: &str) -> Option<f64> {
-  #[cfg(windows)]
-  {
-    let output = run_hidden_command("ping", &["-n", "1", "-w", "500", target]).ok()?;
-    let text = String::from_utf8_lossy(&output.stdout);
-    parse_ping_output_ms(&text)
-  }
+  use std::io::ErrorKind;
+  use std::net::{TcpStream, ToSocketAddrs};
+  use std::time::{Duration, Instant};
 
-  #[cfg(not(windows))]
-  {
-    None
+  let addr = format!("{target}:80")
+    .to_socket_addrs()
+    .ok()?
+    .next()?;
+
+  let start = Instant::now();
+  let result = TcpStream::connect_timeout(&addr, Duration::from_millis(500));
+  let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+
+  match result {
+    Ok(_) => Some(elapsed),
+    Err(e) if e.kind() == ErrorKind::ConnectionRefused => Some(elapsed),
+    _ => None,
   }
 }
 
@@ -961,7 +942,7 @@ pub fn sample_battery_wmi() -> Option<(u8, bool, Option<u32>, Option<f64>)> {
 
 #[cfg(test)]
 mod cross_platform_tests {
-  use super::{is_placeholder_model_name, normalize_model_name, parse_ping_output_ms};
+  use super::{is_placeholder_model_name, normalize_model_name};
 
   #[test]
   fn normalize_model_name_accepts_real_names() {
@@ -1032,34 +1013,6 @@ mod cross_platform_tests {
     assert!(!is_placeholder_model_name("PRIME B650M-A AX6 II"));
   }
 
-  #[test]
-  fn parse_ping_output_ms_extracts_average_from_windows_output() {
-    let output = "Pinging 1.1.1.1 with 32 bytes of data:\r\n\
-      Reply from 1.1.1.1: bytes=32 time=12ms TTL=57\r\n\
-      Ping statistics for 1.1.1.1:\r\n\
-          Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),\r\n\
-      Approximate round trip times in milli-seconds:\r\n\
-          Minimum = 12ms, Maximum = 12ms, Average = 12ms";
-    assert_eq!(parse_ping_output_ms(output), Some(12.0));
-  }
-
-  #[test]
-  fn parse_ping_output_ms_last_number_is_average() {
-    assert_eq!(
-      parse_ping_output_ms("Minimum = 5ms, Maximum = 15ms, Average = 10ms"),
-      Some(10.0)
-    );
-  }
-
-  #[test]
-  fn parse_ping_output_ms_returns_none_for_empty() {
-    assert_eq!(parse_ping_output_ms(""), None);
-  }
-
-  #[test]
-  fn parse_ping_output_ms_returns_none_for_no_numbers() {
-    assert_eq!(parse_ping_output_ms("Request timed out."), None);
-  }
 }
 
 #[cfg(all(test, windows))]
