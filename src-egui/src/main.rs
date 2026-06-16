@@ -55,6 +55,8 @@ pub struct DriveInfo {
     pub total: u64,
     pub pct: u8,
     pub temp: Option<f64>,
+    pub model: String,
+    pub kind: rigstats_backend::stats::DiskKind,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2072,6 +2074,8 @@ fn poll_stats_to_log_payload(s: &PollStats) -> rigstats_backend::stats::StatsPay
                     used: d.used,
                     pct: d.pct,
                     temp: d.temp,
+                    model: d.model.clone(),
+                    kind: d.kind,
                 })
                 .collect(),
         },
@@ -2126,6 +2130,14 @@ async fn poll_loop(
     debug::append_debug_log(
         &dir,
         &format!("hardware: disk_model_map entries={}", disk_model_map.len()),
+    );
+    let disk_type_map: HashMap<String, rigstats_backend::stats::DiskKind> =
+        tokio::task::spawn_blocking(hardware::detect_disk_type_map)
+            .await
+            .unwrap_or_default();
+    debug::append_debug_log(
+        &dir,
+        &format!("hardware: disk_type_map entries={}", disk_type_map.len()),
     );
     let ping_target = hardware::detect_ping_target();
     debug::append_debug_log(&dir, &format!("hardware: ping_target={ping_target}"));
@@ -2235,6 +2247,8 @@ async fn poll_loop(
                     total,
                     pct,
                     temp: None,
+                    model: String::new(),
+                    kind: rigstats_backend::stats::DiskKind::Unknown,
                 }
             })
             .collect();
@@ -2355,6 +2369,17 @@ async fn poll_loop(
         let lhm_data = lhm::fetch_lhm_pipe(&pipe, pref.as_deref(), &dir).await;
         let lhm_connected = lhm_data.is_some();
         lhm_process::track_lhm_connection_state(&dir, lhm_connected);
+
+        for drive in disk_drives.iter_mut() {
+            let key = drive.fs.trim_end_matches(['\\', '/']).to_string();
+            if let Some(model) = disk_model_map.get(&key) {
+                drive.model = model.clone();
+                drive.kind = disk_type_map
+                    .get(model.as_str())
+                    .copied()
+                    .unwrap_or_default();
+            }
+        }
 
         if let Some(ref lhm) = lhm_data {
             for (i, drive) in disk_drives.iter_mut().enumerate() {

@@ -58,6 +58,16 @@ pub struct NetStats {
   pub ping_ms: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DiskKind {
+  NVMe,
+  Ssd,
+  Hdd,
+  #[default]
+  Unknown,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct DiskDrive {
   pub fs: String,
@@ -66,6 +76,8 @@ pub struct DiskDrive {
   pub pct: u8,
   /// Temperature matched from LHM via disk model name; `None` when unavailable.
   pub temp: Option<f64>,
+  pub model: String,
+  pub kind: DiskKind,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -6,6 +6,7 @@
 //! any COM/WMI failure, keeping the app functional even on locked-down systems.
 
 use crate::debug::run_hidden_command;
+use crate::stats::DiskKind;
 use serde::Deserialize;
 
 // --- WMI row structs -------------------------------------------------------
@@ -1142,7 +1143,7 @@ fn try_disk_model_map_via_wmi() -> Option<std::collections::HashMap<String, Stri
   let conn = wmi::WMIConnection::new(com).ok()?;
 
   let drives: Vec<DiskDriveRow> = conn.raw_query("SELECT DeviceID, Model FROM Win32_DiskDrive").ok()?;
-  let mut disk_id_to_model: std::collections::HashMap<String, String> = drives
+  let disk_id_to_model: std::collections::HashMap<String, String> = drives
     .into_iter()
     .filter_map(|r| Some((r.device_id?.trim().to_string(), r.model?.trim().to_string())))
     .collect();
@@ -1151,6 +1152,8 @@ fn try_disk_model_map_via_wmi() -> Option<std::collections::HashMap<String, Stri
     .raw_query("SELECT Antecedent, Dependent FROM Win32_DiskDriveToDiskPartition")
     .ok()?;
   // partition_id → disk_model
+  // Use .get().cloned() (not .remove()) so drives with multiple partitions
+  // (e.g. EFI + Recovery + C:) all get the model, not just the first partition.
   let mut part_to_model: std::collections::HashMap<String, String> = disk_to_part
     .into_iter()
     .filter_map(|r| {
@@ -1158,7 +1161,7 @@ fn try_disk_model_map_via_wmi() -> Option<std::collections::HashMap<String, Stri
       let part_path = r.dependent?;
       let disk_id = extract_device_id(&disk_path)?;
       let part_id = extract_device_id(&part_path)?;
-      let model = disk_id_to_model.remove(&disk_id)?;
+      let model = disk_id_to_model.get(&disk_id)?.clone();
       Some((part_id, model))
     })
     .collect();
@@ -1226,6 +1229,121 @@ fn try_disk_model_map_via_shell() -> Option<std::collections::HashMap<String, St
     entries
       .into_iter()
       .map(|e| (e.letter.trim().to_string(), e.model.trim().to_string()))
+      .collect(),
+  )
+}
+
+/// Returns a map from physical disk model name to `DiskKind` (NVMe / SSD / HDD).
+/// Keyed by the same model string that `detect_disk_model_map` stores as values,
+/// so callers can join the two maps: drive-letter → model → kind.
+pub fn detect_disk_type_map() -> std::collections::HashMap<String, DiskKind> {
+  #[cfg(windows)]
+  {
+    if let Some(map) = try_disk_type_map_via_wmi() {
+      if !map.is_empty() {
+        return map;
+      }
+    }
+    try_disk_type_map_via_shell().unwrap_or_default()
+  }
+  #[cfg(not(windows))]
+  {
+    std::collections::HashMap::new()
+  }
+}
+
+#[cfg(windows)]
+fn classify_disk(bus_type: Option<u16>, media_type: Option<u16>) -> DiskKind {
+  match bus_type {
+    Some(17) => DiskKind::NVMe, // MSFT_PhysicalDisk BusType 17 = NVMe
+    _ => match media_type {
+      Some(4) => DiskKind::Ssd, // MediaType 4 = SSD
+      Some(3) => DiskKind::Hdd, // MediaType 3 = HDD
+      _ => DiskKind::Unknown,
+    },
+  }
+}
+
+#[cfg(windows)]
+fn try_disk_type_map_via_wmi() -> Option<std::collections::HashMap<String, DiskKind>> {
+  use serde::Deserialize;
+
+  #[derive(Deserialize)]
+  struct PhysicalDiskRow {
+    #[serde(rename = "FriendlyName")]
+    friendly_name: Option<String>,
+    #[serde(rename = "MediaType")]
+    media_type: Option<u16>,
+    #[serde(rename = "BusType")]
+    bus_type: Option<u16>,
+  }
+
+  let com = wmi::COMLibrary::new().ok()?;
+  let conn =
+    wmi::WMIConnection::with_namespace_path("ROOT\\microsoft\\windows\\storage", com).ok()?;
+  let disks: Vec<PhysicalDiskRow> = conn
+    .raw_query("SELECT FriendlyName, MediaType, BusType FROM MSFT_PhysicalDisk")
+    .ok()?;
+
+  Some(
+    disks
+      .into_iter()
+      .filter_map(|d| {
+        Some((
+          d.friendly_name?.trim().to_string(),
+          classify_disk(d.bus_type, d.media_type),
+        ))
+      })
+      .collect(),
+  )
+}
+
+#[cfg(windows)]
+fn try_disk_type_map_via_shell() -> Option<std::collections::HashMap<String, DiskKind>> {
+  #[derive(serde::Deserialize)]
+  struct Entry {
+    #[serde(rename = "FriendlyName")]
+    name: Option<String>,
+    #[serde(rename = "MediaType")]
+    media_type: Option<String>,
+    #[serde(rename = "BusType")]
+    bus_type: Option<String>,
+  }
+
+  let output = run_hidden_command(
+    "powershell",
+    &[
+      "-NoProfile",
+      "-Command",
+      "@(Get-PhysicalDisk|Select-Object FriendlyName,MediaType,BusType)|ConvertTo-Json -Compress",
+    ],
+  )
+  .ok()?;
+
+  if !output.status.success() {
+    return None;
+  }
+
+  let text = String::from_utf8_lossy(&output.stdout);
+  let trimmed = text.trim();
+  if trimmed.is_empty() || trimmed == "null" {
+    return None;
+  }
+
+  let entries: Vec<Entry> = serde_json::from_str(trimmed).ok()?;
+  Some(
+    entries
+      .into_iter()
+      .filter_map(|e| {
+        let name = e.name?.trim().to_string();
+        let kind = match (e.bus_type.as_deref(), e.media_type.as_deref()) {
+          (Some("NVMe"), _) => DiskKind::NVMe,
+          (_, Some("SSD")) => DiskKind::Ssd,
+          (_, Some("HDD")) => DiskKind::Hdd,
+          _ => DiskKind::Unknown,
+        };
+        Some((name, kind))
+      })
       .collect(),
   )
 }
