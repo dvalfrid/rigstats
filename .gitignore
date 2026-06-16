@@ -1,5 +1,8 @@
-# Claude Code local settings (machine-specific)
-.claude/
+# Claude Code local settings (machine-specific — settings.json contains hardcoded paths)
+# Use .claude/* (not .claude/) so the skills/ subdir can be un-excluded
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 
 node_modules/
 website/images/
