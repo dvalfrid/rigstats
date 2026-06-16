@@ -87,7 +87,7 @@ pub fn append_stats_row(payload: &StatsPayload, dir: &Path) -> std::io::Result<(
 }
 
 /// Deletes log files in `dir` older than `days` days, based on modification time.
-/// Silently ignores entries it cannot stat or delete.
+/// Silently ignores entries it cannot stat; logs entries it fails to delete.
 /// Silently returns if `dir` does not exist.
 pub fn prune_old_logs(dir: &Path, days: u32) {
   let now_secs = unix_now_secs();
@@ -109,7 +109,12 @@ pub fn prune_old_logs(dir: &Path, days: u32) {
       if let Ok(mtime) = meta.modified() {
         let mtime_secs = mtime.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
         if now_secs.saturating_sub(mtime_secs) > cutoff_secs {
-          let _ = fs::remove_file(&path);
+          if let Err(e) = fs::remove_file(&path) {
+            crate::debug::log_warn(
+              dir,
+              &format!("logging: failed to prune {} — {e}", path.display()),
+            );
+          }
         }
       }
     }

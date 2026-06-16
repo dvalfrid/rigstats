@@ -1756,9 +1756,24 @@ impl SidecarPayload {
   }
 }
 
-/// Unix timestamp of the last "pipe connect failed" log message.
+/// Unix timestamp of the last pipe-trouble log message.
 /// Throttles to one entry per 30-second window so the log stays readable.
 static LAST_PIPE_FAIL_LOG_SECS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Logs a pipe-trouble message at most once per 30-second window. Connect
+/// failures and established-connection read errors/timeouts share this window,
+/// so a persistently broken pipe (e.g. a hung sidecar holding the pipe open)
+/// writes at most one debug line per 30 s instead of one every tick.
+fn log_pipe_trouble_throttled(dir: &std::path::Path, msg: &str) {
+  use crate::debug::{log_warn, unix_now_secs};
+  use std::sync::atomic::Ordering;
+  let now = unix_now_secs();
+  let last = LAST_PIPE_FAIL_LOG_SECS.load(Ordering::Relaxed);
+  if now.saturating_sub(last) >= 30 {
+    LAST_PIPE_FAIL_LOG_SECS.store(now, Ordering::Relaxed);
+    log_warn(dir, msg);
+  }
+}
 
 /// Persistent pipe reader stored in `AppState`.
 pub type LhmPipeReader = tokio::io::BufReader<tokio::net::windows::named_pipe::NamedPipeClient>;
@@ -1778,7 +1793,7 @@ pub async fn fetch_lhm_pipe(
   preferred_gpu: Option<&str>,
   dir: &std::path::Path,
 ) -> Option<LhmData> {
-  use crate::debug::append_debug_log;
+  use crate::debug::{append_debug_log, log_error, log_warn};
   use tokio::io::AsyncBufReadExt;
 
   let mut guard = pipe.lock().await;
@@ -1790,7 +1805,7 @@ pub async fn fetch_lhm_pipe(
     match res {
       Ok(Ok(n)) if n > 0 => {
         if line.len() > MAX_PIPE_LINE_BYTES {
-          append_debug_log(
+          log_warn(
             dir,
             &format!(
               "pipe: oversized frame ({} bytes, cap {MAX_PIPE_LINE_BYTES}) — dropping connection to resync",
@@ -1804,17 +1819,17 @@ pub async fn fetch_lhm_pipe(
           Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
           Err(e) => {
             let preview = line.trim().chars().take(120).collect::<String>();
-            append_debug_log(dir, &format!("pipe: JSON parse error: {e} — raw: {preview}"));
+            log_error(dir, &format!("pipe: JSON parse error: {e} — raw: {preview}"));
             None
           }
         };
       }
       Ok(Err(e)) => {
-        append_debug_log(dir, &format!("pipe: read error (established): {e}"));
+        log_pipe_trouble_throttled(dir, &format!("pipe: read error (established): {e}"));
         *guard = None;
       }
       Err(_) => {
-        append_debug_log(dir, "pipe: read timed out (established connection)");
+        log_pipe_trouble_throttled(dir, "pipe: read timed out (established connection)");
         *guard = None;
       }
       Ok(Ok(_)) => {
@@ -1834,14 +1849,7 @@ pub async fn fetch_lhm_pipe(
   {
     Ok(c) => c,
     Err(e) => {
-      use crate::debug::unix_now_secs;
-      use std::sync::atomic::Ordering;
-      let now = unix_now_secs();
-      let last = LAST_PIPE_FAIL_LOG_SECS.load(Ordering::Relaxed);
-      if now.saturating_sub(last) >= 30 {
-        LAST_PIPE_FAIL_LOG_SECS.store(now, Ordering::Relaxed);
-        append_debug_log(dir, &format!("pipe: connect failed: {e} (os={:?})", e.raw_os_error()));
-      }
+      log_pipe_trouble_throttled(dir, &format!("pipe: connect failed: {e} (os={:?})", e.raw_os_error()));
       return None;
     }
   };
@@ -1854,7 +1862,7 @@ pub async fn fetch_lhm_pipe(
   match res {
     Ok(Ok(n)) if n > 0 => {
       if line.len() > MAX_PIPE_LINE_BYTES {
-        append_debug_log(
+        log_warn(
           dir,
           &format!(
             "pipe: oversized frame ({} bytes, cap {MAX_PIPE_LINE_BYTES}) on first read — discarding connection",
@@ -1867,7 +1875,7 @@ pub async fn fetch_lhm_pipe(
         Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
         Err(e) => {
           let preview = line.trim().chars().take(120).collect::<String>();
-          append_debug_log(
+          log_error(
             dir,
             &format!("pipe: JSON parse error (first read): {e} — raw: {preview}"),
           );
@@ -1879,11 +1887,11 @@ pub async fn fetch_lhm_pipe(
       data
     }
     Ok(Err(e)) => {
-      append_debug_log(dir, &format!("pipe: read error (first connect): {e}"));
+      log_warn(dir, &format!("pipe: read error (first connect): {e}"));
       None
     }
     Err(_) => {
-      append_debug_log(dir, "pipe: timed out waiting for first line after connect");
+      log_warn(dir, "pipe: timed out waiting for first line after connect");
       None
     }
     Ok(Ok(_)) => None, // n == 0: EOF immediately after connect

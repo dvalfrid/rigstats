@@ -32,6 +32,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
+| Test coverage — sidecar + sensor extraction | 🔲 Planned |
 
 ---
 
@@ -1010,5 +1011,36 @@ The effort is significant (estimated 1–2 weeks of Win32 graphics work) and car
 - **Baseline measurement first** — record CPU % for the WebView2 process at idle vs. during a stats tick; target < 1 % on a modern CPU as the acceptance criterion before and after any change.
 
 **Goal:** Identify where UI overhead actually lives and find the highest-impact, lowest-effort fix — likely dirty-checking before DOM writes rather than a full architectural rewrite.
+
+---
+
+## Test coverage — sidecar + sensor extraction 🔲
+
+**Background:** A production-readiness audit (2026-06) found the Rust pure-logic
+layer well covered (semver, colour math, sparkline, `parse_lhm`, GPU selection,
+brand classification, settings migration). Two gaps remain where bugs would be
+silent — wrong sensor readings rather than crashes — and are currently caught
+only by manual inspection.
+
+**What to add:**
+
+- **Sensor sidecar (`sensor-sidecar/`, .NET) has zero tests.** It is a black box
+  for all CPU/GPU/motherboard metrics: named-pipe framing, JSON serialization,
+  and the LibreHardwareMonitor sensor mapping are untested. Stand up a test
+  project (xUnit) covering payload serialization and the sensor-selection logic,
+  and wire it into `cargo xtask verify`.
+- **`extract_*` functions in `rigstats-backend/src/lhm.rs` are only tested
+  indirectly via `parse_lhm`.** Add direct unit tests for the filtering edge
+  cases that silently drop or mis-pair data:
+  - `extract_motherboard` — 0-RPM fan exclusion, the `< 5 °C` sentinel filter,
+    and the "… VID" voltage exclusion.
+  - `extract_network` — mismatched upload/download index counts.
+  - `extract_disk_temps` — malformed `SensorId`, "Warning/Critical Composite"
+    exclusion, and implausible-reading handling.
+  - `extract_ram_temp` — the DIMM `/temperature/0` index assumption.
+
+**Goal:** Move the sensor data path from "covered by integration tests and manual
+inspection" to "each filtering rule has a dedicated regression test," and remove
+the sidecar's status as the one fully untested component.
 
 ---

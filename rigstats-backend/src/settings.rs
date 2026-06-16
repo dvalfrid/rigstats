@@ -274,13 +274,13 @@ pub fn load_settings(dir: &Path) -> Settings {
     Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
       Ok(s) => s,
       Err(e) => {
-        crate::debug::append_debug_log(dir, &format!("settings: parse error — {e}, using defaults"));
+        crate::debug::log_error(dir, &format!("settings: parse error — {e}, using defaults"));
         Settings::default()
       }
     },
     Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
     Err(e) => {
-      crate::debug::append_debug_log(dir, &format!("settings: read error — {e}, using defaults"));
+      crate::debug::log_error(dir, &format!("settings: read error — {e}, using defaults"));
       Settings::default()
     }
   };
@@ -301,8 +301,11 @@ pub fn load_settings(dir: &Path) -> Settings {
     settings.settings_version = 1;
     // Persist immediately so the migration is not repeated on the next launch.
     // Failures are non-fatal: the migrated settings are held in memory and
-    // will be written again the next time the user saves settings.
-    let _ = persist_settings(dir, &settings);
+    // will be written again the next time the user saves settings — but log it
+    // so a recurring migration (e.g. a read-only appdata dir) is diagnosable.
+    if let Err(e) = persist_settings(dir, &settings) {
+      crate::debug::log_error(dir, &format!("settings: migration persist failed — {e}"));
+    }
   }
 
   settings
@@ -399,5 +402,68 @@ mod tests {
     let pwr = t.get("battery_power").expect("battery_power key missing");
     assert_eq!(pwr.warn, Some(15), "battery_power warn should be 15 W");
     assert_eq!(pwr.crit, Some(25), "battery_power crit should be 25 W");
+  }
+
+  /// A v0 settings file as it would deserialize: empty `thresholds` map, the
+  /// legacy flat fields read from disk, version still 0.
+  fn v0_settings() -> super::Settings {
+    let mut s = super::Settings::default();
+    s.thresholds.clear();
+    s.settings_version = 0;
+    s
+  }
+
+  #[test]
+  fn migrate_preserves_user_values_when_any_flat_field_is_set() {
+    let mut s = v0_settings();
+    s.warning_cpu_temp = Some(72);
+    // critical_cpu_temp and every other flat field stay None.
+    super::migrate_v0_thresholds(&mut s);
+
+    let cpu = s.thresholds.get("cpu").expect("cpu key");
+    assert_eq!(cpu.warn, Some(72), "user warn value must survive migration");
+    assert_eq!(cpu.crit, None, "unset flat field maps to None, not a default");
+
+    // The other components are still inserted, with their (None) flat values —
+    // defaults are NOT injected once any field was configured.
+    let gpu = s.thresholds.get("gpu").expect("gpu key");
+    assert_eq!(gpu.warn, None);
+    assert_eq!(gpu.crit, None);
+  }
+
+  #[test]
+  fn migrate_applies_defaults_when_all_flat_fields_are_none() {
+    let mut s = v0_settings();
+    super::migrate_v0_thresholds(&mut s);
+    let defaults = super::default_thresholds();
+    assert_eq!(
+      s.thresholds.get("cpu"),
+      defaults.get("cpu"),
+      "unconfigured v0 install must inherit default cpu thresholds"
+    );
+    assert_eq!(s.thresholds.get("battery"), defaults.get("battery"));
+  }
+
+  #[test]
+  fn load_settings_bumps_version_and_does_not_re_migrate() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = super::settings_path(dir.path());
+    // A minimal v0 file: version 0 plus one legacy flat field.
+    // Settings uses #[serde(rename_all = "camelCase")], so keys are camelCase.
+    std::fs::write(&path, r#"{"settingsVersion":0,"warningCpuTemp":81}"#).unwrap();
+
+    let first = super::load_settings(dir.path());
+    assert_eq!(first.settings_version, 1, "migration must bump version to 1");
+    assert_eq!(
+      first.thresholds.get("cpu").and_then(|t| t.warn),
+      Some(81),
+      "flat value must be copied into the thresholds map"
+    );
+
+    // The migration must have been persisted, so a second load sees version 1
+    // and the same value without re-running the migration.
+    let second = super::load_settings(dir.path());
+    assert_eq!(second.settings_version, 1);
+    assert_eq!(second.thresholds.get("cpu").and_then(|t| t.warn), Some(81));
   }
 }

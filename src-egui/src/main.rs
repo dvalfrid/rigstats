@@ -1979,7 +1979,7 @@ impl RigStatsApp {
     /// which should never pass unnoticed.
     fn persist_settings_logged(&self, s: &settings::Settings) {
         if let Err(e) = settings::persist_settings(&self.dir, s) {
-            debug::append_debug_log(&self.dir, &format!("settings: persist failed — {e}"));
+            debug::log_error(&self.dir, &format!("settings: persist failed — {e}"));
         }
     }
 
@@ -2118,16 +2118,16 @@ async fn poll_loop(
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
         .unwrap_or_default();
-    debug::append_debug_log(&dir, &format!("hardware: ram_spec={ram_spec}"));
+    debug::log_debug(&dir, &format!("hardware: ram_spec={ram_spec}"));
     let ram_details = tokio::task::spawn_blocking(hardware::detect_ram_details)
         .await
         .unwrap_or_default();
-    debug::append_debug_log(&dir, &format!("hardware: ram_details={ram_details}"));
+    debug::log_debug(&dir, &format!("hardware: ram_details={ram_details}"));
     let disk_model_map: HashMap<String, String> =
         tokio::task::spawn_blocking(hardware::detect_disk_model_map)
             .await
             .unwrap_or_default();
-    debug::append_debug_log(
+    debug::log_debug(
         &dir,
         &format!("hardware: disk_model_map entries={}", disk_model_map.len()),
     );
@@ -2135,33 +2135,33 @@ async fn poll_loop(
         tokio::task::spawn_blocking(hardware::detect_disk_type_map)
             .await
             .unwrap_or_default();
-    debug::append_debug_log(
+    debug::log_debug(
         &dir,
         &format!("hardware: disk_type_map entries={}", disk_type_map.len()),
     );
     let ping_target = hardware::detect_ping_target();
-    debug::append_debug_log(&dir, &format!("hardware: ping_target={ping_target}"));
+    debug::log_debug(&dir, &format!("hardware: ping_target={ping_target}"));
     let mb_board: Option<String> = tokio::task::spawn_blocking(hardware::detect_motherboard_name)
         .await
         .ok()
         .flatten();
-    debug::append_debug_log(&dir, &format!("hardware: mb_board={mb_board:?}"));
+    debug::log_debug(&dir, &format!("hardware: mb_board={mb_board:?}"));
     let model_name: String = tokio::task::spawn_blocking(hardware::detect_model_name)
         .await
         .ok()
         .flatten()
         .unwrap_or_default();
-    debug::append_debug_log(&dir, &format!("hardware: model_name={model_name}"));
+    debug::log_debug(&dir, &format!("hardware: model_name={model_name}"));
     let system_brand: String = tokio::task::spawn_blocking(hardware::detect_system_brand)
         .await
         .unwrap_or_default();
-    debug::append_debug_log(&dir, &format!("hardware: system_brand={system_brand}"));
+    debug::log_debug(&dir, &format!("hardware: system_brand={system_brand}"));
     let gpu_name: String = tokio::task::spawn_blocking(hardware::detect_gpu_name)
         .await
         .ok()
         .flatten()
         .unwrap_or_default();
-    debug::append_debug_log(&dir, &format!("hardware: gpu_name={gpu_name}"));
+    debug::log_debug(&dir, &format!("hardware: gpu_name={gpu_name}"));
 
     let mut sys = System::new();
     sys.refresh_cpu();
@@ -2171,8 +2171,8 @@ async fn poll_loop(
         .map(|c| c.brand().to_string())
         .unwrap_or_default();
     let hostname = System::host_name().unwrap_or_else(|| "—".to_string());
-    debug::append_debug_log(&dir, &format!("hardware: cpu_model={cpu_model}"));
-    debug::append_debug_log(&dir, &format!("hardware: hostname={hostname}"));
+    debug::log_debug(&dir, &format!("hardware: cpu_model={cpu_model}"));
+    debug::log_debug(&dir, &format!("hardware: hostname={hostname}"));
 
     let mut disks = Disks::new_with_refreshed_list();
     let mut networks = Networks::new_with_refreshed_list();
@@ -2332,7 +2332,7 @@ async fn poll_loop(
                 let result = match tokio::task::spawn_blocking(hardware::sample_battery_wmi).await {
                     Ok(result) => result,
                     Err(err) => {
-                        debug::append_debug_log(
+                        debug::log_warn(
                             &dir,
                             &format!("battery: sample_battery_wmi join error: {err}"),
                         );
@@ -2341,11 +2341,11 @@ async fn poll_loop(
                 };
                 if result.is_none() {
                     match tokio::task::spawn_blocking(hardware::probe_wmi_status).await {
-                        Ok(Err(err)) => debug::append_debug_log(
+                        Ok(Err(err)) => debug::log_warn(
                             &dir,
                             &format!("battery: WMI probe failed after battery read miss: {err}"),
                         ),
-                        Err(err) => debug::append_debug_log(
+                        Err(err) => debug::log_warn(
                             &dir,
                             &format!("battery: probe_wmi_status join error: {err}"),
                         ),
@@ -2476,7 +2476,7 @@ async fn poll_loop(
         if log_enabled {
             let payload = poll_stats_to_log_payload(&stats);
             if let Err(e) = logging::append_stats_row(&payload, &dir) {
-                debug::append_debug_log(&dir, &format!("logging: csv write error — {e}"));
+                debug::log_error(&dir, &format!("logging: csv write error — {e}"));
             }
             let today = logging::unix_now_secs() / 86400;
             if last_prune_day != Some(today) {
@@ -2504,7 +2504,7 @@ fn main() {
     #[cfg(windows)]
     {
         let dark = win32_dark_mode::is_system_dark_mode();
-        debug::append_debug_log(&dir, &format!("os_dark_mode: {dark}"));
+        debug::log_debug(&dir, &format!("os_dark_mode: {dark}"));
     }
 
     let s = settings::load_settings(&dir);
@@ -2514,7 +2514,7 @@ fn main() {
     let [win_w, _] = profile_to_size(&s.dashboard_profile);
     let win_h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
     let [pos_x, pos_y] = pick_window_position();
-    debug::append_debug_log(
+    debug::log_debug(
         &dir,
         &format!(
             "settings: profile={} panels={} opacity={opacity:.2} floating_mode={}",
@@ -2523,7 +2523,7 @@ fn main() {
             s.floating_mode
         ),
     );
-    debug::append_debug_log(
+    debug::log_debug(
         &dir,
         &format!("window: initial_position=({pos_x:.1}, {pos_y:.1})"),
     );
@@ -2669,7 +2669,7 @@ fn main() {
                     }
                 }));
                 if outcome.is_err() {
-                    debug::append_debug_log(
+                    debug::log_warn(
                         &dir_tray,
                         "tray: event handler panicked — thread recovered, continuing",
                     );
@@ -2776,7 +2776,7 @@ fn main() {
                             }
                             Ok(update_check::CheckResult::UpToDate) => {}
                             Err(e) => {
-                                debug::append_debug_log(
+                                debug::log_warn(
                                     &dir_upd,
                                     &format!("update-check: background check failed — {e}"),
                                 );

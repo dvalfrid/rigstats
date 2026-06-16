@@ -3,7 +3,7 @@
 //! Tracks whether the named pipe delivers data each stats tick
 //! and logs connect/disconnect transitions (throttled to once per 30 s).
 
-use crate::debug::{append_debug_log, unix_now_secs};
+use crate::debug::{append_debug_log, log_warn, unix_now_secs};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -20,14 +20,14 @@ pub fn track_lhm_connection_state(dir: &Path, connected: bool) {
   } else {
     let was_connected = LHM_WAS_CONNECTED.swap(false, Ordering::Relaxed);
     if was_connected {
-      append_debug_log(dir, "sidecar pipe connection lost");
+      log_warn(dir, "sidecar pipe connection lost");
     }
 
     let now = unix_now_secs();
     let last = LAST_LHM_OFFLINE_LOG_SECS.load(Ordering::Relaxed);
     if now.saturating_sub(last) >= 30 {
       LAST_LHM_OFFLINE_LOG_SECS.store(now, Ordering::Relaxed);
-      append_debug_log(dir, "sidecar pipe still offline");
+      log_warn(dir, "sidecar pipe still offline");
     }
   }
 }

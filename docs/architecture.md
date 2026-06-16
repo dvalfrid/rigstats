@@ -363,10 +363,11 @@ in sync with Windows Settings → Apps → Startup.
 
 #### `debug.rs`
 
-`append_debug_log`, `reset_debug_log`, `run_hidden_command`, `unix_now_secs`.
+`append_debug_log` (INFO) and the `log_debug` / `log_warn` / `log_error` level
+variants (all via `append_debug_log_lvl` + the `LogLevel` enum), `reset_debug_log`,
+`run_hidden_command`, `unix_now_secs`. Log lines are formatted as
+`[YYYY-MM-DD HH:MM:SS] [LEVEL] message` using local time (`chrono`).
 No dependencies on other crate modules — safe to import from anywhere.
-
----
 
 ---
 
@@ -383,9 +384,10 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `disk` | Storage | ✓ | sidecar · sysinfo |
 | `motherboard` | Motherboard | opt-in | sidecar · WMI |
 | `process` | Processes | opt-in | sysinfo |
+| `battery` | Battery | opt-in | sidecar · WMI |
 
 Panel visibility and order are saved in `Settings.visible_panels` and
-validated by `normalize_visible_panels` on both frontend and backend.
+validated by `normalize_visible_panels` in the backend.
 
 ---
 

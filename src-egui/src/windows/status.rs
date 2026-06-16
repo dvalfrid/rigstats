@@ -488,7 +488,7 @@ pub fn collect_and_open_diagnostics(dir: &Path) {
             dir,
             &format!("status: diagnostics collected at {}", path.display()),
         ),
-        Err(err) => debug::append_debug_log(
+        Err(err) => debug::log_error(
             dir,
             &format!("status: diagnostics collection failed: {err}"),
         ),

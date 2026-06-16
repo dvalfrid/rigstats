@@ -3359,6 +3359,7 @@ dependencies = [
 name = "rigstats-backend"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "hostname",
  "serde",
  "serde_json",
