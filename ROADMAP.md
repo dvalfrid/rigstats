@@ -33,6 +33,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
 | Test coverage — sidecar + sensor extraction | 🔲 Planned |
+| Remove Node.js / npm infrastructure | ✅ Done |
 
 ---
 
@@ -854,38 +855,13 @@ Next polish pass after v1.27.0 is confirmed stable.
 
 ---
 
-## Remove Node.js / npm infrastructure 🔲
+## Remove Node.js / npm infrastructure ✅
 
-**Background:** Node.js was introduced for the Tauri build pipeline and JS
-frontend. Since the egui migration (v1.27.0), the app is pure Rust at runtime.
-The `frontend/renderer/` JS files are legacy code that is never loaded by the
-egui binary.
-
-Node.js is currently kept for three reasons:
-
-1. **vitest** — unit tests for logic helpers in `frontend/renderer/` (tempColors,
-   vendorBranding, panel formatters). Most of this logic now has Rust equivalents
-   with their own tests; `vendorBranding.js` is the only file with non-duplicated
-   test coverage.
-2. **ESLint** — lints JS files that are not used at runtime.
-3. **markdownlint-cli2** and **lefthook** — tooling that could be replaced with
-   Rust-native alternatives or removed.
-
-### What needs to happen
-
-- Port `vendorBranding.js` brand-key mapping to Rust (or remove it if the
-  `brand.rs` logo loader already covers the same logic) and add Rust tests.
-- Delete `frontend/renderer/` entirely, or keep only non-JS assets.
-- Remove `package.json`, `node_modules`, `vitest.config.js`, `.eslintrc.*`,
-  `lefthook.yml`.
-- Rewrite `.github/workflows/verify.yml` and `build.yml` to use `cargo` and
-  `dotnet` directly instead of `npm run verify` / `npm run build`.
-- Update `CLAUDE.md`, `STANDARDS.md`, and this file to remove all npm/Node
-  references.
-
-### When to do this
-
-After v1.27.0 is stable in production. Not a blocker for any feature work.
+**Implemented.** All Node.js/npm infrastructure has been removed following the
+egui migration (v1.27.0). `package.json`, `node_modules`, `vitest.config.js`,
+`frontend/renderer/`, ESLint config, and lefthook are gone. The build pipeline
+uses `cargo` and `dotnet` directly. Brand-key logic from `vendorBranding.js` is
+covered by `brand.rs` and its Rust tests.
 
 ---
 
@@ -997,20 +973,9 @@ The effort is significant (estimated 1–2 weeks of Win32 graphics work) and car
 
 ---
 
-## UI performance — lighter rendering strategy 🔲
+## UI performance — lighter rendering strategy ⏭
 
-**Background:** The dashboard updates the DOM every second via vanilla JS. As panel count grows (floating mode, battery, motherboard, process) layout cost increases. It is worth investigating whether a simpler or faster rendering model can reduce CPU and GPU overhead on the UI thread.
-
-**What to investigate:**
-
-- **Dirty-check before DOM writes** — profile with Chrome DevTools to identify panels causing unnecessary reflows; only write to the DOM when a value has actually changed (`textContent` set guarded by a previous-value comparison).
-- **Canvas-based rendering** — replace DOM panels with canvas drawing (already done for sparklines). Gives sub-millisecond updates without layout/paint overhead at the cost of CSS flexibility.
-- **OffscreenCanvas + Worker** — move canvas rendering to a Web Worker to fully offload the main thread.
-- **WebGL / GPU-accelerated rendering** — relevant if animations or richer visuals are added without incurring CPU cost.
-- **Tauri `wry` / WebView2 process overhead** — measure whether the WebView2 process itself is the bottleneck compared to a native Win32 surface with Direct2D.
-- **Baseline measurement first** — record CPU % for the WebView2 process at idle vs. during a stats tick; target < 1 % on a modern CPU as the acceptance criterion before and after any change.
-
-**Goal:** Identify where UI overhead actually lives and find the highest-impact, lowest-effort fix — likely dirty-checking before DOM writes rather than a full architectural rewrite.
+Superseded by the egui migration (v1.27.0). The DOM rendering cost — WebView2 process overhead, layout/paint on every tick — is gone entirely. The egui binary sleeps between repaints and idles at ~0 % CPU.
 
 ---
 
