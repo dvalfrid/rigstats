@@ -174,6 +174,17 @@ Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `mother
 
 `rigstats-sensor.exe` runs as a Windows Service (LocalSystem, auto-start at boot). The NSIS installer registers the service with `sc create`, sets restart-on-failure policy via `sc failure`, and starts it immediately. On update: `sc stop` in PREINSTALL, then `sc delete` + `sc create` + `sc start` in POSTINSTALL. On uninstall: `sc stop` + `sc delete`.
 
+### Installer privilege model (UAC administrator broker)
+
+The installer needs admin for the machine-wide work (PawnIO driver, `rigstats-sensor` service, `Program Files`, `HKLM`), but the GUI app is per-user/unprivileged (settings in `%APPDATA%`, autostart toggle in `HKCU`). To handle "over-the-shoulder" UAC — a standard user (e.g. a child account) launches the installer and a *different* admin (e.g. a parent) approves the prompt — `build/installer.nsi` uses the vendored **UAC plugin** (Anders Kjersem, zlib license, under `build/nsis-plugins/`, referenced via `!addplugindir`):
+
+- `RequestExecutionLevel user` + `UAC_RunElevated` in `.onInit`/`un.onInit`: starts unelevated as the real interactive user, elevates an inner instance for the admin work.
+- `SetShellVarContext all`: shortcuts go to All-Users locations.
+- `UAC_AsUser_ExecShell`: launches `rigstats.exe` (finish-page run **and** `/autoupdate` relaunch) back in the unelevated user's context, preserving `--just-updated=VERSION`. Settings/tray/`HKCU` autostart therefore bind to the correct user, not the elevating admin.
+- Best-effort cleanup removes stale per-user shortcuts from pre-UAC installs across `%SystemDrive%\Users\*`.
+
+Correspondingly `update_check.rs::launch_installer` uses the `open` verb (unelevated), **not** `runas` — the installer's UAC plugin performs elevation internally; using `runas` would leave no unelevated user instance and rebind the relaunch to the admin. A previously broken install self-heals on the next install/update (shortcuts + launch rebind automatically); only cosmetic leftovers in the admin profile are not scrubbed.
+
 The Rust backend connects to `\\.\pipe\rigstats-sensors` with `.write(false)` (pipe is write-only from the server side). On connect failure it falls back to the last successful sample so the UI never resets. GPU selection: preferred GPU (if set) → highest VRAM (stable default) → tie-break by load. Extracted GPU fields: core load, core temp, hotspot temp, core clock (`gpu_freq`), memory clock (`gpu_mem_freq`), power, fan speed, VRAM used/total, D3D 3D engine load (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus `gpu_devices` for selector dots. D3D fields are `None` when idle. When `gpu_d3d_3d` is present the GPU panel shows a two-column bar layout (VRAM|3D, FAN|VDEC); `gpu_d3d_vdec` renders dimmed at 0 % when `None`. Without `gpu_d3d_3d` the panel falls back to full-width VRAM and FAN bars.
 
 ### Settings persistence

@@ -101,8 +101,16 @@ pub fn installer_temp_path(version: &str) -> PathBuf {
     std::env::temp_dir().join(format!("rigstats-update-v{version}.exe"))
 }
 
-/// Launches the downloaded NSIS installer via ShellExecuteW with "runas"
-/// so Windows shows the UAC elevation prompt, and /S for silent install.
+/// Launches the downloaded NSIS installer **unelevated** (as the current
+/// interactive user) with `/autoupdate` for a silent, page-less install.
+///
+/// Elevation is performed *inside* the installer by its bundled UAC plugin
+/// (administrator broker model): the installer spawns an elevated inner process
+/// for the machine-wide work and delegates per-user actions — including the
+/// post-update relaunch of RIGStats — back to this unelevated user context.
+/// Launching with `runas` here would start the whole installer elevated, leaving
+/// no unelevated user instance, so the relaunch would bind to the admin who
+/// approved the UAC prompt instead of the actual user. Hence verb `open`.
 #[allow(unsafe_code)]
 pub fn launch_installer(path: &Path) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
@@ -112,7 +120,7 @@ pub fn launch_installer(path: &Path) -> Result<(), String> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
-    let verb: Vec<u16> = "runas\0".encode_utf16().collect();
+    let verb: Vec<u16> = "open\0".encode_utf16().collect();
     let params: Vec<u16> = "/autoupdate\0".encode_utf16().collect();
 
     let result = unsafe {

@@ -32,6 +32,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
+| Multi-user install (over-the-shoulder UAC) | ✅ Done |
 
 ---
 
@@ -853,7 +854,35 @@ Next polish pass after v1.27.0 is confirmed stable.
 
 ---
 
-## Remove Node.js / npm infrastructure 🔲
+## Multi-user install (over-the-shoulder UAC) ✅
+
+**Problem:** On shared/family PCs a standard user (e.g. a child account) launches
+the installer and a *different* administrator (e.g. a parent) approves the UAC
+prompt. The old per-machine installer (`RequestExecutionLevel admin`) then ran
+entirely in the admin's context, so shortcuts, the first app launch, settings,
+and any autostart entry bound to the admin's profile instead of the user at the
+machine. Confirmed via a field diagnostic (`USERNAME=linda` /
+`settings dir: C:\Users\linda\...` while the machine belonged to `neo`).
+
+**Implementation:** Adopted the NSIS **UAC plugin** (administrator broker model,
+Anders Kjersem, zlib license) vendored under `build/nsis-plugins/`:
+
+- `build/installer.nsi` — `RequestExecutionLevel user`; `UAC_RunElevated` in
+  `.onInit`/`un.onInit` elevates an inner instance for the machine-wide work;
+  `SetShellVarContext all` for All-Users shortcuts; `UAC_AsUser_ExecShell`
+  launches `rigstats.exe` (finish-page run + `/autoupdate` relaunch) as the real
+  user, preserving `--just-updated=VERSION`; best-effort cleanup of stale
+  per-user shortcuts across `%SystemDrive%\Users\*`.
+- `src-egui/src/update_check.rs` — `launch_installer` uses the `open` verb (not
+  `runas`) so the installer starts unelevated and the UAC plugin elevates
+  internally, keeping an unelevated user instance for the post-update relaunch.
+
+A previously broken install self-heals on the next install/update: shortcuts and
+launch rebind to the correct user automatically. Only cosmetic leftovers in the
+admin profile (stale settings folder; an `HKCU\…\Run` entry if autostart was ever
+enabled as the admin) are not scrubbed from other users' registry hives.
+
+---
 
 **Background:** Node.js was introduced for the Tauri build pipeline and JS
 frontend. Since the egui migration (v1.27.0), the app is pure Rust at runtime.

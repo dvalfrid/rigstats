@@ -2,10 +2,15 @@
 ; Produces a per-machine installer that:
 ;   - Installs rigstats.exe + rigstats-sensor.exe + PawnIO driver
 ;   - Registers the sensor service (LocalSystem, auto-start)
-;   - Creates Start Menu shortcut and uninstaller
+;   - Creates All-Users Start Menu shortcut and uninstaller
+;   - Uses the UAC plugin (administrator broker model) so the app is installed
+;     and launched for the real interactive user, not the admin who approved the
+;     UAC prompt (fixes over-the-shoulder elevation binding to the wrong account)
 ;
 ; Build command (from repo root, after cargo build --release):
 ;   makensis /DVERSION=1.25.0 build\installer.nsi
+; The vendored UAC plugin under build\nsis-plugins is referenced via
+; !addplugindir, so no NSIS plugin-dir setup is required (local or CI).
 ;
 ; Required files relative to repo root:
 ;   target\release\rigstats.exe
@@ -30,11 +35,25 @@ Name "RIGStats ${VERSION}"
 OutFile "target\release\RIGStats_${VERSION}_x64-setup.exe"
 InstallDir "$PROGRAMFILES64\RIGStats"
 InstallDirRegKey HKLM "Software\RIGStats" "InstallDir"
-RequestExecutionLevel admin
+
+; ── Over-the-shoulder UAC handling (administrator broker model) ────────────────
+; The installer starts as a *normal user* process and elevates an inner instance
+; only for the machine-wide work (driver, service, Program Files, HKLM). All
+; per-user actions and the final app launch are delegated back to the original
+; unelevated user via the UAC plugin's UAC_AsUser_ExecShell. This guarantees
+; RIGStats is installed/launched for the user actually sitting at the machine,
+; even when a *different* administrator account approves the UAC prompt (e.g. a
+; parent elevating for a child's standard account). See build/nsis-plugins/.
+RequestExecutionLevel user
 
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
+
+; Vendored UAC plugin (zlib license) — pinned under build/nsis-plugins.
+; Paths are relative to the repo root (see !cd .. above).
+!addplugindir "build\nsis-plugins\x86-unicode"
+!include "build\nsis-plugins\UAC.nsh"
 
 Var /GLOBAL AutoUpdate
 
@@ -60,20 +79,62 @@ Var /GLOBAL AutoUpdate
 
 !insertmacro MUI_LANGUAGE "English"
 
-; Launch RIGStats without the installer's elevated token so the app
-; runs with normal user privileges (expected for a tray application).
+; Launch RIGStats as the original (unelevated) user via the UAC plugin so the
+; app runs with normal privileges and all per-user state (settings, tray, the
+; in-app autostart toggle's HKCU key) is created for the user at the machine —
+; not the administrator who approved the UAC prompt.
 Function LaunchRIGStats
-  Exec '"$INSTDIR\rigstats.exe"'
+  !insertmacro UAC_AsUser_ExecShell "open" "$INSTDIR\rigstats.exe" "" "$INSTDIR" ""
 FunctionEnd
+
+; ── Shared elevation macro (installer + uninstaller) ───────────────────────────
+; Elevates an inner instance and routes per-user actions through the outer
+; (unelevated) process. After elevation succeeds, switches shell-var context to
+; "all users" so shortcuts land in the All-Users Start Menu / Public Desktop and
+; are visible to every account (including the standard user who launched setup).
+!macro RIGStatsInit thing
+  uac_tryagain:
+  !insertmacro UAC_RunElevated
+  ${Switch} $0
+  ${Case} 0
+    ${IfThen} $1 = 1 ${|} Quit ${|}        ; outer process; inner finished — done.
+    ${IfThen} $3 <> 0 ${|} ${Break} ${|}   ; we are admin — proceed with the work.
+    ${If} $1 = 3                           ; RunAs ok, but the supplied user is not admin.
+      MessageBox mb_YesNo|mb_IconExclamation|mb_TopMost|mb_SetForeground \
+        "RIGStats ${thing} requires administrator privileges. Try again with an administrator account?" \
+        /SD IDNO IDYES uac_tryagain IDNO 0
+    ${EndIf}
+    ; fall through to the abort message below.
+  ${Case} 1223
+    MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \
+      "RIGStats ${thing} requires administrator privileges. Aborting." /SD IDOK
+    Quit
+  ${Case} 1062
+    MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \
+      "Logon service not running. Aborting." /SD IDOK
+    Quit
+  ${Default}
+    MessageBox mb_IconStop|mb_TopMost|mb_SetForeground \
+      "Unable to elevate, error $0." /SD IDOK
+    Quit
+  ${EndSwitch}
+  SetShellVarContext all
+!macroend
 
 ; ── Pre-install ────────────────────────────────────────────────────────────────
 Function .onInit
   ; Detect /autoupdate flag: show progress window but skip wizard pages.
+  ; (The UAC plugin forwards the original command line to the elevated instance,
+  ; so both the outer and inner process observe the flag.)
   ${GetOptions} $CMDLINE "/autoupdate" $R0
   ${IfNot} ${Errors}
     StrCpy $AutoUpdate 1
     SetAutoClose true
   ${EndIf}
+
+  ; Elevate. The outer (user) process returns here only to Quit once the inner
+  ; (admin) process has finished, so everything below runs elevated.
+  !insertmacro RIGStatsInit "installation"
 
   ; Stop the running app and sensor service before overwriting files.
   nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats.exe >NUL 2>&1'
@@ -172,6 +233,12 @@ Section "RIGStats" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
     "NoRepair"         1
 
+  ; ── Shortcuts (All-Users, via SetShellVarContext all set in .onInit) ──────
+  ; Remove stale per-user shortcuts left by pre-UAC installers, which created
+  ; them in the elevating administrator's profile instead of a shared location.
+  ; Safe: only RIGStats-named items under each user's per-user Start Menu/Desktop.
+  nsExec::ExecToLog 'cmd /C for /D %D in ("%SystemDrive%\Users\*") do (del /F /Q "%D\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\RIGStats\*.lnk" >NUL 2>&1 & rmdir "%D\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\RIGStats" >NUL 2>&1 & del /F /Q "%D\Desktop\RIGStats.lnk" >NUL 2>&1)'
+
   CreateDirectory "$SMPROGRAMS\RIGStats"
   CreateShortcut "$SMPROGRAMS\RIGStats\RIGStats.lnk" "$INSTDIR\rigstats.exe"
   CreateShortcut "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk" "$INSTDIR\uninstall.exe"
@@ -192,8 +259,11 @@ Section "RIGStats" SecMain
 
   ; ── Auto-launch with update notification (in-app /autoupdate installs only) ──
   ; Manual installs use the finish-page "Launch RIGStats" checkbox instead.
+  ; Launched as the original unelevated user so settings/tray bind to that user
+  ; (UAC_AsUser_ExecShell preserves the --just-updated argument, unlike a plain
+  ; explorer.exe relaunch).
   ${If} $AutoUpdate == 1
-    Exec '"$INSTDIR\rigstats.exe" "--just-updated=${VERSION}"'
+    !insertmacro UAC_AsUser_ExecShell "open" "$INSTDIR\rigstats.exe" "--just-updated=${VERSION}" "$INSTDIR" ""
   ${EndIf}
 SectionEnd
 
@@ -203,6 +273,12 @@ Section /o "Desktop Shortcut" SecDesktop
 SectionEnd
 
 ; ── Uninstaller ────────────────────────────────────────────────────────────────
+Function un.onInit
+  ; Elevate the uninstaller (needs admin for sc delete + driver removal) and
+  ; switch to All-Users shell-var context so the shared shortcuts are removed.
+  !insertmacro RIGStatsInit "uninstallation"
+FunctionEnd
+
 Section "Uninstall"
   nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
   Sleep 2000
@@ -221,10 +297,14 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\pawnio"
   RMDir "$INSTDIR"
 
+  ; All-Users shortcuts (un.onInit set SetShellVarContext all).
   Delete "$DESKTOP\RIGStats.lnk"
   Delete "$SMPROGRAMS\RIGStats\RIGStats.lnk"
   Delete "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk"
   RMDir  "$SMPROGRAMS\RIGStats"
+
+  ; Remove any stale per-user shortcuts from pre-UAC installers.
+  nsExec::ExecToLog 'cmd /C for /D %D in ("%SystemDrive%\Users\*") do (del /F /Q "%D\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\RIGStats\*.lnk" >NUL 2>&1 & rmdir "%D\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\RIGStats" >NUL 2>&1 & del /F /Q "%D\Desktop\RIGStats.lnk" >NUL 2>&1)'
 
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats"
   DeleteRegKey HKLM "Software\RIGStats"

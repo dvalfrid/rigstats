@@ -95,7 +95,8 @@ rig-dashboard/
 ├── website/
 ├── assets/                 Screenshot PNGs for website/README
 └── build/
-    ├── installer.nsi       NSIS installer script
+    ├── installer.nsi       NSIS installer script (UAC administrator broker)
+    ├── nsis-plugins/        Vendored UAC plugin (zlib license) + provenance
     └── pawnio/             Signed PawnIO kernel driver files
 ```
 
@@ -495,3 +496,42 @@ thread). Produces a self-contained ZIP for bug reports.
 - **Stats delivery** — the single egui window receives `StatsPayload` from the poll thread via `mpsc::Receiver` and passes data to each panel's `draw()` call. No separate broadcast needed.
 - **Drag** — panels in floating mode render a drag-zone overlay (three dots + padlock icon) painted directly onto the panel rect via `ui.painter()`. A click on the padlock toggles lock state via an egui temp-data key `"toggle_lock"`.
 - **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key) and written to `rigstats-settings.json` on every `Save` in Settings.
+
+### Installer privilege model (UAC administrator broker)
+
+The NSIS installer (`build/installer.nsi`) must perform machine-wide work that
+requires admin (install the PawnIO driver, create the `rigstats-sensor` service,
+write to `Program Files` and `HKLM`), while the GUI app itself is unprivileged
+and per-user (settings in `%APPDATA%`, the autostart toggle in `HKCU`).
+
+On a shared/family PC a **standard user** (e.g. a child account) often launches
+the installer, and a **different administrator** (e.g. a parent) approves the UAC
+prompt — "over-the-shoulder" elevation. A naïve per-machine installer
+(`RequestExecutionLevel admin`) then runs entirely in the *administrator's*
+context, so shortcuts, the first app launch, settings, and any autostart entry
+bind to the admin's profile instead of the user actually at the machine.
+
+To avoid this the installer uses the **UAC plugin** (Anders Kjersem, zlib
+license; vendored under `build/nsis-plugins/`, referenced via `!addplugindir`):
+
+- `RequestExecutionLevel user` — the installer starts **unelevated** as the real
+  interactive user.
+- `UAC_RunElevated` (in `.onInit` / `un.onInit`) spawns an **elevated inner
+  instance** that runs all the machine-wide work and the wizard UI.
+- `SetShellVarContext all` — Start Menu / Desktop shortcuts go to the **All-Users**
+  locations, visible to every account.
+- `UAC_AsUser_ExecShell` launches `rigstats.exe` back in the **unelevated user's**
+  context (finish-page run *and* the `/autoupdate` relaunch), preserving the
+  `--just-updated=VERSION` argument. The app therefore creates its settings/tray
+  and writes its `HKCU` autostart key for the correct user.
+- A best-effort cleanup loop removes stale per-user RIGStats shortcuts left by
+  pre-UAC installers across `%SystemDrive%\Users\*`.
+
+Correspondingly, `update_check.rs::launch_installer` starts the downloaded
+installer with the `open` verb (unelevated) — **not** `runas` — so the UAC plugin
+can perform elevation internally while keeping an unelevated user instance for the
+post-update relaunch. A previously broken install self-heals on the next
+install/update: shortcuts and launch rebind to the correct user automatically;
+only cosmetic leftovers in the admin profile (stale settings folder, and an
+`HKCU\…\Run` entry *if* autostart had been enabled as the admin) are not scrubbed
+from other users' registry hives.
