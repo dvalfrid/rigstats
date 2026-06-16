@@ -1,0 +1,83 @@
+name: Test Installer (signed, no release)
+
+# Builds and code-signs the NSIS installer and uploads it as a private workflow
+# artifact. It does NOT create a GitHub Release and does NOT publish latest.json,
+# so it can never trigger end-user auto-updates. Use this to validate the signed
+# installer (UAC flow, account binding, install/uninstall) before shipping.
+#
+# Trigger manually: Actions → "Test Installer (signed, no release)" → Run workflow
+# (pick your feature branch). Download the artifact from the run summary.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to embed in the installer (e.g. 1.30.1-test)
+        required: true
+        default: 0.0.0-test
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test-installer:
+    name: Build And Sign Test Installer (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build output
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-egui
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
+
+      - name: Build release binary + sidecar
+        run: cargo xtask build
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          $nsis = (Get-ChildItem "C:\Program Files*\NSIS\makensis.exe" | Select-Object -First 1).DirectoryName
+          echo "$nsis" >> $env:GITHUB_PATH
+
+      - name: Build NSIS installer
+        shell: pwsh
+        run: |
+          & makensis /DVERSION=${{ github.event.inputs.version }} build\installer.nsi
+
+      - name: Sign installer
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://neu.codesigning.azure.net/
+          trusted-signing-account-name: rigstats-codesign
+          certificate-profile-name: RIGStats
+          files-folder: target\release
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      # Upload as a private artifact only — no release, no latest.json.
+      - name: Upload signed installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rigstats-test-installer-${{ github.event.inputs.version }}
+          path: target\release\RIGStats_*_x64-setup.exe
+          retention-days: 7
+          if-no-files-found: error
