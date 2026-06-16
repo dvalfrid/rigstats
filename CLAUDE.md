@@ -78,6 +78,60 @@ See [STANDARDS.md](STANDARDS.md) for the full code standards.
 | Logic in Rust | `cargo xtask test` |
 | Unsure | `cargo xtask verify` |
 
+## Issue tracking and commit workflow
+
+Every bug fix and feature must follow this sequence — do not skip steps or reorder them.
+
+### 1. Open a GitHub issue before starting work
+
+```powershell
+& "C:\Program Files\GitHub CLI\gh.exe" issue create --title "..." --body "..." --label bug   # or: --label enhancement
+```
+
+`gh` is installed but not on PATH in shell sessions — always use the full path above.
+
+For a **bug**: describe the incorrect behaviour, steps to reproduce, and expected behaviour.
+For a **feature**: describe the user-visible change and why it is needed.
+
+### 2. Implement the fix or feature
+
+### 3. Test in the running app — required before any commit
+
+Run the app and verify the golden path **and** the edge cases for the change:
+
+```powershell
+# Kill → build → verify exe timestamp → launch
+Stop-Process -Id (Get-Process rigstats -ErrorAction Stop).Id -Force
+cargo build --manifest-path src-egui/Cargo.toml
+Start-Process .\target\debug\rigstats.exe
+```
+
+**Do not commit until the fix or feature has been confirmed working in the running app.**
+Passing tests and a clean clippy are necessary but not sufficient — they verify code correctness, not behaviour.
+
+### 4. Run checks, then commit with `Closes #N`
+
+```bash
+cargo xtask fmt
+cargo xtask clippy        # zero warnings required
+```
+
+Reference the issue in the commit message so GitHub closes it automatically when pushed to main:
+
+```
+fix(updater): reset to Idle on close so Check for Updates reappears
+
+Closes #77
+```
+
+### 5. If the commit was made without `Closes #N`, close manually
+
+```powershell
+& "C:\Program Files\GitHub CLI\gh.exe" issue close 77 --comment "Fixed in commit abc1234."
+```
+
+---
+
 ## Documentation and website updates
 
 **Every feature change must also update all three of these — do not wait to be asked:**
