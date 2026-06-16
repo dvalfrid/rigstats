@@ -8,6 +8,20 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.31.0](https://github.com/dvalfrid/rigstats/compare/v1.30.0...v1.31.0) (2026-06-16)
+
+
+### Features
+
+* **debug-log:** human-readable timestamps and severity levels ([d1c4cdf](https://github.com/dvalfrid/rigstats/commit/d1c4cdfc86e02077a81fce6c9e3e400e2977d5a6))
+* **disk:** show free space, model name, and disk type per drive ([8f1ca46](https://github.com/dvalfrid/rigstats/commit/8f1ca46e2e90fa20c3b9941ebafb1d8cec2246d2))
+* **net:** sub-ms ping precision via TCP connect timing ([a7cb110](https://github.com/dvalfrid/rigstats/commit/a7cb11089564eb6c6334d8535e116e0c889bdfbe))
+
+
+### Bug Fixes
+
+* **cpu:** clip core scroll area to exactly 2 visible rows ([d91e5bb](https://github.com/dvalfrid/rigstats/commit/d91e5bb9372cbfd90cc72303a15cb82614f65fa0))
+
 ## [1.30.0](https://github.com/dvalfrid/rigstats/compare/v1.29.0...v1.30.0) (2026-06-15)
 
 
