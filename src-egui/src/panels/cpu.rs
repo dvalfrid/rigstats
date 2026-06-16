@@ -113,13 +113,15 @@ pub fn draw(
             let avail = ui.available_width();
             let row_gap = 2.0_f32 * sc;
             let scroll_h = CORE_ROW_H * 2.0 * sc + row_gap;
+            // allocate_exact_size controls the parent cursor (panel height stays correct).
+            // inner_ui + max_height together control the viewport so all rows are reachable.
             let (outer_rect, _) =
                 ui.allocate_exact_size(Vec2::new(avail, scroll_h), egui::Sense::hover());
-
             let mut inner_ui = ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
 
             egui::ScrollArea::vertical()
                 .id_salt("cpu_cores")
+                .max_height(outer_rect.height())
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(&mut inner_ui, |ui| {
                     ui.style_mut().spacing.item_spacing.y = row_gap;
@@ -133,9 +135,6 @@ pub fn draw(
                             {
                                 let idx = row * 2 + col;
                                 col_ui.horizontal(|ui| {
-                                    // Label with natural text width — no fixed slot,
-                                    // so the bar starts flush after the text (no dead
-                                    // space at the left edge of the column).
                                     ui.label(
                                         RichText::new(format!("C{idx}"))
                                             .size(11.0 * sc)
