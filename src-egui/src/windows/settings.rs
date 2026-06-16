@@ -898,10 +898,10 @@ fn send_test_notification() {
 // ── Appearance tab ────────────────────────────────────────────────────────────
 
 fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
-    // Rig Name card
+    // Override Model Name card
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Rig Name");
+        section_label(ui, dc, "Override Model Name");
         ui.add_space(8.0);
         let w = ui.available_width();
         ui.add_sized(

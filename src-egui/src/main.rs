@@ -2393,6 +2393,15 @@ async fn poll_loop(
             }
         }
 
+        let display_model_name = {
+            let s = settings_arc.lock_safe();
+            if s.model_name.is_empty() {
+                model_name.clone()
+            } else {
+                s.model_name.clone()
+            }
+        };
+
         let stats = PollStats {
             cpu_load,
             cpu_temp: lhm_data.as_ref().and_then(|l| l.cpu_temp),
@@ -2445,7 +2454,7 @@ async fn poll_loop(
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),
-            model_name: model_name.clone(),
+            model_name: display_model_name,
             system_brand: system_brand.clone(),
             gpu_name: lhm_data
                 .as_ref()
