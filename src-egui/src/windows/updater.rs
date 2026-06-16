@@ -453,6 +453,13 @@ pub fn show(
 
     let mut st = state.lock_safe();
 
+    // Reset to Idle on close so "Check for Updates" appears next time the
+    // dialog is opened. Keep Ready so a downloaded installer isn't lost.
+    let reset_to_idle_on_close = matches!(
+        st.status,
+        UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } | UpdateStatus::Error(_)
+    );
+
     // Parse the changelog at most once per status change (not every frame).
     st.ensure_changelog_cache();
 
@@ -641,11 +648,17 @@ pub fn show(
         }
     }
     if action_close {
+        if reset_to_idle_on_close {
+            state.lock_safe().status = UpdateStatus::Idle;
+        }
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 
     if ctx.input(|i| i.viewport().close_requested()) {
+        if reset_to_idle_on_close {
+            state.lock_safe().status = UpdateStatus::Idle;
+        }
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
