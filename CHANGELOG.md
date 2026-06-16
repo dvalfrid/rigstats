@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.31.1](https://github.com/dvalfrid/rigstats/compare/v1.31.0...v1.31.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **settings:** apply Override Model Name to header panel ([ee2a49f](https://github.com/dvalfrid/rigstats/commit/ee2a49fb5077ddc51860550627508a653858e22b)), closes [#78](https://github.com/dvalfrid/rigstats/issues/78)
+* **updater:** reset to Idle on close so Check for Updates reappears ([dba9cd1](https://github.com/dvalfrid/rigstats/commit/dba9cd136047d14a5e499a2752dca0838c5dfd45))
+
 ## [1.31.0](https://github.com/dvalfrid/rigstats/compare/v1.30.0...v1.31.0) (2026-06-16)
 
 

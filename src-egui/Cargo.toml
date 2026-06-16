@@ -1,6 +1,6 @@
 [package]
 name = "rigstats-egui"
-version = "1.31.0" # x-release-please-version
+version = "1.31.1" # x-release-please-version
 edition = "2021"
 rust-version = "1.77"
 
