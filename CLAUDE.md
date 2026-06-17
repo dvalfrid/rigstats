@@ -116,6 +116,28 @@ cargo xtask fmt
 cargo xtask clippy        # zero warnings required
 ```
 
+**Commit message format — [Conventional Commits](https://www.conventionalcommits.org/).**
+This is mandatory: `release-please` (`.github/workflows/release-please.yml`) parses
+commit subjects to generate `CHANGELOG.md` and bump the version. A commit that does
+not follow this format is silently dropped from the changelog.
+
+```
+<type>(<scope>): <subject>
+
+<optional body>
+
+Closes #N
+```
+
+- **type** — one of: `feat` (new feature), `fix` (bug fix), `perf` (performance),
+  `docs`, `refactor`, `test`, `build`, `chore`, `style`. Only `feat`, `fix`, and
+  `perf` surface in the changelog; the rest are still required to be valid types.
+- **scope** — the area changed, lower-case: e.g. `status`, `updater`, `cpu`, `gpu`,
+  `settings`, `disk`, `debug-log`, `readme`, `roadmap`, `claude`. Optional but
+  expected.
+- **subject** — imperative, no trailing period, lower-case start.
+- A breaking change uses `feat!:` / `fix!:` or a `BREAKING CHANGE:` body footer.
+
 Reference the issue in the commit message so GitHub closes it automatically when pushed to main:
 
 ```
