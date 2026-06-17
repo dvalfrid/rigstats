@@ -176,6 +176,7 @@ PowerShell CIM on failure.
 | --- | --- |
 | `detect_gpu_name` | Primary discrete GPU name |
 | `detect_gpu_vram_total_mb` | VRAM total (MB) |
+| `detect_gpu_drivers` | Installed GPU driver name/version/date per adapter (`Vec<GpuDriverInfo>`); `driver_age_days` derives age from `DriverDate` |
 | `detect_system_brand` | Brand key: `rog`, `msi`, `alienware`, etc. |
 | `classify_system_brand` | Brand classification logic |
 | `detect_model_name` | System model name |

@@ -26,6 +26,7 @@ pub struct StatusState {
     pub wmi_ok: bool,
     pub log_path: String,
     pub last_refresh: String,
+    pub gpu_drivers: Vec<hardware::GpuDriverInfo>,
 }
 
 impl StatusState {
@@ -40,6 +41,7 @@ impl StatusState {
             wmi_ok: hardware::probe_wmi_status().is_ok(),
             log_path: log_path.display().to_string(),
             last_refresh: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            gpu_drivers: hardware::detect_gpu_drivers(),
         }
     }
 
@@ -55,6 +57,7 @@ impl StatusState {
             wmi_ok: false,
             log_path: String::new(),
             last_refresh: String::new(),
+            gpu_drivers: Vec::new(),
         }
     }
 }
@@ -89,6 +92,41 @@ fn query_service_running() -> bool {
 // Semantic status colours — independent of light/dark mode.
 const C_GOOD: egui::Color32 = egui::Color32::from_rgb(80, 190, 90);
 const C_BAD: egui::Color32 = egui::Color32::from_rgb(200, 70, 60);
+const C_WARN: egui::Color32 = egui::Color32::from_rgb(220, 170, 60);
+
+// A GPU driver older than this is flagged as potentially outdated. Outdated AMD
+// drivers are a known cause of missing GPU sensors (see docs/troubleshooting.md).
+const DRIVER_STALE_DAYS: i64 = 270;
+
+/// Returns a short freshness label and colour for a driver of the given age.
+fn driver_age_label(age_days: i64) -> (String, egui::Color32) {
+    let months = age_days / 30;
+    if age_days >= DRIVER_STALE_DAYS {
+        (format!("⚠ {months} mo old"), C_WARN)
+    } else if months >= 1 {
+        (format!("{months} mo old"), C_GOOD)
+    } else {
+        ("Up to date".to_string(), C_GOOD)
+    }
+}
+
+/// Maps a GPU adapter name to its vendor's driver download page.
+/// Returns `(vendor_label, url)` or `None` for unknown vendors.
+fn gpu_driver_support(name: &str) -> Option<(&'static str, &'static str)> {
+    let n = name.to_ascii_lowercase();
+    if n.contains("nvidia") || n.contains("geforce") || n.contains("rtx") || n.contains("quadro") {
+        Some(("NVIDIA", "https://www.nvidia.com/Download/index.aspx"))
+    } else if n.contains("radeon") || n.contains("amd") || n.contains("ryzen") {
+        Some(("AMD", "https://www.amd.com/en/support"))
+    } else if n.contains("intel") || n.contains("arc") {
+        Some((
+            "Intel",
+            "https://www.intel.com/content/www/us/en/download-center/home.html",
+        ))
+    } else {
+        None
+    }
+}
 
 // ── Widget helpers ────────────────────────────────────────────────────────────
 
@@ -210,16 +248,27 @@ fn render_diagnostics(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState)
     });
 }
 
-fn render_dependencies(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
+fn render_components(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
     ui.add_space(8.0);
-    section_label(ui, dc, "Dependencies");
+    ui.columns(2, |cols| {
+        section_label(&mut cols[0], dc, "Dependencies");
+        let before = cols[0].min_rect().height();
+        dependencies_card(&mut cols[0], dc, state);
+        let dep_card_h = cols[0].min_rect().height() - before;
+
+        section_label(&mut cols[1], dc, "GPU Drivers");
+        drivers_card(&mut cols[1], dc, state, dep_card_h);
+    });
+}
+
+fn dependencies_card(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
     card_frame(dc).show(ui, |ui| {
         ui.set_width(ui.available_width());
         let sensor_ver = format!("LHM {DEP_LHM_VER}");
         let deps: [(&str, &str, &str, bool); 3] = [
             (
                 "rigstats-sensor",
-                "Hardware sensor feed (Windows Service)",
+                "Hardware sensor feed\n(Windows Service)",
                 sensor_ver.as_str(),
                 state.service_running,
             ),
@@ -257,6 +306,74 @@ fn render_dependencies(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState
                 });
             });
         }
+    });
+}
+
+fn drivers_card(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState, target_h: f32) {
+    // Inner height available for content = target minus the frame's vertical
+    // chrome (inner_margin 10+10 plus the 1 px stroke top/bottom).
+    let inner_h = (target_h - 22.0).max(0.0);
+    card_frame(dc).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+
+        if state.gpu_drivers.is_empty() {
+            ui.set_min_height(inner_h);
+            ui.label(
+                egui::RichText::new("No GPU driver information available.")
+                    .size(11.0)
+                    .color(dc.muted),
+            );
+            return;
+        }
+
+        egui::ScrollArea::vertical()
+            .id_salt("gpu_drivers_scroll")
+            .max_height(inner_h)
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.set_min_height(inner_h);
+                for (i, d) in state.gpu_drivers.iter().enumerate() {
+                    if i > 0 {
+                        ui.add(egui::Separator::default().spacing(6.0));
+                    }
+                    ui.label(
+                        egui::RichText::new(&d.name)
+                            .size(13.0)
+                            .strong()
+                            .color(dc.text),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Driver {}",
+                            d.version.as_deref().unwrap_or("unknown")
+                        ))
+                        .size(11.0)
+                        .color(dc.muted),
+                    );
+                    ui.horizontal(|ui| {
+                        if let Some(date) = &d.date {
+                            ui.label(egui::RichText::new(date).size(11.0).color(dc.muted));
+                        }
+                        if let Some(age) = d.age_days {
+                            let (txt, col) = driver_age_label(age);
+                            ui.label(egui::RichText::new(txt).size(11.0).strong().color(col));
+                        }
+                        if let Some((_, url)) = gpu_driver_support(&d.name) {
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    ui.add(egui::Hyperlink::from_label_and_url(
+                                        egui::RichText::new("↗ Latest driver")
+                                            .size(11.0)
+                                            .color(dc.link),
+                                        url,
+                                    ));
+                                },
+                            );
+                        }
+                    });
+                }
+            });
     });
 }
 
@@ -665,7 +782,7 @@ pub fn show(
             let log_h = (ui.available_height() - STATIC_H).max(80.0);
 
             render_diagnostics(ui, dc, &st);
-            render_dependencies(ui, dc, &st);
+            render_components(ui, dc, &st);
             render_debug_log(ui, dc, &st.log, log_h);
         });
 
@@ -694,5 +811,51 @@ pub fn show(
     if ctx.input(|i| i.viewport().close_requested()) {
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{driver_age_label, gpu_driver_support, C_GOOD, C_WARN, DRIVER_STALE_DAYS};
+
+    #[test]
+    fn fresh_driver_is_up_to_date() {
+        let (txt, col) = driver_age_label(5);
+        assert_eq!(txt, "Up to date");
+        assert_eq!(col, C_GOOD);
+    }
+
+    #[test]
+    fn months_old_but_not_stale_is_good() {
+        let (txt, col) = driver_age_label(60);
+        assert_eq!(txt, "2 mo old");
+        assert_eq!(col, C_GOOD);
+    }
+
+    #[test]
+    fn stale_driver_is_warned() {
+        let (txt, col) = driver_age_label(DRIVER_STALE_DAYS);
+        assert!(
+            txt.starts_with('\u{26a0}'),
+            "expected warning prefix, got {txt}"
+        );
+        assert_eq!(col, C_WARN);
+    }
+
+    #[test]
+    fn vendor_support_matches_known_gpus() {
+        assert_eq!(
+            gpu_driver_support("NVIDIA GeForce RTX 4090").map(|v| v.0),
+            Some("NVIDIA")
+        );
+        assert_eq!(
+            gpu_driver_support("AMD Radeon RX 9070 XT").map(|v| v.0),
+            Some("AMD")
+        );
+        assert_eq!(
+            gpu_driver_support("Intel Arc A770").map(|v| v.0),
+            Some("Intel")
+        );
+        assert_eq!(gpu_driver_support("Some Virtual Display"), None);
     }
 }

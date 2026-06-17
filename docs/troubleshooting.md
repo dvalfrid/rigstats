@@ -26,6 +26,43 @@ sc.exe query rigstats-sensor
 the installer may not have completed successfully — check `install.log` in the
 diagnostics ZIP (Status → Collect Diagnostics).
 
+## GPU Sensors Missing (Temp / Clock / Power / Fan) Or Sidecar Crashes
+
+**Symptom:** The GPU panel shows core load and D3D 3D usage, but `TEMP`, `HOT`,
+`FREQ`, `POWER`, `FAN` and `VRAM` stay at `--` / `0`. The Windows Event Log may
+also show `rigstats-sensor.exe` crashing with:
+
+```
+System.AccessViolationException: Attempted to read or write protected memory.
+   at LibreHardwareMonitor.Hardware.Gpu.AmdGpu.Update()
+```
+
+(or a crash in `atiadlxx.dll`).
+
+**Cause:** This is an **outdated GPU driver**, not a RIGStats bug. The core GPU
+sensors (temp, clock, power, fan) come from AMD's ADL library (`atiadlxx.dll`)
+via LibreHardwareMonitor. Some AMD driver builds return invalid data — or
+corrupt memory — on these ADL calls, which both hides the sensors and can crash
+the sidecar. The `AccessViolationException` is a native-side fault that **cannot
+be caught** from managed .NET, so the whole service dies until it auto-restarts.
+The D3D values (3D load, VRAM-used) keep working because they come from Windows
+D3D counters, not ADL.
+
+This is a known LibreHardwareMonitor issue (see
+[LibreHardwareMonitor#736](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/issues/736)).
+The same RIGStats build on identical hardware works perfectly with a newer
+driver — the GPU read path (`sensor-sidecar/` + `LibreHardwareMonitorLib`) has
+not changed across recent app versions.
+
+**Fix:** Update the GPU **and** chipset drivers to the latest versions:
+
+- AMD: install the latest [AMD Software: Adrenalin Edition](https://www.amd.com/en/support).
+- Note that Windows Update can silently install an older driver build; always
+  prefer the vendor's latest package.
+
+After updating, restart the `rigstats-sensor` service (or reboot) and the GPU
+sensors should populate.
+
 ## Can I Change Which Display Is Used?
 
 Yes. Adjust the display targeting logic in `pick_monitor()` in `rigstats-backend/src/monitor.rs`.

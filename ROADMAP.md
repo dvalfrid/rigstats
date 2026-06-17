@@ -22,6 +22,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | LHM stability — sensor sidecar | ✅ Done (v1.21) |
 | CPU fan speed | ⏭ Investigated, skipped |
 | Stats logging / data export | ✅ Done |
+| GPU driver version + stale-driver warning (Status dialog) | ✅ Done (v1.31) |
 | Floating panel groups | 🔲 Planned |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
@@ -1009,3 +1010,31 @@ inspection" to "each filtering rule has a dedicated regression test," and remove
 the sidecar's status as the one fully untested component.
 
 ---
+
+## GPU driver version + stale-driver warning ✅
+
+**Shipped v1.31.** Motivated by a field bug: a tester's RX 9070 XT showed no GPU
+sensors except D3D 3D load, and `rigstats-sensor.exe` crashed with a native ADL
+`AccessViolationException` in `AmdGpu.Update()` (LHM issue #736). Root cause was an
+outdated AMD driver; updating the GPU + chipset drivers restored all sensors.
+
+**Implementation:**
+
+- `hardware::detect_gpu_drivers()` queries `Win32_VideoController`
+  (Name/DriverVersion/DriverDate) WMI-first with a PowerShell CIM fallback,
+  filtering virtual adapters via `is_ignored_adapter_name`. `driver_age_days`
+  derives whole-day age from `DriverDate` (returns `None` for future/unparseable
+  dates).
+- The Status dialog (`windows/status.rs`) renders a two-column Components row:
+  Dependencies on the left, a GPU Drivers card on the right showing each adapter's
+  version + date, an age-based "stale driver" warning (`DRIVER_STALE_DAYS = 270`),
+  and a per-adapter right-aligned "↗ Latest driver" link to the vendor download
+  page (AMD/NVIDIA/Intel). The Drivers card is forced to the Dependencies card's
+  height and its list is wrapped in a scroll area so multi-GPU systems scroll
+  rather than overflow.
+- `docs/troubleshooting.md` gained a "GPU Sensors Missing … Or Sidecar Crashes"
+  section pointing users at the driver-update fix.
+
+No reliable cross-vendor API exists for "latest available driver version," so the
+feature surfaces the installed version + an age heuristic + a one-click link to the
+vendor's driver download page rather than claiming to know the newest release.

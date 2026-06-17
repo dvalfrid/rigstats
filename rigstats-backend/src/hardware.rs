@@ -269,7 +269,148 @@ pub fn detect_gpu_vram_total_mb() -> Option<f64> {
   }
 }
 
-// --- System brand detection ------------------------------------------------
+// --- GPU driver detection --------------------------------------------------
+
+/// Driver metadata for a single GPU adapter, surfaced in the Status dialog so
+/// users can spot an outdated driver (a common cause of missing GPU sensors).
+#[derive(Debug, Clone)]
+pub struct GpuDriverInfo {
+  /// Adapter name, e.g. "AMD Radeon RX 9070 XT".
+  pub name: String,
+  /// Driver package version (WMI `DriverVersion`), e.g. "32.0.31019.2002".
+  pub version: Option<String>,
+  /// Driver date formatted as "YYYY-MM-DD".
+  pub date: Option<String>,
+  /// Age of the driver in whole days, derived from `date`. Negative values are
+  /// clamped to `None` to guard against machines with a skewed clock.
+  pub age_days: Option<i64>,
+}
+
+#[cfg(windows)]
+#[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_VideoController")]
+struct VideoControllerDriver {
+  #[serde(rename = "Name")]
+  name: Option<String>,
+  #[serde(rename = "DriverVersion")]
+  driver_version: Option<String>,
+  #[serde(rename = "DriverDate")]
+  driver_date: Option<wmi::WMIDateTime>,
+}
+
+#[cfg(windows)]
+#[derive(Deserialize, Debug)]
+struct GpuDriverShellRow {
+  name: Option<String>,
+  version: Option<String>,
+  date: Option<String>,
+}
+
+/// Computes the age in whole days of a driver dated `YYYY-MM-DD`.
+/// Returns `None` for unparseable dates or future dates (clock skew).
+#[cfg(windows)]
+fn driver_age_days(date: &str) -> Option<i64> {
+  let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+  let today = chrono::Local::now().date_naive();
+  let days = (today - d).num_days();
+  if days >= 0 {
+    Some(days)
+  } else {
+    None
+  }
+}
+
+#[cfg(windows)]
+fn gpu_drivers_from_shell() -> Vec<GpuDriverInfo> {
+  let output = match run_hidden_command(
+    "powershell",
+    &[
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "@(Get-CimInstance Win32_VideoController | ForEach-Object { @{ name = $_.Name; version = $_.DriverVersion; date = $(if ($_.DriverDate) { $_.DriverDate.ToString('yyyy-MM-dd') }) } }) | ConvertTo-Json -Compress",
+    ],
+  ) {
+    Ok(o) if o.status.success() => o,
+    _ => return Vec::new(),
+  };
+
+  let text = String::from_utf8_lossy(&output.stdout);
+  let trimmed = text.trim();
+  if trimmed.is_empty() {
+    return Vec::new();
+  }
+
+  // ConvertTo-Json emits a bare object for a single adapter and an array for many.
+  let rows: Vec<GpuDriverShellRow> = match serde_json::from_str::<serde_json::Value>(trimmed) {
+    Ok(serde_json::Value::Array(_)) => serde_json::from_str(trimmed).unwrap_or_default(),
+    Ok(obj @ serde_json::Value::Object(_)) => serde_json::from_value(obj)
+      .map(|r| vec![r])
+      .unwrap_or_default(),
+    _ => Vec::new(),
+  };
+
+  rows
+    .into_iter()
+    .filter_map(|r| {
+      let name = r.name?;
+      if is_ignored_adapter_name(&name) {
+        return None;
+      }
+      let age_days = r.date.as_deref().and_then(driver_age_days);
+      Some(GpuDriverInfo {
+        name,
+        version: r.version,
+        date: r.date,
+        age_days,
+      })
+    })
+    .collect()
+}
+
+/// Detects driver version and date for every real GPU adapter.
+/// Prefers WMI; falls back to PowerShell `Get-CimInstance`. Returns an empty
+/// vector when no adapter could be read or on non-Windows targets.
+pub fn detect_gpu_drivers() -> Vec<GpuDriverInfo> {
+  #[cfg(windows)]
+  {
+    if let Ok(com) = wmi::COMLibrary::new() {
+      if let Ok(conn) = wmi::WMIConnection::new(com) {
+        if let Ok(rows) = conn.query::<VideoControllerDriver>() {
+          let list: Vec<GpuDriverInfo> = rows
+            .into_iter()
+            .filter_map(|r| {
+              let name = r.name?;
+              if is_ignored_adapter_name(&name) {
+                return None;
+              }
+              let date = r
+                .driver_date
+                .map(|d| d.0.format("%Y-%m-%d").to_string());
+              let age_days = date.as_deref().and_then(driver_age_days);
+              Some(GpuDriverInfo {
+                name,
+                version: r.driver_version,
+                date,
+                age_days,
+              })
+            })
+            .collect();
+          if !list.is_empty() {
+            return list;
+          }
+        }
+      }
+    }
+
+    gpu_drivers_from_shell()
+  }
+
+  #[cfg(not(windows))]
+  {
+    Vec::new()
+  }
+}
 
 /// Maps OEM/product strings to a canonical brand slug used for logo selection.
 #[cfg(windows)]
@@ -1350,9 +1491,31 @@ fn try_disk_type_map_via_shell() -> Option<std::collections::HashMap<String, Dis
 
 #[cfg(all(test, windows))]
 mod tests {
-  use super::{classify_system_brand, gpu_name_score, map_memory_type, pick_best_gpu_name};
+  use super::{
+    classify_system_brand, driver_age_days, gpu_name_score, map_memory_type, pick_best_gpu_name,
+  };
 
   // map_memory_type
+
+  #[test]
+  fn driver_age_days_past_date_is_positive() {
+    // A date well in the past must yield a large positive age.
+    let age = driver_age_days("2020-01-01").expect("past date should parse");
+    assert!(age > 1000, "expected age > 1000 days, got {age}");
+  }
+
+  #[test]
+  fn driver_age_days_future_date_is_none() {
+    // Clock-skew guard: future dates return None rather than a negative age.
+    assert_eq!(driver_age_days("2999-12-31"), None);
+  }
+
+  #[test]
+  fn driver_age_days_unparseable_is_none() {
+    assert_eq!(driver_age_days("not-a-date"), None);
+    assert_eq!(driver_age_days(""), None);
+    assert_eq!(driver_age_days("06/16/2026"), None);
+  }
 
   #[test]
   fn map_memory_type_returns_correct_labels_for_all_ddr_codes() {
