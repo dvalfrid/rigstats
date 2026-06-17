@@ -13,142 +13,114 @@
 
 </div>
 
-- A gaming stats dashboard optimized for a vertical secondary display (450×1920).
-
-- Shows CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, and motherboard sensors in real time.
-
-- Computer name, CPU model, GPU model, and motherboard name are detected automatically at startup.
-
-## Overview
-
-RIGStats is a Windows desktop dashboard built with egui (native Rust UI, no WebView). It targets a vertical secondary display and shows live CPU, GPU, RAM, network, and disk data.
-
-## Screens
-
-### Main Dashboard
+RIGStats is a Windows hardware-monitor dashboard built with egui — a native Rust UI targeting a vertical secondary display. For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
 
 <img src="assets/rigStats.png" width="260" alt="Main Dashboard">
 
-The main dashboard is designed for a vertical secondary display and keeps the live system view visible at a glance.
+## Repository Layout
 
-It shows:
+| Path | Contents |
+| --- | --- |
+| `src-egui/` | egui binary (`rigstats.exe`) — panels, tray, dialog windows |
+| `rigstats-backend/` | Shared Rust lib — data sources, settings, hardware detection |
+| `sensor-sidecar/` | .NET 10 C# Windows Service — LHM embedded, named-pipe server |
+| `xtask/` | Cargo xtask — build, verify, fmt, clippy, test tasks |
+| `docs/` | Architecture, setup, release, troubleshooting |
+| `website/` | Product landing page source — not served at runtime |
+| `build/` | NSIS installer script + signed PawnIO kernel driver |
 
-- CPU load, clocks, temperature and power
-- GPU load, temperature, hotspot, clocks, VRAM and fan data
-- RAM usage and installed memory details
-- Network throughput and ping
-- Disk activity, drive usage, and NVMe/SSD temperatures
-- Motherboard sensors: fan speeds, board temperatures, and voltage rails (opt-in panel)
+## Prerequisites
 
-From here you can:
+- **Windows 10/11 x64** — the app and sensor sidecar are Windows-only
+- **Rust stable** — install via [rustup.rs](https://rustup.rs)
+- **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` (required for the sensor sidecar)
+- **Visual Studio 2022 Build Tools** with "Desktop development with C++" workload (for linking)
+- **NSIS** (installer builds only) — `choco install nsis -y`
 
-- monitor the machine continuously on a portrait side display
-- keep the app hidden to the tray when not needed
-- open the tray menu for `Settings`, `Status`, `About`, and `Updates & Changelog`
+> `cargo xtask verify` and `cargo xtask build` fail if the `rigstats-sensor` Windows Service is running because the service holds the exe open. Stop it first (`sc.exe stop rigstats-sensor` in an elevated terminal), then run the command, then restart the service.
 
-### Status Dialog
+## Quick Start
 
-<img src="assets/status-dialog.png" width="480" alt="Status Dialog">
+1. **Install git hooks** (run once after cloning):
 
-The Status dialog is the diagnostics view for runtime health and backend troubleshooting.
+   ```powershell
+   cargo xtask setup
+   ```
 
-It shows:
+2. **Build and run** the debug binary:
 
-- scheduled task information for LibreHardwareMonitor
-- dependency health for LibreHardwareMonitor, `sysinfo`, and `wmi`
-- the current debug log path
-- the latest debug log output
-- the timestamp for the last successful refresh
+   ```powershell
+   cargo build --manifest-path src-egui/Cargo.toml
+   .\target\debug\rigstats.exe
+   ```
 
-From here you can:
+3. **Restart workflow** (Windows locks the exe while it runs):
 
-- confirm that sensor dependencies are healthy
-- inspect startup/runtime issues without opening external tools
-- copy the visible debug log for troubleshooting
-- refresh diagnostics on demand while the log also auto-updates in the dialog
-- export a diagnostics ZIP bundle for bug reports (see [Diagnostics Export](#diagnostics-export))
+   ```powershell
+   Stop-Process -Id (Get-Process rigstats -ErrorAction Stop).Id -Force
+   cargo build --manifest-path src-egui/Cargo.toml
+   Start-Process .\target\debug\rigstats.exe
+   ```
 
-### About Dialog
+   Verify the exe timestamp changed before launching — if not, the process was still running.
 
-<img src="assets/about-dialog.png" width="480" alt="About Dialog">
+4. **Production installer build**:
 
-The About dialog is the lightweight product-information view.
+   ```powershell
+   cargo xtask build
+   ```
 
-It shows:
+   The sensor sidecar exe is bundled automatically.
 
-- the current RIGStats version
-- the project license name
-- direct links to the website and contact
+## Development
 
-From here you can:
+```powershell
+# Format Rust (modifies files)
+cargo xtask fmt
 
-- quickly verify which build/version is running
-- open rigstats.app in the default browser
-- contact the maintainer directly
+# Clippy — zero warnings required (-D warnings)
+cargo xtask clippy
 
-### Updates & Changelog Dialog
+# Run Rust tests
+cargo xtask test
 
-<img src="assets/update-dialog.png" width="480" alt="Updates &amp; Changelog Dialog">
+# Full verify: sidecar build + tests + clippy + fmt-check
+cargo xtask verify
 
-The Updates & Changelog dialog handles update discovery and version history.
+# Build sensor sidecar only
+dotnet build sensor-sidecar/sensor-sidecar.csproj
 
-It shows:
+# Run a single Rust test
+cargo test --manifest-path rigstats-backend/Cargo.toml classify_system_brand
+```
 
-- available update version alongside the current version (when an update exists)
-- release notes for the new version sourced from GitHub (`latest.json`)
-- full local version history (bundled CHANGELOG.md) below the new version's notes
-- download and installation progress bar
+> Stop `rigstats-sensor` before running `cargo xtask verify` or `cargo xtask build` — the service holds the exe open.
 
-From here you can:
+## Architecture
 
-- install the latest version with one click
-- track download progress while the update is fetched
-- browse the complete release history with clickable links to GitHub diffs
+The sensor sidecar (`rigstats-sensor.exe`, .NET 10, LocalSystem Windows Service) embeds LibreHardwareMonitor and streams one JSON line per second over `\\.\pipe\rigstats-sensors`. The Rust backend reads that pipe alongside sysinfo (CPU/RAM/disk/network) and WMI (static hardware metadata at startup), then sends a `StatsPayload` to the egui UI thread each tick. The egui binary renders all panels and dialog windows natively — no WebView, no JavaScript at runtime.
 
-### Settings Dialog
+See [docs/architecture.md](docs/architecture.md) for module-level detail and [docs/setup.md](docs/setup.md) for the full local development setup.
 
-<img src="assets/settings-dialog.png" width="480" alt="Settings Dialog">
+## Sensor Coverage
 
-The Settings dialog controls the dashboard presentation and placement behavior.
+Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).
 
-It shows:
-
-- opacity slider for transparency control
-- editable model name
-- display profile selector
-- always-on-top toggle
-
-From here you can:
-
-- change the dashboard profile for different portrait displays
-- adjust transparency live before saving
-- override the displayed model name
-- control whether the main dashboard stays on top
-
-## Hardware Support
-
-Data comes from two parallel sources that are merged each refresh cycle:
-**LibreHardwareMonitor v0.9.6** (sensor telemetry via local HTTP) and **sysinfo** (OS-level counters).
-WMI provides static metadata at startup.
+<!-- TODO: panels-collage.png — composite grid of all 10 panels -->
 
 ### CPU
-
-<img src="assets/cpu-panel.png" width="200" alt="CPU panel">
 
 | Metric | Source |
 | --- | --- |
 | Total load (%) | sysinfo |
 | Per-core load (%) | sysinfo |
 | Clock frequency (GHz) | sysinfo |
-| Package temperature (°C) | LHM — AMD: `Core (Tctl/Tdie)` |
+| Package temperature (°C) | LHM — AMD: `Core (Tctl/Tdie)`, Intel: `CPU Package` or `Core Average` |
 | Package power (W) | LHM — `Package` power sensor |
 
-> CPU temperature is matched by sensor name: `Core (Tctl/Tdie)` for AMD Ryzen, `CPU Package` or `Core Average` for Intel.
-> The AMD label is preferred when both are present (dual-CPU edge case).
+> CPU temperature is matched by sensor name. The AMD label is preferred when both are present (dual-CPU edge case).
 
 ### GPU
-
-<img src="assets/gpu-panel.png" width="200" alt="GPU panel">
 
 | Metric | Source |
 | --- | --- |
@@ -156,16 +128,16 @@ WMI provides static metadata at startup.
 | Core temperature (°C) | LHM — `GPU Core` temperature |
 | Hot spot temperature (°C) | LHM — `GPU Hot Spot` temperature |
 | Core clock (MHz) | LHM — `GPU Core` clock |
+| Memory clock (MHz) | LHM — `GPU Memory` clock |
 | Package power (W) | LHM — `GPU Package` power |
 | Fan speed (RPM) | LHM — `GPU Fan` |
 | VRAM used / total (GB) | LHM — `GPU Memory Used` / `GPU Memory Total` |
+| D3D 3D engine load (%) | LHM — `GPU Core` D3D 3D — shown when active |
+| D3D Video Decode load (%) | LHM — `GPU Core` D3D Video Decode — `None` when idle |
 
-Supports NVIDIA and AMD discrete GPUs through LHM.
-Intel Arc GPUs should work but have not been tested.
+Supports NVIDIA and AMD discrete GPUs through LHM. Intel Arc GPUs should work but have not been tested.
 
 ### RAM
-
-<img src="assets/ram-panel.png" width="200" alt="RAM panel">
 
 | Metric | Source |
 | --- | --- |
@@ -173,22 +145,19 @@ Intel Arc GPUs should work but have not been tested.
 | Memory type (DDR–DDR5) | WMI `Win32_PhysicalMemory.SMBIOSMemoryType` |
 | Speed (MHz) | WMI `Win32_PhysicalMemory.ConfiguredClockSpeed` / `Speed` |
 | Manufacturer & part number | WMI `Win32_PhysicalMemory` |
+| DIMM temperature (°C) | LHM — SensorId prefix `/memory/dimm/` — DDR5 and equipped DDR4 |
 
 ### Storage
 
-<img src="assets/storage-panel.png" width="200" alt="Storage panel">
-
 | Metric | Source |
 | --- | --- |
-| Read throughput (MB/s) | LHM — aggregated across all drives; shown as purple series in sparkline |
-| Write throughput (MB/s) | LHM — aggregated across all drives; shown as pink series in sparkline |
+| Read throughput (MB/s) | LHM — aggregated across all drives |
+| Write throughput (MB/s) | LHM — aggregated across all drives |
 | Per-drive capacity and usage | sysinfo |
 | Filesystem label | sysinfo |
 | Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`), matched to drive letter via WMI at startup |
 
 ### Motherboard
-
-<img src="assets/motherboard-panel.png" width="200" alt="Motherboard panel">
 
 | Metric | Source |
 | --- | --- |
@@ -198,11 +167,9 @@ Intel Arc GPUs should work but have not been tested.
 | Temperatures (°C) | LHM — all `/lpc/` temperature sensors ≥ 5 °C |
 | Voltage rails (V) | LHM — named `/lpc/` voltage rails only; generic `Voltage #N` slots excluded |
 
-The motherboard panel is opt-in and can be enabled in Settings → Panels. Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and other Super I/O controllers.
+Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and other Super I/O controllers. Opt-in via Settings → Panels.
 
 ### Network
-
-<img src="assets/network-panel.png" width="200" alt="Network panel">
 
 | Metric | Source |
 | --- | --- |
@@ -211,40 +178,48 @@ The motherboard panel is opt-in and can be enabled in Settings → Panels. Works
 | Active interface name | sysinfo |
 | Latency / ping (ms) | Windows `ping` command — default gateway, falls back to `1.1.1.1` |
 
-### Clock
+### Clock & System Identity
 
-<img src="assets/clock-panel.png" width="200" alt="Clock panel">
+| Panel | Metric | Source |
+| --- | --- | --- |
+| Clock | Time, day, date | system time |
+| System Identity | Hostname | `hostname` crate — truncated with ellipsis if too long |
+| System Identity | CPU model string | sysinfo |
+| System Identity | GPU model string | WMI `Win32_VideoController`, falls back to LHM tree |
+| System Identity | System brand / logo | WMI `Win32_ComputerSystem`, `Win32_ComputerSystemProduct`, `Win32_BaseBoard` |
+
+### Processes (opt-in)
 
 | Metric | Source |
 | --- | --- |
-| Time | sysinfo |
-| Day | sysinfo |
-| Date | sysinfo |
+| Top 8 processes by CPU usage | sysinfo |
+| Per-process CPU % of total system | sysinfo |
+| Per-process RAM usage (MB / GB) | sysinfo |
 
-### System Identity
+### Battery (opt-in)
 
-<img src="assets/system-panel.png" width="200" alt="System panel">
-
-| Metadata | Source |
+| Metric | Source |
 | --- | --- |
-| Computer / rig name | `hostname` crate — truncated with ellipsis if too long |
-| CPU model string | sysinfo |
-| GPU model string | WMI `Win32_VideoController`, falls back to LHM tree |
-| System brand / logo | WMI `Win32_ComputerSystem`, `Win32_ComputerSystemProduct`, `Win32_BaseBoard` |
+| Charge percentage (0–100 %) | WMI `Win32_Battery.EstimatedChargeRemaining` |
+| Charging / discharging state | WMI `Win32_Battery.BatteryStatus` |
+| Estimated time remaining | WMI `Win32_Battery.EstimatedRunTime` |
+| Live power draw (W) | WMI `root\wmi BatteryStatus` — charge/discharge rate in mW |
 
-### Recognized System Brands
+Shows "NO BATTERY" gracefully on desktops.
 
-The header logo follows a three-step fallback chain:
+---
+
+## Brand & Logo Detection
+
+The header panel logo follows a three-step fallback chain:
 
 1. **Brand logo** — if the system matches a known gaming/OEM brand below.
 2. **CPU architecture logo** — Intel or AMD, derived from the CPU model string.
 3. **Nothing** — the logo area is hidden silently.
 
-#### Brand logos
+Brand is detected from WMI fields `Win32_ComputerSystem.Manufacturer`, `Win32_ComputerSystem.Model`, `Win32_ComputerSystemProduct.Name/Version`, and `Win32_BaseBoard.Manufacturer/Product`. Product-line names (Alienware, Legion, OMEN, Predator, AORUS) take priority over generic OEM names.
 
-Brand is detected from WMI fields `Win32_ComputerSystem.Manufacturer`, `Win32_ComputerSystem.Model`,
-`Win32_ComputerSystemProduct.Name/Version`, and `Win32_BaseBoard.Manufacturer/Product`.
-Product-line names (Alienware, Legion, OMEN, Predator, AORUS) take priority over generic OEM names.
+### Brand logos
 
 | Logo | Brand | Detected when |
 | --- | --- | --- |
@@ -258,100 +233,59 @@ Product-line names (Alienware, Legion, OMEN, Predator, AORUS) take priority over
 | <img src="src-egui/assets/AORUS-Gigabyte.png" width="48"> | **AORUS** | System name / model contains `AORUS` |
 | <img src="src-egui/assets/gigabyte.png" width="48"> | **Gigabyte** | Manufacturer contains `Gigabyte` |
 
-#### CPU architecture fallback logos
+### CPU architecture fallback
 
-If no brand logo matches, the detected CPU model string is used to show an architecture badge instead.
+If no brand logo matches, the CPU model string is used to show an architecture badge instead.
 
 | Logo | Architecture | Detected when |
 | --- | --- | --- |
 | <img src="src-egui/assets/intel.png" width="48"> | **Intel** | CPU model contains `Intel`, `Core i`, `Xeon`, or `Arc` |
 | <img src="src-egui/assets/AMD-Radeon-Ryzen-Symbol.png" width="48"> | **AMD** | CPU model contains `AMD`, `Ryzen`, `Athlon`, or `EPYC` |
 
-Other recognized brands (ASRock, Corsair, NZXT, Dell, Lenovo, HP, Acer) fall through to the CPU
-architecture fallback. Fully unknown systems show nothing.
+Other recognized brands (ASRock, Corsair, NZXT, Dell, Lenovo, HP, Acer) fall through to the CPU architecture fallback. Fully unknown systems show nothing.
 
 ---
 
 ## Diagnostics Export
 
-The Status dialog has a **Collect Diagnostics…** button. Clicking it opens a native Windows save dialog and writes a single ZIP file that captures everything needed to investigate hardware compatibility issues, missing sensor support, or unexpected behaviour.
-
-### What Is Collected
+The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file capturing everything needed to investigate hardware compatibility issues, missing sensor support, or unexpected behaviour. The ZIP is written only to the location you choose. No data is transmitted automatically; no credentials, browser history, or files outside the RIGStats data directory are included.
 
 | File in ZIP | Contents | Why it is needed |
 | --- | --- | --- |
-| `manifest.json` | Collection timestamp (Unix seconds), RIGStats version | Ties the report to a specific build |
-| `debug.log` | Full RIGStats debug log for the current session — starts with `settings dir`, `os_dark_mode`, settings summary, and all runtime events | Startup sequence, connectivity, settings save errors |
-| `debug-prev.log` | Debug log from the **previous** session — preserved across restarts | Captures the log from a session that crashed; ends with `shutdown: clean` if it closed normally, otherwise the last line before the crash is visible |
-| `settings.json` | Persisted user settings (opacity, profile, model name) | Rules out configuration-specific issues |
-| `sidecar-parsed.json` | Last sensor payload received from the sidecar pipe — GPU temps, CPU temp, fan speeds, disk temps, etc. | **Most important file for adding sensor support** — shows all extracted sensor values exactly as the app uses them |
-| `sensor-tree.txt` | Full LHM hardware and sensor tree as seen at the last sidecar service start — every hardware node, sub-hardware, sensor identifier, type, name, and value | Use this to find the exact identifier for a sensor that isn't being picked up by `SensorReader.cs` |
-| `hardware.json` | WMI/CIM snapshot: OS version, CPU (name, cores, max clock), GPU (name, VRAM, driver), motherboard (manufacturer, model, product, base board), RAM (capacity per stick, speed, type code, manufacturer, part number) | Hardware identification and brand detection |
-| `sidecar-service.txt` | Output of `sc query` and `sc qc` for the `rigstats-sensor` Windows Service | Diagnose sidecar autostart and service registration failures |
-| `environment.txt` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` | Identifies user account paths — essential for diagnosing child/standard account issues where APPDATA may be redirected |
-| `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats — errors and critical events only | Captures OS-level crash records that do not appear in the in-app debug log |
-| `sysinfo.json` | sysinfo snapshot: CPU brand, core count, memory totals, disk mount points, network interface names, detected RAM spec, ping target | Verify what `sysinfo` sees on the machine |
-| `displays.json` | All connected monitors: name, resolution, position, scale factor, portrait/landscape, fit score for the active profile, and which monitor was selected | Diagnose window placement and wrong-monitor issues |
-
-### What Is Not Collected
-
-- No file paths outside the RIGStats data directory
-- No browser history, tokens, or credentials of any kind
-- No data is transmitted anywhere — the ZIP is written only to the location you choose
-- No telemetry is sent automatically at any time
-
-The ZIP is purely a local file that you choose whether to share.
+| `manifest.json` | Collection timestamp, RIGStats version | Ties the report to a specific build |
+| `debug.log` | Full debug log for the current session | Startup sequence, connectivity, settings save errors |
+| `debug-prev.log` | Debug log from the previous session | Captures the log from a session that crashed |
+| `settings.json` | Persisted user settings | Rules out configuration-specific issues |
+| `sidecar-parsed.json` | Last sensor payload from the sidecar pipe | **Most important file for adding sensor support** — shows all extracted values as the app uses them |
+| `sensor-tree.txt` | Full LHM hardware and sensor tree at last sidecar start | Find the exact identifier for a sensor not being picked up |
+| `hardware.json` | WMI/CIM snapshot: OS, CPU, GPU, motherboard, RAM | Hardware identification and brand detection |
+| `sidecar-service.txt` | Output of `sc query` + `sc qc` for `rigstats-sensor` | Diagnose sidecar autostart and service registration failures |
+| `environment.txt` | `USERNAME`, `APPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE`, etc. | Diagnose child/standard account issues where APPDATA may be redirected |
+| `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats | OS-level crash records not visible in the in-app debug log |
+| `sysinfo.json` | sysinfo snapshot: CPU, memory, disks, network, ping target | Verify what sysinfo sees on the machine |
+| `displays.json` | All connected monitors: resolution, position, scale, fit score, selected monitor | Diagnose window placement and wrong-monitor issues |
 
 ---
-
-## Stack
-
-| Component | Role |
-| --- | --- |
-| **egui / eframe** | Native UI (panels, settings, tray, all windows) |
-| **Rust / sysinfo** | CPU, RAM, disk, network data |
-| **LibreHardwareMonitor** | GPU/CPU sensors, disk temperatures, fan speeds |
-| **.NET / sensor sidecar** | Windows Service that streams LHM data over a named pipe |
-
----
-
-## Quick Start
-
-1. Install git hooks (run once after cloning):
-
-   ```powershell
-   cargo xtask setup
-   ```
-
-2. Build and run the debug binary:
-
-   ```powershell
-   cargo build --manifest-path src-egui/Cargo.toml
-   .\target\debug\rigstats.exe
-   ```
-
-3. Build a release installer:
-
-   ```powershell
-   cargo xtask build
-   ```
-
-   The sensor sidecar exe is bundled automatically — no separate download required.
 
 ## Documentation
 
-- [Setup Guide](docs/setup.md)
-- [Release And CI](docs/release.md)
-- [Architecture](docs/architecture.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Changelog](CHANGELOG.md)
-- [Roadmap](ROADMAP.md)
+| Document | Contents |
+| --- | --- |
+| [Architecture](docs/architecture.md) | Data flow, module reference, design decisions |
+| [Setup Guide](docs/setup.md) | Full local dev setup, display profiles, installer build |
+| [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues, sensor diagnostics |
+| [Changelog](CHANGELOG.md) | Full version history |
+| [Roadmap](ROADMAP.md) | Planned features and status |
 
-## Notes
+## Contributing
 
-- Computer name, CPU model, and GPU model are detected automatically at startup
-- Display sleep is not currently blocked by the app
-- The app targets Windows 10/11 and requires no runtime (native egui binary)
+1. **Open a GitHub issue first** — describe the bug or feature before starting work.
+2. **Implement** the fix or feature.
+3. **Test in the running app** — use the kill → build → launch workflow above. Do not commit until the change is verified working in the live app; passing tests alone are not sufficient.
+4. **Run checks, then commit**: `cargo xtask fmt` then `cargo xtask clippy` (zero warnings). Reference the issue in the commit message with `Closes #N` so GitHub closes it automatically.
+
+See [CLAUDE.md](CLAUDE.md) for the full workflow, documentation update requirements, and code standards.
 
 ## License
 
