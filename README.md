@@ -281,9 +281,11 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 ## Contributing
 
 1. **Open a GitHub issue first** — describe the bug or feature before starting work.
-2. **Implement** the fix or feature.
-3. **Test in the running app** — use the kill → build → launch workflow above. Do not commit until the change is verified working in the live app; passing tests alone are not sufficient.
-4. **Run checks, then commit**: `cargo xtask fmt` then `cargo xtask clippy` (zero warnings). Reference the issue in the commit message with `Closes #N` so GitHub closes it automatically.
+2. **Fork the repository** and create a branch from `main`.
+3. **Implement** the fix or feature.
+4. **Test in the running app** — use the kill → build → launch workflow above. Do not commit until the change is verified working in the live app; passing tests alone are not sufficient.
+5. **Run checks**: `cargo xtask fmt` then `cargo xtask clippy` (zero warnings).
+6. **Commit and open a pull request** against `main`. Reference the issue in the commit message with `Closes #N` so GitHub closes it automatically when the PR is merged.
 
 See [CLAUDE.md](CLAUDE.md) for the full workflow, documentation update requirements, and code standards.
 
