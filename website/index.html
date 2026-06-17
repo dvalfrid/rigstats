@@ -200,13 +200,13 @@
           </div>
           <div class="panel-body">
             <h3>GPU</h3>
-            <p>Core load, temperatures, clocks, power, VRAM, and fan RPM. D3D engine workload breakdown shows when the GPU is rendering 3D or decoding video. Includes a multi-GPU selector so you can pin a specific GPU instead of auto-switching each tick.</p>
+            <p>Core load, temperatures, clocks, power, VRAM, and fan load. D3D engine workload breakdown shows when the GPU is rendering 3D or decoding video. Includes a multi-GPU selector so you can pin a specific GPU instead of auto-switching each tick.</p>
             <ul>
               <li>Core load (%)</li>
               <li>Core temperature &amp; hot-spot (°C)</li>
-              <li>Core clock &amp; memory clock (MHz)</li>
-              <li>Package power (W) &amp; fan speed (RPM)</li>
-              <li>VRAM used / total (GB)</li>
+              <li>Core clock (GHz)</li>
+              <li>Package power (W) &amp; fan load (%)</li>
+              <li>VRAM load (%)</li>
               <li>D3D 3D &amp; Video Decode load (when active)</li>
               <li>GPU selector for iGPU/dGPU pinning</li>
             </ul>
@@ -223,8 +223,8 @@
             <p>Current usage alongside the full memory spec read directly from BIOS — type, speed, stick identification, and live DDR5/DDR4 temperature.</p>
             <ul>
               <li>Used / free / total (GB)</li>
-              <li>Memory type (DDR – DDR5)</li>
-              <li>Speed (MHz)</li>
+              <li>Memory type (DDR4 / DDR5)</li>
+              <li>Speed (MT/s)</li>
               <li>Manufacturer &amp; part number</li>
               <li>DIMM temperature (°C) — DDR5 and equipped DDR4</li>
             </ul>
@@ -238,11 +238,11 @@
           </div>
           <div class="panel-body">
             <h3>Network</h3>
-            <p>Live upload and download throughput for the best active interface, plus latency measured against the default gateway. Upload and download are shown as separate coloured series in the sparkline.</p>
+            <p>Live upload and download throughput for the best active interface, plus LAN gateway and WAN latency. Upload and download are shown as separate coloured series in the sparkline.</p>
             <ul>
-              <li>Upload / download (Mbps)</li>
+              <li>Upload / download (Kbps / Mbps)</li>
               <li>Active interface name</li>
-              <li>Ping / latency (ms)</li>
+              <li>LAN &amp; WAN ping (ms)</li>
             </ul>
             <span class="source-tag">sysinfo</span>
           </div>
@@ -256,9 +256,9 @@
             <h3>Storage</h3>
             <p>Aggregated read and write throughput across your primary drives, plus per-drive capacity, usage, and live NVMe/SSD temperature. Read and write are shown as separate coloured series in the sparkline with matching coloured labels.</p>
             <ul>
-              <li>Read / write throughput (MB/s)</li>
+              <li>Read / write throughput (KB/s / MB/s)</li>
               <li>Per-drive capacity &amp; usage</li>
-              <li>Filesystem label</li>
+              <li>Drive letter &amp; model name</li>
               <li>Drive temperature (°C)</li>
             </ul>
             <span class="source-tag">LHM · sysinfo</span>
@@ -327,6 +327,7 @@
             <ul>
               <li>Time (HH:MM:SS)</li>
               <li>Day of week &amp; date</li>
+              <li>System uptime</li>
             </ul>
             <span class="source-tag">sysinfo</span>
           </div>
@@ -338,11 +339,11 @@
           </div>
           <div class="panel-body">
             <h3>System Identity</h3>
-            <p>Rig name, CPU model, and GPU model auto-detected at startup. Recognized gaming OEMs — ROG, MSI, Alienware, Legion, OMEN, Razer, Predator, AORUS — display their brand logo automatically.</p>
+            <p>System brand, hostname, and model name auto-detected at startup. Recognized gaming OEMs — ROG, MSI, Alienware, Legion, OMEN, Razer, Predator, AORUS — display their brand logo automatically.</p>
             <ul>
               <li>Hostname / rig name</li>
-              <li>CPU &amp; GPU model strings</li>
-              <li>System brand logo (auto-detected)</li>
+              <li>System brand &amp; model name</li>
+              <li>Brand logo (auto-detected)</li>
             </ul>
             <span class="source-tag">WMI · sysinfo</span>
           </div>
@@ -362,28 +363,24 @@
 
       <div class="dialogs-grid">
 
-        <article class="dialog-card">
+        <article class="dialog-card dialog-card--settings">
+          <div class="settings-tabs" role="tablist">
+            <button class="settings-tab active" data-img="settings-dashboard-dialog.png" role="tab" aria-selected="true">Dashboard</button>
+            <button class="settings-tab" data-img="settings-panels-dialog.png" role="tab" aria-selected="false">Panels</button>
+            <button class="settings-tab" data-img="settings-alerts-dialog.png" role="tab" aria-selected="false">Alerts</button>
+            <button class="settings-tab" data-img="settings-appearance-dialog.png" role="tab" aria-selected="false">Appearance</button>
+          </div>
           <div class="dialog-img-wrap">
-            <img src="images/settings-dialog.png" alt="Settings dialog screenshot" class="dialog-img">
+            <img id="settings-preview" src="images/settings-dashboard-dialog.png" alt="Settings — Dashboard tab" class="dialog-img">
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Control how and where the dashboard appears. Adjust opacity with a live preview before saving, pick the display profile that matches your monitor, toggle floating mode to scatter panels freely, toggle always-on-top mode, enable launch at startup, configure temperature and battery alert thresholds, choose a colour theme, and choose which panels to show — drag them to set the order.</p>
+            <p>Four focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state.</p>
             <ul>
-              <li>Opacity slider (live preview)</li>
-              <li>Display profile selector</li>
-              <li>Floating mode toggle — independent draggable panel windows</li>
-              <li>Floating panel scale (40–100%)</li>
-              <li>Lock floating panel positions</li>
-              <li>Always-on-top toggle</li>
-              <li>Launch at Startup toggle</li>
-              <li>Editable model name</li>
-              <li>Colour theme — Dark Cyan, Amber, Green, Purple, Slate (live preview)</li>
-              <li>Panel visibility toggles with drag-to-reorder</li>
-              <li>Warning &amp; critical thresholds (CPU, GPU, RAM, Disk temperatures; Battery charge %)</li>
-              <li>Notification enable/disable per alert level</li>
-              <li>Configurable alert cooldown</li>
-              <li>Stats CSV logging with configurable retention</li>
+              <li><strong>Dashboard</strong> — display profile, floating mode toggle, stats CSV logging and retention</li>
+              <li><strong>Panels</strong> — toggle panel visibility, use arrows to reorder</li>
+              <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk (°C) and battery charge % and power W</li>
+              <li><strong>Appearance</strong> — override model name, opacity, window layer (Always Behind / Always on Top), launch at startup, colour theme</li>
             </ul>
           </div>
         </article>
@@ -394,10 +391,11 @@
           </div>
           <div class="dialog-body">
             <h3>Status</h3>
-            <p>Runtime health view for every data source. Shows the rigstats-sensor Windows Service state, dependency health indicators, the live debug log, and last successful refresh time.</p>
+            <p>Runtime health view for every data source. Shows the rigstats-sensor Windows Service state, dependency health indicators, GPU driver versions with age warnings, the live debug log, and last successful refresh time.</p>
             <ul>
-              <li>Dependency health indicators</li>
-              <li>Live debug log viewer</li>
+              <li>Dependency health indicators (sensor, sysinfo, WMI)</li>
+              <li>GPU driver version &amp; age per adapter</li>
+              <li>Live debug log viewer with Copy Log button</li>
               <li>Last successful refresh timestamp</li>
               <li>Diagnostics ZIP export</li>
             </ul>
@@ -410,10 +408,11 @@
           </div>
           <div class="dialog-body">
             <h3>About</h3>
-            <p>Product information at a glance. Shows the current version, license, and direct links to the website and contact.</p>
+            <p>Product information at a glance. Shows the current version, license, contact links, and the full technology stack the app is built on.</p>
             <ul>
-              <li>Current version &amp; license</li>
-              <li>Website &amp; contact links</li>
+              <li>Current version &amp; MIT license</li>
+              <li>GitHub &amp; email links</li>
+              <li>Built with: Rust · egui/eframe · sysinfo · WMI · LibreHardwareMonitor</li>
             </ul>
           </div>
         </article>
@@ -428,7 +427,7 @@
             <ul>
               <li>Background update check (every 6 hours)</li>
               <li>Update badge in the dashboard header</li>
-              <li>Release notes from GitHub + full changelog</li>
+              <li>Full changelog bundled in the app</li>
               <li>One-click download and install with progress bar</li>
             </ul>
           </div>

@@ -438,6 +438,31 @@ code {
   color: var(--accent);
 }
 
+/* ── Settings tab switcher ──────────────────────────────────── */
+.settings-tabs {
+  display: flex;
+  background: #0a0f1a;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.settings-tab {
+  padding: 9px 14px;
+  font-size: .78rem;
+  font-weight: 500;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  margin-bottom: -1px;
+  letter-spacing: .01em;
+}
+
+.settings-tab:hover { color: var(--text-muted); }
+.settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
 /* ── Download ──────────────────────────────────────────────── */
 .download-layout {
   display: grid;

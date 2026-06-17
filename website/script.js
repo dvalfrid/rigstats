@@ -21,3 +21,18 @@ const observer = new IntersectionObserver(entries => {
 }, { rootMargin: '-40% 0px -55% 0px' });
 
 sections.forEach(s => observer.observe(s));
+
+// Settings tab image switcher
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(t => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
+    });
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+    const img = document.getElementById('settings-preview');
+    img.src = 'images/' + tab.dataset.img;
+    img.alt = 'Settings — ' + tab.textContent + ' tab';
+  });
+});
