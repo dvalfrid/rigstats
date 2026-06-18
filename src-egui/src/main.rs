@@ -275,9 +275,10 @@ fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     pos
 }
 
-/// Returns (x, y) position for the window — top-left of the best portrait monitor.
-/// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
-fn pick_window_position() -> [f32; 2] {
+/// Returns `[x, y, w, h]` (logical pixels) for the best portrait monitor — the
+/// one the dashboard targets. Prefers a portrait monitor (height > width), else
+/// the first monitor. Falls back to `[0, 0, 0, 0]` if none / non-Windows.
+fn pick_window_rect() -> [f32; 4] {
     #[cfg(windows)]
     {
         let monitors = win_monitor::list();
@@ -286,11 +287,18 @@ fn pick_window_position() -> [f32; 2] {
             .iter()
             .find(|&&(l, t, r, b)| (b - t) > (r - l))
             .or_else(|| monitors.first());
-        if let Some(&(x, y, _, _)) = picked {
-            return [x as f32, y as f32];
+        if let Some(&(l, t, r, b)) = picked {
+            return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
         }
     }
-    [0.0, 0.0]
+    [0.0, 0.0, 0.0, 0.0]
+}
+
+/// Returns (x, y) position for the window — top-left of the best portrait monitor.
+/// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
+fn pick_window_position() -> [f32; 2] {
+    let [x, y, _, _] = pick_window_rect();
+    [x, y]
 }
 
 // ── Tray icon ─────────────────────────────────────────────────────────────────
@@ -492,6 +500,16 @@ struct RigStatsApp {
     // Win32 HWND stored as isize for window-level opacity (SetLayeredWindowAttributes).
     // Found via FindWindowW on the first ui() frame; 0 until then.
     hwnd: isize,
+    // ── Fullscreen (fill-screen) mode ──────────────────────────────────────
+    /// When true (and not floating), the fixed window fills the whole monitor
+    /// instead of fitting panel content; the dashboard background fills the rest.
+    fullscreen_mode: bool,
+    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
+    fullscreen_align: String,
+    /// Measured panel-stack content height (excluding drag handle + centering pad),
+    /// cached from the previous frame so fullscreen centering is exact. `None`
+    /// until the first fullscreen frame; `compute_window_height` is the fallback.
+    fullscreen_content_h: Option<f32>,
     // ── Floating mode ──────────────────────────────────────────────────────
     floating_mode: bool,
     floating_panels_locked: bool,
@@ -677,6 +695,9 @@ impl RigStatsApp {
             preferred_gpu,
             dir,
             hwnd: 0,
+            fullscreen_mode: init_settings.fullscreen_mode,
+            fullscreen_align: init_settings.fullscreen_align.clone(),
+            fullscreen_content_h: None,
             floating_mode: init_settings.floating_mode,
             floating_panels_locked: init_settings.floating_panels_locked,
             floating_panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
@@ -820,15 +841,19 @@ impl eframe::App for RigStatsApp {
                 .store(self.floating_mode, Ordering::Relaxed);
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            let was_fullscreen = self.fullscreen_mode;
+            self.fullscreen_mode = s.fullscreen_mode;
+            self.fullscreen_align = s.fullscreen_align.clone();
+            let profile = s.dashboard_profile.clone();
             drop(s);
-            let profile = self
-                .current_settings
-                .lock()
-                .unwrap()
-                .dashboard_profile
-                .clone();
-            let [w, _] = profile_to_size(&profile);
-            let h = compute_window_height(&self.visible_panels, profile_scale(&profile));
+            // Toggling fullscreen changes how the window is sized; clear the
+            // fit-to-content guard so the next fixed frame re-snaps correctly, and
+            // drop the cached centering height so it is re-measured.
+            if was_fullscreen != self.fullscreen_mode {
+                self.last_fitted_height = None;
+                self.fullscreen_content_h = None;
+            }
+            let (pos, [w, h]) = self.fixed_window_geometry(&profile);
             // Only resize the main window when in fixed mode AND the size actually changed.
             // Sending InnerSize every settings-reload (e.g. opacity slider drag) causes a
             // visible jump even when the dimensions are identical.
@@ -859,8 +884,9 @@ impl eframe::App for RigStatsApp {
                             -32000.0, -32000.0,
                         )));
                 } else {
-                    // Restore to the correct portrait monitor position.
-                    let [px, py] = pick_window_position();
+                    // Restore to the correct portrait monitor position (and full
+                    // monitor size if fullscreen is enabled).
+                    let [px, py] = pos;
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                             px, py,
@@ -925,14 +951,9 @@ impl eframe::App for RigStatsApp {
                                     egui::Pos2::new(-32000.0, -32000.0),
                                 ));
                         } else {
-                            let [px, py] = pick_window_position();
-                            let s = self.current_settings.lock_safe();
-                            let [w, _] = profile_to_size(&s.dashboard_profile);
-                            let h = compute_window_height(
-                                &self.visible_panels,
-                                profile_scale(&s.dashboard_profile),
-                            );
-                            drop(s);
+                            let profile =
+                                self.current_settings.lock_safe().dashboard_profile.clone();
+                            let ([px, py], [w, h]) = self.fixed_window_geometry(&profile);
                             // Apply level + opacity BEFORE moving on-screen so they are
                             // already in effect when the window becomes visible.
                             ui.ctx()
@@ -1330,6 +1351,26 @@ impl eframe::App for RigStatsApp {
             // Panels in the order defined by visible_panels (respects user reordering).
             let panels_to_draw = self.visible_panels.clone();
             let sc = profile_scale(&self.current_settings.lock_safe().dashboard_profile);
+            // Fullscreen + centered: pad the top so the panel stack is vertically
+            // centered in the filled window. Panel proportions are untouched —
+            // only the surrounding background grows. Use the measured content
+            // height from the previous frame (cached) for an exact center; fall
+            // back to the compute_window_height estimate on the first frame.
+            let center_fullscreen = self.fullscreen_mode && self.fullscreen_align == "center";
+            let center_pad = if center_fullscreen {
+                // Pure panel-stack height (excludes drag handle and pad).
+                let content = self.fullscreen_content_h.unwrap_or_else(|| {
+                    compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
+                });
+                // Center the visible content with equal background above and below.
+                // The drag handle occupies the first DRAG_HANDLE_H px (invisible),
+                // so discount it from the top so the content itself is centered.
+                let pad = ((ui.available_height() - content - theme::DRAG_HANDLE_H) * 0.5).max(0.0);
+                ui.add_space(pad);
+                pad
+            } else {
+                0.0
+            };
             let mut new_preferred_gpu: Option<String> = None;
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
@@ -1469,31 +1510,53 @@ impl eframe::App for RigStatsApp {
                 }
                 ui.add_space((6.0 * sc).round());
             }
+            // Cache the true panel-stack content height for exact centering next
+            // frame: min_rect = drag handle + center pad + content, so content =
+            // min_rect − DRAG_HANDLE_H − pad. Re-center on the next frame if the
+            // measurement drifts from what we used this frame.
+            if center_fullscreen {
+                let content = ui.min_rect().height() - theme::DRAG_HANDLE_H - center_pad;
+                if content > 10.0 {
+                    let changed = self
+                        .fullscreen_content_h
+                        .map(|h| (h - content).abs() > 0.5)
+                        .unwrap_or(true);
+                    self.fullscreen_content_h = Some(content);
+                    if changed {
+                        ui.ctx().request_repaint();
+                    }
+                }
+            }
             // Fit window height to actual rendered content every frame so no black gap
             // appears regardless of panel set, spacing, or egui version.
-            let used_h = ui.min_rect().height();
-            // During the first frames after launch the window may not be fully
-            // realized, so early InnerSize commands can be dropped — which would
-            // leave the bottom panel clipped until the user toggles floating mode.
-            // Force a re-fit (and a fast repaint) for a handful of frames so the
-            // true content height always sticks at startup.
-            if self.startup_fit_frames > 0 {
-                self.startup_fit_frames -= 1;
-                self.last_fitted_height = None;
-                ui.ctx().request_repaint();
-            }
-            let changed = self
-                .last_fitted_height
-                .map(|h| (h - used_h).abs() > 0.5)
-                .unwrap_or(true);
-            if used_h > 10.0 && changed {
-                self.last_fitted_height = Some(used_h);
-                let [w, _] = profile_to_size(&self.current_settings.lock_safe().dashboard_profile);
-                ui.ctx()
-                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                        w - 2.0,
-                        used_h,
-                    )));
+            // Skipped in fullscreen mode — there the window stays at the full monitor
+            // size and must NOT shrink to content.
+            if !self.fullscreen_mode {
+                let used_h = ui.min_rect().height();
+                // During the first frames after launch the window may not be fully
+                // realized, so early InnerSize commands can be dropped — which would
+                // leave the bottom panel clipped until the user toggles floating mode.
+                // Force a re-fit (and a fast repaint) for a handful of frames so the
+                // true content height always sticks at startup.
+                if self.startup_fit_frames > 0 {
+                    self.startup_fit_frames -= 1;
+                    self.last_fitted_height = None;
+                    ui.ctx().request_repaint();
+                }
+                let changed = self
+                    .last_fitted_height
+                    .map(|h| (h - used_h).abs() > 0.5)
+                    .unwrap_or(true);
+                if used_h > 10.0 && changed {
+                    self.last_fitted_height = Some(used_h);
+                    let [w, _] =
+                        profile_to_size(&self.current_settings.lock_safe().dashboard_profile);
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                            w - 2.0,
+                            used_h,
+                        )));
+                }
             }
 
             if let Some(new_pref) = new_preferred_gpu {
@@ -1593,6 +1656,24 @@ impl RigStatsApp {
             "behind" => egui::WindowLevel::AlwaysOnBottom,
             _ => egui::WindowLevel::Normal,
         }
+    }
+
+    /// Fixed-mode window geometry: returns `(top_left, [w, h])`.
+    /// Width is always the profile width so panel proportions never stretch.
+    /// In fullscreen mode the height fills the portrait monitor (intended for a
+    /// monitor whose resolution matches the profile); otherwise it is the
+    /// content-fit estimate (the per-frame fit then refines it). Falls back to the
+    /// content-fit size if no monitor is found.
+    fn fixed_window_geometry(&self, profile: &str) -> ([f32; 2], [f32; 2]) {
+        let [w, _] = profile_to_size(profile);
+        if self.fullscreen_mode {
+            let [x, y, _mw, mh] = pick_window_rect();
+            if mh > 0.0 {
+                return ([x, y], [w, mh]);
+            }
+        }
+        let h = compute_window_height(&self.visible_panels, profile_scale(profile));
+        (pick_window_position(), [w, h])
     }
 
     /// Render every visible panel as its own borderless OS window using
@@ -2521,8 +2602,25 @@ fn main() {
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
     let always_on_top = s.window_layer == "on_top";
     let [win_w, _] = profile_to_size(&s.dashboard_profile);
-    let win_h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
-    let [pos_x, pos_y] = pick_window_position();
+    // Width is always the profile width (panels never stretch). In fullscreen the
+    // height fills the monitor and the window pins to the monitor top-left; the
+    // 2 px width trim used in normal mode is dropped so a matching screen fills.
+    let fullscreen = s.fullscreen_mode && !s.floating_mode;
+    let (inner_w, inner_h, pos_x, pos_y) = {
+        let [bx, by] = pick_window_position();
+        if fullscreen {
+            let [mx, my, _mw, mh] = pick_window_rect();
+            if mh > 0.0 {
+                (win_w, mh, mx, my)
+            } else {
+                let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
+                (win_w - 2.0, h, bx, by)
+            }
+        } else {
+            let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
+            (win_w - 2.0, h, bx, by)
+        }
+    };
     debug::log_debug(
         &dir,
         &format!(
@@ -2554,7 +2652,7 @@ fn main() {
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("RigStats")
         .with_icon(load_app_icon())
-        .with_inner_size([win_w - 2.0, win_h])
+        .with_inner_size([inner_w, inner_h])
         .with_position([pos_x, pos_y])
         .with_decorations(false)
         .with_taskbar(false); // app is tray-only, never show in taskbar

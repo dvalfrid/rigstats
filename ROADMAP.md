@@ -23,6 +23,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | CPU fan speed | ⏭ Investigated, skipped |
 | Stats logging / data export | ✅ Done |
 | GPU driver version + stale-driver warning (Status dialog) | ✅ Done (v1.31) |
+| Fullscreen (fill-screen) mode for dedicated monitors | ✅ Done |
 | Floating panel groups | 🔲 Planned |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
@@ -422,6 +423,30 @@ Settings" and "Close panel".
 - Settings window: "Floating mode" toggle and "Panel Scale" slider in a new
   Layout card
 - Tray menu: "Floating mode" shortcut to toggle without opening Settings
+
+---
+
+## Fullscreen (fill-screen) mode ✅
+
+**Area:** Fixed-mode window sizing (`src-egui/src/main.rs`) + Settings Dashboard tab
+
+For a dedicated small portrait monitor whose resolution matches the chosen
+profile, the dashboard can now cover the entire screen instead of shrinking to
+fit the visible panels. A **Fill Screen** toggle (Settings → Dashboard → Layout)
+makes the non-floating window fill the monitor's height while keeping the profile
+width, so panel proportions never change — the dashboard background simply fills
+the surrounding space. An **Alignment** option (Top / Center, default Center)
+controls where the panel stack sits, so the screen looks like a finished
+dashboard regardless of how many panels are enabled.
+
+**Implementation:**
+- `Settings.fullscreen_mode: bool` + `Settings.fullscreen_align: String`
+  (`#[serde(default ...)]`, no migration).
+- `fixed_window_geometry` returns the monitor-height window when fullscreen;
+  `pick_window_rect` supplies the monitor rect. The per-frame content-fit resize
+  is skipped in fullscreen; centered alignment adds top padding before the panel
+  loop. The dashboard background fills the rest via the existing `clear_color`.
+- Only applies in non-floating mode (the toggle is disabled while floating).
 
 ---
 

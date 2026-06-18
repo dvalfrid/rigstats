@@ -303,6 +303,16 @@ Multi-GPU pinning adds one field:
 - **`preferred_gpu: Option<String>`** — user-selected GPU device name for stable
   display across ticks; `None` means use backend stable default (highest VRAM).
 
+Fullscreen (fill-screen) mode adds two fields — both `#[serde(default ...)]`, no
+migration needed:
+
+- **`fullscreen_mode: bool`** — when true (and not floating), the fixed window
+  fills the portrait monitor's height instead of fitting panel content; the
+  dashboard background fills the rest. Width stays at the profile width so panel
+  proportions never stretch.
+- **`fullscreen_align: String`** — `"top"` or `"center"` (default `"center"`):
+  where the panel stack sits within the filled window.
+
 #### `windows.rs`
 
 Creates and positions secondary windows:

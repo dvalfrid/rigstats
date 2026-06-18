@@ -228,7 +228,7 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`lhm.rs`** — Named pipe client → `LhmData`. `fetch_lhm_pipe` reuses an established connection; on failure logs at most once per 30 s. `.write(false)` on `ClientOptions` (pipe is `PipeDirection.Out`). `select_gpu_idx`: preferred GPU → highest VRAM → tie-break by load.
 - **`lhm_process.rs`** — `track_lhm_connection_state` (connect/disconnect logging, 30 s throttle).
 - **`logging.rs`** — CSV logging: `append_stats_row`, `prune_old_logs`, `current_log_path`, `ymd_from_unix`.
-- **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`. Key fields: `theme` (default `"dark-cyan"`), `thresholds: HashMap<String, ComponentThresholds>`, `panel_layouts`, `floating_mode`, `floating_panel_scale`, `logging_enabled`, `log_retention_days`. `settings_version` migration sentinel (0→1).
+- **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`. Key fields: `theme` (default `"dark-cyan"`), `thresholds: HashMap<String, ComponentThresholds>`, `panel_layouts`, `floating_mode`, `floating_panel_scale`, `fullscreen_mode`, `fullscreen_align` (`"top"`/`"center"`, default `"center"`), `logging_enabled`, `log_retention_days`. `settings_version` migration sentinel (0→1).
 - **`debug.rs`** — `append_debug_log` (INFO) plus `log_debug`/`log_warn`/`log_error` level variants, all built on `append_debug_log_lvl` + the `LogLevel` enum. Lines are written as `[YYYY-MM-DD HH:MM:SS] [LEVEL] message` (local time via `chrono`, the `[LEVEL]` tag padded to `[WARNING]` width so message columns align in the Status view). Also `reset_debug_log` (rotates current log to `rigstats-debug-prev.log` before starting fresh — preserves crash evidence), `unix_now_secs`.
 - **`monitor.rs`** — Profile definitions, monitor selection, `compute_panels_logical_height`.
 - **`autostart.rs`** — Registry-based autostart (HKCU run key).
@@ -241,6 +241,8 @@ Legacy Tauri JS frontend — **no longer used at runtime**. Kept for the vitest 
 ### Dashboard profiles
 
 Profiles are portrait orientations with fixed pixel dimensions (e.g., `portrait-xl` = 450×1920). The profile name is stored in settings; `monitor.rs` returns the window size and `main.rs` positions the egui window accordingly. `compute_panels_logical_height` sums visible panel heights to pre-size the window before first paint.
+
+**Fullscreen (fill-screen) mode** (`fullscreen_mode`): in non-floating mode the window normally fits its content height (per-frame fit in `main.rs`). When `fullscreen_mode` is on, `fixed_window_geometry` instead fills the portrait monitor's height (keeping the profile width so panel proportions never stretch — intended for a screen whose resolution matches the profile), the per-frame content-fit is skipped, and the panel stack is placed per `fullscreen_align` (`"center"` adds top padding to vertically center it; `"top"` leaves it at the top). The dashboard background fills the rest of the window via `clear_color`. Fullscreen has no effect in floating mode.
 
 Valid profiles: `portrait-xl` (450×1920), `portrait-slim` (480×1920), `portrait-hd` (720×1280), `portrait-wxga` (800×1280), `portrait-fhd` (1080×1920), `portrait-wuxga` (1200×1920), `portrait-qhd` (1440×2560), `portrait-hdplus` (768×1366), `portrait-900x1600`, `portrait-1050x1680`, `portrait-1600x2560`, `portrait-4k` (2160×3840), `portrait-fhd-side` (253×1080), `portrait-qhd-side` (338×1440), `portrait-4k-side` (506×2160).
 

@@ -153,6 +153,13 @@ pub struct Settings {
   /// Number of days to retain daily log files before automatic pruning.
   #[serde(default = "default_log_retention_days")]
   pub log_retention_days: u32,
+  /// Fill the whole monitor in non-floating mode; panels keep their size, the
+  /// dashboard background fills the rest.
+  #[serde(default)]
+  pub fullscreen_mode: bool,
+  /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
+  #[serde(default = "default_fullscreen_align")]
+  pub fullscreen_align: String,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -199,6 +206,10 @@ fn default_log_retention_days() -> u32 {
 
 fn default_window_layer() -> String {
   "normal".to_string()
+}
+
+fn default_fullscreen_align() -> String {
+  "center".to_string()
 }
 
 fn default_opacity() -> f64 {
@@ -249,6 +260,8 @@ impl Default for Settings {
       floating_panels_locked: false,
       logging_enabled: false,
       log_retention_days: default_log_retention_days(),
+      fullscreen_mode: false,
+      fullscreen_align: default_fullscreen_align(),
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,

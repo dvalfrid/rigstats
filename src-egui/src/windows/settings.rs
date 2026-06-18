@@ -510,6 +510,62 @@ fn draw_dashboard(
                 });
             });
         }
+
+        // Fill Screen — only applies in non-floating mode, so disable while
+        // floating is on.
+        ui.add_space(8.0);
+        inner_row(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.add_enabled_ui(!draft.floating_mode, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(egui::RichText::new("Fill Screen").size(13.0).color(dc.text));
+                        ui.label(
+                            egui::RichText::new(
+                                "Cover the whole monitor; the dashboard background fills the rest",
+                            )
+                            .size(11.0)
+                            .color(dc.muted),
+                        );
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        toggle_switch(ui, dc, &mut draft.fullscreen_mode);
+                    });
+                });
+            });
+        });
+
+        if draft.fullscreen_mode && !draft.floating_mode {
+            ui.add_space(8.0);
+            inner_row(dc).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("Alignment").size(12.0).color(dc.muted));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let current = if draft.fullscreen_align == "top" {
+                            "Top"
+                        } else {
+                            "Center"
+                        };
+                        egui::ComboBox::from_id_salt("fullscreen_align")
+                            .selected_text(current)
+                            .width(140.0)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut draft.fullscreen_align,
+                                    "center".to_string(),
+                                    "Center",
+                                );
+                                ui.selectable_value(
+                                    &mut draft.fullscreen_align,
+                                    "top".to_string(),
+                                    "Top",
+                                );
+                            });
+                    });
+                });
+            });
+        }
     });
 
     // Stats Logging
