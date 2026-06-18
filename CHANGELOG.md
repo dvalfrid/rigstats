@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.32.0](https://github.com/dvalfrid/rigstats/compare/v1.31.1...v1.32.0) (2026-06-18)
+
+
+### Features
+
+* **settings:** add fullscreen fill-screen mode for dedicated monitors ([2035105](https://github.com/dvalfrid/rigstats/commit/2035105c5c2dee22e0ff72cbf3f9badca5a4388a)), closes [#83](https://github.com/dvalfrid/rigstats/issues/83)
+* **status:** add GPU driver version + stale-driver warning ([58f567e](https://github.com/dvalfrid/rigstats/commit/58f567eda8bc7303e3e371c308d0d0d6582912de)), closes [#81](https://github.com/dvalfrid/rigstats/issues/81)
+
+
+### Bug Fixes
+
+* **updater:** parse changelog lines with trailing closes references ([c8684e6](https://github.com/dvalfrid/rigstats/commit/c8684e6d630b6ad1dd4fcd5d7fc7214084cdfc3e))
+
 ## [1.31.1](https://github.com/dvalfrid/rigstats/compare/v1.31.0...v1.31.1) (2026-06-16)
 
 
