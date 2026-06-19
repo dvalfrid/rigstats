@@ -39,6 +39,56 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 
 ---
 
+## GitHub issue tracking
+
+The whole roadmap is mirrored to
+[GitHub Issues](https://github.com/dvalfrid/rigstats/issues) under the
+**[v2.0 milestone](https://github.com/dvalfrid/rigstats/milestone/1)** — shipped
+features as closed issues, planned work as open issues, and
+investigated-and-dropped items closed as *not planned*.
+
+Each issue is tied to its roadmap entry by a stable **hidden marker** in the
+issue body — `<!-- roadmap-id: <id> -->` (invisible in GitHub's rendered view).
+`tools/sync-roadmap-issues.ps1` uses that marker to **upsert** issues
+idempotently: re-running updates the matching issue in place (title, body,
+labels, milestone, open/closed) instead of creating duplicates. The table below
+is the human-visible counterpart of those markers — keep it in step with the
+script's `$features` data.
+
+| Issue | roadmap-id | Feature | Status |
+| --- | --- | --- | --- |
+| [#84](https://github.com/dvalfrid/rigstats/issues/84) | `auto-update` | Auto-update | ✅ Done |
+| [#85](https://github.com/dvalfrid/rigstats/issues/85) | `nvme-ssd-temperatures` | NVMe / SSD temperatures | ✅ Done |
+| [#86](https://github.com/dvalfrid/rigstats/issues/86) | `temperature-threshold-alerts` | Temperature threshold alerts | ✅ Done |
+| [#87](https://github.com/dvalfrid/rigstats/issues/87) | `motherboard-panel` | Motherboard panel | ✅ Done |
+| [#88](https://github.com/dvalfrid/rigstats/issues/88) | `extended-gpu-panel` | Extended GPU panel | ✅ Done |
+| [#89](https://github.com/dvalfrid/rigstats/issues/89) | `customisable-themes` | Customisable themes / accent colours | ✅ Done |
+| [#90](https://github.com/dvalfrid/rigstats/issues/90) | `process-monitor-panel` | Process monitor panel | ✅ Done |
+| [#91](https://github.com/dvalfrid/rigstats/issues/91) | `floating-panel-layout` | Floating panel layout | ✅ Done |
+| [#92](https://github.com/dvalfrid/rigstats/issues/92) | `multi-gpu-selector` | Multi-GPU selector and pinning | ✅ Done |
+| [#93](https://github.com/dvalfrid/rigstats/issues/93) | `battery-panel` | Battery panel (laptop support) | ✅ Done |
+| [#94](https://github.com/dvalfrid/rigstats/issues/94) | `settings-redesign` | Settings redesign | ✅ Done |
+| [#95](https://github.com/dvalfrid/rigstats/issues/95) | `lhm-sensor-sidecar` | LHM stability — sensor sidecar | ✅ Done |
+| [#96](https://github.com/dvalfrid/rigstats/issues/96) | `desktop-background-l1` | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done |
+| [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration — replace Tauri/WebView2 | ✅ Done |
+| [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | ✅ Done |
+| [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | ✅ Done |
+| [#81](https://github.com/dvalfrid/rigstats/issues/81) | `gpu-driver-warning` | GPU driver version + stale-driver warning | ✅ Done |
+| [#83](https://github.com/dvalfrid/rigstats/issues/83) | `fullscreen-mode` | Fullscreen (fill-screen) mode | ✅ Done |
+| [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | ⏭ Not planned |
+| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency | ⏭ Not planned |
+| [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance — lighter rendering strategy | ⏭ Not planned |
+| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | 🔲 Planned |
+| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
+| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
+| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | 🔲 Planned |
+| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | 🔲 Planned |
+| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | 🔲 Planned |
+| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | 🔲 Planned |
+| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage — sidecar + sensor extraction | 🔲 Planned |
+
+---
+
 ## Auto-update ✅
 
 **Plugin:** `tauri-plugin-updater`

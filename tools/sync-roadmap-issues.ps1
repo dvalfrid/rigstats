@@ -7,7 +7,7 @@
 # then title/body/label/milestone/state are reconciled to match the data below.
 #
 # Source of truth = the $features array. ROADMAP.md stays the human-readable doc.
-# Run:  pwsh -NoProfile -File scripts/sync-roadmap-issues.ps1
+# Run:  pwsh -NoProfile -File tools/sync-roadmap-issues.ps1
 $ErrorActionPreference = "Stop"
 $gh = "C:\Program Files\GitHub CLI\gh.exe"
 $ms = "v2.0"
