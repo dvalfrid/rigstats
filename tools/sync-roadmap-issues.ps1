@@ -112,8 +112,10 @@ $features = @(
      status="Planned" }
 
   # Pre-existing issues: track only (do not rewrite their title/body).
-  @{ id="gpu-driver-warning"; kind="done"; pin=81 }
-  @{ id="fullscreen-mode"; kind="done"; pin=83 }
+  # `title` here is display-only (used for the ROADMAP table; the pinned branch
+  # never rewrites the issue's real title).
+  @{ id="gpu-driver-warning"; kind="done"; pin=81; title="GPU driver version + stale-driver warning" }
+  @{ id="fullscreen-mode"; kind="done"; pin=83; title="Fullscreen (fill-screen) mode" }
 )
 
 # 3. Fetch all issues once; index by marker and by title.
@@ -129,6 +131,7 @@ foreach ($i in $all) {
 
 $knownIds = @{}
 $stats = @{ created = 0; adopted = 0; updated = 0; unchanged = 0; stateFixed = 0 }
+$rows = @()   # collected for the auto-generated ROADMAP.md table
 
 foreach ($f in $features) {
   $knownIds[$f.id] = $true
@@ -154,10 +157,12 @@ foreach ($f in $features) {
     if ($desiredState -eq "CLOSED") { & $gh issue close $num --reason $closeReason | Out-Null }
     Write-Host "CREATED  #$num  $($f.title)"
     $stats.created++
+    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title }
     continue
   }
 
   $num = $issue.number
+  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title }
 
   # ---- pinned: ensure marker present + milestone + state only ----
   if ($f.ContainsKey("pin")) {
@@ -202,6 +207,37 @@ foreach ($f in $features) {
 foreach ($id in $byMarker.Keys) {
   if (-not $knownIds.ContainsKey($id)) {
     Write-Host "ORPHAN   #$($byMarker[$id].number)  roadmap-id '$id' not in data (review manually)"
+  }
+}
+
+# 5. Regenerate the ROADMAP.md issue-tracking table between its markers.
+#    Grouped Done -> Not planned -> Planned, each sorted by issue number.
+$repo = "https://github.com/dvalfrid/rigstats/issues"
+$statusText = @{ done = "✅ Done"; dropped = "⏭ Not planned"; planned = "🔲 Planned" }
+$kindRank = @{ done = 0; dropped = 1; planned = 2 }
+$sorted = $rows | Sort-Object @{ Expression = { $kindRank[$_.kind] } }, @{ Expression = { $_.num } }
+$tableLines = @(
+  "| Issue | roadmap-id | Feature | Status |"
+  "| --- | --- | --- | --- |"
+)
+foreach ($r in $sorted) {
+  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($statusText[$r.kind]) |"
+}
+
+$roadmapPath = Join-Path $PSScriptRoot "..\ROADMAP.md"
+$raw = Get-Content -Raw -LiteralPath $roadmapPath
+$nl = if ($raw -match "`r`n") { "`r`n" } else { "`n" }
+$block = "<!-- roadmap-table:start -->$nl" + ($tableLines -join $nl) + "$nl<!-- roadmap-table:end -->"
+$rx = [regex]'(?s)<!-- roadmap-table:start -->.*?<!-- roadmap-table:end -->'
+if (-not $rx.IsMatch($raw)) {
+  Write-Host "WARN  ROADMAP.md has no <!-- roadmap-table:start/end --> markers; table not written."
+} else {
+  $updated = $rx.Replace($raw, [System.Text.RegularExpressions.MatchEvaluator] { param($m) $block })
+  if ((($updated -replace "`r`n", "`n")) -ne (($raw -replace "`r`n", "`n"))) {
+    [System.IO.File]::WriteAllText($roadmapPath, $updated)
+    Write-Host "ROADMAP  table regenerated ($($sorted.Count) rows)."
+  } else {
+    Write-Host "ROADMAP  table already up to date."
   }
 }
 

@@ -10,8 +10,10 @@ Mirrors the roadmap to **GitHub Issues** under the `v2.0` milestone and keeps th
 in sync. It is an idempotent **upsert**, not a one-shot creator.
 
 - Source of truth is the `$features` array inside the script (id, title, summary,
-  status, label, kind). `ROADMAP.md` stays the human-readable doc; its
-  "GitHub issue tracking" table is the visible counterpart of the markers below.
+  status, label, kind). `ROADMAP.md` stays the human-readable doc; the script
+  also **regenerates** its "GitHub issue tracking" table in place, between the
+  `<!-- roadmap-table:start -->` / `<!-- roadmap-table:end -->` markers, so the
+  doc never drifts from the issues.
 - Each issue carries a hidden marker in its body — `<!-- roadmap-id: <id> -->`
   (invisible in GitHub's rendered view). Issues are matched by that marker (with
   first-run adoption by exact title), so **re-running never creates duplicates**.
