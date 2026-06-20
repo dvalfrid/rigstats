@@ -169,7 +169,7 @@ fn profile_to_size(profile: &str) -> [f32; 2] {
 
 /// True when the profile is a landscape (wide) layout. Landscape profiles use a
 /// `landscape-` key prefix and render panels in a grid rather than a vertical stack.
-fn profile_is_landscape(profile: &str) -> bool {
+pub(crate) fn profile_is_landscape(profile: &str) -> bool {
     profile.starts_with("landscape-")
 }
 

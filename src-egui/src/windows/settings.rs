@@ -150,7 +150,9 @@ fn toggle_switch(ui: &mut egui::Ui, dc: &DialogColors, on: &mut bool) -> egui::R
         resp.mark_changed();
     }
     if ui.is_rect_visible(rect) {
-        let bg = if *on { dc.toggle_on } else { dc.toggle_off };
+        // Dim the switch when the surrounding UI is disabled so it reads as grayed out.
+        let dim = if ui.is_enabled() { 1.0 } else { 0.4 };
+        let bg = if *on { dc.toggle_on } else { dc.toggle_off }.gamma_multiply(dim);
         let r = (rect.height() / 2.0) as u8;
         ui.painter()
             .rect_filled(rect, egui::CornerRadius::same(r), bg);
@@ -162,7 +164,7 @@ fn toggle_switch(ui: &mut egui::Ui, dc: &DialogColors, on: &mut bool) -> egui::R
         ui.painter().circle_filled(
             egui::pos2(cx, rect.center().y),
             rect.height() / 2.0 - 3.0,
-            egui::Color32::WHITE,
+            egui::Color32::WHITE.gamma_multiply(dim),
         );
     }
     resp
@@ -533,22 +535,24 @@ fn draw_dashboard(
             });
         }
 
-        // Fill Screen — only applies in non-floating mode, so disable while
-        // floating is on.
+        // Fill Screen — only applies to a portrait stack in non-floating mode.
+        // Landscape always uses the fixed adaptive-grid geometry, so fill-screen
+        // has no effect there; disable it while floating or in a landscape profile.
+        let is_landscape = crate::profile_is_landscape(&draft.dashboard_profile);
+        let fill_enabled = !draft.floating_mode && !is_landscape;
         ui.add_space(8.0);
         inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.add_enabled_ui(!draft.floating_mode, |ui| {
+            ui.add_enabled_ui(fill_enabled, |ui| {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(egui::RichText::new("Fill Screen").size(13.0).color(dc.text));
-                        ui.label(
-                            egui::RichText::new(
-                                "Cover the whole monitor; the dashboard background fills the rest",
-                            )
-                            .size(11.0)
-                            .color(dc.muted),
-                        );
+                        let desc = if is_landscape {
+                            "Not available for landscape profiles"
+                        } else {
+                            "Cover the whole monitor; the dashboard background fills the rest"
+                        };
+                        ui.label(egui::RichText::new(desc).size(11.0).color(dc.muted));
                     });
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         toggle_switch(ui, dc, &mut draft.fullscreen_mode);
@@ -557,7 +561,7 @@ fn draw_dashboard(
             });
         });
 
-        if draft.fullscreen_mode && !draft.floating_mode {
+        if draft.fullscreen_mode && fill_enabled {
             ui.add_space(8.0);
             inner_row(dc).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
