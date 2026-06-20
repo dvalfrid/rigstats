@@ -15,7 +15,7 @@
 ## Overview
 
 RIGStats is a Windows-only **egui** desktop app (`src-egui/`) that displays
-live hardware telemetry on a secondary portrait monitor. The UI is rendered
+live hardware telemetry on a secondary portrait or landscape monitor. The UI is rendered
 natively via eframe/wgpu — no WebView2, no JavaScript at runtime. The backend
 is Rust and uses three data sources: a managed sensor sidecar (GPU/sensor data
 via named pipe), sysinfo (CPU/RAM/disk/network), and WMI (hardware metadata at
@@ -500,8 +500,15 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### Window placement
 
-- `pick_monitor` scores each attached display against the active profile resolution and selects the best fit; the egui window is positioned at the monitor's top-left origin.
-- The egui window is borderless and undecorated — `eframe::NativeOptions` sets `decorated: false` and `transparent: true`.
+- `pick_window_rect_for_profile` (in `src-egui/src/main.rs`) scores each attached display against the active profile: it filters to monitors matching the profile **orientation** (landscape profiles → `width >= height`, portrait → `height > width`), then picks the one whose resolution is closest to the profile dimensions. A dedicated strip/secondary that matches exactly wins, so the dashboard lands on the right screen automatically. The egui window is positioned at the monitor's top-left origin.
+- The egui window is borderless and undecorated — `eframe::NativeOptions` sets `decorated: false`.
+
+### Dashboard profiles & orientation
+
+- Profiles are named with an orientation prefix: `portrait-*` (tall, e.g. `portrait-xl` 450×1920) and `landscape-*` (wide, e.g. `landscape-xl` 1920×450). Each landscape profile is the transpose of the matching portrait profile; `*-side` portrait profiles map to `*-top` landscape profiles. `profile_is_landscape(profile)` (key prefix check) drives the orientation branches.
+- **Portrait** renders all visible panels in a single vertical stack; the window width is fixed to the profile width and the height fits panel content per frame.
+- **Landscape** renders panels in an **adaptive grid** (`RigStatsApp::render_landscape_grid`). The column count is chosen to maximise the per-cell content scale (ties broken toward fewer rows); every cell is the same size and the panel content scale `sc` is derived from the cell dimensions, so panels shrink/grow to fill any landscape resolution. The window is fixed to the full profile size (no per-frame content-fit). Header and clock are ordinary equal-sized cells.
+- Both orientations share `draw_one_panel`, so every panel, theme, and threshold works identically; floating mode is orientation-independent (each panel is its own positioned window).
 
 ### Floating mode
 

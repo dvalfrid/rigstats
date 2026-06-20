@@ -147,8 +147,30 @@ fn profile_to_size(profile: &str) -> [f32; 2] {
         "portrait-fhd-side" => [253.0, 1080.0],
         "portrait-qhd-side" => [338.0, 1440.0],
         "portrait-4k-side" => [506.0, 2160.0],
+        // Landscape profiles — the portrait dimensions transposed (w > h).
+        "landscape-xl" => [1920.0, 450.0],
+        "landscape-slim" => [1920.0, 480.0],
+        "landscape-hd" => [1280.0, 720.0],
+        "landscape-wxga" => [1280.0, 800.0],
+        "landscape-fhd" => [1920.0, 1080.0],
+        "landscape-wuxga" => [1920.0, 1200.0],
+        "landscape-qhd" => [2560.0, 1440.0],
+        "landscape-hdplus" => [1366.0, 768.0],
+        "landscape-1600x900" => [1600.0, 900.0],
+        "landscape-1680x1050" => [1680.0, 1050.0],
+        "landscape-2560x1600" => [2560.0, 1600.0],
+        "landscape-4k" => [3840.0, 2160.0],
+        "landscape-fhd-top" => [1080.0, 253.0],
+        "landscape-qhd-top" => [1440.0, 338.0],
+        "landscape-4k-top" => [2160.0, 506.0],
         _ => [400.0, 780.0],
     }
+}
+
+/// True when the profile is a landscape (wide) layout. Landscape profiles use a
+/// `landscape-` key prefix and render panels in a grid rather than a vertical stack.
+fn profile_is_landscape(profile: &str) -> bool {
+    profile.starts_with("landscape-")
 }
 
 /// Content scale for a profile. Uses portrait-xl (450 px) as the 1.0 reference.
@@ -275,23 +297,79 @@ fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     pos
 }
 
-/// Returns `[x, y, w, h]` (logical pixels) for the best portrait monitor — the
-/// one the dashboard targets. Prefers a portrait monitor (height > width), else
-/// the first monitor. Falls back to `[0, 0, 0, 0]` if none / non-Windows.
-fn pick_window_rect() -> [f32; 4] {
+/// Returns `[x, y, w, h]` for the best monitor to host `profile`: among monitors
+/// matching the profile orientation, the one whose resolution is closest to the
+/// profile dimensions (so a dedicated strip/secondary that matches exactly wins).
+/// Falls back to the first monitor, then `[0, 0, 0, 0]`.
+fn pick_window_rect_for_profile(profile: &str) -> [f32; 4] {
+    #[cfg(windows)]
+    {
+        let [pw, ph] = profile_to_size(profile);
+        let landscape = pw >= ph;
+        let monitors = win_monitor::list();
+        let dim = |&(l, t, r, b): &(i32, i32, i32, i32)| ((r - l) as f32, (b - t) as f32);
+        let oriented: Vec<&(i32, i32, i32, i32)> = monitors
+            .iter()
+            .filter(|m| {
+                let (w, h) = dim(m);
+                if landscape {
+                    w >= h
+                } else {
+                    h > w
+                }
+            })
+            .collect();
+        let pool: Vec<&(i32, i32, i32, i32)> = if oriented.is_empty() {
+            monitors.iter().collect()
+        } else {
+            oriented
+        };
+        let best = pool.into_iter().min_by(|a, b| {
+            let (aw, ah) = dim(a);
+            let (bw, bh) = dim(b);
+            let da = (aw - pw).abs() + (ah - ph).abs();
+            let db = (bw - pw).abs() + (bh - ph).abs();
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if let Some(&(l, t, r, b)) = best {
+            return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = profile;
+    [0.0, 0.0, 0.0, 0.0]
+}
+
+/// Returns `[x, y, w, h]` (logical pixels) for the best monitor matching the
+/// dashboard `orientation`. For portrait targets, prefers a portrait monitor
+/// (height > width); for landscape targets, prefers a landscape monitor
+/// (width >= height). Falls back to the first monitor, then `[0, 0, 0, 0]`.
+fn pick_window_rect_for(landscape: bool) -> [f32; 4] {
     #[cfg(windows)]
     {
         let monitors = win_monitor::list();
-        // Prefer portrait (height > width), else use first monitor.
         let picked = monitors
             .iter()
-            .find(|&&(l, t, r, b)| (b - t) > (r - l))
+            .find(|&&(l, t, r, b)| {
+                if landscape {
+                    (r - l) >= (b - t)
+                } else {
+                    (b - t) > (r - l)
+                }
+            })
             .or_else(|| monitors.first());
         if let Some(&(l, t, r, b)) = picked {
             return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
         }
     }
+    #[cfg(not(windows))]
+    let _ = landscape;
     [0.0, 0.0, 0.0, 0.0]
+}
+
+/// Returns `[x, y, w, h]` for the best portrait monitor (back-compat helper).
+fn pick_window_rect() -> [f32; 4] {
+    pick_window_rect_for(false)
 }
 
 /// Returns (x, y) position for the window — top-left of the best portrait monitor.
@@ -861,8 +939,17 @@ impl eframe::App for RigStatsApp {
                 let new_size = [w, h];
                 if self.last_applied_window_size != Some(new_size) {
                     self.last_applied_window_size = Some(new_size);
+                    // Resize and snap to the monitor matching the profile orientation.
+                    // (A size change implies a profile/fullscreen/panel change, not an
+                    // opacity drag, so repositioning here does not cause jitter.)
+                    let [px, py] = pos;
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                            px, py,
+                        )));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+                    self.last_fitted_height = None;
                 }
             }
             ui.ctx()
@@ -1350,28 +1437,7 @@ impl eframe::App for RigStatsApp {
 
             // Panels in the order defined by visible_panels (respects user reordering).
             let panels_to_draw = self.visible_panels.clone();
-            let sc = profile_scale(&self.current_settings.lock_safe().dashboard_profile);
-            // Fullscreen + centered: pad the top so the panel stack is vertically
-            // centered in the filled window. Panel proportions are untouched —
-            // only the surrounding background grows. Use the measured content
-            // height from the previous frame (cached) for an exact center; fall
-            // back to the compute_window_height estimate on the first frame.
-            let center_fullscreen = self.fullscreen_mode && self.fullscreen_align == "center";
-            let center_pad = if center_fullscreen {
-                // Pure panel-stack height (excludes drag handle and pad).
-                let content = self.fullscreen_content_h.unwrap_or_else(|| {
-                    compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
-                });
-                // Center the visible content with equal background above and below.
-                // The drag handle occupies the first DRAG_HANDLE_H px (invisible),
-                // so discount it from the top so the content itself is centered.
-                let pad = ((ui.available_height() - content - theme::DRAG_HANDLE_H) * 0.5).max(0.0);
-                ui.add_space(pad);
-                pad
-            } else {
-                0.0
-            };
-            let mut new_preferred_gpu: Option<String> = None;
+            let profile = self.current_settings.lock_safe().dashboard_profile.clone();
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
@@ -1382,180 +1448,88 @@ impl eframe::App for RigStatsApp {
                     None
                 }
             };
-            for panel in &panels_to_draw {
-                match panel.as_str() {
-                    // Panels always render at full opacity; window-level transparency is
-                    // applied by SetLayeredWindowAttributes (win_opacity module).
-                    "header" => {
-                        let _ = panels::header::draw(
-                            ui,
-                            &self.latest,
-                            &self.textures,
-                            1.0,
-                            &self.app_theme,
-                            sc,
-                        );
+            let mut new_preferred_gpu: Option<String> = None;
+
+            if profile_is_landscape(&profile) {
+                // ── Landscape grid — panels packed into an even, adaptive grid ──
+                // The window is fixed to the profile size, so there is no per-frame
+                // content-fit; the grid fills the available area exactly.
+                new_preferred_gpu =
+                    self.render_landscape_grid(ui, &panels_to_draw, update_ver.as_deref());
+            } else {
+                // ── Portrait vertical stack ─────────────────────────────────────
+                let sc = profile_scale(&profile);
+                // Fullscreen + centered: pad the top so the panel stack is vertically
+                // centered in the filled window. Panel proportions are untouched —
+                // only the surrounding background grows. Use the measured content
+                // height from the previous frame (cached) for an exact center; fall
+                // back to the compute_window_height estimate on the first frame.
+                let center_fullscreen = self.fullscreen_mode && self.fullscreen_align == "center";
+                let center_pad = if center_fullscreen {
+                    // Pure panel-stack height (excludes drag handle and pad).
+                    let content = self.fullscreen_content_h.unwrap_or_else(|| {
+                        compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
+                    });
+                    // Center the visible content with equal background above and below.
+                    // The drag handle occupies the first DRAG_HANDLE_H px (invisible),
+                    // so discount it from the top so the content itself is centered.
+                    let pad =
+                        ((ui.available_height() - content - theme::DRAG_HANDLE_H) * 0.5).max(0.0);
+                    ui.add_space(pad);
+                    pad
+                } else {
+                    0.0
+                };
+                for panel in &panels_to_draw {
+                    if let Some(p) = self.draw_one_panel(ui, panel, sc, update_ver.as_deref()) {
+                        new_preferred_gpu = Some(p);
                     }
-                    "clock" => {
-                        let _ = panels::clock::draw(
-                            ui,
-                            self.latest.uptime_secs,
-                            1.0,
-                            &self.app_theme,
-                            update_ver.as_deref(),
-                            sc,
-                        );
-                        // Badge click → open updater dialog.
-                        if ui
-                            .ctx()
-                            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
-                            .unwrap_or(false)
-                        {
-                            self.updater_open.store(true, Ordering::Relaxed);
-                        }
-                    }
-                    "cpu" => {
-                        let _ = panels::cpu::draw(
-                            ui,
-                            &self.latest,
-                            &self.cpu_spark,
-                            &self.textures,
-                            1.0,
-                            self.thresholds.cpu.0,
-                            self.thresholds.cpu.1,
-                            &self.app_theme,
-                            sc,
-                        );
-                    }
-                    "gpu" => {
-                        if let Some(p) = panels::gpu::draw(
-                            ui,
-                            &self.latest,
-                            &self.gpu_spark,
-                            &self.textures,
-                            1.0,
-                            &self.app_theme,
-                            self.thresholds.gpu.0,
-                            self.thresholds.gpu.1,
-                            self.thresholds.gpu_hotspot.0,
-                            self.thresholds.gpu_hotspot.1,
-                            sc,
-                        )
-                        .0
-                        {
-                            new_preferred_gpu = Some(p);
-                        }
-                    }
-                    "ram" => {
-                        let _ = panels::ram::draw(
-                            ui,
-                            &self.latest,
-                            1.0,
-                            self.thresholds.ram.0,
-                            self.thresholds.ram.1,
-                            &self.app_theme,
-                            sc,
-                        );
-                    }
-                    "net" => {
-                        let _ = panels::net::draw(
-                            ui,
-                            &self.latest,
-                            &self.net_up_spark,
-                            &self.net_dn_spark,
-                            1.0,
-                            &self.app_theme,
-                            sc,
-                        );
-                    }
-                    "disk" => {
-                        let _ = panels::disk::draw(
-                            ui,
-                            &self.latest,
-                            1.0,
-                            self.thresholds.disk.0,
-                            self.thresholds.disk.1,
-                            &self.app_theme,
-                            sc,
-                        );
-                    }
-                    "motherboard" => {
-                        let _ = panels::motherboard::draw(
-                            ui,
-                            &self.latest,
-                            1.0,
-                            self.thresholds.mb.0,
-                            self.thresholds.mb.1,
-                            &self.app_theme,
-                            sc,
-                        );
-                    }
-                    "process" => {
-                        let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
-                    }
-                    "battery" => {
-                        let _ = panels::battery::draw(
-                            ui,
-                            &self.latest,
-                            1.0,
-                            &self.app_theme,
-                            sc,
-                            self.thresholds.battery.0,
-                            self.thresholds.battery.1,
-                            self.thresholds.battery_power.0,
-                            self.thresholds.battery_power.1,
-                        );
-                    }
-                    _ => {}
+                    ui.add_space((6.0 * sc).round());
                 }
-                ui.add_space((6.0 * sc).round());
-            }
-            // Cache the true panel-stack content height for exact centering next
-            // frame: min_rect = drag handle + center pad + content, so content =
-            // min_rect − DRAG_HANDLE_H − pad. Re-center on the next frame if the
-            // measurement drifts from what we used this frame.
-            if center_fullscreen {
-                let content = ui.min_rect().height() - theme::DRAG_HANDLE_H - center_pad;
-                if content > 10.0 {
-                    let changed = self
-                        .fullscreen_content_h
-                        .map(|h| (h - content).abs() > 0.5)
-                        .unwrap_or(true);
-                    self.fullscreen_content_h = Some(content);
-                    if changed {
+                // Cache the true panel-stack content height for exact centering next
+                // frame: min_rect = drag handle + center pad + content, so content =
+                // min_rect − DRAG_HANDLE_H − pad. Re-center on the next frame if the
+                // measurement drifts from what we used this frame.
+                if center_fullscreen {
+                    let content = ui.min_rect().height() - theme::DRAG_HANDLE_H - center_pad;
+                    if content > 10.0 {
+                        let changed = self
+                            .fullscreen_content_h
+                            .map(|h| (h - content).abs() > 0.5)
+                            .unwrap_or(true);
+                        self.fullscreen_content_h = Some(content);
+                        if changed {
+                            ui.ctx().request_repaint();
+                        }
+                    }
+                }
+                // Fit window height to actual rendered content every frame so no black gap
+                // appears regardless of panel set, spacing, or egui version.
+                // Skipped in fullscreen mode — there the window stays at the full monitor
+                // size and must NOT shrink to content.
+                if !self.fullscreen_mode {
+                    let used_h = ui.min_rect().height();
+                    // During the first frames after launch the window may not be fully
+                    // realized, so early InnerSize commands can be dropped — which would
+                    // leave the bottom panel clipped until the user toggles floating mode.
+                    // Force a re-fit (and a fast repaint) for a handful of frames so the
+                    // true content height always sticks at startup.
+                    if self.startup_fit_frames > 0 {
+                        self.startup_fit_frames -= 1;
+                        self.last_fitted_height = None;
                         ui.ctx().request_repaint();
                     }
-                }
-            }
-            // Fit window height to actual rendered content every frame so no black gap
-            // appears regardless of panel set, spacing, or egui version.
-            // Skipped in fullscreen mode — there the window stays at the full monitor
-            // size and must NOT shrink to content.
-            if !self.fullscreen_mode {
-                let used_h = ui.min_rect().height();
-                // During the first frames after launch the window may not be fully
-                // realized, so early InnerSize commands can be dropped — which would
-                // leave the bottom panel clipped until the user toggles floating mode.
-                // Force a re-fit (and a fast repaint) for a handful of frames so the
-                // true content height always sticks at startup.
-                if self.startup_fit_frames > 0 {
-                    self.startup_fit_frames -= 1;
-                    self.last_fitted_height = None;
-                    ui.ctx().request_repaint();
-                }
-                let changed = self
-                    .last_fitted_height
-                    .map(|h| (h - used_h).abs() > 0.5)
-                    .unwrap_or(true);
-                if used_h > 10.0 && changed {
-                    self.last_fitted_height = Some(used_h);
-                    let [w, _] =
-                        profile_to_size(&self.current_settings.lock_safe().dashboard_profile);
-                    ui.ctx()
-                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                            w - 2.0,
-                            used_h,
-                        )));
+                    let changed = self
+                        .last_fitted_height
+                        .map(|h| (h - used_h).abs() > 0.5)
+                        .unwrap_or(true);
+                    if used_h > 10.0 && changed {
+                        self.last_fitted_height = Some(used_h);
+                        let [w, _] = profile_to_size(&profile);
+                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                            egui::Vec2::new(w - 2.0, used_h),
+                        ));
+                    }
                 }
             }
 
@@ -1658,6 +1632,223 @@ impl RigStatsApp {
         }
     }
 
+    /// Draw a single panel by key into `ui` at content scale `sc`. Returns a new
+    /// preferred-GPU key if the GPU panel's device selector was clicked. Shared by
+    /// the portrait vertical stack and the landscape grid.
+    fn draw_one_panel(
+        &self,
+        ui: &mut egui::Ui,
+        panel: &str,
+        sc: f32,
+        update_ver: Option<&str>,
+    ) -> Option<String> {
+        let mut new_pref = None;
+        match panel {
+            // Panels always render at full opacity; window-level transparency is
+            // applied by SetLayeredWindowAttributes (win_opacity module).
+            "header" => {
+                let _ = panels::header::draw(
+                    ui,
+                    &self.latest,
+                    &self.textures,
+                    1.0,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "clock" => {
+                let _ = panels::clock::draw(
+                    ui,
+                    self.latest.uptime_secs,
+                    1.0,
+                    &self.app_theme,
+                    update_ver,
+                    sc,
+                );
+                // Badge click → open updater dialog.
+                if ui
+                    .ctx()
+                    .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
+                    .unwrap_or(false)
+                {
+                    self.updater_open.store(true, Ordering::Relaxed);
+                }
+            }
+            "cpu" => {
+                let _ = panels::cpu::draw(
+                    ui,
+                    &self.latest,
+                    &self.cpu_spark,
+                    &self.textures,
+                    1.0,
+                    self.thresholds.cpu.0,
+                    self.thresholds.cpu.1,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "gpu" => {
+                if let Some(p) = panels::gpu::draw(
+                    ui,
+                    &self.latest,
+                    &self.gpu_spark,
+                    &self.textures,
+                    1.0,
+                    &self.app_theme,
+                    self.thresholds.gpu.0,
+                    self.thresholds.gpu.1,
+                    self.thresholds.gpu_hotspot.0,
+                    self.thresholds.gpu_hotspot.1,
+                    sc,
+                )
+                .0
+                {
+                    new_pref = Some(p);
+                }
+            }
+            "ram" => {
+                let _ = panels::ram::draw(
+                    ui,
+                    &self.latest,
+                    1.0,
+                    self.thresholds.ram.0,
+                    self.thresholds.ram.1,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "net" => {
+                let _ = panels::net::draw(
+                    ui,
+                    &self.latest,
+                    &self.net_up_spark,
+                    &self.net_dn_spark,
+                    1.0,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "disk" => {
+                let _ = panels::disk::draw(
+                    ui,
+                    &self.latest,
+                    1.0,
+                    self.thresholds.disk.0,
+                    self.thresholds.disk.1,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "motherboard" => {
+                let _ = panels::motherboard::draw(
+                    ui,
+                    &self.latest,
+                    1.0,
+                    self.thresholds.mb.0,
+                    self.thresholds.mb.1,
+                    &self.app_theme,
+                    sc,
+                );
+            }
+            "process" => {
+                let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
+            }
+            "battery" => {
+                let _ = panels::battery::draw(
+                    ui,
+                    &self.latest,
+                    1.0,
+                    &self.app_theme,
+                    sc,
+                    self.thresholds.battery.0,
+                    self.thresholds.battery.1,
+                    self.thresholds.battery_power.0,
+                    self.thresholds.battery_power.1,
+                );
+            }
+            _ => {}
+        }
+        new_pref
+    }
+
+    /// Render the visible panels as an even, adaptive grid for landscape profiles.
+    ///
+    /// The column count is chosen so each cell is close to the portrait card width
+    /// (~450 px), then the rows follow from the panel count. Every cell is the same
+    /// size and the per-cell content scale `sc` is derived from the cell dimensions,
+    /// so panels shrink/grow to fit any landscape resolution. Returns a new
+    /// preferred-GPU key if the GPU device selector was clicked.
+    fn render_landscape_grid(
+        &self,
+        ui: &mut egui::Ui,
+        panels: &[String],
+        update_ver: Option<&str>,
+    ) -> Option<String> {
+        let n = panels.len();
+        if n == 0 {
+            return None;
+        }
+        let gap = 6.0_f32;
+        let avail_w = ui.available_width().max(40.0);
+        let avail_h = ui.available_height().max(40.0);
+
+        // Choose the column count that maximises the per-cell content scale, so
+        // panels are as large as possible for the given screen shape. Ties are
+        // broken toward fewer rows (wider cells suit short landscape screens).
+        let mut n_cols = 1usize;
+        let mut best_s = f32::MIN;
+        let mut best_rows = usize::MAX;
+        for c in 1..=n {
+            let rows = n.div_ceil(c);
+            let cw = ((avail_w - gap * (c as f32 - 1.0)) / c as f32).max(40.0);
+            let ch = ((avail_h - gap * (rows as f32 - 1.0)) / rows as f32).max(40.0);
+            let s = (cw / 450.0).min(ch / 224.0).clamp(0.4, 1.6);
+            if s > best_s + 0.02 || ((s - best_s).abs() <= 0.02 && rows < best_rows) {
+                n_cols = c;
+                best_s = s;
+                best_rows = rows;
+            }
+        }
+        let n_rows = n.div_ceil(n_cols);
+
+        let cell_w = ((avail_w - gap * (n_cols as f32 - 1.0)) / n_cols as f32).max(40.0);
+        let cell_h = ((avail_h - gap * (n_rows as f32 - 1.0)) / n_rows as f32).max(40.0);
+
+        // Per-cell content scale. Reference card is 450 px wide × ~224 px tall
+        // (PANEL_DATA_H + frame margins + a little slack). Use the smaller of the
+        // width/height ratios so content never overflows the cell.
+        let sc_w = cell_w / 450.0;
+        let sc_h = cell_h / 224.0;
+        let sc = sc_w.min(sc_h).clamp(0.4, 1.6);
+
+        let origin = ui.cursor().min;
+        let mut new_pref = None;
+        for row in 0..n_rows {
+            for col in 0..n_cols {
+                let idx = row * n_cols + col;
+                if idx >= n {
+                    break;
+                }
+                let x = origin.x + col as f32 * (cell_w + gap);
+                let y = origin.y + row as f32 * (cell_h + gap);
+                let cell_rect =
+                    egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(cell_w, cell_h));
+                let mut child = ui.new_child(
+                    egui::UiBuilder::new()
+                        .max_rect(cell_rect)
+                        .layout(egui::Layout::top_down(egui::Align::Min)),
+                );
+                if let Some(p) = self.draw_one_panel(&mut child, &panels[idx], sc, update_ver) {
+                    new_pref = Some(p);
+                }
+            }
+        }
+        // Advance the parent cursor past the whole grid.
+        let total_h = n_rows as f32 * cell_h + (n_rows as f32 - 1.0) * gap;
+        ui.allocate_space(egui::vec2(avail_w, total_h));
+        new_pref
+    }
+
     /// Fixed-mode window geometry: returns `(top_left, [w, h])`.
     /// Width is always the profile width so panel proportions never stretch.
     /// In fullscreen mode the height fills the portrait monitor (intended for a
@@ -1665,7 +1856,13 @@ impl RigStatsApp {
     /// content-fit estimate (the per-frame fit then refines it). Falls back to the
     /// content-fit size if no monitor is found.
     fn fixed_window_geometry(&self, profile: &str) -> ([f32; 2], [f32; 2]) {
-        let [w, _] = profile_to_size(profile);
+        let [w, h] = profile_to_size(profile);
+        // Landscape: the grid fills a fixed window the size of the profile,
+        // pinned to the top-left of the best landscape monitor.
+        if profile_is_landscape(profile) {
+            let [x, y, _mw, _mh] = pick_window_rect_for_profile(profile);
+            return ([x, y], [w, h]);
+        }
         if self.fullscreen_mode {
             let [x, y, _mw, mh] = pick_window_rect();
             if mh > 0.0 {
@@ -2601,12 +2798,18 @@ fn main() {
     let visible_panels = s.visible_panels.clone();
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
     let always_on_top = s.window_layer == "on_top";
-    let [win_w, _] = profile_to_size(&s.dashboard_profile);
+    let [win_w, win_h] = profile_to_size(&s.dashboard_profile);
+    let landscape = profile_is_landscape(&s.dashboard_profile);
     // Width is always the profile width (panels never stretch). In fullscreen the
     // height fills the monitor and the window pins to the monitor top-left; the
     // 2 px width trim used in normal mode is dropped so a matching screen fills.
     let fullscreen = s.fullscreen_mode && !s.floating_mode;
-    let (inner_w, inner_h, pos_x, pos_y) = {
+    let (inner_w, inner_h, pos_x, pos_y) = if landscape {
+        // Landscape: the grid fills a fixed window the size of the profile, pinned
+        // to the top-left of the monitor that best matches the profile resolution.
+        let [mx, my, _mw, _mh] = pick_window_rect_for_profile(&s.dashboard_profile);
+        (win_w, win_h, mx, my)
+    } else {
         let [bx, by] = pick_window_position();
         if fullscreen {
             let [mx, my, _mw, mh] = pick_window_rect();
@@ -2916,4 +3119,64 @@ fn main() {
 
     debug::append_debug_log(&dir, "shutdown: clean");
     runtime.shutdown_background();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{profile_is_landscape, profile_to_size};
+
+    #[test]
+    fn landscape_profiles_detected_by_prefix() {
+        assert!(profile_is_landscape("landscape-xl"));
+        assert!(profile_is_landscape("landscape-4k-top"));
+        assert!(!profile_is_landscape("portrait-xl"));
+        assert!(!profile_is_landscape("portrait-4k-side"));
+    }
+
+    #[test]
+    fn landscape_dims_are_wide() {
+        for p in [
+            "landscape-xl",
+            "landscape-slim",
+            "landscape-hd",
+            "landscape-wxga",
+            "landscape-fhd",
+            "landscape-wuxga",
+            "landscape-qhd",
+            "landscape-hdplus",
+            "landscape-1600x900",
+            "landscape-1680x1050",
+            "landscape-2560x1600",
+            "landscape-4k",
+            "landscape-fhd-top",
+            "landscape-qhd-top",
+            "landscape-4k-top",
+        ] {
+            let [w, h] = profile_to_size(p);
+            assert!(w >= h, "{p} should be landscape (w >= h), got {w}x{h}");
+        }
+    }
+
+    #[test]
+    fn landscape_is_transpose_of_portrait() {
+        // Each landscape profile is the matching portrait profile with axes swapped.
+        let pairs = [
+            ("portrait-xl", "landscape-xl"),
+            ("portrait-fhd", "landscape-fhd"),
+            ("portrait-qhd", "landscape-qhd"),
+            ("portrait-4k", "landscape-4k"),
+            ("portrait-fhd-side", "landscape-fhd-top"),
+            ("portrait-qhd-side", "landscape-qhd-top"),
+            ("portrait-4k-side", "landscape-4k-top"),
+        ];
+        for (portrait, landscape) in pairs {
+            let [pw, ph] = profile_to_size(portrait);
+            let [lw, lh] = profile_to_size(landscape);
+            assert_eq!(
+                [pw, ph],
+                [lh, lw],
+                "{landscape} should transpose {portrait}"
+            );
+        }
+    }
 }

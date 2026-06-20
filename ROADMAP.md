@@ -29,7 +29,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
 | Total system power consumption | 🔲 Planned |
 | Stream Deck integration | 🔲 Planned |
-| Landscape monitor support | 🔲 Planned |
+| Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
@@ -84,7 +84,7 @@ numbers — do not edit it by hand; re-run the script to refresh it.
 | [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | 🔲 Planned |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | 🔲 Planned |
-| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | 🔲 Planned |
+| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | 🔲 Planned |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | 🔲 Planned |
 <!-- roadmap-table:end -->
@@ -859,46 +859,53 @@ sufficient. If absent, approach 2 is the fallback.
 
 ---
 
-## Landscape monitor support 🔲
+## Landscape monitor support ✅
 
 **Panel:** All panels + profile system
 **Data source:** No new data required
+**Status:** ✅ Done — egui adaptive grid (v1.32)
 
-The app currently assumes a portrait secondary monitor. Users with a landscape
-secondary display (or a wide ultrawide primary they want to dedicate a strip of)
-have no way to use the app today. Landscape profiles would also unlock tabletop
-or wall-mounted dashboard builds where the monitor is rotated horizontally.
+Portrait-only support meant users with a landscape secondary display (a spare
+laptop screen, a tabletop/wall-mounted panel, or a dedicated wide strip monitor)
+could not use the app. Landscape profiles add full parity: every panel, theme,
+threshold, and floating mode, laid out for a wide, short screen.
 
-**Architecture:**
+**Implementation (egui — no CSS, profile logic lives in `src-egui/src/main.rs`):**
 
-Profiles are extended with an orientation field. Landscape profiles use a
-horizontal flow layout: panels are arranged left-to-right in columns rather than
-stacking top-to-bottom. CSS custom properties (`--layout-direction`,
-`--panel-width`, `--panel-height`) drive the layout so the same panel JS modules
-work unmodified. A new set of landscape profile names is added alongside the
-existing portrait ones.
+- **Orientation by name.** Landscape profiles use a `landscape-` key prefix;
+  `profile_is_landscape(profile)` drives the orientation branches. No new
+  `Settings` field and no `settings_version` migration are required.
+- **Transposed resolutions.** Each landscape profile is the matching portrait
+  profile with its axes swapped (`portrait-xl` 450×1920 → `landscape-xl`
+  1920×450); portrait `*-side` profiles map to landscape `*-top` profiles.
+- **Adaptive grid.** `render_landscape_grid` packs the visible panels into an
+  even grid. The column count is chosen to maximise the per-cell content scale
+  (ties broken toward fewer rows, which suits short landscape screens); every
+  cell is the same size and the per-cell scale `sc` is derived from the cell
+  dimensions, so panels shrink/grow to fit any landscape resolution. Header and
+  clock are ordinary equal-sized cells (no rotation needed — the cell is already
+  landscape-shaped). The portrait vertical stack is unchanged.
+- **Fixed geometry.** Landscape fixes the window to the full profile size and
+  pins it to the matching monitor; there is no per-frame content-fit.
+- **Profile-aware monitor pick.** `pick_window_rect_for_profile` filters to
+  monitors matching the profile orientation, then picks the one whose resolution
+  is closest to the profile — a dedicated 1920×450 strip wins for `landscape-xl`.
+- **Shared rendering.** Both orientations call `draw_one_panel`, so panels,
+  themes, and thresholds are identical. Floating mode is orientation-independent
+  (each panel is its own positioned window) and works unchanged.
 
-**New landscape profiles (examples):**
+**Landscape profiles:**
 
-| Key | Dimensions |
-| --- | --- |
-| `landscape-fhd` | 1920×1080 |
-| `landscape-hd` | 1280×720 |
-| `landscape-4k` | 3840×2160 |
-| `landscape-wxga` | 1280×800 |
-| `landscape-strip` | 1920×360 (ultra-wide status bar) |
-
-**Scope:**
-
-- Extend `profile_dimensions` and `normalize_profile` in `monitor.rs` to accept
-  `landscape-*` keys and return appropriate dimensions
-- Add an orientation field to the profile lookup so `pick_target_monitor` can
-  choose the best landscape display when multiple monitors are connected
-- New `landscape.css` (or `orientation-landscape` CSS class on `<body>`) that
-  switches `--layout-direction` from `column` to `row` and adjusts panel sizing
-- `applyProfile()` in `app.js` sets the orientation class based on profile key
-  prefix; panel modules require no changes
-- Settings profile picker groups profiles under "Portrait" / "Landscape" headings
+| Key | Dimensions | Key | Dimensions |
+| --- | --- | --- | --- |
+| `landscape-xl` | 1920×450 | `landscape-hdplus` | 1366×768 |
+| `landscape-slim` | 1920×480 | `landscape-1600x900` | 1600×900 |
+| `landscape-hd` | 1280×720 | `landscape-1680x1050` | 1680×1050 |
+| `landscape-wxga` | 1280×800 | `landscape-2560x1600` | 2560×1600 |
+| `landscape-fhd` | 1920×1080 | `landscape-4k` | 3840×2160 |
+| `landscape-wuxga` | 1920×1200 | `landscape-fhd-top` | 1080×253 |
+| `landscape-qhd` | 2560×1440 | `landscape-qhd-top` | 1440×338 |
+|  |  | `landscape-4k-top` | 2160×506 |
 
 ---
 

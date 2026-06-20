@@ -36,6 +36,21 @@ const ALL_PROFILES: &[(&str, &str)] = &[
     ("portrait-fhd-side", "FHD Side (253×1080)"),
     ("portrait-qhd-side", "QHD Side (338×1440)"),
     ("portrait-4k-side", "4K Side (506×2160)"),
+    ("landscape-xl", "Landscape XL (1920×450)"),
+    ("landscape-slim", "Landscape Slim (1920×480)"),
+    ("landscape-hd", "Landscape HD (1280×720)"),
+    ("landscape-wxga", "Landscape WXGA (1280×800)"),
+    ("landscape-fhd", "Landscape FHD (1920×1080)"),
+    ("landscape-wuxga", "Landscape WUXGA (1920×1200)"),
+    ("landscape-qhd", "Landscape QHD (2560×1440)"),
+    ("landscape-hdplus", "Landscape HD+ (1366×768)"),
+    ("landscape-1600x900", "Landscape 1600×900"),
+    ("landscape-1680x1050", "Landscape 1680×1050"),
+    ("landscape-2560x1600", "Landscape 2560×1600"),
+    ("landscape-4k", "Landscape 4K (3840×2160)"),
+    ("landscape-fhd-top", "FHD Top (1080×253)"),
+    ("landscape-qhd-top", "QHD Top (1440×338)"),
+    ("landscape-4k-top", "4K Top (2160×506)"),
 ];
 
 const LOG_RETENTION_OPTIONS: &[(u32, &str)] = &[
@@ -449,7 +464,14 @@ fn draw_dashboard(
                 .selected_text(current)
                 .width(w)
                 .show_ui(ui, |ui| {
+                    let mut shown_landscape_heading = false;
+                    ui.label(egui::RichText::new("Portrait").small().color(dc.muted));
                     for &(key, label) in ALL_PROFILES {
+                        if key.starts_with("landscape-") && !shown_landscape_heading {
+                            shown_landscape_heading = true;
+                            ui.separator();
+                            ui.label(egui::RichText::new("Landscape").small().color(dc.muted));
+                        }
                         ui.selectable_value(&mut draft.dashboard_profile, key.to_string(), label);
                     }
                 });
