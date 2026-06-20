@@ -160,6 +160,15 @@ pub struct Settings {
   /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
   #[serde(default = "default_fullscreen_align")]
   pub fullscreen_align: String,
+  /// When true, the non-floating (landscape/portrait) dashboard window is pinned:
+  /// it cannot be dragged and its position is restored from `pinned_positions`
+  /// across restarts instead of auto-targeting the matching monitor.
+  #[serde(default)]
+  pub dashboard_pinned: bool,
+  /// Pinned window position `[x, y]` for the non-floating dashboard, keyed by
+  /// dashboard profile (positions differ per profile/monitor).
+  #[serde(default)]
+  pub pinned_positions: HashMap<String, [i32; 2]>,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -262,6 +271,8 @@ impl Default for Settings {
       log_retention_days: default_log_retention_days(),
       fullscreen_mode: false,
       fullscreen_align: default_fullscreen_align(),
+      dashboard_pinned: false,
+      pinned_positions: HashMap::new(),
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,

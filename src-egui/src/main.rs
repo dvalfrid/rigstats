@@ -617,6 +617,15 @@ struct RigStatsApp {
     /// cached from the previous frame so fullscreen centering is exact. `None`
     /// until the first fullscreen frame; `compute_window_height` is the fallback.
     fullscreen_content_h: Option<f32>,
+    // ── Pinned (non-floating) dashboard ────────────────────────────────────
+    /// When true, the fixed-mode dashboard window is pinned: it cannot be dragged
+    /// and its position is restored from `Settings::pinned_positions` across
+    /// restarts instead of auto-targeting the matching monitor.
+    dashboard_pinned: bool,
+    /// Last outer position observed for the fixed-mode window this session, used
+    /// to capture the spot to pin when the padlock is clicked. `None` until the
+    /// first fixed-mode frame reports a position.
+    last_fixed_pos: Option<[f32; 2]>,
     // ── Floating mode ──────────────────────────────────────────────────────
     floating_mode: bool,
     floating_panels_locked: bool,
@@ -805,6 +814,8 @@ impl RigStatsApp {
             fullscreen_mode: init_settings.fullscreen_mode,
             fullscreen_align: init_settings.fullscreen_align.clone(),
             fullscreen_content_h: None,
+            dashboard_pinned: init_settings.dashboard_pinned,
+            last_fixed_pos: None,
             floating_mode: init_settings.floating_mode,
             floating_panels_locked: init_settings.floating_panels_locked,
             floating_panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
@@ -951,6 +962,7 @@ impl eframe::App for RigStatsApp {
             let was_fullscreen = self.fullscreen_mode;
             self.fullscreen_mode = s.fullscreen_mode;
             self.fullscreen_align = s.fullscreen_align.clone();
+            self.dashboard_pinned = s.dashboard_pinned;
             let profile = s.dashboard_profile.clone();
             drop(s);
             // Toggling fullscreen changes how the window is sized; clear the
@@ -1430,6 +1442,14 @@ impl eframe::App for RigStatsApp {
         } else {
             // ── Fixed mode — all panels in one portrait window ────────────────
 
+            // ── Fixed mode — all panels in one portrait/landscape window ──────
+
+            // Track the window's current outer position so the padlock can pin
+            // the exact spot it is at when clicked.
+            if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
+                self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+            }
+
             // Drag handle — thin invisible strip at top for moving the borderless window.
             let drag_w = {
                 let w = ui.available_width();
@@ -1443,7 +1463,24 @@ impl eframe::App for RigStatsApp {
                 egui::Vec2::new(drag_w, theme::DRAG_HANDLE_H),
                 egui::Sense::drag(),
             );
-            if drag_resp.dragged() {
+
+            // Padlock at the right of the drag strip: pins the whole dashboard.
+            let pinned = self.dashboard_pinned;
+            let padlock_center = egui::pos2(drag_rect.right() - 12.0, drag_rect.center().y);
+            let padlock_hit = egui::Rect::from_center_size(
+                padlock_center,
+                egui::Vec2::new(24.0, drag_rect.height().max(14.0)),
+            );
+            let hover_pos = ui.ctx().input(|i| i.pointer.hover_pos());
+            let over_padlock = hover_pos.map(|p| padlock_hit.contains(p)).unwrap_or(false);
+            let padlock_resp = ui.interact(
+                padlock_hit,
+                ui.id().with("fixed_padlock"),
+                egui::Sense::click(),
+            );
+
+            // Drag only when not pinned and not starting on the padlock.
+            if drag_resp.dragged() && !pinned && !over_padlock {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
             }
             // After drag ends in "behind" mode, the window was activated for SC_MOVE
@@ -1451,7 +1488,27 @@ impl eframe::App for RigStatsApp {
             if drag_resp.drag_stopped() && self.window_layer == "behind" {
                 self.reapply_window_props_frames = 4;
             }
-            if drag_resp.hovered() {
+
+            if padlock_resp.clicked() {
+                self.dashboard_pinned = !self.dashboard_pinned;
+                let profile = self.current_settings.lock_safe().dashboard_profile.clone();
+                let mut s = self.current_settings.lock_safe();
+                s.dashboard_pinned = self.dashboard_pinned;
+                if self.dashboard_pinned {
+                    // Pin: remember the current window position for this profile.
+                    if let Some([x, y]) = self.last_fixed_pos {
+                        s.pinned_positions
+                            .insert(profile, [x.round() as i32, y.round() as i32]);
+                    }
+                }
+                self.persist_settings_logged(&s);
+            }
+            if padlock_resp.hovered() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+
+            // Drag dots — only when movable (unpinned) and hovering the strip.
+            if drag_resp.hovered() && !pinned && !over_padlock {
                 let painter = ui.painter();
                 let cy = drag_rect.center().y;
                 let cx = drag_rect.center().x;
@@ -1462,6 +1519,18 @@ impl eframe::App for RigStatsApp {
                         egui::Color32::from_gray(160),
                     );
                 }
+            }
+            // Padlock icon — shown while pinned (so it can be released) or when
+            // hovering the strip (so it is discoverable).
+            if pinned || drag_resp.hovered() || padlock_resp.hovered() {
+                let color = if pinned {
+                    self.app_theme.accent
+                } else if padlock_resp.hovered() {
+                    egui::Color32::from_gray(210)
+                } else {
+                    egui::Color32::from_gray(150)
+                };
+                draw_padlock(ui.painter(), padlock_center, pinned, color);
             }
 
             // Panels in the order defined by visible_panels (respects user reordering).
@@ -1888,18 +1957,46 @@ impl RigStatsApp {
         let [w, h] = profile_to_size(profile);
         // Landscape: the grid fills a fixed window the size of the profile,
         // pinned to the top-left of the best landscape monitor.
-        if profile_is_landscape(profile) {
+        let (pos, size) = if profile_is_landscape(profile) {
             let [x, y, _mw, _mh] = pick_window_rect_for_profile(profile);
-            return ([x, y], [w, h]);
-        }
-        if self.fullscreen_mode {
+            ([x, y], [w, h])
+        } else if self.fullscreen_mode {
             let [x, y, _mw, mh] = pick_window_rect();
             if mh > 0.0 {
-                return ([x, y], [w, mh]);
+                ([x, y], [w, mh])
+            } else {
+                let h = compute_window_height(&self.visible_panels, profile_scale(profile));
+                (pick_window_position(), [w, h])
             }
+        } else {
+            let h = compute_window_height(&self.visible_panels, profile_scale(profile));
+            (pick_window_position(), [w, h])
+        };
+        // Pinned override: keep the computed size but restore the saved position
+        // for this profile instead of auto-targeting a monitor.
+        if let Some(pp) = self.pinned_position(profile) {
+            return (pp, size);
         }
-        let h = compute_window_height(&self.visible_panels, profile_scale(profile));
-        (pick_window_position(), [w, h])
+        (pos, size)
+    }
+
+    /// Returns the saved pinned position for `profile` when the dashboard is
+    /// pinned and the stored position is still on a connected monitor; otherwise
+    /// `None` so the caller auto-targets the matching monitor.
+    fn pinned_position(&self, profile: &str) -> Option<[f32; 2]> {
+        if !self.dashboard_pinned {
+            return None;
+        }
+        let s = self.current_settings.lock_safe();
+        let p = s.pinned_positions.get(profile).copied()?;
+        drop(s);
+        let pos = [p[0] as f32, p[1] as f32];
+        let guarded = guard_panel_position(pos, [f32::NAN, f32::NAN]);
+        if guarded[0].is_nan() {
+            None
+        } else {
+            Some(guarded)
+        }
     }
 
     /// Render every visible panel as its own borderless OS window using
@@ -2833,7 +2930,7 @@ fn main() {
     // height fills the monitor and the window pins to the monitor top-left; the
     // 2 px width trim used in normal mode is dropped so a matching screen fills.
     let fullscreen = s.fullscreen_mode && !s.floating_mode;
-    let (inner_w, inner_h, pos_x, pos_y) = if landscape {
+    let (inner_w, inner_h, mut pos_x, mut pos_y) = if landscape {
         // Landscape: the grid fills a fixed window the size of the profile, pinned
         // to the top-left of the monitor that best matches the profile resolution.
         let [mx, my, _mw, _mh] = pick_window_rect_for_profile(&s.dashboard_profile);
@@ -2853,6 +2950,18 @@ fn main() {
             (win_w - 2.0, h, bx, by)
         }
     };
+    // Pinned dashboard: restore the saved position for this profile (keeping the
+    // computed size) instead of auto-targeting a monitor, when still on-screen.
+    if !s.floating_mode && s.dashboard_pinned {
+        if let Some(p) = s.pinned_positions.get(&s.dashboard_profile) {
+            let pos = [p[0] as f32, p[1] as f32];
+            let guarded = guard_panel_position(pos, [f32::NAN, f32::NAN]);
+            if !guarded[0].is_nan() {
+                pos_x = guarded[0];
+                pos_y = guarded[1];
+            }
+        }
+    }
     debug::log_debug(
         &dir,
         &format!(

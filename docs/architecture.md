@@ -500,7 +500,8 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### Window placement
 
-- `pick_window_rect_for_profile` (in `src-egui/src/main.rs`) scores each attached display against the active profile: it filters to monitors matching the profile **orientation** (landscape profiles → `width >= height`, portrait → `height > width`), then picks the one whose resolution is closest to the profile dimensions. A dedicated strip/secondary that matches exactly wins, so the dashboard lands on the right screen automatically. The egui window is positioned at the monitor's top-left origin.
+- `pick_window_rect_for_profile` (in `src-egui/src/main.rs`) targets a monitor only when its resolution **matches** the active profile (both dimensions within ~10 %); among matches it picks the closest fit, so a dedicated strip/secondary that fits the profile is used automatically. When no monitor matches it falls back to the **primary** monitor (top-left at the virtual origin `0,0`), then to the first monitor. The pure selection step is `select_profile_monitor`, which is unit-tested. The egui window is positioned at the chosen monitor's top-left origin.
+- **Pinned dashboard**: when `Settings::dashboard_pinned` is set, the non-floating window restores its saved position from `Settings::pinned_positions[profile]` (via `pinned_position()` / `guard_panel_position`) instead of auto-targeting — both at startup (`main()`) and on settings reload (`fixed_window_geometry`). A padlock in the fixed-mode drag strip toggles the pin and captures the current position. See CLAUDE.md → "Pinned dashboard (non-floating)".
 - The egui window is borderless and undecorated — `eframe::NativeOptions` sets `decorated: false`.
 
 ### Dashboard profiles & orientation
