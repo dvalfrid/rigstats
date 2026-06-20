@@ -297,47 +297,76 @@ fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     pos
 }
 
-/// Returns `[x, y, w, h]` for the best monitor to host `profile`: among monitors
-/// matching the profile orientation, the one whose resolution is closest to the
-/// profile dimensions (so a dedicated strip/secondary that matches exactly wins).
+/// Returns `[x, y, w, h]` for the best monitor to host `profile`.
+///
+/// A monitor is only chosen as a dedicated target when its resolution *matches*
+/// the profile (both dimensions within ~10 %), so a small strip/secondary screen
+/// is used only when its size actually fits the profile. When no monitor matches,
+/// the window goes to the **primary** monitor (top-left at the virtual origin) so
+/// e.g. a 1080×253 profile lands on the main screen rather than a 1920×450 strip.
 /// Falls back to the first monitor, then `[0, 0, 0, 0]`.
 fn pick_window_rect_for_profile(profile: &str) -> [f32; 4] {
     #[cfg(windows)]
     {
         let [pw, ph] = profile_to_size(profile);
-        let landscape = pw >= ph;
         let monitors = win_monitor::list();
-        let dim = |&(l, t, r, b): &(i32, i32, i32, i32)| ((r - l) as f32, (b - t) as f32);
-        let oriented: Vec<&(i32, i32, i32, i32)> = monitors
-            .iter()
-            .filter(|m| {
-                let (w, h) = dim(m);
-                if landscape {
-                    w >= h
-                } else {
-                    h > w
-                }
-            })
-            .collect();
-        let pool: Vec<&(i32, i32, i32, i32)> = if oriented.is_empty() {
-            monitors.iter().collect()
-        } else {
-            oriented
-        };
-        let best = pool.into_iter().min_by(|a, b| {
-            let (aw, ah) = dim(a);
-            let (bw, bh) = dim(b);
-            let da = (aw - pw).abs() + (ah - ph).abs();
-            let db = (bw - pw).abs() + (bh - ph).abs();
-            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-        });
-        if let Some(&(l, t, r, b)) = best {
+        if let Some(idx) = select_profile_monitor(&monitors, pw, ph) {
+            let (l, t, r, b) = monitors[idx];
             return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
         }
     }
     #[cfg(not(windows))]
     let _ = profile;
     [0.0, 0.0, 0.0, 0.0]
+}
+
+/// Pure monitor-selection logic for [`pick_window_rect_for_profile`], split out so
+/// it can be unit-tested without enumerating real monitors.
+///
+/// Returns the index into `monitors` of the screen that should host a profile of
+/// size `pw`×`ph`:
+/// 1. A monitor whose resolution *matches* the profile (both dims within ~10 %);
+///    among matches, the closest fit. This keeps a small strip/secondary screen
+///    reserved for the profile that actually fits it.
+/// 2. Otherwise the **primary** monitor (top-left at the virtual origin `0,0`), so
+///    e.g. a 1080×253 profile lands on the main screen rather than a 1920×450 strip.
+/// 3. Otherwise the first monitor. `None` only when `monitors` is empty.
+fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -> Option<usize> {
+    let dim = |&(l, t, r, b): &(i32, i32, i32, i32)| ((r - l) as f32, (b - t) as f32);
+
+    // 1. A monitor whose resolution matches the profile, closest fit first.
+    let tol_w = (pw * 0.10).max(8.0);
+    let tol_h = (ph * 0.10).max(8.0);
+    let matched = monitors
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| {
+            let (w, h) = dim(m);
+            (w - pw).abs() <= tol_w && (h - ph).abs() <= tol_h
+        })
+        .min_by(|(_, a), (_, b)| {
+            let (aw, ah) = dim(a);
+            let (bw, bh) = dim(b);
+            let da = (aw - pw).abs() + (ah - ph).abs();
+            let db = (bw - pw).abs() + (bh - ph).abs();
+            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+        })
+        .map(|(i, _)| i);
+    if matched.is_some() {
+        return matched;
+    }
+
+    // 2. No dedicated match → the primary monitor (origin at 0,0).
+    if let Some(i) = monitors.iter().position(|&(l, t, _, _)| l == 0 && t == 0) {
+        return Some(i);
+    }
+
+    // 3. Fallback: first monitor.
+    if monitors.is_empty() {
+        None
+    } else {
+        Some(0)
+    }
 }
 
 /// Returns `[x, y, w, h]` (logical pixels) for the best monitor matching the
@@ -3123,7 +3152,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{profile_is_landscape, profile_to_size};
+    use super::{profile_is_landscape, profile_to_size, select_profile_monitor};
 
     #[test]
     fn landscape_profiles_detected_by_prefix() {
@@ -3178,5 +3207,29 @@ mod tests {
                 "{landscape} should transpose {portrait}"
             );
         }
+    }
+
+    #[test]
+    fn profile_monitor_prefers_matching_strip() {
+        // Primary 2560x1440 at origin + a 1920x450 strip at (2560,0).
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 4480, 450)];
+        // landscape-xl is 1920x450 → must pick the strip (index 1).
+        let [w, h] = profile_to_size("landscape-xl");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(1));
+    }
+
+    #[test]
+    fn profile_monitor_falls_back_to_primary_when_no_match() {
+        // Same layout; landscape-fhd-top (1080x253) matches neither screen, so it
+        // must land on the primary monitor at the origin (index 0), NOT the strip.
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 4480, 450)];
+        let [w, h] = profile_to_size("landscape-fhd-top");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(0));
+    }
+
+    #[test]
+    fn profile_monitor_empty_is_none() {
+        let [w, h] = profile_to_size("landscape-xl");
+        assert_eq!(select_profile_monitor(&[], w, h), None);
     }
 }
