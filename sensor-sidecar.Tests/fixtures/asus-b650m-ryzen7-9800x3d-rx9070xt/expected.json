@@ -15,7 +15,7 @@
       "vram_used_mb": 363,
       "vram_total_mb": 512,
       "d3d_3d": 7.5201564,
-      "d3d_vdec": null
+      "d3d_vdec": 0
     },
     {
       "name": "AMD Radeon RX 9070 XT",
@@ -30,7 +30,7 @@
       "vram_used_mb": 3050,
       "vram_total_mb": 16304,
       "d3d_3d": 2.037397,
-      "d3d_vdec": null
+      "d3d_vdec": 0
     }
   ],
   "disk_temps": {

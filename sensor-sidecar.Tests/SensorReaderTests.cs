@@ -149,6 +149,27 @@ public class SensorReaderTests
     }
 
     [Fact]
+    public void ExtractGpu_amd_video_decode_matches_naming_variants()
+    {
+        // NVIDIA: "D3D Video Decode"; AMD iGPU: "D3D Video Decode 1";
+        // AMD discrete: unified "D3D Video Codec Engine". All must populate d3d_vdec.
+        var igpu = Hw(HardwareType.GpuAmd, "Radeon iGPU", "/gpu-amd/0",
+        [
+            Sensor(SensorType.Load, "D3D Video Decode 1", 12.0f),
+            Sensor(SensorType.Load, "D3D Video Codec Engine", 3.0f), // max wins
+        ]);
+        var dgpu = Hw(HardwareType.GpuAmd, "Radeon dGPU", "/gpu-amd/5",
+        [
+            Sensor(SensorType.Load, "D3D Video Codec Engine", 0.0f),
+        ]);
+
+        var devices = SensorReader.Extract(Computer(igpu, dgpu)).GpuDevices;
+
+        Assert.Equal(12.0f, devices[0].D3dVdec); // busiest decode/codec engine
+        Assert.Equal(0.0f, devices[1].D3dVdec);  // present but idle → 0, not null
+    }
+
+    [Fact]
     public void ExtractGpu_reads_vram_from_smalldata_mb_and_data_gb()
     {
         var mbGpu = Hw(HardwareType.GpuNvidia, "A", "/gpu-nvidia/0",

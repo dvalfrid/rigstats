@@ -104,7 +104,12 @@ public static class SensorReader
                 case SensorType.Load:
                     if (s.Name == "GPU Core") load = s.Value;
                     else if (s.Name is "GPU D3D 3D" or "D3D 3D") d3d3d = s.Value;
-                    else if (s.Name is "GPU D3D Video Decode" or "D3D Video Decode") d3dVdec = s.Value;
+                    // Video-decode engine load. NVIDIA exposes "D3D Video Decode";
+                    // AMD names it "D3D Video Decode 1" (iGPU) or routes decoding
+                    // through the unified "D3D Video Codec Engine" (discrete VCN).
+                    // Match any such engine and keep the busiest.
+                    else if (s.Name.Contains("Video Decode") || s.Name.Contains("Video Codec"))
+                        d3dVdec = Math.Max(d3dVdec ?? 0f, s.Value.Value);
                     break;
                 case SensorType.Temperature:
                     if (s.Name == "GPU Core") temp = s.Value;
