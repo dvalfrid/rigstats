@@ -85,7 +85,7 @@ numbers — do not edit it by hand; re-run the script to refresh it.
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | 🔲 Planned |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | 🔲 Planned |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | ✅ Done |
-| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | 🔲 Planned |
+| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | ✅ Done |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | 🔲 Planned |
 <!-- roadmap-table:end -->
 
@@ -916,34 +916,35 @@ threshold, and floating mode, laid out for a wide, short screen.
 
 ---
 
-## Post-update success notification 🔲
+## Post-update success notification ✅
 
-**Background:** When the NSIS installer runs silently (in-app update), the old
-app is killed and restarted without any feedback. The old Tauri-based app showed
-a "RigStats Update" dialog confirming the update succeeded.
+**Implemented.** When the NSIS installer runs an in-app update it now relaunches
+the app with a confirmation dialog, restoring the feedback the old Tauri build
+showed after an update.
 
-### Approach (flag-file pattern)
+### Implementation (command-line argument)
 
-1. **NSIS installer** — when running silently (`IfSilent`), write
-   `%PROGRAMDATA%\se.codeby.rigstats\post-update.txt` containing the new version
-   number, before launching `rigstats.exe`.
+The flag-file pattern in the original plan was replaced by a simpler
+command-line hand-off — the installer already relaunches the app, so it just
+passes the new version directly:
 
-2. **Startup check** (`src-egui/src/main.rs`) — after loading settings and before
-   `eframe::run_native`, check for the flag file. If found: read version, delete
-   file, set `updater_win.status = UpdateStatus::JustUpdated { version }`, set
-   `updater_open = true`.
+1. **NSIS installer** (`build/installer.nsi`) — after an `/autoupdate` install,
+   the finish step runs `Exec '"$INSTDIR\rigstats.exe" "--just-updated=${VERSION}"'`
+   instead of a plain launch.
 
-3. **Updater dialog** (`src-egui/src/windows/updater.rs`) — add
-   `UpdateStatus::JustUpdated { version: String }` variant. Renders "Updated to
-   v{version}" in green in the hero, changelog in the central panel, and a single
-   "Close" button in the footer — same layout as `UpToDate`.
+2. **Startup check** (`src-egui/src/main.rs`) — on launch the app scans
+   `std::env::args()` for `--just-updated=VERSION`. When present it sets
+   `updater_win.status = UpdateStatus::JustUpdated { version }` and opens (and
+   focuses) the updater window.
 
-PROGRAMDATA is used (not APPDATA) because the installer runs elevated and APPDATA
-would point to the admin profile, not the current user.
+3. **Updater dialog** (`src-egui/src/windows/updater.rs`) — the
+   `UpdateStatus::JustUpdated { version }` variant renders "Updated to v{version}"
+   in the hero, the bundled changelog in the central panel, and a single "Close"
+   button — same layout as `UpToDate`.
 
-### When to do this
-
-Next polish pass after v1.27.0 is confirmed stable.
+Passing the version as an argument avoids the elevated-installer APPDATA pitfall
+entirely: no shared file is read, so there is no ambiguity about which user
+profile owns it.
 
 ---
 
