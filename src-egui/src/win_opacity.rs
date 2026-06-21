@@ -1,8 +1,8 @@
 //! Window-level opacity via Win32 SetLayeredWindowAttributes.
 //!
 //! Uses WS_EX_LAYERED + LWA_ALPHA, which works with DXGI flip-mode swap chains
-//! on Windows 10 1803+ and Windows 11. This replicates the same visual effect
-//! as CSS `opacity` on the root element in the Tauri version.
+//! on Windows 10 1803+ and Windows 11. Applies a uniform alpha to the whole
+//! window (frame + content), matching the dashboard's configurable opacity.
 
 #![allow(unsafe_code)]
 

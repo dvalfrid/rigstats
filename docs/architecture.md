@@ -79,7 +79,7 @@ rig-dashboard/
 │   │   └── windows/        Secondary windows (settings, about, status, updater)
 │   ├── assets/             Embedded PNGs (brand logos, tray icon)
 │   └── Cargo.toml
-├── rigstats-backend/       Shared Rust lib — no Tauri coupling
+├── rigstats-backend/       Shared Rust lib (telemetry, hardware, settings)
 │   └── src/
 │       ├── stats.rs        StatsPayload and all sub-structs, HardwareInfo, AppState
 │       ├── hardware.rs     WMI/PowerShell hardware detection at startup
@@ -108,7 +108,7 @@ rig-dashboard/
 
 ### Quick reference
 
-**`rigstats-backend/src/`** — shared lib, no Tauri coupling:
+**`rigstats-backend/src/`** — shared lib consumed by the egui binary:
 
 | Module | Responsibility |
 | --- | --- |
@@ -143,12 +143,12 @@ rig-dashboard/
 
 #### `main.rs`
 
-Entry point: monitor selection, system tray setup, settings load, poll thread, and `eframe::run_native`. Starts a tokio runtime for the background auto-update check (first check after 10 s, then every 6 h). The poll thread calls `get_stats()` once per second and sends `StatsPayload` to the UI thread via `mpsc::Sender`. On startup, checks for `--just-updated=VERSION` argument (set by the NSIS in-app updater) and opens the updater dialog in `JustUpdated` state if present.
+Entry point: settings load, window placement, and `eframe::run_native`, hosting `RigStatsApp` and its per-frame `ui()` loop. Monitor selection lives in `geometry.rs`, tray setup in `tray.rs`, and the poll thread in `poll.rs`. Starts a tokio runtime for the poll loop and the background auto-update check (first check after 10 s, then every 6 h). The poll loop samples hardware once per second and sends a `PollStats` snapshot to the UI thread via `mpsc::SyncSender`. On startup, checks for `--just-updated=VERSION` argument (set by the NSIS in-app updater) and opens the updater dialog in `JustUpdated` state if present.
 
 #### `stats.rs`
 
-Defines two shared state structs and all serializable payload structs sent to
-the frontend.
+Defines two shared state structs and all serializable telemetry payload
+structs.
 
 **`HardwareInfo`** — startup-detected constants, held behind a `Mutex` and read once at poll-thread start: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`, `system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
 
@@ -229,7 +229,7 @@ index using the same policy as the old HTTP parser:
 Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
 memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus
-`gpu_devices: Vec<(device_name, vram_total_mb)>` for the frontend selector.
+`gpu_devices: Vec<(device_name, vram_total_mb)>` for the GPU selector in the UI.
 
 **Disk temperatures**, **RAM temperature**, **CPU temperature**, and
 **Motherboard Super I/O** sensor extraction are all performed inside the sidecar
@@ -367,9 +367,8 @@ between monitors with different DPI settings.
 #### `updater.rs`
 
 `spawn_background_check` starts a loop that checks GitHub Releases every 6
-hours (first check after 10 s). Emits `update-available` to the frontend when
-a newer version is found. Also exposes `check_for_update`, `install_update`,
-and `open_updater_window` commands.
+hours (first check after 10 s). Notifies the UI when a newer version is found.
+Also exposes `check_for_update`, `install_update`, and `open_updater_window`.
 
 #### `autostart.rs`
 
@@ -502,7 +501,7 @@ thread). Produces a self-contained ZIP for bug reports.
   so colour indicators remain active while notifications are silenced.
 - **`TempThresholdPayload`** (the `apply-thresholds` event) carries only
   numeric thresholds, not the notify flags. Whether a notification fires is
-  a backend concern; the frontend uses thresholds only for colour mapping.
+  a backend concern; the UI uses thresholds only for colour mapping.
 
 ### Window placement
 

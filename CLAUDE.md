@@ -183,8 +183,8 @@ The repo is a Cargo workspace (`Cargo.toml` at root) with two members:
 
 | Crate | Path | Role |
 |---|---|---|
-| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules with Tauri coupling removed (`AppHandle` → `&Path` for settings/debug/lhm functions) |
-| `rigstats-egui` | `src-egui/` | Production egui binary — replaces Tauri (migration complete) |
+| `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules (telemetry, hardware, settings, logging). Settings/debug/lhm functions take `&Path` for path resolution |
+| `rigstats-egui` | `src-egui/` | Production egui binary — the desktop app (panels, tray, settings windows) |
 
 The egui binary reads settings from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts one client at a time.
 
@@ -208,7 +208,7 @@ Key source files:
 - **`panels/`** — one file per panel (`cpu.rs`, `gpu.rs`, etc.), each rendering inside `theme::panel_frame()`. Every panel `draw()` accepts `th: &theme::AppTheme` so label/muted text colours follow the active preset; panels with temperatures additionally accept `(warn: u8, crit: u8)` from `PanelThresholds` in `main.rs`. All `draw()` functions return `egui::Rect` (the panel's painted rect); `panel_frame()` itself returns `egui::Rect`. The caller (`main.rs`) uses the returned rect to paint the drag-dots and padlock **overlay** on top of the panel in floating mode: three small dots (top-left of the panel's 24 px drag zone) and a padlock icon (right side of drag zone) are drawn with `ui.painter()` — no separate drag-strip widget. Padlock colour is `app_theme.accent`; click stored via `ui.ctx().data_mut()` temp key `"toggle_lock"`.
 - **`brand.rs`** — loads 13 brand logo PNGs embedded from `src-egui/assets/` (transparent background, auto-cropped). `rig_logo(brand)` returns the rig header logo for: ROG, MSI, Alienware, Razer, Lenovo Legion, HP Omen, AORUS, Gigabyte, Acer Predator, Taurus. `cpu_logo(model)` and `gpu_logo(name)` return AMD/NVIDIA/Intel based on substring matching.
 - **`windows/`** — one file per secondary window (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`). All use `egui::show_viewport_deferred` and are centered via `dialog_center()` in `main.rs`. All four viewports receive the tray icon via `load_app_icon()` (loads `assets/tray.png` as `egui::IconData`). `settings.rs` holds a four-tab layout (Dashboard, Panels, Alerts, Appearance) with live preview: changes are pushed to `current_settings` every frame when `draft != last_preview`; Cancel restores the `original` snapshot captured at open; Save also persists to disk. Appearance includes the theme preset selector. **Live preview applies to:** opacity, theme, rig name, visible panels, floating mode, display profile, all threshold values. **Save-only (not previewed live):** `window_layer`. `status.rs` shows a two-column Components row (`render_components`): a Dependencies card (PawnIO, sidecar service, WMI) on the left and a GPU Drivers card on the right listing each adapter's installed driver version + date, an age-based "stale driver" warning (`DRIVER_STALE_DAYS = 270`), and a per-adapter right-aligned "↗ Latest driver" link to the vendor support page (AMD/NVIDIA/Intel). `render_components` measures the Dependencies card height (`min_rect` delta) and forces the Drivers card to the same height; the driver list sits inside an `egui::ScrollArea` (unique `id_salt("gpu_drivers_scroll")` to avoid an ID clash with the debug-log scroll area) so extra GPUs scroll while the card height stays fixed. Driver data comes from `hardware::detect_gpu_drivers()`. Outdated GPU drivers are the known cause of missing ADL GPU sensors (LHM #736) — see `docs/troubleshooting.md`.
-- **`update_check.rs`** — `check()` fetches `latest.json`, compares semver. `BUNDLED_CHANGELOG` bundles `../../CHANGELOG.md` at compile time (same content as Tauri's bundled resource).
+- **`update_check.rs`** — `check()` fetches `latest.json`, compares semver. `BUNDLED_CHANGELOG` bundles `../../CHANGELOG.md` at compile time.
 - **`win32_dark_mode.rs`** — calls `uxtheme.dll` ordinals 135 (`SetPreferredAppMode(AllowDark)`) + 104 (`RefreshImmersiveColorPolicyState`) at startup so the OS-drawn tray context menu respects dark mode.
 
 ### Data flow
@@ -235,11 +235,6 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`debug.rs`** — `append_debug_log` (INFO) plus `log_debug`/`log_warn`/`log_error` level variants, all built on `append_debug_log_lvl` + the `LogLevel` enum. Lines are written as `[YYYY-MM-DD HH:MM:SS] [LEVEL] message` (local time via `chrono`, the `[LEVEL]` tag padded to `[WARNING]` width so message columns align in the Status view). Also `reset_debug_log` (rotates current log to `rigstats-debug-prev.log` before starting fresh — preserves crash evidence), `unix_now_secs`.
 - **`monitor.rs`** — Profile definitions, monitor selection, `compute_panels_logical_height`.
 - **`autostart.rs`** — Registry-based autostart (HKCU run key).
-
-### Frontend (`frontend/`)
-
-Legacy Tauri JS frontend — **no longer used at runtime**. Kept for the vitest unit test suite which tests pure logic helpers (`tempColors.js`, `vendorBranding.js`, panel formatters). The JS files themselves are not loaded by the egui app.
-
 
 ### Dashboard profiles
 
@@ -273,7 +268,7 @@ Settings are stored in `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`. Th
 
 ### Testing
 
-Frontend tests use **vitest** and are colocated with modules as `*.test.js` files (e.g., `tempColors.test.js`, `vendorBranding.test.js`). Rust tests are in `#[cfg(test)]` modules at the bottom of their respective files; most require Windows and the `wmi` feature.
+Rust tests are in `#[cfg(test)]` modules at the bottom of their respective files (e.g. the geometry helpers in `src-egui/src/geometry.rs`); most require Windows and the `wmi` feature. Run them with `cargo xtask test`.
 
 ### egui dialog design system
 

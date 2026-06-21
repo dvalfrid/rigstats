@@ -2015,7 +2015,7 @@ fn main() {
             visuals.panel_fill = egui::Color32::TRANSPARENT;
             // Popups (ComboBox, tooltips) use window_fill — keep it solid so they're readable.
             visuals.window_fill = egui::Color32::from_gray(28);
-            // Default text colour matches Tauri --text: #b8cce8
+            // Default body text colour: #b8cce8
             visuals.override_text_color = Some(theme::C_TEXT);
             cc.egui_ctx.set_visuals(visuals);
 
