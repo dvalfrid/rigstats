@@ -1,0 +1,27 @@
+# sensor-tree — 2026-06-22 00:00:00Z (SYNTHETIC SAMPLE — not real hardware)
+HW  Cpu                  id=/amdcpu/0 name=AMD Ryzen 9 7950X
+  S  Temperature     id=/amdcpu/0/temperature/2 name=Core (Tctl/Tdie) val=52.4
+  S  Power           id=/amdcpu/0/power/0 name=Package val=78.1
+HW  GpuNvidia            id=/gpu-nvidia/0 name=NVIDIA GeForce RTX 4090
+  S  Load            id=/gpu-nvidia/0/load/0 name=GPU Core val=3
+  S  Temperature     id=/gpu-nvidia/0/temperature/0 name=GPU Core val=41
+  S  Temperature     id=/gpu-nvidia/0/temperature/2 name=GPU Hot Spot val=53
+  S  Clock           id=/gpu-nvidia/0/clock/0 name=GPU Core val=210
+  S  Clock           id=/gpu-nvidia/0/clock/1 name=GPU Memory val=405
+  S  Power           id=/gpu-nvidia/0/power/0 name=GPU Package val=28
+  S  SmallData       id=/gpu-nvidia/0/smalldata/1 name=GPU Memory Used val=1536
+  S  SmallData       id=/gpu-nvidia/0/smalldata/3 name=GPU Memory Total val=24564
+HW  Storage              id=/nvme/0 name=Samsung SSD 990 PRO 2TB
+  S  Temperature     id=/nvme/0/temperature/0 name=Temperature val=38
+  S  Temperature     id=/nvme/0/temperature/1 name=Temperature 1 val=38
+  S  Temperature     id=/nvme/0/temperature/3 name=Temperature 3 (Warning) val=82
+HW  Memory               id=/ram/0 name=Generic Memory
+  S  Data            id=/ram/0/data/0 name=Memory Used val=18.2
+HW  Motherboard          id=/mainboard name=ASUS ROG STRIX X670E-E GAMING WIFI
+  SUB SuperIO           id=/lpc/nct6799d/0 name=Nuvoton NCT6799D
+    S  Fan             id=/lpc/nct6799d/0/fan/0 name=CPU Fan val=812
+    S  Fan             id=/lpc/nct6799d/0/fan/3 name=Chassis Fan #3 val=0
+    S  Temperature     id=/lpc/nct6799d/0/temperature/0 name=CPU val=44
+    S  Temperature     id=/lpc/nct6799d/0/temperature/1 name=System val=33
+    S  Voltage         id=/lpc/nct6799d/0/voltage/0 name=Vcore val=1.048
+    S  Voltage         id=/lpc/nct6799d/0/voltage/4 name=Voltage #5 val=0.84

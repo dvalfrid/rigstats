@@ -26,4 +26,10 @@
   <ItemGroup>
     <Compile Include="..\sensor-sidecar\SensorReader.cs" Link="SensorReader.cs" />
   </ItemGroup>
+
+  <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the
+       test assembly so FixtureTests can discover them at runtime. -->
+  <ItemGroup>
+    <None Include="fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,10 @@
+{
+  "slug": "_sample-synthetic",
+  "synthetic": true,
+  "contributor": "rigstats maintainers",
+  "collected_at_unix": 0,
+  "rigstats_version": "0.0.0",
+  "os": "n/a",
+  "notes": "Hand-written sample demonstrating the fixture format. NOT real hardware. Real machine fixtures live in sibling folders.",
+  "anonymized": true
+}
