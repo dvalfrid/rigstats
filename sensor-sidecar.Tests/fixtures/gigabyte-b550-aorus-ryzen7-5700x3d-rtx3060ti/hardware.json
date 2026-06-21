@@ -1,0 +1,65 @@
+{
+  "board": {
+    "bbMfr": "Gigabyte Technology Co., Ltd.",
+    "bbProd": "B550 AORUS ELITE AX V2",
+    "csMfr": "Gigabyte Technology Co., Ltd.",
+    "csModel": "B550 AORUS ELITE AX V2",
+    "cspName": "B550 AORUS ELITE AX V2",
+    "cspVer": "Default string"
+  },
+  "cpu": [
+    {
+      "cores": 8,
+      "maxMHz": 3001,
+      "name": "AMD Ryzen 7 5700X3D 8-Core Processor           ",
+      "threads": 16
+    }
+  ],
+  "disk": [
+    {
+      "deviceId": "\\\\.\\PHYSICALDRIVE0",
+      "interfaceType": "IDE",
+      "mediaType": "Fixed hard disk media",
+      "model": "SAMSUNG MZ7KM480HAHP-00005",
+      "sizeBytes": 480101368320
+    },
+    {
+      "deviceId": "\\\\.\\PHYSICALDRIVE1",
+      "interfaceType": "SCSI",
+      "mediaType": "Fixed hard disk media",
+      "model": "Fanxiang S501 128GB",
+      "sizeBytes": 128034708480
+    }
+  ],
+  "gpu": [
+    {
+      "driver": "32.0.16.1047",
+      "name": "NVIDIA GeForce RTX 3060 Ti",
+      "ramBytes": 4293918720
+    }
+  ],
+  "os": {
+    "arch": "64-bit",
+    "build": "26200",
+    "caption": "Microsoft Windows 11 Pro",
+    "version": "10.0.26200"
+  },
+  "ram": [
+    {
+      "capBytes": 17179869184,
+      "configured": 3600,
+      "mfr": "Unknown",
+      "part": "CMWX16GC3600C18W2D",
+      "speed": 3600,
+      "typeCode": 26
+    },
+    {
+      "capBytes": 17179869184,
+      "configured": 3600,
+      "mfr": "Unknown",
+      "part": "CMWX16GC3600C18W2D",
+      "speed": 3600,
+      "typeCode": 26
+    }
+  ]
+}

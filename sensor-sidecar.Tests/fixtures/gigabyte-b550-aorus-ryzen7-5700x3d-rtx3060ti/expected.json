@@ -1,0 +1,105 @@
+{
+  "cpu_temp": 61.375008,
+  "cpu_power": 61.636074,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce RTX 3060 Ti",
+      "sensor_family": "gpu-nvidia",
+      "load": 10,
+      "temp": 53,
+      "hotspot_temp": 65.53125,
+      "core_clock": 1695,
+      "mem_clock": 7000.983,
+      "power": 56.919,
+      "fan": 1058,
+      "vram_used_mb": 483,
+      "vram_total_mb": 8192,
+      "d3d_3d": 1.8115305,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "Fanxiang S501 128GB": 44,
+    "SAMSUNG MZ7KM480HAHP-00005": 35
+  },
+  "ram_temp": 38.75,
+  "mb_fans": [
+    {
+      "label": "CPU Fan",
+      "rpm": 3245.1924
+    },
+    {
+      "label": "System Fan #3",
+      "rpm": 1101.142
+    },
+    {
+      "label": "System Fan #1",
+      "rpm": 837.469
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "System #1",
+      "celsius": 31
+    },
+    {
+      "label": "System #2",
+      "celsius": 30
+    },
+    {
+      "label": "CPU",
+      "celsius": 61
+    },
+    {
+      "label": "PCIe x16",
+      "celsius": 36
+    },
+    {
+      "label": "VRM MOS",
+      "celsius": 40
+    },
+    {
+      "label": "Chipset",
+      "celsius": 36
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "Vcore",
+      "volts": 1.284
+    },
+    {
+      "label": "\u002B3.3V",
+      "volts": 3.3066
+    },
+    {
+      "label": "\u002B12V",
+      "volts": 12.096
+    },
+    {
+      "label": "\u002B5V",
+      "volts": 5.04
+    },
+    {
+      "label": "Vcore SoC",
+      "volts": 1.2
+    },
+    {
+      "label": "VDDP",
+      "volts": 0.90000004
+    },
+    {
+      "label": "DIMM",
+      "volts": 1.368
+    },
+    {
+      "label": "\u002B3V Standby",
+      "volts": 3.3119998
+    },
+    {
+      "label": "CMOS Battery",
+      "volts": 3.1200001
+    }
+  ],
+  "mb_chip": "ITE IT8689E"
+}

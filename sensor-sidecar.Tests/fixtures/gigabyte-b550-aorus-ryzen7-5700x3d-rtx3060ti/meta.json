@@ -1,0 +1,10 @@
+{
+  "slug": "gigabyte-b550-aorus-ryzen7-5700x3d-rtx3060ti",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1780951737,
+  "rigstats_version": "1.25.1",
+  "os": "Windows 11 Pro 25H2 (build 26200)",
+  "notes": "Single NVIDIA dGPU (GeForce RTX 3060 Ti, /gpu-nvidia/0). Ryzen 7 5700X3D, Gigabyte B550 AORUS ELITE AX V2, ITE IT8689E Super I/O, 2x Corsair DDR4-3600 DIMM, NVMe (Fanxiang S501) + SATA SSD (Samsung MZ7KM480). CPU under light load.",
+  "anonymized": true
+}
