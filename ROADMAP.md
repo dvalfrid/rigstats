@@ -887,9 +887,16 @@ threshold, and floating mode, laid out for a wide, short screen.
   landscape-shaped). The portrait vertical stack is unchanged.
 - **Fixed geometry.** Landscape fixes the window to the full profile size and
   pins it to the matching monitor; there is no per-frame content-fit.
-- **Profile-aware monitor pick.** `pick_window_rect_for_profile` filters to
-  monitors matching the profile orientation, then picks the one whose resolution
-  is closest to the profile — a dedicated 1920×450 strip wins for `landscape-xl`.
+- **Profile-aware monitor pick.** `pick_window_rect_for_profile` targets a
+  monitor only when its resolution **matches** the profile (both dimensions
+  within ~10 %) — a dedicated 1920×450 strip wins for `landscape-xl`. When no
+  monitor matches it falls back to the **primary** monitor at the virtual origin
+  (so e.g. `landscape-fhd-top` 1080×253 lands on the main screen, not a strip).
+  The pure selection step is `select_profile_monitor`, covered by unit tests.
+- **Pinnable window.** A padlock in the fixed-mode drag strip pins the whole
+  dashboard (the group of panels) to its current screen position; the position
+  is saved per profile in `Settings::pinned_positions` and restored across
+  restarts instead of auto-targeting. Applies to both portrait and landscape.
 - **Shared rendering.** Both orientations call `draw_one_panel`, so panels,
   themes, and thresholds are identical. Floating mode is orientation-independent
   (each panel is its own positioned window) and works unchanged.

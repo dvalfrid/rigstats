@@ -1440,8 +1440,6 @@ impl eframe::App for RigStatsApp {
                 self.persist_settings_logged(&s);
             }
         } else {
-            // ── Fixed mode — all panels in one portrait window ────────────────
-
             // ── Fixed mode — all panels in one portrait/landscape window ──────
 
             // Track the window's current outer position so the padlock can pin

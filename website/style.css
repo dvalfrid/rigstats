@@ -228,6 +228,25 @@ code {
   margin: 0 auto;
 }
 
+/* Hero: portrait + landscape shots stacked to show both orientations. */
+.hero-shots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+}
+.hero-shots .hero-img {
+  max-height: 380px;
+}
+.hero-shots .screen-wrap--wide {
+  width: 100%;
+}
+.hero-shots .screen-wrap--wide .hero-img {
+  max-height: none;
+  width: 100%;
+}
+
 /* ── Features ──────────────────────────────────────────────── */
 .features {
   padding: 40px 0 80px;
