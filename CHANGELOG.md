@@ -8,6 +8,21 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.33.0](https://github.com/dvalfrid/rigstats/compare/v1.32.0...v1.33.0) (2026-06-21)
+
+
+### Features
+
+* **dashboard:** pin the non-floating dashboard to a screen ([9aedbad](https://github.com/dvalfrid/rigstats/commit/9aedbadeda17131175423492766a10fc692dcd59)), closes [#111](https://github.com/dvalfrid/rigstats/issues/111)
+* **landscape:** add landscape profiles with adaptive grid layout ([7c037b7](https://github.com/dvalfrid/rigstats/commit/7c037b722b0527de011156867b9fb22297537b67)), closes [#108](https://github.com/dvalfrid/rigstats/issues/108)
+
+
+### Bug Fixes
+
+* **dashboard:** persist pinned position when switching profiles ([7da9f90](https://github.com/dvalfrid/rigstats/commit/7da9f90113c8ba87f3a9c80beaf230bd104c9df3)), closes [#112](https://github.com/dvalfrid/rigstats/issues/112)
+* **landscape:** only target a matching monitor, else use the primary screen ([e258073](https://github.com/dvalfrid/rigstats/commit/e2580735cf9d2dbd6c81519d0e6b20b841a0b441))
+* **settings:** disable Fill Screen for landscape profiles ([3f452cd](https://github.com/dvalfrid/rigstats/commit/3f452cd2f1ea685f22949f805f8f3487fe37d481))
+
 ## [1.32.0](https://github.com/dvalfrid/rigstats/compare/v1.31.1...v1.32.0) (2026-06-18)
 
 
