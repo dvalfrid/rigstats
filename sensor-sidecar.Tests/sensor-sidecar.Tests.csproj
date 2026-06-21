@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RootNamespace>SensorSidecar.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="NSubstitute" Version="5.3.0" />
+    <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+  </ItemGroup>
+
+  <!--
+    The production sidecar project is a self-contained single-file Exe, which a
+    test library cannot ProjectReference (NETSDK1150). SensorReader.cs has no
+    dependency beyond LibreHardwareMonitorLib (referenced above), so we compile
+    the file directly into the test assembly instead. This keeps the shipped
+    sidecar build untouched.
+  -->
+  <ItemGroup>
+    <Compile Include="..\sensor-sidecar\SensorReader.cs" Link="SensorReader.cs" />
+  </ItemGroup>
+</Project>

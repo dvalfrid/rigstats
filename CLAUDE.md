@@ -270,6 +270,8 @@ Settings are stored in `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`. Th
 
 Rust tests are in `#[cfg(test)]` modules at the bottom of their respective files (e.g. the geometry helpers in `src-egui/src/geometry.rs`); most require Windows and the `wmi` feature. Run them with `cargo xtask test`.
 
+The .NET sensor sidecar has an xUnit project at `sensor-sidecar.Tests/` (NSubstitute mocks for LHM `IComputer`/`IHardware`/`ISensor`). It covers the snake_case JSON serialization contract that the Rust `SidecarPayload` deserializer depends on (`SerializationTests.cs`) and every `SensorReader.Extract` filtering rule (`SensorReaderTests.cs`). It compiles `SensorReader.cs` directly because the shipped sidecar is a self-contained single-file exe that a test library cannot `ProjectReference`. It runs as part of `cargo xtask verify` via `dotnet test sensor-sidecar.Tests/…`.
+
 ### egui dialog design system
 
 All secondary windows (Settings, About, Status, Updater) must follow this layout and colour contract. **Never deviate from these values without updating this section.**

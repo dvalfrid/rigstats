@@ -94,6 +94,7 @@ rig-dashboard/
 │   ├── Program.cs          Entry point, pipe server loop
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
 │   └── sensor-sidecar.csproj
+├── sensor-sidecar.Tests/   xUnit tests: SensorReader.Extract rules + JSON contract
 ├── docs/
 ├── website/
 ├── assets/                 Screenshot PNGs for website/README
@@ -236,6 +237,9 @@ memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 (`SensorReader.cs`) using the same filtering rules previously in `lhm.rs`
 (SensorId prefixes `/nvme/`, `/hdd/`, `/memory/dimm/`, `/lpc/`, etc.). The
 `LhmData` fields for these are populated directly from the sidecar payload.
+
+`SensorReader.Extract` and the `SensorPayload` JSON contract are covered by the
+`sensor-sidecar.Tests` xUnit project (run by `cargo xtask verify`).
 
 #### `lhm_process.rs`
 

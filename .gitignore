@@ -20,3 +20,5 @@ debugLog/
 sensor-sidecar/bin/
 sensor-sidecar/obj/
 sensor-sidecar/publish/
+sensor-sidecar.Tests/bin/
+sensor-sidecar.Tests/obj/

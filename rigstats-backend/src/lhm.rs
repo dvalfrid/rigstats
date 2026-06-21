@@ -526,7 +526,10 @@ fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
 
 #[cfg(test)]
 mod tests {
-  use super::{flatten_lhm, parse_lhm, parse_val, select_gpu_idx, SidecarGpuDevice, SidecarPayload};
+  use super::{
+    extract_disk_temps, extract_motherboard, extract_network, extract_ram_temp, flatten_lhm,
+    parse_lhm, parse_val, select_gpu_idx, FlatNode, SidecarGpuDevice, SidecarPayload,
+  };
   use serde_json::json;
 
   // parse_val
@@ -1625,6 +1628,115 @@ mod tests {
       .into_lhm_data(Some("AMD Radeon 890M"));
     assert_eq!(data.gpu_name.as_deref(), Some("AMD Radeon 890M"));
     assert!((data.gpu_load.unwrap() - 11.0).abs() < 0.01);
+  }
+
+  // --- Direct extract_* edge cases ------------------------------------------
+  //
+  // These call the extractor functions on hand-built FlatNode vectors (bypassing
+  // the JSON flatten step) to pin specific filtering rules as readable regression
+  // tests. They cover edge cases not already exercised by the parse_lhm_* suite.
+
+  fn node(parent: &str, text: &str, value: &str, sensor_id: &str) -> FlatNode {
+    FlatNode {
+      text: text.to_string(),
+      value: value.to_string(),
+      parent: parent.to_string(),
+      grandparent: String::new(),
+      sensor_id: sensor_id.to_string(),
+    }
+  }
+
+  fn node_gp(parent: &str, grandparent: &str, text: &str, value: &str, sensor_id: &str) -> FlatNode {
+    FlatNode {
+      grandparent: grandparent.to_string(),
+      ..node(parent, text, value, sensor_id)
+    }
+  }
+
+  #[test]
+  fn extract_motherboard_excludes_zero_rpm_fan() {
+    let nodes = vec![
+      node("Fans", "CPU Fan", "0 RPM", "/lpc/nct6799d/0/fan/0"),
+      node("Fans", "Chassis Fan", "1200 RPM", "/lpc/nct6799d/0/fan/1"),
+    ];
+    let mb = extract_motherboard(&nodes);
+    assert_eq!(mb.fans.len(), 1, "0 RPM fan must be dropped");
+    assert_eq!(mb.fans[0].0, "Chassis Fan");
+  }
+
+  #[test]
+  fn extract_motherboard_excludes_temp_below_5c_sentinel() {
+    let nodes = vec![
+      node("Temperatures", "System", "34 °C", "/lpc/nct6799d/0/temperature/0"),
+      node("Temperatures", "Unused", "1 °C", "/lpc/nct6799d/0/temperature/1"),
+    ];
+    let mb = extract_motherboard(&nodes);
+    assert_eq!(mb.temps.len(), 1, "sub-5 °C sentinel must be dropped");
+    assert_eq!(mb.temps[0].0, "System");
+  }
+
+  #[test]
+  fn extract_motherboard_amd_svi2_fallback_excludes_vid_rails() {
+    // No LPC chip (laptop EC) → AMD SVI2 fallback path. Per-core "… VID" readouts
+    // are switching targets, not supply rails, and must be excluded.
+    let nodes = vec![
+      node("Voltages", "Core (SVI2 TFN)", "1,350 V", "/amdcpu/0/voltage/0"),
+      node("Voltages", "Core #1 VID", "1,400 V", "/amdcpu/0/voltage/1"),
+    ];
+    let mb = extract_motherboard(&nodes);
+    assert_eq!(mb.voltages.len(), 1, "VID rail must be excluded");
+    assert_eq!(mb.voltages[0].0, "Core (SVI2 TFN)");
+  }
+
+  #[test]
+  fn extract_network_mismatched_upload_download_counts_default_to_zero() {
+    // More uploads than downloads: the upload without a matching download index
+    // must pair with a 0 download rather than panicking or reusing another index.
+    let nodes = vec![
+      node("Throughput", "Upload Speed", "5 MB/s", "/nic/0/throughput/0"),
+      node("Throughput", "Download Speed", "1 MB/s", "/nic/0/throughput/1"),
+      node("Throughput", "Upload Speed", "20 MB/s", "/nic/1/throughput/0"),
+    ];
+    let (up, down) = extract_network(&nodes);
+    // Interface 1 has the largest combined throughput (20 MB/s up, 0 down).
+    assert!((up - 20.0 * 8.0).abs() < 0.01, "busiest upload in Mbit/s");
+    assert_eq!(down, 0.0, "missing download index defaults to 0");
+  }
+
+  #[test]
+  fn extract_disk_temps_excludes_empty_sensor_id() {
+    // A temperature with no storage SensorId prefix (e.g. blank id) must be ignored.
+    let nodes = vec![
+      node_gp("Temperatures", "Ghost Drive", "Temperature", "40 °C", ""),
+      node_gp("Temperatures", "Samsung 990", "Temperature", "42 °C", "/nvme/0/temperature/0"),
+    ];
+    let temps = extract_disk_temps(&nodes);
+    assert_eq!(temps.len(), 1);
+    assert_eq!(temps[0].0, "Samsung 990");
+  }
+
+  #[test]
+  fn extract_disk_temps_excludes_warning_and_critical_and_zero() {
+    let nodes = vec![
+      node_gp("Temperatures", "NVMe", "Temperature", "45 °C", "/nvme/0/temperature/0"),
+      node_gp("Temperatures", "NVMe", "Warning Composite", "80 °C", "/nvme/0/temperature/1"),
+      node_gp("Temperatures", "NVMe", "Critical Composite", "90 °C", "/nvme/0/temperature/2"),
+      node_gp("Temperatures", "NVMe", "Temperature 4", "0 °C", "/nvme/0/temperature/3"),
+    ];
+    let temps = extract_disk_temps(&nodes);
+    assert_eq!(temps.len(), 1);
+    assert!((temps[0].1 - 45.0).abs() < 0.01, "threshold/zero sensors excluded");
+  }
+
+  #[test]
+  fn extract_ram_temp_uses_temperature0_index_only() {
+    // Only the per-DIMM /temperature/0 sensor is the real reading; indices 1–5 are
+    // resolution/threshold values and must be ignored even if numerically higher.
+    let nodes = vec![
+      node("Temperatures", "DIMM #1", "38 °C", "/memory/dimm/0/temperature/0"),
+      node("Temperatures", "DIMM #1 Max", "99 °C", "/memory/dimm/0/temperature/1"),
+    ];
+    assert_eq!(extract_ram_temp(&nodes), Some(38.0));
   }
 }
 

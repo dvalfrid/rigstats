@@ -34,7 +34,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
 | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
-| Test coverage — sidecar + sensor extraction | 🔲 Planned |
+| Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 
 ---
@@ -1076,7 +1076,7 @@ Superseded by the egui migration (v1.27.0). The DOM rendering cost — WebView2 
 
 ---
 
-## Test coverage — sidecar + sensor extraction 🔲
+## Test coverage — sidecar + sensor extraction ✅
 
 **Background:** A production-readiness audit (2026-06) found the Rust pure-logic
 layer well covered (semver, colour math, sparkline, `parse_lhm`, GPU selection,
@@ -1104,6 +1104,32 @@ only by manual inspection.
 **Goal:** Move the sensor data path from "covered by integration tests and manual
 inspection" to "each filtering rule has a dedicated regression test," and remove
 the sidecar's status as the one fully untested component.
+
+**Implementation summary:** A new `sensor-sidecar.Tests/` xUnit project (NSubstitute
+for LHM `IComputer`/`IHardware`/`ISensor` mocks) covers the previously untested
+.NET sensor path:
+
+- `SerializationTests.cs` — locks the snake_case JSON contract the Rust
+  `SidecarPayload` deserializer depends on (every top-level field, all `GpuDevice`
+  fields including the explicit `d3d_3d`/`d3d_vdec`, and the `MbFan`/`MbTemp`/`MbVoltage`
+  label/value names). A C#-side rename now fails a test instead of silently breaking
+  deserialization.
+- `SensorReaderTests.cs` — one test per `SensorReader.Extract` filtering rule across
+  CPU, GPU (load/D3D/clocks/hotspot, VR SoC temp fallback, AMD iGPU power sum, VRAM
+  MB vs GB), disk (storage-prefix + Warning/Critical exclusion, highest-temp), RAM
+  (`/temperature/0`-only, max across DIMMs), and motherboard (0-RPM fan, sub-5 °C
+  temp, generic-slot voltage exclusion, descending fan sort, no GPU bleed-in).
+
+The project compiles `SensorReader.cs` directly (the shipped sidecar is a
+self-contained single-file exe a test lib cannot `ProjectReference`). Wired into
+`cargo xtask verify` via `dotnet test sensor-sidecar.Tests/…`.
+
+The Rust `extract_*` functions gained the named direct edge-case tests in
+`rigstats-backend/src/lhm.rs` (a `node`/`node_gp` `FlatNode` builder feeding the
+extractors directly): 0-RPM fan, sub-5 °C sentinel and `… VID` exclusion in
+`extract_motherboard`; mismatched upload/download counts in `extract_network`;
+empty `SensorId`, Warning/Critical and zero-reading exclusion in `extract_disk_temps`;
+and the `/temperature/0`-only index assumption in `extract_ram_temp`.
 
 ---
 

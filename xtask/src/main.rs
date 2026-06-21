@@ -142,6 +142,14 @@ fn task_verify() -> Result<(), String> {
         "-p:PublishSingleFile=true",
     ]))?;
 
+    println!("── test: sidecar ───────────────────────────────────────────────");
+    run(Command::new("dotnet").args([
+        "test",
+        "sensor-sidecar.Tests/sensor-sidecar.Tests.csproj",
+        "-c",
+        "Release",
+    ]))?;
+
     println!("── test: rigstats-backend ──────────────────────────────────────");
     run(Command::new("cargo").args(["test", "--manifest-path", "rigstats-backend/Cargo.toml"]))?;
 
