@@ -10,17 +10,27 @@
 # Run:  pwsh -NoProfile -File tools/sync-roadmap-issues.ps1
 $ErrorActionPreference = "Stop"
 $gh = "C:\Program Files\GitHub CLI\gh.exe"
-$ms = "v2.0"
+$defaultMs = "v2.0"
+# Milestones to ensure exist, with descriptions. Features default to $defaultMs;
+# a feature opts into a later milestone via its `milestone` key.
+$msDesc = [ordered]@{
+  "v2.0" = "RIGStats 2.0 - full roadmap (shipped + planned)"
+  "v3.0" = "RIGStats 3.0 - future scope (post-2.0 features)"
+}
 
 function Norm([string]$s) { if ($null -eq $s) { return "" } ($s -replace "`r`n", "`n").Trim() }
 
-# 1. Ensure milestone exists
+# 1. Ensure every milestone exists; index by title.
 $msAll = & $gh api "repos/:owner/:repo/milestones?state=all" | ConvertFrom-Json
-$msObj = $msAll | Where-Object { $_.title -eq $ms } | Select-Object -First 1
-if (-not $msObj) {
-  $msObj = & $gh api "repos/:owner/:repo/milestones" -f title="$ms" -f state="open" `
-    -f description="RIGStats 2.0 - full roadmap (shipped + planned)" | ConvertFrom-Json
-  Write-Host "Created milestone '$ms' (#$($msObj.number))."
+$msByTitle = @{}
+foreach ($m in $msAll) { $msByTitle[$m.title] = $m }
+foreach ($t in $msDesc.Keys) {
+  if (-not $msByTitle.ContainsKey($t)) {
+    $obj = & $gh api "repos/:owner/:repo/milestones" -f title="$t" -f state="open" `
+      -f description="$($msDesc[$t])" | ConvertFrom-Json
+    $msByTitle[$t] = $obj
+    Write-Host "Created milestone '$t' (#$($obj.number))."
+  }
 }
 
 # 2. Feature data.  kind = done | dropped | planned.
@@ -86,27 +96,27 @@ $features = @(
      summary="The WebView2 DOM render cost this aimed to reduce is gone entirely after the egui migration; the egui binary sleeps between repaints and idles at ~0% CPU.";
      status="Not planned - superseded by the egui migration (v1.27)" }
 
-  @{ id="floating-panel-groups"; kind="planned"; label="enhancement"; title="Floating panel groups";
+  @{ id="floating-panel-groups"; kind="planned"; label="enhancement"; title="Floating panel groups"; milestone="v3.0";
      summary="Build on floating mode: magnetically snap panels into groups that move together (vertical or horizontal), with a flip-orientation context action and a 'Collect panels to screen' tray command.";
-     status="Planned" }
+     status="Planned (3.0)" }
   @{ id="floating-mode-perf"; kind="planned"; label="enhancement"; title="Floating mode - reduce multi-window rendering cost";
      summary="Floating mode renders one OS viewport per panel via show_viewport_immediate, so cost scales with panel count. Investigate deferred viewports and skipping unchanged panels. Target: idle CPU within ~2x of fixed mode.";
      status="Planned" }
   @{ id="desktop-background-l2"; kind="planned"; label="enhancement"; title="Desktop background - Level 2 (WorkerW)";
      summary="True wallpaper-layer mode that reparents into the Progman/WorkerW hierarchy so the dashboard lives between wallpaper and icons and survives Win+D. Relies on undocumented Windows internals and needs Explorer-restart handling plus input forwarding.";
      status="Planned" }
-  @{ id="streamdeck"; kind="planned"; label="enhancement"; title="Stream Deck integration";
+  @{ id="streamdeck"; kind="planned"; label="enhancement"; title="Stream Deck integration"; milestone="v3.0";
      summary="Display live hardware stats (CPU/GPU load/temp, VRAM, fan RPM) on Stream Deck keys directly over USB HID via the elgato-streamdeck crate - no Elgato software or HTTP server. Opt-in; requires the Elgato app not be running.";
-     status="Planned" }
+     status="Planned (3.0)" }
   @{ id="total-system-power"; kind="planned"; label="enhancement"; title="Total system power consumption";
      summary="Show total real-time system power draw: use a motherboard power sensor if LHM exposes one, otherwise a labelled component-sum estimate. Laptops are already covered by battery discharge rate.";
      status="Planned" }
-  @{ id="landscape-support"; kind="planned"; label="enhancement"; title="Landscape monitor support";
-     summary="Add landscape profiles (1920x1080, ultrawide strip, etc.) with a horizontal flow layout so users with a landscape or ultrawide secondary monitor can run the dashboard.";
-     status="Planned" }
-  @{ id="post-update-notification"; kind="planned"; label="enhancement"; title="Post-update success notification";
-     summary="After a silent in-app update, show an 'Updated to vX' confirmation in the updater dialog, driven by a PROGRAMDATA flag file the NSIS installer writes and the app checks at startup.";
-     status="Planned" }
+  @{ id="landscape-support"; kind="done"; label="enhancement"; title="Landscape monitor support";
+     summary="Landscape profiles (transposed portrait sizes plus Top variants) render every panel in an adaptive grid sized to the profile, auto-target a matching monitor (else the primary screen), and support the pinnable non-floating window.";
+     status="Shipped in v1.32.0" }
+  @{ id="post-update-notification"; kind="done"; label="enhancement"; title="Post-update success notification";
+     summary="After an in-app update the NSIS /autoupdate installer relaunches the app with --just-updated=VERSION, and the app shows an 'Updated to vX' confirmation in the updater dialog at startup.";
+     status="Shipped" }
   @{ id="test-coverage-sidecar"; kind="planned"; label="enhancement"; title="Test coverage - sidecar + sensor extraction";
      summary="Add tests for the currently untested .NET sensor sidecar (named-pipe framing, JSON serialization, LHM sensor mapping) and direct unit tests for the lhm.rs extract_* filtering edge cases.";
      status="Planned" }
@@ -135,6 +145,7 @@ $rows = @()   # collected for the auto-generated ROADMAP.md table
 
 foreach ($f in $features) {
   $knownIds[$f.id] = $true
+  $fMs = if ($f.ContainsKey("milestone")) { $f.milestone } else { $defaultMs }
   $marker = "<!-- roadmap-id: $($f.id) -->"
   $desiredState = if ($f.kind -eq "planned") { "OPEN" } else { "CLOSED" }
   $closeReason = if ($f.kind -eq "dropped") { "not planned" } else { "completed" }
@@ -152,17 +163,17 @@ foreach ($f in $features) {
   # ---- create if missing ----
   if (-not $issue) {
     $body = "$($f.summary)`n`nStatus: $($f.status)`nSource: ROADMAP.md`n`n$marker"
-    $url = & $gh issue create --title $f.title --body $body --label $f.label --milestone $ms
+    $url = & $gh issue create --title $f.title --body $body --label $f.label --milestone $fMs
     $num = ($url | Select-String -Pattern '(\d+)\s*$').Matches.Groups[1].Value
     if ($desiredState -eq "CLOSED") { & $gh issue close $num --reason $closeReason | Out-Null }
     Write-Host "CREATED  #$num  $($f.title)"
     $stats.created++
-    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title }
+    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs }
     continue
   }
 
   $num = $issue.number
-  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title }
+  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs }
 
   # ---- pinned: ensure marker present + milestone + state only ----
   if ($f.ContainsKey("pin")) {
@@ -172,7 +183,7 @@ foreach ($f in $features) {
       Write-Host "STAMPED  #$num  (marker added)"
       $stats.adopted++
     }
-    if (($issue.milestone.title) -ne $ms) { & $gh issue edit $num --milestone $ms | Out-Null }
+    if (($issue.milestone.title) -ne $fMs) { & $gh issue edit $num --milestone $fMs | Out-Null }
     continue
   }
 
@@ -182,7 +193,7 @@ foreach ($f in $features) {
   $editArgs = @()
   if ($issue.title -ne $f.title) { $editArgs += @("--title", $f.title) }
   if ((Norm $issue.body) -ne (Norm $desiredBody)) { $editArgs += @("--body", $desiredBody) }
-  if (($issue.milestone.title) -ne $ms) { $editArgs += @("--milestone", $ms) }
+  if (($issue.milestone.title) -ne $fMs) { $editArgs += @("--milestone", $fMs) }
   $hasLabel = @($issue.labels | Where-Object { $_.name -eq $f.label }).Count -gt 0
   if (-not $hasLabel) { $editArgs += @("--add-label", $f.label) }
 
@@ -217,11 +228,11 @@ $statusText = @{ done = "✅ Done"; dropped = "⏭ Not planned"; planned = "🔲
 $kindRank = @{ done = 0; dropped = 1; planned = 2 }
 $sorted = $rows | Sort-Object @{ Expression = { $kindRank[$_.kind] } }, @{ Expression = { $_.num } }
 $tableLines = @(
-  "| Issue | roadmap-id | Feature | Status |"
-  "| --- | --- | --- | --- |"
+  "| Issue | roadmap-id | Feature | Milestone | Status |"
+  "| --- | --- | --- | --- | --- |"
 )
 foreach ($r in $sorted) {
-  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($statusText[$r.kind]) |"
+  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($r.ms) | $($statusText[$r.kind]) |"
 }
 
 $roadmapPath = Join-Path $PSScriptRoot "..\ROADMAP.md"

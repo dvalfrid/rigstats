@@ -24,11 +24,11 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Stats logging / data export | ✅ Done |
 | GPU driver version + stale-driver warning (Status dialog) | ✅ Done (v1.31) |
 | Fullscreen (fill-screen) mode for dedicated monitors | ✅ Done |
-| Floating panel groups | 🔲 Planned |
+| Floating panel groups | 🔲 Planned (3.0) |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
 | Total system power consumption | 🔲 Planned |
-| Stream Deck integration | 🔲 Planned |
+| Stream Deck integration | 🔲 Planned (3.0) |
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
@@ -42,51 +42,55 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 ## GitHub issue tracking
 
 The whole roadmap is mirrored to
-[GitHub Issues](https://github.com/dvalfrid/rigstats/issues) under the
-**[v2.0 milestone](https://github.com/dvalfrid/rigstats/milestone/1)** — shipped
-features as closed issues, planned work as open issues, and
+[GitHub Issues](https://github.com/dvalfrid/rigstats/issues) across two
+milestones — **[v2.0](https://github.com/dvalfrid/rigstats/milestone/1)** for the
+current scope and **[v3.0](https://github.com/dvalfrid/rigstats/milestone/2)** for
+post-2.0 features (currently Floating panel groups and Stream Deck integration) —
+with shipped features as closed issues, planned work as open issues, and
 investigated-and-dropped items closed as *not planned*.
 
 Each issue is tied to its roadmap entry by a stable **hidden marker** in the
 issue body — `<!-- roadmap-id: <id> -->` (invisible in GitHub's rendered view).
 `tools/sync-roadmap-issues.ps1` uses that marker to **upsert** issues
 idempotently: re-running updates the matching issue in place (title, body,
-labels, milestone, open/closed) instead of creating duplicates. The table below
-is **auto-generated** by that script from its `$features` data and the live issue
-numbers — do not edit it by hand; re-run the script to refresh it.
+labels, milestone, open/closed) instead of creating duplicates. A feature's
+milestone defaults to `v2.0`; add a `milestone` key to its `$features` entry to
+target a later one. The table below is **auto-generated** by that script from its
+`$features` data and the live issue numbers — do not edit it by hand; re-run the
+script to refresh it.
 
 <!-- roadmap-table:start -->
-| Issue | roadmap-id | Feature | Status |
-| --- | --- | --- | --- |
-| [#81](https://github.com/dvalfrid/rigstats/issues/81) | `gpu-driver-warning` | GPU driver version + stale-driver warning | ✅ Done |
-| [#83](https://github.com/dvalfrid/rigstats/issues/83) | `fullscreen-mode` | Fullscreen (fill-screen) mode | ✅ Done |
-| [#84](https://github.com/dvalfrid/rigstats/issues/84) | `auto-update` | Auto-update | ✅ Done |
-| [#85](https://github.com/dvalfrid/rigstats/issues/85) | `nvme-ssd-temperatures` | NVMe / SSD temperatures | ✅ Done |
-| [#86](https://github.com/dvalfrid/rigstats/issues/86) | `temperature-threshold-alerts` | Temperature threshold alerts | ✅ Done |
-| [#87](https://github.com/dvalfrid/rigstats/issues/87) | `motherboard-panel` | Motherboard panel | ✅ Done |
-| [#88](https://github.com/dvalfrid/rigstats/issues/88) | `extended-gpu-panel` | Extended GPU panel | ✅ Done |
-| [#89](https://github.com/dvalfrid/rigstats/issues/89) | `customisable-themes` | Customisable themes / accent colours | ✅ Done |
-| [#90](https://github.com/dvalfrid/rigstats/issues/90) | `process-monitor-panel` | Process monitor panel | ✅ Done |
-| [#91](https://github.com/dvalfrid/rigstats/issues/91) | `floating-panel-layout` | Floating panel layout | ✅ Done |
-| [#92](https://github.com/dvalfrid/rigstats/issues/92) | `multi-gpu-selector` | Multi-GPU selector and pinning | ✅ Done |
-| [#93](https://github.com/dvalfrid/rigstats/issues/93) | `battery-panel` | Battery panel (laptop support) | ✅ Done |
-| [#94](https://github.com/dvalfrid/rigstats/issues/94) | `settings-redesign` | Settings redesign | ✅ Done |
-| [#95](https://github.com/dvalfrid/rigstats/issues/95) | `lhm-sensor-sidecar` | LHM stability - sensor sidecar | ✅ Done |
-| [#96](https://github.com/dvalfrid/rigstats/issues/96) | `desktop-background-l1` | Desktop background - Level 1 (HWND_BOTTOM) | ✅ Done |
-| [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | ✅ Done |
-| [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | ✅ Done |
-| [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | ✅ Done |
-| [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | ⏭ Not planned |
-| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | ⏭ Not planned |
-| [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | ⏭ Not planned |
-| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | 🔲 Planned |
-| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | 🔲 Planned |
-| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | 🔲 Planned |
-| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | 🔲 Planned |
-| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | 🔲 Planned |
-| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | ✅ Done |
-| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | ✅ Done |
-| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | 🔲 Planned |
+| Issue | roadmap-id | Feature | Milestone | Status |
+| --- | --- | --- | --- | --- |
+| [#81](https://github.com/dvalfrid/rigstats/issues/81) | `gpu-driver-warning` | GPU driver version + stale-driver warning | v2.0 | ✅ Done |
+| [#83](https://github.com/dvalfrid/rigstats/issues/83) | `fullscreen-mode` | Fullscreen (fill-screen) mode | v2.0 | ✅ Done |
+| [#84](https://github.com/dvalfrid/rigstats/issues/84) | `auto-update` | Auto-update | v2.0 | ✅ Done |
+| [#85](https://github.com/dvalfrid/rigstats/issues/85) | `nvme-ssd-temperatures` | NVMe / SSD temperatures | v2.0 | ✅ Done |
+| [#86](https://github.com/dvalfrid/rigstats/issues/86) | `temperature-threshold-alerts` | Temperature threshold alerts | v2.0 | ✅ Done |
+| [#87](https://github.com/dvalfrid/rigstats/issues/87) | `motherboard-panel` | Motherboard panel | v2.0 | ✅ Done |
+| [#88](https://github.com/dvalfrid/rigstats/issues/88) | `extended-gpu-panel` | Extended GPU panel | v2.0 | ✅ Done |
+| [#89](https://github.com/dvalfrid/rigstats/issues/89) | `customisable-themes` | Customisable themes / accent colours | v2.0 | ✅ Done |
+| [#90](https://github.com/dvalfrid/rigstats/issues/90) | `process-monitor-panel` | Process monitor panel | v2.0 | ✅ Done |
+| [#91](https://github.com/dvalfrid/rigstats/issues/91) | `floating-panel-layout` | Floating panel layout | v2.0 | ✅ Done |
+| [#92](https://github.com/dvalfrid/rigstats/issues/92) | `multi-gpu-selector` | Multi-GPU selector and pinning | v2.0 | ✅ Done |
+| [#93](https://github.com/dvalfrid/rigstats/issues/93) | `battery-panel` | Battery panel (laptop support) | v2.0 | ✅ Done |
+| [#94](https://github.com/dvalfrid/rigstats/issues/94) | `settings-redesign` | Settings redesign | v2.0 | ✅ Done |
+| [#95](https://github.com/dvalfrid/rigstats/issues/95) | `lhm-sensor-sidecar` | LHM stability - sensor sidecar | v2.0 | ✅ Done |
+| [#96](https://github.com/dvalfrid/rigstats/issues/96) | `desktop-background-l1` | Desktop background - Level 1 (HWND_BOTTOM) | v2.0 | ✅ Done |
+| [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
+| [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
+| [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
+| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
+| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
+| [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
+| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v2.0 | ⏭ Not planned |
+| [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
+| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
+| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | 🔲 Planned |
+| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | 🔲 Planned |
+| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
+| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | 🔲 Planned |
+| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -502,7 +506,7 @@ dashboard regardless of how many panels are enabled.
 
 ---
 
-## Floating panel groups 🔲
+## Floating panel groups 🔲 (Milestone 3.0)
 
 **Panel:** Floating panel layout (requires the above feature)
 **Data source:** No new data required
@@ -767,7 +771,7 @@ and injects them directly via `PostMessage`.
 
 ---
 
-## Stream Deck integration 🔲
+## Stream Deck integration 🔲 (Milestone 3.0)
 
 **Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
 
