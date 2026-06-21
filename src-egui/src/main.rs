@@ -278,23 +278,45 @@ fn dialog_center(w: f32, h: f32) -> [f32; 2] {
 fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     #[cfg(windows)]
     {
-        let monitors = win_monitor::list();
-        let margin = 60.0_f32;
-        for (l, t, r, b) in monitors {
-            let (fl, ft, fr, fb) = (
-                l as f32 - margin,
-                t as f32 - margin,
-                r as f32 + margin,
-                b as f32 + margin,
-            );
-            if pos[0] >= fl && pos[0] <= fr && pos[1] >= ft && pos[1] <= fb {
-                return pos;
-            }
+        if position_on_any_monitor(pos, &win_monitor::list()) {
+            pos
+        } else {
+            fallback
         }
-        fallback
     }
     #[cfg(not(windows))]
     pos
+}
+
+/// True when `pos` lies on (or within the 60 px overhang margin of) any monitor
+/// in `monitors`. Pure core of [`guard_panel_position`] and the pinned-position
+/// check, split out so it can be unit-tested without enumerating real monitors.
+fn position_on_any_monitor(pos: [f32; 2], monitors: &[(i32, i32, i32, i32)]) -> bool {
+    let margin = 60.0_f32;
+    monitors.iter().any(|&(l, t, r, b)| {
+        pos[0] >= l as f32 - margin
+            && pos[0] <= r as f32 + margin
+            && pos[1] >= t as f32 - margin
+            && pos[1] <= b as f32 + margin
+    })
+}
+
+/// Pure decision for where a pinned dashboard should be placed.
+///
+/// Returns the saved position only when the dashboard is `pinned`, a position is
+/// `saved` for the current profile, and that position is still on a connected
+/// monitor; otherwise `None`, so the caller auto-targets the matching monitor.
+fn resolve_pinned_position(
+    pinned: bool,
+    saved: Option<[i32; 2]>,
+    monitors: &[(i32, i32, i32, i32)],
+) -> Option<[f32; 2]> {
+    if !pinned {
+        return None;
+    }
+    let p = saved?;
+    let pos = [p[0] as f32, p[1] as f32];
+    position_on_any_monitor(pos, monitors).then_some(pos)
 }
 
 /// Returns `[x, y, w, h]` for the best monitor to host `profile`.
@@ -973,6 +995,20 @@ impl eframe::App for RigStatsApp {
                 self.fullscreen_content_h = None;
             }
             let (pos, [w, h]) = self.fixed_window_geometry(&profile);
+            // Pinned, but this profile has no saved position yet (e.g. the user
+            // switched profiles while pinned): persist the auto-targeted position
+            // now so the profile is properly pinned and stays put across restarts
+            // instead of lingering in a locked-but-unsaved state.
+            if !self.floating_mode && self.dashboard_pinned {
+                let mut s = self.current_settings.lock_safe();
+                if !s.pinned_positions.contains_key(&profile) {
+                    s.pinned_positions.insert(
+                        profile.clone(),
+                        [pos[0].round() as i32, pos[1].round() as i32],
+                    );
+                    self.persist_settings_logged(&s);
+                }
+            }
             // Only resize the main window when in fixed mode AND the size actually changed.
             // Sending InnerSize every settings-reload (e.g. opacity slider drag) causes a
             // visible jump even when the dimensions are identical.
@@ -1985,16 +2021,15 @@ impl RigStatsApp {
         if !self.dashboard_pinned {
             return None;
         }
-        let s = self.current_settings.lock_safe();
-        let p = s.pinned_positions.get(profile).copied()?;
-        drop(s);
-        let pos = [p[0] as f32, p[1] as f32];
-        let guarded = guard_panel_position(pos, [f32::NAN, f32::NAN]);
-        if guarded[0].is_nan() {
-            None
-        } else {
-            Some(guarded)
-        }
+        let saved = {
+            let s = self.current_settings.lock_safe();
+            s.pinned_positions.get(profile).copied()
+        };
+        #[cfg(windows)]
+        let monitors = win_monitor::list();
+        #[cfg(not(windows))]
+        let monitors: Vec<(i32, i32, i32, i32)> = Vec::new();
+        resolve_pinned_position(self.dashboard_pinned, saved, &monitors)
     }
 
     /// Render every visible panel as its own borderless OS window using
@@ -2951,13 +2986,14 @@ fn main() {
     // Pinned dashboard: restore the saved position for this profile (keeping the
     // computed size) instead of auto-targeting a monitor, when still on-screen.
     if !s.floating_mode && s.dashboard_pinned {
-        if let Some(p) = s.pinned_positions.get(&s.dashboard_profile) {
-            let pos = [p[0] as f32, p[1] as f32];
-            let guarded = guard_panel_position(pos, [f32::NAN, f32::NAN]);
-            if !guarded[0].is_nan() {
-                pos_x = guarded[0];
-                pos_y = guarded[1];
-            }
+        let saved = s.pinned_positions.get(&s.dashboard_profile).copied();
+        #[cfg(windows)]
+        let monitors = win_monitor::list();
+        #[cfg(not(windows))]
+        let monitors: Vec<(i32, i32, i32, i32)> = Vec::new();
+        if let Some([x, y]) = resolve_pinned_position(true, saved, &monitors) {
+            pos_x = x;
+            pos_y = y;
         }
     }
     debug::log_debug(
@@ -3259,7 +3295,10 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{profile_is_landscape, profile_to_size, select_profile_monitor};
+    use super::{
+        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
+        select_profile_monitor,
+    };
 
     #[test]
     fn landscape_profiles_detected_by_prefix() {
@@ -3338,5 +3377,56 @@ mod tests {
     fn profile_monitor_empty_is_none() {
         let [w, h] = profile_to_size("landscape-xl");
         assert_eq!(select_profile_monitor(&[], w, h), None);
+    }
+
+    #[test]
+    fn position_on_monitor_respects_overhang_margin() {
+        let monitors = [(0, 0, 2560, 1440)];
+        // Inside the monitor.
+        assert!(position_on_any_monitor([100.0, 100.0], &monitors));
+        // 40 px past the right edge — within the 60 px overhang margin.
+        assert!(position_on_any_monitor([2600.0, 100.0], &monitors));
+        // 200 px past the right edge — off-screen.
+        assert!(!position_on_any_monitor([2760.0, 100.0], &monitors));
+        // No monitors at all → never on-screen.
+        assert!(!position_on_any_monitor([0.0, 0.0], &[]));
+    }
+
+    #[test]
+    fn pinned_position_none_when_unpinned() {
+        let monitors = [(0, 0, 2560, 1440)];
+        // Even with a valid saved position, an unpinned dashboard auto-targets.
+        assert_eq!(
+            resolve_pinned_position(false, Some([100, 100]), &monitors),
+            None
+        );
+    }
+
+    #[test]
+    fn pinned_position_none_when_no_saved() {
+        let monitors = [(0, 0, 2560, 1440)];
+        // Pinned but nothing saved for this profile → caller auto-targets.
+        assert_eq!(resolve_pinned_position(true, None, &monitors), None);
+    }
+
+    #[test]
+    fn pinned_position_restores_saved_when_on_screen() {
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 4480, 450)];
+        // Saved position sits on the strip → restored verbatim.
+        assert_eq!(
+            resolve_pinned_position(true, Some([2600, 10]), &monitors),
+            Some([2600.0, 10.0])
+        );
+    }
+
+    #[test]
+    fn pinned_position_dropped_when_monitor_gone() {
+        // The strip the position was saved on is now disconnected.
+        let monitors = [(0, 0, 2560, 1440)];
+        // Saved at (3000, 10) — well off the remaining monitor → auto-target.
+        assert_eq!(
+            resolve_pinned_position(true, Some([3000, 10]), &monitors),
+            None
+        );
     }
 }
