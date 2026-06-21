@@ -1,0 +1,10 @@
+{
+  "slug": "asus-ga403wr-ryzen-ai9-hx370-rtx5070ti",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1782083134,
+  "rigstats_version": "1.33.0",
+  "os": "Microsoft Windows 11 Home (build 26200)",
+  "notes": "ASUS ROG Zephyrus G14 GA403WR, Ryzen AI 9 HX 370 + Radeon 890M iGPU + RTX 5070 Ti Laptop GPU (NVIDIA absent from sensor tree — likely Optimus/idle at capture time)",
+  "anonymized": true
+}

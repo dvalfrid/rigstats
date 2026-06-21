@@ -1,0 +1,151 @@
+# sensor-tree — 2026-06-21 20:14:54Z
+HW  Motherboard          id=/motherboard name=ASUS GA403WR
+HW  Cpu                  id=/amdcpu/0 name=AMD Ryzen AI 9 HX 370 w/ Radeon 890M
+  S  Load            id=/amdcpu/0/load/2 name=CPU Core #1 val=62,79
+  S  Load            id=/amdcpu/0/load/3 name=CPU Core #2 val=79,07
+  S  Load            id=/amdcpu/0/load/4 name=CPU Core #3 val=41,86
+  S  Load            id=/amdcpu/0/load/5 name=CPU Core #4 val=53,49
+  S  Load            id=/amdcpu/0/load/6 name=CPU Core #5 val=58,14
+  S  Load            id=/amdcpu/0/load/7 name=CPU Core #6 val=20,45
+  S  Load            id=/amdcpu/0/load/8 name=CPU Core #7 val=86,05
+  S  Load            id=/amdcpu/0/load/9 name=CPU Core #8 val=90,7
+  S  Load            id=/amdcpu/0/load/10 name=CPU Core #9 val=6,98
+  S  Load            id=/amdcpu/0/load/11 name=CPU Core #10 val=0
+  S  Load            id=/amdcpu/0/load/12 name=CPU Core #11 val=2,27
+  S  Load            id=/amdcpu/0/load/13 name=CPU Core #12 val=0
+  S  Load            id=/amdcpu/0/load/14 name=CPU Core #13 val=4,65
+  S  Load            id=/amdcpu/0/load/15 name=CPU Core #14 val=2,38
+  S  Load            id=/amdcpu/0/load/16 name=CPU Core #15 val=2,27
+  S  Load            id=/amdcpu/0/load/17 name=CPU Core #16 val=0
+  S  Load            id=/amdcpu/0/load/18 name=CPU Core #17 val=0
+  S  Load            id=/amdcpu/0/load/19 name=CPU Core #18 val=0
+  S  Load            id=/amdcpu/0/load/20 name=CPU Core #19 val=0
+  S  Load            id=/amdcpu/0/load/21 name=CPU Core #20 val=0
+  S  Load            id=/amdcpu/0/load/22 name=CPU Core #21 val=0
+  S  Load            id=/amdcpu/0/load/23 name=CPU Core #22 val=0
+  S  Load            id=/amdcpu/0/load/24 name=CPU Core #23 val=0
+  S  Load            id=/amdcpu/0/load/25 name=CPU Core #24 val=0
+  S  Load            id=/amdcpu/0/load/0 name=CPU Total val=21,3
+  S  Load            id=/amdcpu/0/load/1 name=CPU Core Max val=90,7
+  S  Power           id=/amdcpu/0/power/0 name=Package val=11,184053
+  S  Clock           id=/amdcpu/0/clock/1 name=Cores (Average) val=1751
+  S  Clock           id=/amdcpu/0/clock/2 name=Cores (Average Effective) val=702
+  S  Clock           id=/amdcpu/0/clock/3 name=Core #1 val=3280
+  S  Clock           id=/amdcpu/0/clock/4 name=Core #1 (Effective) val=2366,5
+  S  Factor          id=/amdcpu/0/factor/0 name=Core #1 val=32,86222
+  S  Power           id=/amdcpu/0/power/1 name=Core #1 (SMU) val=1,7135508
+  S  Voltage         id=/amdcpu/0/voltage/2 name=Core #1 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/5 name=Core #2 val=3280
+  S  Clock           id=/amdcpu/0/clock/6 name=Core #2 (Effective) val=1764
+  S  Factor          id=/amdcpu/0/factor/1 name=Core #2 val=32,86222
+  S  Power           id=/amdcpu/0/power/2 name=Core #2 (SMU) val=1,3387108
+  S  Voltage         id=/amdcpu/0/voltage/3 name=Core #2 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/7 name=Core #3 val=3280
+  S  Clock           id=/amdcpu/0/clock/8 name=Core #3 (Effective) val=1410,5
+  S  Factor          id=/amdcpu/0/factor/2 name=Core #3 val=32,86222
+  S  Power           id=/amdcpu/0/power/3 name=Core #3 (SMU) val=1,176017
+  S  Voltage         id=/amdcpu/0/voltage/4 name=Core #3 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/9 name=Core #4 val=3280
+  S  Clock           id=/amdcpu/0/clock/10 name=Core #4 (Effective) val=2701,5
+  S  Factor          id=/amdcpu/0/factor/3 name=Core #4 val=32,86222
+  S  Power           id=/amdcpu/0/power/4 name=Core #4 (SMU) val=1,9509852
+  S  Voltage         id=/amdcpu/0/voltage/5 name=Core #4 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/11 name=Core #5 val=986
+  S  Clock           id=/amdcpu/0/clock/12 name=Core #5 (Effective) val=72
+  S  Factor          id=/amdcpu/0/factor/4 name=Core #5 val=14,026558
+  S  Power           id=/amdcpu/0/power/5 name=Core #5 (SMU) val=0,028281432
+  S  Voltage         id=/amdcpu/0/voltage/6 name=Core #5 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/13 name=Core #6 val=986
+  S  Clock           id=/amdcpu/0/clock/14 name=Core #6 (Effective) val=28
+  S  Factor          id=/amdcpu/0/factor/5 name=Core #6 val=14,026558
+  S  Power           id=/amdcpu/0/power/6 name=Core #6 (SMU) val=0,0093895495
+  S  Voltage         id=/amdcpu/0/voltage/7 name=Core #6 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/15 name=Core #7 val=986
+  S  Clock           id=/amdcpu/0/clock/16 name=Core #7 (Effective) val=67,5
+  S  Factor          id=/amdcpu/0/factor/6 name=Core #7 val=14,026558
+  S  Power           id=/amdcpu/0/power/7 name=Core #7 (SMU) val=0,025097525
+  S  Voltage         id=/amdcpu/0/voltage/8 name=Core #7 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/17 name=Core #8 val=987
+  S  Clock           id=/amdcpu/0/clock/18 name=Core #8 (Effective) val=5,5
+  S  Factor          id=/amdcpu/0/factor/7 name=Core #8 val=14,026558
+  S  Power           id=/amdcpu/0/power/8 name=Core #8 (SMU) val=0,0006274515
+  S  Voltage         id=/amdcpu/0/voltage/9 name=Core #8 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/19 name=Core #9 val=986
+  S  Clock           id=/amdcpu/0/clock/20 name=Core #9 (Effective) val=5
+  S  Factor          id=/amdcpu/0/factor/8 name=Core #9 val=14,026558
+  S  Power           id=/amdcpu/0/power/9 name=Core #9 (SMU) val=0,0020167625
+  S  Voltage         id=/amdcpu/0/voltage/10 name=Core #9 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/21 name=Core #10 val=986
+  S  Clock           id=/amdcpu/0/clock/22 name=Core #10 (Effective) val=1,5
+  S  Factor          id=/amdcpu/0/factor/9 name=Core #10 val=14,026558
+  S  Power           id=/amdcpu/0/power/10 name=Core #10 (SMU) val=0,00024647918
+  S  Voltage         id=/amdcpu/0/voltage/11 name=Core #10 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/23 name=Core #11 val=986
+  S  Clock           id=/amdcpu/0/clock/24 name=Core #11 (Effective) val=1,5
+  S  Factor          id=/amdcpu/0/factor/10 name=Core #11 val=14,026558
+  S  Power           id=/amdcpu/0/power/11 name=Core #11 (SMU) val=0,0002688559
+  S  Voltage         id=/amdcpu/0/voltage/12 name=Core #11 VID val=0,86875
+  S  Clock           id=/amdcpu/0/clock/25 name=Core #12 val=986
+  S  Clock           id=/amdcpu/0/clock/26 name=Core #12 (Effective) val=2
+  S  Factor          id=/amdcpu/0/factor/11 name=Core #12 val=14,026558
+  S  Power           id=/amdcpu/0/power/12 name=Core #12 (SMU) val=0,00024644096
+  S  Voltage         id=/amdcpu/0/voltage/13 name=Core #12 VID val=0,86875
+  S  Temperature     id=/amdcpu/0/temperature/2 name=Core (Tctl/Tdie) val=47,625008
+  S  Voltage         id=/amdcpu/0/voltage/0 name=Core (SVI2 TFN) val=1,55
+  S  Voltage         id=/amdcpu/0/voltage/1 name=SoC (SVI2 TFN) val=1,55
+  S  Clock           id=/amdcpu/0/clock/0 name=Bus Speed val=99,81066
+HW  Memory               id=/vram name=Virtual Memory
+  S  Data            id=/vram/data/2 name=Memory Used val=19,942253
+  S  Data            id=/vram/data/3 name=Memory Available val=26,17577
+  S  Load            id=/vram/load/1 name=Memory val=43,24178
+HW  Memory               id=/ram name=Total Memory
+  S  Data            id=/ram/data/0 name=Memory Used val=15,054256
+  S  Data            id=/ram/data/1 name=Memory Available val=16,063766
+  S  Load            id=/ram/load/0 name=Memory val=48,37793
+HW  GpuAmd               id=/gpu-amd/0 name=AMD Radeon(TM) 890M Graphics
+  S  SmallData       id=/gpu-amd/0/smalldata/2 name=GPU Memory Total val=512
+  S  Factor          id=/gpu-amd/0/factor/0 name=Fullscreen FPS val=29,830265
+  S  SmallData       id=/gpu-amd/0/smalldata/5 name=D3D Dedicated Memory Total val=512
+  S  SmallData       id=/gpu-amd/0/smalldata/4 name=D3D Dedicated Memory Free val=188,97266
+  S  SmallData       id=/gpu-amd/0/smalldata/3 name=D3D Dedicated Memory Used val=323,02734
+  S  SmallData       id=/gpu-amd/0/smalldata/6 name=D3D Shared Memory Used val=3005,082
+  S  SmallData       id=/gpu-amd/0/smalldata/7 name=D3D Shared Memory Free val=12927,346
+  S  SmallData       id=/gpu-amd/0/smalldata/8 name=D3D Shared Memory Total val=15932,428
+  S  Load            id=/gpu-amd/0/load/2 name=D3D 3D val=8,189401
+  S  Load            id=/gpu-amd/0/load/4 name=D3D Copy val=0,32172117
+  S  Load            id=/gpu-amd/0/load/3 name=D3D Compute 0 val=0
+  S  Load            id=/gpu-amd/0/load/6 name=D3D Timer 0 val=0
+  S  Load            id=/gpu-amd/0/load/5 name=D3D Security 1 val=0
+  S  Load            id=/gpu-amd/0/load/8 name=D3D Video JPEG 0 val=0
+  S  Load            id=/gpu-amd/0/load/9 name=D3D Video Processor val=0
+  S  Load            id=/gpu-amd/0/load/7 name=D3D Video Codec Engine val=0
+  S  SmallData       id=/gpu-amd/0/smalldata/0 name=GPU Memory Used val=323
+  S  SmallData       id=/gpu-amd/0/smalldata/1 name=GPU Memory Free val=189
+  S  Clock           id=/gpu-amd/0/clock/0 name=GPU Core val=785
+  S  Clock           id=/gpu-amd/0/clock/1 name=GPU SoC val=891
+  S  Clock           id=/gpu-amd/0/clock/2 name=GPU Memory val=953
+  S  Temperature     id=/gpu-amd/0/temperature/4 name=GPU VR SoC val=46
+  S  Load            id=/gpu-amd/0/load/0 name=GPU Core val=21
+  S  Power           id=/gpu-amd/0/power/0 name=GPU Core val=2
+HW  Storage              id=/nvme/0 name=WD PC SN5000S SDEQNSJ-1T00-1002
+  S  Temperature     id=/nvme/0/temperature/0 name=Composite Temperature val=41
+  S  Temperature     id=/nvme/0/temperature/1 name=Temperature #1 val=46,850006
+  S  Temperature     id=/nvme/0/temperature/2 name=Temperature #2 val=40,850006
+  S  Temperature     id=/nvme/0/temperature/10 name=Warning Temperature val=83
+  S  Temperature     id=/nvme/0/temperature/11 name=Critical Temperature val=87
+  S  Level           id=/nvme/0/level/20 name=Life val=100
+  S  Data            id=/nvme/0/data/21 name=Data Read val=3106
+  S  Data            id=/nvme/0/data/22 name=Data Written val=2775
+  S  Factor          id=/nvme/0/factor/23 name=Power On Count val=6343
+  S  Factor          id=/nvme/0/factor/24 name=Power On Hours val=93
+  S  Load            id=/nvme/0/load/30 name=Used Space val=37,400227
+  S  Data            id=/nvme/0/data/31 name=Free Space val=641,15283
+  S  Data            id=/nvme/0/data/32 name=Total Space val=1024,2096
+  S  Load            id=/nvme/0/load/51 name=Read Activity val=3,7361926E-06
+  S  Load            id=/nvme/0/load/52 name=Write Activity val=1,4465925E-06
+  S  Load            id=/nvme/0/load/53 name=Total Activity val=99,99995
+  S  Throughput      id=/nvme/0/throughput/54 name=Read Rate val=
+  S  Throughput      id=/nvme/0/throughput/55 name=Write Rate val=
+  S  Level           id=/nvme/0/level/100 name=Available Spare val=100
+  S  Level           id=/nvme/0/level/101 name=Available Spare Threshold val=10
+  S  Level           id=/nvme/0/level/102 name=Percentage Used val=0

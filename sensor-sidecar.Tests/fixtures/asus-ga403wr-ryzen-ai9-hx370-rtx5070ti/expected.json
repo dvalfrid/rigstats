@@ -1,0 +1,29 @@
+{
+  "cpu_temp": 47.625008,
+  "cpu_power": 11.184053,
+  "gpu_devices": [
+    {
+      "name": "AMD Radeon(TM) 890M Graphics",
+      "sensor_family": "gpu-amd",
+      "load": 21,
+      "temp": 46,
+      "hotspot_temp": null,
+      "core_clock": 785,
+      "mem_clock": 953,
+      "power": 2,
+      "fan": null,
+      "vram_used_mb": 323,
+      "vram_total_mb": 512,
+      "d3d_3d": 8.189401,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "WD PC SN5000S SDEQNSJ-1T00-1002": 46.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}
