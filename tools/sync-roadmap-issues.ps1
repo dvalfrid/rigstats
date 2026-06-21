@@ -108,6 +108,9 @@ $features = @(
   @{ id="streamdeck"; kind="planned"; label="enhancement"; title="Stream Deck integration"; milestone="v3.0";
      summary="Display live hardware stats (CPU/GPU load/temp, VRAM, fan RPM) on Stream Deck keys directly over USB HID via the elgato-streamdeck crate - no Elgato software or HTTP server. Opt-in; requires the Elgato app not be running.";
      status="Planned (3.0)" }
+  @{ id="cross-platform-port"; kind="planned"; label="enhancement"; title="Cross-platform OS abstraction - Linux port"; milestone="v3.0";
+     summary="Make the RIGStats core OS-agnostic (ports-and-adapters refactor) so it can be ported to Linux. Extract a win-free rigstats-core defining trait ports (SensorProvider, HardwareProbe, SystemPaths, Autostart, WindowPlatform) and a Platform facade; move WMI/registry/named-pipe/win32 code into a platform-windows adapter crate; add a platform-linux crate (sysfs/NVML/dbus/unix-socket). Replace hard-coded %APPDATA% with the directories crate and the named pipe with interprocess. LHM stays a Windows-only adapter. Per-OS packaging: NSIS/sc on Windows, .deb/AppImage + systemd on Linux.";
+     status="Planned (3.0)" }
   @{ id="total-system-power"; kind="planned"; label="enhancement"; title="Total system power consumption";
      summary="Show total real-time system power draw: use a motherboard power sensor if LHM exposes one, otherwise a labelled component-sum estimate. Laptops are already covered by battery discharge rate.";
      status="Planned" }
@@ -117,9 +120,9 @@ $features = @(
   @{ id="post-update-notification"; kind="done"; label="enhancement"; title="Post-update success notification";
      summary="After an in-app update the NSIS /autoupdate installer relaunches the app with --just-updated=VERSION, and the app shows an 'Updated to vX' confirmation in the updater dialog at startup.";
      status="Shipped" }
-  @{ id="test-coverage-sidecar"; kind="planned"; label="enhancement"; title="Test coverage - sidecar + sensor extraction";
+  @{ id="test-coverage-sidecar"; kind="done"; label="enhancement"; title="Test coverage - sidecar + sensor extraction";
      summary="Add tests for the currently untested .NET sensor sidecar (named-pipe framing, JSON serialization, LHM sensor mapping) and direct unit tests for the lhm.rs extract_* filtering edge cases.";
-     status="Planned" }
+     status="Shipped in v2.0" }
 
   # Pre-existing issues: track only (do not rewrite their title/body).
   # `title` here is display-only (used for the ROADMAP table; the pinned branch
@@ -140,7 +143,7 @@ foreach ($i in $all) {
 }
 
 $knownIds = @{}
-$stats = @{ created = 0; adopted = 0; updated = 0; unchanged = 0; stateFixed = 0 }
+$stats = @{ created = 0; adopted = 0; updated = 0; unchanged = 0; stateFixed = 0; drift = 0 }
 $rows = @()   # collected for the auto-generated ROADMAP.md table
 
 foreach ($f in $features) {
@@ -207,10 +210,22 @@ foreach ($f in $features) {
 
   # ---- state reconcile ----
   if ($issue.state -ne $desiredState) {
-    if ($desiredState -eq "CLOSED") { & $gh issue close $num --reason $closeReason | Out-Null }
-    else { & $gh issue reopen $num | Out-Null }
-    Write-Host "STATE    #$num  -> $desiredState"
-    $stats.stateFixed++
+    if ($desiredState -eq "CLOSED") {
+      & $gh issue close $num --reason $closeReason | Out-Null
+      Write-Host "STATE    #$num  -> CLOSED"
+      $stats.stateFixed++
+    } elseif ($issue.stateReason -eq "COMPLETED") {
+      # GitHub auto-closed this as completed (e.g. a commit landed with "Closes #N")
+      # but $features still marks it planned. Reopening would resurrect finished
+      # work, so we refuse and flag drift instead: the fix is to set this feature's
+      # kind to "done" here. Surfaced as an error so it cannot pass silently.
+      Write-Host "DRIFT    #$num  '$($f.id)' closed as completed but kind=planned -> NOT reopened; set kind='done' in `$features"
+      $stats.drift++
+    } else {
+      & $gh issue reopen $num | Out-Null
+      Write-Host "STATE    #$num  -> OPEN"
+      $stats.stateFixed++
+    }
   }
 }
 
@@ -252,4 +267,10 @@ if (-not $rx.IsMatch($raw)) {
   }
 }
 
-Write-Host "`nSummary: created=$($stats.created) adopted=$($stats.adopted) updated=$($stats.updated) state-fixed=$($stats.stateFixed) unchanged=$($stats.unchanged)"
+Write-Host "`nSummary: created=$($stats.created) adopted=$($stats.adopted) updated=$($stats.updated) state-fixed=$($stats.stateFixed) unchanged=$($stats.unchanged) drift=$($stats.drift)"
+
+if ($stats.drift -gt 0) {
+  Write-Host "`nERROR: $($stats.drift) issue(s) closed as completed but still marked kind='planned' in `$features." -ForegroundColor Red
+  Write-Host "Update those entries to kind='done' (and the ROADMAP status) so the data matches reality, then re-run." -ForegroundColor Red
+  exit 1
+}

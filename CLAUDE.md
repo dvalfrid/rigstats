@@ -152,6 +152,26 @@ Closes #77
 & "C:\Program Files\GitHub CLI\gh.exe" issue close 77 --comment "Fixed in commit abc1234."
 ```
 
+### 6. If the issue is a roadmap feature, mark it done in the sync data — **mandatory**
+
+When the closed issue corresponds to a `$features` entry in
+`tools/sync-roadmap-issues.ps1` (i.e. it has a `roadmap-id`), GitHub closing it via
+`Closes #N` is **not enough**. That script is the source of truth for issue state:
+if the entry still says `kind="planned"`, the next sync run will **re-open the
+finished issue**. Whenever a commit closes a roadmap issue you must, in the same
+commit:
+
+1. Flip that feature's `kind="planned"` → `kind="done"` and update its `status=`
+   text in `tools/sync-roadmap-issues.ps1`.
+2. Update the matching ✅/status in `ROADMAP.md` (status overview + section heading).
+3. Re-run `pwsh -NoProfile -File tools/sync-roadmap-issues.ps1` to reconcile and
+   regenerate the table.
+
+The script guards against forgetting: if it finds an issue closed as `COMPLETED`
+while its `kind` is still `planned`, it refuses to re-open it, prints a `DRIFT`
+warning, and exits non-zero. A red `DRIFT`/`ERROR` line means step 6 was skipped —
+fix the `kind` and re-run.
+
 ---
 
 ## Documentation and website updates

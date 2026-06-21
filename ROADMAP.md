@@ -29,6 +29,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
 | Total system power consumption | 🔲 Planned |
 | Stream Deck integration | 🔲 Planned (3.0) |
+| Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
@@ -45,7 +46,8 @@ The whole roadmap is mirrored to
 [GitHub Issues](https://github.com/dvalfrid/rigstats/issues) across two
 milestones — **[v2.0](https://github.com/dvalfrid/rigstats/milestone/1)** for the
 current scope and **[v3.0](https://github.com/dvalfrid/rigstats/milestone/2)** for
-post-2.0 features (currently Floating panel groups and Stream Deck integration) —
+post-2.0 features (currently Floating panel groups, Stream Deck integration, and
+the cross-platform OS abstraction / Linux port) —
 with shipped features as closed issues, planned work as open issues, and
 investigated-and-dropped items closed as *not planned*.
 
@@ -82,6 +84,7 @@ script to refresh it.
 | [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
+| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
@@ -90,7 +93,7 @@ script to refresh it.
 | [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | 🔲 Planned |
-| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | 🔲 Planned |
+| [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -802,6 +805,91 @@ at once. This should be clearly communicated at setup time.
 - Brightness and layout persisted in `Settings`
 - Stream Deck integration is opt-in (off by default); auto-disabled when no
   device is detected so the crate has zero overhead on systems without one
+
+---
+
+## Cross-platform OS abstraction — Linux port 🔲 (Milestone 3.0)
+
+**Crates:** [`directories`](https://crates.io/crates/directories) (XDG ↔ Known Folders),
+[`interprocess`](https://crates.io/crates/interprocess) (named pipe ↔ Unix socket)
+**Data source:** No new data — re-routes existing sensor/hardware access per OS
+
+End goal: make the RIGStats core OS-agnostic so it can be ported to Linux, with
+each platform supplying only the adapters its OS needs. Today the app is hard-wired
+to Windows — WMI, named pipes, the registry, win32 window calls, and the
+LibreHardwareMonitor sidecar are called inline from otherwise-generic modules. The
+work is a **ports-and-adapters (hexagonal) refactor**, not a rewrite of LHM:
+`SensorPayload`/`LhmData` is already an OS-neutral DTO, and the manifests already
+gate `wmi`/`winreg`/`winapi` behind `cfg(windows)`. The bulk of the effort is
+extracting an OS-free core and moving the Windows code behind traits — fully
+testable on Windows before any Linux code exists.
+
+**Where the Windows coupling lives today:**
+
+| Surface | Windows (today) | Linux equivalent |
+| --- | --- | --- |
+| Sensor stream | C# sidecar (LHM) + named pipe (`lhm.rs`) | hwmon (`/sys/class/hwmon`), NVML, `amdgpu` sysfs, lm-sensors + Unix socket |
+| HW detection | `hardware.rs` — WMI + PowerShell CIM | DMI (`/sys/class/dmi/id`), `/proc`, `lspci`, sysfs |
+| Paths | hard-coded `%APPDATA%`/`%PROGRAMDATA%` | XDG (`~/.config`, `/var/lib`) |
+| Autostart | `autostart.rs` — HKCU registry | systemd user unit or `~/.config/autostart/*.desktop` |
+| Window glue | `win_opacity.rs`, `win32_behind.rs`, `win32_dark_mode.rs`, `geometry.rs` | X11/Wayland (partly hard — see risks) |
+| Packaging | NSIS + `sc create` service | .deb/.rpm/AppImage + systemd unit |
+
+**Architecture — ports & adapters:**
+
+A new OS-free crate `rigstats-core` holds the DTOs (`stats.rs`), settings logic,
+logging, update-check, and the **port traits**. Each OS ships an adapter crate
+selected via `[target.'cfg(...)'.dependencies]` so a Linux build never pulls `wmi`.
+
+```text
+rigstats-core/              # OS-agnostic. No win/wmi deps. Defines the ports.
+rigstats-platform-windows/  # [cfg(windows)]            wmi, winreg, named pipe, win32
+rigstats-platform-linux/    # [cfg(target_os="linux")]  sysfs, NVML, dbus, unix socket
+rigstats-egui/              # UI — depends on core + the platform crate via cfg
+sensor-sidecar/             # Windows (C#/LHM)
+sensor-sidecar-linux/       # optional privileged systemd helper (if root is needed)
+```
+
+Port traits (in `rigstats-core`): `SensorProvider` (`read() -> SensorPayload`),
+`HardwareProbe` (startup constants), `SystemPaths` (config/data/log dirs),
+`Autostart` (enable/disable/query), `WindowPlatform` (opacity, send-to-bottom,
+dark titlebar — no-op default on OSes without support). A `Platform` facade bundles
+the chosen adapters, built once at startup via a `cfg`-gated `current()`. The rest
+of the app talks only to `Platform` — no scattered `cfg(windows)` in UI or logic.
+
+**Known Linux risk points (not refactor problems):**
+
+- **Sensor breadth:** no LHM on Linux. hwmon coverage varies by board; NVIDIA needs
+  NVML, AMD `amdgpu` sysfs, Intel `intel_gpu_top`.
+- **GPU per-engine load** (`d3d_3d`/`d3d_vdec`) has no direct Linux analog — nearest
+  is `/sys/.../gpu_busy_percent`, `nvidia-smi`, or `intel_gpu_top`; expect `None`
+  initially.
+- **"Always-on-bottom" desktop widget** is trivial on Windows but awkward on Wayland
+  (needs `wlr-layer-shell`, only on wlroots compositors) — the biggest UX risk.
+- **Privileges:** some sensors require root → a privileged systemd helper mirrors the
+  Windows Service model.
+
+**Incremental order (each step compiles and is tested on Windows):**
+
+1. **Refactor (zero behaviour change):** extract `rigstats-core`, define the port
+   traits + `Platform` facade, move all Windows code into `platform-windows`, replace
+   `%APPDATA%`/`%PROGRAMDATA%` with `directories`, swap the named-pipe transport for
+   `interprocess`, rename `lhm.rs`/`LhmData` → `sensors.rs`/`SensorSample` (LHM
+   becomes a Windows adapter, not a core concept).
+2. **Linux stub** that compiles (`cargo build --target x86_64-unknown-linux-gnu`) but
+   returns empty values.
+3. **Fill Linux adapters** in order: paths → hardware → sensors → autostart → window glue.
+4. **Packaging** last (.deb/AppImage + systemd unit).
+
+**Scope:**
+
+- New `rigstats-core` crate: DTOs, settings/logging/update logic, `ports.rs` traits
+- New `rigstats-platform-windows` crate: WMI, registry, named pipe, win32 adapters
+- New `rigstats-platform-linux` crate: sysfs/NVML/dbus/unix-socket adapters (stub first)
+- `Platform` facade + `cfg`-gated `current()`; remove inline `cfg(windows)` from UI/logic
+- Replace hard-coded paths with `directories`; replace pipe transport with `interprocess`
+- Rename LHM-specific core names; LHM reduced to the Windows `SensorProvider` adapter
+- Per-OS packaging: keep NSIS/`sc` for Windows; add .deb/AppImage + systemd unit for Linux
 
 ---
 
