@@ -538,7 +538,7 @@ fn draw_dashboard(
         // Fill Screen — only applies to a portrait stack in non-floating mode.
         // Landscape always uses the fixed adaptive-grid geometry, so fill-screen
         // has no effect there; disable it while floating or in a landscape profile.
-        let is_landscape = crate::profile_is_landscape(&draft.dashboard_profile);
+        let is_landscape = crate::geometry::profile_is_landscape(&draft.dashboard_profile);
         let fill_enabled = !draft.floating_mode && !is_landscape;
         ui.add_space(8.0);
         inner_row(dc).show(ui, |ui| {

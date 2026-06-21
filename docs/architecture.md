@@ -41,7 +41,7 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
 sysinfo crate           CPU load/freq, RAM, disk, network, processes
 wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
 
-    └─► poll_loop (src-egui/main.rs): get_stats() → PollStats → mpsc::Sender
+    └─► poll_loop (src-egui/poll.rs): samples hardware → PollStats → mpsc::Sender
             └─► egui UI thread: receives PollStats each 1 s tick
                     ├─► panel draw() calls (portrait mode — single window)
                     └─► panel draw() calls (floating mode — one viewport per panel)
@@ -63,7 +63,10 @@ persisted to settings on change via a dirty-flag debounce.
 rig-dashboard/
 ├── src-egui/               egui binary (rigstats.exe)
 │   ├── src/
-│   │   ├── main.rs         Entry point, poll thread, eframe run_native, PollStats
+│   │   ├── main.rs         Entry point, eframe run_native, RigStatsApp, rendering
+│   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
+│   │   ├── poll.rs         Poll thread, PollStats/DriveInfo/ProcessInfo data types
+│   │   ├── tray.rs         System tray icon, menu, TrayCmd, panel-label helpers
 │   │   ├── theme.rs        AppTheme, colours, panel_frame(), dialog button API
 │   │   ├── brand.rs        Brand logo PNG loading
 │   │   ├── tempcolor.rs    temp_color() — value → green/yellow/red
@@ -123,7 +126,10 @@ rig-dashboard/
 
 | Module | Responsibility |
 | --- | --- |
-| `main.rs` | Entry point, poll thread, eframe `run_native`, `PollStats`, `PanelThresholds`, tray |
+| `main.rs` | Entry point, eframe `run_native`, `RigStatsApp` + `eframe::App` impl, `PanelThresholds`, panel rendering |
+| `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
+| `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping |
+| `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
 | `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API |
 | `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
