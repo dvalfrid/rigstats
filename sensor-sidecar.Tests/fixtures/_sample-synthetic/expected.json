@@ -1,0 +1,48 @@
+{
+  "cpu_temp": 52.4,
+  "cpu_power": 78.1,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce RTX 4090",
+      "sensor_family": "gpu-nvidia",
+      "load": 3,
+      "temp": 41,
+      "hotspot_temp": 53,
+      "core_clock": 210,
+      "mem_clock": 405,
+      "power": 28,
+      "fan": null,
+      "vram_used_mb": 1536,
+      "vram_total_mb": 24564,
+      "d3d_3d": null,
+      "d3d_vdec": null
+    }
+  ],
+  "disk_temps": {
+    "Samsung SSD 990 PRO 2TB": 38
+  },
+  "ram_temp": null,
+  "mb_fans": [
+    {
+      "label": "CPU Fan",
+      "rpm": 812
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "CPU",
+      "celsius": 44
+    },
+    {
+      "label": "System",
+      "celsius": 33
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "Vcore",
+      "volts": 1.048
+    }
+  ],
+  "mb_chip": "Nuvoton NCT6799D"
+}

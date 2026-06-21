@@ -1,3 +1,4 @@
+using System.Text.Json;
 using LibreHardwareMonitor.Hardware;
 using SensorSidecar;
 using Xunit;
@@ -14,6 +15,13 @@ public class FixtureTests
 {
     private static string FixturesRoot =>
         Path.Combine(AppContext.BaseDirectory, "fixtures");
+
+    // Snake_case + indented so committed golden files are readable and diffable.
+    private static readonly JsonSerializerOptions GoldenOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = true,
+    };
 
     public static IEnumerable<object[]> Fixtures()
     {
@@ -50,6 +58,16 @@ public class FixtureTests
         // 4. CPU temperature, when present, must be physically plausible.
         if (payload.CpuTemp is { } cpu)
             Assert.InRange(cpu, 0f, 150f);
+
+        // 5. Optional golden snapshot: if expected.json ships with the fixture, the
+        //    full extracted payload must match it exactly (precise regression guard).
+        //    Regenerate with RIGSTATS_WRITE_EXPECTED=1 (writes next to sensor-tree.txt).
+        var goldenPath = Path.Combine(FixturesRoot, slug, "expected.json");
+        var actualJson = JsonSerializer.Serialize(payload, GoldenOptions);
+        if (Environment.GetEnvironmentVariable("RIGSTATS_WRITE_EXPECTED") == "1")
+            File.WriteAllText(goldenPath, actualJson);
+        if (File.Exists(goldenPath))
+            Assert.Equal(File.ReadAllText(goldenPath).ReplaceLineEndings(), actualJson.ReplaceLineEndings());
     }
 
     [Fact]

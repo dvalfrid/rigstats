@@ -68,6 +68,21 @@ the LHM tree via `SensorTreeLoader`, runs `SensorReader.Extract`, and asserts
 structural invariants (GPU count matches, fans > 0, temps ≥ 5 °C, voltages > 0.1 V,
 plausible CPU temp). Adding a folder = adding coverage automatically.
 
+### Golden snapshots (`expected.json`)
+
+A fixture may also ship an `expected.json` — the full extracted `SensorPayload`
+(snake_case, indented). When present, the test asserts the extraction matches it
+**exactly**, so any change in `SensorReader` output is caught precisely. Generate
+or refresh it after deliberately changing extraction logic:
+
+```bash
+RIGSTATS_WRITE_EXPECTED=1 dotnet test sensor-sidecar.Tests/sensor-sidecar.Tests.csproj
+# (writes expected.json into each fixture's output copy; copy it back into the
+#  source fixtures/<slug>/ folder and review the diff before committing)
+```
+
+On Windows PowerShell: `$env:RIGSTATS_WRITE_EXPECTED="1"; dotnet test …`.
+
 ### To contribute a machine
 
 1. *Collect Diagnostics…* in RIGStats (Status window).

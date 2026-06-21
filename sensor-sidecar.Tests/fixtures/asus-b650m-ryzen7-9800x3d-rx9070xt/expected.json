@@ -1,0 +1,116 @@
+{
+  "cpu_temp": 51.125008,
+  "cpu_power": 61.135742,
+  "gpu_devices": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "sensor_family": "gpu-amd",
+      "load": 0,
+      "temp": 50,
+      "hotspot_temp": null,
+      "core_clock": 600,
+      "mem_clock": 3000,
+      "power": 32,
+      "fan": null,
+      "vram_used_mb": 363,
+      "vram_total_mb": 512,
+      "d3d_3d": 7.5201564,
+      "d3d_vdec": null
+    },
+    {
+      "name": "AMD Radeon RX 9070 XT",
+      "sensor_family": "gpu-amd",
+      "load": 100,
+      "temp": 34,
+      "hotspot_temp": 37,
+      "core_clock": 507,
+      "mem_clock": 2505,
+      "power": 48,
+      "fan": 0,
+      "vram_used_mb": 3050,
+      "vram_total_mb": 16304,
+      "d3d_3d": 2.037397,
+      "d3d_vdec": null
+    }
+  ],
+  "disk_temps": {
+    "SLEG-860-2TBI-S58": 46.850006,
+    "Samsung SSD 990 PRO 2TB": 52.850006
+  },
+  "ram_temp": 31.5,
+  "mb_fans": [
+    {
+      "label": "Fan #7",
+      "rpm": 2727.2727
+    },
+    {
+      "label": "Fan #3",
+      "rpm": 1008.2151
+    },
+    {
+      "label": "Fan #2",
+      "rpm": 976.13885
+    },
+    {
+      "label": "Fan #5",
+      "rpm": 976.13885
+    },
+    {
+      "label": "Fan #4",
+      "rpm": 958.8068
+    },
+    {
+      "label": "Fan #1",
+      "rpm": 918.3674
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "Temperature #1",
+      "celsius": 33
+    },
+    {
+      "label": "Temperature #2",
+      "celsius": 28
+    },
+    {
+      "label": "Temperature #3",
+      "celsius": 25.5
+    },
+    {
+      "label": "Temperature #4",
+      "celsius": 6
+    },
+    {
+      "label": "Temperature #5",
+      "celsius": 18
+    },
+    {
+      "label": "Temperature #6",
+      "celsius": 26
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "Vcore",
+      "volts": 1.192
+    },
+    {
+      "label": "AVCC",
+      "volts": 3.3760002
+    },
+    {
+      "label": "\u002B3.3V",
+      "volts": 3.3600001
+    },
+    {
+      "label": "\u002B3V Standby",
+      "volts": 3.3760002
+    },
+    {
+      "label": "CPU Termination",
+      "volts": 1.6800001
+    }
+  ],
+  "mb_chip": "Nuvoton NCT6799D"
+}

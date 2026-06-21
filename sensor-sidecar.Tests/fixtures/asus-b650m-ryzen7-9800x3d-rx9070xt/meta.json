@@ -1,0 +1,10 @@
+{
+  "slug": "asus-b650m-ryzen7-9800x3d-rx9070xt",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1782081532,
+  "rigstats_version": "1.32.0",
+  "os": "Windows 11 Home (build 26200)",
+  "notes": "Dual-GPU: AMD Radeon iGPU (/gpu-amd/0) + Radeon RX 9070 XT dGPU (/gpu-amd/5). Ryzen 7 9800X3D, Nuvoton NCT6799D Super I/O, 2x Team Group DDR5-6000 DIMM, 2x NVMe. Idle snapshot. Values use comma decimal separator and scientific notation.",
+  "anonymized": true
+}

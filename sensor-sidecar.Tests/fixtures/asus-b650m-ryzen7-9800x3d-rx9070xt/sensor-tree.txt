@@ -1,0 +1,259 @@
+# sensor-tree — 2026-06-21 06:59:24Z
+HW  Motherboard          id=/motherboard name=ASUS PRIME B650M-A AX6 II
+  SUB SuperIO            id=/lpc/nct6799d/0 name=Nuvoton NCT6799D
+    S  Control         id=/lpc/nct6799d/0/control/0 name=Fan #1 val=35,686275
+    S  Control         id=/lpc/nct6799d/0/control/1 name=Fan #2 val=35,686275
+    S  Control         id=/lpc/nct6799d/0/control/2 name=Fan #3 val=35,686275
+    S  Control         id=/lpc/nct6799d/0/control/3 name=Fan #4 val=35,686275
+    S  Control         id=/lpc/nct6799d/0/control/4 name=Fan #5 val=60
+    S  Control         id=/lpc/nct6799d/0/control/5 name=Fan #6 val=100
+    S  Control         id=/lpc/nct6799d/0/control/6 name=Fan #7 val=100
+    S  Voltage         id=/lpc/nct6799d/0/voltage/0 name=Vcore val=1,192
+    S  Voltage         id=/lpc/nct6799d/0/voltage/1 name=Voltage #2 val=1,008
+    S  Voltage         id=/lpc/nct6799d/0/voltage/2 name=AVCC val=3,3760002
+    S  Voltage         id=/lpc/nct6799d/0/voltage/3 name=+3.3V val=3,3600001
+    S  Voltage         id=/lpc/nct6799d/0/voltage/4 name=Voltage #5 val=1,008
+    S  Voltage         id=/lpc/nct6799d/0/voltage/5 name=Voltage #6 val=1,0400001
+    S  Voltage         id=/lpc/nct6799d/0/voltage/6 name=Voltage #7 val=1,008
+    S  Voltage         id=/lpc/nct6799d/0/voltage/7 name=+3V Standby val=3,3760002
+    S  Voltage         id=/lpc/nct6799d/0/voltage/9 name=CPU Termination val=1,6800001
+    S  Voltage         id=/lpc/nct6799d/0/voltage/10 name=Voltage #11 val=0,69600004
+    S  Voltage         id=/lpc/nct6799d/0/voltage/11 name=Voltage #12 val=0,568
+    S  Voltage         id=/lpc/nct6799d/0/voltage/12 name=Voltage #13 val=1,0400001
+    S  Voltage         id=/lpc/nct6799d/0/voltage/13 name=Voltage #14 val=1,008
+    S  Voltage         id=/lpc/nct6799d/0/voltage/14 name=Voltage #15 val=1
+    S  Temperature     id=/lpc/nct6799d/0/temperature/1 name=Temperature #1 val=33
+    S  Temperature     id=/lpc/nct6799d/0/temperature/2 name=Temperature #2 val=28
+    S  Temperature     id=/lpc/nct6799d/0/temperature/3 name=Temperature #3 val=25,5
+    S  Temperature     id=/lpc/nct6799d/0/temperature/4 name=Temperature #4 val=6
+    S  Temperature     id=/lpc/nct6799d/0/temperature/5 name=Temperature #5 val=18
+    S  Temperature     id=/lpc/nct6799d/0/temperature/6 name=Temperature #6 val=26
+    S  Fan             id=/lpc/nct6799d/0/fan/0 name=Fan #1 val=918,3674
+    S  Fan             id=/lpc/nct6799d/0/fan/1 name=Fan #2 val=976,13885
+    S  Fan             id=/lpc/nct6799d/0/fan/2 name=Fan #3 val=1008,2151
+    S  Fan             id=/lpc/nct6799d/0/fan/3 name=Fan #4 val=958,8068
+    S  Fan             id=/lpc/nct6799d/0/fan/4 name=Fan #5 val=976,13885
+    S  Fan             id=/lpc/nct6799d/0/fan/5 name=Fan #6 val=0
+    S  Fan             id=/lpc/nct6799d/0/fan/6 name=Fan #7 val=2727,2727
+HW  Cpu                  id=/amdcpu/0 name=AMD Ryzen 7 9800X3D
+  S  Load            id=/amdcpu/0/load/2 name=CPU Core #1 val=28,65
+  S  Load            id=/amdcpu/0/load/3 name=CPU Core #2 val=31,58
+  S  Load            id=/amdcpu/0/load/4 name=CPU Core #3 val=18,71
+  S  Load            id=/amdcpu/0/load/5 name=CPU Core #4 val=12,87
+  S  Load            id=/amdcpu/0/load/6 name=CPU Core #5 val=11,11
+  S  Load            id=/amdcpu/0/load/7 name=CPU Core #6 val=11,11
+  S  Load            id=/amdcpu/0/load/8 name=CPU Core #7 val=31,76
+  S  Load            id=/amdcpu/0/load/9 name=CPU Core #8 val=52,05
+  S  Load            id=/amdcpu/0/load/10 name=CPU Core #9 val=16,96
+  S  Load            id=/amdcpu/0/load/11 name=CPU Core #10 val=14,62
+  S  Load            id=/amdcpu/0/load/12 name=CPU Core #11 val=30,41
+  S  Load            id=/amdcpu/0/load/13 name=CPU Core #12 val=54,39
+  S  Load            id=/amdcpu/0/load/14 name=CPU Core #13 val=8,24
+  S  Load            id=/amdcpu/0/load/15 name=CPU Core #14 val=9,41
+  S  Load            id=/amdcpu/0/load/16 name=CPU Core #15 val=16,37
+  S  Load            id=/amdcpu/0/load/17 name=CPU Core #16 val=14,62
+  S  Load            id=/amdcpu/0/load/0 name=CPU Total val=22,68
+  S  Load            id=/amdcpu/0/load/1 name=CPU Core Max val=54,39
+  S  Power           id=/amdcpu/0/power/0 name=Package val=61,135742
+  S  Clock           id=/amdcpu/0/clock/1 name=Cores (Average) val=4572
+  S  Clock           id=/amdcpu/0/clock/2 name=Cores (Average Effective) val=1257
+  S  Clock           id=/amdcpu/0/clock/3 name=Core #1 val=5225
+  S  Clock           id=/amdcpu/0/clock/4 name=Core #1 (Effective) val=1861,5
+  S  Factor          id=/amdcpu/0/factor/0 name=Core #1 val=52,25115
+  S  Power           id=/amdcpu/0/power/1 name=Core #1 (SMU) val=3,8509152
+  S  Voltage         id=/amdcpu/0/voltage/2 name=Core #1 VID val=0,4125
+  S  Clock           id=/amdcpu/0/clock/5 name=Core #2 val=
+  S  Clock           id=/amdcpu/0/clock/6 name=Core #2 (Effective) val=0
+  S  Factor          id=/amdcpu/0/factor/1 name=Core #2 val=
+  S  Power           id=/amdcpu/0/power/2 name=Core #2 (SMU) val=3,1117196
+  S  Voltage         id=/amdcpu/0/voltage/3 name=Core #2 VID val=0,4125
+  S  Clock           id=/amdcpu/0/clock/7 name=Core #3 val=5225
+  S  Clock           id=/amdcpu/0/clock/8 name=Core #3 (Effective) val=750,5
+  S  Factor          id=/amdcpu/0/factor/2 name=Core #3 val=52,25115
+  S  Power           id=/amdcpu/0/power/3 name=Core #3 (SMU) val=2,054196
+  S  Voltage         id=/amdcpu/0/voltage/4 name=Core #3 VID val=0,40625
+  S  Clock           id=/amdcpu/0/clock/9 name=Core #4 val=5225
+  S  Clock           id=/amdcpu/0/clock/10 name=Core #4 (Effective) val=2539
+  S  Factor          id=/amdcpu/0/factor/3 name=Core #4 val=52,25115
+  S  Power           id=/amdcpu/0/power/4 name=Core #4 (SMU) val=5,605229
+  S  Voltage         id=/amdcpu/0/voltage/5 name=Core #4 VID val=0,40625
+  S  Clock           id=/amdcpu/0/clock/11 name=Core #5 val=5225
+  S  Clock           id=/amdcpu/0/clock/12 name=Core #5 (Effective) val=1050
+  S  Factor          id=/amdcpu/0/factor/4 name=Core #5 val=52,25115
+  S  Power           id=/amdcpu/0/power/5 name=Core #5 (SMU) val=2,726131
+  S  Voltage         id=/amdcpu/0/voltage/6 name=Core #5 VID val=0,40625
+  S  Clock           id=/amdcpu/0/clock/13 name=Core #6 val=5225
+  S  Clock           id=/amdcpu/0/clock/14 name=Core #6 (Effective) val=2473
+  S  Factor          id=/amdcpu/0/factor/5 name=Core #6 val=52,25115
+  S  Power           id=/amdcpu/0/power/6 name=Core #6 (SMU) val=5,685684
+  S  Voltage         id=/amdcpu/0/voltage/7 name=Core #6 VID val=0,425
+  S  Clock           id=/amdcpu/0/clock/15 name=Core #7 val=5225
+  S  Clock           id=/amdcpu/0/clock/16 name=Core #7 (Effective) val=575
+  S  Factor          id=/amdcpu/0/factor/6 name=Core #7 val=52,25115
+  S  Power           id=/amdcpu/0/power/7 name=Core #7 (SMU) val=1,6001152
+  S  Voltage         id=/amdcpu/0/voltage/8 name=Core #7 VID val=0,425
+  S  Clock           id=/amdcpu/0/clock/17 name=Core #8 val=5225
+  S  Clock           id=/amdcpu/0/clock/18 name=Core #8 (Effective) val=805,5
+  S  Factor          id=/amdcpu/0/factor/7 name=Core #8 val=52,25115
+  S  Power           id=/amdcpu/0/power/8 name=Core #8 (SMU) val=2,0783188
+  S  Voltage         id=/amdcpu/0/voltage/9 name=Core #8 VID val=0,425
+  S  Temperature     id=/amdcpu/0/temperature/2 name=Core (Tctl/Tdie) val=51,125008
+  S  Temperature     id=/amdcpu/0/temperature/3 name=CCD1 (Tdie) val=46,750004
+  S  Clock           id=/amdcpu/0/clock/0 name=Bus Speed val=99,9978
+HW  Memory               id=/vram name=Virtual Memory
+  S  Data            id=/vram/data/2 name=Memory Used val=54,07001
+  S  Data            id=/vram/data/3 name=Memory Available val=8,091347
+  S  Load            id=/vram/load/1 name=Memory val=86,983315
+HW  Memory               id=/ram name=Total Memory
+  S  Data            id=/ram/data/0 name=Memory Used val=25,497807
+  S  Data            id=/ram/data/1 name=Memory Available val=5,6635513
+  S  Load            id=/ram/load/0 name=Memory val=81,82508
+HW  Memory               id=/memory/dimm/1 name=Team Group Inc - UD5-6000 (#1)
+  S  Temperature     id=/memory/dimm/1/temperature/0 name=DIMM #1 val=31
+  S  Temperature     id=/memory/dimm/1/temperature/1 name=Temperature Sensor Resolution val=0,25
+  S  Temperature     id=/memory/dimm/1/temperature/2 name=Thermal Sensor Low Limit val=0
+  S  Temperature     id=/memory/dimm/1/temperature/3 name=Thermal Sensor High Limit val=55
+  S  Temperature     id=/memory/dimm/1/temperature/4 name=Thermal Sensor Critical Low Limit val=0
+  S  Temperature     id=/memory/dimm/1/temperature/5 name=Thermal Sensor Critical High Limit val=85
+  S  Timing          id=/memory/dimm/1/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0,416
+  S  Timing          id=/memory/dimm/1/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1
+  S  Timing          id=/memory/dimm/1/timing/22 name=tAA (CAS Latency Time) val=16,64
+  S  Timing          id=/memory/dimm/1/timing/23 name=tRCD (RAS to CAS Delay Time) val=16,64
+  S  Timing          id=/memory/dimm/1/timing/24 name=tRP (Row Precharge Delay Time) val=16,64
+  S  Timing          id=/memory/dimm/1/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/1/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=48,64
+  S  Timing          id=/memory/dimm/1/timing/27 name=tWR (Write Recovery Time) val=30
+  S  Timing          id=/memory/dimm/1/timing/28 name=tRFC1 (Normal Refresh Recovery Time) val=295
+  S  Timing          id=/memory/dimm/1/timing/29 name=tRFC2 (Fine Granularity Refresh Recovery Time) val=160
+  S  Timing          id=/memory/dimm/1/timing/30 name=tRFCsb (Same Bank Refresh Recovery Time) val=130
+  S  Timing          id=/memory/dimm/1/timing/31 name=tRFC1_dlr (Normal Refresh Recovery Time 3DS) val=0
+  S  Timing          id=/memory/dimm/1/timing/32 name=tRFC2_dlr (Fine Granularity Refresh Recovery Time 3DS) val=0
+  S  Timing          id=/memory/dimm/1/timing/33 name=tRFCsb_dlr (Same Bank Refresh Recovery Time 3DS) val=0
+  S  Data            id=/memory/dimm/1/data/50 name=Capacity val=16
+HW  Memory               id=/memory/dimm/3 name=Team Group Inc - UD5-6000 (#3)
+  S  Temperature     id=/memory/dimm/3/temperature/0 name=DIMM #3 val=31,5
+  S  Temperature     id=/memory/dimm/3/temperature/1 name=Temperature Sensor Resolution val=0,25
+  S  Temperature     id=/memory/dimm/3/temperature/2 name=Thermal Sensor Low Limit val=0
+  S  Temperature     id=/memory/dimm/3/temperature/3 name=Thermal Sensor High Limit val=55
+  S  Temperature     id=/memory/dimm/3/temperature/4 name=Thermal Sensor Critical Low Limit val=0
+  S  Temperature     id=/memory/dimm/3/temperature/5 name=Thermal Sensor Critical High Limit val=85
+  S  Timing          id=/memory/dimm/3/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0,416
+  S  Timing          id=/memory/dimm/3/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1
+  S  Timing          id=/memory/dimm/3/timing/22 name=tAA (CAS Latency Time) val=16,64
+  S  Timing          id=/memory/dimm/3/timing/23 name=tRCD (RAS to CAS Delay Time) val=16,64
+  S  Timing          id=/memory/dimm/3/timing/24 name=tRP (Row Precharge Delay Time) val=16,64
+  S  Timing          id=/memory/dimm/3/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/3/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=48,64
+  S  Timing          id=/memory/dimm/3/timing/27 name=tWR (Write Recovery Time) val=30
+  S  Timing          id=/memory/dimm/3/timing/28 name=tRFC1 (Normal Refresh Recovery Time) val=295
+  S  Timing          id=/memory/dimm/3/timing/29 name=tRFC2 (Fine Granularity Refresh Recovery Time) val=160
+  S  Timing          id=/memory/dimm/3/timing/30 name=tRFCsb (Same Bank Refresh Recovery Time) val=130
+  S  Timing          id=/memory/dimm/3/timing/31 name=tRFC1_dlr (Normal Refresh Recovery Time 3DS) val=0
+  S  Timing          id=/memory/dimm/3/timing/32 name=tRFC2_dlr (Fine Granularity Refresh Recovery Time 3DS) val=0
+  S  Timing          id=/memory/dimm/3/timing/33 name=tRFCsb_dlr (Same Bank Refresh Recovery Time 3DS) val=0
+  S  Data            id=/memory/dimm/3/data/50 name=Capacity val=16
+HW  GpuAmd               id=/gpu-amd/0 name=AMD Radeon(TM) Graphics
+  S  SmallData       id=/gpu-amd/0/smalldata/2 name=GPU Memory Total val=512
+  S  Factor          id=/gpu-amd/0/factor/0 name=Fullscreen FPS val=-1
+  S  SmallData       id=/gpu-amd/0/smalldata/5 name=D3D Dedicated Memory Total val=485,7578
+  S  SmallData       id=/gpu-amd/0/smalldata/4 name=D3D Dedicated Memory Free val=122,48047
+  S  SmallData       id=/gpu-amd/0/smalldata/3 name=D3D Dedicated Memory Used val=363,27734
+  S  SmallData       id=/gpu-amd/0/smalldata/6 name=D3D Shared Memory Used val=1070,8945
+  S  SmallData       id=/gpu-amd/0/smalldata/7 name=D3D Shared Memory Free val=14883,721
+  S  SmallData       id=/gpu-amd/0/smalldata/8 name=D3D Shared Memory Total val=15954,615
+  S  Load            id=/gpu-amd/0/load/2 name=D3D 3D val=7,5201564
+  S  Load            id=/gpu-amd/0/load/5 name=D3D Copy val=0,2826227
+  S  Load            id=/gpu-amd/0/load/3 name=D3D Compute 0 val=0
+  S  Load            id=/gpu-amd/0/load/4 name=D3D Compute 1 val=0
+  S  Load            id=/gpu-amd/0/load/9 name=D3D Timer 0 val=0
+  S  Load            id=/gpu-amd/0/load/8 name=D3D Security 1 val=0
+  S  Load            id=/gpu-amd/0/load/7 name=D3D High Priority Compute val=0
+  S  Load            id=/gpu-amd/0/load/6 name=D3D High Priority 3D val=0
+  S  Load            id=/gpu-amd/0/load/12 name=D3D Video JPEG 0 val=0
+  S  Load            id=/gpu-amd/0/load/11 name=D3D Video Decode 1 val=0
+  S  Load            id=/gpu-amd/0/load/10 name=D3D Video Codec 0 val=0
+  S  SmallData       id=/gpu-amd/0/smalldata/0 name=GPU Memory Used val=363
+  S  SmallData       id=/gpu-amd/0/smalldata/1 name=GPU Memory Free val=149
+  S  Clock           id=/gpu-amd/0/clock/0 name=GPU Core val=600
+  S  Clock           id=/gpu-amd/0/clock/1 name=GPU SoC val=1200
+  S  Clock           id=/gpu-amd/0/clock/2 name=GPU Memory val=3000
+  S  Temperature     id=/gpu-amd/0/temperature/4 name=GPU VR SoC val=50
+  S  Voltage         id=/gpu-amd/0/voltage/0 name=GPU Core val=1,1550001
+  S  Voltage         id=/gpu-amd/0/voltage/2 name=GPU SoC val=1,24
+  S  Load            id=/gpu-amd/0/load/0 name=GPU Core val=0
+  S  Power           id=/gpu-amd/0/power/0 name=GPU Core val=18
+  S  Power           id=/gpu-amd/0/power/2 name=GPU SoC val=14
+HW  GpuAmd               id=/gpu-amd/5 name=AMD Radeon RX 9070 XT
+  S  SmallData       id=/gpu-amd/5/smalldata/2 name=GPU Memory Total val=16304
+  S  Factor          id=/gpu-amd/5/factor/0 name=Fullscreen FPS val=-1
+  S  SmallData       id=/gpu-amd/5/smalldata/5 name=D3D Dedicated Memory Total val=16188,531
+  S  SmallData       id=/gpu-amd/5/smalldata/4 name=D3D Dedicated Memory Free val=13138,004
+  S  SmallData       id=/gpu-amd/5/smalldata/3 name=D3D Dedicated Memory Used val=3050,5273
+  S  SmallData       id=/gpu-amd/5/smalldata/6 name=D3D Shared Memory Used val=787,47656
+  S  SmallData       id=/gpu-amd/5/smalldata/7 name=D3D Shared Memory Free val=15167,139
+  S  SmallData       id=/gpu-amd/5/smalldata/8 name=D3D Shared Memory Total val=15954,615
+  S  Load            id=/gpu-amd/5/load/2 name=D3D 3D val=2,037397
+  S  Load            id=/gpu-amd/5/load/4 name=D3D Copy val=0
+  S  Load            id=/gpu-amd/5/load/3 name=D3D Compute 0 val=0
+  S  Load            id=/gpu-amd/5/load/5 name=D3D Copy val=1,8023336
+  S  Load            id=/gpu-amd/5/load/7 name=D3D Timer 0 val=0
+  S  Load            id=/gpu-amd/5/load/6 name=D3D Security 1 val=0
+  S  Load            id=/gpu-amd/5/load/9 name=D3D Video JPEG 0 val=0
+  S  Load            id=/gpu-amd/5/load/8 name=D3D Video Codec Engine val=0
+  S  SmallData       id=/gpu-amd/5/smalldata/0 name=GPU Memory Used val=3050
+  S  SmallData       id=/gpu-amd/5/smalldata/1 name=GPU Memory Free val=13254
+  S  Power           id=/gpu-amd/5/power/3 name=GPU Package val=48
+  S  Clock           id=/gpu-amd/5/clock/0 name=GPU Core val=507
+  S  Clock           id=/gpu-amd/5/clock/2 name=GPU Memory val=2505
+  S  Temperature     id=/gpu-amd/5/temperature/0 name=GPU Core val=34
+  S  Temperature     id=/gpu-amd/5/temperature/1 name=GPU Memory val=56
+  S  Temperature     id=/gpu-amd/5/temperature/7 name=GPU Hot Spot val=37
+  S  Fan             id=/gpu-amd/5/fan/0 name=GPU Fan val=0
+  S  Control         id=/gpu-amd/5/control/0 name=GPU Fan val=0
+  S  Voltage         id=/gpu-amd/5/voltage/0 name=GPU Core val=0,781
+  S  Load            id=/gpu-amd/5/load/0 name=GPU Core val=100
+  S  Load            id=/gpu-amd/5/load/1 name=GPU Memory val=0
+HW  Storage              id=/nvme/0 name=SLEG-860-2TBI-S58
+  S  Temperature     id=/nvme/0/temperature/0 name=Composite Temperature val=26
+  S  Temperature     id=/nvme/0/temperature/1 name=Temperature #1 val=30,850006
+  S  Temperature     id=/nvme/0/temperature/2 name=Temperature #2 val=46,850006
+  S  Temperature     id=/nvme/0/temperature/10 name=Warning Temperature val=85
+  S  Temperature     id=/nvme/0/temperature/11 name=Critical Temperature val=92
+  S  Level           id=/nvme/0/level/20 name=Life val=99
+  S  Data            id=/nvme/0/data/21 name=Data Read val=9065
+  S  Data            id=/nvme/0/data/22 name=Data Written val=9003
+  S  Factor          id=/nvme/0/factor/23 name=Power On Count val=632
+  S  Factor          id=/nvme/0/factor/24 name=Power On Hours val=909
+  S  Load            id=/nvme/0/load/30 name=Used Space val=24,640701
+  S  Data            id=/nvme/0/data/31 name=Free Space val=1543,6661
+  S  Data            id=/nvme/0/data/32 name=Total Space val=2048,4082
+  S  Load            id=/nvme/0/load/51 name=Read Activity val=5,4392247E-05
+  S  Load            id=/nvme/0/load/52 name=Write Activity val=1,7910621E-05
+  S  Load            id=/nvme/0/load/53 name=Total Activity val=99,99813
+  S  Throughput      id=/nvme/0/throughput/54 name=Read Rate val=
+  S  Throughput      id=/nvme/0/throughput/55 name=Write Rate val=
+  S  Level           id=/nvme/0/level/100 name=Available Spare val=100
+  S  Level           id=/nvme/0/level/101 name=Available Spare Threshold val=10
+  S  Level           id=/nvme/0/level/102 name=Percentage Used val=1
+HW  Storage              id=/nvme/1 name=Samsung SSD 990 PRO 2TB
+  S  Temperature     id=/nvme/1/temperature/0 name=Composite Temperature val=35
+  S  Temperature     id=/nvme/1/temperature/1 name=Temperature #1 val=34,850006
+  S  Temperature     id=/nvme/1/temperature/2 name=Temperature #2 val=52,850006
+  S  Temperature     id=/nvme/1/temperature/10 name=Warning Temperature val=81
+  S  Temperature     id=/nvme/1/temperature/11 name=Critical Temperature val=84
+  S  Level           id=/nvme/1/level/20 name=Life val=100
+  S  Data            id=/nvme/1/data/21 name=Data Read val=2235
+  S  Data            id=/nvme/1/data/22 name=Data Written val=4503
+  S  Factor          id=/nvme/1/factor/23 name=Power On Count val=583
+  S  Factor          id=/nvme/1/factor/24 name=Power On Hours val=628
+  S  Load            id=/nvme/1/load/30 name=Used Space val=52,03492
+  S  Data            id=/nvme/1/data/31 name=Free Space val=959,493
+  S  Data            id=/nvme/1/data/32 name=Total Space val=2000,3989
+  S  Load            id=/nvme/1/load/51 name=Read Activity val=6,0632647E-06
+  S  Load            id=/nvme/1/load/52 name=Write Activity val=2,6323444E-06
+  S  Load            id=/nvme/1/load/53 name=Total Activity val=99,99812
+  S  Throughput      id=/nvme/1/throughput/54 name=Read Rate val=
+  S  Throughput      id=/nvme/1/throughput/55 name=Write Rate val=
+  S  Level           id=/nvme/1/level/100 name=Available Spare val=100
+  S  Level           id=/nvme/1/level/101 name=Available Spare Threshold val=10
+  S  Level           id=/nvme/1/level/102 name=Percentage Used val=0

@@ -1,0 +1,55 @@
+{
+    "cpu":  [
+                {
+                    "threads":  16,
+                    "name":  "AMD Ryzen 7 9800X3D 8-Core Processor           ",
+                    "cores":  8
+                }
+            ],
+    "board":  {
+                  "bbProd":  "PRIME B650M-A AX6 II",
+                  "csModel":  "ROG GM700TZ",
+                  "csMfr":  "ASUSTeK COMPUTER INC."
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  2000396321280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "Samsung SSD 990 PRO 2TB"
+                 },
+                 {
+                     "sizeBytes":  2048407280640,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "SLEG-860-2TBI-S58"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "AMD Radeon(TM) Graphics",
+                    "driver":  "32.0.21043.12001",
+                    "ramBytes":  536870912
+                },
+                {
+                    "name":  "AMD Radeon RX 9070 XT",
+                    "driver":  "32.0.31019.2002",
+                    "ramBytes":  4293918720
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  4800
+                },
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  4800
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Home",
+               "build":  "26200",
+               "version":  "10.0.26200"
+           }
+}
