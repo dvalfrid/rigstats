@@ -272,6 +272,20 @@ Rust tests are in `#[cfg(test)]` modules at the bottom of their respective files
 
 The .NET sensor sidecar has an xUnit project at `sensor-sidecar.Tests/` (NSubstitute mocks for LHM `IComputer`/`IHardware`/`ISensor`). It covers the snake_case JSON serialization contract that the Rust `SidecarPayload` deserializer depends on (`SerializationTests.cs`) and every `SensorReader.Extract` filtering rule (`SensorReaderTests.cs`). It compiles `SensorReader.cs` directly because the shipped sidecar is a self-contained single-file exe that a test library cannot `ProjectReference`. It runs as part of `cargo xtask verify` via `dotnet test sensor-sidecar.Tests/…`.
 
+#### Sensor fixture intake (runbook) — trigger: "ny sensor-fixture" / "add this sensor file"
+
+When the user gives you a `sensor-tree.txt` (or a diagnostics ZIP / its folder path), add it to the real-hardware corpus. This is the canonical procedure — follow it without re-deriving it:
+
+1. **Read the full file.** If a path is given, read it directly (the user runs you locally). A pasted snippet is often truncated — prefer the path. The dump format and rules live in `sensor-sidecar.Tests/fixtures/README.md`.
+2. **Pick the slug** `<board>-<cpu>-<gpu>` (lowercase kebab), from the `HW` names in the tree and/or `hardware.json`. Collision → suffix `-2`.
+3. **Create `sensor-sidecar.Tests/fixtures/<slug>/`** and copy in `sensor-tree.txt` (required) and `hardware.json` (if present). Write `meta.json` (schema in the fixtures README; `collected_at_unix` + `rigstats_version` come from the ZIP's `manifest.json`).
+4. **PII check:** only `sensor-tree.txt` + `hardware.json` are safe (hardware model names only). **Never commit the full ZIP** (`environment.txt`/`event-log.txt`/`settings.json` carry user identity). Glance through before committing.
+5. **Run** `dotnet test sensor-sidecar.Tests/sensor-sidecar.Tests.csproj -c Release`. The auto-discovering `FixtureTests` theory now covers the new machine (no code change needed).
+6. **Generate the golden snapshot:** `$env:RIGSTATS_WRITE_EXPECTED="1"; dotnet test …; Remove-Item Env:\RIGSTATS_WRITE_EXPECTED`, then copy each generated `expected.json` from `sensor-sidecar.Tests/bin/Release/net10.0-windows/fixtures/<slug>/` back into the source `fixtures/<slug>/`. Re-run without the flag to confirm it compares equal.
+7. **Review the golden `expected.json` for silent gaps** — sensors that came out `null`/missing although the hardware clearly exposes them (e.g. a `d3d_vdec` that stays null because the real sensor is named `D3D Video Decode 1`). Report findings; a logic fix is a separate `fix(...)` commit + issue, and requires regenerating affected goldens.
+8. **Commit** `test(sidecar): add fixture <slug>` (type `test`; does not surface in the changelog, which is correct). No issue required for a pure fixture add.
+
+
 ### egui dialog design system
 
 All secondary windows (Settings, About, Status, Updater) must follow this layout and colour contract. **Never deviate from these values without updating this section.**
