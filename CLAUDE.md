@@ -274,7 +274,7 @@ Valid portrait profiles: `portrait-xl` (450×1920), `portrait-slim` (480×1920),
 
 Valid landscape profiles (transpose of the portrait set): `landscape-xl` (1920×450), `landscape-slim` (1920×480), `landscape-hd` (1280×720), `landscape-wxga` (1280×800), `landscape-fhd` (1920×1080), `landscape-wuxga` (1920×1200), `landscape-qhd` (2560×1440), `landscape-hdplus` (1366×768), `landscape-1600x900`, `landscape-1680x1050`, `landscape-2560x1600`, `landscape-4k` (3840×2160), `landscape-fhd-top` (1080×253), `landscape-qhd-top` (1440×338), `landscape-4k-top` (2160×506).
 
-Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `battery`. `motherboard`, `process`, and `battery` are opt-in (not included in the default visible set).
+Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`. `motherboard`, `process`, `power`, and `battery` are opt-in (not included in the default visible set).
 
 ### Sensor sidecar integration
 

@@ -159,6 +159,7 @@ pub(crate) fn panel_label(key: &str) -> &'static str {
         "disk" => "Disk",
         "motherboard" => "Motherboard",
         "process" => "Processes",
+        "power" => "System Power",
         "battery" => "Battery",
         _ => "Panel",
     }

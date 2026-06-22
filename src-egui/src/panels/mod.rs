@@ -6,5 +6,6 @@ pub mod gpu;
 pub mod header;
 pub mod motherboard;
 pub mod net;
+pub mod power;
 pub mod process;
 pub mod ram;

@@ -27,7 +27,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Floating panel groups | 🔲 Planned (3.0) |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | 🔲 Planned |
-| Total system power consumption | 🔲 Planned |
+| Total system power consumption | ✅ Done (v1.34) |
 | Stream Deck integration | 🔲 Planned (3.0) |
 | Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
 | Landscape monitor support | ✅ Done (v1.32) |
@@ -82,6 +82,7 @@ script to refresh it.
 | [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
 | [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
 | [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
+| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | ✅ Done |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
@@ -92,7 +93,6 @@ script to refresh it.
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | 🔲 Planned |
 | [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
-| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
@@ -893,7 +893,9 @@ of the app talks only to `Platform` — no scattered `cfg(windows)` in UI or log
 
 ---
 
-## Total system power consumption 🔲
+## Total system power consumption ✅
+
+**Implemented in v1.34.** New opt-in `power` panel: estimated total system power (~W) with CPU/GPU breakdown bars and a bottom gauge. Uses CPU Package + GPU Package + platform overhead (~25 W desktop, ~10 W laptop). Both sensors unavailable → panel dims gracefully.
 
 **Panel:** Header or dedicated power row in CPU/GPU panel
 **Data source:** LHM sensor tree (built-in sensors only — no external hardware required)

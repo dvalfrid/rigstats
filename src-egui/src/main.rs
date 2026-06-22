@@ -1345,6 +1345,9 @@ impl RigStatsApp {
             "process" => {
                 let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
             }
+            "power" => {
+                let _ = panels::power::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
+            }
             "battery" => {
                 let _ = panels::battery::draw(
                     ui,
@@ -1742,6 +1745,7 @@ impl RigStatsApp {
                                 "process" => {
                                     panels::process::draw(ui, stats, 1.0, &app_theme, scale)
                                 }
+                                "power" => panels::power::draw(ui, stats, 1.0, &app_theme, scale),
                                 "battery" => panels::battery::draw(
                                     ui,
                                     stats,

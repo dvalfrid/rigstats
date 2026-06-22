@@ -17,6 +17,7 @@ const ALL_PANELS: &[(&str, &str)] = &[
     ("disk", "Storage"),
     ("motherboard", "Motherboard"),
     ("process", "Processes"),
+    ("power", "System Power"),
     ("battery", "Battery"),
 ];
 

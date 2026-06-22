@@ -111,9 +111,9 @@ $features = @(
   @{ id="cross-platform-port"; kind="planned"; label="enhancement"; title="Cross-platform OS abstraction - Linux port"; milestone="v3.0";
      summary="Make the RIGStats core OS-agnostic (ports-and-adapters refactor) so it can be ported to Linux. Extract a win-free rigstats-core defining trait ports (SensorProvider, HardwareProbe, SystemPaths, Autostart, WindowPlatform) and a Platform facade; move WMI/registry/named-pipe/win32 code into a platform-windows adapter crate; add a platform-linux crate (sysfs/NVML/dbus/unix-socket). Replace hard-coded %APPDATA% with the directories crate and the named pipe with interprocess. LHM stays a Windows-only adapter. Per-OS packaging: NSIS/sc on Windows, .deb/AppImage + systemd on Linux.";
      status="Planned (3.0)" }
-  @{ id="total-system-power"; kind="planned"; label="enhancement"; title="Total system power consumption";
+  @{ id="total-system-power"; kind="done"; label="enhancement"; title="Total system power consumption";
      summary="Show total real-time system power draw: use a motherboard power sensor if LHM exposes one, otherwise a labelled component-sum estimate. Laptops are already covered by battery discharge rate.";
-     status="Planned" }
+     status="Done (v1.34)" }
   @{ id="landscape-support"; kind="done"; label="enhancement"; title="Landscape monitor support";
      summary="Landscape profiles (transposed portrait sizes plus Top variants) render every panel in an adaptive grid sized to the profile, auto-target a matching monitor (else the primary screen), and support the pinnable non-floating window.";
      status="Shipped in v1.32.0" }
