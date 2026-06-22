@@ -125,8 +125,9 @@ public static class SensorReader
                     else if (s.Name == "GPU Core") gpuCorePower = s.Value;
                     else if (s.Name == "GPU SoC") gpuSocPower = s.Value;
                     break;
-                case SensorType.Fan:
-                    fan = s.Value;
+                case SensorType.Control:
+                    if (s.Name.Contains("GPU Fan"))
+                        fan = fan.HasValue ? (fan + s.Value) / 2f : s.Value;
                     break;
                 case SensorType.SmallData:
                     if (s.Name == "GPU Memory Used") vramUsed = s.Value;

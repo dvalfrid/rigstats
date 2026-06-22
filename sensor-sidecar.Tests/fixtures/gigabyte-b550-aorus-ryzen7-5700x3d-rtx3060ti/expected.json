@@ -11,7 +11,7 @@
       "core_clock": 1695,
       "mem_clock": 7000.983,
       "power": 56.919,
-      "fan": 1058,
+      "fan": 30,
       "vram_used_mb": 483,
       "vram_total_mb": 8192,
       "d3d_3d": 1.8115305,
