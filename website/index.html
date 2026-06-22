@@ -176,7 +176,7 @@
   <section class="section" id="panels">
     <div class="container">
       <header class="section-head">
-        <h2>Ten Live Panels (7 default + 3 optional)</h2>
+        <h2>Eleven Live Panels (7 default + 4 optional)</h2>
         <p>Each panel tracks exactly what matters for that component — with sparkline history so you see trends, not just a snapshot.</p>
       </header>
 
@@ -319,6 +319,24 @@
               <li>Color-coded power: green &lt;12 W / amber 12–20 W / red &gt;20 W</li>
             </ul>
             <span class="source-tag">WMI</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
+            <img src="images/system-power-panel.png" alt="System Power panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>System Power</h3>
+            <p>Estimated total system power draw with a CPU/GPU/Other breakdown, so you can see at a glance what your rig is pulling from the wall. Optional panel, enabled in Settings.</p>
+            <ul>
+              <li>Estimated total draw (~W) — CPU Package + GPU Package + platform overhead</li>
+              <li>Proportional breakdown bars: CPU (cyan), GPU (red), Other (platform overhead)</li>
+              <li>Bottom gauge scaled to your PSU's rated wattage — set it once in Settings</li>
+              <li>Auto-reference (500 W desktop / 120 W laptop) when no PSU wattage is configured</li>
+              <li>Dims gracefully when LHM sensors are unavailable</li>
+            </ul>
+            <span class="source-tag">LHM sidecar</span>
           </div>
         </article>
 

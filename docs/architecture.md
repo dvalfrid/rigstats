@@ -137,7 +137,7 @@ rig-dashboard/
 | `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
 | `win_opacity.rs` | `SetLayeredWindowAttributes` wrapper for window-level opacity |
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
-| `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect` |
+| `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`, `clock`, `header` |
 | `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs` |
 
 ### Module details
@@ -169,6 +169,8 @@ structs.
 | `MotherboardStats` | Fans, temps, voltages, chip name, board name |
 | `ProcessEntry` | Process name, CPU % of total system, RAM in MB |
 | `BatteryStats` | `present`, charge %, charging state, time remaining, power draw (W) |
+
+The `power` panel (`panels/power.rs`) is opt-in and derives its estimate entirely from fields already in `PollStats` — no new sidecar data. It computes `cpu_power + gpu_power + platform_overhead` (25 W desktop / 10 W laptop) and exposes CPU/GPU breakdown bars plus a bottom gauge. The gauge ceiling is `Settings.psu_watts` when set by the user, otherwise the auto reference.
 
 `StatsPayload.top_processes` is a `Vec<ProcessEntry>` pre-sorted by CPU usage
 and capped at 8 entries before serialisation.
