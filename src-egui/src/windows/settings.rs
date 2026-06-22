@@ -774,6 +774,49 @@ fn draw_panels(
         }
     });
 
+    // System Power — PSU capacity
+    ui.add_space(8.0);
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "System Power");
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("PSU capacity")
+                    .size(13.0)
+                    .color(dc.text),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let mut enabled = draft.psu_watts.is_some();
+                if toggle_switch(ui, dc, &mut enabled).changed() {
+                    draft.psu_watts = if enabled { Some(650) } else { None };
+                }
+                ui.add_space(6.0);
+                if let Some(ref mut w) = draft.psu_watts {
+                    let mut val = *w as i32;
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut val)
+                                .range(100..=5000)
+                                .suffix(" W"),
+                        )
+                        .changed()
+                    {
+                        *w = val as u16;
+                    }
+                } else {
+                    ui.label(egui::RichText::new("auto").size(12.0).color(dc.muted));
+                }
+            });
+        });
+        ui.add_space(2.0);
+        ui.label(
+            egui::RichText::new("Scale the power bar to your PSU's rated wattage")
+                .size(10.0)
+                .color(dc.muted),
+        );
+    });
+
     if let Some((key, add)) = toggle {
         if add {
             if !draft.visible_panels.contains(&key) {

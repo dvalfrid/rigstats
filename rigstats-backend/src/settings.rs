@@ -169,6 +169,10 @@ pub struct Settings {
   /// dashboard profile (positions differ per profile/monitor).
   #[serde(default)]
   pub pinned_positions: HashMap<String, [i32; 2]>,
+  /// User-specified PSU rated wattage for the System Power panel bar scale.
+  /// `None` = automatic reference (500 W desktop / 120 W laptop).
+  #[serde(default)]
+  pub psu_watts: Option<u16>,
 
   // ---- Legacy migration shims (schema version 0) --------------------------
   // These fields existed in older settings files as eight flat values.
@@ -273,6 +277,7 @@ impl Default for Settings {
       fullscreen_align: default_fullscreen_align(),
       dashboard_pinned: false,
       pinned_positions: HashMap::new(),
+      psu_watts: None,
       warning_cpu_temp: None,
       critical_cpu_temp: None,
       warning_gpu_temp: None,

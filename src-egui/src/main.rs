@@ -146,6 +146,8 @@ struct RigStatsApp {
     floating_mode_arc: Arc<AtomicBool>,
     /// Live thresholds for temperature colour coding — updated on settings reload.
     thresholds: PanelThresholds,
+    /// User-specified PSU wattage for the System Power panel bar scale.
+    psu_watts: Option<u16>,
     /// Active panel theme derived from `Settings.theme`.
     app_theme: theme::AppTheme,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
@@ -310,6 +312,7 @@ impl RigStatsApp {
             behind_enforce: RefCell::new(HashMap::new()),
             floating_mode_arc,
             thresholds: PanelThresholds::from_settings(&init_settings),
+            psu_watts: init_settings.psu_watts,
             app_theme: theme::AppTheme::from_key(&init_settings.theme),
             os_dark_mode: {
                 #[cfg(windows)]
@@ -433,6 +436,7 @@ impl eframe::App for RigStatsApp {
             }
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
             self.thresholds = PanelThresholds::from_settings(&s);
+            self.psu_watts = s.psu_watts;
             self.app_theme = theme::AppTheme::from_key(&s.theme);
             self.window_layer = s.window_layer.clone();
             let was_floating = self.floating_mode;
@@ -1346,7 +1350,8 @@ impl RigStatsApp {
                 let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
             }
             "power" => {
-                let _ = panels::power::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
+                let _ =
+                    panels::power::draw(ui, &self.latest, 1.0, &self.app_theme, sc, self.psu_watts);
             }
             "battery" => {
                 let _ = panels::battery::draw(
@@ -1745,7 +1750,14 @@ impl RigStatsApp {
                                 "process" => {
                                     panels::process::draw(ui, stats, 1.0, &app_theme, scale)
                                 }
-                                "power" => panels::power::draw(ui, stats, 1.0, &app_theme, scale),
+                                "power" => panels::power::draw(
+                                    ui,
+                                    stats,
+                                    1.0,
+                                    &app_theme,
+                                    scale,
+                                    self.psu_watts,
+                                ),
                                 "battery" => panels::battery::draw(
                                     ui,
                                     stats,

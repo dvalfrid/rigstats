@@ -46,6 +46,7 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
+    psu_watts: Option<u16>,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H * sc);
@@ -57,11 +58,11 @@ pub fn draw(
         );
 
         let is_laptop = stats.battery_present;
-        let reference_w = if is_laptop {
+        let reference_w = psu_watts.map(|w| w as f64).unwrap_or(if is_laptop {
             LAPTOP_REFERENCE_W
         } else {
             DESKTOP_REFERENCE_W
-        };
+        });
         let est = estimate_total(stats.cpu_power, stats.gpu_power, is_laptop);
         let has_data = est.is_some();
         let (total_w, cpu_w, gpu_w, other_w, complete) = est.unwrap_or((0.0, 0.0, 0.0, 0.0, false));
