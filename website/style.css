@@ -389,6 +389,34 @@ code {
   font-family: "Cascadia Code", monospace;
 }
 
+/* ── Source legend ─────────────────────────────────────────── */
+.source-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  margin-top: 32px;
+  padding: 16px 20px;
+  background: rgba(129, 140, 248, .04);
+  border: 1px solid rgba(129, 140, 248, .1);
+  border-radius: 10px;
+}
+.source-legend dt {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+.source-legend dd {
+  margin: 0 0 0 10px;
+  font-size: .82rem;
+  color: var(--text-muted);
+  align-self: center;
+  flex: 1 1 260px;
+}
+@media (max-width: 700px) {
+  .source-legend { flex-direction: column; gap: 12px; }
+  .source-legend dd { margin-left: 0; }
+}
+
 /* ── Dialogs ───────────────────────────────────────────────── */
 .dialogs-grid {
   display: grid;

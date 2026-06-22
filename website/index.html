@@ -336,7 +336,7 @@
               <li>Auto-reference (500 W desktop / 120 W laptop) when no PSU wattage is configured</li>
               <li>Dims gracefully when LHM sensors are unavailable</li>
             </ul>
-            <span class="source-tag">LHM sidecar</span>
+            <span class="source-tag">LHM</span>
           </div>
         </article>
 
@@ -373,6 +373,15 @@
         </article>
 
       </div>
+
+      <dl class="source-legend">
+        <dt><span class="source-tag">LHM</span></dt>
+        <dd>LibreHardwareMonitor — kernel-level sensor data (CPU/GPU temps, clocks, power, fan speeds, voltages) read via the bundled sensor service.</dd>
+        <dt><span class="source-tag">sysinfo</span></dt>
+        <dd>Rust sysinfo crate — OS-level metrics (CPU load, RAM usage, disk I/O, network throughput, process list) read directly without a driver.</dd>
+        <dt><span class="source-tag">WMI</span></dt>
+        <dd>Windows Management Instrumentation — system identity data (GPU name, RAM spec, motherboard model, battery state) queried at startup.</dd>
+      </dl>
     </div>
   </section>
 
