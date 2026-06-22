@@ -374,14 +374,14 @@
 
       </div>
 
-      <dl class="source-legend">
-        <dt><span class="source-tag">LHM</span></dt>
-        <dd>LibreHardwareMonitor — kernel-level sensor data (CPU/GPU temps, clocks, power, fan speeds, voltages) read via the bundled sensor service.</dd>
-        <dt><span class="source-tag">sysinfo</span></dt>
-        <dd>Rust sysinfo crate — OS-level metrics (CPU load, RAM usage, disk I/O, network throughput, process list) read directly without a driver.</dd>
-        <dt><span class="source-tag">WMI</span></dt>
-        <dd>Windows Management Instrumentation — system identity data (GPU name, RAM spec, motherboard model, battery state) queried at startup.</dd>
-      </dl>
+      <div class="source-legend">
+        <p class="source-legend__heading">Data sources</p>
+        <ul class="source-legend__list">
+          <li><span class="source-tag">LHM</span><span>LibreHardwareMonitor — kernel-level sensor data (CPU/GPU temps, clocks, power, fan speeds) read via the bundled sensor service</span></li>
+          <li><span class="source-tag">sysinfo</span><span>Rust sysinfo crate — OS metrics (CPU load, RAM, disk I/O, network, processes) read directly without a kernel driver</span></li>
+          <li><span class="source-tag">WMI</span><span>Windows Management Instrumentation — system identity data (GPU model, RAM spec, motherboard, battery) queried at startup</span></li>
+        </ul>
+      </div>
     </div>
   </section>
 
