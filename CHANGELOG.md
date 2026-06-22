@@ -8,6 +8,19 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.34.0](https://github.com/dvalfrid/rigstats/compare/v1.33.0...v1.34.0) (2026-06-22)
+
+
+### Features
+
+* **power:** add System Power panel with CPU/GPU breakdown ([7439ad2](https://github.com/dvalfrid/rigstats/commit/7439ad26c0709c00c6b1009cee893850e82f07bb)), closes [#118](https://github.com/dvalfrid/rigstats/issues/118)
+* **power:** add user-configurable PSU capacity for power bar scale ([726a49d](https://github.com/dvalfrid/rigstats/commit/726a49d147375c6e11589e7df9998b085842e8a4))
+
+
+### Bug Fixes
+
+* **gpu:** read AMD video-decode load from naming variants ([75663f0](https://github.com/dvalfrid/rigstats/commit/75663f04c7857d851a1409f7703ca1daf81b6ba4)), closes [#115](https://github.com/dvalfrid/rigstats/issues/115)
+
 ## [1.33.0](https://github.com/dvalfrid/rigstats/compare/v1.32.0...v1.33.0) (2026-06-21)
 
 
