@@ -83,6 +83,7 @@ script to refresh it.
 | [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
 | [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
 | [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
+| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | ✅ Done |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | ✅ Done |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
@@ -92,9 +93,9 @@ script to refresh it.
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | 🔲 Planned |
-| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
+| [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
