@@ -81,7 +81,7 @@ impl Textures {
     }
 }
 
-pub(crate) fn cpu_vendor(model: &str) -> Option<&'static str> {
+pub fn cpu_vendor(model: &str) -> Option<&'static str> {
     let m = model.to_ascii_lowercase();
     if m.contains("amd") || m.contains("ryzen") || m.contains("athlon") || m.contains("epyc") {
         Some("amd")
@@ -92,7 +92,7 @@ pub(crate) fn cpu_vendor(model: &str) -> Option<&'static str> {
     }
 }
 
-pub(crate) fn gpu_vendor(name: &str) -> Option<&'static str> {
+pub fn gpu_vendor(name: &str) -> Option<&'static str> {
     let m = name.to_ascii_lowercase();
     if m.contains("amd") || m.contains("radeon") || m.contains("rx ") || m.contains("vega") {
         Some("amd")

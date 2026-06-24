@@ -1078,6 +1078,7 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
             let layer_label = match draft.window_layer.as_str() {
                 "on_top" => "Always on Top",
                 "behind" => "Always Behind",
+                "wallpaper" => "Desktop Wallpaper",
                 _ => "Normal",
             };
             let w = ui.available_width();
@@ -1096,8 +1097,30 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
                         "behind".to_string(),
                         "Always Behind",
                     );
+                    ui.selectable_value(
+                        &mut draft.window_layer,
+                        "wallpaper".to_string(),
+                        "Desktop Wallpaper",
+                    );
                 });
         });
+        if draft.window_layer == "wallpaper" {
+            // Wallpaper mode and floating mode are mutually exclusive; selecting
+            // wallpaper turns floating off (the runtime also lets floating win if
+            // both are somehow set).
+            draft.floating_mode = false;
+            ui.add_space(2.0);
+            ui.label(
+                egui::RichText::new(
+                    "Lives in the desktop wallpaper layer (survives Win+D), at the spot the \
+                     window had before switching — position it in Normal mode first, then \
+                     switch. Display-only — disables floating mode; changes apply on Save \
+                     (no live preview, no opacity).",
+                )
+                .size(10.0)
+                .color(dc.muted),
+            );
+        }
 
         ui.add_space(4.0);
         ui.add(egui::Separator::default().spacing(4.0));

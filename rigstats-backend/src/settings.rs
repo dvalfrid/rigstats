@@ -141,7 +141,9 @@ pub struct Settings {
   /// If set and the GPU exists, that GPU will be displayed. Otherwise, auto-selection by load is used.
   #[serde(default)]
   pub preferred_gpu: Option<String>,
-  /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), or `"behind"` (HWND_BOTTOM).
+  /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), `"behind"`
+  /// (HWND_BOTTOM), or `"wallpaper"` (reparented into the desktop WorkerW layer
+  /// via the `rigstats-wallpaper` host process — survives Win+D).
   #[serde(default = "default_window_layer")]
   pub window_layer: String,
   /// When true, floating panel windows cannot be moved by dragging.
@@ -169,6 +171,12 @@ pub struct Settings {
   /// dashboard profile (positions differ per profile/monitor).
   #[serde(default)]
   pub pinned_positions: HashMap<String, [i32; 2]>,
+  /// Screen position `[x, y]` for the wallpaper-mode host window. Captured from
+  /// the main window when switching into wallpaper mode (so the user positions it
+  /// in a normal layer, then switches), and used by the `rigstats-wallpaper` host
+  /// instead of centring on the monitor. `None` until first set.
+  #[serde(default)]
+  pub wallpaper_position: Option<[i32; 2]>,
   /// User-specified PSU rated wattage for the System Power panel bar scale.
   /// `None` = automatic reference (500 W desktop / 120 W laptop).
   #[serde(default)]
@@ -277,6 +285,7 @@ impl Default for Settings {
       fullscreen_align: default_fullscreen_align(),
       dashboard_pinned: false,
       pinned_positions: HashMap::new(),
+      wallpaper_position: None,
       psu_watts: None,
       warning_cpu_temp: None,
       critical_cpu_temp: None,

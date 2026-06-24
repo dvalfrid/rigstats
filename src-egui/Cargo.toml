@@ -4,9 +4,17 @@ version = "1.34.0" # x-release-please-version
 edition = "2021"
 rust-version = "1.77"
 
+[lib]
+name = "rigstats_egui"
+path = "src/lib.rs"
+
 [[bin]]
 name = "rigstats"
 path = "src/main.rs"
+
+[[bin]]
+name = "rigstats-wallpaper"
+path = "src/bin/wallpaper.rs"
 
 [dependencies]
 rigstats-backend = { path = "../rigstats-backend" }
@@ -24,7 +32,7 @@ rfd = "0.15"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror"] }
+winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

@@ -26,7 +26,7 @@ The repository is a Cargo workspace with two members:
 | Crate | Path | Role |
 | --- | --- | --- |
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no framework coupling |
-| `rigstats-egui` | `src-egui/` | Production binary — eframe app, all panels, tray, settings windows |
+| `rigstats-egui` | `src-egui/` | egui library + two binaries: `rigstats` (main app — panels, tray, settings windows) and `rigstats-wallpaper` (the WorkerW desktop-wallpaper host process). Both share the panel renderer (`dashboard::DashboardView`) |
 
 ---
 
@@ -61,9 +61,12 @@ persisted to settings on change via a dirty-flag debounce.
 
 ```text
 rig-dashboard/
-├── src-egui/               egui binary (rigstats.exe)
+├── src-egui/               egui library + binaries (rigstats.exe, rigstats-wallpaper.exe)
 │   ├── src/
-│   │   ├── main.rs         Entry point, eframe run_native, RigStatsApp, rendering
+│   │   ├── lib.rs          Shared library root — re-exports the modules below
+│   │   ├── main.rs         `rigstats` bin: eframe run_native, RigStatsApp, wallpaper supervisor
+│   │   ├── bin/wallpaper.rs  `rigstats-wallpaper` bin: WorkerW desktop-wallpaper host
+│   │   ├── dashboard.rs    Shared DashboardView render core + PanelThresholds
 │   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
 │   │   ├── poll.rs         Poll thread, PollStats/DriveInfo/ProcessInfo data types
 │   │   ├── tray.rs         System tray icon, menu, TrayCmd, panel-label helpers
@@ -75,6 +78,7 @@ rig-dashboard/
 │   │   ├── update_check.rs Update detection, download, installer launch
 │   │   ├── win_opacity.rs  SetLayeredWindowAttributes wrapper
 │   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
+│   │   ├── win32_wallpaper.rs  Progman/WorkerW discovery + SetParent reparenting
 │   │   ├── panels/         One file per panel (cpu, gpu, ram, net, disk, …)
 │   │   └── windows/        Secondary windows (settings, about, status, updater)
 │   ├── assets/             Embedded PNGs (brand logos, tray icon)
@@ -123,20 +127,24 @@ rig-dashboard/
 | `logging.rs` | Stats CSV logging — `append_stats_row`, `prune_old_logs`, `current_log_path` |
 | `debug.rs` | Debug log helpers — no deps on other modules |
 
-**`src-egui/src/`** — egui binary:
+**`src-egui/src/`** — egui library + binaries:
 
 | Module | Responsibility |
 | --- | --- |
-| `main.rs` | Entry point, eframe `run_native`, `RigStatsApp` + `eframe::App` impl, `PanelThresholds`, panel rendering |
+| `lib.rs` | Shared library root — declares + re-exports the modules below so both bins link them |
+| `main.rs` | `rigstats` bin: eframe `run_native`, `RigStatsApp` + `eframe::App` impl, panel rendering, wallpaper-mode supervisor |
+| `bin/wallpaper.rs` | `rigstats-wallpaper` bin: minimal eframe host that renders the dashboard into the desktop WorkerW layer |
+| `dashboard.rs` | Shared `DashboardView` (borrowed render state + `draw_one_panel`/`render_landscape_grid`) and `PanelThresholds` |
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
-| `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping |
+| `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping; pauses (releases the sensor pipe) when the main app is in wallpaper mode |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
-| `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API |
+| `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API, `apply_dashboard_fonts` |
 | `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
 | `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
 | `win_opacity.rs` | `SetLayeredWindowAttributes` wrapper for window-level opacity |
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
+| `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`, `clock`, `header` |
 | `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs` |
 
@@ -527,3 +535,14 @@ thread). Produces a self-contained ZIP for bug reports.
 - **Stats delivery** — the single egui window receives `StatsPayload` from the poll thread via `mpsc::Receiver` and passes data to each panel's `draw()` call. No separate broadcast needed.
 - **Drag** — panels in floating mode render a drag-zone overlay (three dots + padlock icon) painted directly onto the panel rect via `ui.painter()`. A click on the padlock toggles lock state via an egui temp-data key `"toggle_lock"`.
 - **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key) and written to `rigstats-settings.json` on every `Save` in Settings.
+
+### Desktop wallpaper mode (WorkerW)
+
+- **Why a separate process** — `window_layer == "wallpaper"` reparents a window into the desktop `WorkerW` (between wallpaper and icons) so it survives `Win+D`. A child window is destroyed when its parent is — cross-process included — so an Explorer restart would destroy the reparented window. Reparenting the *main* window would therefore kill the app; instead a dedicated **`rigstats-wallpaper`** host process owns the wallpaper window, and the main app supervises it.
+- **Supervisor** (`RigStatsApp::update_wallpaper_mode`, called each frame) — on entering wallpaper mode the main app parks its own window off-screen, sets the shared `poll_paused` flag (so `poll_loop` releases the single-client sensor pipe and the host becomes the active poller), and spawns the host. It relaunches the host if it exits (covers an Explorer restart that destroyed the host's window) and kills it on leaving the mode or quitting. Mutually exclusive with floating mode (floating wins).
+- **Host** (`bin/wallpaper.rs`) — a minimal eframe app sized to the **profile dimensions** (never stretched to fill the monitor — that would break panel proportions) and centred on the matching monitor, so the wallpaper shows around it. Renders the shared `DashboardView`. On the first frame it caches its HWND (via `FindWindow`, before reparenting — afterwards the window is a WorkerW *child* and `FindWindow` can no longer find it) and attaches. It re-attaches each tick if `is_attached` reports it was detached, and exits if its parent PID (`RIGSTATS_PARENT_PID`) disappears so it never orphans.
+- **Positioning** — the host window is placed at `Settings::wallpaper_position` (absolute screen coords, so it encodes both *which* monitor and *where*) when that point is still on a connected monitor, else centred on the profile-matching monitor. The supervisor captures that position from the main window's last on-screen position when **entering** wallpaper mode and persists it before spawning the host, so the workflow is: position the window in a normal layer, then switch to wallpaper. Leaving wallpaper mode restores the window to that spot. Verified to coexist with Wallpaper Engine (WE paints the wallpaper into the WorkerW; our child window sits above it).
+- **WorkerW discovery** (`win32_wallpaper::find_wallpaper_workerw`) — Windows 11 keeps the wallpaper `WorkerW` as a *child* of `Progman` (checked first, no spawn); older Windows 10 needs `SendMessageTimeout(Progman, 0x052C)` then the top-level `WorkerW` sibling after Progman; a legacy `SHELLDLL_DefView`-sibling enumeration is the final fallback. Reparented coordinates are translated to WorkerW-client space so the window stays on the correct monitor.
+- **v1 is display-only** — no mouse hook; drag/padlock are N/A and GPU selection uses Settings → preferred GPU. The host binary is also the artifact a future Wallpaper Engine "Application wallpaper" integration (ROADMAP, v3.0) will reuse.
+- **Settings apply on Save, not live preview** — the host is a separate process that reads `rigstats-settings.json` from disk (~1 Hz), while Settings live-preview only pushes the draft to the main app's in-memory `current_settings`. So theme/panel/threshold changes appear on **Save**, not while dragging. (A future enhancement could persist the draft to disk during preview in wallpaper mode.)
+- **Opacity is not supported in wallpaper mode** — `WS_EX_LAYERED`/`LWA_ALPHA` (used for window opacity in the normal/behind modes) cannot be applied to a WorkerW *child* window (`SetParent` strips the layered ex-style; setting it on a child is rejected — verified). The dashboard is opaque over the wallpaper. Translucency-over-wallpaper would need a transparent swapchain (DirectComposition), the same blocker as the dropped "background transparency" roadmap item.
