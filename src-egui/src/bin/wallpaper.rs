@@ -87,11 +87,23 @@ impl WallpaperHost {
     }
 
     /// Re-read settings from disk (the main app persists them there) so theme,
-    /// panels, thresholds and opacity stay live. Profile changes are handled by
-    /// the supervisor relaunching the host, so they are intentionally ignored
-    /// here.
+    /// panels, thresholds and opacity stay live. A profile change (which alters
+    /// the window size, orientation and target monitor) is applied by exiting so
+    /// the supervisor relaunches a fresh host for the new profile — reading disk
+    /// means we only ever see the profile after it is **saved**, not during live
+    /// preview, which matches wallpaper mode's "applies on Save" contract.
     fn refresh_settings(&mut self) {
         let s = settings::load_settings(&self.dir);
+        if s.dashboard_profile != self.profile {
+            debug::log_debug(
+                &self.dir,
+                &format!(
+                    "rigstats-wallpaper: profile changed {} → {}, exiting for relaunch",
+                    self.profile, s.dashboard_profile
+                ),
+            );
+            std::process::exit(0);
+        }
         self.app_theme = theme::AppTheme::from_key(&s.theme);
         self.thresholds = PanelThresholds::from_settings(&s);
         self.psu_watts = s.psu_watts;
