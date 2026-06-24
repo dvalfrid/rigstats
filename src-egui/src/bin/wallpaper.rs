@@ -92,17 +92,33 @@ impl WallpaperHost {
     /// the supervisor relaunches a fresh host for the new profile — reading disk
     /// means we only ever see the profile after it is **saved**, not during live
     /// preview, which matches wallpaper mode's "applies on Save" contract.
-    fn refresh_settings(&mut self) {
+    /// Reload settings from disk and apply live changes. Returns `true` when the
+    /// host should shut down (the profile changed → relaunch for the new size, or
+    /// the user left wallpaper mode). The caller closes the window via
+    /// `ViewportCommand::Close` so eframe/wgpu tears down cleanly — a plain
+    /// `process::exit` would skip the GPU device teardown and leak graphics
+    /// resources across spawn cycles (the cause of later DLL-init failures).
+    #[must_use]
+    fn refresh_settings(&mut self) -> bool {
         let s = settings::load_settings(&self.dir);
+        // Left wallpaper mode (toggled floating on, or switched window layer):
+        // the supervisor expects us to exit so it can take the dashboard back.
+        if s.floating_mode || s.window_layer != "wallpaper" {
+            debug::append_debug_log(
+                &self.dir,
+                "rigstats-wallpaper: wallpaper mode left, closing",
+            );
+            return true;
+        }
         if s.dashboard_profile != self.profile {
             debug::log_debug(
                 &self.dir,
                 &format!(
-                    "rigstats-wallpaper: profile changed {} → {}, exiting for relaunch",
+                    "rigstats-wallpaper: profile changed {} → {}, closing for relaunch",
                     self.profile, s.dashboard_profile
                 ),
             );
-            std::process::exit(0);
+            return true;
         }
         self.app_theme = theme::AppTheme::from_key(&s.theme);
         self.thresholds = PanelThresholds::from_settings(&s);
@@ -118,6 +134,7 @@ impl WallpaperHost {
             #[cfg(windows)]
             win_opacity::set_opacity(self.hwnd, self.opacity);
         }
+        false
     }
 }
 
@@ -174,10 +191,15 @@ impl eframe::App for WallpaperHost {
             self.latest = stats;
         }
 
-        // Live settings refresh (~1 Hz).
+        // Live settings refresh (~1 Hz). A true return means we should shut down
+        // (profile changed, or wallpaper mode was left) — close cleanly so wgpu
+        // tears down properly instead of leaking via an abrupt process exit.
         if self.last_settings_check.elapsed() >= Duration::from_millis(900) {
             self.last_settings_check = Instant::now();
-            self.refresh_settings();
+            if self.refresh_settings() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                return;
+            }
         }
 
         // Re-attach safety net (~1 Hz): if Explorer rebuilt the WorkerW hierarchy

@@ -166,6 +166,19 @@ struct RigStatsApp {
     wallpaper_child: Option<std::process::Child>,
     /// True while wallpaper mode is active; used to detect enter/leave transitions.
     wallpaper_active: bool,
+    /// When the current host was last spawned. Used to tell a fast-failing host
+    /// (dies within seconds → back off) from a long-lived one that died for an
+    /// external reason (e.g. an Explorer restart → respawn promptly).
+    wallpaper_last_spawn: Option<Instant>,
+    /// Consecutive fast spawn failures. Drives exponential respawn backoff so a
+    /// host that cannot start (e.g. transient GPU/DLL-init failure) never storms
+    /// the supervisor into respawning every frame. Reset on entering the mode.
+    wallpaper_spawn_fails: u32,
+    /// Set when leaving wallpaper mode while the host is still alive: the host
+    /// self-exits cleanly from disk state (so wgpu tears down properly instead of
+    /// being TerminateProcess-d), and this deadline triggers a `kill()` fallback
+    /// if it has not exited in time.
+    wallpaper_teardown_at: Option<Instant>,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -293,6 +306,9 @@ impl RigStatsApp {
             poll_paused,
             wallpaper_child: None,
             wallpaper_active: false,
+            wallpaper_last_spawn: None,
+            wallpaper_spawn_fails: 0,
+            wallpaper_teardown_at: None,
         }
     }
 
@@ -321,6 +337,16 @@ impl RigStatsApp {
         if want && !self.wallpaper_active {
             self.wallpaper_active = true;
             self.poll_paused.store(true, Ordering::Relaxed);
+            // Reset the respawn throttle for a fresh session, and force-reap any
+            // host still draining from a just-left session so we never end up with
+            // two hosts when the user toggles back in quickly.
+            self.wallpaper_spawn_fails = 0;
+            self.wallpaper_last_spawn = None;
+            self.wallpaper_teardown_at = None;
+            if let Some(mut child) = self.wallpaper_child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
             // Capture where the user left the window in the previous (on-screen)
             // layer and hand it to the host, so the workflow is: position the
             // window where you want it in Normal mode, then switch to wallpaper.
@@ -337,9 +363,15 @@ impl RigStatsApp {
         } else if !want && self.wallpaper_active {
             self.wallpaper_active = false;
             self.poll_paused.store(false, Ordering::Relaxed);
-            if let Some(mut child) = self.wallpaper_child.take() {
-                let _ = child.kill();
-                let _ = child.wait();
+            // Graceful teardown: the floating/layer flag was already persisted to
+            // disk by the caller, so the host self-exits cleanly within ~1 s (its
+            // wgpu device tears down properly). We DO NOT TerminateProcess it here
+            // — repeatedly killing the GPU host leaked graphics/desktop-heap
+            // resources until a later spawn failed at DLL-init (0xc0000142) and the
+            // supervisor respawned it every frame. Hand the child to the drain
+            // block below, which reaps it and only kill()s as a timed fallback.
+            if self.wallpaper_child.is_some() {
+                self.wallpaper_teardown_at = Some(Instant::now());
             }
             let profile = self.current_settings.lock_safe().dashboard_profile.clone();
             let ([mut px, mut py], [w, h]) = self.fixed_window_geometry(&profile);
@@ -363,19 +395,98 @@ impl RigStatsApp {
             debug::log_debug(&self.dir, "wallpaper: leaving — restoring main window");
         }
 
+        // Drain a host that is shutting down after leaving wallpaper mode: reap it
+        // once it has self-exited; kill() only as a fallback if it overruns the
+        // grace period. Runs while not active so a re-entered mode starts clean.
+        if !self.wallpaper_active {
+            if let Some(deadline) = self.wallpaper_teardown_at {
+                let exited = match self.wallpaper_child.as_mut() {
+                    Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
+                    None => true,
+                };
+                if exited {
+                    self.wallpaper_child = None;
+                    self.wallpaper_teardown_at = None;
+                    self.wallpaper_last_spawn = None;
+                    debug::log_debug(&self.dir, "wallpaper: host exited cleanly");
+                } else if deadline.elapsed() >= Duration::from_secs(3) {
+                    if let Some(mut child) = self.wallpaper_child.take() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                    self.wallpaper_teardown_at = None;
+                    self.wallpaper_last_spawn = None;
+                    debug::log_warn(&self.dir, "wallpaper: host did not exit in time, killed");
+                }
+            }
+        }
+
         if self.wallpaper_active {
-            let needs_spawn = match self.wallpaper_child.as_mut() {
+            // Detect whether the host needs (re)spawning, and whether the previous
+            // instance died quickly (a failure to back off from) or after running
+            // for a while (a legitimate loss, e.g. an Explorer restart).
+            let exited = match self.wallpaper_child.as_mut() {
                 None => true,
                 Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
             };
-            if needs_spawn {
-                match Self::spawn_wallpaper_host() {
-                    Ok(child) => {
-                        debug::log_debug(&self.dir, "wallpaper: spawned host process");
-                        self.wallpaper_child = Some(child);
+            if exited {
+                if self.wallpaper_child.take().is_some() {
+                    // The host was running and has now exited. If it died within a
+                    // few seconds of spawning, treat it as a fast failure and back
+                    // off; if it lived longer, reset the failure counter.
+                    let fast_fail = self
+                        .wallpaper_last_spawn
+                        .map(|t| t.elapsed() < Duration::from_secs(4))
+                        .unwrap_or(true);
+                    if fast_fail {
+                        self.wallpaper_spawn_fails = self.wallpaper_spawn_fails.saturating_add(1);
+                    } else {
+                        self.wallpaper_spawn_fails = 0;
                     }
-                    Err(e) => {
-                        debug::log_error(&self.dir, &format!("wallpaper: spawn host failed — {e}"));
+                }
+                // Exponential backoff after a fast failure: 0 s, 2 s, 4 s, 8 s …
+                // capped at 30 s. Stop entirely after 5 consecutive failures so a
+                // host that simply cannot start does not spawn error dialogs
+                // forever; re-toggling the mode resets the counter.
+                const MAX_FAILS: u32 = 5;
+                if self.wallpaper_spawn_fails >= MAX_FAILS {
+                    if self.wallpaper_spawn_fails == MAX_FAILS {
+                        self.wallpaper_spawn_fails += 1; // log the giving-up once
+                        debug::log_error(
+                            &self.dir,
+                            "wallpaper: host failed to start repeatedly — giving up \
+                             (toggle wallpaper mode off and on to retry)",
+                        );
+                    }
+                } else {
+                    let backoff = if self.wallpaper_spawn_fails == 0 {
+                        Duration::ZERO
+                    } else {
+                        Duration::from_secs(
+                            (2u64.saturating_pow(self.wallpaper_spawn_fails)).min(30),
+                        )
+                    };
+                    let ready = self
+                        .wallpaper_last_spawn
+                        .map(|t| t.elapsed() >= backoff)
+                        .unwrap_or(true);
+                    if ready {
+                        match Self::spawn_wallpaper_host() {
+                            Ok(child) => {
+                                debug::log_debug(&self.dir, "wallpaper: spawned host process");
+                                self.wallpaper_child = Some(child);
+                                self.wallpaper_last_spawn = Some(Instant::now());
+                            }
+                            Err(e) => {
+                                self.wallpaper_spawn_fails =
+                                    self.wallpaper_spawn_fails.saturating_add(1);
+                                self.wallpaper_last_spawn = Some(Instant::now());
+                                debug::log_error(
+                                    &self.dir,
+                                    &format!("wallpaper: spawn host failed — {e}"),
+                                );
+                            }
+                        }
                     }
                 }
             }
