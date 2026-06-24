@@ -267,45 +267,6 @@ fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -
     }
 }
 
-/// Returns `[x, y, w, h]` (logical pixels) for the best monitor matching the
-/// dashboard `orientation`. For portrait targets, prefers a portrait monitor
-/// (height > width); for landscape targets, prefers a landscape monitor
-/// (width >= height). Falls back to the first monitor, then `[0, 0, 0, 0]`.
-fn pick_window_rect_for(landscape: bool) -> [f32; 4] {
-    #[cfg(windows)]
-    {
-        let monitors = win_monitor::list();
-        let picked = monitors
-            .iter()
-            .find(|&&(l, t, r, b)| {
-                if landscape {
-                    (r - l) >= (b - t)
-                } else {
-                    (b - t) > (r - l)
-                }
-            })
-            .or_else(|| monitors.first());
-        if let Some(&(l, t, r, b)) = picked {
-            return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = landscape;
-    [0.0, 0.0, 0.0, 0.0]
-}
-
-/// Returns `[x, y, w, h]` for the best portrait monitor (back-compat helper).
-pub fn pick_window_rect() -> [f32; 4] {
-    pick_window_rect_for(false)
-}
-
-/// Returns (x, y) position for the window — top-left of the best portrait monitor.
-/// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
-pub fn pick_window_position() -> [f32; 2] {
-    let [x, y, _, _] = pick_window_rect();
-    [x, y]
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -390,6 +351,26 @@ mod tests {
     fn profile_monitor_empty_is_none() {
         let [w, h] = profile_to_size("landscape-xl");
         assert_eq!(select_profile_monitor(&[], w, h), None);
+    }
+
+    #[test]
+    fn portrait_side_profile_prefers_matching_strip() {
+        // Primary 2560x1440 at origin + a 338x1440 portrait side-strip at (2560,0).
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 2898, 1440)];
+        // portrait-qhd-side is 338x1440 → must pick the side-strip (index 1), so a
+        // side profile lands on the strip that matches it, not the main screen.
+        let [w, h] = profile_to_size("portrait-qhd-side");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(1));
+    }
+
+    #[test]
+    fn portrait_profile_falls_back_to_primary_when_no_match() {
+        // Same layout; a full portrait-fhd (1080x1920) matches neither screen, so it
+        // must land on the primary monitor (index 0), NOT the small side-strip — the
+        // old behaviour (any portrait monitor) wrongly sent it to the strip.
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 2898, 1440)];
+        let [w, h] = profile_to_size("portrait-fhd");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(0));
     }
 
     #[test]

@@ -5,9 +5,8 @@ use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
-    compute_window_height, dialog_center, guard_panel_position, pick_window_position,
-    pick_window_rect, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
-    profile_to_size, resolve_pinned_position,
+    compute_window_height, dialog_center, guard_panel_position, pick_window_rect_for_profile,
+    profile_is_landscape, profile_scale, profile_to_size, resolve_pinned_position,
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
@@ -983,9 +982,14 @@ impl eframe::App for RigStatsApp {
             // ── Fixed mode — all panels in one portrait/landscape window ──────
 
             // Track the window's current outer position so the padlock can pin
-            // the exact spot it is at when clicked.
-            if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
-                self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+            // the exact spot it is at when clicked, and so a profile change can
+            // carry the window over to its current spot. Skip while the window is
+            // parked off-screen for wallpaper mode, which would otherwise overwrite
+            // the real position with the parking coordinates.
+            if !self.wallpaper_active {
+                if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
+                    self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+                }
             }
 
             // Drag handle — thin invisible strip at top for moving the borderless window.
@@ -1323,29 +1327,35 @@ impl RigStatsApp {
     /// content-fit size if no monitor is found.
     fn fixed_window_geometry(&self, profile: &str) -> ([f32; 2], [f32; 2]) {
         let [w, h] = profile_to_size(profile);
-        // Landscape: the grid fills a fixed window the size of the profile,
-        // pinned to the top-left of the best landscape monitor.
-        let (pos, size) = if profile_is_landscape(profile) {
-            let [x, y, _mw, _mh] = pick_window_rect_for_profile(profile);
-            ([x, y], [w, h])
-        } else if self.fullscreen_mode {
-            let [x, y, _mw, mh] = pick_window_rect();
-            if mh > 0.0 {
-                ([x, y], [w, mh])
-            } else {
-                let h = compute_window_height(&self.visible_panels, profile_scale(profile));
-                (pick_window_position(), [w, h])
-            }
+        // Auto-target the monitor whose resolution matches the profile (a strip/
+        // secondary screen only when it actually fits); otherwise the primary
+        // monitor. Used for both orientations so portrait/side profiles land on a
+        // matching screen or the main screen — never on an arbitrary small monitor.
+        let [mx, my, _mw, mh] = pick_window_rect_for_profile(profile);
+        let (auto_pos, size) = if profile_is_landscape(profile) {
+            // Landscape: the grid fills a fixed window the size of the profile.
+            ([mx, my], [w, h])
+        } else if self.fullscreen_mode && mh > 0.0 {
+            ([mx, my], [w, mh])
         } else {
             let h = compute_window_height(&self.visible_panels, profile_scale(profile));
-            (pick_window_position(), [w, h])
+            ([mx, my], [w, h])
         };
         // Pinned override: keep the computed size but restore the saved position
         // for this profile instead of auto-targeting a monitor.
         if let Some(pp) = self.pinned_position(profile) {
             return (pp, size);
         }
-        (pos, size)
+        // Carry the window's current position across a profile change, so switching
+        // profiles keeps the dashboard where the user left it. Fall back to the
+        // auto-target only when that spot is off every connected monitor. Skipped in
+        // fullscreen, which must snap to the monitor it fills.
+        if !self.fullscreen_mode {
+            if let Some(last) = self.last_fixed_pos {
+                return (guard_panel_position(last, auto_pos), size);
+            }
+        }
+        (auto_pos, size)
     }
 
     /// Returns the saved pinned position for `profile` when the dashboard is
@@ -1808,25 +1818,18 @@ fn main() {
     // height fills the monitor and the window pins to the monitor top-left; the
     // 2 px width trim used in normal mode is dropped so a matching screen fills.
     let fullscreen = s.fullscreen_mode && !s.floating_mode;
+    // Auto-target the monitor matching the profile resolution (or the primary
+    // monitor when none matches) for both orientations, so portrait/side profiles
+    // land on a matching screen or the main screen rather than an arbitrary one.
+    let [mx, my, _mw, mh] = pick_window_rect_for_profile(&s.dashboard_profile);
     let (inner_w, inner_h, mut pos_x, mut pos_y) = if landscape {
-        // Landscape: the grid fills a fixed window the size of the profile, pinned
-        // to the top-left of the monitor that best matches the profile resolution.
-        let [mx, my, _mw, _mh] = pick_window_rect_for_profile(&s.dashboard_profile);
+        // Landscape: the grid fills a fixed window the size of the profile.
         (win_w, win_h, mx, my)
+    } else if fullscreen && mh > 0.0 {
+        (win_w, mh, mx, my)
     } else {
-        let [bx, by] = pick_window_position();
-        if fullscreen {
-            let [mx, my, _mw, mh] = pick_window_rect();
-            if mh > 0.0 {
-                (win_w, mh, mx, my)
-            } else {
-                let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
-                (win_w - 2.0, h, bx, by)
-            }
-        } else {
-            let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
-            (win_w - 2.0, h, bx, by)
-        }
+        let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
+        (win_w - 2.0, h, mx, my)
     };
     // Pinned dashboard: restore the saved position for this profile (keeping the
     // computed size) instead of auto-targeting a monitor, when still on-screen.
