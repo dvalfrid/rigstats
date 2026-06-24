@@ -731,6 +731,7 @@ impl eframe::App for RigStatsApp {
                         self.status_refreshing.clone(),
                         self.dir.as_ref().clone(),
                         self.latest.lhm_connected,
+                        self.wallpaper_active,
                         ui.ctx().clone(),
                     );
                 }
@@ -936,6 +937,7 @@ impl eframe::App for RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.latest.lhm_connected;
+            let wallpaper_active = self.wallpaper_active;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
@@ -960,6 +962,7 @@ impl eframe::App for RigStatsApp {
                         &collecting,
                         &dir,
                         lhm_connected,
+                        wallpaper_active,
                         &dc,
                     );
                 },
