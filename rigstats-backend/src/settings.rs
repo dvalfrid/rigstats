@@ -504,4 +504,45 @@ mod tests {
     assert_eq!(second.settings_version, 1);
     assert_eq!(second.thresholds.get("cpu").and_then(|t| t.warn), Some(81));
   }
+
+  #[test]
+  fn load_settings_promotes_legacy_always_on_top_to_window_layer() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = super::settings_path(dir.path());
+    // A pre-1.24 file: always_on_top set, no window_layer field at all.
+    std::fs::write(&path, r#"{"settingsVersion":1,"alwaysOnTop":true}"#).unwrap();
+
+    let s = super::load_settings(dir.path());
+    assert_eq!(
+      s.window_layer, "on_top",
+      "legacy always_on_top:true must promote the default window_layer to on_top"
+    );
+    assert!(
+      s.always_on_top,
+      "always_on_top must stay in sync with the resolved layer"
+    );
+  }
+
+  #[test]
+  fn load_settings_respects_explicit_window_layer_over_always_on_top() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = super::settings_path(dir.path());
+    // A modern file: an explicit non-default layer must win, and always_on_top is
+    // re-derived from it (false here, since the layer is wallpaper, not on_top).
+    std::fs::write(
+      &path,
+      r#"{"settingsVersion":1,"windowLayer":"wallpaper","alwaysOnTop":true}"#,
+    )
+    .unwrap();
+
+    let s = super::load_settings(dir.path());
+    assert_eq!(
+      s.window_layer, "wallpaper",
+      "an explicit window_layer must not be overwritten by the legacy promotion"
+    );
+    assert!(
+      !s.always_on_top,
+      "always_on_top must be re-derived from the layer (wallpaper => false)"
+    );
+  }
 }
