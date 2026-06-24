@@ -375,6 +375,14 @@ Validation enforces this constraint in `save_settings`. Default thresholds: warn
 Warning-level notifications are permanently disabled (`notify_on_warn` is always
 sent as `false`); only Critical alerts have a user-visible toggle.
 
+> **Update (egui rewrite):** the Settings dialog was later reimplemented natively
+> in egui and restructured into **five** tabs — **Display** (display profile,
+> window layer + opacity, floating mode + panel scale, fill screen + alignment),
+> **Panels**, **Alerts**, **Appearance** (model name + theme), and **General**
+> (launch at startup, stats logging). In Desktop Wallpaper mode no-op controls grey
+> out, the Display Profile is locked, and changes apply on Save (see the Desktop
+> background mode section below).
+
 ---
 
 ## Stats logging / data export ✅

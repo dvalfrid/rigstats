@@ -71,7 +71,18 @@ Built-in profiles:
 | `portrait-qhd-side` | 338×1440 | Landscape monitor sidebar |
 | `portrait-4k-side` | 506×2160 | Landscape monitor sidebar |
 
-The active profile is changed in Settings → Display Profile.
+The active profile is changed in Settings → Display tab. The dashboard
+auto-targets the connected monitor that best matches the profile (resolution +
+orientation), falling back to the primary monitor when none match. Landscape
+profiles (the transpose of the portrait set, e.g. `landscape-xl` = 1920×450) are
+also available.
+
+The **Window Layer** control on the same tab places the dashboard as `Normal`,
+`Always on Top`, `Always Behind`, or **Desktop Wallpaper** (reparented into the
+desktop WorkerW layer — see [architecture.md](architecture.md) “Desktop wallpaper
+mode”). In wallpaper mode the dashboard is rendered by the separate
+`rigstats-wallpaper.exe` host, so settings apply on Save and the Display Profile is
+locked while that layer is active.
 
 ## Local Builds
 

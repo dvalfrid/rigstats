@@ -197,7 +197,7 @@ Prefer the simplest solution that solves the problem. Before implementing, ask: 
 
 ## Architecture Overview
 
-This is a **Windows-only** egui desktop app ("RIGStats") that displays hardware telemetry on a secondary portrait monitor. There is no web frontend — all UI is native Rust/egui.
+This is a **Windows-only** egui desktop app ("RIGStats") that displays hardware telemetry on a secondary monitor (portrait or landscape), as a floating overlay, or reparented into the desktop wallpaper (WorkerW) layer. There is no web frontend — all UI is native Rust/egui.
 
 The repo is a Cargo workspace (`Cargo.toml` at root) with two members:
 

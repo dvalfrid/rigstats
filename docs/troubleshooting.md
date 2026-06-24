@@ -63,11 +63,49 @@ not changed across recent app versions.
 After updating, restart the `rigstats-sensor` service (or reboot) and the GPU
 sensors should populate.
 
+## Desktop Wallpaper Mode
+
+Set **Settings → Display → Window Layer → Desktop Wallpaper** to render the
+dashboard as a live wallpaper, between the desktop background and the icons. It
+survives `Win+D`, is never covered by other windows, and coexists with Wallpaper
+Engine / Lively.
+
+A few behaviours are specific to this mode and are **expected**, not bugs:
+
+- **Settings apply on Save, not as a live preview.** The wallpaper is drawn by a
+  separate background process (`rigstats-wallpaper.exe`) that reads settings from
+  disk about once a second, so theme/panel/threshold changes only appear after you
+  press **Save**. Settings shows an amber banner reminding you of this.
+- **Controls with no live effect are greyed out** while the applied layer is
+  Desktop Wallpaper, and the **Display Profile selector is locked**. To change the
+  profile, switch the Window Layer back to a non-wallpaper option (Normal / Always
+  on Top / Always Behind), pick the profile, then return to Desktop Wallpaper and
+  Save.
+- **Window opacity has no effect** in wallpaper mode. `WS_EX_LAYERED` cannot be
+  applied to a WorkerW child window, so the dashboard is opaque over the wallpaper.
+- **The dashboard position** is the screen position the window had when you
+  switched into wallpaper mode (saved as `wallpaperPosition`). Place the window
+  where you want it *before* switching to Desktop Wallpaper.
+
+If the dashboard disappears after Explorer restarts, the host process exits and is
+respawned automatically by the main app within a second.
+
 ## Can I Change Which Display Is Used?
 
-Yes. Adjust the display targeting logic in `pick_monitor()` in `rigstats-backend/src/monitor.rs`.
+Yes — open Settings and pick a **Display Profile** that matches the target screen.
+The dashboard auto-targets the connected monitor whose resolution and orientation
+best match the profile (a dedicated 1920×450 strip wins for `landscape-xl`, a
+portrait side-strip wins for the `*-side` profiles, etc.), and otherwise falls
+back to the primary monitor — it no longer lands on an arbitrary small screen.
 
-The dashboard first targets the selected profile resolution, then falls back gracefully.
+When you switch profiles the window keeps its current screen position if that spot
+is still on a connected monitor; only when the saved position is off-screen does it
+re-target the matching monitor. **Fill Screen** fills the height of the monitor the
+window currently sits on, so enabling it never moves the dashboard to another
+screen.
+
+The low-level targeting logic lives in `pick_window_rect_for_profile` /
+`select_profile_monitor` in `src-egui/src/geometry.rs`.
 
 ## Can I Switch Dashboard Size Manually?
 
