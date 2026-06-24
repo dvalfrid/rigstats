@@ -28,6 +28,48 @@ The repository is a Cargo workspace with two members:
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no framework coupling |
 | `rigstats-egui` | `src-egui/` | egui library + two binaries: `rigstats` (main app — panels, tray, settings windows) and `rigstats-wallpaper` (the WorkerW desktop-wallpaper host process). Both share the panel renderer (`dashboard::DashboardView`) |
 
+### Layered separation: shared core, swappable shell
+
+The codebase is structured as a **shared telemetry+render core** with a thin,
+per-target **application shell** on top:
+
+```
+rigstats-sensor.exe   ── Sensor   (separate .NET process, named pipe)
+        │
+rigstats-backend      ── Backend  (hardware, settings, logging, lhm pipe)
+   poll.rs            ── poll_loop (the ~1 Hz telemetry loop)          ← shared
+   dashboard.rs       ── DashboardView (the panel render core)         ← shared
+        │
+   ┌────┴───────────────────────────┐
+rigstats (main.rs)            rigstats-wallpaper (bin/wallpaper.rs)
+RigStatsApp shell             WallpaperHost shell
+```
+
+Both binaries link the same library and render through the **same**
+`DashboardView`, driven by the **same** `poll_loop` — so the wallpaper host is
+not a fork of the dashboard, it is the *same* dashboard with a different shell.
+
+What differs between the two is only the **app shell**, and the difference is
+deliberate (not historical):
+
+- **`rigstats` (main)** — interactive: mouse, floating-panel drag/lock, the tray
+  menu, the Settings/About/Status/Updater dialogs, live preview, and the
+  wallpaper supervisor.
+- **`rigstats-wallpaper` (host)** — display-only: no mouse, reads settings from
+  disk (~1 Hz), and reparents into the desktop `WorkerW` layer.
+
+A **separate process is mandatory**, not a convenience: a WorkerW child window is
+destroyed when Explorer restarts, which must never be allowed to take the main
+app down with it. So the two shells cannot be collapsed into one process; the
+boundary is a correctness requirement (see *Desktop wallpaper mode* below).
+
+> **Known duplication / planned cleanup.** The two shells currently each carry a
+> near-identical copy of the *runtime glue* that wires telemetry to the renderer
+> — `latest`/sparklines/`textures`/`thresholds`, the receiver-drain loop, the
+> `view()` builder, and the settings→theme/threshold mapping. Extracting this
+> into a shared `DashboardRuntime` (embedded by both shells) is tracked in
+> **issue #135**; it would make "swap the shell, share everything else" literal.
+
 ---
 
 ## Data Flow
