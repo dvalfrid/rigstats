@@ -1,6 +1,6 @@
 ; RIGStats NSIS installer
 ; Produces a per-machine installer that:
-;   - Installs rigstats.exe + rigstats-sensor.exe + PawnIO driver
+;   - Installs rigstats.exe + rigstats-wallpaper.exe + rigstats-sensor.exe + PawnIO driver
 ;   - Registers the sensor service (LocalSystem, auto-start)
 ;   - Creates Start Menu shortcut and uninstaller
 ;
@@ -9,6 +9,7 @@
 ;
 ; Required files relative to repo root:
 ;   target\release\rigstats.exe
+;   target\release\rigstats-wallpaper.exe
 ;   sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe
 ;   build\pawnio\PawnIO.sys
 ;   build\pawnio\pawnio.inf
@@ -114,6 +115,7 @@ Section "RIGStats" SecMain
   ; Remove old Tauri binary name if upgrading from pre-egui version.
   Delete "$INSTDIR\rigstats.exe"
   File "target\release\rigstats.exe"
+  File "target\release\rigstats-wallpaper.exe"
   File "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe"
   ; Native libs that may be emitted alongside the single-file exe depending on
   ; the .NET runtime pack. They are Unix P/Invoke helpers never loaded on
@@ -213,6 +215,7 @@ Section "Uninstall"
   Sleep 1000
 
   Delete "$INSTDIR\rigstats.exe"
+  Delete "$INSTDIR\rigstats-wallpaper.exe"
   Delete "$INSTDIR\rigstats-sensor.exe"
   Delete "$INSTDIR\MonoPosixHelper.dll"
   Delete "$INSTDIR\libMonoPosixHelper.dll"

@@ -312,15 +312,53 @@ impl RigStatsApp {
         }
     }
 
+    /// Absolute path to the sibling `rigstats-wallpaper.exe`, or `None` if the
+    /// running exe's own path can't be resolved.
+    #[cfg(windows)]
+    fn wallpaper_host_path() -> Option<std::path::PathBuf> {
+        std::env::current_exe()
+            .ok()
+            .map(|exe| exe.with_file_name("rigstats-wallpaper.exe"))
+    }
+
     /// Spawn the `rigstats-wallpaper` host process (sibling exe), passing this
     /// process's PID so the host exits if the main app goes away.
     #[cfg(windows)]
     fn spawn_wallpaper_host() -> std::io::Result<std::process::Child> {
-        let exe = std::env::current_exe()?;
-        let host = exe.with_file_name("rigstats-wallpaper.exe");
+        let host = Self::wallpaper_host_path().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "could not resolve current exe path",
+            )
+        })?;
         std::process::Command::new(host)
             .env("RIGSTATS_PARENT_PID", std::process::id().to_string())
             .spawn()
+    }
+
+    /// Restore the main dashboard window on-screen after wallpaper mode (either
+    /// on leaving the mode or when entering was aborted because the host binary
+    /// is missing). Places it at the saved `wallpaper_position` when that is
+    /// still on a connected monitor, else the profile-matching monitor.
+    #[cfg(windows)]
+    fn restore_main_window(&mut self, ctx: &egui::Context) {
+        let profile = self.current_settings.lock_safe().dashboard_profile.clone();
+        let ([mut px, mut py], [w, h]) = self.fixed_window_geometry(&profile);
+        if let Some(p) = self.current_settings.lock_safe().wallpaper_position {
+            let [gx, gy] = guard_panel_position([p[0] as f32, p[1] as f32], [px, py]);
+            px = gx;
+            py = gy;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+            Self::window_level_from_layer(&self.window_layer),
+        ));
+        win_opacity::set_opacity(self.hwnd, self.opacity);
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+            px, py,
+        )));
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+        self.last_fitted_height = None;
+        self.reapply_window_props_frames = 4;
     }
 
     /// Drive the wallpaper-host lifecycle each frame.
@@ -335,6 +373,30 @@ impl RigStatsApp {
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
         let want = self.window_layer == "wallpaper" && !self.floating_mode;
         if want && !self.wallpaper_active {
+            // Guard: the host is a sibling exe (`rigstats-wallpaper.exe`). If it is
+            // missing (a packaging regression — e.g. the installer not bundling it),
+            // do NOT enter wallpaper mode: parking the main window off-screen while
+            // no host appears would hide the dashboard entirely. Revert to the
+            // normal layer, restore the window on-screen (startup may have already
+            // parked it), and log clearly so a diagnostic shows the cause.
+            let host_missing = Self::wallpaper_host_path()
+                .map(|p| !p.exists())
+                .unwrap_or(true);
+            if host_missing {
+                debug::log_error(
+                    &self.dir,
+                    "wallpaper: rigstats-wallpaper.exe not found next to the app — \
+                     staying in normal mode (reinstall/update to restore wallpaper mode)",
+                );
+                self.window_layer = "normal".to_string();
+                {
+                    let mut s = self.current_settings.lock_safe();
+                    s.window_layer = "normal".to_string();
+                    self.persist_settings_logged(&s);
+                }
+                self.restore_main_window(ctx);
+                return;
+            }
             self.wallpaper_active = true;
             self.poll_paused.store(true, Ordering::Relaxed);
             // Reset the respawn throttle for a fresh session, and force-reap any
@@ -373,25 +435,7 @@ impl RigStatsApp {
             if self.wallpaper_child.is_some() {
                 self.wallpaper_teardown_at = Some(Instant::now());
             }
-            let profile = self.current_settings.lock_safe().dashboard_profile.clone();
-            let ([mut px, mut py], [w, h]) = self.fixed_window_geometry(&profile);
-            // Restore to the saved wallpaper spot (if still on a monitor) so the
-            // window reappears where the user placed it and can be drag-adjusted.
-            if let Some(p) = self.current_settings.lock_safe().wallpaper_position {
-                let [gx, gy] = guard_panel_position([p[0] as f32, p[1] as f32], [px, py]);
-                px = gx;
-                py = gy;
-            }
-            ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-                Self::window_level_from_layer(&self.window_layer),
-            ));
-            win_opacity::set_opacity(self.hwnd, self.opacity);
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
-                px, py,
-            )));
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-            self.last_fitted_height = None;
-            self.reapply_window_props_frames = 4;
+            self.restore_main_window(ctx);
             debug::log_debug(&self.dir, "wallpaper: leaving — restoring main window");
         }
 
