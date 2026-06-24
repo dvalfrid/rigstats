@@ -424,10 +424,18 @@ impl RigStatsApp {
         if self.wallpaper_active {
             // Detect whether the host needs (re)spawning, and whether the previous
             // instance died quickly (a failure to back off from) or after running
-            // for a while (a legitimate loss, e.g. an Explorer restart).
-            let exited = match self.wallpaper_child.as_mut() {
-                None => true,
-                Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
+            // for a while (a legitimate loss, e.g. an Explorer restart). Capture the
+            // exit code too: a loader failure such as 0xC0000142
+            // (STATUS_DLL_INIT_FAILED) kills the host before its main() runs, so the
+            // host can never log the cause itself — the supervisor's record of the
+            // exit code is the only diagnostic trace that reaches a submitted log.
+            let (exited, exit_code): (bool, Option<i32>) = match self.wallpaper_child.as_mut() {
+                None => (true, None),
+                Some(child) => match child.try_wait() {
+                    Ok(Some(status)) => (true, status.code()),
+                    Ok(None) => (false, None),
+                    Err(_) => (true, None),
+                },
             };
             if exited {
                 if self.wallpaper_child.take().is_some() {
@@ -438,10 +446,28 @@ impl RigStatsApp {
                         .wallpaper_last_spawn
                         .map(|t| t.elapsed() < Duration::from_secs(4))
                         .unwrap_or(true);
+                    let code_desc = match exit_code {
+                        Some(c) => format!("exit code {c} (0x{:08X})", c as u32),
+                        None => "no exit code".to_string(),
+                    };
                     if fast_fail {
                         self.wallpaper_spawn_fails = self.wallpaper_spawn_fails.saturating_add(1);
+                        debug::log_warn(
+                            &self.dir,
+                            &format!(
+                                "wallpaper: host exited within 4s of spawn ({code_desc}); \
+                                 consecutive fast failures: {}",
+                                self.wallpaper_spawn_fails
+                            ),
+                        );
                     } else {
                         self.wallpaper_spawn_fails = 0;
+                        debug::log_debug(
+                            &self.dir,
+                            &format!(
+                                "wallpaper: host exited after running ({code_desc}); respawning"
+                            ),
+                        );
                     }
                 }
                 // Exponential backoff after a fast failure: 0 s, 2 s, 4 s, 8 s …

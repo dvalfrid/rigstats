@@ -334,8 +334,11 @@ fn main() {
     let visible_panels = s.visible_panels.clone();
     let theme_key = s.theme.clone();
     let psu_watts = s.psu_watts;
+    // `dir` is moved into the eframe closure (the host owns it); keep a copy for
+    // logging the run result after run_native returns.
+    let log_dir = dir.clone();
 
-    let _ = eframe::run_native(
+    let run_result = eframe::run_native(
         TITLE,
         options,
         Box::new(move |cc| {
@@ -383,6 +386,19 @@ fn main() {
             Ok(Box::new(host))
         }),
     );
+
+    // Log an eframe/wgpu init or run failure so a host that reached main() but
+    // could not create its window leaves a trace in a submitted diagnostic (a
+    // loader-level failure like 0xC0000142 never gets here — that is recorded by
+    // the supervisor's exit-code log instead).
+    if let Err(e) = run_result {
+        debug::log_error(
+            &log_dir,
+            &format!("rigstats-wallpaper: run_native failed — {e}"),
+        );
+    } else {
+        debug::append_debug_log(&log_dir, "rigstats-wallpaper exiting");
+    }
 
     // Hold the runtime until run_native returns (window closed).
     drop(runtime);
