@@ -133,6 +133,33 @@ fn inner_row(dc: &DialogColors) -> egui::Frame {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/// Amber banner shown across all Settings tabs while the *applied* window layer is
+/// Desktop Wallpaper: the visible dashboard is the host process rendering from disk,
+/// so no change previews live — everything takes effect on Save.
+fn wallpaper_save_banner(ui: &mut egui::Ui, dc: &DialogColors) {
+    const AMBER: egui::Color32 = egui::Color32::from_rgb(0xE5, 0xC0, 0x7B);
+    egui::Frame::new()
+        .fill(dc.card)
+        .stroke(egui::Stroke::new(1.0, AMBER.gamma_multiply(0.5)))
+        .corner_radius(egui::CornerRadius::same(5))
+        .inner_margin(egui::Margin::symmetric(10, 7))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                ui.label(egui::RichText::new("⚠").size(12.0).color(AMBER));
+                ui.label(
+                    egui::RichText::new(
+                        "Desktop Wallpaper mode — changes apply when you click Save (no live \
+                         preview). Switch to another layer to change the Display Profile.",
+                    )
+                    .size(10.5)
+                    .color(dc.text),
+                );
+            });
+        });
+}
+
 fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
     ui.label(
         egui::RichText::new(text)
@@ -185,8 +212,9 @@ fn drag_handle(ui: &mut egui::Ui, dc: &DialogColors) {
     }
 }
 
-/// Styled tab button. Returns true when clicked.
-fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool) -> bool {
+/// Styled tab button. Returns true when clicked. `width` lets the caller size
+/// all tabs equally to fill the available bar width (so 5 tabs always fit).
+fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool, width: f32) -> bool {
     let mut clicked = false;
     ui.scope(|ui| {
         let cr = egui::CornerRadius::same(5);
@@ -210,7 +238,7 @@ fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool) -> b
         let text_col = if active { dc.tab_active_text } else { dc.text };
         if ui
             .add_sized(
-                [128.0, 28.0],
+                [width, 28.0],
                 egui::Button::new(egui::RichText::new(label).size(12.0).color(text_col)),
             )
             .clicked()
@@ -323,12 +351,16 @@ pub fn show(
                 })
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.spacing_mut().item_spacing.x = 4.0;
-                        for (i, lbl) in ["Dashboard", "Panels", "Alerts", "Appearance"]
-                            .iter()
-                            .enumerate()
-                        {
-                            if tab_btn(ui, dc, lbl, st.tab == i) {
+                        let spacing = 4.0;
+                        ui.spacing_mut().item_spacing.x = spacing;
+                        const TAB_LABELS: [&str; 5] =
+                            ["Display", "Panels", "Alerts", "Appearance", "General"];
+                        // Size every tab equally to fill the bar so all of them
+                        // always fit (5 fixed-width tabs would overflow the dialog).
+                        let n = TAB_LABELS.len() as f32;
+                        let tab_w = ((ui.available_width() - spacing * (n - 1.0)) / n).floor();
+                        for (i, lbl) in TAB_LABELS.iter().enumerate() {
+                            if tab_btn(ui, dc, lbl, st.tab == i, tab_w) {
                                 st.tab = i;
                             }
                         }
@@ -349,12 +381,29 @@ pub fn show(
                             ui.spacing_mut().item_spacing.y = 8.0;
                             let tab = st.tab;
                             let battery_present = st.battery_present;
+                            // The currently *applied* window layer. Live preview forces
+                            // window_layer back to `original` (it's Save-only), so until
+                            // Save the app still runs in `original.window_layer` even if
+                            // the draft selects another. The Display tab grays its
+                            // wallpaper-incompatible controls based on this (reality), not
+                            // the draft, so switching away from wallpaper doesn't falsely
+                            // enable controls before the switch actually takes effect.
+                            let applied_layer = st.original.window_layer.clone();
+                            // While the *applied* layer is Desktop Wallpaper the visible
+                            // dashboard is the separate host process rendering from disk,
+                            // so nothing in Settings previews live — every change (profile,
+                            // theme, panels, thresholds, layer) only shows after Save. A
+                            // single banner states this once for all tabs.
+                            if applied_layer == "wallpaper" {
+                                wallpaper_save_banner(ui, dc);
+                            }
                             let draft = &mut st.draft;
                             match tab {
-                                0 => draw_dashboard(ui, dc, draft, dir.as_ref()),
+                                0 => draw_display(ui, dc, draft, &applied_layer),
                                 1 => draw_panels(ui, dc, draft, battery_present),
                                 2 => draw_alerts(ui, dc, draft),
                                 3 => draw_appearance(ui, dc, draft),
+                                4 => draw_general(ui, dc, draft, dir.as_ref()),
                                 _ => {}
                             }
                         });
@@ -423,18 +472,20 @@ pub fn show(
     }
 }
 
-// ── Dashboard tab ─────────────────────────────────────────────────────────────
-
-fn draw_dashboard(
+// ── Display tab ───────────────────────────────────────────────────────────────
+fn draw_display(
     ui: &mut egui::Ui,
     dc: &DialogColors,
     draft: &mut settings::Settings,
-    dir: &Path,
+    applied_layer: &str,
 ) {
     // Desktop Wallpaper mode is display-only: floating and fill-screen have no
     // effect there (the host is sized to the profile, centred on its monitor), so
-    // those controls are disabled while wallpaper is the selected layer.
-    let is_wallpaper = draft.window_layer == "wallpaper";
+    // those controls are disabled while wallpaper is the *applied* layer. We gate
+    // on the applied layer (not the draft) because window_layer is Save-only — the
+    // app stays in wallpaper mode until Save even after the draft selects Normal,
+    // so enabling the controls before Save would be misleading.
+    let is_wallpaper = applied_layer == "wallpaper";
     // Display Profile
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -461,6 +512,28 @@ fn draw_dashboard(
                     .size(11.0)
                     .color(dc.muted),
             );
+        } else if is_wallpaper {
+            // Profile is locked while pinned to the wallpaper — switch to a
+            // non-wallpaper layer to change it, then pin again.
+            let current = ALL_PROFILES
+                .iter()
+                .find(|(k, _)| *k == draft.dashboard_profile.as_str())
+                .map(|(_, l)| *l)
+                .unwrap_or(draft.dashboard_profile.as_str());
+            egui::Frame::new()
+                .fill(dc.inner)
+                .corner_radius(egui::CornerRadius::same(4))
+                .inner_margin(egui::Margin::symmetric(8, 4))
+                .show(ui, |ui| {
+                    ui.set_min_width(w - 16.0);
+                    ui.label(egui::RichText::new(current).size(13.0).color(dc.muted));
+                });
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new("Switch to a non-wallpaper layer to change the profile")
+                    .size(11.0)
+                    .color(dc.muted),
+            );
         } else {
             let current = ALL_PROFILES
                 .iter()
@@ -483,6 +556,119 @@ fn draw_dashboard(
                     }
                 });
         }
+    });
+
+    // Window — layer (Normal / On Top / Behind / Desktop Wallpaper) + opacity.
+    // Kept on the same tab as Layout/Fill so the wallpaper-driven gray-out of
+    // those controls is visible right below the layer that causes it.
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Window");
+        ui.add_space(8.0);
+
+        // Window Layer
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("Window Layer")
+                    .size(12.0)
+                    .color(dc.muted),
+            );
+            ui.add_space(8.0);
+            let layer_label = match draft.window_layer.as_str() {
+                "on_top" => "Always on Top",
+                "behind" => "Always Behind",
+                "wallpaper" => "Desktop Wallpaper",
+                _ => "Normal",
+            };
+            let w = ui.available_width();
+            egui::ComboBox::from_id_salt("window_layer")
+                .selected_text(layer_label)
+                .width(w)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut draft.window_layer, "normal".to_string(), "Normal");
+                    ui.selectable_value(
+                        &mut draft.window_layer,
+                        "on_top".to_string(),
+                        "Always on Top",
+                    );
+                    ui.selectable_value(
+                        &mut draft.window_layer,
+                        "behind".to_string(),
+                        "Always Behind",
+                    );
+                    ui.selectable_value(
+                        &mut draft.window_layer,
+                        "wallpaper".to_string(),
+                        "Desktop Wallpaper",
+                    );
+                });
+        });
+        if draft.window_layer == "wallpaper" {
+            // Wallpaper mode and floating mode are mutually exclusive; selecting
+            // wallpaper turns floating off (the runtime also lets floating win if
+            // both are somehow set).
+            draft.floating_mode = false;
+            ui.add_space(2.0);
+            ui.label(
+                egui::RichText::new(
+                    "Lives in the desktop wallpaper layer (survives Win+D), at the spot the \
+                     window had before switching — position it in Normal mode first, then \
+                     switch. Display-only — disables floating mode; changes apply on Save \
+                     (no live preview, no opacity).",
+                )
+                .size(10.0)
+                .color(dc.muted),
+            );
+        }
+        // Window-layer changes are Save-only: the app stays in the *applied* layer
+        // (and grays the controls accordingly) until Save. Make that explicit so
+        // the user doesn't expect the switch — or the re-enabled controls — to take
+        // effect just from picking a different layer.
+        if draft.window_layer != applied_layer {
+            ui.add_space(2.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.label(
+                    egui::RichText::new("⚠")
+                        .size(10.0)
+                        .color(egui::Color32::from_rgb(0xE5, 0xC0, 0x7B)),
+                );
+                ui.label(
+                    egui::RichText::new("Window Layer changes take effect when you click Save.")
+                        .size(10.0)
+                        .color(dc.link),
+                );
+            });
+        }
+
+        ui.add_space(6.0);
+        ui.add(egui::Separator::default().spacing(4.0));
+        ui.add_space(4.0);
+
+        // Opacity — unsupported in Desktop Wallpaper mode (a WorkerW child window
+        // rejects WS_EX_LAYERED, so the dashboard is always opaque there).
+        let pct = (draft.opacity * 100.0).round() as u32;
+        ui.add_enabled_ui(!is_wallpaper, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let label = if is_wallpaper {
+                        "n/a".to_string()
+                    } else {
+                        format!("{pct}%")
+                    };
+                    ui.label(egui::RichText::new(label).size(12.0).color(dc.text));
+                    let mut opacity = draft.opacity as f32;
+                    let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
+                        .step_by(0.05)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    if ui.add(slider).changed() {
+                        draft.opacity = opacity as f64;
+                    }
+                });
+            });
+        });
     });
 
     // Layout
@@ -602,6 +788,36 @@ fn draw_dashboard(
                 });
             });
         }
+    });
+}
+
+// ── General tab ───────────────────────────────────────────────────────────────
+fn draw_general(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings, dir: &Path) {
+    // Launch at Startup
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Startup");
+        ui.add_space(8.0);
+        inner_row(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new("Launch at Startup")
+                            .size(13.0)
+                            .color(dc.text),
+                    );
+                    ui.label(
+                        egui::RichText::new("Starts with Windows · LHM connects automatically")
+                            .size(11.0)
+                            .color(dc.muted),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    toggle_switch(ui, dc, &mut draft.autostart_enabled);
+                });
+            });
+        });
     });
 
     // Stats Logging
@@ -1033,9 +1249,6 @@ fn send_test_notification() {
 // ── Appearance tab ────────────────────────────────────────────────────────────
 
 fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
-    // Opacity is not supported in Desktop Wallpaper mode: a WorkerW child window
-    // rejects WS_EX_LAYERED, so the dashboard is always opaque there.
-    let is_wallpaper = draft.window_layer == "wallpaper";
     // Override Model Name card
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -1046,122 +1259,6 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
             [w, 24.0],
             egui::TextEdit::singleline(&mut draft.model_name).text_color(dc.text),
         );
-    });
-
-    // Window card
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Window");
-        ui.add_space(8.0);
-
-        // Opacity
-        let pct = (draft.opacity * 100.0).round() as u32;
-        ui.add_enabled_ui(!is_wallpaper, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let label = if is_wallpaper {
-                        "n/a".to_string()
-                    } else {
-                        format!("{pct}%")
-                    };
-                    ui.label(egui::RichText::new(label).size(12.0).color(dc.text));
-                    let mut opacity = draft.opacity as f32;
-                    let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
-                        .step_by(0.05)
-                        .show_value(false)
-                        .trailing_fill(true);
-                    if ui.add(slider).changed() {
-                        draft.opacity = opacity as f64;
-                    }
-                });
-            });
-        });
-
-        ui.add_space(6.0);
-        ui.add(egui::Separator::default().spacing(4.0));
-        ui.add_space(4.0);
-
-        // Window Layer
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new("Window Layer")
-                    .size(12.0)
-                    .color(dc.muted),
-            );
-            ui.add_space(8.0);
-            let layer_label = match draft.window_layer.as_str() {
-                "on_top" => "Always on Top",
-                "behind" => "Always Behind",
-                "wallpaper" => "Desktop Wallpaper",
-                _ => "Normal",
-            };
-            let w = ui.available_width();
-            egui::ComboBox::from_id_salt("window_layer")
-                .selected_text(layer_label)
-                .width(w)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut draft.window_layer, "normal".to_string(), "Normal");
-                    ui.selectable_value(
-                        &mut draft.window_layer,
-                        "on_top".to_string(),
-                        "Always on Top",
-                    );
-                    ui.selectable_value(
-                        &mut draft.window_layer,
-                        "behind".to_string(),
-                        "Always Behind",
-                    );
-                    ui.selectable_value(
-                        &mut draft.window_layer,
-                        "wallpaper".to_string(),
-                        "Desktop Wallpaper",
-                    );
-                });
-        });
-        if draft.window_layer == "wallpaper" {
-            // Wallpaper mode and floating mode are mutually exclusive; selecting
-            // wallpaper turns floating off (the runtime also lets floating win if
-            // both are somehow set).
-            draft.floating_mode = false;
-            ui.add_space(2.0);
-            ui.label(
-                egui::RichText::new(
-                    "Lives in the desktop wallpaper layer (survives Win+D), at the spot the \
-                     window had before switching — position it in Normal mode first, then \
-                     switch. Display-only — disables floating mode; changes apply on Save \
-                     (no live preview, no opacity).",
-                )
-                .size(10.0)
-                .color(dc.muted),
-            );
-        }
-
-        ui.add_space(4.0);
-        ui.add(egui::Separator::default().spacing(4.0));
-        ui.add_space(4.0);
-
-        // Launch at Startup
-        inner_row(dc).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new("Launch at Startup")
-                            .size(13.0)
-                            .color(dc.text),
-                    );
-                    ui.label(
-                        egui::RichText::new("Starts with Windows · LHM connects automatically")
-                            .size(11.0)
-                            .color(dc.muted),
-                    );
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, dc, &mut draft.autostart_enabled);
-                });
-            });
-        });
     });
 
     card_frame(dc).show(ui, |ui| {

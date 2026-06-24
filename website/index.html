@@ -397,22 +397,24 @@
 
         <article class="dialog-card dialog-card--settings">
           <div class="settings-tabs" role="tablist">
-            <button class="settings-tab active" data-img="settings-dashboard-dialog.png" role="tab" aria-selected="true">Dashboard</button>
+            <button class="settings-tab active" data-img="settings-display-dialog.png" role="tab" aria-selected="true">Display</button>
             <button class="settings-tab" data-img="settings-panels-dialog.png" role="tab" aria-selected="false">Panels</button>
             <button class="settings-tab" data-img="settings-alerts-dialog.png" role="tab" aria-selected="false">Alerts</button>
             <button class="settings-tab" data-img="settings-appearance-dialog.png" role="tab" aria-selected="false">Appearance</button>
+            <button class="settings-tab" data-img="settings-general-dialog.png" role="tab" aria-selected="false">General</button>
           </div>
           <div class="dialog-img-wrap">
-            <img id="settings-preview" src="images/settings-dashboard-dialog.png" alt="Settings — Dashboard tab" class="dialog-img">
+            <img id="settings-preview" src="images/settings-display-dialog.png" alt="Settings — Display tab" class="dialog-img">
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Four focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state.</p>
+            <p>Five focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state.</p>
             <ul>
-              <li><strong>Dashboard</strong> — display profile, floating mode toggle, stats CSV logging and retention</li>
-              <li><strong>Panels</strong> — toggle panel visibility, use arrows to reorder</li>
+              <li><strong>Display</strong> — display profile, window layer (Normal / Always on Top / Always Behind / Desktop Wallpaper — lives in the wallpaper layer and survives Win+D), opacity, floating mode and panel scale, fill screen and alignment</li>
+              <li><strong>Panels</strong> — toggle panel visibility, use arrows to reorder, set PSU rated wattage</li>
               <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk (°C) and battery charge % and power W</li>
-              <li><strong>Appearance</strong> — override model name, opacity, window layer (Always Behind / Always on Top / Desktop Wallpaper — lives in the wallpaper layer and survives Win+D), launch at startup, colour theme</li>
+              <li><strong>Appearance</strong> — override model name, colour theme</li>
+              <li><strong>General</strong> — launch at startup, stats CSV logging and retention</li>
             </ul>
           </div>
         </article>
