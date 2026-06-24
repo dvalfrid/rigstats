@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.35.1](https://github.com/dvalfrid/rigstats/compare/v1.35.0...v1.35.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **wallpaper:** bundle host exe in installer + guard against missing host ([474f95f](https://github.com/dvalfrid/rigstats/commit/474f95fde514931bd9288879be5bac5d87528b18)), closes [#136](https://github.com/dvalfrid/rigstats/issues/136)
+
 ## [1.35.0](https://github.com/dvalfrid/rigstats/compare/v1.34.0...v1.35.0) (2026-06-24)
 
 
