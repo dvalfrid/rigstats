@@ -145,7 +145,7 @@ fn wallpaper_save_banner(ui: &mut egui::Ui, dc: &DialogColors) {
         .inner_margin(egui::Margin::symmetric(10, 7))
         .show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 ui.label(egui::RichText::new("⚠").size(12.0).color(AMBER));
                 ui.label(
