@@ -172,8 +172,40 @@
     </div>
   </section>
 
+  <!-- Desktop Wallpaper mode -->
+  <section class="section" id="wallpaper-mode">
+    <div class="container">
+      <header class="section-head">
+        <h2>Desktop Wallpaper Mode</h2>
+        <p>Mount the dashboard directly into the Windows desktop layer — permanently visible on your primary monitor, never overlapping your apps or taskbar.</p>
+      </header>
+      <ul class="features-grid">
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Behind everything, always visible</h3>
+          <p>Runs in the Windows WorkerW layer — the same layer as your desktop wallpaper. Visible in any gaps between windows and on empty desktop space, without covering anything.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Survives Win+D</h3>
+          <p>Press Win+D to show the desktop and the dashboard stays put — unlike Always Behind mode, the WorkerW layer is not affected by the Show Desktop command.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Separate process, zero focus impact</h3>
+          <p>The wallpaper host (<code>rigstats-wallpaper</code>) runs isolated from the main app. It never appears in Alt+Tab, never steals focus, and exits automatically when the parent stops.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Settings apply on Save</h3>
+          <p>Because the host is a separate process, changes can't be previewed live. Settings apply on Save, and the display profile is locked while in wallpaper mode — switch layer to change it.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
   <!-- Panels -->
-  <section class="section" id="panels">
+  <section class="section section-alt" id="panels">
     <div class="container">
       <header class="section-head">
         <h2>Eleven Live Panels (7 default + 4 optional)</h2>
