@@ -177,6 +177,35 @@ fn position_on_any_monitor(pos: [f32; 2], monitors: &[(i32, i32, i32, i32)]) -> 
     })
 }
 
+/// Returns the rect `[x, y, w, h]` of the monitor that contains `pos`, or `None`
+/// when `pos` is off every monitor (or on non-Windows). Used by fill-screen mode
+/// to fill the monitor the window currently sits on rather than the
+/// profile-matching one.
+pub fn monitor_rect_at(pos: [f32; 2]) -> Option<[f32; 4]> {
+    #[cfg(windows)]
+    {
+        monitor_containing_point(pos, &win_monitor::list())
+            .map(|(l, t, r, b)| [l as f32, t as f32, (r - l) as f32, (b - t) as f32])
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pos;
+        None
+    }
+}
+
+/// Pure: the monitor in `monitors` whose bounds contain `pos`, if any. Strict
+/// containment (no overhang margin) so the window's own top-left corner resolves
+/// to exactly the screen it sits on. Split out for unit testing.
+fn monitor_containing_point(
+    pos: [f32; 2],
+    monitors: &[(i32, i32, i32, i32)],
+) -> Option<(i32, i32, i32, i32)> {
+    monitors.iter().copied().find(|&(l, t, r, b)| {
+        pos[0] >= l as f32 && pos[0] < r as f32 && pos[1] >= t as f32 && pos[1] < b as f32
+    })
+}
+
 /// Pure decision for where a pinned dashboard should be placed.
 ///
 /// Returns the saved position only when the dashboard is `pinned`, a position is
@@ -270,8 +299,8 @@ fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -
 #[cfg(test)]
 mod tests {
     use super::{
-        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
-        select_profile_monitor,
+        monitor_containing_point, position_on_any_monitor, profile_is_landscape, profile_to_size,
+        resolve_pinned_position, select_profile_monitor,
     };
 
     #[test]
@@ -371,6 +400,26 @@ mod tests {
         let monitors = [(0, 0, 2560, 1440), (2560, 0, 2898, 1440)];
         let [w, h] = profile_to_size("portrait-fhd");
         assert_eq!(select_profile_monitor(&monitors, w, h), Some(0));
+    }
+
+    #[test]
+    fn monitor_containing_point_strict_containment() {
+        // Primary at origin + a small portrait strip to the left at negative x.
+        let monitors = [(0, 0, 2560, 1440), (-450, 0, 0, 1920)];
+        // A window on the small left strip resolves to that monitor (index 1).
+        assert_eq!(
+            monitor_containing_point([-200.0, 300.0], &monitors),
+            Some((-450, 0, 0, 1920))
+        );
+        // A window on the primary resolves to the primary.
+        assert_eq!(
+            monitor_containing_point([100.0, 100.0], &monitors),
+            Some((0, 0, 2560, 1440))
+        );
+        // Off every monitor → None (no overhang margin, unlike position_on_any_monitor).
+        assert_eq!(monitor_containing_point([5000.0, 100.0], &monitors), None);
+        // Empty monitor list → None.
+        assert_eq!(monitor_containing_point([0.0, 0.0], &[]), None);
     }
 
     #[test]

@@ -5,8 +5,9 @@ use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
-    compute_window_height, dialog_center, guard_panel_position, pick_window_rect_for_profile,
-    profile_is_landscape, profile_scale, profile_to_size, resolve_pinned_position,
+    compute_window_height, dialog_center, guard_panel_position, monitor_rect_at,
+    pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
+    resolve_pinned_position,
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
@@ -1335,8 +1336,18 @@ impl RigStatsApp {
         let (auto_pos, size) = if profile_is_landscape(profile) {
             // Landscape: the grid fills a fixed window the size of the profile.
             ([mx, my], [w, h])
-        } else if self.fullscreen_mode && mh > 0.0 {
-            ([mx, my], [w, mh])
+        } else if self.fullscreen_mode {
+            // Fill the height of the monitor the window currently sits on (where
+            // the user placed it) — not the profile-matching monitor. Otherwise
+            // enabling Fill Screen would teleport the dashboard to another screen.
+            // Fall back to the auto-target monitor when the current position is
+            // unknown or off every monitor.
+            let m = self
+                .last_fixed_pos
+                .and_then(monitor_rect_at)
+                .filter(|r| r[3] > 0.0)
+                .unwrap_or([mx, my, _mw, mh]);
+            ([m[0], m[1]], [w, m[3]])
         } else {
             let h = compute_window_height(&self.visible_panels, profile_scale(profile));
             ([mx, my], [w, h])
