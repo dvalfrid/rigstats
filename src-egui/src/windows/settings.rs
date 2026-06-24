@@ -431,6 +431,10 @@ fn draw_dashboard(
     draft: &mut settings::Settings,
     dir: &Path,
 ) {
+    // Desktop Wallpaper mode is display-only: floating and fill-screen have no
+    // effect there (the host is sized to the profile, centred on its monitor), so
+    // those controls are disabled while wallpaper is the selected layer.
+    let is_wallpaper = draft.window_layer == "wallpaper";
     // Display Profile
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -488,21 +492,24 @@ fn draw_dashboard(
         ui.add_space(8.0);
         inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new("Floating Mode")
-                            .size(13.0)
-                            .color(dc.text),
-                    );
-                    ui.label(
-                        egui::RichText::new("Each panel opens as a separate frameless window")
-                            .size(11.0)
-                            .color(dc.muted),
-                    );
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, dc, &mut draft.floating_mode);
+            ui.add_enabled_ui(!is_wallpaper, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(
+                            egui::RichText::new("Floating Mode")
+                                .size(13.0)
+                                .color(dc.text),
+                        );
+                        let desc = if is_wallpaper {
+                            "Not available in Desktop Wallpaper mode"
+                        } else {
+                            "Each panel opens as a separate frameless window"
+                        };
+                        ui.label(egui::RichText::new(desc).size(11.0).color(dc.muted));
+                    });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        toggle_switch(ui, dc, &mut draft.floating_mode);
+                    });
                 });
             });
         });
@@ -540,7 +547,7 @@ fn draw_dashboard(
         // Landscape always uses the fixed adaptive-grid geometry, so fill-screen
         // has no effect there; disable it while floating or in a landscape profile.
         let is_landscape = crate::geometry::profile_is_landscape(&draft.dashboard_profile);
-        let fill_enabled = !draft.floating_mode && !is_landscape;
+        let fill_enabled = !draft.floating_mode && !is_landscape && !is_wallpaper;
         ui.add_space(8.0);
         inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -548,7 +555,9 @@ fn draw_dashboard(
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.label(egui::RichText::new("Fill Screen").size(13.0).color(dc.text));
-                        let desc = if is_landscape {
+                        let desc = if is_wallpaper {
+                            "Not available in Desktop Wallpaper mode"
+                        } else if is_landscape {
                             "Not available for landscape profiles"
                         } else {
                             "Cover the whole monitor; the dashboard background fills the rest"
@@ -1024,6 +1033,9 @@ fn send_test_notification() {
 // ── Appearance tab ────────────────────────────────────────────────────────────
 
 fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
+    // Opacity is not supported in Desktop Wallpaper mode: a WorkerW child window
+    // rejects WS_EX_LAYERED, so the dashboard is always opaque there.
+    let is_wallpaper = draft.window_layer == "wallpaper";
     // Override Model Name card
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -1044,22 +1056,25 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
 
         // Opacity
         let pct = (draft.opacity * 100.0).round() as u32;
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    egui::RichText::new(format!("{pct}%"))
-                        .size(12.0)
-                        .color(dc.text),
-                );
-                let mut opacity = draft.opacity as f32;
-                let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
-                    .step_by(0.05)
-                    .show_value(false)
-                    .trailing_fill(true);
-                if ui.add(slider).changed() {
-                    draft.opacity = opacity as f64;
-                }
+        ui.add_enabled_ui(!is_wallpaper, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let label = if is_wallpaper {
+                        "n/a".to_string()
+                    } else {
+                        format!("{pct}%")
+                    };
+                    ui.label(egui::RichText::new(label).size(12.0).color(dc.text));
+                    let mut opacity = draft.opacity as f32;
+                    let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
+                        .step_by(0.05)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    if ui.add(slider).changed() {
+                        draft.opacity = opacity as f64;
+                    }
+                });
             });
         });
 
