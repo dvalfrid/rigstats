@@ -16,8 +16,8 @@ use eframe::egui;
 use rigstats_backend::{debug, settings};
 use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
 use rigstats_egui::geometry::{
-    guard_panel_position, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
-    profile_to_size,
+    compute_window_height, guard_panel_position, pick_window_rect_for_profile,
+    profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::spark::Sparkline;
@@ -61,6 +61,14 @@ struct WallpaperHost {
     last_settings_check: Instant,
     last_attach_check: Instant,
     last_parent_check: Instant,
+    /// Last window height we fit to the portrait content, so we only re-dispatch
+    /// `InnerSize` when the rendered content height actually changes. `None`
+    /// forces a fit on the next frame (startup, or after a panel-set change).
+    last_fitted_height: Option<f32>,
+    /// Re-fit for a few frames after launch: early `InnerSize` commands can be
+    /// dropped before the window is fully realized, which would leave a black gap
+    /// or a clipped bottom panel until something else triggers a resize.
+    startup_fit_frames: u8,
 }
 
 impl WallpaperHost {
@@ -87,7 +95,11 @@ impl WallpaperHost {
         self.app_theme = theme::AppTheme::from_key(&s.theme);
         self.thresholds = PanelThresholds::from_settings(&s);
         self.psu_watts = s.psu_watts;
-        self.visible_panels = s.visible_panels.clone();
+        if self.visible_panels != s.visible_panels {
+            self.visible_panels = s.visible_panels.clone();
+            // Panel set changed → portrait content height changed; force a re-fit.
+            self.last_fitted_height = None;
+        }
         let new_op = s.opacity.clamp(0.1, 1.0) as f32;
         if (new_op - self.opacity).abs() > f32::EPSILON {
             self.opacity = new_op;
@@ -177,6 +189,28 @@ impl eframe::App for WallpaperHost {
                 self.view().draw_one_panel(ui, panel, sc, None);
                 ui.add_space((6.0 * sc).round());
             }
+            // Fit the window height to the rendered portrait content so no black
+            // gap appears below the stack (the profile height is the full monitor
+            // span; the panel stack is shorter). Mirrors the main app's per-frame
+            // fit. Landscape fills the whole grid, so it keeps the fixed profile size.
+            let used_h = ui.min_rect().height();
+            if self.startup_fit_frames > 0 {
+                self.startup_fit_frames -= 1;
+                self.last_fitted_height = None;
+                ui.ctx().request_repaint();
+            }
+            let changed = self
+                .last_fitted_height
+                .map(|h| (h - used_h).abs() > 0.5)
+                .unwrap_or(true);
+            if used_h > 10.0 && changed {
+                self.last_fitted_height = Some(used_h);
+                let [w, _] = profile_to_size(&self.profile);
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                        w, used_h,
+                    )));
+            }
         }
 
         ui.ctx().request_repaint_after(Duration::from_secs(1));
@@ -195,12 +229,23 @@ fn main() {
     let profile = s.dashboard_profile.clone();
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
 
-    // Size the window to the profile's fixed dimensions (never stretch to fill the
-    // monitor — that would break panel proportions on a larger screen). Use the
-    // position the user set in a normal layer before switching (s.wallpaper_position)
-    // when it is still on a connected monitor; otherwise centre on the matching
-    // monitor. The wallpaper shows around it.
-    let size = profile_to_size(&profile);
+    // Size the window to fit the dashboard: landscape fills the whole adaptive
+    // grid (the fixed profile size), portrait fits the panel-stack content height
+    // (the per-frame fit in `ui()` then refines it). Never stretch a portrait
+    // window to the full profile height — that leaves a black gap below the stack.
+    // Width is always the profile width so panel proportions are preserved. Use
+    // the position the user set in a normal layer before switching
+    // (s.wallpaper_position) when it is still on a connected monitor; otherwise
+    // centre on the matching monitor. The wallpaper shows around it.
+    let [pw, ph] = profile_to_size(&profile);
+    let size = if profile_is_landscape(&profile) {
+        [pw, ph]
+    } else {
+        [
+            pw,
+            compute_window_height(&s.visible_panels, profile_scale(&profile)),
+        ]
+    };
     let [mx, my, mw, mh] = pick_window_rect_for_profile(&profile);
     let centered = if mw > 0.0 && mh > 0.0 {
         [mx + (mw - size[0]) * 0.5, my + (mh - size[1]) * 0.5]
@@ -298,6 +343,8 @@ fn main() {
                 last_settings_check: Instant::now(),
                 last_attach_check: Instant::now(),
                 last_parent_check: Instant::now(),
+                last_fitted_height: None,
+                startup_fit_frames: 8,
             };
             Ok(Box::new(host))
         }),
