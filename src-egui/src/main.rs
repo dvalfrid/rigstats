@@ -1,44 +1,27 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-mod brand;
-mod geometry;
-mod lock_ext;
-mod panels;
-mod poll;
-mod ring;
-mod spark;
-mod tempcolor;
-mod theme;
-mod tray;
-mod update_check;
-#[cfg(windows)]
-mod win32_behind;
-#[cfg(windows)]
-mod win32_dark_mode;
-#[cfg(windows)]
-mod win_opacity;
-mod windows;
-
 use eframe::egui;
-#[cfg(windows)]
-use geometry::win_monitor;
-use geometry::{
-    compute_window_height, dialog_center, guard_panel_position, pick_window_position,
-    pick_window_rect, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
-    profile_to_size, resolve_pinned_position,
-};
-use lock_ext::LockSafe;
-use poll::poll_loop;
-// Re-exported so panel modules can refer to `crate::PollStats`.
-pub(crate) use poll::PollStats;
 use rigstats_backend::{debug, logging, settings};
-use spark::Sparkline;
+use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
+#[cfg(windows)]
+use rigstats_egui::geometry::win_monitor;
+use rigstats_egui::geometry::{
+    compute_window_height, dialog_center, guard_panel_position, monitor_rect_at,
+    pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
+    resolve_pinned_position,
+};
+use rigstats_egui::lock_ext::LockSafe;
+use rigstats_egui::poll::poll_loop;
+use rigstats_egui::spark::Sparkline;
+use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
+use rigstats_egui::{brand, panels, theme, update_check, windows, PollStats};
+#[cfg(windows)]
+use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
-use tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
 use tray_icon::menu::MenuEvent;
 
 fn app_data_dir() -> PathBuf {
@@ -175,6 +158,27 @@ struct RigStatsApp {
     /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
     /// drive fast repaints) so the true content height reliably sticks.
     startup_fit_frames: u8,
+    // ── Wallpaper (WorkerW) mode ───────────────────────────────────────────
+    /// Shared with `poll_loop`: set while in wallpaper mode so this app stops
+    /// polling and releases the sensor pipe to the `rigstats-wallpaper` host.
+    poll_paused: Arc<AtomicBool>,
+    /// Handle to the spawned `rigstats-wallpaper` host process, if running.
+    wallpaper_child: Option<std::process::Child>,
+    /// True while wallpaper mode is active; used to detect enter/leave transitions.
+    wallpaper_active: bool,
+    /// When the current host was last spawned. Used to tell a fast-failing host
+    /// (dies within seconds → back off) from a long-lived one that died for an
+    /// external reason (e.g. an Explorer restart → respawn promptly).
+    wallpaper_last_spawn: Option<Instant>,
+    /// Consecutive fast spawn failures. Drives exponential respawn backoff so a
+    /// host that cannot start (e.g. transient GPU/DLL-init failure) never storms
+    /// the supervisor into respawning every frame. Reset on entering the mode.
+    wallpaper_spawn_fails: u32,
+    /// Set when leaving wallpaper mode while the host is still alive: the host
+    /// self-exits cleanly from disk state (so wgpu tears down properly instead of
+    /// being TerminateProcess-d), and this deadline triggers a `kill()` fallback
+    /// if it has not exited in time.
+    wallpaper_teardown_at: Option<Instant>,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -186,55 +190,6 @@ struct BehindEnforce {
     /// While `Instant::now() < force_until`, enforce every frame (short burst
     /// after a drag finishes so the panel snaps back behind promptly).
     force_until: Instant,
-}
-
-/// Per-component warn/crit thresholds (°C) used for temperature colour coding.
-#[derive(Clone)]
-struct PanelThresholds {
-    cpu: (u8, u8),
-    gpu: (u8, u8),
-    gpu_hotspot: (u8, u8),
-    ram: (u8, u8),
-    disk: (u8, u8),
-    mb: (u8, u8),
-    battery: (u8, u8),
-    battery_power: (u8, u8),
-}
-
-impl Default for PanelThresholds {
-    fn default() -> Self {
-        Self {
-            cpu: (80, 90),
-            gpu: (80, 90),
-            gpu_hotspot: (90, 105),
-            ram: (60, 70),
-            disk: (50, 60),
-            mb: (70, 90),
-            battery: (20, 10),
-            battery_power: (15, 25),
-        }
-    }
-}
-
-impl PanelThresholds {
-    fn from_settings(s: &settings::Settings) -> Self {
-        let get = |key: &str, default: (u8, u8)| -> (u8, u8) {
-            s.thresholds.get(key).map_or(default, |t| {
-                (t.warn.unwrap_or(default.0), t.crit.unwrap_or(default.1))
-            })
-        };
-        let def = Self::default();
-        Self {
-            cpu: get("cpu", def.cpu),
-            gpu: get("gpu", def.gpu),
-            gpu_hotspot: def.gpu_hotspot, // not user-configurable
-            ram: get("ram", def.ram),
-            disk: get("disk", def.disk),
-            mb: def.mb, // not user-configurable
-            battery: get("battery", def.battery),
-            battery_power: get("battery_power", def.battery_power),
-        }
-    }
 }
 
 impl RigStatsApp {
@@ -254,6 +209,7 @@ impl RigStatsApp {
         updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
         updater_open: Arc<AtomicBool>,
         updater_focus: Arc<AtomicBool>,
+        poll_paused: Arc<AtomicBool>,
     ) -> Self {
         let init_settings = current_settings.lock_safe().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -347,6 +303,263 @@ impl RigStatsApp {
             last_applied_window_size: None,
             last_fitted_height: None,
             startup_fit_frames: 12,
+            poll_paused,
+            wallpaper_child: None,
+            wallpaper_active: false,
+            wallpaper_last_spawn: None,
+            wallpaper_spawn_fails: 0,
+            wallpaper_teardown_at: None,
+        }
+    }
+
+    /// Absolute path to the sibling `rigstats-wallpaper.exe`, or `None` if the
+    /// running exe's own path can't be resolved.
+    #[cfg(windows)]
+    fn wallpaper_host_path() -> Option<std::path::PathBuf> {
+        std::env::current_exe()
+            .ok()
+            .map(|exe| exe.with_file_name("rigstats-wallpaper.exe"))
+    }
+
+    /// Spawn the `rigstats-wallpaper` host process (sibling exe), passing this
+    /// process's PID so the host exits if the main app goes away.
+    #[cfg(windows)]
+    fn spawn_wallpaper_host() -> std::io::Result<std::process::Child> {
+        let host = Self::wallpaper_host_path().ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "could not resolve current exe path",
+            )
+        })?;
+        std::process::Command::new(host)
+            .env("RIGSTATS_PARENT_PID", std::process::id().to_string())
+            .spawn()
+    }
+
+    /// Restore the main dashboard window on-screen after wallpaper mode (either
+    /// on leaving the mode or when entering was aborted because the host binary
+    /// is missing). Places it at the saved `wallpaper_position` when that is
+    /// still on a connected monitor, else the profile-matching monitor.
+    #[cfg(windows)]
+    fn restore_main_window(&mut self, ctx: &egui::Context) {
+        let profile = self.current_settings.lock_safe().dashboard_profile.clone();
+        let ([mut px, mut py], [w, h]) = self.fixed_window_geometry(&profile);
+        if let Some(p) = self.current_settings.lock_safe().wallpaper_position {
+            let [gx, gy] = guard_panel_position([p[0] as f32, p[1] as f32], [px, py]);
+            px = gx;
+            py = gy;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+            Self::window_level_from_layer(&self.window_layer),
+        ));
+        win_opacity::set_opacity(self.hwnd, self.opacity);
+        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+            px, py,
+        )));
+        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
+        self.last_fitted_height = None;
+        self.reapply_window_props_frames = 4;
+    }
+
+    /// Drive the wallpaper-host lifecycle each frame.
+    ///
+    /// Wallpaper mode is active when `window_layer == "wallpaper"` and floating
+    /// mode is off (floating wins if both are set). On entering: park our own
+    /// window off-screen and pause polling so the host owns the dashboard and the
+    /// sensor pipe. While active: (re)spawn the host if it has exited (e.g. an
+    /// Explorer restart destroyed its WorkerW-child window). On leaving: kill the
+    /// host, resume polling, and restore our window.
+    #[cfg(windows)]
+    fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
+        let want = self.window_layer == "wallpaper" && !self.floating_mode;
+        if want && !self.wallpaper_active {
+            // Guard: the host is a sibling exe (`rigstats-wallpaper.exe`). If it is
+            // missing (a packaging regression — e.g. the installer not bundling it),
+            // do NOT enter wallpaper mode: parking the main window off-screen while
+            // no host appears would hide the dashboard entirely. Revert to the
+            // normal layer, restore the window on-screen (startup may have already
+            // parked it), and log clearly so a diagnostic shows the cause.
+            let host_missing = Self::wallpaper_host_path()
+                .map(|p| !p.exists())
+                .unwrap_or(true);
+            if host_missing {
+                debug::log_error(
+                    &self.dir,
+                    "wallpaper: rigstats-wallpaper.exe not found next to the app — \
+                     staying in normal mode (reinstall/update to restore wallpaper mode)",
+                );
+                self.window_layer = "normal".to_string();
+                {
+                    let mut s = self.current_settings.lock_safe();
+                    s.window_layer = "normal".to_string();
+                    self.persist_settings_logged(&s);
+                }
+                self.restore_main_window(ctx);
+                return;
+            }
+            self.wallpaper_active = true;
+            self.poll_paused.store(true, Ordering::Relaxed);
+            // Reset the respawn throttle for a fresh session, and force-reap any
+            // host still draining from a just-left session so we never end up with
+            // two hosts when the user toggles back in quickly.
+            self.wallpaper_spawn_fails = 0;
+            self.wallpaper_last_spawn = None;
+            self.wallpaper_teardown_at = None;
+            if let Some(mut child) = self.wallpaper_child.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            // Capture where the user left the window in the previous (on-screen)
+            // layer and hand it to the host, so the workflow is: position the
+            // window where you want it in Normal mode, then switch to wallpaper.
+            // Persisted before the host is spawned below so it reads the value.
+            if let Some([x, y]) = self.last_fixed_pos {
+                let mut s = self.current_settings.lock_safe();
+                s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
+                self.persist_settings_logged(&s);
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                -32000.0, -32000.0,
+            )));
+            debug::log_debug(&self.dir, "wallpaper: entering — parking main window");
+        } else if !want && self.wallpaper_active {
+            self.wallpaper_active = false;
+            self.poll_paused.store(false, Ordering::Relaxed);
+            // Graceful teardown: the floating/layer flag was already persisted to
+            // disk by the caller, so the host self-exits cleanly within ~1 s (its
+            // wgpu device tears down properly). We DO NOT TerminateProcess it here
+            // — repeatedly killing the GPU host leaked graphics/desktop-heap
+            // resources until a later spawn failed at DLL-init (0xc0000142) and the
+            // supervisor respawned it every frame. Hand the child to the drain
+            // block below, which reaps it and only kill()s as a timed fallback.
+            if self.wallpaper_child.is_some() {
+                self.wallpaper_teardown_at = Some(Instant::now());
+            }
+            self.restore_main_window(ctx);
+            debug::log_debug(&self.dir, "wallpaper: leaving — restoring main window");
+        }
+
+        // Drain a host that is shutting down after leaving wallpaper mode: reap it
+        // once it has self-exited; kill() only as a fallback if it overruns the
+        // grace period. Runs while not active so a re-entered mode starts clean.
+        if !self.wallpaper_active {
+            if let Some(deadline) = self.wallpaper_teardown_at {
+                let exited = match self.wallpaper_child.as_mut() {
+                    Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
+                    None => true,
+                };
+                if exited {
+                    self.wallpaper_child = None;
+                    self.wallpaper_teardown_at = None;
+                    self.wallpaper_last_spawn = None;
+                    debug::log_debug(&self.dir, "wallpaper: host exited cleanly");
+                } else if deadline.elapsed() >= Duration::from_secs(3) {
+                    if let Some(mut child) = self.wallpaper_child.take() {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    }
+                    self.wallpaper_teardown_at = None;
+                    self.wallpaper_last_spawn = None;
+                    debug::log_warn(&self.dir, "wallpaper: host did not exit in time, killed");
+                }
+            }
+        }
+
+        if self.wallpaper_active {
+            // Detect whether the host needs (re)spawning, and whether the previous
+            // instance died quickly (a failure to back off from) or after running
+            // for a while (a legitimate loss, e.g. an Explorer restart). Capture the
+            // exit code too: a loader failure such as 0xC0000142
+            // (STATUS_DLL_INIT_FAILED) kills the host before its main() runs, so the
+            // host can never log the cause itself — the supervisor's record of the
+            // exit code is the only diagnostic trace that reaches a submitted log.
+            let (exited, exit_code): (bool, Option<i32>) = match self.wallpaper_child.as_mut() {
+                None => (true, None),
+                Some(child) => match child.try_wait() {
+                    Ok(Some(status)) => (true, status.code()),
+                    Ok(None) => (false, None),
+                    Err(_) => (true, None),
+                },
+            };
+            if exited {
+                if self.wallpaper_child.take().is_some() {
+                    // The host was running and has now exited. If it died within a
+                    // few seconds of spawning, treat it as a fast failure and back
+                    // off; if it lived longer, reset the failure counter.
+                    let fast_fail = self
+                        .wallpaper_last_spawn
+                        .map(|t| t.elapsed() < Duration::from_secs(4))
+                        .unwrap_or(true);
+                    let code_desc = match exit_code {
+                        Some(c) => format!("exit code {c} (0x{:08X})", c as u32),
+                        None => "no exit code".to_string(),
+                    };
+                    if fast_fail {
+                        self.wallpaper_spawn_fails = self.wallpaper_spawn_fails.saturating_add(1);
+                        debug::log_warn(
+                            &self.dir,
+                            &format!(
+                                "wallpaper: host exited within 4s of spawn ({code_desc}); \
+                                 consecutive fast failures: {}",
+                                self.wallpaper_spawn_fails
+                            ),
+                        );
+                    } else {
+                        self.wallpaper_spawn_fails = 0;
+                        debug::log_debug(
+                            &self.dir,
+                            &format!(
+                                "wallpaper: host exited after running ({code_desc}); respawning"
+                            ),
+                        );
+                    }
+                }
+                // Exponential backoff after a fast failure: 0 s, 2 s, 4 s, 8 s …
+                // capped at 30 s. Stop entirely after 5 consecutive failures so a
+                // host that simply cannot start does not spawn error dialogs
+                // forever; re-toggling the mode resets the counter.
+                const MAX_FAILS: u32 = 5;
+                if self.wallpaper_spawn_fails >= MAX_FAILS {
+                    if self.wallpaper_spawn_fails == MAX_FAILS {
+                        self.wallpaper_spawn_fails += 1; // log the giving-up once
+                        debug::log_error(
+                            &self.dir,
+                            "wallpaper: host failed to start repeatedly — giving up \
+                             (toggle wallpaper mode off and on to retry)",
+                        );
+                    }
+                } else {
+                    let backoff = if self.wallpaper_spawn_fails == 0 {
+                        Duration::ZERO
+                    } else {
+                        Duration::from_secs(
+                            (2u64.saturating_pow(self.wallpaper_spawn_fails)).min(30),
+                        )
+                    };
+                    let ready = self
+                        .wallpaper_last_spawn
+                        .map(|t| t.elapsed() >= backoff)
+                        .unwrap_or(true);
+                    if ready {
+                        match Self::spawn_wallpaper_host() {
+                            Ok(child) => {
+                                debug::log_debug(&self.dir, "wallpaper: spawned host process");
+                                self.wallpaper_child = Some(child);
+                                self.wallpaper_last_spawn = Some(Instant::now());
+                            }
+                            Err(e) => {
+                                self.wallpaper_spawn_fails =
+                                    self.wallpaper_spawn_fails.saturating_add(1);
+                                self.wallpaper_last_spawn = Some(Instant::now());
+                                debug::log_error(
+                                    &self.dir,
+                                    &format!("wallpaper: spawn host failed — {e}"),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -373,6 +586,10 @@ impl eframe::App for RigStatsApp {
                 win_opacity::set_opacity(self.hwnd, self.opacity);
             }
         }
+
+        // Drive the wallpaper-host lifecycle (spawn/supervise/teardown).
+        #[cfg(windows)]
+        self.update_wallpaper_mode(ui.ctx());
 
         // Re-apply WindowLevel + opacity for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
@@ -476,7 +693,11 @@ impl eframe::App for RigStatsApp {
             // Only resize the main window when in fixed mode AND the size actually changed.
             // Sending InnerSize every settings-reload (e.g. opacity slider drag) causes a
             // visible jump even when the dimensions are identical.
-            if !self.floating_mode {
+            //
+            // In wallpaper mode our window is parked off-screen and the host owns the
+            // visible dashboard — repositioning here would yank the (frozen, polling-
+            // paused) main window back on-screen over the wallpaper, so skip it.
+            if !self.floating_mode && !self.wallpaper_active {
                 let new_size = [w, h];
                 if self.last_applied_window_size != Some(new_size) {
                     self.last_applied_window_size = Some(new_size);
@@ -554,6 +775,7 @@ impl eframe::App for RigStatsApp {
                         self.status_refreshing.clone(),
                         self.dir.as_ref().clone(),
                         self.latest.lhm_connected,
+                        self.wallpaper_active,
                         ui.ctx().clone(),
                     );
                 }
@@ -759,6 +981,7 @@ impl eframe::App for RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.latest.lhm_connected;
+            let wallpaper_active = self.wallpaper_active;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
@@ -783,6 +1006,7 @@ impl eframe::App for RigStatsApp {
                         &collecting,
                         &dir,
                         lhm_connected,
+                        wallpaper_active,
                         &dc,
                     );
                 },
@@ -943,9 +1167,14 @@ impl eframe::App for RigStatsApp {
             // ── Fixed mode — all panels in one portrait/landscape window ──────
 
             // Track the window's current outer position so the padlock can pin
-            // the exact spot it is at when clicked.
-            if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
-                self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+            // the exact spot it is at when clicked, and so a profile change can
+            // carry the window over to its current spot. Skip while the window is
+            // parked off-screen for wallpaper mode, which would otherwise overwrite
+            // the real position with the parking coordinates.
+            if !self.wallpaper_active {
+                if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
+                    self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+                }
             }
 
             // Drag handle — thin invisible strip at top for moving the borderless window.
@@ -1228,9 +1457,24 @@ impl RigStatsApp {
         }
     }
 
-    /// Draw a single panel by key into `ui` at content scale `sc`. Returns a new
-    /// preferred-GPU key if the GPU panel's device selector was clicked. Shared by
-    /// the portrait vertical stack and the landscape grid.
+    /// Build a borrowed [`DashboardView`] over this frame's render state, shared
+    /// with the `rigstats-wallpaper` host so the panel layout lives in one place.
+    fn view(&self) -> DashboardView<'_> {
+        DashboardView {
+            latest: &self.latest,
+            cpu_spark: &self.cpu_spark,
+            gpu_spark: &self.gpu_spark,
+            net_up_spark: &self.net_up_spark,
+            net_dn_spark: &self.net_dn_spark,
+            textures: &self.textures,
+            app_theme: &self.app_theme,
+            thresholds: &self.thresholds,
+            psu_watts: self.psu_watts,
+        }
+    }
+
+    /// Draw a single panel via the shared [`DashboardView`], then consume the
+    /// clock panel's `"open_updater"` badge-click flag (host has no updater).
     fn draw_one_panel(
         &self,
         ui: &mut egui::Ui,
@@ -1238,215 +1482,26 @@ impl RigStatsApp {
         sc: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
-        let mut new_pref = None;
-        match panel {
-            // Panels always render at full opacity; window-level transparency is
-            // applied by SetLayeredWindowAttributes (win_opacity module).
-            "header" => {
-                let _ = panels::header::draw(
-                    ui,
-                    &self.latest,
-                    &self.textures,
-                    1.0,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "clock" => {
-                let _ = panels::clock::draw(
-                    ui,
-                    self.latest.uptime_secs,
-                    1.0,
-                    &self.app_theme,
-                    update_ver,
-                    sc,
-                );
-                // Badge click → open updater dialog.
-                if ui
-                    .ctx()
-                    .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
-                    .unwrap_or(false)
-                {
-                    self.updater_open.store(true, Ordering::Relaxed);
-                }
-            }
-            "cpu" => {
-                let _ = panels::cpu::draw(
-                    ui,
-                    &self.latest,
-                    &self.cpu_spark,
-                    &self.textures,
-                    1.0,
-                    self.thresholds.cpu.0,
-                    self.thresholds.cpu.1,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "gpu" => {
-                if let Some(p) = panels::gpu::draw(
-                    ui,
-                    &self.latest,
-                    &self.gpu_spark,
-                    &self.textures,
-                    1.0,
-                    &self.app_theme,
-                    self.thresholds.gpu.0,
-                    self.thresholds.gpu.1,
-                    self.thresholds.gpu_hotspot.0,
-                    self.thresholds.gpu_hotspot.1,
-                    sc,
-                )
-                .0
-                {
-                    new_pref = Some(p);
-                }
-            }
-            "ram" => {
-                let _ = panels::ram::draw(
-                    ui,
-                    &self.latest,
-                    1.0,
-                    self.thresholds.ram.0,
-                    self.thresholds.ram.1,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "net" => {
-                let _ = panels::net::draw(
-                    ui,
-                    &self.latest,
-                    &self.net_up_spark,
-                    &self.net_dn_spark,
-                    1.0,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "disk" => {
-                let _ = panels::disk::draw(
-                    ui,
-                    &self.latest,
-                    1.0,
-                    self.thresholds.disk.0,
-                    self.thresholds.disk.1,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "motherboard" => {
-                let _ = panels::motherboard::draw(
-                    ui,
-                    &self.latest,
-                    1.0,
-                    self.thresholds.mb.0,
-                    self.thresholds.mb.1,
-                    &self.app_theme,
-                    sc,
-                );
-            }
-            "process" => {
-                let _ = panels::process::draw(ui, &self.latest, 1.0, &self.app_theme, sc);
-            }
-            "power" => {
-                let _ =
-                    panels::power::draw(ui, &self.latest, 1.0, &self.app_theme, sc, self.psu_watts);
-            }
-            "battery" => {
-                let _ = panels::battery::draw(
-                    ui,
-                    &self.latest,
-                    1.0,
-                    &self.app_theme,
-                    sc,
-                    self.thresholds.battery.0,
-                    self.thresholds.battery.1,
-                    self.thresholds.battery_power.0,
-                    self.thresholds.battery_power.1,
-                );
-            }
-            _ => {}
+        let new_pref = self.view().draw_one_panel(ui, panel, sc, update_ver);
+        if panel == "clock"
+            && ui
+                .ctx()
+                .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
+                .unwrap_or(false)
+        {
+            self.updater_open.store(true, Ordering::Relaxed);
         }
         new_pref
     }
 
-    /// Render the visible panels as an even, adaptive grid for landscape profiles.
-    ///
-    /// The column count is chosen so each cell is close to the portrait card width
-    /// (~450 px), then the rows follow from the panel count. Every cell is the same
-    /// size and the per-cell content scale `sc` is derived from the cell dimensions,
-    /// so panels shrink/grow to fit any landscape resolution. Returns a new
-    /// preferred-GPU key if the GPU device selector was clicked.
+    /// Render the visible panels as an adaptive landscape grid via the shared view.
     fn render_landscape_grid(
         &self,
         ui: &mut egui::Ui,
         panels: &[String],
         update_ver: Option<&str>,
     ) -> Option<String> {
-        let n = panels.len();
-        if n == 0 {
-            return None;
-        }
-        let gap = 6.0_f32;
-        let avail_w = ui.available_width().max(40.0);
-        let avail_h = ui.available_height().max(40.0);
-
-        // Choose the column count that maximises the per-cell content scale, so
-        // panels are as large as possible for the given screen shape. Ties are
-        // broken toward fewer rows (wider cells suit short landscape screens).
-        let mut n_cols = 1usize;
-        let mut best_s = f32::MIN;
-        let mut best_rows = usize::MAX;
-        for c in 1..=n {
-            let rows = n.div_ceil(c);
-            let cw = ((avail_w - gap * (c as f32 - 1.0)) / c as f32).max(40.0);
-            let ch = ((avail_h - gap * (rows as f32 - 1.0)) / rows as f32).max(40.0);
-            let s = (cw / 450.0).min(ch / 224.0).clamp(0.4, 1.6);
-            if s > best_s + 0.02 || ((s - best_s).abs() <= 0.02 && rows < best_rows) {
-                n_cols = c;
-                best_s = s;
-                best_rows = rows;
-            }
-        }
-        let n_rows = n.div_ceil(n_cols);
-
-        let cell_w = ((avail_w - gap * (n_cols as f32 - 1.0)) / n_cols as f32).max(40.0);
-        let cell_h = ((avail_h - gap * (n_rows as f32 - 1.0)) / n_rows as f32).max(40.0);
-
-        // Per-cell content scale. Reference card is 450 px wide × ~224 px tall
-        // (PANEL_DATA_H + frame margins + a little slack). Use the smaller of the
-        // width/height ratios so content never overflows the cell.
-        let sc_w = cell_w / 450.0;
-        let sc_h = cell_h / 224.0;
-        let sc = sc_w.min(sc_h).clamp(0.4, 1.6);
-
-        let origin = ui.cursor().min;
-        let mut new_pref = None;
-        for row in 0..n_rows {
-            for col in 0..n_cols {
-                let idx = row * n_cols + col;
-                if idx >= n {
-                    break;
-                }
-                let x = origin.x + col as f32 * (cell_w + gap);
-                let y = origin.y + row as f32 * (cell_h + gap);
-                let cell_rect =
-                    egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(cell_w, cell_h));
-                let mut child = ui.new_child(
-                    egui::UiBuilder::new()
-                        .max_rect(cell_rect)
-                        .layout(egui::Layout::top_down(egui::Align::Min)),
-                );
-                if let Some(p) = self.draw_one_panel(&mut child, &panels[idx], sc, update_ver) {
-                    new_pref = Some(p);
-                }
-            }
-        }
-        // Advance the parent cursor past the whole grid.
-        let total_h = n_rows as f32 * cell_h + (n_rows as f32 - 1.0) * gap;
-        ui.allocate_space(egui::vec2(avail_w, total_h));
-        new_pref
+        self.view().render_landscape_grid(ui, panels, update_ver)
     }
 
     /// Fixed-mode window geometry: returns `(top_left, [w, h])`.
@@ -1457,29 +1512,45 @@ impl RigStatsApp {
     /// content-fit size if no monitor is found.
     fn fixed_window_geometry(&self, profile: &str) -> ([f32; 2], [f32; 2]) {
         let [w, h] = profile_to_size(profile);
-        // Landscape: the grid fills a fixed window the size of the profile,
-        // pinned to the top-left of the best landscape monitor.
-        let (pos, size) = if profile_is_landscape(profile) {
-            let [x, y, _mw, _mh] = pick_window_rect_for_profile(profile);
-            ([x, y], [w, h])
+        // Auto-target the monitor whose resolution matches the profile (a strip/
+        // secondary screen only when it actually fits); otherwise the primary
+        // monitor. Used for both orientations so portrait/side profiles land on a
+        // matching screen or the main screen — never on an arbitrary small monitor.
+        let [mx, my, _mw, mh] = pick_window_rect_for_profile(profile);
+        let (auto_pos, size) = if profile_is_landscape(profile) {
+            // Landscape: the grid fills a fixed window the size of the profile.
+            ([mx, my], [w, h])
         } else if self.fullscreen_mode {
-            let [x, y, _mw, mh] = pick_window_rect();
-            if mh > 0.0 {
-                ([x, y], [w, mh])
-            } else {
-                let h = compute_window_height(&self.visible_panels, profile_scale(profile));
-                (pick_window_position(), [w, h])
-            }
+            // Fill the height of the monitor the window currently sits on (where
+            // the user placed it) — not the profile-matching monitor. Otherwise
+            // enabling Fill Screen would teleport the dashboard to another screen.
+            // Fall back to the auto-target monitor when the current position is
+            // unknown or off every monitor.
+            let m = self
+                .last_fixed_pos
+                .and_then(monitor_rect_at)
+                .filter(|r| r[3] > 0.0)
+                .unwrap_or([mx, my, _mw, mh]);
+            ([m[0], m[1]], [w, m[3]])
         } else {
             let h = compute_window_height(&self.visible_panels, profile_scale(profile));
-            (pick_window_position(), [w, h])
+            ([mx, my], [w, h])
         };
         // Pinned override: keep the computed size but restore the saved position
         // for this profile instead of auto-targeting a monitor.
         if let Some(pp) = self.pinned_position(profile) {
             return (pp, size);
         }
-        (pos, size)
+        // Carry the window's current position across a profile change, so switching
+        // profiles keeps the dashboard where the user left it. Fall back to the
+        // auto-target only when that spot is off every connected monitor. Skipped in
+        // fullscreen, which must snap to the monitor it fills.
+        if !self.fullscreen_mode {
+            if let Some(last) = self.last_fixed_pos {
+                return (guard_panel_position(last, auto_pos), size);
+            }
+        }
+        (auto_pos, size)
     }
 
     /// Returns the saved pinned position for `profile` when the dashboard is
@@ -1942,25 +2013,18 @@ fn main() {
     // height fills the monitor and the window pins to the monitor top-left; the
     // 2 px width trim used in normal mode is dropped so a matching screen fills.
     let fullscreen = s.fullscreen_mode && !s.floating_mode;
+    // Auto-target the monitor matching the profile resolution (or the primary
+    // monitor when none matches) for both orientations, so portrait/side profiles
+    // land on a matching screen or the main screen rather than an arbitrary one.
+    let [mx, my, _mw, mh] = pick_window_rect_for_profile(&s.dashboard_profile);
     let (inner_w, inner_h, mut pos_x, mut pos_y) = if landscape {
-        // Landscape: the grid fills a fixed window the size of the profile, pinned
-        // to the top-left of the monitor that best matches the profile resolution.
-        let [mx, my, _mw, _mh] = pick_window_rect_for_profile(&s.dashboard_profile);
+        // Landscape: the grid fills a fixed window the size of the profile.
         (win_w, win_h, mx, my)
+    } else if fullscreen && mh > 0.0 {
+        (win_w, mh, mx, my)
     } else {
-        let [bx, by] = pick_window_position();
-        if fullscreen {
-            let [mx, my, _mw, mh] = pick_window_rect();
-            if mh > 0.0 {
-                (win_w, mh, mx, my)
-            } else {
-                let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
-                (win_w - 2.0, h, bx, by)
-            }
-        } else {
-            let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
-            (win_w - 2.0, h, bx, by)
-        }
+        let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
+        (win_w - 2.0, h, mx, my)
     };
     // Pinned dashboard: restore the saved position for this profile (keeping the
     // computed size) instead of auto-targeting a monitor, when still on-screen.
@@ -2001,7 +2065,21 @@ fn main() {
     let dir_clone = dir.clone();
     let pref_poll = preferred_gpu_arc.clone();
     let settings_poll = current_settings_shared.clone();
-    runtime.spawn(async move { poll_loop(tx, dir_clone, pref_poll, settings_poll).await });
+    // Pause flag: set while in wallpaper mode so this app releases the sensor
+    // pipe to the `rigstats-wallpaper` host (which becomes the active poller).
+    let poll_paused = Arc::new(AtomicBool::new(false));
+    let poll_paused_loop = poll_paused.clone();
+    runtime.spawn(async move {
+        poll_loop(tx, dir_clone, pref_poll, settings_poll, poll_paused_loop).await
+    });
+
+    // Wallpaper mode at startup: the host owns the on-screen dashboard, so place
+    // our own window off-screen from the start to avoid a one-frame flash.
+    let start_wallpaper = s.window_layer == "wallpaper" && !s.floating_mode;
+    if start_wallpaper {
+        pos_x = -32000.0;
+        pos_y = -32000.0;
+    }
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("RigStats")
@@ -2036,31 +2114,7 @@ fn main() {
             cc.egui_ctx.set_visuals(visuals);
 
             // Larger font sizes for readability on a portrait monitor.
-            {
-                use egui::{FontFamily, FontId, TextStyle};
-                let mut style = (*cc.egui_ctx.global_style()).clone();
-                style.text_styles = [
-                    (
-                        TextStyle::Small,
-                        FontId::new(12.0, FontFamily::Proportional),
-                    ),
-                    (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
-                    (
-                        TextStyle::Button,
-                        FontId::new(14.0, FontFamily::Proportional),
-                    ),
-                    (
-                        TextStyle::Heading,
-                        FontId::new(18.0, FontFamily::Proportional),
-                    ),
-                    (
-                        TextStyle::Monospace,
-                        FontId::new(13.0, FontFamily::Monospace),
-                    ),
-                ]
-                .into();
-                cc.egui_ctx.set_global_style(style);
-            }
+            theme::apply_dashboard_fonts(&cc.egui_ctx);
 
             let tray = build_tray(s.logging_enabled);
             let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
@@ -2263,6 +2317,7 @@ fn main() {
                 updater_win_bg,
                 updater_open_bg,
                 updater_focus_bg,
+                poll_paused,
             )))
         }),
     )

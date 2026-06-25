@@ -102,6 +102,44 @@ The sensor sidecar (`rigstats-sensor.exe`, .NET 10, LocalSystem Windows Service)
 
 See [docs/architecture.md](docs/architecture.md) for module-level detail and [docs/setup.md](docs/setup.md) for the full local development setup.
 
+## Display & Placement
+
+The dashboard renders on a secondary monitor and is configured entirely from
+**Settings** (a 560×560 dialog with five tabs: Display, Panels, Alerts,
+Appearance, General).
+
+- **Display profiles** — pick a portrait or landscape profile that matches the
+  target screen (e.g. `portrait-xl` = 450×1920, `landscape-xl` = 1920×450). The
+  dashboard auto-targets the connected monitor whose resolution and orientation
+  best match, and falls back to the primary monitor when none match. Switching
+  profiles keeps the window where you left it as long as that spot is still
+  on-screen.
+- **Window layer** — `Normal`, `Always on Top`, `Always Behind`, or **Desktop
+  Wallpaper**.
+- **Floating mode** — render panels as individually draggable/lockable cards.
+- **Fill Screen** — fill the height of the monitor the window currently sits on
+  (panel proportions are preserved).
+
+### Desktop Wallpaper (WorkerW) mode
+
+Selecting **Window Layer → Desktop Wallpaper** renders the dashboard as a live
+wallpaper, reparented into the desktop `WorkerW` layer between the wallpaper and
+the desktop icons. It survives `Win+D`, is never covered by other windows, and
+coexists with Wallpaper Engine / Lively.
+
+Because the wallpaper is drawn by a separate background process
+(`rigstats-wallpaper.exe`) that reads settings from disk, a few behaviours differ
+from the normal layers and are **expected**:
+
+- Settings apply on **Save**, not as a live preview (an amber banner reminds you).
+- No-op controls grey out and the **Display Profile is locked** — switch back to a
+  non-wallpaper layer to change the profile, then return and Save.
+- **Window opacity has no effect** (a Win32 `WS_EX_LAYERED` limitation on WorkerW
+  children).
+
+See [docs/troubleshooting.md](docs/troubleshooting.md#desktop-wallpaper-mode) for
+details.
+
 ## Sensor Coverage
 
 Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).

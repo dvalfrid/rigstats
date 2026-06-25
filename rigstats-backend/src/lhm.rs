@@ -29,6 +29,9 @@ pub struct LhmData {
   pub gpu_freq: Option<f64>,
   pub gpu_mem_freq: Option<f64>,
   pub gpu_power: Option<f64>,
+  /// Sum of power across all detected GPU devices. Use this for system-wide
+  /// power estimates; `gpu_power` is the selected GPU only.
+  pub total_gpu_power: Option<f64>,
   pub gpu_fan: Option<f64>,
   pub vram_used: Option<f64>,
   pub vram_total: Option<f64>,
@@ -501,6 +504,7 @@ fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
     gpu_freq: gpu.freq,
     gpu_mem_freq: gpu.mem_freq,
     gpu_power: gpu.power,
+    total_gpu_power: gpu.power,
     gpu_fan: gpu.fan,
     vram_used: gpu.vram_used,
     vram_total: gpu.vram_total,
@@ -1832,6 +1836,15 @@ impl SidecarPayload {
 
     let gpu = select_gpu_idx(&self.gpu_devices, preferred_gpu).map(|i| &self.gpu_devices[i]);
 
+    let total_gpu_power: Option<f64> = {
+      let powers: Vec<f64> = self
+        .gpu_devices
+        .iter()
+        .filter_map(|g| g.power.map(|v| v as f64))
+        .collect();
+      if powers.is_empty() { None } else { Some(powers.iter().sum()) }
+    };
+
     LhmData {
       gpu_name: gpu.map(|g| g.name.clone()),
       gpu_load: gpu.and_then(|g| g.load).map(|v| v as f64),
@@ -1840,6 +1853,7 @@ impl SidecarPayload {
       gpu_freq: gpu.and_then(|g| g.core_clock).map(|v| v as f64),
       gpu_mem_freq: gpu.and_then(|g| g.mem_clock).map(|v| v as f64),
       gpu_power: gpu.and_then(|g| g.power).map(|v| v as f64),
+      total_gpu_power,
       gpu_fan: gpu.and_then(|g| g.fan).map(|v| v as f64),
       vram_used: gpu.and_then(|g| g.vram_used_mb).map(|v| v as f64),
       vram_total: gpu.and_then(|g| g.vram_total_mb).map(|v| v as f64),

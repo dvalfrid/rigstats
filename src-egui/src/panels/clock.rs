@@ -2,7 +2,7 @@ use egui::{RichText, Ui};
 
 use crate::theme;
 
-pub(crate) fn format_uptime(secs: u64) -> String {
+pub fn format_uptime(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     let s = secs % 60;

@@ -8,6 +8,36 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.35.1](https://github.com/dvalfrid/rigstats/compare/v1.35.0...v1.35.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* **wallpaper:** bundle host exe in installer + guard against missing host ([474f95f](https://github.com/dvalfrid/rigstats/commit/474f95fde514931bd9288879be5bac5d87528b18)), closes [#136](https://github.com/dvalfrid/rigstats/issues/136)
+
+## [1.35.0](https://github.com/dvalfrid/rigstats/compare/v1.34.0...v1.35.0) (2026-06-24)
+
+
+### Features
+
+* **settings:** restructure into five tabs and clarify wallpaper mode ([d11d591](https://github.com/dvalfrid/rigstats/commit/d11d591e535a76fea6f4d21e15b20c773ec6b41b)), closes [#128](https://github.com/dvalfrid/rigstats/issues/128)
+* **wallpaper:** log host exit code so loader crashes show in diagnostics ([37fcba1](https://github.com/dvalfrid/rigstats/commit/37fcba11e73f7f8ec4234a17116620e651153200)), closes [#133](https://github.com/dvalfrid/rigstats/issues/133)
+* **window:** add desktop wallpaper (WorkerW) mode via host process ([37d29d3](https://github.com/dvalfrid/rigstats/commit/37d29d33f5b9e5e95c3e77c7557fd866842d8646)), closes [#122](https://github.com/dvalfrid/rigstats/issues/122)
+
+
+### Bug Fixes
+
+* **gpu:** read fan Control sensor (%) instead of Fan sensor (RPM) ([6a4a0ce](https://github.com/dvalfrid/rigstats/commit/6a4a0ce5c12990c4c10e5cb0a91f5881c7faf338)), closes [#119](https://github.com/dvalfrid/rigstats/issues/119)
+* **power:** sum all GPU powers for System Power GPU row ([e4a1bed](https://github.com/dvalfrid/rigstats/commit/e4a1bed292e32ae1f8297e4885ff37bc3346b1ea)), closes [#120](https://github.com/dvalfrid/rigstats/issues/120)
+* **settings:** disable wallpaper-incompatible controls ([9a34526](https://github.com/dvalfrid/rigstats/commit/9a345265de89230bfb37a31c228be4c95510583b)), closes [#124](https://github.com/dvalfrid/rigstats/issues/124)
+* **settings:** wrap wallpaper-save banner text within the panel ([acaa3b3](https://github.com/dvalfrid/rigstats/commit/acaa3b321bee57210233abbb3d702c221799107f)), closes [#130](https://github.com/dvalfrid/rigstats/issues/130)
+* **status:** show 'Wallpaper host' pipe state instead of red Disconnected ([fea4f1a](https://github.com/dvalfrid/rigstats/commit/fea4f1a40c3f34a9f0e5f67be1a4d2aba6298ae1)), closes [#134](https://github.com/dvalfrid/rigstats/issues/134)
+* **wallpaper:** apply display-profile change on Save via host relaunch ([7787c17](https://github.com/dvalfrid/rigstats/commit/7787c170d146e7ccbbc0c35be0dd038a45ec736e)), closes [#127](https://github.com/dvalfrid/rigstats/issues/127)
+* **wallpaper:** fit portrait host window to content height ([69a1177](https://github.com/dvalfrid/rigstats/commit/69a1177b868e417866689be17bcc6a850d4e87d3)), closes [#126](https://github.com/dvalfrid/rigstats/issues/126)
+* **wallpaper:** graceful host teardown + respawn backoff to stop 0xc0000142 storm ([be5143f](https://github.com/dvalfrid/rigstats/commit/be5143f03f180880950fb9b1f74454a15ba92911)), closes [#132](https://github.com/dvalfrid/rigstats/issues/132)
+* **window:** carry dashboard position across profile changes ([7755e1d](https://github.com/dvalfrid/rigstats/commit/7755e1d60e513ca9d6155c119b2a2c44e1ab7d8c)), closes [#125](https://github.com/dvalfrid/rigstats/issues/125)
+* **window:** fill the current monitor in Fill Screen mode ([0dafdb7](https://github.com/dvalfrid/rigstats/commit/0dafdb797731bf0f204057a9e2aa2bc0b6af63a3)), closes [#129](https://github.com/dvalfrid/rigstats/issues/129)
+
 ## [1.34.0](https://github.com/dvalfrid/rigstats/compare/v1.33.0...v1.34.0) (2026-06-22)
 
 

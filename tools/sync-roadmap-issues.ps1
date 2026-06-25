@@ -102,9 +102,12 @@ $features = @(
   @{ id="floating-mode-perf"; kind="planned"; label="enhancement"; title="Floating mode - reduce multi-window rendering cost";
      summary="Floating mode renders one OS viewport per panel via show_viewport_immediate, so cost scales with panel count. Investigate deferred viewports and skipping unchanged panels. Target: idle CPU within ~2x of fixed mode.";
      status="Planned" }
-  @{ id="desktop-background-l2"; kind="planned"; label="enhancement"; title="Desktop background - Level 2 (WorkerW)";
-     summary="True wallpaper-layer mode that reparents into the Progman/WorkerW hierarchy so the dashboard lives between wallpaper and icons and survives Win+D. Relies on undocumented Windows internals and needs Explorer-restart handling plus input forwarding.";
-     status="Planned" }
+  @{ id="desktop-background-l2"; kind="done"; label="enhancement"; title="Desktop background - Level 2 (WorkerW)";
+     summary="True wallpaper-layer mode (Settings -> Window Layer -> Desktop Wallpaper). A separate rigstats-wallpaper host process reparents into the Progman/WorkerW hierarchy so the dashboard lives between wallpaper and icons and survives Win+D; the main app supervises it (relaunch on Explorer restart) and pauses its own polling to hand the sensor pipe over. Display-only in v1.";
+     status="Shipped" }
+  @{ id="desktop-background-we-hosted"; kind="planned"; label="enhancement"; title="Desktop background - WE Application wallpaper"; milestone="v3.0";
+     summary="Ship the rigstats-wallpaper host as a Wallpaper Engine Application wallpaper so WE handles the WorkerW reparenting, multi-monitor placement and Explorer-restart recovery. Adds a 32-bit build of the host (WE requires a 32-bit single-window app) and a hosted launch mode that fills the rect WE assigns. WE-owners only; mutually exclusive with the built-in WorkerW mode.";
+     status="Planned (3.0)" }
   @{ id="streamdeck"; kind="planned"; label="enhancement"; title="Stream Deck integration"; milestone="v3.0";
      summary="Display live hardware stats (CPU/GPU load/temp, VRAM, fan RPM) on Stream Deck keys directly over USB HID via the elgato-streamdeck crate - no Elgato software or HTTP server. Opt-in; requires the Elgato app not be running.";
      status="Planned (3.0)" }

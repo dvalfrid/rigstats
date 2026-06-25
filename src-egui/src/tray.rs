@@ -9,7 +9,7 @@ use tray_icon::{
 };
 
 /// Commands sent from the tray-polling thread to the UI thread.
-pub(crate) enum TrayCmd {
+pub enum TrayCmd {
     OpenSettings,
     OpenAbout,
     OpenStatus,
@@ -18,15 +18,15 @@ pub(crate) enum TrayCmd {
     ToggleRecording,
 }
 
-pub(crate) struct Tray {
+pub struct Tray {
     icon: tray_icon::TrayIcon,
-    pub(crate) settings_id: tray_icon::menu::MenuId,
-    pub(crate) about_id: tray_icon::menu::MenuId,
-    pub(crate) status_id: tray_icon::menu::MenuId,
-    pub(crate) updater_id: tray_icon::menu::MenuId,
-    pub(crate) quit_id: tray_icon::menu::MenuId,
-    pub(crate) floating_id: tray_icon::menu::MenuId,
-    pub(crate) recording_id: tray_icon::menu::MenuId,
+    pub settings_id: tray_icon::menu::MenuId,
+    pub about_id: tray_icon::menu::MenuId,
+    pub status_id: tray_icon::menu::MenuId,
+    pub updater_id: tray_icon::menu::MenuId,
+    pub quit_id: tray_icon::menu::MenuId,
+    pub floating_id: tray_icon::menu::MenuId,
+    pub recording_id: tray_icon::menu::MenuId,
     recording_item: tray_icon::menu::MenuItem,
 }
 
@@ -38,7 +38,7 @@ fn load_tray_icon() -> Icon {
 }
 
 /// Load tray.png as egui IconData for dialog viewport windows.
-pub(crate) fn load_app_icon() -> egui::IconData {
+pub fn load_app_icon() -> egui::IconData {
     let bytes = include_bytes!("../../assets/tray.png");
     let img = image::load_from_memory(bytes).expect("tray.png").to_rgba8();
     let (w, h) = img.dimensions();
@@ -49,7 +49,7 @@ pub(crate) fn load_app_icon() -> egui::IconData {
     }
 }
 
-pub(crate) fn build_tray(logging_enabled: bool) -> Tray {
+pub fn build_tray(logging_enabled: bool) -> Tray {
     let floating_item = MenuItem::new("Toggle Floating Mode", true, None);
     let recording_label = if logging_enabled {
         "Stop Recording"
@@ -118,7 +118,7 @@ pub(crate) fn build_tray(logging_enabled: bool) -> Tray {
 }
 
 impl Tray {
-    pub(crate) fn set_recording(&self, enabled: bool) {
+    pub fn set_recording(&self, enabled: bool) {
         let label = if enabled {
             "Stop Recording"
         } else {
@@ -148,7 +148,7 @@ impl Tray {
 
 // ── Panel helpers ─────────────────────────────────────────────────────────────
 
-pub(crate) fn panel_label(key: &str) -> &'static str {
+pub fn panel_label(key: &str) -> &'static str {
     match key {
         "header" => "Header",
         "clock" => "Clock",
@@ -166,7 +166,7 @@ pub(crate) fn panel_label(key: &str) -> &'static str {
 }
 
 /// Initial window height estimate for a panel (content + frame inner margin 16 px).
-pub(crate) fn panel_initial_h(key: &str) -> f32 {
+pub fn panel_initial_h(key: &str) -> f32 {
     match key {
         "header" | "clock" => theme::PANEL_HEADER_H + 16.0,
         _ => theme::PANEL_DATA_H + 16.0,

@@ -23,6 +23,11 @@ pub struct StatusState {
     pub log: String,
     pub service_running: bool,
     pub pipe_connected: bool,
+    /// True when the app is in Desktop Wallpaper mode: the main app pauses its
+    /// poll loop and releases the sensor pipe so the wallpaper host owns it, so
+    /// `pipe_connected` is legitimately false here. The Pipe row reflects that
+    /// the host owns the pipe instead of showing a misleading red "Disconnected".
+    pub wallpaper_active: bool,
     pub wmi_ok: bool,
     pub log_path: String,
     pub last_refresh: String,
@@ -30,7 +35,7 @@ pub struct StatusState {
 }
 
 impl StatusState {
-    pub fn load(dir: &std::path::Path, pipe_connected: bool) -> Self {
+    pub fn load(dir: &std::path::Path, pipe_connected: bool, wallpaper_active: bool) -> Self {
         let log_path = dir.join("rigstats-debug.log");
         let log = std::fs::read_to_string(&log_path)
             .unwrap_or_else(|_| "(log file not found)".to_string());
@@ -38,6 +43,7 @@ impl StatusState {
             log,
             service_running: query_service_running(),
             pipe_connected,
+            wallpaper_active,
             wmi_ok: hardware::probe_wmi_status().is_ok(),
             log_path: log_path.display().to_string(),
             last_refresh: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -54,6 +60,7 @@ impl StatusState {
             log: "(loading…)".to_string(),
             service_running: false,
             pipe_connected: false,
+            wallpaper_active: false,
             wmi_ok: false,
             log_path: String::new(),
             last_refresh: String::new(),
@@ -70,13 +77,14 @@ pub fn spawn_load(
     refreshing: Arc<AtomicBool>,
     dir: PathBuf,
     pipe_connected: bool,
+    wallpaper_active: bool,
     ctx: egui::Context,
 ) {
     if refreshing.swap(true, Ordering::Relaxed) {
         return;
     }
     std::thread::spawn(move || {
-        let loaded = StatusState::load(&dir, pipe_connected);
+        let loaded = StatusState::load(&dir, pipe_connected, wallpaper_active);
         *state.lock_safe() = loaded;
         refreshing.store(false, Ordering::Relaxed);
         ctx.request_repaint();
@@ -220,11 +228,14 @@ fn render_diagnostics(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState)
                         .strong()
                         .color(svc_color),
                 );
-                let pipe_color = if state.pipe_connected { C_GOOD } else { C_BAD };
-                let pipe_text = if state.pipe_connected {
-                    "Connected"
+                let (pipe_text, pipe_color) = if state.wallpaper_active {
+                    // Desktop Wallpaper mode: the main app released the pipe to the
+                    // wallpaper host on purpose — not an error.
+                    ("Wallpaper host", C_GOOD)
+                } else if state.pipe_connected {
+                    ("Connected", C_GOOD)
                 } else {
-                    "Disconnected"
+                    ("Disconnected", C_BAD)
                 };
                 ui.label(
                     egui::RichText::new(pipe_text)
@@ -681,6 +692,7 @@ pub fn show(
     collecting: &Arc<AtomicBool>,
     dir: &Arc<PathBuf>,
     pipe_connected: bool,
+    wallpaper_active: bool,
     dc: &DialogColors,
 ) {
     dc.apply_to_ctx(ctx);
@@ -792,6 +804,7 @@ pub fn show(
             refreshing.clone(),
             dir.as_ref().clone(),
             pipe_connected,
+            wallpaper_active,
             main_ctx.clone(),
         );
     }

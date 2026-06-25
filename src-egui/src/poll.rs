@@ -7,6 +7,7 @@ use crate::lock_ext::LockSafe;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
@@ -48,6 +49,7 @@ pub struct PollStats {
     pub gpu_vram_used_mb: Option<f64>,
     pub gpu_vram_total_mb: Option<f64>,
     pub gpu_power: Option<f64>,
+    pub total_gpu_power: Option<f64>,
     pub gpu_fan: Option<f64>,
     pub gpu_d3d_3d: Option<f64>,
     pub gpu_d3d_vdec: Option<f64>,
@@ -199,11 +201,12 @@ fn poll_stats_to_log_payload(s: &PollStats) -> rigstats_backend::stats::StatsPay
 
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
-pub(crate) async fn poll_loop(
+pub async fn poll_loop(
     tx: mpsc::SyncSender<PollStats>,
     dir: PathBuf,
     preferred_gpu: Arc<Mutex<Option<String>>>,
     settings_arc: Arc<Mutex<settings::Settings>>,
+    paused: Arc<AtomicBool>,
 ) {
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
@@ -277,6 +280,18 @@ pub(crate) async fn poll_loop(
     let mut first_tick_logged = false;
 
     loop {
+        // Paused (the main app is in wallpaper mode): release the sensor pipe so
+        // the wallpaper host process can own it (it accepts one client at a time)
+        // and skip the whole tick to save CPU. The host does the polling instead.
+        if paused.load(Ordering::Relaxed) {
+            {
+                let mut p = pipe.lock().await;
+                *p = None;
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
         sys.refresh_specifics(
             RefreshKind::new()
                 .with_cpu(CpuRefreshKind::new().with_cpu_usage().with_frequency())
@@ -506,6 +521,7 @@ pub(crate) async fn poll_loop(
             gpu_vram_used_mb: lhm_data.as_ref().and_then(|l| l.vram_used),
             gpu_vram_total_mb: lhm_data.as_ref().and_then(|l| l.vram_total),
             gpu_power: lhm_data.as_ref().and_then(|l| l.gpu_power),
+            total_gpu_power: lhm_data.as_ref().and_then(|l| l.total_gpu_power),
             gpu_fan: lhm_data.as_ref().and_then(|l| l.gpu_fan),
             gpu_d3d_3d: lhm_data.as_ref().and_then(|l| l.gpu_d3d_3d),
             gpu_d3d_vdec: lhm_data.as_ref().and_then(|l| l.gpu_d3d_vdec),

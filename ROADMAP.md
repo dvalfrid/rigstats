@@ -26,7 +26,8 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Fullscreen (fill-screen) mode for dedicated monitors | ✅ Done |
 | Floating panel groups | 🔲 Planned (3.0) |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
-| Desktop background — Level 2 (WorkerW) | 🔲 Planned |
+| Desktop background — Level 2 (WorkerW) | ✅ Done |
+| Desktop background — WE Application wallpaper | 🔲 Planned (3.0) |
 | Total system power consumption | ✅ Done (v1.34) |
 | Stream Deck integration | 🔲 Planned (3.0) |
 | Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
@@ -82,6 +83,7 @@ script to refresh it.
 | [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
 | [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
 | [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
+| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | ✅ Done |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | ✅ Done |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
@@ -91,9 +93,9 @@ script to refresh it.
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | 🔲 Planned |
-| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
+| [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -372,6 +374,14 @@ the warn threshold must be *above* the crit threshold (e.g. warn at 20 %, crit a
 Validation enforces this constraint in `save_settings`. Default thresholds: warn 20 %, crit 10 %.
 Warning-level notifications are permanently disabled (`notify_on_warn` is always
 sent as `false`); only Critical alerts have a user-visible toggle.
+
+> **Update (egui rewrite):** the Settings dialog was later reimplemented natively
+> in egui and restructured into **five** tabs — **Display** (display profile,
+> window layer + opacity, floating mode + panel scale, fill screen + alignment),
+> **Panels**, **Alerts**, **Appearance** (model name + theme), and **General**
+> (launch at startup, stats logging). In Desktop Wallpaper mode no-op controls grey
+> out, the Display Profile is locked, and changes apply on Save (see the Desktop
+> background mode section below).
 
 ---
 
@@ -712,65 +722,65 @@ call `apply_window_layer` on each panel window at creation and on every sync.
 
 ---
 
-## Desktop background mode — Level 2 (WorkerW) 🔲
+## Desktop background mode — Level 2 (WorkerW) ✅
 
-**Panel:** Main window + floating panels
+**Panel:** Main window
 **Data source:** No new data required
 
 Makes the dashboard a true part of the wallpaper layer — living between the
 desktop wallpaper and the desktop icons. Survives `Win+D`, is never covered by
 any normal window, and appears below even desktop icons. This is the technique
-used by Wallpaper Engine and similar tools.
+used by Wallpaper Engine and Lively. Selected via **Settings → Window Layer →
+Desktop Wallpaper**.
 
-**Pros:**
+**Implementation (separate host process):**
 
-- Genuinely part of the background — survives `Win+D`, screen switches, and
-  window maximize/fullscreen operations
-- Never accidentally visible above game fullscreen windows (unlike HWND_BOTTOM
-  which can flicker)
-- Dashboard is accessible without any window management — it is always "there"
+The single-process `SetParent`-into-WorkerW approach is unsafe: a child window is
+destroyed when its parent is, cross-process included, so an Explorer restart
+(Windows update, Explorer crash, sleep/display change) would destroy the
+reparented window and kill the app. Instead a dedicated **`rigstats-wallpaper`**
+host process owns the wallpaper window:
 
-**Cons:**
+1. The main `rigstats` app, on entering wallpaper mode, parks its own window
+   off-screen, **pauses its sensor polling** (releasing the single-client sensor
+   pipe), and spawns + supervises the host. It relaunches the host if it exits
+   and kills it on leaving the mode or quitting.
+2. The host finds the desktop `WorkerW` (on Windows 11 a child of `Progman`;
+   on older Windows 10 the top-level sibling created by
+   `SendMessageTimeout(Progman, 0x052C)`), reparents its borderless window into
+   it via `SetParent`, and re-attaches each tick if Explorer rebuilds the
+   hierarchy. The host exits if its parent PID disappears, so it never orphans.
+3. Both binaries share the panel renderer (`DashboardView`) from the
+   `rigstats-egui` library, so the wallpaper looks identical to the dashboard.
 
-- Relies on undocumented Windows internals: finding the `WorkerW` child of
-  `Progman` via `SendMessageTimeout(0x052C)` and reparenting into it. Microsoft
-  could remove or change this behaviour in any Windows update
-- When Explorer crashes and restarts, the WorkerW hierarchy is rebuilt —
-  the dashboard process must detect this (via `WM_SHELLHOOKMESSAGE` or polling)
-  and re-parent itself
-- WebView2 as a child of WorkerW has known rendering edge cases: some GPU
-  compositing modes draw incorrectly, and hardware-accelerated WebView2 may
-  not composite cleanly in the wallpaper layer
-- Mouse input is not forwarded to WorkerW children by default — click-through
-  to the desktop is expected, but interactive elements (GPU selector dots,
-  drag handles) would stop working unless the window is temporarily un-parented
-- Incompatible with floating panel mode (each floating window would need its own
-  WorkerW reparenting and input-forwarding solution)
-- Significantly harder to test across Windows 10 / 11 versions
+This split also gives crash isolation (a WorkerW compositing fault takes down only
+the renderer) and produces the single-window host artifact that the planned
+Wallpaper Engine integration reuses.
 
-**Architecture:**
+**v1 scope — display-only:** no `WH_MOUSE_LL` mouse hook. Drag/padlock are N/A in
+wallpaper mode; GPU selection uses **Settings → preferred GPU**. Mutually
+exclusive with floating mode (floating wins if both are set). An interactive
+Phase B (in-panel clicks via a low-level mouse hook) can follow as a separate
+feature.
 
-On mode activation, the app:
+**Files:** `src-egui/src/win32_wallpaper.rs` (Progman/WorkerW discovery,
+`SetParent`, attach/detach/parent-liveness), `src-egui/src/bin/wallpaper.rs` (the
+host), `src-egui/src/dashboard.rs` (shared `DashboardView`), supervisor in
+`src-egui/src/main.rs`.
 
-1. Sends `SendMessageTimeout(progman_hwnd, 0x052C, 0, 0, ...)` to Progman to
-   force creation of the split `WorkerW` sibling
-2. Enumerates top-level windows to find the `WorkerW` that sits *behind* the
-   desktop icon layer (identified by checking for a `SHELLDLL_DefView` child)
-3. Calls `SetParent(dashboard_hwnd, workerview_hwnd)` to reparent the window
-4. Subscribes to shell hook messages to detect Explorer restarts and re-parent
+## Desktop background mode — WE Application wallpaper 🔲
 
-Input handling: because WorkerW does not relay mouse events, a separate
-`WH_MOUSE_LL` low-level hook captures clicks in the dashboard's bounding rect
-and injects them directly via `PostMessage`.
+**Panel:** Main window
+**Data source:** No new data required
 
-**Scope:**
-
-- Win32 interop in `windows.rs`: Progman discovery, WorkerW enumeration,
-  `SetParent`, shell hook registration
-- Explorer restart watchdog (polling or `WM_SHELLHOOKMESSAGE`)
-- Low-level mouse hook for interactive elements in wallpaper mode
-- Settings toggle (mutually exclusive with floating mode)
-- Comprehensive testing on Windows 10 21H2, Windows 11 22H2 and 24H2
+Optional alternative to the built-in WorkerW mode for users who own
+[Wallpaper Engine](https://www.wallpaperengine.io/): ship `rigstats-wallpaper` as
+a WE **Application wallpaper** so WE handles the WorkerW reparenting, multi-monitor
+placement and Explorer-restart recovery. The host binary built for Level 2 is
+already the right artifact; this milestone adds a **32-bit build** of it (WE
+requires a 32-bit single-window app) and a hosted launch mode that fills the rect
+WE assigns instead of auto-targeting a monitor. WE-owners only; the two background
+modes are mutually exclusive (both target the same desktop layer). Target: **v3.0**.
 
 ---
 

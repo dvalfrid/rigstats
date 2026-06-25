@@ -63,7 +63,7 @@ pub fn draw(
         } else {
             DESKTOP_REFERENCE_W
         });
-        let est = estimate_total(stats.cpu_power, stats.gpu_power, is_laptop);
+        let est = estimate_total(stats.cpu_power, stats.total_gpu_power, is_laptop);
         let has_data = est.is_some();
         let (total_w, cpu_w, gpu_w, other_w, complete) = est.unwrap_or((0.0, 0.0, 0.0, 0.0, false));
 
@@ -123,15 +123,15 @@ pub fn draw(
             let other_frac = (other_w / total_w) as f32;
 
             let cpu_lbl = theme::avail_color(&stats.cpu_power, th.stat_label);
-            let gpu_lbl = theme::avail_color(&stats.gpu_power, th.stat_label);
+            let gpu_lbl = theme::avail_color(&stats.total_gpu_power, th.stat_label);
             let cpu_val = theme::avail_color(&stats.cpu_power, theme::C_TEXT);
-            let gpu_val = theme::avail_color(&stats.gpu_power, theme::C_TEXT);
+            let gpu_val = theme::avail_color(&stats.total_gpu_power, theme::C_TEXT);
 
             let cpu_s = stats
                 .cpu_power
                 .map_or("-- W".to_string(), |w| format!("{w:.0} W"));
             let gpu_s = stats
-                .gpu_power
+                .total_gpu_power
                 .map_or("-- W".to_string(), |w| format!("{w:.0} W"));
             let other_s = format!("~{other_w:.0} W");
 

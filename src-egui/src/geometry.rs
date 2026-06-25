@@ -6,7 +6,7 @@
 
 use crate::theme;
 
-pub(crate) fn profile_to_size(profile: &str) -> [f32; 2] {
+pub fn profile_to_size(profile: &str) -> [f32; 2] {
     match profile {
         "portrait-xl" => [450.0, 1920.0],
         "portrait-slim" => [480.0, 1920.0],
@@ -45,13 +45,13 @@ pub(crate) fn profile_to_size(profile: &str) -> [f32; 2] {
 
 /// True when the profile is a landscape (wide) layout. Landscape profiles use a
 /// `landscape-` key prefix and render panels in a grid rather than a vertical stack.
-pub(crate) fn profile_is_landscape(profile: &str) -> bool {
+pub fn profile_is_landscape(profile: &str) -> bool {
     profile.starts_with("landscape-")
 }
 
 /// Content scale for a profile. Uses portrait-xl (450 px) as the 1.0 reference.
 /// Narrow profiles (side panels) scale down; wider profiles stay at 1.0.
-pub(crate) fn profile_scale(profile: &str) -> f32 {
+pub fn profile_scale(profile: &str) -> f32 {
     const REF_W: f32 = 450.0;
     (profile_to_size(profile)[0] / REF_W).clamp(0.4, 1.0)
 }
@@ -60,7 +60,7 @@ pub(crate) fn profile_scale(profile: &str) -> f32 {
 ///
 /// Values are calibrated estimates (content + frame inner margin 16 px).
 /// Fine-tune by measuring actual rendered heights in the live app.
-pub(crate) fn compute_window_height(visible_panels: &[String], sc: f32) -> f32 {
+pub fn compute_window_height(visible_panels: &[String], sc: f32) -> f32 {
     // panel_frame inner_margin: Margin::symmetric(12, 8) → 8 top + 8 bottom = 16 px.
     const V_MARGIN: f32 = 16.0;
     let header_h = (theme::PANEL_HEADER_H + V_MARGIN) * sc;
@@ -80,7 +80,7 @@ pub(crate) fn compute_window_height(visible_panels: &[String], sc: f32) -> f32 {
 // ── Windows monitor enumeration ───────────────────────────────────────────────
 
 #[cfg(windows)]
-pub(crate) mod win_monitor {
+pub mod win_monitor {
     use winapi::shared::minwindef::LPARAM;
     use winapi::shared::windef::{HDC, HMONITOR, LPRECT};
     use winapi::um::shellscalingapi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
@@ -130,7 +130,7 @@ pub(crate) mod win_monitor {
 
 /// Returns the (x, y) top-left position to center a window of `w × h` on the
 /// first landscape monitor (or first monitor if all are portrait).
-pub(crate) fn dialog_center(w: f32, h: f32) -> [f32; 2] {
+pub fn dialog_center(w: f32, h: f32) -> [f32; 2] {
     #[cfg(windows)]
     {
         let monitors = win_monitor::list();
@@ -151,7 +151,7 @@ pub(crate) fn dialog_center(w: f32, h: f32) -> [f32; 2] {
 /// overhang so a panel that straddles a monitor edge is still considered visible),
 /// otherwise returns `fallback`.  Call this before applying a saved floating-panel
 /// position so panels that were left on a disconnected monitor snap back on-screen.
-pub(crate) fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
+pub fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     #[cfg(windows)]
     {
         if position_on_any_monitor(pos, &win_monitor::list()) {
@@ -177,12 +177,41 @@ fn position_on_any_monitor(pos: [f32; 2], monitors: &[(i32, i32, i32, i32)]) -> 
     })
 }
 
+/// Returns the rect `[x, y, w, h]` of the monitor that contains `pos`, or `None`
+/// when `pos` is off every monitor (or on non-Windows). Used by fill-screen mode
+/// to fill the monitor the window currently sits on rather than the
+/// profile-matching one.
+pub fn monitor_rect_at(pos: [f32; 2]) -> Option<[f32; 4]> {
+    #[cfg(windows)]
+    {
+        monitor_containing_point(pos, &win_monitor::list())
+            .map(|(l, t, r, b)| [l as f32, t as f32, (r - l) as f32, (b - t) as f32])
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pos;
+        None
+    }
+}
+
+/// Pure: the monitor in `monitors` whose bounds contain `pos`, if any. Strict
+/// containment (no overhang margin) so the window's own top-left corner resolves
+/// to exactly the screen it sits on. Split out for unit testing.
+fn monitor_containing_point(
+    pos: [f32; 2],
+    monitors: &[(i32, i32, i32, i32)],
+) -> Option<(i32, i32, i32, i32)> {
+    monitors.iter().copied().find(|&(l, t, r, b)| {
+        pos[0] >= l as f32 && pos[0] < r as f32 && pos[1] >= t as f32 && pos[1] < b as f32
+    })
+}
+
 /// Pure decision for where a pinned dashboard should be placed.
 ///
 /// Returns the saved position only when the dashboard is `pinned`, a position is
 /// `saved` for the current profile, and that position is still on a connected
 /// monitor; otherwise `None`, so the caller auto-targets the matching monitor.
-pub(crate) fn resolve_pinned_position(
+pub fn resolve_pinned_position(
     pinned: bool,
     saved: Option<[i32; 2]>,
     monitors: &[(i32, i32, i32, i32)],
@@ -203,7 +232,7 @@ pub(crate) fn resolve_pinned_position(
 /// the window goes to the **primary** monitor (top-left at the virtual origin) so
 /// e.g. a 1080×253 profile lands on the main screen rather than a 1920×450 strip.
 /// Falls back to the first monitor, then `[0, 0, 0, 0]`.
-pub(crate) fn pick_window_rect_for_profile(profile: &str) -> [f32; 4] {
+pub fn pick_window_rect_for_profile(profile: &str) -> [f32; 4] {
     #[cfg(windows)]
     {
         let [pw, ph] = profile_to_size(profile);
@@ -267,50 +296,11 @@ fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -
     }
 }
 
-/// Returns `[x, y, w, h]` (logical pixels) for the best monitor matching the
-/// dashboard `orientation`. For portrait targets, prefers a portrait monitor
-/// (height > width); for landscape targets, prefers a landscape monitor
-/// (width >= height). Falls back to the first monitor, then `[0, 0, 0, 0]`.
-fn pick_window_rect_for(landscape: bool) -> [f32; 4] {
-    #[cfg(windows)]
-    {
-        let monitors = win_monitor::list();
-        let picked = monitors
-            .iter()
-            .find(|&&(l, t, r, b)| {
-                if landscape {
-                    (r - l) >= (b - t)
-                } else {
-                    (b - t) > (r - l)
-                }
-            })
-            .or_else(|| monitors.first());
-        if let Some(&(l, t, r, b)) = picked {
-            return [l as f32, t as f32, (r - l) as f32, (b - t) as f32];
-        }
-    }
-    #[cfg(not(windows))]
-    let _ = landscape;
-    [0.0, 0.0, 0.0, 0.0]
-}
-
-/// Returns `[x, y, w, h]` for the best portrait monitor (back-compat helper).
-pub(crate) fn pick_window_rect() -> [f32; 4] {
-    pick_window_rect_for(false)
-}
-
-/// Returns (x, y) position for the window — top-left of the best portrait monitor.
-/// Falls back to (0, 0) if no portrait monitor is found or on non-Windows.
-pub(crate) fn pick_window_position() -> [f32; 2] {
-    let [x, y, _, _] = pick_window_rect();
-    [x, y]
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
-        select_profile_monitor,
+        monitor_containing_point, position_on_any_monitor, profile_is_landscape, profile_to_size,
+        resolve_pinned_position, select_profile_monitor,
     };
 
     #[test]
@@ -390,6 +380,46 @@ mod tests {
     fn profile_monitor_empty_is_none() {
         let [w, h] = profile_to_size("landscape-xl");
         assert_eq!(select_profile_monitor(&[], w, h), None);
+    }
+
+    #[test]
+    fn portrait_side_profile_prefers_matching_strip() {
+        // Primary 2560x1440 at origin + a 338x1440 portrait side-strip at (2560,0).
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 2898, 1440)];
+        // portrait-qhd-side is 338x1440 → must pick the side-strip (index 1), so a
+        // side profile lands on the strip that matches it, not the main screen.
+        let [w, h] = profile_to_size("portrait-qhd-side");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(1));
+    }
+
+    #[test]
+    fn portrait_profile_falls_back_to_primary_when_no_match() {
+        // Same layout; a full portrait-fhd (1080x1920) matches neither screen, so it
+        // must land on the primary monitor (index 0), NOT the small side-strip — the
+        // old behaviour (any portrait monitor) wrongly sent it to the strip.
+        let monitors = [(0, 0, 2560, 1440), (2560, 0, 2898, 1440)];
+        let [w, h] = profile_to_size("portrait-fhd");
+        assert_eq!(select_profile_monitor(&monitors, w, h), Some(0));
+    }
+
+    #[test]
+    fn monitor_containing_point_strict_containment() {
+        // Primary at origin + a small portrait strip to the left at negative x.
+        let monitors = [(0, 0, 2560, 1440), (-450, 0, 0, 1920)];
+        // A window on the small left strip resolves to that monitor (index 1).
+        assert_eq!(
+            monitor_containing_point([-200.0, 300.0], &monitors),
+            Some((-450, 0, 0, 1920))
+        );
+        // A window on the primary resolves to the primary.
+        assert_eq!(
+            monitor_containing_point([100.0, 100.0], &monitors),
+            Some((0, 0, 2560, 1440))
+        );
+        // Off every monitor → None (no overhang margin, unlike position_on_any_monitor).
+        assert_eq!(monitor_containing_point([5000.0, 100.0], &monitors), None);
+        // Empty monitor list → None.
+        assert_eq!(monitor_containing_point([0.0, 0.0], &[]), None);
     }
 
     #[test]
