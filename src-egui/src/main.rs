@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use eframe::egui;
 use rigstats_backend::{debug, logging, settings};
-use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
+use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -11,9 +11,8 @@ use rigstats_egui::geometry::{
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
-use rigstats_egui::spark::Sparkline;
 use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
-use rigstats_egui::{brand, panels, theme, update_check, windows, PollStats};
+use rigstats_egui::{panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
 use std::cell::RefCell;
@@ -32,21 +31,13 @@ fn app_data_dir() -> PathBuf {
 // ── eframe application ────────────────────────────────────────────────────────
 
 struct RigStatsApp {
+    runtime: DashboardRuntime,
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
-    latest: PollStats,
-    visible_panels: Vec<String>,
     opacity: f32,
     /// Cached from settings — "on_top", "behind", or "normal".
     window_layer: String,
     tray: Tray,
-    // Sparklines
-    cpu_spark: Sparkline,
-    gpu_spark: Sparkline,
-    net_up_spark: Sparkline,
-    net_dn_spark: Sparkline,
-    // Brand textures (loaded once at startup)
-    textures: brand::Textures,
     // Secondary windows
     settings_open: Arc<AtomicBool>,
     about_open: Arc<AtomicBool>,
@@ -127,12 +118,6 @@ struct RigStatsApp {
     behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     floating_mode_arc: Arc<AtomicBool>,
-    /// Live thresholds for temperature colour coding — updated on settings reload.
-    thresholds: PanelThresholds,
-    /// User-specified PSU wattage for the System Power panel bar scale.
-    psu_watts: Option<u16>,
-    /// Active panel theme derived from `Settings.theme`.
-    app_theme: theme::AppTheme,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
@@ -195,15 +180,14 @@ struct BehindEnforce {
 impl RigStatsApp {
     #[allow(clippy::too_many_arguments)]
     fn new(
+        runtime: DashboardRuntime,
         receiver: mpsc::Receiver<PollStats>,
         tray_rx: mpsc::Receiver<TrayCmd>,
-        visible_panels: Vec<String>,
         opacity: f32,
         tray: Tray,
         current_settings: Arc<Mutex<settings::Settings>>,
         settings_reload: Arc<AtomicBool>,
         dir: Arc<PathBuf>,
-        textures: brand::Textures,
         preferred_gpu: Arc<Mutex<Option<String>>>,
         floating_mode_arc: Arc<AtomicBool>,
         updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
@@ -218,18 +202,12 @@ impl RigStatsApp {
             .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
             .collect();
         Self {
+            runtime,
             receiver,
             tray_rx,
-            latest: PollStats::default(),
-            visible_panels,
             opacity,
             window_layer: init_settings.window_layer.clone(),
             tray,
-            cpu_spark: Sparkline::new(60),
-            gpu_spark: Sparkline::new(60),
-            net_up_spark: Sparkline::new(60),
-            net_dn_spark: Sparkline::new(60),
-            textures,
             settings_open: Arc::new(AtomicBool::new(false)),
             about_open: Arc::new(AtomicBool::new(false)),
             status_open: Arc::new(AtomicBool::new(false)),
@@ -267,9 +245,6 @@ impl RigStatsApp {
             panels_positioned: HashSet::new(),
             behind_enforce: RefCell::new(HashMap::new()),
             floating_mode_arc,
-            thresholds: PanelThresholds::from_settings(&init_settings),
-            psu_watts: init_settings.psu_watts,
-            app_theme: theme::AppTheme::from_key(&init_settings.theme),
             os_dark_mode: {
                 #[cfg(windows)]
                 {
@@ -626,35 +601,24 @@ impl eframe::App for RigStatsApp {
         }
 
         // Pull latest stats from poll thread; push to sparklines only on new data.
-        while let Ok(stats) = self.receiver.try_recv() {
-            let cpu_v = stats.cpu_load as f32;
-            let gpu_v = stats.gpu_load.unwrap_or(0.0) as f32;
-            let nu_v = stats.net_up_mbps as f32;
-            let nd_v = stats.net_down_mbps as f32;
-            self.cpu_spark.push(cpu_v);
-            self.gpu_spark.push(gpu_v);
-            self.net_up_spark.push(nu_v);
-            self.net_dn_spark.push(nd_v);
-            self.latest = stats;
-        }
+        self.runtime.drain(&self.receiver);
 
         // Apply settings saved from the settings window.
         if self.settings_reload.swap(false, Ordering::Relaxed) {
             let s = self.current_settings.lock_safe();
-            let prev_visible = self.visible_panels.clone();
-            self.visible_panels = s.visible_panels.clone();
+            let prev_visible = self.runtime.visible_panels.clone();
+            let panels_changed = self.runtime.apply_settings(&s);
             // Any panel that was visible before but is now hidden must be removed
             // from panels_positioned so its saved position is re-applied when it
             // reappears (e.g. after cancel reverts a live preview toggle).
-            for key in &prev_visible {
-                if !self.visible_panels.contains(key) {
-                    self.panels_positioned.remove(key);
+            if panels_changed {
+                for key in &prev_visible {
+                    if !self.runtime.visible_panels.contains(key) {
+                        self.panels_positioned.remove(key);
+                    }
                 }
             }
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
-            self.thresholds = PanelThresholds::from_settings(&s);
-            self.psu_watts = s.psu_watts;
-            self.app_theme = theme::AppTheme::from_key(&s.theme);
             self.window_layer = s.window_layer.clone();
             let was_floating = self.floating_mode;
             self.floating_mode = s.floating_mode;
@@ -774,7 +738,7 @@ impl eframe::App for RigStatsApp {
                         self.status_win.clone(),
                         self.status_refreshing.clone(),
                         self.dir.as_ref().clone(),
-                        self.latest.lhm_connected,
+                        self.runtime.latest.lhm_connected,
                         self.wallpaper_active,
                         ui.ctx().clone(),
                     );
@@ -980,7 +944,7 @@ impl eframe::App for RigStatsApp {
             let [px, py] = dialog_center(680.0, 720.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
-            let lhm_connected = self.latest.lhm_connected;
+            let lhm_connected = self.runtime.latest.lhm_connected;
             let wallpaper_active = self.wallpaper_active;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
@@ -1251,7 +1215,7 @@ impl eframe::App for RigStatsApp {
             // hovering the strip (so it is discoverable).
             if pinned || drag_resp.hovered() || padlock_resp.hovered() {
                 let color = if pinned {
-                    self.app_theme.accent
+                    self.runtime.app_theme.accent
                 } else if padlock_resp.hovered() {
                     egui::Color32::from_gray(210)
                 } else {
@@ -1261,7 +1225,7 @@ impl eframe::App for RigStatsApp {
             }
 
             // Panels in the order defined by visible_panels (respects user reordering).
-            let panels_to_draw = self.visible_panels.clone();
+            let panels_to_draw = self.runtime.visible_panels.clone();
             let profile = self.current_settings.lock_safe().dashboard_profile.clone();
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
@@ -1457,20 +1421,8 @@ impl RigStatsApp {
         }
     }
 
-    /// Build a borrowed [`DashboardView`] over this frame's render state, shared
-    /// with the `rigstats-wallpaper` host so the panel layout lives in one place.
     fn view(&self) -> DashboardView<'_> {
-        DashboardView {
-            latest: &self.latest,
-            cpu_spark: &self.cpu_spark,
-            gpu_spark: &self.gpu_spark,
-            net_up_spark: &self.net_up_spark,
-            net_dn_spark: &self.net_dn_spark,
-            textures: &self.textures,
-            app_theme: &self.app_theme,
-            thresholds: &self.thresholds,
-            psu_watts: self.psu_watts,
-        }
+        self.runtime.view()
     }
 
     /// Draw a single panel via the shared [`DashboardView`], then consume the
@@ -1533,7 +1485,7 @@ impl RigStatsApp {
                 .unwrap_or([mx, my, _mw, mh]);
             ([m[0], m[1]], [w, m[3]])
         } else {
-            let h = compute_window_height(&self.visible_panels, profile_scale(profile));
+            let h = compute_window_height(&self.runtime.visible_panels, profile_scale(profile));
             ([mx, my], [w, h])
         };
         // Pinned override: keep the computed size but restore the saved position
@@ -1586,8 +1538,8 @@ impl RigStatsApp {
 
         let opacity = self.opacity;
 
-        for idx in 0..self.visible_panels.len() {
-            let key = self.visible_panels[idx].clone();
+        for idx in 0..self.runtime.visible_panels.len() {
+            let key = self.runtime.visible_panels[idx].clone();
 
             let init_pos: [f32; 2] = {
                 let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
@@ -1631,13 +1583,13 @@ impl RigStatsApp {
             let behind_enforce = &self.behind_enforce;
             let new_pref_arc = &self.float_new_pref_gpu;
             let lock_arc = &self.floating_lock_arc;
-            let stats = &self.latest;
-            let cspark = &self.cpu_spark;
-            let gspark = &self.gpu_spark;
-            let nuspark = &self.net_up_spark;
-            let ndspark = &self.net_dn_spark;
-            let tex = &self.textures;
-            let app_theme = self.app_theme;
+            let stats = &self.runtime.latest;
+            let cspark = &self.runtime.cpu_spark;
+            let gspark = &self.runtime.gpu_spark;
+            let nuspark = &self.runtime.net_up_spark;
+            let ndspark = &self.runtime.net_dn_spark;
+            let tex = &self.runtime.textures;
+            let app_theme = self.runtime.app_theme;
             let float_update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
                 let st = self.updater_win.lock_safe();
@@ -1766,8 +1718,8 @@ impl RigStatsApp {
                                     cspark,
                                     tex,
                                     1.0,
-                                    self.thresholds.cpu.0,
-                                    self.thresholds.cpu.1,
+                                    self.runtime.thresholds.cpu.0,
+                                    self.runtime.thresholds.cpu.1,
                                     &app_theme,
                                     scale,
                                 ),
@@ -1779,10 +1731,10 @@ impl RigStatsApp {
                                         tex,
                                         1.0,
                                         &app_theme,
-                                        self.thresholds.gpu.0,
-                                        self.thresholds.gpu.1,
-                                        self.thresholds.gpu_hotspot.0,
-                                        self.thresholds.gpu_hotspot.1,
+                                        self.runtime.thresholds.gpu.0,
+                                        self.runtime.thresholds.gpu.1,
+                                        self.runtime.thresholds.gpu_hotspot.0,
+                                        self.runtime.thresholds.gpu_hotspot.1,
                                         scale,
                                     );
                                     new_pref = r.0;
@@ -1792,8 +1744,8 @@ impl RigStatsApp {
                                     ui,
                                     stats,
                                     1.0,
-                                    self.thresholds.ram.0,
-                                    self.thresholds.ram.1,
+                                    self.runtime.thresholds.ram.0,
+                                    self.runtime.thresholds.ram.1,
                                     &app_theme,
                                     scale,
                                 ),
@@ -1804,8 +1756,8 @@ impl RigStatsApp {
                                     ui,
                                     stats,
                                     1.0,
-                                    self.thresholds.disk.0,
-                                    self.thresholds.disk.1,
+                                    self.runtime.thresholds.disk.0,
+                                    self.runtime.thresholds.disk.1,
                                     &app_theme,
                                     scale,
                                 ),
@@ -1813,8 +1765,8 @@ impl RigStatsApp {
                                     ui,
                                     stats,
                                     1.0,
-                                    self.thresholds.mb.0,
-                                    self.thresholds.mb.1,
+                                    self.runtime.thresholds.mb.0,
+                                    self.runtime.thresholds.mb.1,
                                     &app_theme,
                                     scale,
                                 ),
@@ -1827,7 +1779,7 @@ impl RigStatsApp {
                                     1.0,
                                     &app_theme,
                                     scale,
-                                    self.psu_watts,
+                                    self.runtime.psu_watts,
                                 ),
                                 "battery" => panels::battery::draw(
                                     ui,
@@ -1835,10 +1787,10 @@ impl RigStatsApp {
                                     1.0,
                                     &app_theme,
                                     scale,
-                                    self.thresholds.battery.0,
-                                    self.thresholds.battery.1,
-                                    self.thresholds.battery_power.0,
-                                    self.thresholds.battery_power.1,
+                                    self.runtime.thresholds.battery.0,
+                                    self.runtime.thresholds.battery.1,
+                                    self.runtime.thresholds.battery_power.0,
+                                    self.runtime.thresholds.battery_power.1,
                                 ),
                                 _ => egui::Rect::NOTHING,
                             };
@@ -2195,7 +2147,7 @@ fn main() {
             let current_settings = current_settings_shared;
             let settings_reload = Arc::new(AtomicBool::new(false));
             let dir_arc = Arc::new(dir.clone());
-            let textures = brand::Textures::load(&cc.egui_ctx);
+            let dashboard_runtime = DashboardRuntime::new(&cc.egui_ctx, &s);
 
             // Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
             // active.  With `show_viewport_immediate`, all panels are rendered
@@ -2303,15 +2255,14 @@ fn main() {
             }
 
             Ok(Box::new(RigStatsApp::new(
+                dashboard_runtime,
                 rx,
                 tray_rx,
-                visible_panels,
                 opacity,
                 tray,
                 current_settings,
                 settings_reload,
                 dir_arc,
-                textures,
                 preferred_gpu_arc,
                 fm_arc_hb,
                 updater_win_bg,

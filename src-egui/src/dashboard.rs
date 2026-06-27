@@ -1,16 +1,16 @@
 //! Shared dashboard render core.
 //!
-//! [`DashboardView`] is a lightweight borrow of the non-floating render state
-//! (latest stats, sparklines, textures, theme, thresholds) plus the
-//! panel-drawing methods shared by the main `rigstats` app and the
-//! `rigstats-wallpaper` host. Both binaries own the underlying data and build a
-//! `DashboardView` to render a frame, so the panel layout lives in exactly one
-//! place. See `docs/architecture.md`.
+//! [`DashboardRuntime`] owns the telemetry→renderer glue (sparklines, theme,
+//! thresholds, textures) shared by both binaries. [`DashboardView`] is a
+//! lightweight borrow over that state used for a single render frame. Both
+//! types live here so the panel layout and runtime wiring are in one place.
+//! See `docs/architecture.md`.
 
 use crate::spark::Sparkline;
 use crate::{brand, panels, theme, PollStats};
 use eframe::egui;
 use rigstats_backend::settings;
+use std::sync::mpsc;
 
 /// Per-component warn/crit thresholds (°C) used for temperature colour coding.
 #[derive(Clone)]
@@ -285,5 +285,78 @@ impl DashboardView<'_> {
         let total_h = n_rows as f32 * cell_h + (n_rows as f32 - 1.0) * gap;
         ui.allocate_space(egui::vec2(avail_w, total_h));
         new_pref
+    }
+}
+
+/// Owned runtime state shared by both binaries: the telemetry→renderer glue
+/// that wires sparklines, theme, thresholds, and textures to [`DashboardView`].
+/// Both `RigStatsApp` and `WallpaperHost` embed one instance; each keeps only
+/// its own shell concerns (dialogs/tray vs. WorkerW attach).
+pub struct DashboardRuntime {
+    pub latest: PollStats,
+    pub cpu_spark: Sparkline,
+    pub gpu_spark: Sparkline,
+    pub net_up_spark: Sparkline,
+    pub net_dn_spark: Sparkline,
+    pub textures: brand::Textures,
+    pub app_theme: theme::AppTheme,
+    pub thresholds: PanelThresholds,
+    pub psu_watts: Option<u16>,
+    pub visible_panels: Vec<String>,
+}
+
+impl DashboardRuntime {
+    pub fn new(ctx: &egui::Context, s: &settings::Settings) -> Self {
+        Self {
+            latest: PollStats::default(),
+            cpu_spark: Sparkline::new(60),
+            gpu_spark: Sparkline::new(60),
+            net_up_spark: Sparkline::new(60),
+            net_dn_spark: Sparkline::new(60),
+            textures: brand::Textures::load(ctx),
+            app_theme: theme::AppTheme::from_key(&s.theme),
+            thresholds: PanelThresholds::from_settings(s),
+            psu_watts: s.psu_watts,
+            visible_panels: s.visible_panels.clone(),
+        }
+    }
+
+    /// Drain pending [`PollStats`] from `rx` into the sparklines and `latest`.
+    pub fn drain(&mut self, rx: &mpsc::Receiver<PollStats>) {
+        while let Ok(stats) = rx.try_recv() {
+            self.cpu_spark.push(stats.cpu_load as f32);
+            self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
+            self.net_up_spark.push(stats.net_up_mbps as f32);
+            self.net_dn_spark.push(stats.net_down_mbps as f32);
+            self.latest = stats;
+        }
+    }
+
+    /// Apply a new settings snapshot. Returns `true` if `visible_panels`
+    /// changed (callers may need to invalidate cached panel-height state).
+    pub fn apply_settings(&mut self, s: &settings::Settings) -> bool {
+        self.app_theme = theme::AppTheme::from_key(&s.theme);
+        self.thresholds = PanelThresholds::from_settings(s);
+        self.psu_watts = s.psu_watts;
+        let panels_changed = self.visible_panels != s.visible_panels;
+        if panels_changed {
+            self.visible_panels = s.visible_panels.clone();
+        }
+        panels_changed
+    }
+
+    /// Build a borrowed [`DashboardView`] for the current frame.
+    pub fn view(&self) -> DashboardView<'_> {
+        DashboardView {
+            latest: &self.latest,
+            cpu_spark: &self.cpu_spark,
+            gpu_spark: &self.gpu_spark,
+            net_up_spark: &self.net_up_spark,
+            net_dn_spark: &self.net_dn_spark,
+            textures: &self.textures,
+            app_theme: &self.app_theme,
+            thresholds: &self.thresholds,
+            psu_watts: self.psu_watts,
+        }
     }
 }

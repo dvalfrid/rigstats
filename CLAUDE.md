@@ -105,7 +105,7 @@ Cargo workspace with two members:
 | Crate | Path | Role |
 |---|---|---|
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — telemetry, hardware detection, settings, logging |
-| `rigstats-egui` | `src-egui/` | egui library (`lib.rs`) + two binaries: `rigstats` (main app) and `rigstats-wallpaper` (WorkerW host). Both share `dashboard::DashboardView`. |
+| `rigstats-egui` | `src-egui/` | egui library (`lib.rs`) + two binaries: `rigstats` (main app) and `rigstats-wallpaper` (WorkerW host). Both embed `dashboard::DashboardRuntime` and render via `dashboard::DashboardView`. |
 
 Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts one client at a time — in wallpaper mode only the host polls; the main app pauses its `poll_loop` via `poll_paused`.
 
@@ -113,7 +113,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 
 - **`lib.rs`** — library root; re-exports all modules so both binaries share the same panel renderer
 - **`main.rs`** — `RigStatsApp`/`eframe::App`: frame loop, settings reload, secondary viewports, panel rendering, wallpaper-mode supervisor (`update_wallpaper_mode`)
-- **`dashboard.rs`** — `DashboardView<'a>`: shared render core (both binaries); `PanelThresholds` (warn/crit pairs)
+- **`dashboard.rs`** — `DashboardRuntime`: owned telemetry→renderer glue (sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView<'a>`: borrowed per-frame render state; `PanelThresholds` (warn/crit pairs)
 - **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
 - **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types

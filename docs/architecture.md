@@ -26,7 +26,7 @@ The repository is a Cargo workspace with two members:
 | Crate | Path | Role |
 | --- | --- | --- |
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — all backend modules, no framework coupling |
-| `rigstats-egui` | `src-egui/` | egui library + two binaries: `rigstats` (main app — panels, tray, settings windows) and `rigstats-wallpaper` (the WorkerW desktop-wallpaper host process). Both share the panel renderer (`dashboard::DashboardView`) |
+| `rigstats-egui` | `src-egui/` | egui library + two binaries: `rigstats` (main app — panels, tray, settings windows) and `rigstats-wallpaper` (the WorkerW desktop-wallpaper host process). Both embed `dashboard::DashboardRuntime` and render via `dashboard::DashboardView` |
 
 ### Layered separation: shared core, swappable shell
 
@@ -38,16 +38,18 @@ rigstats-sensor.exe   ── Sensor   (separate .NET process, named pipe)
         │
 rigstats-backend      ── Backend  (hardware, settings, logging, lhm pipe)
    poll.rs            ── poll_loop (the ~1 Hz telemetry loop)          ← shared
-   dashboard.rs       ── DashboardView (the panel render core)         ← shared
+   dashboard.rs       ── DashboardRuntime (telemetry glue) + DashboardView (render core) ← shared
         │
    ┌────┴───────────────────────────┐
 rigstats (main.rs)            rigstats-wallpaper (bin/wallpaper.rs)
 RigStatsApp shell             WallpaperHost shell
 ```
 
-Both binaries link the same library and render through the **same**
-`DashboardView`, driven by the **same** `poll_loop` — so the wallpaper host is
-not a fork of the dashboard, it is the *same* dashboard with a different shell.
+Both binaries link the same library, embed the same `DashboardRuntime` (which
+owns sparklines, theme, thresholds, textures, and the `drain`/`view` wiring),
+and render through the same `DashboardView` driven by the same `poll_loop` —
+so the wallpaper host is not a fork of the dashboard, it is the *same*
+dashboard with a different shell.
 
 What differs between the two is only the **app shell**, and the difference is
 deliberate (not historical):
@@ -63,12 +65,10 @@ destroyed when Explorer restarts, which must never be allowed to take the main
 app down with it. So the two shells cannot be collapsed into one process; the
 boundary is a correctness requirement (see *Desktop wallpaper mode* below).
 
-> **Known duplication / planned cleanup.** The two shells currently each carry a
-> near-identical copy of the *runtime glue* that wires telemetry to the renderer
-> — `latest`/sparklines/`textures`/`thresholds`, the receiver-drain loop, the
-> `view()` builder, and the settings→theme/threshold mapping. Extracting this
-> into a shared `DashboardRuntime` (embedded by both shells) is tracked in
-> **issue #135**; it would make "swap the shell, share everything else" literal.
+The telemetry→renderer glue that was previously duplicated across both shells
+(sparklines, theme, thresholds, textures, `drain()`, `view()`, settings
+mapping) now lives in a single `DashboardRuntime` struct (issue #135). Each
+shell embeds one instance and keeps only its own concerns on top.
 
 ---
 
@@ -176,7 +176,7 @@ rig-dashboard/
 | `lib.rs` | Shared library root — declares + re-exports the modules below so both bins link them |
 | `main.rs` | `rigstats` bin: eframe `run_native`, `RigStatsApp` + `eframe::App` impl, panel rendering, wallpaper-mode supervisor |
 | `bin/wallpaper.rs` | `rigstats-wallpaper` bin: minimal eframe host that renders the dashboard into the desktop WorkerW layer |
-| `dashboard.rs` | Shared `DashboardView` (borrowed render state + `draw_one_panel`/`render_landscape_grid`) and `PanelThresholds` |
+| `dashboard.rs` | `DashboardRuntime` (owned telemetry→renderer glue: sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView` (borrowed per-frame render state + `draw_one_panel`/`render_landscape_grid`); `PanelThresholds` |
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping; pauses (releases the sensor pipe) when the main app is in wallpaper mode |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |

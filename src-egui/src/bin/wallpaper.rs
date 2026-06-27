@@ -14,14 +14,13 @@
 
 use eframe::egui;
 use rigstats_backend::{debug, settings};
-use rigstats_egui::dashboard::{DashboardView, PanelThresholds};
+use rigstats_egui::dashboard::DashboardRuntime;
 use rigstats_egui::geometry::{
     compute_window_height, guard_panel_position, pick_window_rect_for_profile,
     profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::poll::poll_loop;
-use rigstats_egui::spark::Sparkline;
-use rigstats_egui::{brand, theme, PollStats};
+use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_wallpaper, win_opacity};
 use std::path::PathBuf;
@@ -39,17 +38,8 @@ fn app_data_dir() -> PathBuf {
 }
 
 struct WallpaperHost {
+    runtime: DashboardRuntime,
     receiver: mpsc::Receiver<PollStats>,
-    latest: PollStats,
-    cpu_spark: Sparkline,
-    gpu_spark: Sparkline,
-    net_up_spark: Sparkline,
-    net_dn_spark: Sparkline,
-    textures: brand::Textures,
-    app_theme: theme::AppTheme,
-    thresholds: PanelThresholds,
-    psu_watts: Option<u16>,
-    visible_panels: Vec<String>,
     profile: String,
     opacity: f32,
     dir: PathBuf,
@@ -72,26 +62,6 @@ struct WallpaperHost {
 }
 
 impl WallpaperHost {
-    fn view(&self) -> DashboardView<'_> {
-        DashboardView {
-            latest: &self.latest,
-            cpu_spark: &self.cpu_spark,
-            gpu_spark: &self.gpu_spark,
-            net_up_spark: &self.net_up_spark,
-            net_dn_spark: &self.net_dn_spark,
-            textures: &self.textures,
-            app_theme: &self.app_theme,
-            thresholds: &self.thresholds,
-            psu_watts: self.psu_watts,
-        }
-    }
-
-    /// Re-read settings from disk (the main app persists them there) so theme,
-    /// panels, thresholds and opacity stay live. A profile change (which alters
-    /// the window size, orientation and target monitor) is applied by exiting so
-    /// the supervisor relaunches a fresh host for the new profile — reading disk
-    /// means we only ever see the profile after it is **saved**, not during live
-    /// preview, which matches wallpaper mode's "applies on Save" contract.
     /// Reload settings from disk and apply live changes. Returns `true` when the
     /// host should shut down (the profile changed → relaunch for the new size, or
     /// the user left wallpaper mode). The caller closes the window via
@@ -120,11 +90,7 @@ impl WallpaperHost {
             );
             return true;
         }
-        self.app_theme = theme::AppTheme::from_key(&s.theme);
-        self.thresholds = PanelThresholds::from_settings(&s);
-        self.psu_watts = s.psu_watts;
-        if self.visible_panels != s.visible_panels {
-            self.visible_panels = s.visible_panels.clone();
+        if self.runtime.apply_settings(&s) {
             // Panel set changed → portrait content height changed; force a re-fit.
             self.last_fitted_height = None;
         }
@@ -183,13 +149,7 @@ impl eframe::App for WallpaperHost {
         }
 
         // Drain new stats into the sparklines.
-        while let Ok(stats) = self.receiver.try_recv() {
-            self.cpu_spark.push(stats.cpu_load as f32);
-            self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
-            self.net_up_spark.push(stats.net_up_mbps as f32);
-            self.net_dn_spark.push(stats.net_down_mbps as f32);
-            self.latest = stats;
-        }
+        self.runtime.drain(&self.receiver);
 
         // Live settings refresh (~1 Hz). A true return means we should shut down
         // (profile changed, or wallpaper mode was left) — close cleanly so wgpu
@@ -214,13 +174,13 @@ impl eframe::App for WallpaperHost {
 
         // Render the dashboard filling the window (no drag handle in wallpaper
         // mode — it is display-only).
-        let panels = self.visible_panels.clone();
+        let panels = self.runtime.visible_panels.clone();
         if profile_is_landscape(&self.profile) {
-            self.view().render_landscape_grid(ui, &panels, None);
+            self.runtime.view().render_landscape_grid(ui, &panels, None);
         } else {
             let sc = profile_scale(&self.profile);
             for panel in &panels {
-                self.view().draw_one_panel(ui, panel, sc, None);
+                self.runtime.view().draw_one_panel(ui, panel, sc, None);
                 ui.add_space((6.0 * sc).round());
             }
             // Fit the window height to the rendered portrait content so no black
@@ -330,10 +290,6 @@ fn main() {
         ..Default::default()
     };
 
-    let thresholds = PanelThresholds::from_settings(&s);
-    let visible_panels = s.visible_panels.clone();
-    let theme_key = s.theme.clone();
-    let psu_watts = s.psu_watts;
     // `dir` is moved into the eframe closure (the host owns it); keep a copy for
     // logging the run result after run_native returns.
     let log_dir = dir.clone();
@@ -361,17 +317,8 @@ fn main() {
             });
 
             let host = WallpaperHost {
+                runtime: DashboardRuntime::new(&cc.egui_ctx, &s),
                 receiver: rx,
-                latest: PollStats::default(),
-                cpu_spark: Sparkline::new(60),
-                gpu_spark: Sparkline::new(60),
-                net_up_spark: Sparkline::new(60),
-                net_dn_spark: Sparkline::new(60),
-                textures: brand::Textures::load(&cc.egui_ctx),
-                app_theme: theme::AppTheme::from_key(&theme_key),
-                thresholds,
-                psu_watts,
-                visible_panels,
                 profile,
                 opacity,
                 dir,
