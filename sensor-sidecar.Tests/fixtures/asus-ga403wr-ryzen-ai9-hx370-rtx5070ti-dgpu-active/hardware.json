@@ -1,0 +1,60 @@
+{
+    "cpu":  [
+                {
+                    "threads":  24,
+                    "name":  "AMD Ryzen AI 9 HX 370 w/ Radeon 890M           ",
+                    "cores":  12
+                }
+            ],
+    "board":  {
+                  "bbProd":  "GA403WR",
+                  "csModel":  "ROG Zephyrus G14 GA403WR_GA403WR",
+                  "csMfr":  "ASUSTeK COMPUTER INC."
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  1024203640320,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "WD PC SN5000S SDEQNSJ-1T00-1002"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "AMD Radeon(TM) 890M Graphics",
+                    "driver":  "32.0.21036.1002",
+                    "ramBytes":  536870912
+                },
+                {
+                    "name":  "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+                    "driver":  "32.0.16.1062",
+                    "ramBytes":  4293918720
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  8000,
+                    "capBytes":  8589934592,
+                    "speed":  8000
+                },
+                {
+                    "configured":  8000,
+                    "capBytes":  8589934592,
+                    "speed":  8000
+                },
+                {
+                    "configured":  8000,
+                    "capBytes":  8589934592,
+                    "speed":  8000
+                },
+                {
+                    "configured":  8000,
+                    "capBytes":  8589934592,
+                    "speed":  8000
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Home",
+               "build":  "26200",
+               "version":  "10.0.26200"
+           }
+}

@@ -1,0 +1,44 @@
+{
+  "cpu_temp": 73.25001,
+  "cpu_power": 27.27806,
+  "gpu_devices": [
+    {
+      "name": "AMD Radeon(TM) 890M Graphics",
+      "sensor_family": "gpu-amd",
+      "load": 22,
+      "temp": 63,
+      "hotspot_temp": null,
+      "core_clock": 1571,
+      "mem_clock": 1000,
+      "power": 8,
+      "fan": null,
+      "vram_used_mb": 302,
+      "vram_total_mb": 512,
+      "d3d_3d": 8.823448,
+      "d3d_vdec": 0
+    },
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+      "sensor_family": "gpu-nvidia",
+      "load": 0,
+      "temp": 58.8125,
+      "hotspot_temp": null,
+      "core_clock": 337,
+      "mem_clock": 9001,
+      "power": 20.541,
+      "fan": null,
+      "vram_used_mb": 283,
+      "vram_total_mb": 12227,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "WD PC SN5000S SDEQNSJ-1T00-1002": 73.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}
