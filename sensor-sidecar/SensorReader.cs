@@ -81,11 +81,18 @@ public static class SensorReader
         foreach (var s in hw.Sensors)
         {
             if (s.Value is null) continue;
+            // A literal 0 here means the SMU couldn't be read (seen on some AMD
+            // Zen/Zen+ board/driver combos) rather than a real reading — treat it
+            // as unavailable, same threshold as ExtractMotherboard's temp filter.
             if (s.SensorType == SensorType.Temperature && CpuTempNames.Contains(s.Name))
-                temp = s.Value;
+            {
+                if (s.Value >= 5) temp = s.Value;
+            }
             else if (s.SensorType == SensorType.Power &&
                      (s.Name == "CPU Package" || s.Name == "Package"))
-                power = s.Value;
+            {
+                if (s.Value > 0) power = s.Value;
+            }
         }
     }
 

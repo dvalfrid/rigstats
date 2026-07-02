@@ -1,6 +1,6 @@
 {
-  "cpu_temp": 0,
-  "cpu_power": 0,
+  "cpu_temp": null,
+  "cpu_power": null,
   "gpu_devices": [
     {
       "name": "NVIDIA GeForce GTX 1070",
