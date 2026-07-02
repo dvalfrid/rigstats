@@ -1,0 +1,70 @@
+{
+    "cpu":  [
+                {
+                    "threads":  12,
+                    "name":  "AMD Ryzen 5 2600 Six-Core Processor            ",
+                    "cores":  6
+                }
+            ],
+    "board":  {
+                  "bbProd":  "PRIME B450M-A",
+                  "csModel":  "System Product Name",
+                  "csMfr":  "System manufacturer"
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  320070320640,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "Hitachi HTS545032B9SA02"
+                 },
+                 {
+                     "sizeBytes":  250048512000,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "Samsung SSD 850 EVO 250GB"
+                 },
+                 {
+                     "sizeBytes":  500097024000,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "SAMSUNG HD501LJ"
+                 },
+                 {
+                     "sizeBytes":  256052966400,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "SAMSUNG MZVLW256HEHP-000H1"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "NVIDIA GeForce GTX 1070",
+                    "driver":  "32.0.15.6094",
+                    "ramBytes":  4293918720
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  1200,
+                    "capBytes":  8589934592,
+                    "speed":  2400
+                },
+                {
+                    "configured":  1200,
+                    "capBytes":  8589934592,
+                    "speed":  2400
+                },
+                {
+                    "configured":  1200,
+                    "capBytes":  8589934592,
+                    "speed":  2400
+                },
+                {
+                    "configured":  1200,
+                    "capBytes":  8589934592,
+                    "speed":  2400
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 10 Pro",
+               "build":  "19045",
+               "version":  "10.0.19045"
+           }
+}

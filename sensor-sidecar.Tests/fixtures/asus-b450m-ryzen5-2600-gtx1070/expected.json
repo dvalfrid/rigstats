@@ -1,0 +1,29 @@
+{
+  "cpu_temp": 0,
+  "cpu_power": 0,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce GTX 1070",
+      "sensor_family": "gpu-nvidia",
+      "load": 1,
+      "temp": 39,
+      "hotspot_temp": 50.40625,
+      "core_clock": 139,
+      "mem_clock": 405,
+      "power": 13.914,
+      "fan": 0,
+      "vram_used_mb": 672,
+      "vram_total_mb": 8192,
+      "d3d_3d": 0.9874116,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "SAMSUNG MZVLW256HEHP-000H1": 42.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}

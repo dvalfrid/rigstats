@@ -1,0 +1,11 @@
+{
+  "slug": "asus-b450m-ryzen5-2600-gtx1070",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1783009834,
+  "rigstats_version": "1.35.1",
+  "os": "Microsoft Windows 10 Pro (build 19045)",
+  "notes": "AMD Ryzen 5 2600 (Zen+) on ASUS PRIME B450M-A, single NVIDIA GTX 1070 dGPU. All CPU SMU sensors (Tctl/Tdie temp, package power, per-core clocks) report val=0 — LHM cannot read Zen+ SMU data on this board/driver combo, a genuine zero-sensor tree rather than a truncated one. 4x SATA/NVMe drives (Hitachi HDD, Samsung 850 EVO, Samsung HD501LJ, Samsung NVMe).",
+  "anonymized": true,
+  "gpu_driver": "32.0.15.6094"
+}
