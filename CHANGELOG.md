@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.35.2](https://github.com/dvalfrid/rigstats/compare/v1.35.1...v1.35.2) (2026-07-02)
+
+
+### Bug Fixes
+
+* **header:** stop hostname text from crowding the brand logo ([410318a](https://github.com/dvalfrid/rigstats/commit/410318a27e8f4d698a1f75b7a3a8c9689c9014b2)), closes [#146](https://github.com/dvalfrid/rigstats/issues/146)
+* **sidecar:** treat CPU temp/power of 0 as unavailable ([f9c60ff](https://github.com/dvalfrid/rigstats/commit/f9c60ff9e7fcf35db1c95935ca4eb873bcdf88c2)), closes [#148](https://github.com/dvalfrid/rigstats/issues/148)
+
 ## [1.35.1](https://github.com/dvalfrid/rigstats/compare/v1.35.0...v1.35.1) (2026-06-24)
 
 
