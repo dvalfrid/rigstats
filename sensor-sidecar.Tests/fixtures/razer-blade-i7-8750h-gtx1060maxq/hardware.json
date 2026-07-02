@@ -1,0 +1,50 @@
+{
+    "cpu":  [
+                {
+                    "threads":  12,
+                    "name":  "Intel(R) Core(TM) i7-8750H CPU @ 2.20GHz",
+                    "cores":  6
+                }
+            ],
+    "board":  {
+                  "bbProd":  "C1_MB",
+                  "csModel":  "Blade",
+                  "csMfr":  "Razer"
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  512105932800,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "SAMSUNG MZVLB512HAJQ-00000"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "Intel(R) UHD Graphics 630",
+                    "driver":  "23.20.16.4974",
+                    "ramBytes":  1073741824
+                },
+                {
+                    "name":  "NVIDIA GeForce GTX 1060 with Max-Q Design",
+                    "driver":  "32.0.15.8228",
+                    "ramBytes":  4293918720
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  2667,
+                    "capBytes":  8589934592,
+                    "speed":  2667
+                },
+                {
+                    "configured":  2667,
+                    "capBytes":  8589934592,
+                    "speed":  2667
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Home",
+               "build":  "26200",
+               "version":  "10.0.26200"
+           }
+}

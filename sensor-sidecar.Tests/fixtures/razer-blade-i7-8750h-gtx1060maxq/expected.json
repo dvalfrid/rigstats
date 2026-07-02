@@ -1,0 +1,44 @@
+{
+  "cpu_temp": 64,
+  "cpu_power": 19.913967,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+      "sensor_family": "gpu-nvidia",
+      "load": 0,
+      "temp": 52,
+      "hotspot_temp": 58.65625,
+      "core_clock": 139,
+      "mem_clock": 405,
+      "power": 5.036,
+      "fan": null,
+      "vram_used_mb": 113,
+      "vram_total_mb": 6144,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    },
+    {
+      "name": "Intel(R) UHD Graphics 630",
+      "sensor_family": "gpu-intel-integrated",
+      "load": null,
+      "temp": null,
+      "hotspot_temp": null,
+      "core_clock": null,
+      "mem_clock": null,
+      "power": 9.072823,
+      "fan": null,
+      "vram_used_mb": null,
+      "vram_total_mb": null,
+      "d3d_3d": 96.350815,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "SAMSUNG MZVLB512HAJQ-00000": 52.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}

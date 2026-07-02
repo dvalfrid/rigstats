@@ -1,0 +1,12 @@
+{
+  "slug": "razer-blade-i7-8750h-gtx1060maxq",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1782997332,
+  "rigstats_version": "1.35.1",
+  "os": "Microsoft Windows 11 Home (build 26200)",
+  "notes": "Razer Blade laptop with Optimus hybrid graphics: Intel UHD Graphics 630 (iGPU) + NVIDIA GeForce GTX 1060 Max-Q (dGPU), both present in the tree. Intel Core i7-8750H (6C/12T). 2x8GB DDR4-2667 SODIMM (Samsung). NVMe (Samsung MZVLB512HAJQ).",
+  "anonymized": true,
+  "gpu_driver": "32.0.15.8228",
+  "gpu_state": "all-active"
+}
