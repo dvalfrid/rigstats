@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<XML_DIZ_INFO>
+	<MASTER_PAD_VERSION_INFO>
+		<MASTER_PAD_VERSION>4.0</MASTER_PAD_VERSION>
+		<MASTER_PAD_EDITOR>RIGStats release process</MASTER_PAD_EDITOR>
+		<MASTER_PAD_INFO>https://www.asp-shareware.org/pad/</MASTER_PAD_INFO>
+	</MASTER_PAD_VERSION_INFO>
+
+	<Company_Info>
+		<Company_Name>Daniel Valfridsson</Company_Name>
+		<Address_1></Address_1>
+		<Address_2></Address_2>
+		<City_Town></City_Town>
+		<State_Province></State_Province>
+		<Zip_Postal_Code></Zip_Postal_Code>
+		<Country>Sweden</Country>
+		<Company_WebSite_URL>https://rigstats.app</Company_WebSite_URL>
+		<Contact_Name>Daniel Valfridsson</Contact_Name>
+		<Contact_Email>daniel@valfridsson.net</Contact_Email>
+		<Support_Email>daniel@valfridsson.net</Support_Email>
+		<Sales_Email></Sales_Email>
+		<Other_Contact_Email></Other_Contact_Email>
+		<Author_Alias>dvalfrid</Author_Alias>
+	</Company_Info>
+
+	<Program_Info>
+		<Program_Name>RIGStats</Program_Name>
+		<Program_Version>1.35.2</Program_Version>
+		<Program_Release_Month>07</Program_Release_Month>
+		<Program_Release_Day>02</Program_Release_Day>
+		<Program_Release_Year>2026</Program_Release_Year>
+		<Program_Cost_Dollars>0</Program_Cost_Dollars>
+		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
+		<Program_Type>Freeware</Program_Type>
+		<Program_Release_Status>Minor Update</Program_Release_Status>
+		<Program_Install_Support>Install and Uninstall</Program_Install_Support>
+		<Program_OS_Support>
+			<Win_All>No</Win_All>
+			<Win2000>No</Win2000>
+			<WinXP>No</WinXP>
+			<Win7_x32>No</Win7_x32>
+			<Win7_x64>No</Win7_x64>
+			<Win8_x32>No</Win8_x32>
+			<Win8_x64>No</Win8_x64>
+			<Win10_x32>No</Win10_x32>
+			<Win10_x64>Yes</Win10_x64>
+			<Win11>Yes</Win11>
+			<WinServer>No</WinServer>
+			<WinOther>No</WinOther>
+			<WinMobile>No</WinMobile>
+		</Program_OS_Support>
+		<Program_Language>English</Program_Language>
+		<Character_Set>Unicode</Character_Set>
+		<Program_Categories>System Utilities::System Information</Program_Categories>
+		<Program_Specific_Category>System Info</Program_Specific_Category>
+		<Program_Change_Info>Bug fixes: hostname text no longer crowds the brand logo in the header; CPU temperature/power readings of 0 are now treated as unavailable instead of shown as real values.</Program_Change_Info>
+		<File_Size_Bytes>37497168</File_Size_Bytes>
+		<File_Size_K>36618</File_Size_K>
+		<File_Size_MB>36</File_Size_MB>
+		<Minimum_RAM_Required></Minimum_RAM_Required>
+		<Minimum_Hard_Disk_Space></Minimum_Hard_Disk_Space>
+		<Minimum_Processor_Required></Minimum_Processor_Required>
+	</Program_Info>
+
+	<Program_Descriptions>
+		<English>
+			<Keywords>hardware monitor, system monitor, CPU temperature, GPU temperature, sensor overlay, wallpaper monitor, LibreHardwareMonitor, gaming PC dashboard, RAM usage, disk monitor</Keywords>
+			<Char_Desc_45>Real-time hardware monitor for Windows PCs</Char_Desc_45>
+			<Char_Desc_80>Lightweight overlay: CPU, GPU, RAM, disk, network &amp; power telemetry.</Char_Desc_80>
+			<Char_Desc_250>RIGStats is a lightweight, open-source hardware monitoring dashboard for Windows. It displays real-time telemetry for your entire rig - CPU, GPU, RAM, storage, network and system power - in a clean, always-visible overlay.</Char_Desc_250>
+			<Char_Desc_450>RIGStats is a lightweight, open-source hardware monitoring dashboard for Windows. It displays real-time telemetry for your entire rig - CPU, GPU, RAM, storage, network and system power - in a clean, always-visible overlay. Features sparkline panels, portrait/landscape profiles, wallpaper mode, floating overlay, Fill Screen mode, auto-updater, and a bundled sensor service powered by LibreHardwareMonitor.</Char_Desc_450>
+			<Char_Desc_2000>RIGStats is a lightweight, open-source hardware monitoring dashboard for Windows. It displays real-time telemetry for your entire rig - CPU, GPU, RAM, storage, network and system power - in a clean, always-visible overlay. Features sparkline panels, portrait/landscape profiles, wallpaper mode, floating overlay, Fill Screen mode, auto-updater, and a bundled sensor service powered by LibreHardwareMonitor. Requires Windows 10 or 11 (64-bit). Free and open source, no telemetry, no bloat.</Char_Desc_2000>
+			<Char_Desc_2500>RIGStats is a lightweight, open-source hardware monitoring dashboard for Windows. It displays real-time telemetry for your entire rig - CPU, GPU, RAM, storage, network and system power - in a clean, always-visible overlay. Features sparkline panels, portrait/landscape profiles, wallpaper mode, floating overlay, Fill Screen mode, auto-updater, and a bundled sensor service powered by LibreHardwareMonitor. Requires Windows 10 or 11 (64-bit). Free and open source, no telemetry, no bloat.</Char_Desc_2500>
+			<Char_Desc_4000>RIGStats is a lightweight, open-source hardware monitoring dashboard for Windows. It displays real-time telemetry for your entire rig - CPU, GPU, RAM, storage, network and system power - in a clean, always-visible overlay. Features sparkline panels, portrait/landscape profiles, wallpaper mode, floating overlay, Fill Screen mode, auto-updater, and a bundled sensor service powered by LibreHardwareMonitor. Requires Windows 10 or 11 (64-bit). Free and open source, no telemetry, no bloat.</Char_Desc_4000>
+		</English>
+	</Program_Descriptions>
+
+	<Web_Info>
+		<Application_URLs>
+			<Application_Info_URL>https://rigstats.app</Application_Info_URL>
+			<Application_Order_URL></Application_Order_URL>
+			<Application_Screenshot_URL>https://rigstats.app/images/rigStats.png</Application_Screenshot_URL>
+			<Application_Icon_URL>https://rigstats.app/images/icon-256.png</Application_Icon_URL>
+			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
+		</Application_URLs>
+		<Download_URLs>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.35.2/RIGStats_1.35.2_x64-setup.exe</Primary_Download_URL>
+		</Download_URLs>
+	</Web_Info>
+
+	<Permissions>
+		<Distribution_Permissions>Allow Free Distribution</Distribution_Permissions>
+	</Permissions>
+
+	<Affiliates>
+	</Affiliates>
+</XML_DIZ_INFO>
