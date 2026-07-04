@@ -6,6 +6,7 @@ The repository includes `.github/workflows/verify.yml`.
 
 It runs on Windows for every push and pull request and executes `cargo xtask verify`:
 
+- Validates `website/pad.xml` (well-formed XML; `Program_Version` and `Primary_Download_URL` match `src-egui/Cargo.toml`'s version)
 - Publishes the .NET sensor sidecar
 - `cargo test` on `rigstats-backend` and `src-egui`
 - `cargo clippy -- -D warnings`
@@ -51,6 +52,49 @@ What it does:
 - Updates `CHANGELOG.md`
 - Bumps versions in `src-egui/Cargo.toml` (marked with `# x-release-please-version`)
 - When the release PR is merged, creates tag + GitHub Release and triggers `release.yml`
+
+## PAD File (Software Directory Listings)
+
+`website/pad.xml` is a [PAD](https://www.asp-shareware.org/pad/) (Portable
+Application Description) file — a standardized XML format that software
+directories like Softpedia read to list and auto-refresh an app's page. It's
+published at `https://rigstats.app/pad.xml` by `deploy-website.yml` whenever
+`website/**` changes on `main`. Directories that support PAD periodically
+re-crawl that URL on their own, so once a listing exists there's normally
+nothing to do per release — see the sections below for what keeps the file
+itself in sync.
+
+Everything below happens inside release-please's own release PR, before
+merge, so no step needs to push to `main` directly (`main` requires a PR +
+review + the `Verify (Windows)` check; the default `GITHUB_TOKEN` can't
+bypass that, only the repo's Admin role can).
+
+**Version + download URL** — `Program_Version` and `Primary_Download_URL` in
+`website/pad.xml` are marked with the same `x-release-please-version`
+comment used in `src-egui/Cargo.toml`, and the file is listed in
+`release-please-config.json`'s `extra-files`. Release-please bumps both the
+moment it opens/updates the release PR — same mechanism as the Cargo.toml
+version bump.
+
+**Release date + changelog text** — `Program_Release_Month/Day/Year` and
+`Program_Change_Info` aren't simple version substrings, so
+`release-please.yml` has an extra step (`Sync PAD release date and
+changelog`) that runs right after release-please itself: it checks out
+release-please's PR branch (`release-please--branches--main`, not `main`),
+reads the newest entry release-please just wrote into `CHANGELOG.md`, and
+pushes a follow-up commit with the parsed date and a plain-text summary of
+the bug-fix/feature bullets (markdown links stripped, joined with `; `).
+That branch isn't protected the way `main` is, so this works with the
+default `GITHUB_TOKEN`. It's safe to re-run on every push while the PR is
+open — release-please recomputes the whole PR each time, so this step just
+reapplies on top.
+
+**Not automated** — `File_Size_Bytes/K/MB` stay static from the initial
+submission. Getting the exact figure needs the compiled installer, which
+only exists after the release PR is merged and `release.yml` builds it —
+by then we're back to the `main` branch-protection problem, and it's not
+worth a privileged PAT just for a size figure that drifts by a few KB per
+release. Revisit only if a directory actually rejects updates over it.
 
 ## Release Assets
 
