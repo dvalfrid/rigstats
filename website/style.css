@@ -851,3 +851,9 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Wallpaper mode shot ───────────────────────────────────── */
+.wallpaper-shot {
+  max-width: 420px;
+  margin: 0 auto 48px;
+}
