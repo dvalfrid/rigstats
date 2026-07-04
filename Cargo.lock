@@ -3372,7 +3372,7 @@ dependencies = [
 
 [[package]]
 name = "rigstats-egui"
-version = "1.35.1"
+version = "1.35.2"
 dependencies = [
  "chrono",
  "eframe",
@@ -5510,6 +5510,9 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 [[package]]
 name = "xtask"
 version = "0.1.0"
+dependencies = [
+ "quick-xml",
+]
 
 [[package]]
 name = "yoke"
