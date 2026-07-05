@@ -23,8 +23,8 @@ a Windows 10/11 x64 machine to build and test.
 
 ## Code of Conduct
 
-Be respectful and constructive. Assume good faith, keep discussion focused on the
-code, and help newcomers where you can.
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). Be respectful
+and constructive, assume good faith, and keep discussion focused on the code.
 
 ## Prerequisites
 

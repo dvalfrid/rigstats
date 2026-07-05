@@ -1,0 +1,74 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. RIGStats reads hardware from a lot of
+        different sources (LibreHardwareMonitor, sysinfo, WMI) that vary a lot between
+        machines, so **the diagnostics ZIP below is usually the difference between a fix
+        and a bug we can't reproduce.**
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Settings → ...
+        2. Enable ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: RIGStats version
+      description: Settings → About, or the Status window.
+      placeholder: e.g. v1.4.2
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: e.g. Windows 11 24H2
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics ZIP
+      description: >
+        Open the app, go to the **Status** window, click **Collect Diagnostics…**, save
+        the ZIP, then drag it into this box to attach it. It contains the debug log,
+        settings, sensor tree, and hardware snapshot — no personal files or credentials.
+        Without it we usually cannot reproduce hardware-detection or sensor bugs.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, related issues, anything else that helps.
+    validations:
+      required: false
