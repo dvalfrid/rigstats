@@ -19,7 +19,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $tag     = gh release list --limit 1 --json tagName --jq '.[0].tagName'
+          $tag     = gh release list --repo ${{ github.repository }} --limit 1 --json tagName --jq '.[0].tagName'
           $version = $tag -replace '^v', ''
           "tag=$tag"         >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
