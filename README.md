@@ -17,6 +17,13 @@ RIGStats is a Windows hardware-monitor dashboard built with egui — a native Ru
 
 <img src="assets/rigStats.png" width="260" alt="Main Dashboard">
 
+## Installation
+
+- **winget:** `winget install Codeby.RIGStats`
+- **Direct download:** grab the latest installer from the [Releases page](https://github.com/dvalfrid/rigstats/releases/latest)
+
+Both install the same signed NSIS installer, which also registers the sensor sidecar as a Windows Service. See [rigstats.app](https://rigstats.app/#download) for requirements and first-run guidance.
+
 ## Repository Layout
 
 | Path | Contents |
