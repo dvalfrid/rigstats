@@ -77,6 +77,62 @@ pub fn compute_window_height(visible_panels: &[String], sc: f32) -> f32 {
     h + (n as f32 * 6.0 * sc)
 }
 
+/// Chooses the landscape grid's column/row split and per-cell content scale.
+///
+/// Maximises the per-cell scale (reference card 450×224, the portrait card
+/// width and `PANEL_DATA_H` + frame margin) against `ref_h` — the profile's own
+/// declared height, not the live window height. Using a live height would let a
+/// shrunk content-fit window feed back into ever-fewer columns next frame, and
+/// would drift from the profile's natural scale (e.g. `landscape-qhd-top`
+/// should match its transposed `portrait-qhd-side`, regardless of Fill Screen
+/// or how the content-fit window currently happens to be sized). Ties are
+/// broken toward fewer rows (wider cells suit short landscape screens).
+///
+/// Shared by `DashboardView::render_landscape_grid` (the actual renderer) and
+/// `compute_landscape_window_height` (the settings-reload size estimate) so the
+/// two can't drift apart. `n` must be at least 1. Returns `(n_cols, n_rows, sc)`.
+pub fn landscape_grid_layout(n: usize, avail_w: f32, ref_h: f32) -> (usize, usize, f32) {
+    let gap = 6.0_f32;
+    let avail_w = avail_w.max(40.0);
+    let ref_h = ref_h.max(40.0);
+    let mut n_cols = 1usize;
+    let mut best_s = f32::MIN;
+    let mut best_rows = usize::MAX;
+    for c in 1..=n {
+        let rows = n.div_ceil(c);
+        let cw = ((avail_w - gap * (c as f32 - 1.0)) / c as f32).max(40.0);
+        let ch = ((ref_h - gap * (rows as f32 - 1.0)) / rows as f32).max(40.0);
+        let s = (cw / 450.0).min(ch / 224.0).clamp(0.4, 1.6);
+        if s > best_s + 0.02 || ((s - best_s).abs() <= 0.02 && rows < best_rows) {
+            n_cols = c;
+            best_s = s;
+            best_rows = rows;
+        }
+    }
+    (n_cols, n.div_ceil(n_cols), best_s)
+}
+
+/// Estimated window height for the content-fit landscape grid (Fill Screen off).
+///
+/// Panels wrap into rows via [`landscape_grid_layout`] against the profile's own
+/// reference height, then use that natural (non-stretched) cell height. Used
+/// only for the settings-reload estimate; the per-frame fit then measures the
+/// real content height and corrects it.
+pub fn compute_landscape_window_height(
+    visible_panels: &[String],
+    profile_width: f32,
+    profile_height: f32,
+) -> f32 {
+    let n = visible_panels.len();
+    if n == 0 {
+        return theme::DRAG_HANDLE_H;
+    }
+    let gap = 6.0_f32;
+    let (_, n_rows, sc) = landscape_grid_layout(n, profile_width, profile_height);
+    let cell_h = 224.0 * sc;
+    theme::DRAG_HANDLE_H + n_rows as f32 * cell_h + (n_rows as f32 - 1.0).max(0.0) * gap
+}
+
 // ── Windows monitor enumeration ───────────────────────────────────────────────
 
 #[cfg(windows)]
@@ -299,8 +355,9 @@ fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -
 #[cfg(test)]
 mod tests {
     use super::{
-        monitor_containing_point, position_on_any_monitor, profile_is_landscape, profile_to_size,
-        resolve_pinned_position, select_profile_monitor,
+        compute_landscape_window_height, landscape_grid_layout, monitor_containing_point,
+        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
+        select_profile_monitor,
     };
 
     #[test]
@@ -333,6 +390,80 @@ mod tests {
             let [w, h] = profile_to_size(p);
             assert!(w >= h, "{p} should be landscape (w >= h), got {w}x{h}");
         }
+    }
+
+    #[test]
+    fn landscape_window_height_grows_with_more_rows() {
+        let [profile_w, profile_h] = profile_to_size("landscape-fhd");
+        let one_row = vec!["cpu".to_string(), "gpu".to_string()];
+        let two_rows = vec![
+            "cpu".to_string(),
+            "gpu".to_string(),
+            "ram".to_string(),
+            "disk".to_string(),
+        ];
+        let h1 = compute_landscape_window_height(&one_row, profile_w, profile_h);
+        let h2 = compute_landscape_window_height(&two_rows, profile_w, profile_h);
+        assert!(
+            h2 > h1,
+            "adding a second row should grow the content-fit height: {h1} vs {h2}"
+        );
+    }
+
+    #[test]
+    fn landscape_window_height_empty_is_just_drag_handle() {
+        let [w, h] = profile_to_size("landscape-fhd");
+        assert_eq!(
+            compute_landscape_window_height(&[], w, h),
+            crate::theme::DRAG_HANDLE_H
+        );
+    }
+
+    #[test]
+    fn landscape_top_profile_scale_matches_transposed_portrait() {
+        // landscape-qhd-top (1440×338) is the transpose of portrait-qhd-side
+        // (338×1440); its natural single-row scale should be close to portrait's
+        // width-driven scale, not the much larger scale a width-only column
+        // choice would pick by ignoring the profile's short declared height.
+        let [pw, ph] = profile_to_size("landscape-qhd-top");
+        let panels = vec![
+            "cpu".to_string(),
+            "gpu".to_string(),
+            "ram".to_string(),
+            "net".to_string(),
+        ];
+        let h = compute_landscape_window_height(&panels, pw, ph);
+        // A single natural-scale row plus the drag handle should stay well under
+        // the profile's declared height, not balloon toward it via a 1.6x clamp.
+        assert!(
+            h < ph * 0.75,
+            "expected a compact single-row height, got {h} against profile height {ph}"
+        );
+    }
+
+    #[test]
+    fn landscape_grid_layout_picks_full_width_single_row_for_short_profile() {
+        // Same case as above, checked directly against the shared layout
+        // function that both the renderer and the estimate call — a compact
+        // single row across all 4 columns, not a zoomed-in multi-row grid.
+        let [pw, ph] = profile_to_size("landscape-qhd-top");
+        let (n_cols, n_rows, sc) = landscape_grid_layout(4, pw, ph);
+        assert_eq!(n_cols, 4);
+        assert_eq!(n_rows, 1);
+        assert!(sc < 1.0, "expected a compact scale, got {sc}");
+    }
+
+    #[test]
+    fn landscape_grid_layout_uses_more_rows_when_ref_h_is_tall() {
+        // The same 4 panels against a tall reference height (e.g. Fill Screen
+        // stretching into a monitor much taller than the profile) should be
+        // free to spread across more rows for a bigger per-cell scale.
+        let (_n_cols, n_rows, sc) = landscape_grid_layout(4, 1920.0, 1080.0);
+        assert!(n_rows >= 2, "expected multiple rows, got {n_rows}");
+        assert!(
+            sc > 1.0,
+            "expected a larger scale with room to grow, got {sc}"
+        );
     }
 
     #[test]

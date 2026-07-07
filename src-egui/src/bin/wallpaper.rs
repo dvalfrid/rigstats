@@ -16,8 +16,8 @@ use eframe::egui;
 use rigstats_backend::{debug, settings};
 use rigstats_egui::dashboard::DashboardRuntime;
 use rigstats_egui::geometry::{
-    compute_window_height, guard_panel_position, pick_window_rect_for_profile,
-    profile_is_landscape, profile_scale, profile_to_size,
+    compute_landscape_window_height, compute_window_height, guard_panel_position,
+    pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::{theme, PollStats};
@@ -91,7 +91,7 @@ impl WallpaperHost {
             return true;
         }
         if self.runtime.apply_settings(&s) {
-            // Panel set changed → portrait content height changed; force a re-fit.
+            // Panel set changed → content height changed; force a re-fit.
             self.last_fitted_height = None;
         }
         let new_op = s.opacity.clamp(0.1, 1.0) as f32;
@@ -173,38 +173,42 @@ impl eframe::App for WallpaperHost {
         }
 
         // Render the dashboard filling the window (no drag handle in wallpaper
-        // mode — it is display-only).
+        // mode — it is display-only). There is no Fill Screen toggle in wallpaper
+        // mode (the whole point is a small widget over the real desktop), so the
+        // landscape grid always uses natural, non-stretched cell sizes just like
+        // the portrait stack — both fit the window to their actual content below.
         let panels = self.runtime.visible_panels.clone();
         if profile_is_landscape(&self.profile) {
-            self.runtime.view().render_landscape_grid(ui, &panels, None);
+            let ref_h = profile_to_size(&self.profile)[1];
+            self.runtime
+                .view()
+                .render_landscape_grid(ui, &panels, None, false, ref_h);
         } else {
             let sc = profile_scale(&self.profile);
             for panel in &panels {
                 self.runtime.view().draw_one_panel(ui, panel, sc, None);
                 ui.add_space((6.0 * sc).round());
             }
-            // Fit the window height to the rendered portrait content so no black
-            // gap appears below the stack (the profile height is the full monitor
-            // span; the panel stack is shorter). Mirrors the main app's per-frame
-            // fit. Landscape fills the whole grid, so it keeps the fixed profile size.
-            let used_h = ui.min_rect().height();
-            if self.startup_fit_frames > 0 {
-                self.startup_fit_frames -= 1;
-                self.last_fitted_height = None;
-                ui.ctx().request_repaint();
-            }
-            let changed = self
-                .last_fitted_height
-                .map(|h| (h - used_h).abs() > 0.5)
-                .unwrap_or(true);
-            if used_h > 10.0 && changed {
-                self.last_fitted_height = Some(used_h);
-                let [w, _] = profile_to_size(&self.profile);
-                ui.ctx()
-                    .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                        w, used_h,
-                    )));
-            }
+        }
+
+        // Fit the window height to the rendered content so no black gap appears
+        // below it (the profile height is the full monitor span; the actual
+        // content is usually shorter). Mirrors the main app's per-frame fit.
+        let used_h = ui.min_rect().height();
+        if self.startup_fit_frames > 0 {
+            self.startup_fit_frames -= 1;
+            self.last_fitted_height = None;
+            ui.ctx().request_repaint();
+        }
+        let changed = self
+            .last_fitted_height
+            .map(|h| (h - used_h).abs() > 0.5)
+            .unwrap_or(true);
+        if used_h > 10.0 && changed {
+            self.last_fitted_height = Some(used_h);
+            let [w, _] = profile_to_size(&self.profile);
+            ui.ctx()
+                .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, used_h)));
         }
 
         ui.ctx().request_repaint_after(Duration::from_secs(1));
@@ -223,17 +227,20 @@ fn main() {
     let profile = s.dashboard_profile.clone();
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
 
-    // Size the window to fit the dashboard: landscape fills the whole adaptive
-    // grid (the fixed profile size), portrait fits the panel-stack content height
-    // (the per-frame fit in `ui()` then refines it). Never stretch a portrait
-    // window to the full profile height — that leaves a black gap below the stack.
-    // Width is always the profile width so panel proportions are preserved. Use
-    // the position the user set in a normal layer before switching
+    // Size the window to fit the dashboard content (the per-frame fit in `ui()`
+    // then refines this estimate): the landscape grid uses natural cell sizes,
+    // the portrait stack its panel-stack height. Never stretch to the full
+    // profile height — that leaves a black gap below the content. Width is
+    // always the profile width so panel proportions are preserved. Use the
+    // position the user set in a normal layer before switching
     // (s.wallpaper_position) when it is still on a connected monitor; otherwise
     // centre on the matching monitor. The wallpaper shows around it.
     let [pw, ph] = profile_to_size(&profile);
     let size = if profile_is_landscape(&profile) {
-        [pw, ph]
+        [
+            pw,
+            compute_landscape_window_height(&s.visible_panels, pw, ph),
+        ]
     } else {
         [
             pw,

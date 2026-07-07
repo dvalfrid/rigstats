@@ -5,9 +5,9 @@ use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
-    compute_window_height, dialog_center, guard_panel_position, monitor_rect_at,
-    pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
-    resolve_pinned_position,
+    compute_landscape_window_height, compute_window_height, dialog_center, guard_panel_position,
+    monitor_rect_at, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
+    profile_to_size, resolve_pinned_position,
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
@@ -1239,12 +1239,19 @@ impl eframe::App for RigStatsApp {
             };
             let mut new_preferred_gpu: Option<String> = None;
 
-            if profile_is_landscape(&profile) {
+            let is_landscape = profile_is_landscape(&profile);
+            if is_landscape {
                 // ── Landscape grid — panels packed into an even, adaptive grid ──
-                // The window is fixed to the profile size, so there is no per-frame
-                // content-fit; the grid fills the available area exactly.
-                new_preferred_gpu =
-                    self.render_landscape_grid(ui, &panels_to_draw, update_ver.as_deref());
+                // Fullscreen: the window is fixed to the profile/monitor size and
+                // the grid stretches to fill it exactly. Otherwise the grid uses
+                // natural cell sizes and the fit-to-content block below shrinks
+                // the window to the rows actually used.
+                new_preferred_gpu = self.render_landscape_grid(
+                    ui,
+                    &panels_to_draw,
+                    update_ver.as_deref(),
+                    &profile,
+                );
             } else {
                 // ── Portrait vertical stack ─────────────────────────────────────
                 let sc = profile_scale(&profile);
@@ -1292,33 +1299,40 @@ impl eframe::App for RigStatsApp {
                         }
                     }
                 }
-                // Fit window height to actual rendered content every frame so no black gap
-                // appears regardless of panel set, spacing, or egui version.
-                // Skipped in fullscreen mode — there the window stays at the full monitor
-                // size and must NOT shrink to content.
-                if !self.fullscreen_mode {
-                    let used_h = ui.min_rect().height();
-                    // During the first frames after launch the window may not be fully
-                    // realized, so early InnerSize commands can be dropped — which would
-                    // leave the bottom panel clipped until the user toggles floating mode.
-                    // Force a re-fit (and a fast repaint) for a handful of frames so the
-                    // true content height always sticks at startup.
-                    if self.startup_fit_frames > 0 {
-                        self.startup_fit_frames -= 1;
-                        self.last_fitted_height = None;
-                        ui.ctx().request_repaint();
-                    }
-                    let changed = self
-                        .last_fitted_height
-                        .map(|h| (h - used_h).abs() > 0.5)
-                        .unwrap_or(true);
-                    if used_h > 10.0 && changed {
-                        self.last_fitted_height = Some(used_h);
-                        let [w, _] = profile_to_size(&profile);
-                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(
-                            egui::Vec2::new(w - 2.0, used_h),
-                        ));
-                    }
+            }
+
+            // Fit window height to actual rendered content every frame so no black gap
+            // appears regardless of panel set, spacing, or egui version. Applies to both
+            // orientations — the landscape grid uses natural cell sizes outside fullscreen
+            // so it shrinks/grows with the panel count just like the portrait stack.
+            // Skipped in fullscreen mode — there the window stays at the full monitor
+            // size and must NOT shrink to content.
+            if !self.fullscreen_mode {
+                let used_h = ui.min_rect().height();
+                // During the first frames after launch the window may not be fully
+                // realized, so early InnerSize commands can be dropped — which would
+                // leave the bottom panel clipped until the user toggles floating mode.
+                // Force a re-fit (and a fast repaint) for a handful of frames so the
+                // true content height always sticks at startup.
+                if self.startup_fit_frames > 0 {
+                    self.startup_fit_frames -= 1;
+                    self.last_fitted_height = None;
+                    ui.ctx().request_repaint();
+                }
+                let changed = self
+                    .last_fitted_height
+                    .map(|h| (h - used_h).abs() > 0.5)
+                    .unwrap_or(true);
+                if used_h > 10.0 && changed {
+                    self.last_fitted_height = Some(used_h);
+                    let [w, _] = profile_to_size(&profile);
+                    // Landscape keeps the full profile width (no trim); the portrait
+                    // stack trims 2 px to avoid a sub-pixel edge artifact.
+                    let target_w = if is_landscape { w } else { w - 2.0 };
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                            target_w, used_h,
+                        )));
                 }
             }
 
@@ -1447,43 +1461,53 @@ impl RigStatsApp {
     }
 
     /// Render the visible panels as an adaptive landscape grid via the shared view.
+    /// Stretches to fill the fixed window only in Fill Screen mode; otherwise the
+    /// grid uses natural cell sizes so the per-frame fit can shrink the window to
+    /// the actual rows used.
     fn render_landscape_grid(
         &self,
         ui: &mut egui::Ui,
         panels: &[String],
         update_ver: Option<&str>,
+        profile: &str,
     ) -> Option<String> {
-        self.view().render_landscape_grid(ui, panels, update_ver)
+        let ref_h = profile_to_size(profile)[1];
+        self.view()
+            .render_landscape_grid(ui, panels, update_ver, self.fullscreen_mode, ref_h)
     }
 
     /// Fixed-mode window geometry: returns `(top_left, [w, h])`.
     /// Width is always the profile width so panel proportions never stretch.
-    /// In fullscreen mode the height fills the portrait monitor (intended for a
-    /// monitor whose resolution matches the profile); otherwise it is the
-    /// content-fit estimate (the per-frame fit then refines it). Falls back to the
-    /// content-fit size if no monitor is found.
+    /// In fullscreen mode the height fills the monitor (intended for a monitor
+    /// whose resolution matches the profile), for both orientations; otherwise
+    /// it is the content-fit estimate (the per-frame fit then refines it).
+    /// Falls back to the content-fit size if no monitor is found.
     fn fixed_window_geometry(&self, profile: &str) -> ([f32; 2], [f32; 2]) {
-        let [w, h] = profile_to_size(profile);
+        let [w, profile_h] = profile_to_size(profile);
         // Auto-target the monitor whose resolution matches the profile (a strip/
         // secondary screen only when it actually fits); otherwise the primary
         // monitor. Used for both orientations so portrait/side profiles land on a
         // matching screen or the main screen — never on an arbitrary small monitor.
         let [mx, my, _mw, mh] = pick_window_rect_for_profile(profile);
-        let (auto_pos, size) = if profile_is_landscape(profile) {
-            // Landscape: the grid fills a fixed window the size of the profile.
-            ([mx, my], [w, h])
-        } else if self.fullscreen_mode {
+        let (auto_pos, size) = if self.fullscreen_mode {
             // Fill the height of the monitor the window currently sits on (where
             // the user placed it) — not the profile-matching monitor. Otherwise
             // enabling Fill Screen would teleport the dashboard to another screen.
             // Fall back to the auto-target monitor when the current position is
-            // unknown or off every monitor.
+            // unknown or off every monitor. Applies to both orientations: the
+            // landscape grid stretches to fill it, the portrait stack centers/
+            // top-aligns within it.
             let m = self
                 .last_fixed_pos
                 .and_then(monitor_rect_at)
                 .filter(|r| r[3] > 0.0)
                 .unwrap_or([mx, my, _mw, mh]);
             ([m[0], m[1]], [w, m[3]])
+        } else if profile_is_landscape(profile) {
+            // Landscape, not fullscreen: content-fit estimate (the per-frame fit
+            // then refines it), same as the portrait branch below.
+            let h = compute_landscape_window_height(&self.runtime.visible_panels, w, profile_h);
+            ([mx, my], [w, h])
         } else {
             let h = compute_window_height(&self.runtime.visible_panels, profile_scale(profile));
             ([mx, my], [w, h])
@@ -1969,11 +1993,13 @@ fn main() {
     // monitor when none matches) for both orientations, so portrait/side profiles
     // land on a matching screen or the main screen rather than an arbitrary one.
     let [mx, my, _mw, mh] = pick_window_rect_for_profile(&s.dashboard_profile);
-    let (inner_w, inner_h, mut pos_x, mut pos_y) = if landscape {
-        // Landscape: the grid fills a fixed window the size of the profile.
-        (win_w, win_h, mx, my)
-    } else if fullscreen && mh > 0.0 {
+    let (inner_w, inner_h, mut pos_x, mut pos_y) = if fullscreen && mh > 0.0 {
         (win_w, mh, mx, my)
+    } else if landscape {
+        // Landscape, not fullscreen: content-fit estimate (the per-frame fit
+        // then refines it), same as the portrait branch below.
+        let h = compute_landscape_window_height(&visible_panels, win_w, win_h);
+        (win_w, h, mx, my)
     } else {
         let h = compute_window_height(&visible_panels, profile_scale(&s.dashboard_profile));
         (win_w - 2.0, h, mx, my)

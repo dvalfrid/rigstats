@@ -729,11 +729,14 @@ fn draw_display(
             });
         }
 
-        // Fill Screen — only applies to a portrait stack in non-floating mode.
-        // Landscape always uses the fixed adaptive-grid geometry, so fill-screen
-        // has no effect there; disable it while floating or in a landscape profile.
+        // Fill Screen — applies to both the portrait stack and the landscape grid
+        // in non-floating mode. Off, each shrinks/grows to the panels actually
+        // shown; on, the window fills the whole monitor (the landscape grid
+        // stretches to use it, the portrait stack keeps its size and centers or
+        // top-aligns within it). Wallpaper mode always fills the monitor already,
+        // so the toggle has no effect there.
         let is_landscape = crate::geometry::profile_is_landscape(&draft.dashboard_profile);
-        let fill_enabled = !draft.floating_mode && !is_landscape && !is_wallpaper;
+        let fill_enabled = !draft.floating_mode && !is_wallpaper;
         ui.add_space(8.0);
         inner_row(dc).show(ui, |ui| {
             ui.set_min_width(ui.available_width());
@@ -743,8 +746,6 @@ fn draw_display(
                         ui.label(egui::RichText::new("Fill Screen").size(13.0).color(dc.text));
                         let desc = if is_wallpaper {
                             "Not available in Desktop Wallpaper mode"
-                        } else if is_landscape {
-                            "Not available for landscape profiles"
                         } else {
                             "Cover the whole monitor; the dashboard background fills the rest"
                         };
@@ -757,7 +758,10 @@ fn draw_display(
             });
         });
 
-        if draft.fullscreen_mode && fill_enabled {
+        // Alignment only applies to the portrait stack — the landscape grid
+        // always stretches to fill the whole window, so there is no leftover
+        // space to align within.
+        if draft.fullscreen_mode && fill_enabled && !is_landscape {
             ui.add_space(8.0);
             inner_row(dc).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());

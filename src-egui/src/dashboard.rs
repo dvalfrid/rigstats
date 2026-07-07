@@ -6,6 +6,7 @@
 //! types live here so the panel layout and runtime wiring are in one place.
 //! See `docs/architecture.md`.
 
+use crate::geometry::landscape_grid_layout;
 use crate::spark::Sparkline;
 use crate::{brand, panels, theme, PollStats};
 use eframe::egui;
@@ -216,11 +217,30 @@ impl DashboardView<'_> {
     /// size and the per-cell content scale `sc` is derived from the cell dimensions,
     /// so panels shrink/grow to fit any landscape resolution. Returns a new
     /// preferred-GPU key if the GPU device selector was clicked.
+    ///
+    /// `ref_h` is the profile's own declared height — used to choose the column
+    /// count and content scale in *both* Fill Screen states, so a profile's
+    /// natural panel scale stays stable and matches its transposed portrait
+    /// counterpart (e.g. `landscape-qhd-top` vs `portrait-qhd-side`) regardless
+    /// of Fill Screen or the live window height. Using the live window height
+    /// instead would feed back on itself in content-fit mode (a shorter window
+    /// implies fewer rows fit, which would shrink the window further) and drift
+    /// from the profile's intended scale.
+    ///
+    /// `fill` selects between the two Fill Screen states: `true` (screen fill on,
+    /// or wallpaper mode which always fills) stretches cells to use the whole
+    /// *live* available height, exactly filling the fixed profile/monitor-sized
+    /// window (panels keep `ref_h`'s natural scale and are centered within the
+    /// taller cell). `false` (the default) keeps cells at their natural height,
+    /// so the grid — and the window fit to it — shrinks or grows with the panel
+    /// count instead of leaving a gap below a partial grid.
     pub fn render_landscape_grid(
         &self,
         ui: &mut egui::Ui,
         panels: &[String],
         update_ver: Option<&str>,
+        fill: bool,
+        ref_h: f32,
     ) -> Option<String> {
         let n = panels.len();
         if n == 0 {
@@ -228,36 +248,15 @@ impl DashboardView<'_> {
         }
         let gap = 6.0_f32;
         let avail_w = ui.available_width().max(40.0);
-        let avail_h = ui.available_height().max(40.0);
-
-        // Choose the column count that maximises the per-cell content scale, so
-        // panels are as large as possible for the given screen shape. Ties are
-        // broken toward fewer rows (wider cells suit short landscape screens).
-        let mut n_cols = 1usize;
-        let mut best_s = f32::MIN;
-        let mut best_rows = usize::MAX;
-        for c in 1..=n {
-            let rows = n.div_ceil(c);
-            let cw = ((avail_w - gap * (c as f32 - 1.0)) / c as f32).max(40.0);
-            let ch = ((avail_h - gap * (rows as f32 - 1.0)) / rows as f32).max(40.0);
-            let s = (cw / 450.0).min(ch / 224.0).clamp(0.4, 1.6);
-            if s > best_s + 0.02 || ((s - best_s).abs() <= 0.02 && rows < best_rows) {
-                n_cols = c;
-                best_s = s;
-                best_rows = rows;
-            }
-        }
-        let n_rows = n.div_ceil(n_cols);
+        let (n_cols, n_rows, sc) = landscape_grid_layout(n, avail_w, ref_h);
 
         let cell_w = ((avail_w - gap * (n_cols as f32 - 1.0)) / n_cols as f32).max(40.0);
-        let cell_h = ((avail_h - gap * (n_rows as f32 - 1.0)) / n_rows as f32).max(40.0);
-
-        // Per-cell content scale. Reference card is 450 px wide × ~224 px tall
-        // (PANEL_DATA_H + frame margins + a little slack). Use the smaller of the
-        // width/height ratios so content never overflows the cell.
-        let sc_w = cell_w / 450.0;
-        let sc_h = cell_h / 224.0;
-        let sc = sc_w.min(sc_h).clamp(0.4, 1.6);
+        let cell_h = if fill {
+            let avail_h = ui.available_height().max(40.0);
+            ((avail_h - gap * (n_rows as f32 - 1.0)) / n_rows as f32).max(40.0)
+        } else {
+            224.0 * sc
+        };
 
         let origin = ui.cursor().min;
         let mut new_pref = None;
@@ -269,8 +268,19 @@ impl DashboardView<'_> {
                 }
                 let x = origin.x + col as f32 * (cell_w + gap);
                 let y = origin.y + row as f32 * (cell_h + gap);
-                let cell_rect =
-                    egui::Rect::from_min_size(egui::pos2(x, y), egui::vec2(cell_w, cell_h));
+                // In fill mode the cell can be taller than the panel's natural
+                // content (e.g. the scale clamp caps growth before the cell does) —
+                // center the panel within it instead of leaving dead space below.
+                let content_h = 224.0 * sc;
+                let pad = if fill {
+                    ((cell_h - content_h) * 0.5).max(0.0)
+                } else {
+                    0.0
+                };
+                let cell_rect = egui::Rect::from_min_size(
+                    egui::pos2(x, y + pad),
+                    egui::vec2(cell_w, cell_h - pad),
+                );
                 let mut child = ui.new_child(
                     egui::UiBuilder::new()
                         .max_rect(cell_rect)
