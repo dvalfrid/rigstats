@@ -24,11 +24,25 @@ jobs:
           "tag=$tag"         >> $env:GITHUB_OUTPUT
           "version=$version" >> $env:GITHUB_OUTPUT
 
+      - name: Check for an open winget-pkgs PR
+        id: existing-pr
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $openPr = gh pr list --repo microsoft/winget-pkgs --search "Codeby.RIGStats in:title" --state open --json url --jq '.[0].url'
+          if ($openPr) {
+            Write-Host "Skipping submission — an update PR is already open: $openPr"
+          }
+          "skip=$(if ($openPr) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+
       - name: Install wingetcreate
+        if: steps.existing-pr.outputs.skip != 'true'
         shell: pwsh
         run: Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile wingetcreate.exe
 
       - name: Submit manifest to winget-pkgs
+        if: steps.existing-pr.outputs.skip != 'true'
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
