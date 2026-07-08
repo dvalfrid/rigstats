@@ -25,7 +25,7 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.36.0</Program_Version> <!-- x-release-please-version -->
+		<Program_Version>1.36.0</Program_Version>
 		<Program_Release_Month>07</Program_Release_Month>
 		<Program_Release_Day>08</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.36.0/RIGStats_1.35.2_x64-setup.exe</Primary_Download_URL> <!-- x-release-please-version -->
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.36.0/RIGStats_1.36.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 

@@ -6,9 +6,7 @@
     ".": {
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        "package.json",
-        "src-egui/Cargo.toml",
-        "website/pad.xml"
+        "src-egui/Cargo.toml"
       ]
     }
   }

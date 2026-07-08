@@ -36,7 +36,7 @@ jobs:
         if: ${{ steps.release.outputs.release_created != 'true' }}
         uses: actions/checkout@v4
 
-      - name: Sync PAD release date and changelog
+      - name: Sync PAD version, release date and changelog
         if: ${{ steps.release.outputs.release_created != 'true' }}
         shell: bash
         run: |
@@ -47,6 +47,21 @@ jobs:
 
           git fetch origin release-please--branches--main:release-please--branches--main
           git checkout release-please--branches--main
+
+          version=$(grep -m1 '^version = "' src-egui/Cargo.toml | sed -E 's/^version = "([^"]+)".*/\1/')
+          if [ -z "$version" ]; then
+            echo "Could not find version in src-egui/Cargo.toml"
+            exit 1
+          fi
+          sed -i "s#<Program_Version>.*</Program_Version>#<Program_Version>${version}</Program_Version>#" website/pad.xml
+          sed -i "s#<Primary_Download_URL>.*</Primary_Download_URL>#<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v${version}/RIGStats_${version}_x64-setup.exe</Primary_Download_URL>#" website/pad.xml
+
+          expected_url="https://github.com/dvalfrid/rigstats/releases/download/v${version}/RIGStats_${version}_x64-setup.exe"
+          if ! grep -qF "<Program_Version>${version}</Program_Version>" website/pad.xml || \
+             ! grep -qF "<Primary_Download_URL>${expected_url}</Primary_Download_URL>" website/pad.xml; then
+            echo "::error::website/pad.xml did not sync to the expected version/URL"
+            exit 1
+          fi
 
           section=$(awk '/^## \[/{if (++n==2) exit} n==1' CHANGELOG.md)
 
