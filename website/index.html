@@ -162,10 +162,9 @@
         <ul class="floating-features">
           <li>Each panel is an independent frameless window</li>
           <li>Drag any panel to reposition it — positions are saved across restarts</li>
-          <li>Lock panel positions in Settings to prevent accidental moves</li>
+          <li>Click the padlock on a panel's drag handle to lock its position and prevent accidental moves</li>
           <li>Scale all floating panels from 40% to 100% in Settings</li>
           <li>Panel visibility follows the same settings as portrait mode</li>
-          <li>Right-click a panel to open Settings or close that panel</li>
           <li>Toggle floating mode from Settings or the tray menu</li>
         </ul>
       </div>
@@ -223,7 +222,7 @@
           </div>
           <div class="panel-body">
             <h3>CPU</h3>
-            <p>Total and per-core load with sparklines, current clock frequency, package temperature, and power draw.</p>
+            <p>Total load history with a sparkline, per-core load bars, current clock frequency, package temperature, and power draw.</p>
             <ul>
               <li>Total &amp; per-core load (%)</li>
               <li>Clock frequency (GHz)</li>
@@ -351,7 +350,7 @@
               <li>Estimated time remaining</li>
               <li>Live power draw (W) — charge rate when plugged in, discharge rate on battery</li>
               <li>Color-coded bar: green / amber / red by charge level</li>
-              <li>Color-coded power: green &lt;12 W / amber 12–20 W / red &gt;20 W</li>
+              <li>Color-coded power against configurable warn/critical thresholds (15 W / 25 W by default)</li>
             </ul>
             <span class="source-tag">WMI</span>
           </div>
@@ -480,7 +479,7 @@
             <p>Product information at a glance. Shows the current version, license, contact links, and the full technology stack the app is built on.</p>
             <ul>
               <li>Current version &amp; MIT license</li>
-              <li>GitHub &amp; email links</li>
+              <li>Website, GitHub &amp; email links</li>
               <li>Built with: Rust · egui/eframe · sysinfo · WMI · LibreHardwareMonitor</li>
             </ul>
           </div>
@@ -511,7 +510,7 @@
     <div class="container">
       <header class="section-head">
         <h2>Download &amp; Install</h2>
-        <p>A single NSIS installer handles everything — including setting up LibreHardwareMonitor as a Windows scheduled task so sensor data is available immediately at startup.</p>
+        <p>A single NSIS installer handles everything — including setting up the LibreHardwareMonitor sensor as a Windows Service so sensor data is available immediately at startup.</p>
       </header>
 
       <div class="download-layout">
@@ -548,7 +547,7 @@
               <span class="step-num">2</span>
               <div>
                 <strong>Run the installer</strong>
-                <p>Accept the UAC prompt — admin rights are needed to register the LibreHardwareMonitor scheduled task.</p>
+                <p>Accept the UAC prompt — admin rights are needed to register the RIGStats sensor Windows Service.</p>
               </div>
             </li>
             <li>
