@@ -27,7 +27,7 @@
 		<Program_Name>RIGStats</Program_Name>
 		<Program_Version>1.36.0</Program_Version> <!-- x-release-please-version -->
 		<Program_Release_Month>07</Program_Release_Month>
-		<Program_Release_Day>02</Program_Release_Day>
+		<Program_Release_Day>08</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>Bug fixes: hostname text no longer crowds the brand logo in the header; CPU temperature/power readings of 0 are now treated as unavailable instead of shown as real values.</Program_Change_Info>
+		<Program_Change_Info>status: restore displays.json in diagnostics export, fix stale docs; ux: add drag/lock tooltips and a Help/Docs entry pointing to rigstats.app; autostart: never let a dev build overwrite the real autostart entry; dashboard: support Fill Screen for landscape and stabilize its scale; winget: pass --repo to gh release list in submit workflow; winget: skip submission when an update PR is already open</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
