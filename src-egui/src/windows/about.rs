@@ -113,6 +113,8 @@ pub fn show(
                 );
                 ui.add_space(8.0);
 
+                link_row(ui, dc, "Website", "rigstats.app", "https://rigstats.app");
+                ui.add(egui::Separator::default().spacing(6.0));
                 link_row(
                     ui,
                     dc,
@@ -143,13 +145,18 @@ pub fn show(
                 ui.set_min_width(ui.available_width());
                 ui.label(egui::RichText::new("Built with").size(11.0).color(dc.label));
                 ui.add_space(6.0);
-                ui.label(
-                    egui::RichText::new(
-                        "Rust  ·  egui / eframe  ·  sysinfo  ·  WMI  ·  LibreHardwareMonitor",
-                    )
-                    .size(12.0)
-                    .color(dc.text),
-                );
+                ui.vertical_centered(|ui| {
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(
+                                "Rust\u{a0}\u{a0}·  egui\u{a0}/\u{a0}eframe\u{a0}\u{a0}·  sysinfo\u{a0}\u{a0}·  WMI\u{a0}\u{a0}·  LibreHardwareMonitor",
+                            )
+                            .size(12.0)
+                            .color(dc.text),
+                        )
+                        .halign(egui::Align::Center),
+                    );
+                });
             });
         });
 

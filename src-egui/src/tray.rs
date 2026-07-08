@@ -14,6 +14,7 @@ pub enum TrayCmd {
     OpenAbout,
     OpenStatus,
     OpenUpdater,
+    OpenDocs,
     ToggleFloating,
     ToggleRecording,
 }
@@ -24,6 +25,7 @@ pub struct Tray {
     pub about_id: tray_icon::menu::MenuId,
     pub status_id: tray_icon::menu::MenuId,
     pub updater_id: tray_icon::menu::MenuId,
+    pub docs_id: tray_icon::menu::MenuId,
     pub quit_id: tray_icon::menu::MenuId,
     pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
@@ -61,6 +63,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let about_item = MenuItem::new("About", true, None);
     let status_item = MenuItem::new("Status", true, None);
     let updater_item = MenuItem::new("Check for Updates", true, None);
+    let docs_item = MenuItem::new("Help / Docs", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
 
     let floating_id = floating_item.id().clone();
@@ -69,6 +72,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let about_id = about_item.id().clone();
     let status_id = status_item.id().clone();
     let updater_id = updater_item.id().clone();
+    let docs_id = docs_item.id().clone();
     let quit_id = quit_item.id().clone();
 
     let menu = Menu::new();
@@ -78,6 +82,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
     let _ = menu.append(&status_item);
+    let _ = menu.append(&docs_item);
     let _ = menu.append(&updater_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&quit_item);
@@ -110,6 +115,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
         about_id,
         status_id,
         updater_id,
+        docs_id,
         quit_id,
         floating_id,
         recording_id,

@@ -747,6 +747,10 @@ impl eframe::App for RigStatsApp {
                     self.updater_open.store(true, Ordering::Relaxed);
                     self.updater_focus.store(true, Ordering::Relaxed);
                 }
+                TrayCmd::OpenDocs => {
+                    ui.ctx()
+                        .open_url(egui::OpenUrl::new_tab("https://rigstats.app"));
+                }
                 TrayCmd::ToggleFloating => {
                     let new_mode = {
                         let mut s = self.current_settings.lock_safe();
@@ -907,7 +911,7 @@ impl eframe::App for RigStatsApp {
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
                     .with_title("About RigStats")
-                    .with_inner_size([380.0, 420.0])
+                    .with_inner_size([380.0, 460.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -1164,11 +1168,22 @@ impl eframe::App for RigStatsApp {
             );
             let hover_pos = ui.ctx().input(|i| i.pointer.hover_pos());
             let over_padlock = hover_pos.map(|p| padlock_hit.contains(p)).unwrap_or(false);
-            let padlock_resp = ui.interact(
-                padlock_hit,
-                ui.id().with("fixed_padlock"),
-                egui::Sense::click(),
-            );
+            let drag_resp = if over_padlock {
+                drag_resp
+            } else {
+                drag_resp.on_hover_text("Drag to move")
+            };
+            let padlock_resp = ui
+                .interact(
+                    padlock_hit,
+                    ui.id().with("fixed_padlock"),
+                    egui::Sense::click(),
+                )
+                .on_hover_text(if pinned {
+                    "Click to unlock"
+                } else {
+                    "Click to lock position here"
+                });
 
             // Drag only when not pinned and not starting on the padlock.
             if drag_resp.dragged() && !pinned && !over_padlock {
@@ -1853,12 +1868,29 @@ impl RigStatsApp {
                                 ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
                             }
 
+                            // Hover-only response so a tooltip can be attached without
+                            // interfering with the raw just_pressed drag trigger above.
+                            if !locked && !in_padlock {
+                                let drag_zone_resp = ui.interact(
+                                    drag_zone,
+                                    ui.id().with("panel_drag_zone"),
+                                    egui::Sense::hover(),
+                                );
+                                let _ = drag_zone_resp.on_hover_text("Drag to move");
+                            }
+
                             // Padlock interaction.
-                            let padlock_resp = ui.interact(
-                                padlock_hit,
-                                ui.id().with("padlock"),
-                                egui::Sense::click(),
-                            );
+                            let padlock_resp = ui
+                                .interact(
+                                    padlock_hit,
+                                    ui.id().with("padlock"),
+                                    egui::Sense::click(),
+                                )
+                                .on_hover_text(if locked {
+                                    "Click to unlock"
+                                } else {
+                                    "Click to lock position here"
+                                });
                             if padlock_resp.clicked() {
                                 lock_arc.store(!locked, Ordering::Relaxed);
                             }
@@ -2106,6 +2138,7 @@ fn main() {
             let about_id = tray.about_id.clone();
             let status_id = tray.status_id.clone();
             let updater_id = tray.updater_id.clone();
+            let docs_id = tray.docs_id.clone();
             let floating_id = tray.floating_id.clone();
             let recording_id = tray.recording_id.clone();
             let dir_tray = dir.clone();
@@ -2146,6 +2179,8 @@ fn main() {
                             Some(TrayCmd::OpenStatus)
                         } else if ev.id == updater_id {
                             Some(TrayCmd::OpenUpdater)
+                        } else if ev.id == docs_id {
+                            Some(TrayCmd::OpenDocs)
                         } else {
                             None
                         };
