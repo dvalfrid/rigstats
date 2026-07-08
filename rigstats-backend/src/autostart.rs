@@ -23,15 +23,39 @@ fn hkcu() -> RegKey {
   RegKey::predef(HKEY_CURRENT_USER)
 }
 
+/// Returns `true` if `exe` sits under a cargo `target/debug` or `target/release`
+/// directory, i.e. it's a local build rather than an installed copy.
+///
+/// Guards against a dev build silently overwriting the real autostart entry:
+/// the Settings dialog re-registers on every Save while the checkbox is
+/// enabled, so running the app from `cargo build` and saving settings must
+/// never point the real Run key at a `target\` exe.
+fn is_cargo_build_artifact(exe: &std::path::Path) -> bool {
+  let mut components = exe.components().peekable();
+  while let Some(c) = components.next() {
+    if c.as_os_str().eq_ignore_ascii_case("target") {
+      if let Some(next) = components.peek() {
+        let name = next.as_os_str();
+        if name.eq_ignore_ascii_case("debug") || name.eq_ignore_ascii_case("release") {
+          return true;
+        }
+      }
+    }
+  }
+  false
+}
+
 /// Adds (or updates) the autostart registry value pointing at the current exe,
 /// and removes any StartupApproved entry that Windows may have set to disabled.
+///
+/// No-ops (returns `Ok`) when running from a local cargo build — see
+/// [`is_cargo_build_artifact`].
 pub fn register_autostart() -> Result<(), String> {
-  let exe = std::env::current_exe()
-    .map_err(|e| format!("Cannot resolve exe path: {e}"))?
-    .to_string_lossy()
-    .to_string();
-
-  let value = format!("\"{}\"", exe);
+  let exe = std::env::current_exe().map_err(|e| format!("Cannot resolve exe path: {e}"))?;
+  if is_cargo_build_artifact(&exe) {
+    return Ok(());
+  }
+  let value = format!("\"{}\"", exe.to_string_lossy());
 
   let run = hkcu()
     .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
@@ -50,7 +74,14 @@ pub fn register_autostart() -> Result<(), String> {
 
 /// Removes the autostart registry value and any StartupApproved entry.
 /// Succeeds silently if the values are already absent.
+///
+/// No-ops (returns `Ok`) when running from a local cargo build — see
+/// [`is_cargo_build_artifact`].
 pub fn unregister_autostart() -> Result<(), String> {
+  if std::env::current_exe().is_ok_and(|e| is_cargo_build_artifact(&e)) {
+    return Ok(());
+  }
+
   let run = hkcu()
     .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
     .map_err(|e| format!("Cannot open Run key for writing: {e}"))?;
@@ -122,4 +153,21 @@ pub fn is_autostart_registered_with_log(mut debug_log: impl FnMut(&str)) -> bool
   }
 
   true
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::path::PathBuf;
+
+  #[test]
+  fn detects_debug_and_release_build_artifacts() {
+    assert!(is_cargo_build_artifact(&PathBuf::from(r"C:\repo\target\debug\rigstats.exe")));
+    assert!(is_cargo_build_artifact(&PathBuf::from(r"C:\repo\target\release\rigstats.exe")));
+  }
+
+  #[test]
+  fn does_not_flag_installed_exe() {
+    assert!(!is_cargo_build_artifact(&PathBuf::from(r"C:\Program Files\RIGStats\rigstats.exe")));
+  }
 }
