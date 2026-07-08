@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.36.0](https://github.com/dvalfrid/rigstats/compare/v1.35.2...v1.36.0) (2026-07-08)
+
+
+### Features
+
+* **status:** restore displays.json in diagnostics export, fix stale docs ([0f2a47a](https://github.com/dvalfrid/rigstats/commit/0f2a47a3df1488b57df8627b4a3b4e91e2df3aa0)), closes [#163](https://github.com/dvalfrid/rigstats/issues/163)
+* **ux:** add drag/lock tooltips and a Help/Docs entry pointing to rigstats.app ([9c78b89](https://github.com/dvalfrid/rigstats/commit/9c78b89916db4115cc8777ddfe31ca4762e795d2)), closes [#161](https://github.com/dvalfrid/rigstats/issues/161)
+
+
+### Bug Fixes
+
+* **autostart:** never let a dev build overwrite the real autostart entry ([435be07](https://github.com/dvalfrid/rigstats/commit/435be07535319af665976ee885e9e4ba92ebac2c)), closes [#160](https://github.com/dvalfrid/rigstats/issues/160)
+* **dashboard:** support Fill Screen for landscape and stabilize its scale ([af8a138](https://github.com/dvalfrid/rigstats/commit/af8a1388fd698fd7b825392150f014ff0c0296d6)), closes [#159](https://github.com/dvalfrid/rigstats/issues/159)
+* **winget:** pass --repo to gh release list in submit workflow ([a78fd7b](https://github.com/dvalfrid/rigstats/commit/a78fd7b6be1677b6798a1bf082f57341ce3a6588))
+* **winget:** skip submission when an update PR is already open ([74d7d32](https://github.com/dvalfrid/rigstats/commit/74d7d323c1b30abfc09e4ab1eab27a014e5e75f3))
+
 ## [1.35.2](https://github.com/dvalfrid/rigstats/compare/v1.35.1...v1.35.2) (2026-07-02)
 
 
