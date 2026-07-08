@@ -430,6 +430,50 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         })
         .unwrap_or_else(|_| "(settings file not found)".to_string());
 
+    let dashboard_profile = std::fs::read_to_string(dir.join("rigstats-settings.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| {
+            v.get("dashboardProfile")
+                .and_then(|p| p.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+
+    let displays_json = {
+        let monitors = crate::geometry::win_monitor::list();
+        let selected_rect = (!dashboard_profile.is_empty())
+            .then(|| crate::geometry::pick_window_rect_for_profile(&dashboard_profile));
+
+        let monitor_entries: Vec<serde_json::Value> = monitors
+            .iter()
+            .map(|&(l, t, r, b)| {
+                let is_selected = selected_rect.is_some_and(|[x, y, w, h]| {
+                    x.round() as i32 == l
+                        && y.round() as i32 == t
+                        && w.round() as i32 == r - l
+                        && h.round() as i32 == b - t
+                });
+                serde_json::json!({
+                    "left": l,
+                    "top": t,
+                    "right": r,
+                    "bottom": b,
+                    "width": r - l,
+                    "height": b - t,
+                    "is_primary": l == 0 && t == 0,
+                    "is_selected": is_selected,
+                })
+            })
+            .collect();
+
+        serde_json::to_string_pretty(&serde_json::json!({
+            "dashboard_profile": dashboard_profile,
+            "monitors": monitor_entries,
+        }))
+        .unwrap_or_else(|_| "(failed to enumerate displays)".to_string())
+    };
+
     let sidecar_log = std::fs::read(
         PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
             .join("se.codeby.rigstats")
@@ -590,6 +634,7 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         ("environment.txt", env_txt.as_bytes()),
         ("sysinfo.json", sysinfo_json.as_bytes()),
         ("event-log.txt", event_log_txt.as_bytes()),
+        ("displays.json", displays_json.as_bytes()),
     ];
 
     for (name, data) in entries {

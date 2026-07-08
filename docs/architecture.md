@@ -356,9 +356,10 @@ needed:
 - **`floating_panels_locked: bool`** — when true, drag handles are disabled on
   all panel windows; toggled by `toggle_floating_lock` and persisted immediately.
 - **`panel_layouts: HashMap<String, PanelLayout>`** — last known `outer_position`
-  (`x: i32, y: i32`) per panel key. Positions are saved by `panel-host.js`
-  after each move (debounced 500 ms) and re-applied with DWM inset compensation
-  on next startup.
+  (`x: i32, y: i32`) per panel key. Positions are tracked directly in
+  `render_floating_panels` (`src-egui/src/main.rs`) from each panel viewport's
+  `outer_rect` and persisted to `rigstats-settings.json`; no JavaScript or
+  debounce is involved.
 
 Multi-GPU pinning adds one field:
 
@@ -375,50 +376,35 @@ migration needed:
 - **`fullscreen_align: String`** — `"top"` or `"center"` (default `"center"`):
   where the panel stack sits within the filled window.
 
-#### `windows.rs`
+#### `windows/` (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`)
 
-Creates and positions secondary windows:
-`ensure_settings_window`, `ensure_about_window`, `ensure_status_window`,
-`ensure_updater_window`.
+Secondary egui windows, each rendered via `show_viewport_immediate` from the
+tray-command handler in `main.rs` — not separate OS windows created through a
+Tauri-style `ensure_*_window` API. Every dialog is centred with
+`geometry::dialog_center(w, h)`, which enumerates real monitors via
+`geometry::win_monitor::list()` (falls back to `[100.0, 100.0]` when none are
+found) rather than tracking a tray-click position. Settings is 560×600; About,
+Status, and Updater have their own fixed sizes set at their
+`show_viewport_immediate` call sites.
 
-Settings window uses `center_on_tray_monitor` which converts the physical tray
-click position to logical pixels using `monitor.scale_factor()`, then centres
-the 560×600 window on that monitor. Other secondary windows use
-`tray_anchor_position` (anchored above the tray icon). Both functions read
-`LAST_TRAY_CLICK_X/Y` set by `set_last_tray_click_position`; fall back to the
-first available monitor when no click has been recorded.
+Floating panel management lives in `render_floating_panels` (`main.rs`), not a
+separate `windows.rs` module:
 
-Floating panel management:
-
-- **`all_panel_keys()`** — canonical ordered list of the 10 panel keys; exported
-  so `commands.rs` can iterate panel windows without duplicating the list.
-- **`panel_base_size(key, dashboard_profile, user_scale)`** — scales each
-  panel's logical dimensions to match the active profile, then applies the user
-  `floating_panel_scale` multiplier.
-- **`launch_floating_panels(app, state)`** — opens one frameless `always_on_top`
-  `panel-{key}` window per panel and reconciles already-open windows by
-  resize/show/hide instead of skipping them. Applies DWM invisible resize border
-  compensation (`inner_position − outer_position`) to saved positions from
-  `settings.panel_layouts`. Panels without a saved position are staggered
-  diagonally. Build failures and panics are logged and skipped; the remaining
-  panels are still created.
-- **`sync_floating_panels(app, state)`** — reconciles open windows with the
-  current settings without tearing everything down: hides unwanted panels,
-  resizes/shows existing ones, then calls `launch_floating_panels` for any
-  that are missing. Main window hide/show is fail-safe: it hides main only when
-  at least one requested floating panel is visible, otherwise it logs and keeps
-  main visible.
-- **`spawn_sync_floating_panels(app)`** — schedules floating sync on the main
-  thread (required by `WebviewWindowBuilder::build`) with queue coalescing so
-  repeated preview/toggle calls do not flood the event loop.
-- **`close_floating_panels(app)`** — hides (not closes) all open panel windows
-  for fast mode switching.
-
-`on_window_event` handles `CloseRequested` (hide-to-tray) for the main window
-and re-applies `set_decorations(false)` on `Moved` for the main window and
-floating panel windows only. The re-application is necessary because Windows
-can restore `WS_CAPTION`/`WS_THICKFRAME` when a borderless window is dragged
-between monitors with different DPI settings.
+- Iterates `self.runtime.visible_panels` and opens one frameless,
+  `WindowLevel`-matched viewport per panel via `show_viewport_immediate`,
+  sized from `panel_initial_h(key)` scaled by `floating_panel_scale`.
+- A panel's position is only set on first creation (`with_position`); after
+  that the OS owns it via drag, and the viewport's `outer_rect` is read back
+  each frame to update `floating_positions` (persisted to
+  `settings.panel_layouts` on Save). Panels without a saved position stagger
+  diagonally from `[100.0, 80.0]`.
+- Each panel draws its own drag zone (top 24 px) and padlock hit-rect inline;
+  dragging is triggered by a raw `just_pressed` check in that zone rather than
+  `egui::Sense::drag()`, so it can call `win32_behind::prepare_for_drag` first
+  when the window layer is "Always Behind" (`SC_MOVE` needs the window
+  active, which `WS_EX_NOACTIVATE` normally prevents).
+- The per-panel lock toggle flips `floating_lock_arc` (shared across all
+  panel viewports) rather than being a per-window Tauri command.
 
 #### `updater.rs`
 
@@ -484,15 +470,13 @@ thread). Produces a self-contained ZIP for bug reports.
 | `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `AppState.settings` snapshot | All user settings |
-| `sidecar-parsed.json` | `AppState.last_lhm` snapshot | Extracted values: temps, clocks, fans, voltages |
-| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, connect/disconnect, errors |
+| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, connect/disconnect. Lifecycle events only — no parsed sensor values (that's `AppState.last_lhm`, not currently exported to the ZIP). |
 | `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
-| `battery.json` | WMI probes + `AppState.last_battery_sample` | See battery diagnostics below |
 | `environment.txt` | `std::env::var` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` — exposes child/standard account path redirections |
 | `event-log.txt` | PowerShell `Get-WinEvent` | Windows Application Event Log: rigstats errors and critical events — catches OS-level crashes not recorded in the in-app log |
 | `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
-| `displays.json` | Monitor list from `pick_monitor()` | Resolution, position, scale, fit score, which was selected |
+| `displays.json` | `geometry::win_monitor::list()` + `pick_window_rect_for_profile()` | Each monitor's position/resolution, `is_primary`, and `is_selected` for the active dashboard profile |
 
 ### `sysinfo.json` — key fields
 
@@ -503,16 +487,6 @@ thread). Produces a self-contained ZIP for bug reports.
 | `diskModelMap` | Drive-letter → model-name map built at startup. Empty map = WMI join failed — check `diskModelMapProbe`. |
 | `diskModelMapProbe` | Runs the WMI three-table join used by `detect_disk_model_map`. Empty result means the BIOS doesn't expose the partition associations. |
 | `wmiAvailable` | Whether WMI was reachable at startup. `false` means all WMI-sourced fields (RAM type/speed, GPU VRAM, etc.) will be missing. |
-
-### `battery.json` — key fields
-
-| Field | What it tells you |
-| --- | --- |
-| `cached.present` | `false` = no battery detected at last 10 s sample. On desktops this is expected. |
-| `cached.ageSecs` | Seconds since the last battery WMI sample. Should be ≤ 10 on a live system. |
-| `cached.powerW` | `null` = `root\wmi BatteryStatus` didn't return a rate — check `wmiStatusProbe`. |
-| `win32Battery` | Raw `Win32_Battery` values: `EstimatedChargeRemaining`, `BatteryStatus`, `EstimatedRunTime`. `exit_code` 0 = query succeeded. Non-empty `stderr` = access or class error. |
-| `wmiBatteryStatus` | Raw `root\wmi BatteryStatus` values: `ChargeRate`, `DischargeRate` in mW. Many desktop drivers don't expose this class — `"(no data)"` is expected on non-laptop systems. |
 
 ---
 

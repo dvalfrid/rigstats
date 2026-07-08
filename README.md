@@ -112,7 +112,7 @@ See [docs/architecture.md](docs/architecture.md) for module-level detail and [do
 ## Display & Placement
 
 The dashboard renders on a secondary monitor and is configured entirely from
-**Settings** (a 560×560 dialog with five tabs: Display, Panels, Alerts,
+**Settings** (a 560×600 dialog with five tabs: Display, Panels, Alerts,
 Appearance, General).
 
 - **Display profiles** — pick a portrait or landscape profile that matches the
@@ -301,14 +301,15 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | `debug.log` | Full debug log for the current session | Startup sequence, connectivity, settings save errors |
 | `debug-prev.log` | Debug log from the previous session | Captures the log from a session that crashed |
 | `settings.json` | Persisted user settings | Rules out configuration-specific issues |
-| `sidecar-parsed.json` | Last sensor payload from the sidecar pipe | **Most important file for adding sensor support** — shows all extracted values as the app uses them |
+| `install.log` | NSIS installer/upgrade log | Diagnose install failures (service registration, driver install) |
+| `sidecar-log.txt` | Raw log written by the `rigstats-sensor` Windows Service | **Most important file for adding sensor support** — LibreHardwareMonitor startup and pipe-server activity |
 | `sensor-tree.txt` | Full LHM hardware and sensor tree at last sidecar start | Find the exact identifier for a sensor not being picked up |
 | `hardware.json` | WMI/CIM snapshot: OS, CPU, GPU, motherboard, RAM | Hardware identification and brand detection |
 | `sidecar-service.txt` | Output of `sc query` + `sc qc` for `rigstats-sensor` | Diagnose sidecar autostart and service registration failures |
 | `environment.txt` | `USERNAME`, `APPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE`, etc. | Diagnose child/standard account issues where APPDATA may be redirected |
 | `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats | OS-level crash records not visible in the in-app debug log |
 | `sysinfo.json` | sysinfo snapshot: CPU, memory, disks, network, ping target | Verify what sysinfo sees on the machine |
-| `displays.json` | All connected monitors: resolution, position, scale, fit score, selected monitor | Diagnose window placement and wrong-monitor issues |
+| `displays.json` | Connected monitors (position, resolution) and which one was auto-selected for the current dashboard profile | Diagnose window placement and wrong-monitor issues |
 
 ---
 

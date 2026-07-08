@@ -166,18 +166,25 @@ See [Diagnostics Export](../README.md#diagnostics-export) in the README for a fu
 
 ### What To Look For In `displays.json`
 
-The file lists every monitor Windows reports to the app — the same data used by `pick_target_monitor()`.
+The file lists every monitor Windows reports to the app — the same data used by
+`geometry::pick_window_rect_for_profile()` — plus which one was picked for the
+current dashboard profile.
 
-Each entry shows:
+Top-level fields:
 
-- `widthPx` / `heightPx` — physical pixel resolution
-- `positionX` / `positionY` — position in the virtual desktop coordinate space
-- `scaleFactor` — Windows DPI scaling (e.g. `1.5` = 150 %)
-- `isPortrait` — whether height ≥ width
-- `fitScore` — how well this monitor matches the active profile (lower = better)
-- `selected` — `true` on the monitor that was actually chosen
+- `dashboard_profile` — the profile active when diagnostics were collected
+- `monitors[]` — one entry per connected display:
+  - `left` / `top` / `right` / `bottom` — position in the virtual desktop
+    coordinate space, in logical (DPI-normalized) pixels
+  - `width` / `height` — derived resolution
+  - `is_primary` — `true` for the monitor at the virtual origin `(0, 0)`
+  - `is_selected` — `true` on the monitor that was actually chosen for
+    `dashboard_profile`
 
-If the dashboard appears on the wrong monitor, compare the `fitScore` values and check whether the correct monitor has `isPortrait: true` and a lower score than the others.
+If the dashboard appears on the wrong monitor, check which entry has
+`is_selected: true` and compare its `width`/`height` against the profile's
+expected size — a profile only targets a monitor whose resolution matches
+within ~10%; otherwise it falls back to the primary monitor.
 
 ### What To Look For In `sensor-tree.txt`
 
@@ -189,18 +196,24 @@ For example, if a DIMM temperature reads correctly in standalone LHM but not in 
 
 The file is overwritten on every service start, so it always reflects the current hardware configuration.
 
-### What To Look For In `sidecar-parsed.json`
+### What To Look For In `sidecar-log.txt`
 
-The file contains the last sensor payload that the Rust backend successfully
-received from the sidecar pipe. It shows the extracted values — GPU temps,
-CPU temp, fan speeds, disk temps, etc. — exactly as the app uses them.
+The file is the raw log written by the `rigstats-sensor` Windows Service
+itself — lifecycle events only: `Hardware opened. Listening on
+\\.\pipe\rigstats-sensors`, `Client connected.` / `Client disconnected.`, and
+`Stopped.`. It does **not** contain parsed sensor values.
 
-When a sensor always shows `--`, check whether the relevant field is `null`
-here. If it is, the mismatch is in `sensor-sidecar/SensorReader.cs` (the C#
-extraction logic). If the field is present but the wrong value appears in the
-UI, the mismatch is in `rigstats-backend/src/lhm.rs` (the Rust selection logic).
+Use it to tell whether the sidecar is running and accepting a pipe
+connection at all. If the service never logs "Client connected", the Rust
+backend isn't reaching the pipe — check `sidecar-service.txt` for the service
+state first.
 
-Check `sidecar-log.txt` for service start/stop events and connection errors.
+When a specific sensor always shows `--` in the dashboard (the sidecar itself
+is clearly running and connected), the mismatch is in
+`sensor-sidecar/SensorReader.cs` (the C# extraction logic) or
+`rigstats-backend/src/lhm.rs` (the Rust selection logic) — use
+`sensor-tree.txt` (below) to find the exact sensor identifier and compare it
+against both.
 
 ## How Do I Change The UI?
 
