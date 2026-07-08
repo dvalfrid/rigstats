@@ -106,8 +106,13 @@ It runs when a GitHub Release is published (or manually via `workflow_dispatch` 
 - runs `cargo xtask build`
 - builds the NSIS installer
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
-- **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field
+- **signs `latest.json` with a legacy Tauri minisign key** via `npx --yes @tauri-apps/cli@^2 signer sign` — the one intentional Node.js dependency left in the pipeline (see the "Remove Node.js / npm infrastructure" entry in [ROADMAP.md](../ROADMAP.md)); it lets clients still on a pre-1.26 Tauri build verify and install an update instead of crashing
+- **generates `latest.json`** — version, installer URL, SHA256 checksum, the minisign `signature`, and the current version's changelog section embedded in the `notes` field
 - uploads the `.exe` and `latest.json` to the GitHub Release
+
+A separate `.github/workflows/winget-submit.yml` runs after a release and
+opens/updates the `Codeby.RIGStats` manifest PR in `microsoft/winget-pkgs`,
+skipping submission if an update PR for that release is already open.
 
 ### Signing
 

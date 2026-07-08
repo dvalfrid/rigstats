@@ -283,6 +283,13 @@ without sharing the exact accent colour.
 - `renderer/themes.test.js` — 16 tests covering preset enumeration, hex↔HSL
   round-trip accuracy, and derived-colour saturation invariants
 
+> **Update (egui rewrite):** theming was later reimplemented natively in
+> `theme.rs` — `AppTheme::from_key(key)` maps a theme key straight to
+> `egui::Color32` accents and derived tones (no CSS custom properties). The
+> preset list has grown to **seven**: Dark Cyan (default), Amber, Green,
+> Purple, Slate, Red, Blue (`theme::THEME_KEYS`). Selected via Settings →
+> Appearance; still previews live and persists across restarts.
+
 ---
 
 ## Process monitor panel ✅
@@ -313,6 +320,11 @@ Enabled via Settings → panel toggles.
   insertion into `innerHTML` to prevent XSS from adversarial process names
 - `"process"` added to the valid panel key list in `monitor.rs` and `settings.js`
 
+> **Update (egui rewrite):** the panel is now drawn natively by
+> `panels/process.rs`. The top-8-by-CPU sort/truncate happens in
+> `poll.rs` each tick (no serialisation/escaping concerns since there's no
+> HTML rendering); the panel itself just reads the already-sorted list.
+
 ---
 
 ## Battery panel (laptop support) ✅
@@ -342,6 +354,13 @@ Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, status
 - Floating panel: `panel-battery.html` (256 px, standard drag handle).
 - `"battery"` added to valid panel keys in `monitor.rs`, `windows.rs`, `settings.js`,
   `app.js`, and `panel-host.js`.
+
+> **Update (egui rewrite):** the panel is now drawn natively by
+> `panels/battery.rs`, sourced the same way (WMI `Win32_Battery` +
+> `root\wmi BatteryStatus` in `hardware.rs`). The charge/power colour
+> thresholds are no longer hardcoded — they're user-configurable warn/crit
+> values under Settings → Alerts (defaults: charge warn 10 % / crit 5 %,
+> power warn 15 W / crit 25 W).
 
 ---
 
@@ -492,6 +511,21 @@ Settings" and "Close panel".
 - Settings window: "Floating mode" toggle and "Panel Scale" slider in a new
   Layout card
 - Tray menu: "Floating mode" shortcut to toggle without opening Settings
+
+> **Update (egui rewrite):** floating mode is now `render_floating_panels`
+> in `src-egui/src/main.rs` — each visible panel is an egui
+> `show_viewport_immediate` viewport instead of a Tauri `WebviewWindow`, sized
+> from `panel_initial_h(key) * floating_panel_scale`. A panel's drag zone
+> (top 24 px) and padlock hit-rect are drawn and hit-tested inline per panel
+> rather than via `data-tauri-drag-region`; dragging triggers
+> `egui::ViewportCommand::StartDrag` directly. Positions are read back from
+> each viewport's `outer_rect` every frame and written straight to
+> `settings.panel_layouts` — no `broadcast_stats`/`stats-broadcast` event, no
+> `panel-host.js`; the same in-process `StatsPayload` tick just renders once
+> per open viewport. The lock toggle is a single shared
+> `floating_lock_arc` rather than a per-window Tauri command, and there is no
+> right-click "Open Settings" / "Close panel" context menu — panels are
+> shown/hidden entirely from Settings → Panels.
 
 ---
 
@@ -1054,11 +1088,20 @@ profile owns it.
 
 ## Remove Node.js / npm infrastructure ✅
 
-**Implemented.** All Node.js/npm infrastructure has been removed following the
-egui migration (v1.27.0). `package.json`, `node_modules`, `vitest.config.js`,
-`frontend/renderer/`, ESLint config, and lefthook are gone. The build pipeline
-uses `cargo` and `dotnet` directly. Brand-key logic from `vendorBranding.js` is
-covered by `brand.rs` and its Rust tests.
+**Implemented.** All Node.js/npm infrastructure has been removed from the app
+and its build following the egui migration (v1.27.0). `package.json`,
+`node_modules`, `vitest.config.js`, `frontend/renderer/`, ESLint config, and
+lefthook are gone. The build pipeline uses `cargo` and `dotnet` directly.
+Brand-key logic from `vendorBranding.js` is covered by `brand.rs` and its
+Rust tests.
+
+**One intentional exception:** the release workflow (`.github/workflows/release.yml`)
+still runs `npx --yes @tauri-apps/cli@^2 signer sign` to produce a legacy
+Tauri minisign signature alongside `latest.json`. This is required so
+clients still on a pre-1.26 (Tauri) build can verify and install an update
+without crashing — dropping it would strand anyone who hasn't updated in a
+while. Remove this step (and the `npx` dependency) once pre-1.26 installs are
+judged negligible.
 
 ---
 
