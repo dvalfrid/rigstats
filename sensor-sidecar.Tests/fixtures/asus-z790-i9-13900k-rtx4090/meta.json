@@ -1,0 +1,16 @@
+{
+  "slug": "asus-z790-i9-13900k-rtx4090",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1783666274,
+  "rigstats_version": "1.36.0",
+  "os": "Windows 10 22H2 (build 19045)",
+  "notes": "idle snapshot",
+  "anonymized": true,
+  "confirmed_by": 1,
+  "gpu_driver": "32.0.15.9649",
+  "bios": null,
+  "gpu_state": "all-active",
+  "variant_of": null,
+  "differs": null
+}

@@ -1,0 +1,91 @@
+{
+  "cpu_temp": 65,
+  "cpu_power": 91.16596,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce RTX 4090",
+      "sensor_family": "gpu-nvidia",
+      "load": 8,
+      "temp": 40,
+      "hotspot_temp": 49.3125,
+      "core_clock": 375,
+      "mem_clock": 405,
+      "power": 19.646,
+      "fan": 0,
+      "vram_used_mb": 2014,
+      "vram_total_mb": 24564,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "Samsung SSD 990 PRO 2TB": 59.850006,
+    "Samsung SSD 960 EVO 1TB": 53.850006,
+    "INTEL SSDSC2BW480A4": 37,
+    "WDC  WDS500G2B0A-00SM50": 37
+  },
+  "ram_temp": 41.5,
+  "mb_fans": [
+    {
+      "label": "Fan #7",
+      "rpm": 2454.5454
+    },
+    {
+      "label": "Fan #2",
+      "rpm": 1428.5714
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "CPU Core",
+      "celsius": 57
+    },
+    {
+      "label": "Temperature #1",
+      "celsius": 46.5
+    },
+    {
+      "label": "Temperature #2",
+      "celsius": 38
+    },
+    {
+      "label": "Temperature #3",
+      "celsius": 12
+    },
+    {
+      "label": "Temperature #4",
+      "celsius": 12
+    },
+    {
+      "label": "Temperature #5",
+      "celsius": 19
+    },
+    {
+      "label": "Temperature #6",
+      "celsius": 32
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "Vcore",
+      "volts": 1.2800001
+    },
+    {
+      "label": "AVCC",
+      "volts": 3.4720001
+    },
+    {
+      "label": "\u002B3.3V",
+      "volts": 3.2640002
+    },
+    {
+      "label": "\u002B3V Standby",
+      "volts": 3.456
+    },
+    {
+      "label": "CPU Termination",
+      "volts": 0.52000004
+    }
+  ],
+  "mb_chip": "Nuvoton NCT6798D"
+}

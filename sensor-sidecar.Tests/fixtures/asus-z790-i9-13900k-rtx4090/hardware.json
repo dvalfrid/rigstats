@@ -1,0 +1,65 @@
+{
+    "cpu":  [
+                {
+                    "threads":  32,
+                    "name":  "13th Gen Intel(R) Core(TM) i9-13900K",
+                    "cores":  24
+                }
+            ],
+    "board":  {
+                  "bbProd":  "ROG STRIX Z790-F GAMING WIFI",
+                  "csModel":  "System Product Name",
+                  "csMfr":  "ASUS"
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  2000396321280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "Samsung SSD 990 PRO 2TB"
+                 },
+                 {
+                     "sizeBytes":  480101368320,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "INTEL SSDSC2BW480A4"
+                 },
+                 {
+                     "sizeBytes":  1000202273280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "Samsung SSD 960 EVO 1TB"
+                 },
+                 {
+                     "sizeBytes":  500105249280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "WDC  WDS500G2B0A-00SM50"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "Parsec Virtual Display Adapter",
+                    "driver":  "0.45.0.0",
+                    "ramBytes":  null
+                },
+                {
+                    "name":  "NVIDIA GeForce RTX 4090",
+                    "driver":  "32.0.15.9649",
+                    "ramBytes":  4293918720
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  6600,
+                    "capBytes":  34359738368,
+                    "speed":  6600
+                },
+                {
+                    "configured":  6600,
+                    "capBytes":  34359738368,
+                    "speed":  6600
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 10 Pro",
+               "build":  "19045",
+               "version":  "10.0.19045"
+           }
+}
