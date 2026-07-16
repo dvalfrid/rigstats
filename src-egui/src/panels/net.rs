@@ -85,7 +85,7 @@ fn draw_dual(
         }
         Some((
             mesh,
-            egui::Shape::line(pts.to_vec(), Stroke::new(1.5, color)),
+            egui::Shape::line(pts.to_vec(), Stroke::new(1.5_f32, color)),
         ))
     };
 

@@ -1380,7 +1380,7 @@ fn draw_padlock(painter: &egui::Painter, center: egui::Pos2, locked: bool, color
     let body_w = 8.0_f32;
     let body_h = 4.5_f32;
     let sr = 2.6_f32; // shackle half-width = radius of semicircle
-    let stroke = egui::Stroke::new(1.5, color);
+    let stroke = egui::Stroke::new(1.5_f32, color);
 
     // Body — filled rect in the lower portion.
     let body_cy = center.y + 2.2;

@@ -268,7 +268,7 @@ pub fn panel_frame(
         outer_margin: Margin::ZERO,
         corner_radius: CornerRadius::ZERO,
         fill: premul(PANEL_FILL, opacity),
-        stroke: Stroke::new(0.5, premul(PANEL_BORDER, opacity)),
+        stroke: Stroke::new(0.5_f32, premul(PANEL_BORDER, opacity)),
         ..Default::default()
     };
 
@@ -486,15 +486,15 @@ fn with_btn_visuals<R>(
         let w = &mut ui.visuals_mut().widgets;
         w.inactive.bg_fill = fill;
         w.inactive.weak_bg_fill = fill;
-        w.inactive.bg_stroke = Stroke::new(1.0, border);
+        w.inactive.bg_stroke = Stroke::new(1.0_f32, border);
         w.inactive.corner_radius = cr;
         w.hovered.bg_fill = fill_hov;
         w.hovered.weak_bg_fill = fill_hov;
-        w.hovered.bg_stroke = Stroke::new(1.0, border);
+        w.hovered.bg_stroke = Stroke::new(1.0_f32, border);
         w.hovered.corner_radius = cr;
         w.active.bg_fill = fill_act;
         w.active.weak_bg_fill = fill_act;
-        w.active.bg_stroke = Stroke::new(1.0, border);
+        w.active.bg_stroke = Stroke::new(1.0_f32, border);
         w.active.corner_radius = cr;
         f(ui)
     })
@@ -629,7 +629,7 @@ mod tests {
 fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
     let bracket_a = (128.0 * opacity) as u8;
     let c = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), bracket_a);
-    let stroke = Stroke::new(1.0, c);
+    let stroke = Stroke::new(1.0_f32, c);
     let size = 8.0;
     let inset = 5.0;
 

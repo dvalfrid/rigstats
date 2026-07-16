@@ -119,7 +119,7 @@ fn dialog_frame(dc: &DialogColors) -> egui::Frame {
 fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
         .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0, dc.card_border))
+        .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(12, 8))
 }
@@ -140,7 +140,7 @@ fn wallpaper_save_banner(ui: &mut egui::Ui, dc: &DialogColors) {
     const AMBER: egui::Color32 = egui::Color32::from_rgb(0xE5, 0xC0, 0x7B);
     egui::Frame::new()
         .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0, AMBER.gamma_multiply(0.5)))
+        .stroke(egui::Stroke::new(1.0_f32, AMBER.gamma_multiply(0.5)))
         .corner_radius(egui::CornerRadius::same(5))
         .inner_margin(egui::Margin::symmetric(10, 7))
         .show(ui, |ui| {
@@ -203,7 +203,7 @@ fn drag_handle(ui: &mut egui::Ui, dc: &DialogColors) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(16.0, 20.0), egui::Sense::hover());
     if ui.is_rect_visible(rect) {
         let cx = rect.center().x;
-        let stroke = egui::Stroke::new(1.5, dc.muted);
+        let stroke = egui::Stroke::new(1.5_f32, dc.muted);
         for dy in [-4.0_f32, 0.0, 4.0] {
             let y = rect.center().y + dy;
             ui.painter()
@@ -221,15 +221,17 @@ fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool, widt
         if active {
             ui.visuals_mut().widgets.inactive.bg_fill = dc.tab_active;
             ui.visuals_mut().widgets.inactive.fg_stroke =
-                egui::Stroke::new(1.0, dc.tab_active_text);
+                egui::Stroke::new(1.0_f32, dc.tab_active_text);
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
             ui.visuals_mut().widgets.hovered.bg_fill = dc.tab_active;
-            ui.visuals_mut().widgets.hovered.fg_stroke = egui::Stroke::new(1.0, dc.tab_active_text);
+            ui.visuals_mut().widgets.hovered.fg_stroke =
+                egui::Stroke::new(1.0_f32, dc.tab_active_text);
             ui.visuals_mut().widgets.hovered.corner_radius = cr;
             ui.visuals_mut().widgets.active.corner_radius = cr;
         } else {
             ui.visuals_mut().widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
-            ui.visuals_mut().widgets.inactive.bg_stroke = egui::Stroke::new(1.0, dc.card_border);
+            ui.visuals_mut().widgets.inactive.bg_stroke =
+                egui::Stroke::new(1.0_f32, dc.card_border);
             ui.visuals_mut().widgets.inactive.corner_radius = cr;
             ui.visuals_mut().widgets.hovered.bg_fill = dc.card;
             ui.visuals_mut().widgets.hovered.corner_radius = cr;

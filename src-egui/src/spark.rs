@@ -84,7 +84,7 @@ impl Sparkline {
         painter.add(Shape::mesh(mesh));
 
         // Line on top
-        painter.add(Shape::line(points, Stroke::new(1.5, color)));
+        painter.add(Shape::line(points, Stroke::new(1.5_f32, color)));
     }
 }
 

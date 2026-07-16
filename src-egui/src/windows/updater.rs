@@ -518,7 +518,7 @@ pub fn show(
                     top: 14,
                     bottom: 12,
                 })
-                .stroke(egui::Stroke::new(1.0, dc.card_border)),
+                .stroke(egui::Stroke::new(1.0_f32, dc.card_border)),
         )
         .show_separator_line(true)
         .show(ctx, |ui| {
@@ -549,7 +549,7 @@ pub fn show(
                     top: 8,
                     bottom: 10,
                 })
-                .stroke(egui::Stroke::new(1.0, dc.card_border)),
+                .stroke(egui::Stroke::new(1.0_f32, dc.card_border)),
         )
         .show_separator_line(true)
         .show(ctx, |ui| {

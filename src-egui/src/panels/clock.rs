@@ -70,7 +70,7 @@ pub fn draw(
             let resp = ui.add(
                 egui::Button::new(RichText::new(&label).size(11.0 * sc).color(badge_color))
                     .fill(bg_color)
-                    .stroke(egui::Stroke::new(1.0, border_color))
+                    .stroke(egui::Stroke::new(1.0_f32, border_color))
                     .corner_radius(egui::CornerRadius::same(2)),
             );
             if resp.hovered() {

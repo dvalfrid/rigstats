@@ -84,7 +84,7 @@ pub fn draw(
                                 painter.circle_stroke(
                                     center,
                                     3.5 * sc,
-                                    Stroke::new(1.5, th.text_muted),
+                                    Stroke::new(1.5_f32, th.text_muted),
                                 );
                             }
                             let resp = resp.on_hover_text(name.as_str());

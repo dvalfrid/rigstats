@@ -14,7 +14,7 @@ fn dialog_frame(dc: &DialogColors) -> egui::Frame {
 fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
         .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0, dc.card_border))
+        .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(14, 12))
 }
