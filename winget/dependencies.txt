@@ -1,0 +1,9 @@
+# Winget PackageIdentifiers currently declared as Dependencies on the
+# Codeby.RIGStats installer manifest (winget-pkgs, x64 architecture).
+#
+# Checked against the actual PE imports of the built rigstats.exe by
+# `cargo xtask verify` (see check_winget_dependencies in xtask/src/main.rs).
+# If that check fails, update this file AND the installer manifest on
+# winget-pkgs to match (wingetcreate has no CLI flag for dependencies —
+# it only carries forward whatever the previous manifest already has).
+Microsoft.VCRedist.2015+.x64

@@ -1,7 +1,7 @@
 use std::{
     env,
     path::{Path, PathBuf},
-    process::{Command, exit},
+    process::{exit, Command},
 };
 
 fn main() {
@@ -115,13 +115,11 @@ fn task_setup() -> Result<(), String> {
             println!("Installed. Open a new terminal and run `cargo xtask setup` again.");
             return Ok(());
         }
-        return Err(
-            "Could not install lefthook automatically.\n\
+        return Err("Could not install lefthook automatically.\n\
              Install manually and re-run:\n\
              \n  winget install evilmartians.lefthook\
              \n  scoop install lefthook"
-                .to_owned(),
-        );
+            .to_owned());
     }
     run(Command::new("lefthook").arg("install"))?;
     println!("Git hooks installed.");
@@ -178,7 +176,155 @@ fn task_verify() -> Result<(), String> {
         "--check",
     ]))?;
 
+    println!("── winget dependencies ─────────────────────────────────────────");
+    check_winget_dependencies()?;
+
     println!("── all checks passed ───────────────────────────────────────────");
+    Ok(())
+}
+
+/// DLLs that ship with Windows 10+ itself (or are Windows API Sets) and never
+/// require a winget package dependency.
+const OS_DLL_ALLOWLIST: &[&str] = &[
+    "kernel32.dll",
+    "user32.dll",
+    "gdi32.dll",
+    "advapi32.dll",
+    "shell32.dll",
+    "shlwapi.dll",
+    "ole32.dll",
+    "oleaut32.dll",
+    "comctl32.dll",
+    "comdlg32.dll",
+    "ws2_32.dll",
+    "winmm.dll",
+    "ntdll.dll",
+    "crypt32.dll",
+    "bcrypt.dll",
+    "bcryptprimitives.dll",
+    "dwmapi.dll",
+    "d3d11.dll",
+    "d3d12.dll",
+    "dxgi.dll",
+    "d2d1.dll",
+    "dwrite.dll",
+    "windows.storage.dll",
+    "combase.dll",
+    "rpcrt4.dll",
+    "sechost.dll",
+    "userenv.dll",
+    "iphlpapi.dll",
+    "setupapi.dll",
+    "version.dll",
+    "psapi.dll",
+    "powrprof.dll",
+    "propsys.dll",
+    "uxtheme.dll",
+    "msvcrt.dll",
+    "imm32.dll",
+    "oleacc.dll",
+    "uiautomationcore.dll",
+    "pdh.dll",
+    "opengl32.dll",
+];
+
+/// Non-OS DLLs mapped to the winget `PackageIdentifier` that provides them.
+/// Extend this when a new native dependency shows up in `check_winget_dependencies`.
+const WINGET_DEP_MAP: &[(&str, &str)] = &[
+    ("vcruntime140.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("vcruntime140_1.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("msvcp140.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("msvcp140_1.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("msvcp140_2.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("msvcp140_codecvt_ids.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("concrt140.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("vcomp140.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("vccorlib140.dll", "Microsoft.VCRedist.2015+.x64"),
+    ("webview2loader.dll", "Microsoft.EdgeWebView2Runtime"),
+];
+
+/// Confirms the winget `Dependencies` we declare for `Codeby.RIGStats` (tracked in
+/// `winget/dependencies.txt`) still match what `rigstats.exe` actually imports.
+/// Catches both a newly-introduced native dependency winget doesn't know about yet,
+/// and a stale dependency we no longer need — either one makes reviewers' lives
+/// harder. `wingetcreate update` has no flag to set dependencies, so a mismatch here
+/// must be fixed by hand in `winget/dependencies.txt` and in the live winget-pkgs
+/// manifest before the next release is submitted.
+fn check_winget_dependencies() -> Result<(), String> {
+    let root = project_root();
+
+    let exe_path = root.join("target/debug/rigstats.exe");
+    run(Command::new("cargo").args([
+        "build",
+        "--manifest-path",
+        "src-egui/Cargo.toml",
+        "--bin",
+        "rigstats",
+    ]))?;
+
+    let bytes = std::fs::read(&exe_path)
+        .map_err(|e| format!("failed to read {}: {e}", exe_path.display()))?;
+    let pe = goblin::pe::PE::parse(&bytes)
+        .map_err(|e| format!("failed to parse {} as PE: {e}", exe_path.display()))?;
+
+    let mut required: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let mut unmapped: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    for import in &pe.imports {
+        let dll = import.dll.to_ascii_lowercase();
+        if OS_DLL_ALLOWLIST.contains(&dll.as_str())
+            || dll.starts_with("api-ms-win-")
+            || dll.starts_with("ext-ms-")
+        {
+            continue;
+        }
+        match WINGET_DEP_MAP.iter().find(|(name, _)| *name == dll) {
+            Some((_, pkg_id)) => {
+                required.insert(pkg_id);
+            }
+            None => {
+                unmapped.insert(dll);
+            }
+        }
+    }
+
+    if !unmapped.is_empty() {
+        return Err(format!(
+            "rigstats.exe imports DLL(s) not recognized by check_winget_dependencies: {}\n\
+             Classify each one in xtask/src/main.rs: add it to OS_DLL_ALLOWLIST if it ships \
+             with Windows, or to WINGET_DEP_MAP with the winget PackageIdentifier that provides it.",
+            unmapped.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+
+    let deps_path = root.join("winget/dependencies.txt");
+    let declared_raw = std::fs::read_to_string(&deps_path)
+        .map_err(|e| format!("failed to read {}: {e}", deps_path.display()))?;
+    let declared: std::collections::BTreeSet<&str> = declared_raw
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+
+    let missing: Vec<_> = required.difference(&declared).collect();
+    let stale: Vec<_> = declared.difference(&required).collect();
+
+    if !missing.is_empty() || !stale.is_empty() {
+        let mut msg = String::from("winget/dependencies.txt is out of sync with rigstats.exe:\n");
+        for pkg in &missing {
+            msg.push_str(&format!(
+                "  + {pkg} is required (imported DLL not covered by any declared dependency) — add it to winget/dependencies.txt and to the winget-pkgs installer manifest\n"
+            ));
+        }
+        for pkg in &stale {
+            msg.push_str(&format!(
+                "  - {pkg} is declared but no longer needed (no matching DLL import) — remove it from winget/dependencies.txt and from the winget-pkgs installer manifest\n"
+            ));
+        }
+        return Err(msg);
+    }
+
+    println!("winget dependencies match rigstats.exe imports: {declared:?}");
     Ok(())
 }
 

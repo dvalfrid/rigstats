@@ -5,4 +5,5 @@ edition = "2021"
 publish = false
 
 [dependencies]
+goblin = "0.10.7"
 quick-xml = "0.39"
