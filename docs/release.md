@@ -96,6 +96,19 @@ by then we're back to the `main` branch-protection problem, and it's not
 worth a privileged PAT just for a size figure that drifts by a few KB per
 release. Revisit only if a directory actually rejects updates over it.
 
+## Uptodown
+
+RIGStats is also listed on [Uptodown](https://rigstats.en.uptodown.com/windows).
+Unlike the PAD directories above, Uptodown mirrors the installer itself onto
+its own CDN rather than linking straight to the GitHub asset, and renames it
+to its own convention (`rigstats-<version>.exe`, lowercase) when it does.
+That rename happens on their end — release assets stay
+`RIGStats_<version>_x64-setup.exe` here, nothing to adjust per release.
+
+To publish a new version there: open the app's Uptodown page, use their
+update/submit flow, and point it at (or upload) the signed installer from the
+GitHub Release. They re-crawl/re-approve on their own schedule after that.
+
 ## Release Assets
 
 Installer publishing is handled by `.github/workflows/release.yml`.
