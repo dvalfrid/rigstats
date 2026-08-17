@@ -1,0 +1,44 @@
+{
+  "cpu_temp": null,
+  "cpu_power": null,
+  "gpu_devices": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "sensor_family": "gpu-amd",
+      "load": 0,
+      "temp": 40,
+      "hotspot_temp": null,
+      "core_clock": 600,
+      "mem_clock": 3000,
+      "power": 47,
+      "fan": null,
+      "vram_used_mb": 0,
+      "vram_total_mb": 512,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    },
+    {
+      "name": "NVIDIA GeForce RTX 5070",
+      "sensor_family": "gpu-nvidia",
+      "load": 0,
+      "temp": 29.714844,
+      "hotspot_temp": null,
+      "core_clock": 405,
+      "mem_clock": 405,
+      "power": 7.616,
+      "fan": 0,
+      "vram_used_mb": 994,
+      "vram_total_mb": 12227,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "KINGSTON SNV3S2000G": 62.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}

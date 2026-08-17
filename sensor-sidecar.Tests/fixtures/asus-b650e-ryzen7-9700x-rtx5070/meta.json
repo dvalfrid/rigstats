@@ -1,0 +1,11 @@
+{
+  "slug": "asus-b650e-ryzen7-9700x-rtx5070",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1786957046,
+  "rigstats_version": "1.36.0",
+  "os": "Windows 11 Home (build 26200)",
+  "notes": "Dual-GPU: RTX 5070 dGPU + AMD Radeon iGPU, both active in tree. Ryzen 7 9700X, 2x DDR5-6000 DIMM, 1x NVMe. Idle-ish snapshot (low core loads). Values use comma decimal separator.",
+  "anonymized": true,
+  "gpu_driver": "32.0.15.9186"
+}

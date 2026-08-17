@@ -1,0 +1,50 @@
+{
+    "cpu":  [
+                {
+                    "threads":  16,
+                    "name":  "AMD Ryzen 7 9700X 8-Core Processor             ",
+                    "cores":  8
+                }
+            ],
+    "board":  {
+                  "bbProd":  "B650E MAX GAMING WIFI",
+                  "csModel":  "KomplettPC",
+                  "csMfr":  "Komplett"
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  2000396321280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "KINGSTON SNV3S2000G"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "NVIDIA GeForce RTX 5070",
+                    "driver":  "32.0.15.9186",
+                    "ramBytes":  4293918720
+                },
+                {
+                    "name":  "AMD Radeon(TM) Graphics",
+                    "driver":  "32.0.21043.5001",
+                    "ramBytes":  536870912
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  4800
+                },
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  4800
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Home",
+               "build":  "26200",
+               "version":  "10.0.26200"
+           }
+}
