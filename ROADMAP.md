@@ -837,9 +837,11 @@ dashboard's fill/border colors by the opacity setting to match the swap
 chain's `PreMultiplied` composite alpha mode. The Settings opacity slider is
 now enabled in every window layer.
 
-**Known follow-up:** sparkline (mini-graph) backgrounds still render with a
-hardcoded opaque fill, unaffected by this opacity plumbing — see
-[#168](https://github.com/dvalfrid/rigstats/issues/168).
+Sparkline (mini-graph) backgrounds initially still rendered with a hardcoded
+opaque fill, unaffected by this opacity plumbing — fixed in
+[#168](https://github.com/dvalfrid/rigstats/issues/168) (`Sparkline::draw` in
+`spark.rs`, and `net.rs`'s own dual-sparkline renderer, both now premultiply
+their background/line/gradient colors by `opacity`).
 
 **Files:** `src-egui/src/bin/wallpaper.rs`, `src-egui/src/win_opacity.rs`,
 `src-egui/src/theme.rs` (`premul`), `src-egui/src/dashboard.rs` (`opacity`
