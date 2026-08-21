@@ -36,7 +36,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) — main window | ✅ Done (Normal/Always-on-Top/Always-Behind) |
-| Background-only transparency (per-pixel alpha) — floating mode | 🔲 Planned (3.0), see #169 |
+| Background-only transparency (per-pixel alpha) — floating mode | 🚧 Blocked — eframe/egui-wgpu secondary-viewport limitation, see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
@@ -1315,11 +1315,18 @@ behave: only the background rect fades, the graph line/fill stay fully
 readable at any opacity.
 
 **Not done — kept as `WS_EX_LAYERED`, unaffected by this issue:** floating
-mode. It renders one OS viewport per visible panel
-(`show_viewport_immediate`), not a single window, so the same technique needs
-repeating per-viewport and re-verifying under panels being created/destroyed
-as visibility toggles — tracked separately as
-[#169](https://github.com/dvalfrid/rigstats/issues/169).
+mode. It renders one OS viewport per visible panel via
+`show_viewport_immediate`, not a single window. Attempted 2026-08-21 and
+reverted: applying `win_opacity::set_no_redirection_bitmap` to a floating
+panel's HWND renders it as a washed-out light gray/blue instead of
+translucent — reproduced with **zero** opacity/transparency logic in the
+drawn content (isolated via controlled before/after tests), so this isn't a
+premultiply or `WS_EX_LAYERED`-conflict bug like the ones this issue's own
+history includes — it points to a real eframe 0.34.3/egui-wgpu limitation in
+how the swap-chain surface is created for **non-root** `show_viewport_immediate`
+viewports combined with a DComp (`DxgiFromVisual`) backend. Tracked separately
+as [#169](https://github.com/dvalfrid/rigstats/issues/169), needs its own
+dedicated investigation (same rigor as #131) before retrying.
 
 ---
 
