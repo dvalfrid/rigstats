@@ -37,7 +37,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) — main window | ✅ Done (Normal/Always-on-Top/Always-Behind) |
-| Background-only transparency (per-pixel alpha) — floating mode | 🚧 Blocked — eframe/egui-wgpu secondary-viewport limitation, see #169 |
+| Background-only transparency (per-pixel alpha) — floating mode | 🚧 Blocked upstream — [egui#3632](https://github.com/emilk/egui/issues/3632)/[PR#8116](https://github.com/emilk/egui/pull/8116), watched weekly, see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
@@ -1340,8 +1340,28 @@ premultiply or `WS_EX_LAYERED`-conflict bug like the ones this issue's own
 history includes — it points to a real eframe 0.34.3/egui-wgpu limitation in
 how the swap-chain surface is created for **non-root** `show_viewport_immediate`
 viewports combined with a DComp (`DxgiFromVisual`) backend. Tracked separately
-as [#169](https://github.com/dvalfrid/rigstats/issues/169), needs its own
-dedicated investigation (same rigor as #131) before retrying.
+as [#169](https://github.com/dvalfrid/rigstats/issues/169).
+
+**Root cause identified upstream (2026-08-21) — this is [egui#3632](https://github.com/emilk/egui/issues/3632),**
+open since ~Feb 2025: secondary/child egui viewports don't get window
+transparency working on Windows, on both the glow and wgpu backends (this app
+uses wgpu), for different underlying reasons per backend. The wgpu-specific
+fix is drafted at [egui PR #8116](https://github.com/emilk/egui/pull/8116)
+(`Closes #3632 #7543`) — adds a `configure_wgpu_window_attributes` hook that
+applies `WS_EX_NOREDIRECTIONBITMAP` **at window-creation time** for every
+viewport (today it only happens implicitly for the root), plus a wgpu
+adapter-selection fix — but is draft/WIP and stalled since 2026-05-08. Sibling
+[PR #8423](https://github.com/emilk/egui/pull/8423) (glow backend only — does
+**not** fix our case) is far more active as of 2026-08-21 (maintainer-approved,
+mergeable), showing renewed attention in this area.
+
+**Decision:** wait for the upstream fix rather than patch in the WIP branch
+(explicitly marked "not ready" by its own author) or hand-roll a workaround.
+A weekly scheduled check (Claude Code routine `trig_016na2KJC5p2p4NeVmE8km3w`,
+Mondays 08:00 UTC) watches egui#3632/#8116 and comments on #169/#170 if the
+upstream state changes. Revisit once that fix ships in a released
+`eframe`/`egui-wgpu` version — check that comment thread first before
+re-investigating from scratch.
 
 ---
 
