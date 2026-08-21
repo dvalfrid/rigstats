@@ -35,7 +35,8 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
-| Background-only transparency (per-pixel alpha) | 🔲 Planned (3.0) — unblocked by #131/#168's DComp technique |
+| Background-only transparency (per-pixel alpha) — main window | 🚧 Implemented (Normal/Always-on-Top/Always-Behind), pending dialog confirmation |
+| Background-only transparency (per-pixel alpha) — floating mode | 🔲 Planned (3.0), see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
@@ -97,6 +98,7 @@ script to refresh it.
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
+| [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1221,9 +1223,9 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
-## Background-only transparency (per-pixel alpha) 🔲
+## Background-only transparency (per-pixel alpha) 🚧
 
-**Reopened 2026-08-21 ([#101](https://github.com/dvalfrid/rigstats/issues/101)) — unblocked by [#131](https://github.com/dvalfrid/rigstats/issues/131)/[#168](https://github.com/dvalfrid/rigstats/issues/168).** The investigation below (2026-06-ish) is kept as-is for historical record; see "Path forward" at the end for the current plan.
+**Reopened and implemented 2026-08-21 ([#101](https://github.com/dvalfrid/rigstats/issues/101)) — unblocked by [#131](https://github.com/dvalfrid/rigstats/issues/131)/[#168](https://github.com/dvalfrid/rigstats/issues/168).** The investigation below (2026-06-ish) is kept as-is for historical record; see "Implemented for Normal / Always-on-Top / Always-Behind" near the end for what shipped.
 
 **Goal:** Make panel backgrounds transparent to the desktop wallpaper while keeping text, numbers, labels, graphs, and borders fully opaque — a "frosted glass" style where only the dark fill fades through.
 
@@ -1276,46 +1278,51 @@ closure (labels, numbers, `ring::show` gauges, bars, logos), which all use
 theme colors at full alpha. In Desktop Wallpaper mode this already produces
 exactly the "frosted glass" effect this issue wants — confirmed visually.
 
-**Plan to bring it to Normal / Always-on-Top / Always-Behind:**
+**Implemented for Normal / Always-on-Top / Always-Behind (2026-08-21):**
 
-1. Apply the same swap-chain setup `bin/wallpaper.rs` uses to the main window
-   in `main.rs`: `NativeOptions.wgpu_options` forcing `Backends::DX12` +
+1. `main.rs` forces the same swap-chain setup `bin/wallpaper.rs` uses:
+   `NativeOptions.wgpu_options` with `Backends::DX12` +
    `Dx12SwapchainKind::DxgiFromVisual`, `ViewportBuilder::with_transparent(true)`
    on the **main viewport only**, and `win_opacity::set_no_redirection_bitmap`
-   called once the main window's HWND is known (mirrors the existing
-   HWND-caching pattern already used for `win_opacity::set_opacity`).
-2. `main.rs`'s `clear_color()` needs the same premultiply treatment as
-   `bin/wallpaper.rs`'s (`theme::premul(theme::PANEL_FILL, opacity)`).
-3. `main.rs`'s own `draw_one_panel`/`render_landscape_grid` wrapper methods
-   currently hardcode `1.0` when calling into `DashboardView` — change these to
-   pass the real opacity instead. This is the change that actually activates
-   the effect; the underlying `dashboard.rs` plumbing already exists.
-4. **Dialogs must stay fully opaque** (Settings/About/Status/Updater — see
-   `src-egui/src/windows/CLAUDE.md`). These are separate deferred egui
-   viewports; `support_transparent_backbuffer` (egui-wgpu's alpha-mode gate,
-   `egui-wgpu-0.34.3/src/winit.rs`) is keyed off each viewport's *own*
-   `ViewportBuilder::with_transparent` flag, not a global setting, so never
-   calling `.with_transparent(true)` on their builders should keep them on
-   `CompositeAlphaMode::Opaque` regardless of the main window's DComp setup —
-   needs empirical confirmation, since all viewports likely share one
-   `wgpu::Instance`/backend configuration.
-5. Decide whether `WS_EX_LAYERED`-based whole-window opacity
-   (`win_opacity::set_opacity`) should be *removed* once this ships, or kept
-   as a fallback — the two mechanisms give visibly different results (uniform
-   dim vs. frosted glass) for the same slider value, and only one should be
-   active per window at a time.
+   called once the main window's HWND is known (replaces the old
+   `win_opacity::set_opacity` call at that same spot).
+2. `main.rs`'s `clear_color()` now premultiplies by opacity
+   (`theme::premul(theme::PANEL_FILL, self.opacity)`), matching `bin/wallpaper.rs`.
+3. `main.rs`'s `draw_one_panel`/`render_landscape_grid` wrapper methods now pass
+   `self.opacity` instead of hardcoded `1.0` into `DashboardView`.
+4. The four other `win_opacity::set_opacity(self.hwnd, ...)` re-application call
+   sites (window-layer transitions, wallpaper-mode restore, floating toggles)
+   were removed — no longer needed since `clear_color`/`draw_one_panel` read
+   `self.opacity` live every frame instead of needing a one-shot Win32 push.
+   Floating panels keep their own independent `win_opacity::set_opacity` call
+   (unaffected — see the floating-mode follow-up below).
+5. **Dialogs stay fully opaque** (Settings/About/Status/Updater — see
+   `src-egui/src/windows/CLAUDE.md`): confirmed by code inspection that none of
+   their `ViewportBuilder`s call `.with_transparent(true)`, so
+   `support_transparent_backbuffer` (egui-wgpu's alpha-mode gate,
+   `egui-wgpu-0.34.3/src/winit.rs`) stays false for them regardless of the main
+   window's DComp setup — pending one live click-through to confirm visually
+   (tray-icon automation wasn't reliable in this session; Windows 11's
+   redesigned tray isn't exposed via classic UIA).
 
-**Open questions before implementing:**
+**Verified visually:** Normal, Always-on-Top, and Always-Behind all render with
+the background genuinely transparent (desktop bleeding through) while text,
+numbers, gauges, and bars stay fully legible — no black flashes, no
+regressions, window levels/Z-order (including `win32_behind`'s `HWND_BOTTOM`
+enforcement) unaffected by the DComp swap chain.
 
-- Do Always-on-Top/Always-Behind interact any differently with a DComp swap
-  chain than Normal mode does? (Only the WorkerW-child case was tested in #131.)
-- Floating mode renders one OS viewport per panel (`show_viewport_immediate`)
-  — would each need its own DComp setup, or is floating mode better left on
-  the simpler `WS_EX_LAYERED` uniform-dim path?
-- Performance: `bin/wallpaper.rs` repaints at ~1 Hz; the main window repaints
-  more often during interaction (drag, hover) — confirm the DComp swap chain
-  has no resize/redraw-churn issues at interactive frame rates (#131's Phase 3
-  flagged continuous resize as a real risk for the wallpaper host specifically).
+**Sparkline correction:** the first pass of this also scaled the sparkline
+line/gradient by opacity (copying #168's approach too literally) — caught via
+screenshot comparison at 10/50/100% opacity. Fixed to match how text/gauges
+behave: only the background rect fades, the graph line/fill stay fully
+readable at any opacity.
+
+**Not done — kept as `WS_EX_LAYERED`, unaffected by this issue:** floating
+mode. It renders one OS viewport per visible panel
+(`show_viewport_immediate`), not a single window, so the same technique needs
+repeating per-viewport and re-verifying under panels being created/destroyed
+as visibility toggles — tracked separately as
+[#169](https://github.com/dvalfrid/rigstats/issues/169).
 
 ---
 

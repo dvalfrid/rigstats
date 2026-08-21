@@ -327,7 +327,6 @@ impl RigStatsApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
             Self::window_level_from_layer(&self.window_layer),
         ));
-        win_opacity::set_opacity(self.hwnd, self.opacity);
         ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
             px, py,
         )));
@@ -541,24 +540,31 @@ impl RigStatsApp {
 
 impl eframe::App for RigStatsApp {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // Solid dark background matching PANEL_FILL. Window-level opacity is
-        // applied by SetLayeredWindowAttributes so the swap chain stays opaque.
-        let c = theme::PANEL_FILL;
+        // Premultiplied, opacity-driven fill for the DComp-composited swap chain
+        // (see `wgpu_options` in `main()`) — replaces the old WS_EX_LAYERED-based
+        // window opacity with selective per-pixel transparency: only the panel
+        // background fades (this fill, plus theme::panel_frame's premultiply),
+        // while text/gauges/bars/graphs stay fully opaque (issue #101).
+        let c = theme::premul(theme::PANEL_FILL, self.opacity);
         [
             c.r() as f32 / 255.0,
             c.g() as f32 / 255.0,
             c.b() as f32 / 255.0,
-            1.0,
+            c.a() as f32 / 255.0,
         ]
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        // On the first frame: locate the HWND and apply the initial window opacity.
+        // On the first frame: locate the HWND and apply WS_EX_NOREDIRECTIONBITMAP
+        // (required once, for the DComp-composited swap chain to actually
+        // composite — see `win_opacity::set_no_redirection_bitmap`'s doc comment
+        // and issue #101). Opacity itself is applied continuously via
+        // `clear_color`/`draw_one_panel`, not a one-shot Win32 call.
         #[cfg(windows)]
         if self.hwnd == 0 {
             self.hwnd = win_opacity::find_hwnd("RigStats");
             if self.hwnd != 0 {
-                win_opacity::set_opacity(self.hwnd, self.opacity);
+                win_opacity::set_no_redirection_bitmap(self.hwnd);
             }
         }
 
@@ -566,7 +572,7 @@ impl eframe::App for RigStatsApp {
         #[cfg(windows)]
         self.update_wallpaper_mode(ui.ctx());
 
-        // Re-apply WindowLevel + opacity for a few frames after a floating→non-floating
+        // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
         if self.reapply_window_props_frames > 0 {
             self.reapply_window_props_frames -= 1;
@@ -576,7 +582,6 @@ impl eframe::App for RigStatsApp {
                 ));
             #[cfg(windows)]
             {
-                win_opacity::set_opacity(self.hwnd, self.opacity);
                 // For "behind" mode, also enforce HWND_BOTTOM directly — ViewportCommand
                 // alone is not reliable on Windows. Only needed at startup/transition;
                 // normal operation won't bring the window back to front on its own.
@@ -682,8 +687,6 @@ impl eframe::App for RigStatsApp {
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                     Self::window_level_from_layer(&self.window_layer),
                 ));
-            #[cfg(windows)]
-            win_opacity::set_opacity(self.hwnd, self.opacity);
             // Toggle main window position when floating mode changes.
             // We move it off-screen instead of hiding it — a hidden window is not
             // ticked by eframe, so the floating panels would not update.
@@ -772,14 +775,12 @@ impl eframe::App for RigStatsApp {
                             let profile =
                                 self.current_settings.lock_safe().dashboard_profile.clone();
                             let ([px, py], [w, h]) = self.fixed_window_geometry(&profile);
-                            // Apply level + opacity BEFORE moving on-screen so they are
-                            // already in effect when the window becomes visible.
+                            // Apply level BEFORE moving on-screen so it is already
+                            // in effect when the window becomes visible.
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                                     Self::window_level_from_layer(&self.window_layer),
                                 ));
-                            #[cfg(windows)]
-                            win_opacity::set_opacity(self.hwnd, self.opacity);
                             ui.ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::OuterPosition(
                                     egui::Pos2::new(px, py),
@@ -1463,9 +1464,14 @@ impl RigStatsApp {
         sc: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
-        // Always full opacity: the main app applies opacity at the window level
-        // via `win_opacity` (WS_EX_LAYERED), not per-panel.
-        let new_pref = self.view().draw_one_panel(ui, panel, sc, 1.0, update_ver);
+        // Selective transparency (issue #101): only panel backgrounds/decorations
+        // fade with opacity (via theme::panel_frame's premultiply); text, gauges,
+        // bars, and logos inside each panel's own draw() stay fully opaque. The
+        // window-level DComp swap chain (see `wgpu_options` in `main()`) is what
+        // makes the resulting transparent background actually composite.
+        let new_pref = self
+            .view()
+            .draw_one_panel(ui, panel, sc, self.opacity, update_ver);
         if panel == "clock"
             && ui
                 .ctx()
@@ -1489,9 +1495,15 @@ impl RigStatsApp {
         profile: &str,
     ) -> Option<String> {
         let ref_h = profile_to_size(profile)[1];
-        // Always full opacity — see `draw_one_panel` above.
-        self.view()
-            .render_landscape_grid(ui, panels, update_ver, self.fullscreen_mode, ref_h, 1.0)
+        // See `draw_one_panel` above.
+        self.view().render_landscape_grid(
+            ui,
+            panels,
+            update_ver,
+            self.fullscreen_mode,
+            ref_h,
+            self.opacity,
+        )
     }
 
     /// Fixed-mode window geometry: returns `(top_left, [w, h])`.
@@ -2100,7 +2112,15 @@ fn main() {
         .with_inner_size([inner_w, inner_h])
         .with_position([pos_x, pos_y])
         .with_decorations(false)
-        .with_taskbar(false); // app is tray-only, never show in taskbar
+        .with_taskbar(false) // app is tray-only, never show in taskbar
+        // Needed for egui-wgpu's alpha-mode picker to select a transparent
+        // CompositeAlphaMode; the actual per-pixel compositing is provided by
+        // the DComp swap chain configured via `wgpu_options` below plus
+        // `win_opacity::set_no_redirection_bitmap` (issue #101, using the
+        // technique proven in #131/#168). Floating panels and secondary
+        // dialog viewports (Settings/About/Status/Updater) deliberately do
+        // NOT set this, so they stay fully opaque.
+        .with_transparent(true);
     if always_on_top {
         viewport = viewport.with_always_on_top();
     }
@@ -2108,8 +2128,33 @@ fn main() {
         viewport = viewport.with_taskbar(false);
     }
 
+    // Force the DX12 backend with a DirectComposition-backed swap chain
+    // (`DxgiFromVisual`), giving the main window real per-pixel alpha instead
+    // of DWM's normal opaque flip-model swap chain — see issue #101 and
+    // `docs/architecture.md`.
+    let wgpu_options = eframe::egui_wgpu::WgpuConfiguration {
+        wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(
+            eframe::egui_wgpu::WgpuSetupCreateNew {
+                instance_descriptor: eframe::wgpu::InstanceDescriptor {
+                    backends: eframe::wgpu::Backends::DX12,
+                    backend_options: eframe::wgpu::BackendOptions {
+                        dx12: eframe::wgpu::Dx12BackendOptions {
+                            presentation_system: eframe::wgpu::Dx12SwapchainKind::DxgiFromVisual,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..eframe::wgpu::InstanceDescriptor::new_without_display_handle()
+                },
+                ..eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle()
+            },
+        ),
+        ..Default::default()
+    };
+
     let options = eframe::NativeOptions {
         viewport,
+        wgpu_options,
         ..Default::default()
     };
 
