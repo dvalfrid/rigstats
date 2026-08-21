@@ -25,9 +25,10 @@ impl Sparkline {
     }
 
     /// Draw the sparkline spanning full available width at the given height.
-    /// `opacity` (0.0-1.0) is baked into the background fill and line/gradient
-    /// colors so the graph blends correctly over a transparent window
-    /// background (the wallpaper host, in Desktop Wallpaper mode).
+    /// `opacity` (0.0-1.0) is baked into the background fill only, so the graph
+    /// blends correctly over a transparent window background — the line and
+    /// gradient fill (the actual data) stay fully readable, matching how text
+    /// and gauges elsewhere ignore `opacity`.
     pub fn draw(&self, ui: &mut Ui, height: f32, color: Color32, opacity: f32) {
         let w = {
             let w = ui.available_width();
@@ -66,16 +67,18 @@ impl Sparkline {
             })
             .collect();
 
-        // Gradient fill area under the line (matches JS linear gradient top→bottom)
-        let oa = opacity.clamp(0.0, 1.0);
+        // Gradient fill area under the line (matches JS linear gradient top→bottom).
+        // Not scaled by `opacity` — like text/gauges/bars elsewhere, the graph's
+        // own data (line + fill) stays fully readable; only the background (above)
+        // fades with the window's translucency.
         let fill_y = rect.bottom();
         let mut mesh = Mesh::default();
         for pair in points.windows(2) {
             let (p0, p1) = (pair[0], pair[1]);
             let b0 = Pos2::new(p0.x, fill_y);
             let b1 = Pos2::new(p1.x, fill_y);
-            let a0 = ((fill_y - p0.y) / rect.height() * 0x44 as f32 * oa) as u8;
-            let a1 = ((fill_y - p1.y) / rect.height() * 0x44 as f32 * oa) as u8;
+            let a0 = ((fill_y - p0.y) / rect.height() * 0x44 as f32) as u8;
+            let a1 = ((fill_y - p1.y) / rect.height() * 0x44 as f32) as u8;
             let c0 = premul_color(color, a0);
             let c1 = premul_color(color, a1);
             let v = mesh.vertices.len() as u32;
@@ -89,10 +92,7 @@ impl Sparkline {
         painter.add(Shape::mesh(mesh));
 
         // Line on top
-        painter.add(Shape::line(
-            points,
-            Stroke::new(1.5_f32, premul_color(color, (255.0 * oa) as u8)),
-        ));
+        painter.add(Shape::line(points, Stroke::new(1.5_f32, color)));
     }
 }
 
