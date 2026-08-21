@@ -8,6 +8,25 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.37.0](https://github.com/dvalfrid/rigstats/compare/v1.36.0...v1.37.0) (2026-08-21)
+
+
+### Features
+
+* **main:** selective per-pixel transparency for Normal/On-Top/Behind ([#101](https://github.com/dvalfrid/rigstats/issues/101)) ([14da1ec](https://github.com/dvalfrid/rigstats/commit/14da1ec074cba9b62f2f253ac6fd08b3f632b533))
+* **wallpaper:** support per-pixel opacity in Desktop Wallpaper mode via DirectComposition ([72869a5](https://github.com/dvalfrid/rigstats/commit/72869a517641bd1ca66282a5ba38afe05598b283)), closes [#131](https://github.com/dvalfrid/rigstats/issues/131)
+* **winget:** verify declared dependencies against rigstats.exe imports ([9adceaf](https://github.com/dvalfrid/rigstats/commit/9adceaffebf962ccc39fdceb5e9f9021f78b42cc))
+
+
+### Bug Fixes
+
+* **egui:** suffix Stroke width literals to satisfy float_literal_f32_fallback ([c939e23](https://github.com/dvalfrid/rigstats/commit/c939e230e86f9b58cf8d351478cac117edb19c7e))
+* **landscape:** clip grid cells and stop egui's interact_size floor overflowing compact panels ([8dd70fc](https://github.com/dvalfrid/rigstats/commit/8dd70fc7a0baf7291b294142bb8541e9e8cba470)), closes [#171](https://github.com/dvalfrid/rigstats/issues/171) [#172](https://github.com/dvalfrid/rigstats/issues/172)
+* **main:** avoid crash at startup when no DX12 adapter is available ([ebb73f5](https://github.com/dvalfrid/rigstats/commit/ebb73f51fe28a30367e2c53625526028a8c84198)), closes [#173](https://github.com/dvalfrid/rigstats/issues/173)
+* **wallpaper:** make sparkline graph backgrounds respect dashboard opacity ([791e29f](https://github.com/dvalfrid/rigstats/commit/791e29fa098afbb73dd046db5cd606b7a2e6ec39)), closes [#168](https://github.com/dvalfrid/rigstats/issues/168)
+* **wallpaper:** stop scaling sparkline line/gradient by opacity ([95b1977](https://github.com/dvalfrid/rigstats/commit/95b197743d9453dc4043f94c045abbcfe2dbbb83))
+* **winget:** match Publisher to installer registry value ([19e09a1](https://github.com/dvalfrid/rigstats/commit/19e09a168f5ed3e023b65db811a483155c1ab3ce))
+
 ## [1.36.0](https://github.com/dvalfrid/rigstats/compare/v1.35.2...v1.36.0) (2026-07-08)
 
 
