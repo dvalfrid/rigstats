@@ -29,6 +29,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Desktop background — Level 2 (WorkerW) | ✅ Done |
 | Desktop wallpaper mode — per-pixel opacity (DirectComposition) | ✅ Done |
 | Desktop background — WE Application wallpaper | 🔲 Planned (3.0) |
+| Desktop background — independently positioned panels (floating + WorkerW) | 🔲 Planned (3.0), see #170 |
 | Total system power consumption | ✅ Done (v1.34) |
 | Stream Deck integration | 🔲 Planned (3.0) |
 | Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
@@ -860,6 +861,20 @@ their background/line/gradient colors by `opacity`).
 threaded through `draw_one_panel`/`render_landscape_grid`),
 `src-egui/src/windows/settings.rs`. Standalone research probe kept at
 `src-egui/examples/dcomp_probe.rs`.
+
+## Desktop background mode — independently positioned panels (floating + WorkerW) 🔲
+
+[#170](https://github.com/dvalfrid/rigstats/issues/170) — combine floating
+mode's per-panel independent positioning/dragging
+(`main.rs::render_floating_panels`) with WorkerW integration
+(`win32_wallpaper.rs`, proven single-window in #131), so each panel is its
+own small window living in the desktop background layer instead of the
+wallpaper host's current single fixed layout. Single host process (not one
+process per panel, to avoid N independent telemetry pollers). Deliberately
+**opaque only** — per-pixel transparency would hit the same
+non-root-immediate-viewport limitation found in #169, so it's excluded here
+and left as a follow-up once that's resolved. Full design, risks, and
+acceptance criteria are in the issue — not duplicated here.
 
 ## Desktop background mode — WE Application wallpaper 🔲
 
