@@ -1357,7 +1357,7 @@ mergeable), showing renewed attention in this area.
 
 **Decision:** wait for the upstream fix rather than patch in the WIP branch
 (explicitly marked "not ready" by its own author) or hand-roll a workaround.
-A weekly scheduled check (Claude Code routine `trig_016na2KJC5p2p4NeVmE8km3w`,
+A weekly scheduled check ([Claude Code routine `trig_016na2KJC5p2p4NeVmE8km3w`](https://claude.ai/code/routines/trig_016na2KJC5p2p4NeVmE8km3w),
 Mondays 08:00 UTC) watches egui#3632/#8116 and comments on #169/#170 if the
 upstream state changes. Revisit once that fix ships in a released
 `eframe`/`egui-wgpu` version — check that comment thread first before
