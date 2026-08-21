@@ -35,7 +35,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
-| Background-only transparency (per-pixel alpha) — main window | 🚧 Implemented (Normal/Always-on-Top/Always-Behind), pending dialog confirmation |
+| Background-only transparency (per-pixel alpha) — main window | ✅ Done (Normal/Always-on-Top/Always-Behind) |
 | Background-only transparency (per-pixel alpha) — floating mode | 🔲 Planned (3.0), see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
@@ -85,6 +85,7 @@ script to refresh it.
 | [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
 | [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
 | [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
+| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v2.0 | ✅ Done |
 | [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | ✅ Done |
 | [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | ✅ Done |
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
@@ -93,7 +94,6 @@ script to refresh it.
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
-| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v3.0 | 🔲 Planned |
 | [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
@@ -1223,9 +1223,9 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
-## Background-only transparency (per-pixel alpha) 🚧
+## Background-only transparency (per-pixel alpha) ✅
 
-**Reopened and implemented 2026-08-21 ([#101](https://github.com/dvalfrid/rigstats/issues/101)) — unblocked by [#131](https://github.com/dvalfrid/rigstats/issues/131)/[#168](https://github.com/dvalfrid/rigstats/issues/168).** The investigation below (2026-06-ish) is kept as-is for historical record; see "Implemented for Normal / Always-on-Top / Always-Behind" near the end for what shipped.
+**Reopened, implemented, and shipped 2026-08-21 ([#101](https://github.com/dvalfrid/rigstats/issues/101), closed) — unblocked by [#131](https://github.com/dvalfrid/rigstats/issues/131)/[#168](https://github.com/dvalfrid/rigstats/issues/168).** The investigation below (2026-06-ish) is kept as-is for historical record; see "Implemented for Normal / Always-on-Top / Always-Behind" near the end for what shipped. Floating mode is a separate follow-up: [#169](https://github.com/dvalfrid/rigstats/issues/169).
 
 **Goal:** Make panel backgrounds transparent to the desktop wallpaper while keeping text, numbers, labels, graphs, and borders fully opaque — a "frosted glass" style where only the dark fill fades through.
 
@@ -1297,13 +1297,10 @@ exactly the "frosted glass" effect this issue wants — confirmed visually.
    Floating panels keep their own independent `win_opacity::set_opacity` call
    (unaffected — see the floating-mode follow-up below).
 5. **Dialogs stay fully opaque** (Settings/About/Status/Updater — see
-   `src-egui/src/windows/CLAUDE.md`): confirmed by code inspection that none of
-   their `ViewportBuilder`s call `.with_transparent(true)`, so
-   `support_transparent_backbuffer` (egui-wgpu's alpha-mode gate,
-   `egui-wgpu-0.34.3/src/winit.rs`) stays false for them regardless of the main
-   window's DComp setup — pending one live click-through to confirm visually
-   (tray-icon automation wasn't reliable in this session; Windows 11's
-   redesigned tray isn't exposed via classic UIA).
+   `src-egui/src/windows/CLAUDE.md`): none of their `ViewportBuilder`s call
+   `.with_transparent(true)`, so `support_transparent_backbuffer` (egui-wgpu's
+   alpha-mode gate, `egui-wgpu-0.34.3/src/winit.rs`) stays false for them
+   regardless of the main window's DComp setup. Confirmed live.
 
 **Verified visually:** Normal, Always-on-Top, and Always-Behind all render with
 the background genuinely transparent (desktop bleeding through) while text,
