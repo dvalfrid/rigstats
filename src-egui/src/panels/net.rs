@@ -21,6 +21,10 @@ fn fmt_mbps_parts(v: f64) -> (String, &'static str) {
 }
 
 /// Draw two sparklines on the same canvas (both with gradient fill).
+/// `opacity` (0.0-1.0) is baked into the background fill and line/gradient
+/// colors so the graph blends correctly over a transparent window background
+/// (the wallpaper host, in Desktop Wallpaper mode).
+#[allow(clippy::too_many_arguments)]
 fn draw_dual(
     ui: &mut Ui,
     height: f32,
@@ -28,6 +32,7 @@ fn draw_dual(
     dn: &Sparkline,
     up_color: Color32,
     dn_color: Color32,
+    opacity: f32,
 ) {
     let w = {
         let w = ui.available_width();
@@ -39,7 +44,13 @@ fn draw_dual(
     };
     let (resp, painter) = ui.allocate_painter(Vec2::new(w, height), Sense::hover());
     let rect = resp.rect;
-    painter.rect_filled(rect, 0.0, Color32::from_gray(18));
+    let oa = opacity.clamp(0.0, 1.0);
+    let bg_alpha = (oa * 255.0) as u8;
+    painter.rect_filled(
+        rect,
+        0.0,
+        crate::spark::premul_color(Color32::from_gray(18), bg_alpha),
+    );
 
     // Shared scale so both series are comparable.
     let up_max = up.values().iter().cloned().fold(0.0f32, f32::max);
@@ -71,8 +82,8 @@ fn draw_dual(
         let mut mesh = egui::Mesh::default();
         for pair in pts.windows(2) {
             let (p0, p1) = (pair[0], pair[1]);
-            let a0 = (((fill_y - p0.y) / rect.height()) * 0x55 as f32) as u8;
-            let a1 = (((fill_y - p1.y) / rect.height()) * 0x55 as f32) as u8;
+            let a0 = (((fill_y - p0.y) / rect.height()) * 0x55 as f32 * oa) as u8;
+            let a1 = (((fill_y - p1.y) / rect.height()) * 0x55 as f32 * oa) as u8;
             let c0 = crate::spark::premul_color(color, a0);
             let c1 = crate::spark::premul_color(color, a1);
             let v = mesh.vertices.len() as u32;
@@ -85,7 +96,10 @@ fn draw_dual(
         }
         Some((
             mesh,
-            egui::Shape::line(pts.to_vec(), Stroke::new(1.5_f32, color)),
+            egui::Shape::line(
+                pts.to_vec(),
+                Stroke::new(1.5_f32, crate::spark::premul_color(color, bg_alpha)),
+            ),
         ))
     };
 
@@ -240,6 +254,7 @@ pub fn draw(
             dn_spark,
             theme::C_GRN,
             theme::C_NET_DOWN,
+            opacity,
         );
     })
 }

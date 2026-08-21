@@ -339,7 +339,7 @@ pub fn draw(
         let filler =
             (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()) - SPARK_H * sc).max(0.0);
         ui.add_space(filler);
-        spark.draw(ui, SPARK_H * sc, theme::C_AMD);
+        spark.draw(ui, SPARK_H * sc, theme::C_AMD, opacity);
     });
 
     (new_gpu, rect)

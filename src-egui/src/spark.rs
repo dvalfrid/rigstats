@@ -25,7 +25,10 @@ impl Sparkline {
     }
 
     /// Draw the sparkline spanning full available width at the given height.
-    pub fn draw(&self, ui: &mut Ui, height: f32, color: Color32) {
+    /// `opacity` (0.0-1.0) is baked into the background fill and line/gradient
+    /// colors so the graph blends correctly over a transparent window
+    /// background (the wallpaper host, in Desktop Wallpaper mode).
+    pub fn draw(&self, ui: &mut Ui, height: f32, color: Color32, opacity: f32) {
         let w = {
             let w = ui.available_width();
             if w.is_finite() && w > 0.0 {
@@ -34,13 +37,14 @@ impl Sparkline {
                 ui.ctx().content_rect().width().max(1.0)
             }
         };
-        self.draw_inner(ui, w, height, color);
+        self.draw_inner(ui, w, height, color, opacity);
     }
 
-    fn draw_inner(&self, ui: &mut Ui, w: f32, height: f32, color: Color32) {
+    fn draw_inner(&self, ui: &mut Ui, w: f32, height: f32, color: Color32, opacity: f32) {
         let (response, painter) = ui.allocate_painter(Vec2::new(w, height), Sense::hover());
         let rect = response.rect;
-        painter.rect_filled(rect, 0.0, Color32::from_gray(18));
+        let bg_alpha = (opacity.clamp(0.0, 1.0) * 255.0) as u8;
+        painter.rect_filled(rect, 0.0, premul_color(Color32::from_gray(18), bg_alpha));
 
         let n = self.values.len();
         if n < 2 {
@@ -63,14 +67,15 @@ impl Sparkline {
             .collect();
 
         // Gradient fill area under the line (matches JS linear gradient top→bottom)
+        let oa = opacity.clamp(0.0, 1.0);
         let fill_y = rect.bottom();
         let mut mesh = Mesh::default();
         for pair in points.windows(2) {
             let (p0, p1) = (pair[0], pair[1]);
             let b0 = Pos2::new(p0.x, fill_y);
             let b1 = Pos2::new(p1.x, fill_y);
-            let a0 = ((fill_y - p0.y) / rect.height() * 0x44 as f32) as u8;
-            let a1 = ((fill_y - p1.y) / rect.height() * 0x44 as f32) as u8;
+            let a0 = ((fill_y - p0.y) / rect.height() * 0x44 as f32 * oa) as u8;
+            let a1 = ((fill_y - p1.y) / rect.height() * 0x44 as f32 * oa) as u8;
             let c0 = premul_color(color, a0);
             let c1 = premul_color(color, a1);
             let v = mesh.vertices.len() as u32;
@@ -84,7 +89,10 @@ impl Sparkline {
         painter.add(Shape::mesh(mesh));
 
         // Line on top
-        painter.add(Shape::line(points, Stroke::new(1.5_f32, color)));
+        painter.add(Shape::line(
+            points,
+            Stroke::new(1.5_f32, premul_color(color, (255.0 * oa) as u8)),
+        ));
     }
 }
 
