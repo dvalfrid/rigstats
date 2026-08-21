@@ -130,6 +130,11 @@ pub fn draw(
             .max_height(scroll_h)
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
+                // egui's default `interact_size.y` (18px, unscaled) otherwise sets
+                // each row's minimum height regardless of `sc`, so at compact
+                // scales a drive group renders taller than ROW_H/MODEL_H*sc
+                // account for, overflowing the panel's height budget.
+                ui.spacing_mut().interact_size.y = ROW_H.min(MODEL_H) * sc;
 
                 for (i, drive) in drives.iter().enumerate() {
                     if i > 0 {

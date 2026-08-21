@@ -118,6 +118,10 @@ pub fn draw(
             let (outer_rect, _) =
                 ui.allocate_exact_size(Vec2::new(avail, scroll_h), egui::Sense::hover());
             let mut inner_ui = ui.new_child(egui::UiBuilder::new().max_rect(outer_rect));
+            // `max_rect` alone is a layout hint, not a clip: with more than 4
+            // cores, rows beyond the first 2 would otherwise bleed past this
+            // viewport into the sparkline drawn below instead of being scrolled.
+            inner_ui.set_clip_rect(outer_rect.intersect(inner_ui.clip_rect()));
 
             egui::ScrollArea::vertical()
                 .id_salt("cpu_cores")
@@ -125,6 +129,11 @@ pub fn draw(
                 .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .show(&mut inner_ui, |ui| {
                     ui.style_mut().spacing.item_spacing.y = row_gap;
+                    // egui's default `interact_size.y` (18px, unscaled) otherwise
+                    // sets each row's minimum height regardless of `sc`, so at
+                    // compact scales a row renders taller than CORE_ROW_H*sc
+                    // accounts for, and only ~1 row fits in the 2-row budget.
+                    ui.style_mut().spacing.interact_size.y = CORE_ROW_H * sc;
                     for (row, pair) in cores.chunks(2).enumerate() {
                         // ui.columns() splits width exactly 50/50 — each column
                         // computes its own bar_w from its actual available width,

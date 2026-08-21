@@ -308,6 +308,10 @@ impl DashboardView<'_> {
                         .max_rect(cell_rect)
                         .layout(egui::Layout::top_down(egui::Align::Min)),
                 );
+                // `max_rect` alone is a layout hint, not a clip: a panel whose
+                // content exceeds its cell budget would otherwise bleed into
+                // neighbouring cells/rows instead of being contained.
+                child.set_clip_rect(cell_rect.intersect(child.clip_rect()));
                 if let Some(p) =
                     self.draw_one_panel(&mut child, &panels[idx], sc, opacity, update_ver)
                 {
