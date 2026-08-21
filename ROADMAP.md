@@ -27,6 +27,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Floating panel groups | 🔲 Planned (3.0) |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | ✅ Done |
+| Desktop wallpaper mode — per-pixel opacity (DirectComposition) | ✅ Done |
 | Desktop background — WE Application wallpaper | 🔲 Planned (3.0) |
 | Total system power consumption | ✅ Done (v1.34) |
 | Stream Deck integration | 🔲 Planned (3.0) |
@@ -34,7 +35,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
-| Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition |
+| Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition (see #131 for uniform-opacity DComp integration; selective background-only transparency is a separate, larger effort) |
 | Floating mode — reduce multi-window rendering cost | 🔲 Planned |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
@@ -801,6 +802,50 @@ feature.
 `SetParent`, attach/detach/parent-liveness), `src-egui/src/bin/wallpaper.rs` (the
 host), `src-egui/src/dashboard.rs` (shared `DashboardView`), supervisor in
 `src-egui/src/main.rs`.
+
+## Desktop wallpaper mode — per-pixel opacity (DirectComposition) ✅
+
+**Panel:** `rigstats-wallpaper` host
+**Data source:** No new data required
+
+[#131](https://github.com/dvalfrid/rigstats/issues/131) — not tracked in the
+`$features`/roadmap-issue-sync table (opened as a standalone spike, no
+`roadmap-id` marker); tracked here in prose only.
+
+Window-level opacity (`WS_EX_LAYERED` + `SetLayeredWindowAttributes`, used in
+the Normal/Always-on-Top/Always-Behind layers) cannot be applied to a WorkerW
+*child* window — `SetParent` strips the layered ex-style and DWM rejects
+setting it on a child. Until this issue the opacity slider was hard-disabled
+in Settings whenever Desktop Wallpaper mode was selected.
+
+**Implemented as a spike, landed directly (not just a PoC):** the host now
+forces the DX12 backend with `wgpu::Dx12SwapchainKind::DxgiFromVisual`
+(`NativeOptions.wgpu_options` in `bin/wallpaper.rs`), which makes `wgpu`
+create a DirectComposition-backed, per-pixel-alpha swap chain from the
+window's HWND automatically — no hand-rolled `IDCompositionDevice`/visual-tree
+code needed, and no new `unsafe` in this crate's own code (the
+`unsafe_code = "deny"` lint stays satisfied). The one real blocker beyond
+prior investigation (see "Background-only transparency" above): eframe/
+egui-winit 0.34.3 has no hook to request `WS_EX_NOREDIRECTIONBITMAP` — required
+per Microsoft's docs for a DComp swap chain to actually composite instead of
+being masked by DWM's own opaque redirection bitmap — at window-creation time.
+Verified empirically that applying it *after* the wgpu surface already exists
+(`win_opacity::set_no_redirection_bitmap`, via `SetWindowLongPtrW` +
+`SetWindowPos(SWP_FRAMECHANGED)`) still works, so eframe did not need to be
+replaced. `clear_color()` and `theme::panel_frame()` premultiply the
+dashboard's fill/border colors by the opacity setting to match the swap
+chain's `PreMultiplied` composite alpha mode. The Settings opacity slider is
+now enabled in every window layer.
+
+**Known follow-up:** sparkline (mini-graph) backgrounds still render with a
+hardcoded opaque fill, unaffected by this opacity plumbing — see
+[#168](https://github.com/dvalfrid/rigstats/issues/168).
+
+**Files:** `src-egui/src/bin/wallpaper.rs`, `src-egui/src/win_opacity.rs`,
+`src-egui/src/theme.rs` (`premul`), `src-egui/src/dashboard.rs` (`opacity`
+threaded through `draw_one_panel`/`render_landscape_grid`),
+`src-egui/src/windows/settings.rs`. Standalone research probe kept at
+`src-egui/examples/dcomp_probe.rs`.
 
 ## Desktop background mode — WE Application wallpaper 🔲
 

@@ -3389,6 +3389,8 @@ dependencies = [
  "eframe",
  "egui",
  "image",
+ "pollster",
+ "raw-window-handle",
  "rfd",
  "rigstats-backend",
  "serde",
@@ -3397,7 +3399,9 @@ dependencies = [
  "tokio",
  "tray-icon",
  "ureq",
+ "wgpu",
  "winapi",
+ "winit",
  "winres",
  "zip",
 ]

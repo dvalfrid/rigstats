@@ -1463,7 +1463,9 @@ impl RigStatsApp {
         sc: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
-        let new_pref = self.view().draw_one_panel(ui, panel, sc, update_ver);
+        // Always full opacity: the main app applies opacity at the window level
+        // via `win_opacity` (WS_EX_LAYERED), not per-panel.
+        let new_pref = self.view().draw_one_panel(ui, panel, sc, 1.0, update_ver);
         if panel == "clock"
             && ui
                 .ctx()
@@ -1487,8 +1489,9 @@ impl RigStatsApp {
         profile: &str,
     ) -> Option<String> {
         let ref_h = profile_to_size(profile)[1];
+        // Always full opacity — see `draw_one_panel` above.
         self.view()
-            .render_landscape_grid(ui, panels, update_ver, self.fullscreen_mode, ref_h)
+            .render_landscape_grid(ui, panels, update_ver, self.fullscreen_mode, ref_h, 1.0)
     }
 
     /// Fixed-mode window geometry: returns `(top_left, [w, h])`.

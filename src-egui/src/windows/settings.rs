@@ -616,7 +616,7 @@ fn draw_display(
                     "Lives in the desktop wallpaper layer (survives Win+D), at the spot the \
                      window had before switching — position it in Normal mode first, then \
                      switch. Display-only — disables floating mode; changes apply on Save \
-                     (no live preview, no opacity).",
+                     (no live preview).",
                 )
                 .size(10.0)
                 .color(dc.muted),
@@ -647,28 +647,27 @@ fn draw_display(
         ui.add(egui::Separator::default().spacing(4.0));
         ui.add_space(4.0);
 
-        // Opacity — unsupported in Desktop Wallpaper mode (a WorkerW child window
-        // rejects WS_EX_LAYERED, so the dashboard is always opaque there).
+        // Opacity — in Desktop Wallpaper mode this is applied per-pixel via a
+        // DirectComposition-backed swap chain (`win_opacity::set_no_redirection_bitmap`
+        // + `wgpu_options` in `bin/wallpaper.rs`) rather than WS_EX_LAYERED, which a
+        // WorkerW child window rejects. Supported in every window layer.
         let pct = (draft.opacity * 100.0).round() as u32;
-        ui.add_enabled_ui(!is_wallpaper, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let label = if is_wallpaper {
-                        "n/a".to_string()
-                    } else {
-                        format!("{pct}%")
-                    };
-                    ui.label(egui::RichText::new(label).size(12.0).color(dc.text));
-                    let mut opacity = draft.opacity as f32;
-                    let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
-                        .step_by(0.05)
-                        .show_value(false)
-                        .trailing_fill(true);
-                    if ui.add(slider).changed() {
-                        draft.opacity = opacity as f64;
-                    }
-                });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(format!("{pct}%"))
+                        .size(12.0)
+                        .color(dc.text),
+                );
+                let mut opacity = draft.opacity as f32;
+                let slider = egui::Slider::new(&mut opacity, 0.1_f32..=1.0_f32)
+                    .step_by(0.05)
+                    .show_value(false)
+                    .trailing_fill(true);
+                if ui.add(slider).changed() {
+                    draft.opacity = opacity as f64;
+                }
             });
         });
     });

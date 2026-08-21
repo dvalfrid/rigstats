@@ -37,6 +37,15 @@ winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "sh
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
+[target.'cfg(windows)'.dev-dependencies]
+# Pinned to match the versions eframe/egui-wgpu already resolve to (see Cargo.lock),
+# so the DComp spike probe (examples/dcomp_probe.rs, issue #131) doesn't perturb
+# the workspace's dependency resolution.
+wgpu = "=29.0.3"
+winit = "=0.30.13"
+pollster = "=0.4.0"
+raw-window-handle = "=0.6.2"
+
 [lints.rust]
 unsafe_code = "deny"
 

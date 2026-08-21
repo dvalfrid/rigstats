@@ -84,26 +84,40 @@ impl DashboardView<'_> {
     /// The clock panel may set an `"open_updater"` temp flag on the egui context
     /// (badge click); the caller is responsible for consuming it — the host
     /// process has no updater dialog and simply ignores it.
+    ///
+    /// `opacity` (0.0-1.0) is baked into each panel's fills/borders/decorations
+    /// via `theme::panel_frame`'s premultiply so panels blend correctly over a
+    /// transparent window background (the wallpaper host, in Desktop Wallpaper
+    /// mode). The main app always passes `1.0` here — its opacity is applied at
+    /// the window level via `SetLayeredWindowAttributes` instead (see
+    /// `win_opacity` module), which is unavailable once the window is
+    /// reparented into WorkerW.
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_one_panel(
         &self,
         ui: &mut egui::Ui,
         panel: &str,
         sc: f32,
+        opacity: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
         let mut new_pref = None;
         match panel {
-            // Panels always render at full opacity; window-level transparency is
-            // applied by SetLayeredWindowAttributes (win_opacity module).
             "header" => {
-                let _ =
-                    panels::header::draw(ui, self.latest, self.textures, 1.0, self.app_theme, sc);
+                let _ = panels::header::draw(
+                    ui,
+                    self.latest,
+                    self.textures,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                );
             }
             "clock" => {
                 let _ = panels::clock::draw(
                     ui,
                     self.latest.uptime_secs,
-                    1.0,
+                    opacity,
                     self.app_theme,
                     update_ver,
                     sc,
@@ -115,7 +129,7 @@ impl DashboardView<'_> {
                     self.latest,
                     self.cpu_spark,
                     self.textures,
-                    1.0,
+                    opacity,
                     self.thresholds.cpu.0,
                     self.thresholds.cpu.1,
                     self.app_theme,
@@ -128,7 +142,7 @@ impl DashboardView<'_> {
                     self.latest,
                     self.gpu_spark,
                     self.textures,
-                    1.0,
+                    opacity,
                     self.app_theme,
                     self.thresholds.gpu.0,
                     self.thresholds.gpu.1,
@@ -145,7 +159,7 @@ impl DashboardView<'_> {
                 let _ = panels::ram::draw(
                     ui,
                     self.latest,
-                    1.0,
+                    opacity,
                     self.thresholds.ram.0,
                     self.thresholds.ram.1,
                     self.app_theme,
@@ -158,7 +172,7 @@ impl DashboardView<'_> {
                     self.latest,
                     self.net_up_spark,
                     self.net_dn_spark,
-                    1.0,
+                    opacity,
                     self.app_theme,
                     sc,
                 );
@@ -167,7 +181,7 @@ impl DashboardView<'_> {
                 let _ = panels::disk::draw(
                     ui,
                     self.latest,
-                    1.0,
+                    opacity,
                     self.thresholds.disk.0,
                     self.thresholds.disk.1,
                     self.app_theme,
@@ -178,7 +192,7 @@ impl DashboardView<'_> {
                 let _ = panels::motherboard::draw(
                     ui,
                     self.latest,
-                    1.0,
+                    opacity,
                     self.thresholds.mb.0,
                     self.thresholds.mb.1,
                     self.app_theme,
@@ -186,17 +200,23 @@ impl DashboardView<'_> {
                 );
             }
             "process" => {
-                let _ = panels::process::draw(ui, self.latest, 1.0, self.app_theme, sc);
+                let _ = panels::process::draw(ui, self.latest, opacity, self.app_theme, sc);
             }
             "power" => {
-                let _ =
-                    panels::power::draw(ui, self.latest, 1.0, self.app_theme, sc, self.psu_watts);
+                let _ = panels::power::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.psu_watts,
+                );
             }
             "battery" => {
                 let _ = panels::battery::draw(
                     ui,
                     self.latest,
-                    1.0,
+                    opacity,
                     self.app_theme,
                     sc,
                     self.thresholds.battery.0,
@@ -234,6 +254,7 @@ impl DashboardView<'_> {
     /// taller cell). `false` (the default) keeps cells at their natural height,
     /// so the grid — and the window fit to it — shrinks or grows with the panel
     /// count instead of leaving a gap below a partial grid.
+    #[allow(clippy::too_many_arguments)]
     pub fn render_landscape_grid(
         &self,
         ui: &mut egui::Ui,
@@ -241,6 +262,7 @@ impl DashboardView<'_> {
         update_ver: Option<&str>,
         fill: bool,
         ref_h: f32,
+        opacity: f32,
     ) -> Option<String> {
         let n = panels.len();
         if n == 0 {
@@ -286,7 +308,9 @@ impl DashboardView<'_> {
                         .max_rect(cell_rect)
                         .layout(egui::Layout::top_down(egui::Align::Min)),
                 );
-                if let Some(p) = self.draw_one_panel(&mut child, &panels[idx], sc, update_ver) {
+                if let Some(p) =
+                    self.draw_one_panel(&mut child, &panels[idx], sc, opacity, update_ver)
+                {
                     new_pref = Some(p);
                 }
             }

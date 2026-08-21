@@ -1,8 +1,9 @@
-//! Window-level opacity via Win32 SetLayeredWindowAttributes.
+//! Window-level opacity and compositor-visibility styles via raw Win32 calls.
 //!
-//! Uses WS_EX_LAYERED + LWA_ALPHA, which works with DXGI flip-mode swap chains
-//! on Windows 10 1803+ and Windows 11. Applies a uniform alpha to the whole
-//! window (frame + content), matching the dashboard's configurable opacity.
+//! Uniform (whole-window) opacity uses WS_EX_LAYERED + LWA_ALPHA, which works
+//! with DXGI flip-mode swap chains on Windows 10 1803+ and Windows 11. This
+//! module also applies WS_EX_NOREDIRECTIONBITMAP, needed for per-pixel-alpha
+//! DirectComposition swap chains (see [`set_no_redirection_bitmap`]).
 
 #![allow(unsafe_code)]
 
@@ -10,7 +11,8 @@ use winapi::{
     shared::windef::HWND,
     um::winuser::{
         FindWindowW, GetWindowLongW, SetForegroundWindow, SetLayeredWindowAttributes,
-        SetWindowLongW, GWL_EXSTYLE, LWA_ALPHA, WS_EX_LAYERED,
+        SetWindowLongW, SetWindowPos, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
     },
 };
 
@@ -49,6 +51,35 @@ pub fn set_opacity(hwnd: isize, opacity: f32) {
             SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED as i32);
         }
         SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+    }
+}
+
+/// Mark the window as not needing a DWM redirection bitmap, required for a
+/// DirectComposition-backed (per-pixel-alpha) swap chain to actually composite
+/// transparently — without it, DWM's own opaque redirection surface for the
+/// window sits over the DComp visual tree and the window renders solid
+/// regardless of the swap chain's alpha mode. Unlike WS_EX_LAYERED, eframe/
+/// egui-winit has no way to request this at window-creation time, but (verified
+/// empirically for issue #131) it still takes effect when applied after the
+/// wgpu surface already exists, as long as `SetWindowPos(SWP_FRAMECHANGED)`
+/// follows the style change. No-op if hwnd is 0.
+pub fn set_no_redirection_bitmap(hwnd: isize) {
+    if hwnd == 0 {
+        return;
+    }
+    let hwnd = hwnd as HWND;
+    unsafe {
+        let style = GetWindowLongW(hwnd, GWL_EXSTYLE);
+        SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_NOREDIRECTIONBITMAP as i32);
+        SetWindowPos(
+            hwnd,
+            std::ptr::null_mut(),
+            0,
+            0,
+            0,
+            0,
+            SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
     }
 }
 

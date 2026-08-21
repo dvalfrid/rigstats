@@ -106,14 +106,17 @@ impl WallpaperHost {
 
 impl eframe::App for WallpaperHost {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // Solid dashboard background; window-level opacity is applied separately
-        // via SetLayeredWindowAttributes so the swap chain stays opaque.
-        let c = theme::PANEL_FILL;
+        // Premultiplied, opacity-driven fill for the DComp-composited swap chain
+        // (see `wgpu_options` in `main()`) — WS_EX_LAYERED-based window opacity
+        // is rejected once reparented into WorkerW, so per-pixel alpha here is
+        // the replacement (issue #131). `theme::premul` returns values already
+        // premultiplied, matching the swap chain's `PreMultiplied` alpha mode.
+        let c = theme::premul(theme::PANEL_FILL, self.opacity);
         [
             c.r() as f32 / 255.0,
             c.g() as f32 / 255.0,
             c.b() as f32 / 255.0,
-            1.0,
+            c.a() as f32 / 255.0,
         ]
     }
 
@@ -140,6 +143,10 @@ impl eframe::App for WallpaperHost {
             self.hwnd = win_opacity::find_hwnd(TITLE);
             if self.hwnd != 0 {
                 win_opacity::set_opacity(self.hwnd, self.opacity);
+                // Required for the DComp-backed swap chain (see `wgpu_options` in
+                // `main()`) to actually composite transparently — see doc comment
+                // on `set_no_redirection_bitmap` (issue #131 spike).
+                win_opacity::set_no_redirection_bitmap(self.hwnd);
                 if win32_wallpaper::attach(self.hwnd) {
                     debug::append_debug_log(&self.dir, "rigstats-wallpaper: attached to WorkerW");
                 } else {
@@ -180,13 +187,20 @@ impl eframe::App for WallpaperHost {
         let panels = self.runtime.visible_panels.clone();
         if profile_is_landscape(&self.profile) {
             let ref_h = profile_to_size(&self.profile)[1];
-            self.runtime
-                .view()
-                .render_landscape_grid(ui, &panels, None, false, ref_h);
+            self.runtime.view().render_landscape_grid(
+                ui,
+                &panels,
+                None,
+                false,
+                ref_h,
+                self.opacity,
+            );
         } else {
             let sc = profile_scale(&self.profile);
             for panel in &panels {
-                self.runtime.view().draw_one_panel(ui, panel, sc, None);
+                self.runtime
+                    .view()
+                    .draw_one_panel(ui, panel, sc, self.opacity, None);
                 ui.add_space((6.0 * sc).round());
             }
         }
@@ -290,10 +304,42 @@ fn main() {
         .with_position(pos)
         .with_decorations(false)
         .with_taskbar(false)
-        .with_window_level(egui::WindowLevel::Normal);
+        .with_window_level(egui::WindowLevel::Normal)
+        // Needed for egui-wgpu's alpha-mode picker to select a transparent
+        // CompositeAlphaMode (see `egui-wgpu-0.34.3/src/winit.rs`); the actual
+        // per-pixel compositing is provided by the DComp swap chain configured
+        // via `wgpu_options` below plus `win_opacity::set_no_redirection_bitmap`.
+        .with_transparent(true);
+
+    // Force the DX12 backend with a DirectComposition-backed swap chain
+    // (`DxgiFromVisual`), so the host renders with real per-pixel alpha instead
+    // of DWM's normal opaque flip-model swap chain — the only way to get
+    // translucency once the window is reparented into WorkerW, where
+    // WS_EX_LAYERED (used for opacity in the other window layers) is rejected.
+    // See issue #131 and `docs/architecture.md` "Desktop wallpaper mode".
+    let wgpu_options = eframe::egui_wgpu::WgpuConfiguration {
+        wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(
+            eframe::egui_wgpu::WgpuSetupCreateNew {
+                instance_descriptor: eframe::wgpu::InstanceDescriptor {
+                    backends: eframe::wgpu::Backends::DX12,
+                    backend_options: eframe::wgpu::BackendOptions {
+                        dx12: eframe::wgpu::Dx12BackendOptions {
+                            presentation_system: eframe::wgpu::Dx12SwapchainKind::DxgiFromVisual,
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                    ..eframe::wgpu::InstanceDescriptor::new_without_display_handle()
+                },
+                ..eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle()
+            },
+        ),
+        ..Default::default()
+    };
 
     let options = eframe::NativeOptions {
         viewport,
+        wgpu_options,
         ..Default::default()
     };
 

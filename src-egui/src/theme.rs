@@ -242,7 +242,7 @@ pub fn bar_avail(ui: &Ui, fixed_w_sum: f32, gaps: u32) -> f32 {
 }
 
 /// Premultiply `color` (assumed fully opaque) by `opacity`.
-fn premul(color: Color32, opacity: f32) -> Color32 {
+pub fn premul(color: Color32, opacity: f32) -> Color32 {
     let a = opacity.clamp(0.0, 1.0);
     Color32::from_rgba_premultiplied(
         (color.r() as f32 * a) as u8,
