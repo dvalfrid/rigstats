@@ -160,6 +160,37 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) for best change
 
 ---
 
+## Manual Pre-Release Checklist
+
+`cargo xtask verify` covers everything that can be asserted in code. The
+items below can't — they need a real DWM compositor, real window modes, or a
+real Explorer session — so they're a manual pass before tagging a release.
+Add to this list whenever a bug turns out to only be catchable by hand.
+
+Run through this on the debug build (`cargo build --manifest-path
+src-egui/Cargo.toml`) before merging the release PR:
+
+- **Window layers** — cycle Normal / Always-on-Top / Always-Behind (tray menu
+  or Settings) and confirm the dashboard renders correctly, including
+  translucency at a partial opacity setting, in each.
+- **Profiles** — spot-check at least one portrait and one landscape profile
+  beyond whatever was touched by this cycle's changes; pay attention to
+  scrollable content (CPU cores, disk drives) at different `sc` scales.
+- **Desktop Wallpaper mode** — attach, confirm it survives `Win+D`, sits under
+  desktop icons, and opacity renders per-pixel (not a uniform dim). Restart
+  `explorer.exe` and confirm it re-attaches on its own.
+- **Floating mode** — panels reposition/persist correctly across a restart.
+- **Opacity extremes** — check both ~10% and 100% opacity; background should
+  fade but text/gauges/graph lines/bars must stay fully legible at every
+  level (see [ROADMAP.md](../ROADMAP.md) background-transparency entries for
+  why this specific check exists).
+- **Settings dialog** — open every tab, change a setting, close, reopen the
+  app, confirm it persisted. Confirm dialogs themselves never become
+  translucent regardless of the dashboard opacity setting.
+- **Fresh install vs. upgrade** — if `settings.rs` migration logic changed
+  this cycle, test loading an old-format `rigstats-settings.json` in addition
+  to a clean install.
+
 ## Testing an Installer Before Release
 
 Before merging the release PR, test the full installer flow using the artifact

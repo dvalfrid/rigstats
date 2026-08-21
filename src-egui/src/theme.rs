@@ -558,6 +558,32 @@ mod tests {
     }
 
     #[test]
+    fn premul_full_opacity_is_unchanged() {
+        let c = premul(Color32::from_rgb(200, 100, 50), 1.0);
+        assert_eq!(c, Color32::from_rgba_premultiplied(200, 100, 50, 255));
+    }
+
+    #[test]
+    fn premul_zero_opacity_is_fully_transparent() {
+        let c = premul(Color32::from_rgb(200, 100, 50), 0.0);
+        assert_eq!(c, Color32::from_rgba_premultiplied(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn premul_half_opacity_scales_channels_and_alpha_together() {
+        let c = premul(Color32::from_rgb(200, 100, 50), 0.5);
+        assert_eq!(c, Color32::from_rgba_premultiplied(100, 50, 25, 127));
+    }
+
+    #[test]
+    fn premul_clamps_out_of_range_opacity() {
+        let over = premul(Color32::from_rgb(200, 100, 50), 2.0);
+        let under = premul(Color32::from_rgb(200, 100, 50), -1.0);
+        assert_eq!(over, premul(Color32::from_rgb(200, 100, 50), 1.0));
+        assert_eq!(under, premul(Color32::from_rgb(200, 100, 50), 0.0));
+    }
+
+    #[test]
     fn hue_of_red() {
         assert!((rgb_to_hue(255, 0, 0) - 0.0).abs() < 1.0);
     }

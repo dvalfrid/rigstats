@@ -138,6 +138,24 @@ mod tests {
         let v: Vec<f32> = s.values().iter().copied().collect();
         assert_eq!(v, vec![1.0, 2.0, 3.0]);
     }
+
+    #[test]
+    fn premul_color_full_alpha_is_unchanged() {
+        let c = premul_color(Color32::from_rgb(200, 100, 50), 255);
+        assert_eq!(c, Color32::from_rgba_premultiplied(200, 100, 50, 255));
+    }
+
+    #[test]
+    fn premul_color_zero_alpha_is_fully_transparent() {
+        let c = premul_color(Color32::from_rgb(200, 100, 50), 0);
+        assert_eq!(c, Color32::from_rgba_premultiplied(0, 0, 0, 0));
+    }
+
+    #[test]
+    fn premul_color_half_alpha_scales_channels_and_alpha_together() {
+        let c = premul_color(Color32::from_rgb(200, 100, 50), 128);
+        assert_eq!(c, Color32::from_rgba_premultiplied(100, 50, 25, 128));
+    }
 }
 
 pub fn premul_color(c: Color32, a: u8) -> Color32 {
