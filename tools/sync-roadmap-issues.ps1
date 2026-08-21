@@ -89,9 +89,9 @@ $features = @(
   @{ id="cpu-fan-speed"; kind="dropped"; label="wontfix"; title="CPU fan speed";
      summary="Investigated: LHM exposes cooler fans as generic Fan #N channels with no signal identifying which channel is the CPU cooler, and a highest-RPM heuristic proved unreliable. CPU cooler RPM remains available in the Motherboard panel.";
      status="Not planned - investigated, no reliable signal" }
-  @{ id="background-transparency"; kind="dropped"; label="wontfix"; title="Background-only transparency (per-pixel alpha)";
-     summary="Goal was transparent panel backgrounds with opaque text/graphs. All four attempted approaches (wgpu/glow transparent, two LWA_COLORKEY variants) failed; achieving it requires custom Win32 DirectComposition integration (1-2 weeks, high risk).";
-     status="Not planned - blocked, needs DirectComposition" }
+  @{ id="background-transparency"; kind="planned"; label="enhancement"; title="Background-only transparency (per-pixel alpha)"; milestone="v3.0";
+     summary="Goal: transparent panel backgrounds with opaque text/graphs/bars/images, in the Normal/Always-on-Top/Always-Behind window layers (Settings/About/Updater dialogs stay fully opaque). Originally dropped as blocked - four approaches failed (wgpu/glow transparent, two LWA_COLORKEY variants). Unblocked by #131/#168: wgpu's Dx12SwapchainKind::DxgiFromVisual + WS_EX_NOREDIRECTIONBITMAP (applied post-window-creation via win_opacity::set_no_redirection_bitmap) gives a real DComp per-pixel-alpha swap chain without a custom DComp integration. dashboard.rs already threads an opacity parameter into panel_frame/sparklines only (not into text/gauge/bar colors) - wiring the main window to that same opacity value instead of hardcoded 1.0, plus the DComp swap chain, should reproduce wallpaper mode's already-working frosted-glass effect. Dialog viewports must not opt into with_transparent so they stay opaque.";
+     status="Planned (3.0) - feasible via the #131/#168 DComp technique; needs design for main-window + dialog-viewport interaction" }
   @{ id="ui-performance-strategy"; kind="dropped"; label="wontfix"; title="UI performance - lighter rendering strategy";
      summary="The WebView2 DOM render cost this aimed to reduce is gone entirely after the egui migration; the egui binary sleeps between repaints and idles at ~0% CPU.";
      status="Not planned - superseded by the egui migration (v1.27)" }
@@ -99,9 +99,9 @@ $features = @(
   @{ id="floating-panel-groups"; kind="planned"; label="enhancement"; title="Floating panel groups"; milestone="v3.0";
      summary="Build on floating mode: magnetically snap panels into groups that move together (vertical or horizontal), with a flip-orientation context action and a 'Collect panels to screen' tray command.";
      status="Planned (3.0)" }
-  @{ id="floating-mode-perf"; kind="planned"; label="enhancement"; title="Floating mode - reduce multi-window rendering cost";
-     summary="Floating mode renders one OS viewport per panel via show_viewport_immediate, so cost scales with panel count. Investigate deferred viewports and skipping unchanged panels. Target: idle CPU within ~2x of fixed mode.";
-     status="Planned" }
+  @{ id="floating-mode-perf"; kind="dropped"; label="wontfix"; title="Floating mode - reduce multi-window rendering cost";
+     summary="Investigated via architectural review: the low-hanging fruit (Behind-mode throttle) already shipped separately. The remainder (Arc-wrapping shared state, deferred viewports) is high implementation cost for a sub-1% CPU saving in release builds on the target hardware (gaming rigs); show_viewport_immediate + &-reference is the correct design for panels sharing one 1 Hz data snapshot.";
+     status="Not planned - deferred indefinitely unless floating-mode CPU complaints arise on battery systems" }
   @{ id="desktop-background-l2"; kind="done"; label="enhancement"; title="Desktop background - Level 2 (WorkerW)";
      summary="True wallpaper-layer mode (Settings -> Window Layer -> Desktop Wallpaper). A separate rigstats-wallpaper host process reparents into the Progman/WorkerW hierarchy so the dashboard lives between wallpaper and icons and survives Win+D; the main app supervises it (relaunch on Explorer restart) and pauses its own polling to hand the sensor pipe over. Display-only in v1.";
      status="Shipped" }

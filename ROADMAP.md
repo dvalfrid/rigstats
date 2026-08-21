@@ -35,8 +35,8 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
-| Background-only transparency (per-pixel alpha) | ⏭ Investigated, blocked — needs DirectComposition (see #131 for uniform-opacity DComp integration; selective background-only transparency is a separate, larger effort) |
-| Floating mode — reduce multi-window rendering cost | 🔲 Planned |
+| Background-only transparency (per-pixel alpha) | 🔲 Planned (3.0) — unblocked by #131/#168's DComp technique |
+| Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 
@@ -90,10 +90,10 @@ script to refresh it.
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
-| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
+| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
+| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v3.0 | 🔲 Planned |
 | [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
-| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | 🔲 Planned |
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
@@ -606,7 +606,17 @@ that re-stacks all open panel windows vertically on the chosen monitor in
 
 ---
 
-## Floating mode — reduce multi-window rendering cost 🔲
+## Floating mode — reduce multi-window rendering cost ⏭
+
+**Dropped ([#104](https://github.com/dvalfrid/rigstats/issues/104), closed
+2026-06-24 after architectural review):** the low-hanging fruit (Behind-mode
+throttle, below) already shipped. The remainder — `Arc`-wrapping shared state
+for deferred viewports — is high implementation cost for a sub-1% CPU saving
+in release builds on the target hardware (gaming rigs); `show_viewport_immediate`
++ `&`-reference is the correct design for panels sharing one 1 Hz data
+snapshot. Deferred indefinitely unless floating-mode CPU complaints arise on
+battery-powered laptops. The investigation below is kept for reference if that
+changes.
 
 **Area:** Floating panel rendering (`src-egui/src/main.rs::render_floating_panels`)
 **Data source:** No new data required — pure rendering/architecture work
@@ -1211,7 +1221,9 @@ task, no HTTP, no external process lifecycle to manage.
 
 ---
 
-## Background-only transparency (per-pixel alpha) ⏭
+## Background-only transparency (per-pixel alpha) 🔲
+
+**Reopened 2026-08-21 ([#101](https://github.com/dvalfrid/rigstats/issues/101)) — unblocked by [#131](https://github.com/dvalfrid/rigstats/issues/131)/[#168](https://github.com/dvalfrid/rigstats/issues/168).** The investigation below (2026-06-ish) is kept as-is for historical record; see "Path forward" at the end for the current plan.
 
 **Goal:** Make panel backgrounds transparent to the desktop wallpaper while keeping text, numbers, labels, graphs, and borders fully opaque — a "frosted glass" style where only the dark fill fades through.
 
@@ -1241,22 +1253,69 @@ Black is gamma-invariant (`0^n = 0`) so the stored framebuffer bytes match the C
 
 The previous Tauri frontend achieved background-only transparency successfully. WebView2 (the Chromium-based renderer embedded in Tauri) uses **DirectComposition** internally. DComp creates swap chains via `IDXGIFactory2::CreateSwapChainForComposition` with `DXGI_ALPHA_MODE_PREMULTIPLIED`, and presents them to DWM through a composition tree. DWM then composites the window using per-pixel alpha from the swap chain, so pixels with `alpha = 0` are fully transparent while fully-opaque pixels (text, borders, graphs) are unaffected.
 
-### Path forward
+### Path forward (updated 2026-08-21 — unblocked by #131/#168)
 
-Background-only transparency requires **custom Win32 DirectComposition integration**. The steps are:
+Approach 1 above concluded "the wgpu D3D12 backend does not set this up" — true
+for the wgpu version tested at the time, but wgpu 27.0.0 (already older than
+the version this repo has pinned) added exactly this capability:
+`wgpu::Dx12SwapchainKind::DxgiFromVisual`, which makes the DX12 backend create
+a DirectComposition-backed, per-pixel-alpha swap chain automatically from a
+plain HWND — no custom `IDCompositionDevice`/visual-tree code needed (steps
+1-3 above are handled internally by wgpu). #131 proved this works end-to-end
+for the wallpaper host, including the one real remaining blocker: eframe/
+egui-winit has no hook to request `WS_EX_NOREDIRECTIONBITMAP` at
+window-creation time, but applying it *after* the wgpu surface already exists
+(`win_opacity::set_no_redirection_bitmap`) still works.
 
-1. Create a `IDCompositionDevice` (via `DCompositionCreateDevice`)
-2. Create the DXGI swap chain for composition: `IDXGIFactory2::CreateSwapChainForComposition` with `DXGI_ALPHA_MODE_PREMULTIPLIED` in `DXGI_SWAP_CHAIN_DESC1`
-3. Bind the swap chain to a DComp visual and set it as the root visual on the window
-4. Render clear color as `[r, g, b, 0.0]` (premultiplied alpha — black transparent background) and UI content at `alpha = 1.0`
-5. Commit the DComp transaction each frame
+**Selective transparency (this issue's actual goal) turns out to already be
+solved as a side effect of how #131/#168 threaded `opacity` through:**
+`dashboard.rs`'s `draw_one_panel`/`render_landscape_grid` only pass `opacity`
+into `theme::panel_frame` (background fill/border) and the sparkline
+background/gradient/line — never into the content drawn inside each panel's
+closure (labels, numbers, `ring::show` gauges, bars, logos), which all use
+theme colors at full alpha. In Desktop Wallpaper mode this already produces
+exactly the "frosted glass" effect this issue wants — confirmed visually.
 
-This is non-trivial and requires either:
+**Plan to bring it to Normal / Always-on-Top / Always-Behind:**
 
-- **A custom eframe/wgpu patch** that hooks in DComp before swap chain creation, or
-- **A completely custom Win32 rendering path** that bypasses eframe's window setup
+1. Apply the same swap-chain setup `bin/wallpaper.rs` uses to the main window
+   in `main.rs`: `NativeOptions.wgpu_options` forcing `Backends::DX12` +
+   `Dx12SwapchainKind::DxgiFromVisual`, `ViewportBuilder::with_transparent(true)`
+   on the **main viewport only**, and `win_opacity::set_no_redirection_bitmap`
+   called once the main window's HWND is known (mirrors the existing
+   HWND-caching pattern already used for `win_opacity::set_opacity`).
+2. `main.rs`'s `clear_color()` needs the same premultiply treatment as
+   `bin/wallpaper.rs`'s (`theme::premul(theme::PANEL_FILL, opacity)`).
+3. `main.rs`'s own `draw_one_panel`/`render_landscape_grid` wrapper methods
+   currently hardcode `1.0` when calling into `DashboardView` — change these to
+   pass the real opacity instead. This is the change that actually activates
+   the effect; the underlying `dashboard.rs` plumbing already exists.
+4. **Dialogs must stay fully opaque** (Settings/About/Status/Updater — see
+   `src-egui/src/windows/CLAUDE.md`). These are separate deferred egui
+   viewports; `support_transparent_backbuffer` (egui-wgpu's alpha-mode gate,
+   `egui-wgpu-0.34.3/src/winit.rs`) is keyed off each viewport's *own*
+   `ViewportBuilder::with_transparent` flag, not a global setting, so never
+   calling `.with_transparent(true)` on their builders should keep them on
+   `CompositeAlphaMode::Opaque` regardless of the main window's DComp setup —
+   needs empirical confirmation, since all viewports likely share one
+   `wgpu::Instance`/backend configuration.
+5. Decide whether `WS_EX_LAYERED`-based whole-window opacity
+   (`win_opacity::set_opacity`) should be *removed* once this ships, or kept
+   as a fallback — the two mechanisms give visibly different results (uniform
+   dim vs. frosted glass) for the same slider value, and only one should be
+   active per window at a time.
 
-The effort is significant (estimated 1–2 weeks of Win32 graphics work) and carries risk: the DComp surface owner must be the same process and thread that creates the egui window, making it hard to layer on top of eframe's existing setup. This feature is deprioritised until the rest of the egui migration is stable.
+**Open questions before implementing:**
+
+- Do Always-on-Top/Always-Behind interact any differently with a DComp swap
+  chain than Normal mode does? (Only the WorkerW-child case was tested in #131.)
+- Floating mode renders one OS viewport per panel (`show_viewport_immediate`)
+  — would each need its own DComp setup, or is floating mode better left on
+  the simpler `WS_EX_LAYERED` uniform-dim path?
+- Performance: `bin/wallpaper.rs` repaints at ~1 Hz; the main window repaints
+  more often during interaction (drag, hover) — confirm the DComp swap chain
+  has no resize/redraw-churn issues at interactive frame rates (#131's Phase 3
+  flagged continuous resize as a real risk for the wallpaper host specifically).
 
 ---
 
