@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.36.0</Program_Version>
-		<Program_Release_Month>07</Program_Release_Month>
-		<Program_Release_Day>08</Program_Release_Day>
+		<Program_Version>1.37.0</Program_Version>
+		<Program_Release_Month>08</Program_Release_Month>
+		<Program_Release_Day>21</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>status: restore displays.json in diagnostics export, fix stale docs; ux: add drag/lock tooltips and a Help/Docs entry pointing to rigstats.app; autostart: never let a dev build overwrite the real autostart entry; dashboard: support Fill Screen for landscape and stabilize its scale; winget: pass --repo to gh release list in submit workflow; winget: skip submission when an update PR is already open</Program_Change_Info>
+		<Program_Change_Info>main: selective per-pixel transparency for Normal/On-Top/Behind ([#101](https://github.com/dvalfrid/rigstats/issues/101)); wallpaper: support per-pixel opacity in Desktop Wallpaper mode via DirectComposition; winget: verify declared dependencies against rigstats.exe imports; egui: suffix Stroke width literals to satisfy float_literal_f32_fallback; landscape: clip grid cells and stop egui's interact_size floor overflowing compact panels [#172](https://github.com/dvalfrid/rigstats/issues/172); main: avoid crash at startup when no DX12 adapter is available; wallpaper: make sparkline graph backgrounds respect dashboard opacity; wallpaper: stop scaling sparkline line/gradient by opacity; winget: match Publisher to installer registry value</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.36.0/RIGStats_1.36.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.37.0/RIGStats_1.37.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
