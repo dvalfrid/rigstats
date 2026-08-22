@@ -149,10 +149,7 @@ pub struct Settings {
   /// When true, floating panel windows cannot be moved by dragging.
   #[serde(default)]
   pub floating_panels_locked: bool,
-  /// When true, a CSV row is appended to the daily log file on every stats tick.
-  #[serde(default)]
-  pub logging_enabled: bool,
-  /// Number of days to retain daily log files before automatic pruning.
+  /// Number of days to retain finished, unpinned recording sessions before automatic pruning.
   #[serde(default = "default_log_retention_days")]
   pub log_retention_days: u32,
   /// Fill the whole monitor in non-floating mode; panels keep their size, the
@@ -279,7 +276,6 @@ impl Default for Settings {
       preferred_gpu: None,
       window_layer: default_window_layer(),
       floating_panels_locked: false,
-      logging_enabled: false,
       log_retention_days: default_log_retention_days(),
       fullscreen_mode: false,
       fullscreen_align: default_fullscreen_align(),

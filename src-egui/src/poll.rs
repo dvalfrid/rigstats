@@ -583,19 +583,23 @@ pub async fn poll_loop(
             first_tick_logged = true;
         }
 
-        // CSV logging — reads settings each tick so changes take effect immediately.
-        let (log_enabled, retention_days) = {
-            let s = settings_arc.lock_safe();
-            (s.logging_enabled, s.log_retention_days)
-        };
-        if log_enabled {
+        // Session recording — append to the active session's CSV, if any. The
+        // active session lives in the on-disk index (not in-process state) so
+        // both this app's poll loop and the separate `rigstats-wallpaper` host's
+        // poll loop pick up a tray-started recording, whichever one is currently
+        // the active poller.
+        let active_session = logging::load_sessions(&dir)
+            .into_iter()
+            .find(logging::SessionMeta::is_active);
+        if let Some(session) = active_session {
             let payload = poll_stats_to_log_payload(&stats);
-            if let Err(e) = logging::append_stats_row(&payload, &dir) {
+            if let Err(e) = logging::append_stats_row(&payload, &dir, &session) {
                 debug::log_error(&dir, &format!("logging: csv write error — {e}"));
             }
+            let retention_days = settings_arc.lock_safe().log_retention_days;
             let today = logging::unix_now_secs() / 86400;
             if last_prune_day != Some(today) {
-                logging::prune_old_logs(&dir, retention_days);
+                logging::prune_old_sessions(&dir, retention_days);
                 last_prune_day = Some(today);
             }
         }

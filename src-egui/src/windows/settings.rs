@@ -825,32 +825,20 @@ fn draw_general(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
         });
     });
 
-    // Stats Logging
+    // Session Recording
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Stats Logging");
+        section_label(ui, dc, "Session Recording");
         ui.add_space(8.0);
 
-        inner_row(dc).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new("Enable Logging")
-                            .size(13.0)
-                            .color(dc.text),
-                    );
-                    ui.label(
-                        egui::RichText::new("Saves one CSV row per second to the app data folder")
-                            .size(11.0)
-                            .color(dc.muted),
-                    );
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    toggle_switch(ui, dc, &mut draft.logging_enabled);
-                });
-            });
-        });
+        ui.label(
+            egui::RichText::new(
+                "Start/stop a recording from the tray menu, then browse past sessions from \
+                 the tray's \u{201c}Session History\u{201d} window.",
+            )
+            .size(11.0)
+            .color(dc.muted),
+        );
 
         ui.add_space(8.0);
         ui.horizontal(|ui| {

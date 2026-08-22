@@ -43,11 +43,13 @@ struct RigStatsApp {
     about_open: Arc<AtomicBool>,
     status_open: Arc<AtomicBool>,
     updater_open: Arc<AtomicBool>,
+    history_open: Arc<AtomicBool>,
     // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
     settings_focus: Arc<AtomicBool>,
     about_focus: Arc<AtomicBool>,
     status_focus: Arc<AtomicBool>,
     updater_focus: Arc<AtomicBool>,
+    history_focus: Arc<AtomicBool>,
     settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
     status_win: Arc<Mutex<windows::status::StatusState>>,
     status_refreshing: Arc<AtomicBool>,
@@ -55,6 +57,9 @@ struct RigStatsApp {
     updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
     // true while a manual check/download is in flight (prevents double-trigger)
     updater_busy: Arc<AtomicBool>,
+    history_win: Arc<Mutex<windows::history::HistoryState>>,
+    history_refreshing: Arc<AtomicBool>,
+    history_loading_rows: Arc<AtomicBool>,
     // Shared settings (updated on save, applied each frame)
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
@@ -219,10 +224,12 @@ impl RigStatsApp {
             about_open: Arc::new(AtomicBool::new(false)),
             status_open: Arc::new(AtomicBool::new(false)),
             updater_open,
+            history_open: Arc::new(AtomicBool::new(false)),
             settings_focus: Arc::new(AtomicBool::new(false)),
             about_focus: Arc::new(AtomicBool::new(false)),
             status_focus: Arc::new(AtomicBool::new(false)),
             updater_focus,
+            history_focus: Arc::new(AtomicBool::new(false)),
             settings_win: Arc::new(Mutex::new(
                 windows::settings::SettingsWindow::from_settings(&init_settings),
             )),
@@ -231,6 +238,9 @@ impl RigStatsApp {
             status_collecting: Arc::new(AtomicBool::new(false)),
             updater_win,
             updater_busy: Arc::new(AtomicBool::new(false)),
+            history_win: Arc::new(Mutex::new(windows::history::HistoryState::placeholder())),
+            history_refreshing: Arc::new(AtomicBool::new(false)),
+            history_loading_rows: Arc::new(AtomicBool::new(false)),
             current_settings,
             settings_reload,
             preferred_gpu,
@@ -784,6 +794,16 @@ impl eframe::App for RigStatsApp {
                         ui.ctx().clone(),
                     );
                 }
+                TrayCmd::OpenHistory => {
+                    self.history_open.store(true, Ordering::Relaxed);
+                    self.history_focus.store(true, Ordering::Relaxed);
+                    windows::history::spawn_load_sessions(
+                        self.history_win.clone(),
+                        self.history_refreshing.clone(),
+                        self.dir.as_ref().clone(),
+                        ui.ctx().clone(),
+                    );
+                }
                 TrayCmd::OpenUpdater => {
                     self.updater_open.store(true, Ordering::Relaxed);
                     self.updater_focus.store(true, Ordering::Relaxed);
@@ -843,16 +863,28 @@ impl eframe::App for RigStatsApp {
                     }
                 }
                 TrayCmd::ToggleRecording => {
-                    let (new_enabled, retention_days) = {
-                        let mut s = self.current_settings.lock_safe();
-                        s.logging_enabled = !s.logging_enabled;
-                        self.persist_settings_logged(&s);
-                        (s.logging_enabled, s.log_retention_days)
-                    };
-                    if new_enabled {
-                        logging::prune_old_logs(&self.dir, retention_days);
+                    // The active session lives in the on-disk index, not in-process
+                    // state — the same source both this app's and the wallpaper
+                    // host's poll loops check each tick (see `poll_loop`).
+                    let active = logging::load_sessions(&self.dir)
+                        .into_iter()
+                        .find(logging::SessionMeta::is_active);
+                    if let Some(session) = active {
+                        let retention_days = self.current_settings.lock_safe().log_retention_days;
+                        logging::end_session(&self.dir, &session.id, logging::unix_now_secs());
+                        logging::prune_old_sessions(&self.dir, retention_days);
+                        self.tray.set_recording(false);
+                    } else {
+                        match logging::start_session(&self.dir) {
+                            Ok(_) => self.tray.set_recording(true),
+                            Err(e) => {
+                                debug::log_error(
+                                    &self.dir,
+                                    &format!("logging: failed to start session — {e}"),
+                                );
+                            }
+                        }
                     }
-                    self.tray.set_recording(new_enabled);
                 }
             }
         }
@@ -877,7 +909,8 @@ impl eframe::App for RigStatsApp {
         let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
             || self.about_open.load(Ordering::Relaxed)
             || self.status_open.load(Ordering::Relaxed)
-            || self.updater_open.load(Ordering::Relaxed);
+            || self.updater_open.load(Ordering::Relaxed)
+            || self.history_open.load(Ordering::Relaxed);
         if !any_dialog_open && self.any_dialog_open_prev {
             let mut vis = egui::Visuals::dark();
             vis.panel_fill = egui::Color32::TRANSPARENT;
@@ -1018,6 +1051,56 @@ impl eframe::App for RigStatsApp {
                         &dir,
                         lhm_connected,
                         wallpaper_active,
+                        &dc,
+                    );
+                },
+            );
+            #[cfg(windows)]
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
+            #[cfg(windows)]
+            if wants_focus {
+                if found_hwnd != 0 {
+                    win_opacity::bring_to_foreground(found_hwnd);
+                } else {
+                    focus.store(true, Ordering::Relaxed);
+                }
+            }
+        }
+
+        if self.history_open.load(Ordering::Relaxed) {
+            let open = self.history_open.clone();
+            let focus = self.history_focus.clone();
+            let state = self.history_win.clone();
+            let refreshing = self.history_refreshing.clone();
+            let loading_rows = self.history_loading_rows.clone();
+            let dir = self.dir.clone();
+            let mctx = main_ctx.clone();
+            let [px, py] = dialog_center(820.0, 720.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
+            ui.ctx().show_viewport_immediate(
+                egui::ViewportId::from_hash_of("history"),
+                egui::ViewportBuilder::default()
+                    .with_title("RigStats — Session History")
+                    .with_inner_size([820.0, 720.0])
+                    .with_position([px, py])
+                    .with_taskbar(false)
+                    .with_icon(load_app_icon())
+                    .with_always_on_top(),
+                |child_ui, _class| {
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Session History");
+                    }
+                    windows::history::show(
+                        child_ui.ctx(),
+                        &mctx,
+                        &open,
+                        &focus,
+                        &state,
+                        &refreshing,
+                        &loading_rows,
+                        &dir,
                         &dc,
                     );
                 },
@@ -2133,6 +2216,11 @@ fn main() {
         .build()
         .expect("tokio runtime");
 
+    // Close any session left open by an unclean shutdown and best-effort import
+    // legacy daily-rolling logs, before the poll loop (or the tray/UI) can see
+    // the session index.
+    logging::reconcile_sessions_on_startup(&dir);
+
     let preferred_gpu_arc: Arc<Mutex<Option<String>>> =
         Arc::new(Mutex::new(s.preferred_gpu.clone()));
     let current_settings_shared = Arc::new(Mutex::new(settings::load_settings(&dir)));
@@ -2251,7 +2339,9 @@ fn main() {
             // Larger font sizes for readability on a portrait monitor.
             theme::apply_dashboard_fonts(&cc.egui_ctx);
 
-            let tray = build_tray(s.logging_enabled);
+            // A fresh launch never has an active recording session — any session left
+            // open by an unclean shutdown was already closed by reconcile_sessions_on_startup.
+            let tray = build_tray(false);
             let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
 
             // Spawn a thread that polls tray events at 50 ms intervals and wakes the
@@ -2262,6 +2352,7 @@ fn main() {
             let settings_id = tray.settings_id.clone();
             let about_id = tray.about_id.clone();
             let status_id = tray.status_id.clone();
+            let history_id = tray.history_id.clone();
             let updater_id = tray.updater_id.clone();
             let docs_id = tray.docs_id.clone();
             let floating_id = tray.floating_id.clone();
@@ -2302,6 +2393,8 @@ fn main() {
                             Some(TrayCmd::OpenAbout)
                         } else if ev.id == status_id {
                             Some(TrayCmd::OpenStatus)
+                        } else if ev.id == history_id {
+                            Some(TrayCmd::OpenHistory)
                         } else if ev.id == updater_id {
                             Some(TrayCmd::OpenUpdater)
                         } else if ev.id == docs_id {

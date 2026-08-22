@@ -15,6 +15,7 @@ pub enum TrayCmd {
     OpenStatus,
     OpenUpdater,
     OpenDocs,
+    OpenHistory,
     ToggleFloating,
     ToggleRecording,
 }
@@ -26,6 +27,7 @@ pub struct Tray {
     pub status_id: tray_icon::menu::MenuId,
     pub updater_id: tray_icon::menu::MenuId,
     pub docs_id: tray_icon::menu::MenuId,
+    pub history_id: tray_icon::menu::MenuId,
     pub quit_id: tray_icon::menu::MenuId,
     pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
@@ -62,6 +64,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let settings_item = MenuItem::new("Settings", true, None);
     let about_item = MenuItem::new("About", true, None);
     let status_item = MenuItem::new("Status", true, None);
+    let history_item = MenuItem::new("Session History", true, None);
     let updater_item = MenuItem::new("Check for Updates", true, None);
     let docs_item = MenuItem::new("Help / Docs", true, None);
     let quit_item = MenuItem::new("Quit", true, None);
@@ -71,6 +74,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let settings_id = settings_item.id().clone();
     let about_id = about_item.id().clone();
     let status_id = status_item.id().clone();
+    let history_id = history_item.id().clone();
     let updater_id = updater_item.id().clone();
     let docs_id = docs_item.id().clone();
     let quit_id = quit_item.id().clone();
@@ -78,6 +82,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
     let menu = Menu::new();
     let _ = menu.append(&floating_item);
     let _ = menu.append(&recording_item);
+    let _ = menu.append(&history_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -116,6 +121,7 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
         status_id,
         updater_id,
         docs_id,
+        history_id,
         quit_id,
         floating_id,
         recording_id,

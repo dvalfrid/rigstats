@@ -292,7 +292,10 @@ fn main() {
     let dir_poll = dir.clone();
     let pref_poll = preferred_gpu_arc.clone();
     let settings_poll = settings_shared.clone();
-    // The host is the active poller — never paused.
+    // The host is the active poller — never paused. Session recording is driven
+    // by the on-disk session index (see `poll_loop`), so a tray-started
+    // recording in the main app is picked up here too even though this is a
+    // separate process.
     let never_paused = Arc::new(AtomicBool::new(false));
     runtime.spawn(
         async move { poll_loop(tx, dir_poll, pref_poll, settings_poll, never_paused).await },
