@@ -355,14 +355,19 @@ fn plot_metric(
         return None;
     }
     section_label(ui, dc, chart.title);
-    let resp = Plot::new(chart.id)
+    // Keyed by group_id (which already includes the session id) so switching
+    // sessions never inherits another session's zoom/pan state, and manual
+    // drag/zoom is disabled so the y-axis always auto-fits the full data range
+    // instead of a stale bounds getting "stuck" and clipping later values.
+    let resp = Plot::new((group_id, chart.id))
         .height(140.0)
         .legend(Legend::default())
         .allow_scroll(false)
-        // Same group_id across all metrics in a session: dragging/zooming any one
-        // chart pans/zooms them all together (x only — each metric keeps its own
-        // y-scale) and hovering any one chart shows the crosshair on all of them,
-        // so CPU load, temp, RAM, etc. at a given moment line up visually.
+        .allow_drag(false)
+        .allow_zoom(false)
+        // Same group_id across all metrics in a session: hovering any one chart
+        // shows the crosshair on all of them, so CPU load, temp, RAM, etc. at a
+        // given moment line up visually.
         .link_axis(group_id, [true, false])
         .link_cursor(group_id, [true, false])
         .x_axis_formatter(|mark, _range| fmt_elapsed(mark.value))
