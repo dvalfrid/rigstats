@@ -41,6 +41,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
+| Session history — record, browse, and visualize past sessions | 🔲 Planned (3.0) |
 
 ---
 
@@ -100,6 +101,7 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | 🔲 Planned |
+| [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1455,3 +1457,48 @@ outdated AMD driver; updating the GPU + chipset drivers restored all sensors.
 No reliable cross-vendor API exists for "latest available driver version," so the
 feature surfaces the installed version + an age heuristic + a one-click link to the
 vendor's driver download page rather than claiming to know the newest release.
+
+---
+
+## Session history — record, browse, and visualize past sessions 🔲 (Milestone 3.0)
+
+**Panel:** New History window, opened from the tray
+**Data source:** Existing `StatsPayload` fields already logged by `stats-logging` — no new sensors required
+**Crate:** [`egui_plot`](https://crates.io/crates/egui_plot), version-matched to the pinned `egui`/`eframe` `0.34`
+
+[#175](https://github.com/dvalfrid/rigstats/issues/175) — `stats-logging` (shipped)
+made recorded data write-only: one CSV row per tick to a daily-rolling file, with
+no way to look at it inside the app. This turns that into named, browsable
+**recording sessions** with an in-app history viewer.
+
+**Scope:**
+
+- Session model replaces the daily-rolling log with explicit start/stop
+  recordings, reusing the existing tray "Start/Stop Recording" toggle
+  (`TrayCmd::ToggleRecording`) as the start/stop control — same label/icon/tooltip
+  behavior, new session semantics underneath.
+- Each session gets a `SessionMeta { id, name, start_unix, end_unix, pinned,
+  summary }` entry in a new `rigstats-sessions.json` index and its own
+  `rigstats-session-<id>.csv` file (same 13-column schema logging already uses).
+- Sessions can be pinned (exempt from `log_retention_days` pruning), renamed,
+  and deleted.
+- New History window: session list (name, time range, duration, pin toggle, quick
+  avg-stat preview) plus a detail view with stat tiles and `egui_plot` line charts
+  grouped by CPU / GPU / System.
+
+**Architecture:**
+
+- `rigstats-backend/src/logging.rs` gains the session index, a CSV reader
+  (`read_session_rows`, doesn't exist today), summary-stat computation on
+  session close, crash-safe auto-close of an orphaned open session on next
+  startup, and a best-effort legacy import of any existing
+  `rigstats-log-YYYY-MM-DD.csv` files as read-only sessions on first run after
+  upgrade.
+- `src-egui/src/windows/history.rs` (new) follows the dialog contract in
+  `src-egui/src/windows/CLAUDE.md` and the off-thread load pattern already used
+  by `status.rs`'s `StatusState` (`Arc<Mutex<...>>` + background thread +
+  `ctx.request_repaint()`).
+- `TrayCmd::OpenHistory` wired the same way as `TrayCmd::OpenStatus`
+  (`show_viewport_immediate`, `Arc<AtomicBool>` open/focus flags).
+
+Full design detail, risks, and acceptance criteria are in the issue.

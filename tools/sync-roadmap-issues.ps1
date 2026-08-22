@@ -129,6 +129,9 @@ $features = @(
   @{ id="test-coverage-sidecar"; kind="done"; label="enhancement"; title="Test coverage - sidecar + sensor extraction";
      summary="Add tests for the currently untested .NET sensor sidecar (named-pipe framing, JSON serialization, LHM sensor mapping) and direct unit tests for the lhm.rs extract_* filtering edge cases.";
      status="Shipped in v2.0" }
+  @{ id="session-history"; kind="planned"; label="enhancement"; title="Session history: record, browse, and visualize past sessions"; milestone="v3.0";
+     summary="Turn stats logging into named, browsable recording sessions: explicit start/stop via the existing tray Start/Stop Recording toggle, a new per-session CSV file instead of the daily-rolling log, and a History window (egui_plot charts of CPU/GPU/RAM/disk/net/ping) to pick a past session and see what happened. Sessions can be pinned to survive retention pruning, renamed, and deleted.";
+     status="Planned (3.0)" }
 
   # Pre-existing issues: track only (do not rewrite their title/body).
   # `title` here is display-only (used for the ROADMAP table; the pinned branch
