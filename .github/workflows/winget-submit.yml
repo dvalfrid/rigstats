@@ -4,13 +4,18 @@ on:
   workflow_run:
     workflows: ["Release"]
     types: [completed]
+  # Manual escape hatch: `workflow_run` only fires for Release runs that
+  # completed on the default branch. Re-running Release via workflow_dispatch
+  # against a tag ref (see docs/release.md's "Manual re-run" section) doesn't
+  # qualify, so it silently never chains into this workflow.
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 jobs:
   submit:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: windows-latest
     steps:
       - name: Get latest release version

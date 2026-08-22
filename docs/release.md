@@ -142,6 +142,16 @@ If the release build fails or needs to be re-run for an existing tag:
 3. Enter the existing tag (e.g. `v1.27.0`)
 4. Run
 
+**Important:** leave the "Use workflow from" branch/tag dropdown on `main`.
+`winget-submit.yml` is chained via `workflow_run`, which GitHub only fires
+for runs that completed on the default branch — if this dropdown is set to
+the tag instead, the Release build itself still succeeds, but the Winget
+submission silently never queues (no error, no skipped run — it just never
+starts). If that already happened, `winget-submit.yml` also has a manual
+`workflow_dispatch` trigger as a fallback: Actions → Submit to Winget → Run
+workflow. It always submits whatever the latest GitHub Release is, so no
+input is needed.
+
 ## Day-To-Day Process
 
 1. Develop normally and merge PRs to `main`.
