@@ -355,7 +355,6 @@ fn plot_metric(
         return None;
     }
     section_label(ui, dc, chart.title);
-    let unit = chart.unit;
     let resp = Plot::new(chart.id)
         .height(140.0)
         .legend(Legend::default())
@@ -367,14 +366,11 @@ fn plot_metric(
         .link_axis(group_id, [true, false])
         .link_cursor(group_id, [true, false])
         .x_axis_formatter(|mark, _range| fmt_elapsed(mark.value))
-        .label_formatter(move |name, value| {
-            let t = fmt_elapsed(value.x);
-            if name.is_empty() {
-                t
-            } else {
-                format!("{name}\n{t}\n{:.1}{unit}", value.y)
-            }
-        })
+        // Every chart renders its values the same way — via the synced readout
+        // box drawn in `draw_synced_readout`, on this chart as much as any other
+        // linked one — so the mouse-following tooltip here only ever shows the
+        // time, never a name/value pair.
+        .label_formatter(|_name, value| fmt_elapsed(value.x))
         .show(ui, |plot_ui| {
             for (name, color, pts) in &chart.series {
                 if pts.is_empty() {
@@ -395,6 +391,10 @@ fn plot_metric(
 /// floating readout box for it near the top of the chart — the same values a
 /// user would see by hovering this chart directly, kept in sync while they
 /// hover a *different* linked chart instead.
+/// For each series, finds the point closest to `x` and draws a small dot right
+/// on the curve there plus a value label anchored just above it — so as the
+/// hovered x moves, each label rides its own line up and down instead of
+/// sitting in one fixed corner.
 fn draw_synced_readout(
     ui: &egui::Ui,
     rect: egui::Rect,
@@ -402,52 +402,44 @@ fn draw_synced_readout(
     x: f64,
     chart: &ChartSpec,
 ) {
-    let lines: Vec<(egui::Color32, String)> = chart
-        .series
-        .iter()
-        .filter_map(|(name, color, pts)| {
-            pts.iter()
-                .min_by(|a, b| (a[0] - x).abs().total_cmp(&(b[0] - x).abs()))
-                .map(|p| (*color, format!("{name}: {:.1}{}", p[1], chart.unit)))
-        })
-        .collect();
-    if lines.is_empty() {
-        return;
-    }
-
+    let painter = ui.painter().with_clip_rect(rect);
     let font = egui::FontId::proportional(11.0);
     let line_h = 14.0;
-    let max_chars = lines
-        .iter()
-        .map(|(_, t)| t.chars().count())
-        .max()
-        .unwrap_or(0);
-    let box_w = max_chars as f32 * 6.2 + 10.0;
-    let box_h = lines.len() as f32 * line_h + 6.0;
-    let screen_x = transform
-        .position_from_point(&egui_plot::PlotPoint::new(x, 0.0))
-        .x;
-    let box_x = (screen_x + 8.0).clamp(
-        rect.left() + 2.0,
-        (rect.right() - box_w - 2.0).max(rect.left() + 2.0),
-    );
-    let box_rect = egui::Rect::from_min_size(
-        egui::pos2(box_x, rect.top() + 4.0),
-        egui::vec2(box_w, box_h),
-    );
 
-    let painter = ui.painter().with_clip_rect(rect);
-    painter.rect_filled(box_rect, 3.0, egui::Color32::from_black_alpha(220));
-    let mut y = box_rect.top() + 3.0;
-    for (color, text) in &lines {
+    for (name, color, pts) in &chart.series {
+        let Some(p) = pts
+            .iter()
+            .min_by(|a, b| (a[0] - x).abs().total_cmp(&(b[0] - x).abs()))
+        else {
+            continue;
+        };
+        let point_pos = transform.position_from_point(&egui_plot::PlotPoint::new(p[0], p[1]));
+
+        painter.circle_filled(point_pos, 3.0, *color);
+        painter.circle_stroke(
+            point_pos,
+            3.0,
+            egui::Stroke::new(1.0, egui::Color32::from_black_alpha(200)),
+        );
+
+        let text = format!("{name}: {:.1}{}", p[1], chart.unit);
+        let box_w = text.chars().count() as f32 * 6.2 + 8.0;
+        let box_x = (point_pos.x + 6.0).clamp(
+            rect.left() + 2.0,
+            (rect.right() - box_w - 2.0).max(rect.left() + 2.0),
+        );
+        let box_y = (point_pos.y - line_h - 4.0).max(rect.top() + 2.0);
+        let box_rect =
+            egui::Rect::from_min_size(egui::pos2(box_x, box_y), egui::vec2(box_w, line_h + 4.0));
+
+        painter.rect_filled(box_rect, 3.0, egui::Color32::from_black_alpha(220));
         painter.text(
-            egui::pos2(box_rect.left() + 5.0, y),
+            box_rect.left_top() + egui::vec2(4.0, 2.0),
             egui::Align2::LEFT_TOP,
             text,
             font.clone(),
             *color,
         );
-        y += line_h;
     }
 }
 
@@ -636,23 +628,20 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
                     .collect();
 
                 // Whichever chart the pointer is actually over defines the shared
-                // hover x for this frame; every other chart then draws its own
-                // values at that same x, so a moment in time reads across all of
-                // them at once instead of only the chart under the cursor.
-                let hovered = pointer_pos.and_then(|pos| {
-                    plot_geo.iter().enumerate().find_map(|(i, geo)| {
+                // hover x for this frame; every chart (including that one) then
+                // draws its own values at that same x in the same style, so a
+                // moment in time reads identically across all of them — the
+                // mouse-following native tooltip is time-only (see
+                // `label_formatter` above).
+                let hover_x = pointer_pos.and_then(|pos| {
+                    plot_geo.iter().find_map(|geo| {
                         let (rect, transform) = geo.as_ref()?;
                         rect.contains(pos)
-                            .then(|| (i, transform.value_from_position(pos).x))
+                            .then(|| transform.value_from_position(pos).x)
                     })
                 });
-                if let Some((hovered_idx, x)) = hovered {
-                    for (i, (chart, geo)) in charts.iter().zip(plot_geo.iter()).enumerate() {
-                        // Skip the actively-hovered chart — egui_plot already shows
-                        // its native hover label there via `label_formatter`.
-                        if i == hovered_idx {
-                            continue;
-                        }
+                if let Some(x) = hover_x {
+                    for (chart, geo) in charts.iter().zip(plot_geo.iter()) {
                         if let Some((rect, transform)) = geo {
                             draw_synced_readout(ui, *rect, transform, x, chart);
                         }
