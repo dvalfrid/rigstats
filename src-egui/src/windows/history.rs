@@ -200,54 +200,79 @@ fn render_session_row(
                 }
             }
         } else {
-            let name_resp = ui.label(
-                egui::RichText::new(&meta.name)
-                    .size(13.0)
-                    .strong()
-                    .color(if selected { dc.title } else { dc.text }),
+            // Every piece of the header (name, status/duration, avg stats) senses
+            // its own click so the whole visual block acts as one target — not
+            // just the name text — and shows a pointer cursor wherever hovered.
+            let mut header_hovered = false;
+            let mut header_clicked = false;
+            let mut sense_click = |resp: egui::Response| {
+                let resp = resp.interact(egui::Sense::click());
+                header_hovered |= resp.hovered();
+                header_clicked |= resp.clicked();
+            };
+
+            sense_click(
+                ui.label(
+                    egui::RichText::new(&meta.name)
+                        .size(13.0)
+                        .strong()
+                        .color(if selected { dc.title } else { dc.text }),
+                ),
             );
-            if name_resp.interact(egui::Sense::click()).clicked() {
+
+            ui.horizontal(|ui| {
+                if is_active {
+                    sense_click(
+                        ui.label(
+                            egui::RichText::new("● Recording")
+                                .size(11.0)
+                                .strong()
+                                .color(theme::C_AMD),
+                        ),
+                    );
+                } else {
+                    sense_click(
+                        ui.label(
+                            egui::RichText::new(fmt_local(meta.start_unix))
+                                .size(11.0)
+                                .color(dc.muted),
+                        ),
+                    );
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    sense_click(
+                        ui.label(
+                            egui::RichText::new(fmt_duration(session_duration_secs(meta)))
+                                .size(11.0)
+                                .color(dc.muted),
+                        ),
+                    );
+                });
+            });
+
+            if !is_active {
+                sense_click(
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "avg CPU {:.0}% · avg GPU {}",
+                            meta.summary.avg_cpu_load,
+                            meta.summary
+                                .avg_gpu_load
+                                .map(|v| format!("{v:.0}%"))
+                                .unwrap_or_else(|| "—".to_string())
+                        ))
+                        .size(11.0)
+                        .color(dc.muted),
+                    ),
+                );
+            }
+
+            if header_hovered {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            if header_clicked {
                 actions.select = Some(meta.id.clone());
             }
-        }
-
-        ui.horizontal(|ui| {
-            if is_active {
-                ui.label(
-                    egui::RichText::new("● Recording")
-                        .size(11.0)
-                        .strong()
-                        .color(theme::C_AMD),
-                );
-            } else {
-                ui.label(
-                    egui::RichText::new(fmt_local(meta.start_unix))
-                        .size(11.0)
-                        .color(dc.muted),
-                );
-            }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    egui::RichText::new(fmt_duration(session_duration_secs(meta)))
-                        .size(11.0)
-                        .color(dc.muted),
-                );
-            });
-        });
-
-        if !is_active {
-            ui.label(
-                egui::RichText::new(format!(
-                    "avg CPU {:.0}% · avg GPU {}",
-                    meta.summary.avg_cpu_load,
-                    meta.summary
-                        .avg_gpu_load
-                        .map(|v| format!("{v:.0}%"))
-                        .unwrap_or_else(|| "—".to_string())
-                ))
-                .size(11.0)
-                .color(dc.muted),
-            );
         }
 
         ui.add_space(4.0);
@@ -307,21 +332,31 @@ fn render_session_list(
 // ── Detail pane (charts) ─────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
+/// One metric chart: title/unit for display, plus one `(name, color, points)`
+/// series per line. `points` are `[elapsed_seconds, value]` pairs.
+struct ChartSpec {
+    id: &'static str,
+    title: &'static str,
+    unit: &'static str,
+    series: Vec<(&'static str, egui::Color32, Vec<[f64; 2]>)>,
+}
+
+/// Renders one metric's plot. Returns the plot's screen rect and coordinate
+/// transform (used afterwards to draw synced value readouts on every other
+/// chart at whichever point the user is hovering), or `None` if it has no data.
 fn plot_metric(
     ui: &mut egui::Ui,
     dc: &DialogColors,
-    id: &str,
-    title: &str,
-    unit: &'static str,
+    chart: &ChartSpec,
     group_id: egui::Id,
-    series: &[(&str, egui::Color32, Vec<[f64; 2]>)],
-) {
-    let any_data = series.iter().any(|(_, _, pts)| !pts.is_empty());
+) -> Option<(egui::Rect, egui_plot::PlotTransform)> {
+    let any_data = chart.series.iter().any(|(_, _, pts)| !pts.is_empty());
     if !any_data {
-        return;
+        return None;
     }
-    section_label(ui, dc, title);
-    Plot::new(id)
+    section_label(ui, dc, chart.title);
+    let unit = chart.unit;
+    let resp = Plot::new(chart.id)
         .height(140.0)
         .legend(Legend::default())
         .allow_scroll(false)
@@ -341,7 +376,7 @@ fn plot_metric(
             }
         })
         .show(ui, |plot_ui| {
-            for (name, color, pts) in series {
+            for (name, color, pts) in &chart.series {
                 if pts.is_empty() {
                     continue;
                 }
@@ -353,6 +388,67 @@ fn plot_metric(
             }
         });
     ui.add_space(10.0);
+    Some((resp.response.rect, resp.transform))
+}
+
+/// Finds, per series, the point whose x is closest to `x` and draws a small
+/// floating readout box for it near the top of the chart — the same values a
+/// user would see by hovering this chart directly, kept in sync while they
+/// hover a *different* linked chart instead.
+fn draw_synced_readout(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    transform: &egui_plot::PlotTransform,
+    x: f64,
+    chart: &ChartSpec,
+) {
+    let lines: Vec<(egui::Color32, String)> = chart
+        .series
+        .iter()
+        .filter_map(|(name, color, pts)| {
+            pts.iter()
+                .min_by(|a, b| (a[0] - x).abs().total_cmp(&(b[0] - x).abs()))
+                .map(|p| (*color, format!("{name}: {:.1}{}", p[1], chart.unit)))
+        })
+        .collect();
+    if lines.is_empty() {
+        return;
+    }
+
+    let font = egui::FontId::proportional(11.0);
+    let line_h = 14.0;
+    let max_chars = lines
+        .iter()
+        .map(|(_, t)| t.chars().count())
+        .max()
+        .unwrap_or(0);
+    let box_w = max_chars as f32 * 6.2 + 10.0;
+    let box_h = lines.len() as f32 * line_h + 6.0;
+    let screen_x = transform
+        .position_from_point(&egui_plot::PlotPoint::new(x, 0.0))
+        .x;
+    let box_x = (screen_x + 8.0).clamp(
+        rect.left() + 2.0,
+        (rect.right() - box_w - 2.0).max(rect.left() + 2.0),
+    );
+    let box_rect = egui::Rect::from_min_size(
+        egui::pos2(box_x, rect.top() + 4.0),
+        egui::vec2(box_w, box_h),
+    );
+
+    let painter = ui.painter().with_clip_rect(rect);
+    painter.rect_filled(box_rect, 3.0, egui::Color32::from_black_alpha(220));
+    let mut y = box_rect.top() + 3.0;
+    for (color, text) in &lines {
+        painter.text(
+            egui::pos2(box_rect.left() + 5.0, y),
+            egui::Align2::LEFT_TOP,
+            text,
+            font.clone(),
+            *color,
+        );
+        y += line_h;
+    }
 }
 
 fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows: &[SessionRow]) {
@@ -429,125 +525,139 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
     // different session doesn't inherit the previous one's zoom/pan state.
     let group_id = egui::Id::new(("history_link_group", &meta.id));
 
+    let charts = [
+        ChartSpec {
+            id: "history_plot_load",
+            title: "Load %",
+            unit: "%",
+            series: vec![
+                (
+                    "CPU",
+                    theme::C_ACCENT,
+                    rows.iter().map(|r| [xs(r), r.cpu_load]).collect(),
+                ),
+                (
+                    "GPU",
+                    theme::C_AMD,
+                    rows.iter()
+                        .filter_map(|r| r.gpu_load.map(|v| [xs(r), v]))
+                        .collect(),
+                ),
+            ],
+        },
+        ChartSpec {
+            id: "history_plot_temp",
+            title: "Temperature °C",
+            unit: "°C",
+            series: vec![
+                (
+                    "CPU",
+                    theme::C_ACCENT,
+                    rows.iter()
+                        .filter_map(|r| r.cpu_temp.map(|v| [xs(r), v]))
+                        .collect(),
+                ),
+                (
+                    "GPU",
+                    theme::C_AMD,
+                    rows.iter()
+                        .filter_map(|r| r.gpu_temp.map(|v| [xs(r), v]))
+                        .collect(),
+                ),
+            ],
+        },
+        ChartSpec {
+            id: "history_plot_ram",
+            title: "RAM Used (GB)",
+            unit: " GB",
+            series: vec![(
+                "RAM",
+                theme::C_RAM,
+                rows.iter().map(|r| [xs(r), r.ram_used_gb]).collect(),
+            )],
+        },
+        ChartSpec {
+            id: "history_plot_net",
+            title: "Network (Mbps)",
+            unit: " Mbps",
+            series: vec![
+                (
+                    "Up",
+                    theme::C_GRN,
+                    rows.iter().map(|r| [xs(r), r.net_up_mbps]).collect(),
+                ),
+                (
+                    "Down",
+                    theme::C_NET_DOWN,
+                    rows.iter().map(|r| [xs(r), r.net_down_mbps]).collect(),
+                ),
+            ],
+        },
+        ChartSpec {
+            id: "history_plot_disk",
+            title: "Disk (MB/s)",
+            unit: " MB/s",
+            series: vec![
+                (
+                    "Read",
+                    theme::C_PUR,
+                    rows.iter().map(|r| [xs(r), r.disk_read_mbs]).collect(),
+                ),
+                (
+                    "Write",
+                    theme::C_PROC,
+                    rows.iter().map(|r| [xs(r), r.disk_write_mbs]).collect(),
+                ),
+            ],
+        },
+        ChartSpec {
+            id: "history_plot_ping",
+            title: "Ping (ms)",
+            unit: " ms",
+            series: vec![(
+                "Ping",
+                theme::C_TEXT,
+                rows.iter()
+                    .filter_map(|r| r.ping_ms.map(|v| [xs(r), v]))
+                    .collect(),
+            )],
+        },
+    ];
+
     card_frame(dc).show(ui, |ui| {
         ui.set_width(ui.available_width());
+        let pointer_pos = ui.input(|i| i.pointer.hover_pos());
         egui::ScrollArea::vertical()
             .id_salt("history_detail_scroll")
             .show(ui, |ui| {
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_load",
-                    "Load %",
-                    "%",
-                    group_id,
-                    &[
-                        (
-                            "CPU",
-                            theme::C_ACCENT,
-                            rows.iter().map(|r| [xs(r), r.cpu_load]).collect(),
-                        ),
-                        (
-                            "GPU",
-                            theme::C_AMD,
-                            rows.iter()
-                                .filter_map(|r| r.gpu_load.map(|v| [xs(r), v]))
-                                .collect(),
-                        ),
-                    ],
-                );
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_temp",
-                    "Temperature °C",
-                    "°C",
-                    group_id,
-                    &[
-                        (
-                            "CPU",
-                            theme::C_ACCENT,
-                            rows.iter()
-                                .filter_map(|r| r.cpu_temp.map(|v| [xs(r), v]))
-                                .collect(),
-                        ),
-                        (
-                            "GPU",
-                            theme::C_AMD,
-                            rows.iter()
-                                .filter_map(|r| r.gpu_temp.map(|v| [xs(r), v]))
-                                .collect(),
-                        ),
-                    ],
-                );
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_ram",
-                    "RAM Used (GB)",
-                    " GB",
-                    group_id,
-                    &[(
-                        "RAM",
-                        theme::C_RAM,
-                        rows.iter().map(|r| [xs(r), r.ram_used_gb]).collect(),
-                    )],
-                );
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_net",
-                    "Network (Mbps)",
-                    " Mbps",
-                    group_id,
-                    &[
-                        (
-                            "Up",
-                            theme::C_GRN,
-                            rows.iter().map(|r| [xs(r), r.net_up_mbps]).collect(),
-                        ),
-                        (
-                            "Down",
-                            theme::C_NET_DOWN,
-                            rows.iter().map(|r| [xs(r), r.net_down_mbps]).collect(),
-                        ),
-                    ],
-                );
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_disk",
-                    "Disk (MB/s)",
-                    " MB/s",
-                    group_id,
-                    &[
-                        (
-                            "Read",
-                            theme::C_PUR,
-                            rows.iter().map(|r| [xs(r), r.disk_read_mbs]).collect(),
-                        ),
-                        (
-                            "Write",
-                            theme::C_PROC,
-                            rows.iter().map(|r| [xs(r), r.disk_write_mbs]).collect(),
-                        ),
-                    ],
-                );
-                plot_metric(
-                    ui,
-                    dc,
-                    "history_plot_ping",
-                    "Ping (ms)",
-                    " ms",
-                    group_id,
-                    &[(
-                        "Ping",
-                        theme::C_TEXT,
-                        rows.iter()
-                            .filter_map(|r| r.ping_ms.map(|v| [xs(r), v]))
-                            .collect(),
-                    )],
-                );
+                let plot_geo: Vec<Option<(egui::Rect, egui_plot::PlotTransform)>> = charts
+                    .iter()
+                    .map(|chart| plot_metric(ui, dc, chart, group_id))
+                    .collect();
+
+                // Whichever chart the pointer is actually over defines the shared
+                // hover x for this frame; every other chart then draws its own
+                // values at that same x, so a moment in time reads across all of
+                // them at once instead of only the chart under the cursor.
+                let hovered = pointer_pos.and_then(|pos| {
+                    plot_geo.iter().enumerate().find_map(|(i, geo)| {
+                        let (rect, transform) = geo.as_ref()?;
+                        rect.contains(pos)
+                            .then(|| (i, transform.value_from_position(pos).x))
+                    })
+                });
+                if let Some((hovered_idx, x)) = hovered {
+                    for (i, (chart, geo)) in charts.iter().zip(plot_geo.iter()).enumerate() {
+                        // Skip the actively-hovered chart — egui_plot already shows
+                        // its native hover label there via `label_formatter`.
+                        if i == hovered_idx {
+                            continue;
+                        }
+                        if let Some((rect, transform)) = geo {
+                            draw_synced_readout(ui, *rect, transform, x, chart);
+                        }
+                    }
+                }
             });
     });
 }
