@@ -10,10 +10,65 @@ use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::settings::atomic_write;
 use crate::stats::StatsPayload;
+
+/// Small cross-process mutual-exclusion lock guarding the read-modify-write
+/// cycle on `rigstats-sessions.json`. That file is written by more than one
+/// process (this app and the `rigstats-wallpaper` host both prune once a day,
+/// and either can start/end/rename/pin/delete a session), and without this,
+/// two racing writes could silently discard each other's change — e.g. a
+/// rename overwritten by a concurrent prune. Built on plain atomic file
+/// creation so it needs no extra dependency and no `unsafe` code.
+struct SessionsLock {
+  path: PathBuf,
+  held: bool,
+}
+
+impl SessionsLock {
+  /// Retries for up to ~50ms, which is far longer than a normal
+  /// load-mutate-save cycle takes. A lock file older than a few seconds is
+  /// assumed to be left behind by a process that crashed while holding it,
+  /// and is cleared rather than waited on. If the deadline is still reached
+  /// (e.g. another process is doing unusually large I/O, like startup
+  /// reconciliation), the caller proceeds without the lock — a missed update
+  /// in that rare case is far better than hanging the caller, which may be
+  /// the UI thread.
+  fn acquire(dir: &Path) -> Self {
+    let path = dir.join("rigstats-sessions.lock");
+    let deadline = Instant::now() + Duration::from_millis(50);
+    loop {
+      match OpenOptions::new().write(true).create_new(true).open(&path) {
+        Ok(_) => return Self { path, held: true },
+        Err(_) => {
+          let stale = fs::metadata(&path)
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|m| m.elapsed().ok())
+            .is_some_and(|age| age > Duration::from_secs(3));
+          if stale {
+            let _ = fs::remove_file(&path);
+            continue;
+          }
+          if Instant::now() >= deadline {
+            return Self { path, held: false };
+          }
+          std::thread::sleep(Duration::from_millis(2));
+        }
+      }
+    }
+  }
+}
+
+impl Drop for SessionsLock {
+  fn drop(&mut self) {
+    if self.held {
+      let _ = fs::remove_file(&self.path);
+    }
+  }
+}
 
 const CSV_HEADER: &str = "timestamp_unix,cpu_load,cpu_temp,cpu_freq_mhz,gpu_load,gpu_temp,\
 gpu_vram_used_mb,ram_used_gb,disk_read_mbs,disk_write_mbs,net_up_mbps,net_down_mbps,ping_ms\n";
@@ -141,14 +196,34 @@ pub fn session_file_path(dir: &Path, meta: &SessionMeta) -> PathBuf {
   }
 }
 
+fn backup_index_path(dir: &Path) -> PathBuf {
+  dir.join("rigstats-sessions.json.bak")
+}
+
+fn parse_sessions_index(raw: &str) -> Option<Vec<SessionMeta>> {
+  serde_json::from_str::<SessionsIndex>(raw).ok().map(|i| i.sessions)
+}
+
 /// Loads all sessions from the index, newest first. Returns an empty list if
-/// the index is missing or fails to parse.
+/// the index is missing (a legitimate empty state). If the index exists but
+/// fails to parse (corrupt), the corrupt content is preserved alongside it
+/// for recovery and the last-known-good backup (kept by `save_sessions`) is
+/// tried before falling back to empty — a single bad write can't otherwise
+/// silently erase all session history the next time something saves.
 pub fn load_sessions(dir: &Path) -> Vec<SessionMeta> {
   let path = sessions_index_path(dir);
   let mut sessions = match fs::read_to_string(&path) {
-    Ok(raw) => serde_json::from_str::<SessionsIndex>(&raw)
-      .map(|i| i.sessions)
-      .unwrap_or_default(),
+    Ok(raw) => match parse_sessions_index(&raw) {
+      Some(sessions) => sessions,
+      None => {
+        crate::debug::log_error(dir, "logging: sessions index is corrupt — recovering from backup");
+        let _ = fs::write(dir.join("rigstats-sessions.json.corrupt"), &raw);
+        fs::read_to_string(backup_index_path(dir))
+          .ok()
+          .and_then(|raw| parse_sessions_index(&raw))
+          .unwrap_or_default()
+      }
+    },
     Err(_) => Vec::new(),
   };
   sessions.sort_by(|a, b| b.start_unix.cmp(&a.start_unix));
@@ -164,7 +239,13 @@ fn save_sessions(dir: &Path, sessions: &[SessionMeta]) -> Result<(), String> {
     sessions: sessions.to_vec(),
   })
   .map_err(|e| e.to_string())?;
-  atomic_write(&path, &json)
+  atomic_write(&path, &json)?;
+  // Mirror the index we just wrote into a backup, so if the main file is
+  // later found corrupt (external tampering, disk trouble) it can be healed
+  // from the most recent known-good state instead of silently losing all
+  // session history.
+  let _ = fs::write(backup_index_path(dir), &json);
+  Ok(())
 }
 
 fn log_persist_err(dir: &Path, e: &str) {
@@ -208,6 +289,7 @@ pub fn start_session(dir: &Path) -> std::io::Result<SessionMeta> {
   w.write_all(CSV_HEADER.as_bytes())?;
   w.flush()?;
 
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   sessions.push(meta.clone());
   if let Err(e) = save_sessions(dir, &sessions) {
@@ -250,6 +332,7 @@ pub fn append_stats_row(payload: &StatsPayload, dir: &Path, session: &SessionMet
 /// summary from the CSV, and persists the index. Returns the updated meta, or
 /// `None` if `id` was not found.
 pub fn end_session(dir: &Path, id: &str, end_unix: u64) -> Option<SessionMeta> {
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   let idx = sessions.iter().position(|s| s.id == id)?;
   sessions[idx].end_unix = Some(end_unix);
@@ -263,6 +346,7 @@ pub fn end_session(dir: &Path, id: &str, end_unix: u64) -> Option<SessionMeta> {
 }
 
 pub fn set_session_pinned(dir: &Path, id: &str, pinned: bool) {
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   if let Some(s) = sessions.iter_mut().find(|s| s.id == id) {
     s.pinned = pinned;
@@ -273,6 +357,7 @@ pub fn set_session_pinned(dir: &Path, id: &str, pinned: bool) {
 }
 
 pub fn rename_session(dir: &Path, id: &str, name: String) {
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   if let Some(s) = sessions.iter_mut().find(|s| s.id == id) {
     s.name = name;
@@ -284,6 +369,7 @@ pub fn rename_session(dir: &Path, id: &str, name: String) {
 
 /// Removes a session's index entry and deletes its CSV file.
 pub fn delete_session(dir: &Path, id: &str) {
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   if let Some(idx) = sessions.iter().position(|s| s.id == id) {
     let meta = sessions.remove(idx);
@@ -302,6 +388,7 @@ pub fn delete_session(dir: &Path, id: &str) {
 /// Deletes finished, unpinned sessions whose `end_unix` is older than `days`.
 /// Active (still-recording) and pinned sessions are always kept.
 pub fn prune_old_sessions(dir: &Path, days: u32) {
+  let _lock = SessionsLock::acquire(dir);
   let now = unix_now_secs();
   let cutoff = days as u64 * 86400;
   let mut sessions = load_sessions(dir);
@@ -409,6 +496,7 @@ pub fn summarize_rows(rows: &[SessionRow]) -> SessionSummary {
 /// any pre-session-model daily-rolling logs (`rigstats-log-YYYY-MM-DD.csv`) as
 /// read-only legacy sessions. Malformed/empty legacy files are skipped.
 pub fn reconcile_sessions_on_startup(dir: &Path) {
+  let _lock = SessionsLock::acquire(dir);
   let mut sessions = load_sessions(dir);
   let mut changed = false;
 
@@ -713,5 +801,100 @@ mod tests {
     .unwrap();
     reconcile_sessions_on_startup(dir.path());
     assert!(load_sessions(dir.path()).is_empty());
+  }
+
+  // --- corrupted index recovery ---
+
+  #[test]
+  fn load_sessions_recovers_from_backup_when_index_is_corrupt() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let meta = start_session(dir.path()).unwrap();
+    set_session_pinned(dir.path(), &meta.id, true);
+    assert!(backup_index_path(dir.path()).exists(), "backup must exist after a save");
+
+    fs::write(sessions_index_path(dir.path()), "{ not json").unwrap();
+
+    let recovered = load_sessions(dir.path());
+    assert_eq!(recovered.len(), 1, "must recover the session from the backup");
+    assert_eq!(recovered[0].id, meta.id);
+    assert!(recovered[0].pinned);
+    assert!(
+      dir.path().join("rigstats-sessions.json.corrupt").exists(),
+      "corrupt content must be preserved for forensics"
+    );
+  }
+
+  #[test]
+  fn load_sessions_falls_back_to_empty_when_no_backup_exists() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    fs::write(sessions_index_path(dir.path()), "{ not json").unwrap();
+    assert!(load_sessions(dir.path()).is_empty());
+  }
+
+  #[test]
+  fn missing_index_is_empty_not_treated_as_corrupt() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    assert!(load_sessions(dir.path()).is_empty());
+    assert!(!dir.path().join("rigstats-sessions.json.corrupt").exists());
+  }
+
+  // --- SessionsLock ---
+
+  #[test]
+  fn lock_waits_for_release_then_succeeds() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let first = SessionsLock::acquire(dir.path());
+    assert!(first.held);
+
+    let dir_path = dir.path().to_path_buf();
+    let handle = std::thread::spawn(move || {
+      let second = SessionsLock::acquire(&dir_path);
+      assert!(second.held, "must wait for the first lock to be released, not give up");
+    });
+
+    std::thread::sleep(Duration::from_millis(10));
+    drop(first);
+    handle.join().unwrap();
+  }
+
+  #[test]
+  fn stale_lock_is_reclaimed_instead_of_blocking() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let lock_path = dir.path().join("rigstats-sessions.lock");
+    let file = fs::File::create(&lock_path).unwrap();
+    file.set_modified(SystemTime::now() - Duration::from_secs(10)).unwrap();
+    drop(file);
+
+    let started = Instant::now();
+    let lock = SessionsLock::acquire(dir.path());
+    assert!(lock.held, "a stale lock must be reclaimed, not just waited out");
+    assert!(started.elapsed() < Duration::from_millis(50), "reclaiming a stale lock must be fast");
+  }
+
+  #[test]
+  fn concurrent_pin_and_rename_do_not_lose_either_update() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let meta = start_session(dir.path()).unwrap();
+    let id_a = meta.id.clone();
+    let id_b = meta.id.clone();
+    let dir_a = dir.path().to_path_buf();
+    let dir_b = dir.path().to_path_buf();
+
+    let renamer = std::thread::spawn(move || {
+      for i in 0..50 {
+        rename_session(&dir_a, &id_a, format!("Name {i}"));
+      }
+    });
+    let pinner = std::thread::spawn(move || {
+      for _ in 0..50 {
+        set_session_pinned(&dir_b, &id_b, true);
+      }
+    });
+    renamer.join().unwrap();
+    pinner.join().unwrap();
+
+    let sessions = load_sessions(dir.path());
+    assert_eq!(sessions.len(), 1, "the session must not be duplicated or dropped");
+    assert!(sessions[0].pinned, "the pin from the other thread must not be lost");
   }
 }
