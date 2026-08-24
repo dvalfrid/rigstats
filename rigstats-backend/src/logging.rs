@@ -337,7 +337,7 @@ pub fn end_session(dir: &Path, id: &str, end_unix: u64) -> Option<SessionMeta> {
   let idx = sessions.iter().position(|s| s.id == id)?;
   sessions[idx].end_unix = Some(end_unix);
   let path = session_file_path(dir, &sessions[idx]);
-  sessions[idx].summary = compute_summary(&path);
+  sessions[idx].summary = compute_summary(dir, &path);
   let updated = sessions[idx].clone();
   if let Err(e) = save_sessions(dir, &sessions) {
     log_persist_err(dir, &e);
@@ -415,9 +415,16 @@ pub fn prune_old_sessions(dir: &Path, days: u32) {
 }
 
 /// Reads and parses a session CSV's data rows (header skipped, malformed lines dropped).
-fn read_csv_rows(path: &Path) -> Vec<SessionRow> {
-  let Ok(file) = fs::File::open(path) else {
-    return Vec::new();
+fn read_csv_rows(dir: &Path, path: &Path) -> Vec<SessionRow> {
+  let file = match fs::File::open(path) {
+    Ok(file) => file,
+    Err(e) => {
+      // A session's data file failing to open (moved/deleted/permissions)
+      // otherwise looks identical to "no data recorded yet" in the UI —
+      // log it so that's diagnosable.
+      crate::debug::log_warn(dir, &format!("logging: failed to open session CSV {} — {e}", path.display()));
+      return Vec::new();
+    }
   };
   let reader = BufReader::new(file);
   let mut rows = Vec::new();
@@ -454,11 +461,11 @@ fn read_csv_rows(path: &Path) -> Vec<SessionRow> {
 
 /// Reads and parses `meta`'s CSV data rows, for charting.
 pub fn read_session_rows(dir: &Path, meta: &SessionMeta) -> Vec<SessionRow> {
-  read_csv_rows(&session_file_path(dir, meta))
+  read_csv_rows(dir, &session_file_path(dir, meta))
 }
 
-fn compute_summary(path: &Path) -> SessionSummary {
-  summarize_rows(&read_csv_rows(path))
+fn compute_summary(dir: &Path, path: &Path) -> SessionSummary {
+  summarize_rows(&read_csv_rows(dir, path))
 }
 
 /// Computes summary stats (avg/peak per metric) from already-loaded rows —
@@ -503,9 +510,9 @@ pub fn reconcile_sessions_on_startup(dir: &Path) {
   for s in sessions.iter_mut() {
     if s.end_unix.is_none() {
       let path = session_file_path(dir, s);
-      let rows = read_csv_rows(&path);
+      let rows = read_csv_rows(dir, &path);
       s.end_unix = Some(rows.last().map(|r| r.timestamp_unix).unwrap_or(s.start_unix));
-      s.summary = compute_summary(&path);
+      s.summary = compute_summary(dir, &path);
       changed = true;
     }
   }
@@ -525,7 +532,7 @@ pub fn reconcile_sessions_on_startup(dir: &Path) {
       if known_legacy.contains(&legacy_id) {
         continue;
       }
-      let rows = read_csv_rows(&path);
+      let rows = read_csv_rows(dir, &path);
       let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
         continue;
       };
@@ -536,7 +543,7 @@ pub fn reconcile_sessions_on_startup(dir: &Path) {
         end_unix: Some(last.timestamp_unix),
         pinned: false,
         legacy: true,
-        summary: compute_summary(&path),
+        summary: compute_summary(dir, &path),
       });
       changed = true;
     }
@@ -705,6 +712,29 @@ mod tests {
   fn end_session_missing_id_returns_none() {
     let dir = tempfile::tempdir().expect("tempdir");
     assert!(end_session(dir.path(), "nonexistent", 0).is_none());
+  }
+
+  #[test]
+  fn missing_session_csv_is_logged_not_silent() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let meta = SessionMeta {
+      id: "no-such-file".to_string(),
+      name: "Ghost".to_string(),
+      start_unix: 0,
+      end_unix: None,
+      pinned: false,
+      legacy: false,
+      summary: SessionSummary::default(),
+    };
+
+    let rows = read_session_rows(dir.path(), &meta);
+    assert!(rows.is_empty(), "no data is still the correct result...");
+
+    let log = fs::read_to_string(crate::debug::debug_log_path(dir.path())).expect("debug log must exist");
+    assert!(
+      log.contains("failed to open session CSV"),
+      "...but why must be diagnosable from the debug log, not silent: {log}"
+    );
   }
 
   #[test]
