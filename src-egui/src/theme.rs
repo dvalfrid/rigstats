@@ -545,6 +545,31 @@ pub fn dialog_btn_secondary_disabled(ui: &mut Ui, label: &str, dc: &DialogColors
     });
 }
 
+/// Same Windows 11-style chrome as `dialog_btn_secondary`, scaled down for
+/// inline row actions (e.g. session list Pin/Rename/Reveal/Delete) where the
+/// full-size dialog button would be too large. `size` is caller-supplied so a
+/// whole row of these can share one fixed size regardless of label length.
+pub fn dialog_btn_secondary_compact(
+    ui: &mut Ui,
+    label: &str,
+    dc: &DialogColors,
+    size: Vec2,
+) -> egui::Response {
+    let fill = dc.btn_sec_fill;
+    let hover = dc.btn_sec_hover;
+    let act = Color32::from_rgb(
+        fill.r().saturating_sub(DBTN_SEC_ACT_DARKEN),
+        fill.g().saturating_sub(DBTN_SEC_ACT_DARKEN),
+        fill.b().saturating_sub(DBTN_SEC_ACT_DARKEN),
+    );
+    let border = dc.btn_sec_border;
+    let text_col = dc.btn_sec_text;
+    with_btn_visuals(ui, fill, hover, act, border, |ui| {
+        ui.visuals_mut().override_text_color = Some(text_col);
+        ui.add(egui::Button::new(egui::RichText::new(label).size(11.5)).min_size(size))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

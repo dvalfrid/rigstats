@@ -143,6 +143,7 @@ fn stat_tile(ui: &mut egui::Ui, dc: &DialogColors, label: &str, value: &str, col
         .corner_radius(egui::CornerRadius::same(4))
         .inner_margin(egui::Margin::symmetric(10, 6))
         .show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new(label).size(10.0).color(dc.muted));
                 ui.label(egui::RichText::new(value).size(15.0).strong().color(color));
@@ -192,12 +193,11 @@ fn render_session_row(
             let (_, text) = rename_draft.as_mut().unwrap();
             let resp = ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY));
             resp.request_focus();
-            if resp.lost_focus() {
-                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                    actions.cancel_rename = true;
-                } else {
-                    actions.commit_rename = Some((meta.id.clone(), text.clone()));
-                }
+            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                actions.commit_rename = Some((meta.id.clone(), text.clone()));
+            }
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                actions.cancel_rename = true;
             }
         } else {
             // Every piece of the header (name, status/duration, avg stats) senses
@@ -250,23 +250,6 @@ fn render_session_row(
                 });
             });
 
-            if !is_active {
-                sense_click(
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "avg CPU {:.0}% · avg GPU {}",
-                            meta.summary.avg_cpu_load,
-                            meta.summary
-                                .avg_gpu_load
-                                .map(|v| format!("{v:.0}%"))
-                                .unwrap_or_else(|| "—".to_string())
-                        ))
-                        .size(11.0)
-                        .color(dc.muted),
-                    ),
-                );
-            }
-
             if header_hovered {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
@@ -275,20 +258,61 @@ fn render_session_row(
             }
         }
 
+        // All row buttons share one size (the widest label in the current
+        // group) and the same Windows 11-style chrome as the dialog buttons,
+        // just scaled down — keeps them visually consistent with each other
+        // and with the rest of the app instead of each auto-sizing to text.
+        let font_id = egui::FontId::new(11.5, egui::FontFamily::Proportional);
+        let btn_pad = 14.0;
+        let btn_h = 22.0;
+        let group_width = |ui: &egui::Ui, labels: &[&str]| -> f32 {
+            labels
+                .iter()
+                .map(|label| {
+                    ui.painter()
+                        .layout_no_wrap((*label).to_owned(), font_id.clone(), egui::Color32::WHITE)
+                        .size()
+                        .x
+                })
+                .fold(0.0_f32, f32::max)
+                + btn_pad
+        };
+
         ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            let pin_label = if meta.pinned { "Unpin" } else { "Pin" };
-            if ui.small_button(pin_label).clicked() {
-                actions.toggle_pin = Some(meta.id.clone());
-            }
-            if !editing && ui.small_button("Rename").clicked() {
-                actions.start_rename = Some((meta.id.clone(), meta.name.clone()));
-            }
-            if ui.small_button("Reveal").clicked() {
-                actions.reveal = Some(meta.id.clone());
-            }
-            if !is_active && ui.small_button("Delete").clicked() {
-                actions.delete = Some(meta.id.clone());
+        // Wrapped (not a plain horizontal) so a narrow panel makes the button
+        // row overflow onto a second line instead of spilling past the panel
+        // edge — that overflow was rendering as a bright stray line at the
+        // panel boundary.
+        ui.horizontal_wrapped(|ui| {
+            if editing {
+                let size = egui::vec2(group_width(ui, &["Save", "Cancel"]), btn_h);
+                if theme::dialog_btn_secondary_compact(ui, "Save", dc, size).clicked() {
+                    let text = rename_draft.as_ref().unwrap().1.clone();
+                    actions.commit_rename = Some((meta.id.clone(), text));
+                }
+                if theme::dialog_btn_secondary_compact(ui, "Cancel", dc, size).clicked() {
+                    actions.cancel_rename = true;
+                }
+            } else {
+                let size = egui::vec2(
+                    group_width(ui, &["Pin", "Unpin", "Rename", "Reveal", "Delete"]),
+                    btn_h,
+                );
+                let pin_label = if meta.pinned { "Unpin" } else { "Pin" };
+                if theme::dialog_btn_secondary_compact(ui, pin_label, dc, size).clicked() {
+                    actions.toggle_pin = Some(meta.id.clone());
+                }
+                if theme::dialog_btn_secondary_compact(ui, "Rename", dc, size).clicked() {
+                    actions.start_rename = Some((meta.id.clone(), meta.name.clone()));
+                }
+                if theme::dialog_btn_secondary_compact(ui, "Reveal", dc, size).clicked() {
+                    actions.reveal = Some(meta.id.clone());
+                }
+                if !is_active
+                    && theme::dialog_btn_secondary_compact(ui, "Delete", dc, size).clicked()
+                {
+                    actions.delete = Some(meta.id.clone());
+                }
             }
         });
     });
@@ -316,6 +340,7 @@ fn render_session_list(
 
     egui::ScrollArea::vertical()
         .id_salt("history_session_list")
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
         .show(ui, |ui| {
             for (i, meta) in st.sessions.iter().enumerate() {
                 if i > 0 {
@@ -370,6 +395,9 @@ fn plot_metric(
         // given moment line up visually.
         .link_axis(group_id, [true, false])
         .link_cursor(group_id, [true, false])
+        // Default cursor color is additive gray, which reads as a stark white
+        // line against the dark chart background — tone it down.
+        .cursor_color(egui::Color32::from_white_alpha(40))
         .x_axis_formatter(|mark, _range| fmt_elapsed(mark.value))
         // Every chart renders its values the same way — via the synced readout
         // box drawn in `draw_synced_readout`, on this chart as much as any other
@@ -458,9 +486,9 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
                     .color(dc.title),
             );
             let range = if let Some(end) = meta.end_unix {
-                format!("{} \u{2192} {}", fmt_local(meta.start_unix), fmt_local(end))
+                format!("{} - {}", fmt_local(meta.start_unix), fmt_local(end))
             } else {
-                format!("{} \u{2192} now", fmt_local(meta.start_unix))
+                format!("{} - now", fmt_local(meta.start_unix))
             };
             ui.label(egui::RichText::new(range).size(11.0).color(dc.muted));
         });
@@ -477,41 +505,41 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
         return;
     }
 
-    ui.horizontal_wrapped(|ui| {
-        stat_tile(
-            ui,
-            dc,
+    let mut tiles: Vec<(&str, String, egui::Color32)> = vec![
+        (
             "AVG CPU",
-            &format!("{:.0}%", summary.avg_cpu_load),
+            format!("{:.0}%", summary.avg_cpu_load),
             theme::C_ACCENT,
-        );
-        stat_tile(
-            ui,
-            dc,
+        ),
+        (
             "PEAK CPU",
-            &format!("{:.0}%", summary.peak_cpu_load),
+            format!("{:.0}%", summary.peak_cpu_load),
             theme::C_ACCENT,
-        );
-        if let Some(avg_gpu) = summary.avg_gpu_load {
-            stat_tile(ui, dc, "AVG GPU", &format!("{avg_gpu:.0}%"), theme::C_AMD);
+        ),
+    ];
+    if let Some(avg_gpu) = summary.avg_gpu_load {
+        tiles.push(("AVG GPU", format!("{avg_gpu:.0}%"), theme::C_AMD));
+    }
+    if let Some(peak_gpu) = summary.peak_gpu_load {
+        tiles.push(("PEAK GPU", format!("{peak_gpu:.0}%"), theme::C_AMD));
+    }
+    tiles.push((
+        "AVG RAM",
+        format!("{:.1} GB", summary.avg_ram_gb),
+        theme::C_RAM,
+    ));
+    tiles.push((
+        "PEAK RAM",
+        format!("{:.1} GB", summary.peak_ram_gb),
+        theme::C_RAM,
+    ));
+
+    // Equal-width columns so the tile row reads as a balanced grid instead of
+    // ragged auto-sized boxes with leftover whitespace on the right.
+    ui.columns(tiles.len(), |cols| {
+        for (col, (label, value, color)) in cols.iter_mut().zip(tiles.iter()) {
+            stat_tile(col, dc, label, value, *color);
         }
-        if let Some(peak_gpu) = summary.peak_gpu_load {
-            stat_tile(ui, dc, "PEAK GPU", &format!("{peak_gpu:.0}%"), theme::C_AMD);
-        }
-        stat_tile(
-            ui,
-            dc,
-            "AVG RAM",
-            &format!("{:.1} GB", summary.avg_ram_gb),
-            theme::C_RAM,
-        );
-        stat_tile(
-            ui,
-            dc,
-            "PEAK RAM",
-            &format!("{:.1} GB", summary.peak_ram_gb),
-            theme::C_RAM,
-        );
     });
     ui.add_space(10.0);
 
@@ -737,7 +765,7 @@ pub fn show(
     // ── Session list ──────────────────────────────────────────────────────────
     egui::SidePanel::left("history_sessions")
         .resizable(false)
-        .exact_width(260.0)
+        .exact_width(290.0)
         .frame(
             egui::Frame::new()
                 .fill(dc.bg)
