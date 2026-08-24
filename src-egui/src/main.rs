@@ -175,6 +175,13 @@ struct RigStatsApp {
     /// being TerminateProcess-d), and this deadline triggers a `kill()` fallback
     /// if it has not exited in time.
     wallpaper_teardown_at: Option<Instant>,
+    // ── Tray recording indicator ───────────────────────────────────────────
+    /// True while a session is being recorded — drives the blinking tray dot.
+    recording_active: bool,
+    /// Current phase of the blink (dot shown vs. hidden).
+    recording_blink_on: bool,
+    /// When the blink last flipped.
+    recording_blink_at: Instant,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -302,6 +309,9 @@ impl RigStatsApp {
             wallpaper_last_spawn: None,
             wallpaper_spawn_fails: 0,
             wallpaper_teardown_at: None,
+            recording_active: false,
+            recording_blink_on: true,
+            recording_blink_at: Instant::now(),
         }
     }
 
@@ -874,9 +884,15 @@ impl eframe::App for RigStatsApp {
                         logging::end_session(&self.dir, &session.id, logging::unix_now_secs());
                         logging::prune_old_sessions(&self.dir, retention_days);
                         self.tray.set_recording(false);
+                        self.recording_active = false;
                     } else {
                         match logging::start_session(&self.dir) {
-                            Ok(_) => self.tray.set_recording(true),
+                            Ok(_) => {
+                                self.tray.set_recording(true);
+                                self.recording_active = true;
+                                self.recording_blink_on = true;
+                                self.recording_blink_at = Instant::now();
+                            }
                             Err(e) => {
                                 debug::log_error(
                                     &self.dir,
@@ -1485,12 +1501,25 @@ impl eframe::App for RigStatsApp {
             }
         }
 
-        // Idle repaint rate: 1 fps regardless of whether a dialog is open.
-        // Interaction responsiveness (hover, click, drag) is driven by OS input events
-        // which wake eframe immediately — request_repaint_after only matters when idle.
-        // All dialogs call main_ctx.request_repaint_of(ROOT) on close, so the
-        // show_viewport_immediate cleanup on the next frame is already fast.
-        ui.ctx().request_repaint_after(Duration::from_secs(1));
+        // While recording, blink the tray dot on/off so an active session reads
+        // as an ongoing event rather than a static indicator.
+        if self.recording_active {
+            const BLINK_PERIOD: Duration = Duration::from_millis(600);
+            if self.recording_blink_at.elapsed() >= BLINK_PERIOD {
+                self.recording_blink_on = !self.recording_blink_on;
+                self.recording_blink_at = Instant::now();
+                self.tray.set_recording_blink(self.recording_blink_on);
+            }
+            ui.ctx().request_repaint_after(BLINK_PERIOD);
+        } else {
+            // Idle repaint rate: 1 fps regardless of whether a dialog is open.
+            // Interaction responsiveness (hover, click, drag) is driven by OS input
+            // events which wake eframe immediately — request_repaint_after only
+            // matters when idle. All dialogs call main_ctx.request_repaint_of(ROOT)
+            // on close, so the show_viewport_immediate cleanup on the next frame is
+            // already fast.
+            ui.ctx().request_repaint_after(Duration::from_secs(1));
+        }
     }
 }
 

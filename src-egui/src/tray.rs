@@ -137,7 +137,24 @@ impl Tray {
             "Start Recording"
         };
         self.recording_item.set_text(label);
-        let bytes: &[u8] = if enabled {
+        self.set_icon_variant(enabled);
+        let tooltip = if enabled {
+            "RIGStats \u{2014} Recording"
+        } else {
+            "RIGStats"
+        };
+        let _ = self.icon.set_tooltip(Some(tooltip));
+    }
+
+    /// Swaps just the tray icon glyph between the plain and dot variants,
+    /// leaving the menu label and tooltip untouched — used to blink the
+    /// recording indicator while a session is active.
+    pub fn set_recording_blink(&self, dot_visible: bool) {
+        self.set_icon_variant(dot_visible);
+    }
+
+    fn set_icon_variant(&self, dot: bool) {
+        let bytes: &[u8] = if dot {
             include_bytes!("../../assets/tray-recording.png")
         } else {
             include_bytes!("../../assets/tray.png")
@@ -149,12 +166,6 @@ impl Tray {
                 let _ = self.icon.set_icon(Some(icon));
             }
         }
-        let tooltip = if enabled {
-            "RIGStats \u{2014} Recording"
-        } else {
-            "RIGStats"
-        };
-        let _ = self.icon.set_tooltip(Some(tooltip));
     }
 }
 
