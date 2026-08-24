@@ -901,6 +901,18 @@ impl eframe::App for RigStatsApp {
                             }
                         }
                     }
+                    // The Session History window (if open) shows its own snapshot of
+                    // the session list — without this it keeps showing the session
+                    // that was just started/stopped as still recording until the
+                    // user manually hits Refresh.
+                    if self.history_open.load(Ordering::Relaxed) {
+                        windows::history::spawn_load_sessions(
+                            self.history_win.clone(),
+                            self.history_refreshing.clone(),
+                            self.dir.as_ref().clone(),
+                            ui.ctx().clone(),
+                        );
+                    }
                 }
             }
         }

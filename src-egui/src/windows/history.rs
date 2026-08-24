@@ -222,9 +222,16 @@ fn render_session_row(
 
             ui.horizontal(|ui| {
                 if is_active {
+                    // Painted dot rather than a Unicode bullet glyph, which the
+                    // embedded font doesn't have (renders as a tofu box).
+                    let (dot_rect, dot_resp) =
+                        ui.allocate_exact_size(egui::vec2(8.0, 11.0), egui::Sense::click());
+                    ui.painter()
+                        .circle_filled(dot_rect.center(), 3.0, theme::C_AMD);
+                    sense_click(dot_resp);
                     sense_click(
                         ui.label(
-                            egui::RichText::new("● Recording")
+                            egui::RichText::new("Recording")
                                 .size(11.0)
                                 .strong()
                                 .color(theme::C_AMD),
