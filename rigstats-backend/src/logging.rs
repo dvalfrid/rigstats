@@ -226,7 +226,7 @@ pub fn load_sessions(dir: &Path) -> Vec<SessionMeta> {
     },
     Err(_) => Vec::new(),
   };
-  sessions.sort_by(|a, b| b.start_unix.cmp(&a.start_unix));
+  sessions.sort_by_key(|a| std::cmp::Reverse(a.start_unix));
   sessions
 }
 
