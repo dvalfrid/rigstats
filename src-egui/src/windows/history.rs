@@ -419,7 +419,7 @@ fn plot_metric(
                 plot_ui.line(
                     Line::new((*name).to_string(), PlotPoints::from(pts.clone()))
                         .color(*color)
-                        .width(1.6),
+                        .width(1.6_f32),
                 );
             }
         });
@@ -459,7 +459,7 @@ fn draw_synced_readout(
         painter.circle_stroke(
             point_pos,
             3.0,
-            egui::Stroke::new(1.0, egui::Color32::from_black_alpha(200)),
+            egui::Stroke::new(1.0_f32, egui::Color32::from_black_alpha(200)),
         );
 
         let text = format!("{name}: {:.1}{}", p[1], chart.unit);
