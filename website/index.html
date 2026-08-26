@@ -144,6 +144,16 @@
           <h3>Floating panel layout</h3>
           <p>Switch to floating mode and each panel becomes a draggable, always-on-top window you can place anywhere on any screen. Positions persist across restarts.</p>
         </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Session recording &amp; history<span class="badge-soon">Coming in v1.38</span></h3>
+          <p>Start and stop recording sessions straight from the tray menu — the tray icon blinks while one is live. Browse, chart, rename, pin, and delete past sessions in the History window.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Redesigned tray menu<span class="badge-soon">Coming in v1.38</span></h3>
+          <p>Every tray menu row has its own procedurally-drawn icon — no bundled images — with a blinking red dot on Stop Recording while a session is live.</p>
+        </li>
       </ul>
     </div>
   </section>
@@ -203,6 +213,27 @@
           <p>Because the host is a separate process, changes can't be previewed live. Settings apply on Save, and the display profile is locked while in wallpaper mode — switch layer to change it.</p>
         </li>
       </ul>
+    </div>
+  </section>
+
+  <!-- Session recording -->
+  <section class="section section-alt" id="recording">
+    <div class="container">
+      <header class="section-head">
+        <h2>Recording, Right From the Tray<span class="badge-soon">Coming in v1.38</span></h2>
+        <p>Every menu row now has its own procedurally-drawn icon — no external image assets — and starting a recording is one click away.</p>
+      </header>
+      <div class="floating-showcase">
+        <div class="screen-wrap">
+          <img src="images/tray-menue-recording.png" alt="RIGStats tray menu while a session is recording — a red dot icon next to Stop Recording, with procedurally-drawn icons on every row" class="hero-img">
+        </div>
+        <ul class="floating-features">
+          <li>Toggle <strong>Start/Stop Recording</strong> from the tray menu — no dialog needed</li>
+          <li>The tray icon blinks a red dot while a session is live, so it's obvious at a glance</li>
+          <li>Open <strong>Session History</strong> from the same menu to browse and chart past sessions</li>
+          <li>Every menu row's icon is drawn procedurally at startup — no bundled image assets</li>
+        </ul>
+      </div>
     </div>
   </section>
 
@@ -423,7 +454,7 @@
   <section class="section section-alt" id="dialogs">
     <div class="container">
       <header class="section-head">
-        <h2>Four Supporting Dialogs</h2>
+        <h2>Five Supporting Dialogs</h2>
         <p>Accessible from the system tray icon. Each dialog has a single, focused purpose.</p>
       </header>
 
@@ -466,6 +497,22 @@
               <li>Live debug log viewer with Copy Log button</li>
               <li>Last successful refresh timestamp</li>
               <li>Diagnostics ZIP export</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="dialog-card">
+          <div class="dialog-img-wrap">
+            <img src="images/session-history-dialog.png" alt="Session History window screenshot — session list on the left, CPU/GPU/RAM charts on the right" class="dialog-img">
+          </div>
+          <div class="dialog-body">
+            <h3>Session History<span class="badge-soon">Coming in v1.38</span></h3>
+            <p>Browse and chart past recording sessions. Each session gets its own CPU/GPU/RAM/network/disk/ping charts with synced hover, so you can see exactly what happened during a gaming session or stress test.</p>
+            <ul>
+              <li>Pin, rename, reveal in Explorer, or delete any session</li>
+              <li>Synced multi-chart hover — one moment in time across every metric</li>
+              <li>Avg/peak summary tiles per session</li>
+              <li>Automatic retention pruning; pinned sessions are always kept</li>
             </ul>
           </div>
         </article>

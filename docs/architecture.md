@@ -124,7 +124,7 @@ rig-dashboard/
 │   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
 │   │   ├── win32_wallpaper.rs  Progman/WorkerW discovery + SetParent reparenting
 │   │   ├── panels/         One file per panel (cpu, gpu, ram, net, disk, …)
-│   │   └── windows/        Secondary windows (settings, about, status, updater)
+│   │   └── windows/        Secondary windows (settings, about, status, updater, history)
 │   ├── assets/             Embedded PNGs (brand logos, tray icon)
 │   └── Cargo.toml
 ├── rigstats-backend/       Shared Rust lib (telemetry, hardware, settings)
@@ -136,7 +136,7 @@ rig-dashboard/
 │       ├── monitor.rs      Display profiles, panel key validation
 │       ├── settings.rs     Settings struct, JSON persistence, atomic_write
 │       ├── autostart.rs    Windows startup registry management
-│       ├── logging.rs      Stats CSV logging
+│       ├── logging.rs      Session-based CSV stats logging, sessions.json index
 │       └── debug.rs        Debug log helpers
 ├── sensor-sidecar/         .NET 10 C# sidecar (rigstats-sensor.exe)
 │   ├── Program.cs          Entry point, pipe server loop
@@ -168,7 +168,7 @@ rig-dashboard/
 | `monitor.rs` | Display profiles, monitor selection, panel key validation |
 | `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
 | `autostart.rs` | Windows startup registry management (HKCU run key) |
-| `logging.rs` | Stats CSV logging — `append_stats_row`, `prune_old_logs`, `current_log_path` |
+| `logging.rs` | Session-based CSV stats logging — `start_session`/`end_session`/`append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`/`prune_old_sessions`, `reconcile_sessions_on_startup`; `sessions.json` index guarded by `SessionsLock` (cross-process file lock) and a `.bak` for corruption recovery |
 | `debug.rs` | Debug log helpers — no deps on other modules |
 
 **`src-egui/src/`** — egui library + binaries:
@@ -192,7 +192,7 @@ rig-dashboard/
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
 | `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`, `clock`, `header` |
-| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs` |
+| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs` |
 
 ### Module details
 
@@ -380,7 +380,7 @@ migration needed:
 - **`fullscreen_align: String`** — `"top"` or `"center"` (default `"center"`):
   where the panel stack sits within the filled window.
 
-#### `windows/` (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`)
+#### `windows/` (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`)
 
 Secondary egui windows, each rendered via `show_viewport_immediate` from the
 tray-command handler in `main.rs` — not separate OS windows created through a
@@ -415,6 +415,23 @@ separate `windows.rs` module:
 `spawn_background_check` starts a loop that checks GitHub Releases every 6
 hours (first check after 10 s). Notifies the UI when a newer version is found.
 Also exposes `check_for_update`, `install_update`, and `open_updater_window`.
+
+#### `history.rs`
+
+Session History window, opened via `TrayCmd::OpenHistory`. Left panel lists
+sessions (name, time range, duration, avg CPU/GPU) with Pin/Rename/Reveal/Delete
+row actions — buttons share one fixed size per row and wrap onto a second line
+rather than overflow a narrow panel. Renaming swaps the row into an inline
+`TextEdit` with Save/Cancel (Enter/Escape also commit/cancel). Selecting a
+session loads its CSV rows on a background thread
+(`spawn_load_rows`/`spawn_load_sessions`, guarded by an `AtomicBool` so a
+second load while one is in flight is a no-op) and renders CPU/GPU/RAM/
+network/disk/ping charts via `egui_plot`, one `Plot` per metric group linked
+by a shared group id so hovering any chart shows a synced crosshair and
+per-curve value readout across all of them. The list refreshes on open, after
+any pin/rename/delete action, and whenever `TrayCmd::ToggleRecording` fires
+while the window is open (otherwise a session ending while History is open
+would keep showing it as still recording until a manual Refresh).
 
 #### `autostart.rs`
 

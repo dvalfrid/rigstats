@@ -147,6 +147,25 @@ from the normal layers and are **expected**:
 See [docs/troubleshooting.md](docs/troubleshooting.md#desktop-wallpaper-mode) for
 details.
 
+## Session History
+
+Explicit start/stop recording sessions, replacing the old continuous
+daily-rolling log. Toggle **Start/Stop Recording** from the tray menu — the
+tray icon blinks while a session is live — then open **Session History** to
+browse and chart past sessions.
+
+- Each session gets its own CSV file plus a `SessionMeta` entry (name, time
+  range, duration, pinned) in a JSON index.
+- Rename, pin (exempt from retention pruning), reveal in Explorer, or delete
+  any session from the list.
+- Per-session detail view: CPU/GPU/RAM/network/disk/ping charts (`egui_plot`)
+  with synced hover across every metric, plus avg/peak summary tiles.
+- `log_retention_days` (Settings → General) prunes old, unpinned sessions
+  automatically; pinned and still-recording sessions are never pruned.
+- The index is resilient to corruption and cross-process writes (this app and
+  `rigstats-wallpaper` can both record) — a `.bak` copy and a short file lock
+  around each read-modify-write guard against a bad write or a lost update.
+
 ## Sensor Coverage
 
 Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).

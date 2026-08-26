@@ -2,6 +2,8 @@
 
 All secondary windows (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`) must follow this layout and colour contract. **Never deviate from these values without updating this file.**
 
+`history.rs` follows the same hero/footer frames, colour tokens, and button API, but adds a `SidePanel` (session list) + `CentralPanel` (chart detail) between them instead of a single central content area — a deliberate exception for its master/detail layout, not a contract violation to fix.
+
 ## Layout skeleton
 
 Every dialog uses three egui panels:

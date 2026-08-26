@@ -163,6 +163,23 @@ code {
   margin-bottom: 20px;
 }
 
+/* Small, muted marker for a feature that has landed on main but not yet
+   shipped in a tagged release — deliberately understated, not accent-coloured. */
+.badge-soon {
+  display: inline-block;
+  padding: 2px 9px;
+  margin-left: 8px;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .02em;
+  color: var(--text-dim);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
 /* ── Hero ──────────────────────────────────────────────────── */
 .hero {
   padding: 100px 0 80px;

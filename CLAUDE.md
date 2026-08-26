@@ -123,7 +123,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`theme.rs`** — `AppTheme`, color helpers, `panel_frame()`, sparkline/bar helpers, `avail_color()`, dialog button API (`dialog_btn_primary`/`dialog_btn_secondary`)
 - **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`
 - **`brand.rs`** — embedded brand logo PNGs; `rig_logo`, `cpu_logo`, `gpu_logo`
-- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`; secondary viewports via `show_viewport_deferred`. Dialog design contract: `src-egui/src/windows/CLAUDE.md`
+- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_deferred`. Dialog design contract: `src-egui/src/windows/CLAUDE.md`
 - **`win32_wallpaper.rs`** — `find_wallpaper_workerw`, `attach`/`detach`, `process_alive`; used only by the wallpaper host
 - **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup
 - **`update_check.rs`** — `check()` fetches `latest.json`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`
@@ -147,7 +147,7 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 - **`hardware.rs`** — WMI/CIM hardware detection: GPU, RAM, disk, system brand, model, motherboard, ping
 - **`lhm.rs`** — named pipe client → `LhmData`; `select_gpu_idx` (preferred → highest VRAM → load tie-break)
 - **`lhm_process.rs`** — connection state tracking (connect/disconnect logging, 30 s throttle)
-- **`logging.rs`** — CSV stats logging: `append_stats_row`, `prune_old_logs`
+- **`logging.rs`** — session-based CSV stats logging: `start_session`/`end_session`, `append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`, `prune_old_sessions`, `reconcile_sessions_on_startup`. Session index (`rigstats-sessions.json`) writes are guarded by a cross-process file lock (`SessionsLock`) and mirrored to a `.bak` for corruption recovery.
 - **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`
 - **`debug.rs`** — `log_debug`/`log_warn`/`log_error`; `reset_debug_log` rotates log to `rigstats-debug-prev.log`
 - **`monitor.rs`** — profile definitions, monitor selection, `compute_panels_logical_height`
@@ -173,6 +173,10 @@ Valid profile names and panel keys: see `geometry.rs` and `settings.rs`.
 The Rust backend connects to `\\.\pipe\rigstats-sensors` (`.write(false)`). On failure it falls back to the last sample. GPU selection: preferred → highest VRAM → load tie-break. D3D fields (`gpu_d3d_3d`, `gpu_d3d_vdec`) are `None` when idle; their presence toggles the GPU panel between a two-column bar layout and single-bar default.
 
 For adding hardware sensor fixtures, run `/sensor-fixture`.
+
+### Session recording
+
+Tray `Start/Stop Recording` (`TrayCmd::ToggleRecording` in `main.rs`) starts/ends a session via `logging.rs` and flips `Tray::set_recording` (menu label/icon + tray tooltip). While a session is active, `main.rs` blinks the tray icon (~600 ms, driven by the same idle-repaint tick) via `Tray::set_recording_blink`. The active session lives in the on-disk index, not in-process state, so both this app's and `rigstats-wallpaper`'s `poll_loop` — whichever is currently polling — append rows to it. `windows/history.rs` (opened via `TrayCmd::OpenHistory`) lists/pins/renames/deletes sessions and charts a selected one with `egui_plot`; it refreshes its session list on open, on any list action, and whenever recording starts/stops while it's open.
 
 ### Settings persistence
 
