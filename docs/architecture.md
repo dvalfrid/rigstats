@@ -114,6 +114,7 @@ rig-dashboard/
 │   │   ├── gpu_guard.rs    wgpu device-loss guard (uncaptured-error/device-lost callbacks)
 │   │   ├── tray.rs         System tray icon, menu, TrayCmd, panel-label helpers
 │   │   ├── menu_icons.rs   Procedurally-drawn tray context-menu glyph icons
+│   │   ├── lock_ext.rs     LockSafe — poison-tolerant `.lock_safe()` mutex helper
 │   │   ├── theme.rs        AppTheme, colours, panel_frame(), dialog button API
 │   │   ├── brand.rs        Brand logo PNG loading
 │   │   ├── tempcolor.rs    temp_color() — value → green/yellow/red
@@ -123,6 +124,7 @@ rig-dashboard/
 │   │   ├── win_opacity.rs  SetLayeredWindowAttributes wrapper
 │   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
 │   │   ├── win32_wallpaper.rs  Progman/WorkerW discovery + SetParent reparenting
+│   │   ├── win32_behind.rs Always-Behind window layer: apply_behind/prepare_for_drag/keep_behind
 │   │   ├── panels/         One file per panel (cpu, gpu, ram, net, disk, …)
 │   │   └── windows/        Secondary windows (settings, about, status, updater, history)
 │   ├── assets/             Embedded PNGs (brand logos, tray icon)
@@ -133,7 +135,6 @@ rig-dashboard/
 │       ├── hardware.rs     WMI/PowerShell hardware detection at startup
 │       ├── lhm.rs          Named pipe client → LhmData; GPU selection
 │       ├── lhm_process.rs  LHM connection state tracking
-│       ├── monitor.rs      Display profiles, panel key validation
 │       ├── settings.rs     Settings struct, JSON persistence, atomic_write
 │       ├── autostart.rs    Windows startup registry management
 │       ├── logging.rs      Session-based CSV stats logging, sessions.json index
@@ -164,8 +165,7 @@ rig-dashboard/
 | `stats.rs` | `StatsPayload` and all sub-structs; `HardwareInfo` (startup constants) and `AppState` (per-tick state) |
 | `hardware.rs` | WMI/PowerShell hardware detection at startup |
 | `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
-| `lhm_process.rs` | LHM connection state tracking, 30 s log throttle |
-| `monitor.rs` | Display profiles, monitor selection, panel key validation |
+| `lhm_process.rs` | `track_lhm_connection_state` — sidecar pipe connect/disconnect logging, 30 s "still offline" throttle |
 | `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
 | `autostart.rs` | Windows startup registry management (HKCU run key) |
 | `logging.rs` | Session-based CSV stats logging — `start_session`/`end_session`/`append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`/`prune_old_sessions`, `reconcile_sessions_on_startup`; `sessions.json` index guarded by `SessionsLock` (cross-process file lock) and a `.bak` for corruption recovery |
@@ -184,6 +184,7 @@ rig-dashboard/
 | `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
+| `lock_ext.rs` | `LockSafe` trait — `.lock_safe()` recovers a poisoned `Mutex` instead of panicking; used throughout `windows/*.rs` |
 | `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API, `apply_dashboard_fonts` |
 | `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
@@ -191,6 +192,7 @@ rig-dashboard/
 | `win_opacity.rs` | `SetLayeredWindowAttributes` wrapper for window-level opacity |
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
 | `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
+| `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`, `clock`, `header` |
 | `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs` |
 
@@ -207,7 +209,7 @@ structs.
 
 **`HardwareInfo`** — startup-detected constants, held behind a `Mutex` and read once at poll-thread start: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`, `system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
 
-**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`, `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`, `last_lhm`, `last_alert`, `last_battery_sample`.
+**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`, `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`, `last_lhm`, `last_alert`, `last_battery_sample`, `last_log_prune_day`. (Note: this struct is currently unused — nothing in `src-egui` constructs an `AppState`; see the note in Design Decisions.)
 
 **Payload structs:**
 
@@ -299,28 +301,13 @@ memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 
 #### `lhm_process.rs`
 
-Retained query helpers for the legacy LHM scheduled task — used only by
-`diagnostics.rs` to include task state in the diagnostics ZIP. No longer
-manages LHM process lifecycle (that responsibility has moved to the sidecar).
-
-- `get_lhm_task_details` / `get_lhm_task_diagnosis` — query `schtasks` for the
-  LHM task status and parse the result into a structured string
-- `track_lhm_connection_state` — logs connect/disconnect transitions at most
-  once every 30 s (shares the throttle approach used by `fetch_lhm_pipe`)
-- `can_reach_lhm_endpoint` — retained for diagnostics; checks whether the old
-  LHM HTTP port is still reachable (helps diagnose mixed-install scenarios)
-
-#### `monitor.rs`
-
-- `normalize_profile` / `profile_dimensions` — canonical profile name → pixel
-  dimensions
-- `pick_target_monitor` — selects the best available monitor for a profile using
-  an aspect-ratio + area fit score; positions the window borderless using
-  `set_size` + `set_decorations(false)` + `set_position`
-- `normalize_visible_panels` — validates and deduplicates panel key lists
-
-Valid panel keys: `header`, `clock`, `cpu`, `gpu`, `ram`, `net`, `disk`,
-`motherboard`, `process`, `battery`. `motherboard`, `process`, and `battery` are opt-in.
+Just one function: `track_lhm_connection_state(dir, connected)`, called each
+stats tick. Logs a message when the sidecar pipe transitions
+connected→disconnected or back, and throttles the repeated "still offline"
+warning to once per 30 s so a prolonged outage doesn't spam the debug log.
+Diagnostics-ZIP collection (including the LHM sensor tree) lives in
+`src-egui/src/windows/status.rs` (`collect_and_open_diagnostics`), not a
+separate module.
 
 #### `settings.rs`
 
@@ -358,7 +345,10 @@ needed:
 - **`floating_panel_scale: f64`** — floating panel size multiplier in the
   range `0.4..=1.0` (sanitized in command handlers before persistence).
 - **`floating_panels_locked: bool`** — when true, drag handles are disabled on
-  all panel windows; toggled by `toggle_floating_lock` and persisted immediately.
+  all panel windows. The per-panel padlock toggles a shared `floating_lock_arc`
+  (`AtomicBool`); each frame's `update()` compares it against
+  `self.floating_panels_locked` and persists on change (`main.rs`, ~line 1002) —
+  there is no single `toggle_floating_lock` function.
 - **`panel_layouts: HashMap<String, PanelLayout>`** — last known `outer_position`
   (`x: i32, y: i32`) per panel key. Positions are tracked directly in
   `render_floating_panels` (`src-egui/src/main.rs`) from each panel viewport's
@@ -464,9 +454,12 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `motherboard` | Motherboard | opt-in | sidecar · WMI |
 | `process` | Processes | opt-in | sysinfo |
 | `battery` | Battery | opt-in | sidecar · WMI |
+| `power` | System Power | opt-in | sidecar (derived, no new sensors) |
 
-Panel visibility and order are saved in `Settings.visible_panels` and
-validated by `normalize_visible_panels` in the backend.
+Panel visibility and order are saved as a plain `Vec<String>` of keys in
+`Settings.visible_panels` (`rigstats-backend/src/settings.rs`) — there is no
+separate validation function; an unrecognized key is simply ignored by the
+renderer's key→panel match.
 
 ---
 
@@ -540,19 +533,26 @@ thread). Produces a self-contained ZIP for bug reports.
 
 ### Reliability and correctness
 
-- **Sidecar fallback** — the last successful sample is kept in memory so the UI
-  never resets to `--` when the sidecar pipe is temporarily unavailable.
-- **Payload validation** — `isValidStatsPayload` rejects malformed or empty
-  payloads before rendering to avoid visual resets.
-- **No tick overlap** — the tick loop sets `isTicking` before the async call and
-  clears it in `finally`, preventing out-of-order UI updates.
-- **Alert cooldowns** use a `Mutex<HashMap<String, Instant>>` keyed on
-  `"<component>_<level>"`. Warning and critical are independent clocks.
-  `notify_on_warn`/`notify_on_crit` gate whole levels without clearing thresholds
-  so colour indicators remain active while notifications are silenced.
-- **`TempThresholdPayload`** (the `apply-thresholds` event) carries only
-  numeric thresholds, not the notify flags. Whether a notification fires is
-  a backend concern; the UI uses thresholds only for colour mapping.
+- **No tick overlap by construction** — `poll_loop` is a single `loop { ...;
+  tokio::time::sleep(1s).await }` on one task, not a re-entrant timer callback,
+  so there is no possibility of two ticks running concurrently or out of order.
+- **Sidecar pipe read failures are per-tick, not sticky** — `fetch_lhm_pipe`
+  returns `Option<LhmData>`; on a failed/timed-out read it returns `None` for
+  *that* tick only (logged via `lhm_process::track_lhm_connection_state`, throttled
+  to once per 30 s). There is currently no last-known-good LHM sample kept
+  across ticks, so LHM-derived fields go blank for the duration of an outage
+  rather than holding the previous value — non-LHM data (sysinfo, WMI) is
+  unaffected since it's sourced independently each tick.
+- **Threshold-based alert notifications are not currently wired up.**
+  `Settings` has full support for this — per-component warn/crit thresholds,
+  `notify_on_warn`/`notify_on_crit` toggles, `alert_cooldown_secs`, and a
+  working "Test Notification" button (`windows/settings.rs`,
+  `send_test_notification` — shows a real Windows balloon tip via a hidden
+  PowerShell `NotifyIcon` script) — but nothing in `poll_loop` or `main.rs`
+  currently compares a live reading against its threshold and fires that
+  notification automatically. Thresholds are otherwise fully used for panel
+  colour-coding (warn = yellow, crit = red). Tracked as a bug — see
+  [#179](https://github.com/dvalfrid/rigstats/issues/179).
 
 ### Window placement
 

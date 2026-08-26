@@ -119,13 +119,17 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types
 - **`tray.rs`** — system tray icon, `TrayCmd` enum, `load_app_icon`, `panel_label`/`panel_initial_h`
 - **`menu_icons.rs`** — procedurally-rasterized glyph icons for each tray context-menu row (no external image assets)
+- **`lock_ext.rs`** — `LockSafe::lock_safe()`: poison-tolerant `Mutex` locking used throughout `windows/*.rs`
 - **`gpu_guard.rs`** — `install_gpu_loss_guard`: wgpu device-error/device-lost callbacks that flag a fatal GPU error instead of panicking
 - **`theme.rs`** — `AppTheme`, color helpers, `panel_frame()`, sparkline/bar helpers, `avail_color()`, dialog button API (`dialog_btn_primary`/`dialog_btn_secondary`)
+- **`ring.rs`** — ring gauge renderer; **`spark.rs`** — sparkline ring buffer; **`tempcolor.rs`** — `temp_color()` value→green/yellow/red
 - **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`
 - **`brand.rs`** — embedded brand logo PNGs; `rig_logo`, `cpu_logo`, `gpu_logo`
-- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_deferred`. Dialog design contract: `src-egui/src/windows/CLAUDE.md`
+- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_immediate`. Dialog design contract: `src-egui/src/windows/CLAUDE.md`
 - **`win32_wallpaper.rs`** — `find_wallpaper_workerw`, `attach`/`detach`, `process_alive`; used only by the wallpaper host
+- **`win32_behind.rs`** — `apply_behind`/`prepare_for_drag`/`keep_behind`: Always-Behind window layer support
 - **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup
+- **`win_opacity.rs`** — `SetLayeredWindowAttributes` wrapper for window-level opacity
 - **`update_check.rs`** — `check()` fetches `latest.json`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`
 
 ### Data flow
@@ -143,14 +147,13 @@ wmi crate (GPU name, VRAM, RAM spec/details, system brand)
 
 ### Backend (`rigstats-backend/src/`)
 
-- **`stats.rs`** — `StatsPayload` + sub-structs; `HardwareInfo` (startup constants behind `Mutex`), `AppState` (per-tick mutable state)
+- **`stats.rs`** — `StatsPayload` + sub-structs; `HardwareInfo` (startup constants behind `Mutex`). `AppState` (per-tick mutable state) is defined here but currently unused — nothing constructs one.
 - **`hardware.rs`** — WMI/CIM hardware detection: GPU, RAM, disk, system brand, model, motherboard, ping
 - **`lhm.rs`** — named pipe client → `LhmData`; `select_gpu_idx` (preferred → highest VRAM → load tie-break)
 - **`lhm_process.rs`** — connection state tracking (connect/disconnect logging, 30 s throttle)
 - **`logging.rs`** — session-based CSV stats logging: `start_session`/`end_session`, `append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`, `prune_old_sessions`, `reconcile_sessions_on_startup`. Session index (`rigstats-sessions.json`) writes are guarded by a cross-process file lock (`SessionsLock`) and mirrored to a `.bak` for corruption recovery.
 - **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`
 - **`debug.rs`** — `log_debug`/`log_warn`/`log_error`; `reset_debug_log` rotates log to `rigstats-debug-prev.log`
-- **`monitor.rs`** — profile definitions, monitor selection, `compute_panels_logical_height`
 - **`autostart.rs`** — HKCU run key for launch-at-startup
 
 ### Dashboard profiles

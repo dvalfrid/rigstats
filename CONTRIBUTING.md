@@ -29,7 +29,7 @@ and constructive, assume good faith, and keep discussion focused on the code.
 ## Prerequisites
 
 - **Windows 10/11 x64** — the app and sensor sidecar are Windows-only
-- **Rust stable** — install via [rustup.rs](https://rustup.rs)
+- **Rust** — install [rustup.rs](https://rustup.rs); the toolchain version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml), so `rustup` auto-installs the exact version CI uses the first time you run `cargo` in this repo
 - **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` (required for the sensor sidecar)
 - **Visual Studio 2022 Build Tools** with the "Desktop development with C++" workload (for linking)
 - **NSIS** — `choco install nsis -y` (only needed for installer builds)

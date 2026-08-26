@@ -661,14 +661,19 @@
                 <tr><th>File in ZIP</th><th>Contents</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>debug.log</code></td><td>Full startup and runtime log</td></tr>
-                <tr><td><code>sidecar-parsed.json</code></td><td>Last sensor payload from the sidecar — GPU, CPU, fans, disk temps</td></tr>
+                <tr><td><code>manifest.json</code></td><td>Collection timestamp and RIGStats version</td></tr>
+                <tr><td><code>debug.log</code></td><td>Full debug log for the current session</td></tr>
+                <tr><td><code>debug-prev.log</code></td><td>Debug log from the previous session — captures a crash</td></tr>
+                <tr><td><code>settings.json</code></td><td>Current user settings</td></tr>
+                <tr><td><code>install.log</code></td><td>NSIS installer/upgrade log</td></tr>
+                <tr><td><code>sidecar-log.txt</code></td><td>Raw log from the rigstats-sensor Windows Service — LibreHardwareMonitor startup and pipe-server activity</td></tr>
                 <tr><td><code>sensor-tree.txt</code></td><td>Full LHM hardware and sensor tree at last service start — identifiers, types, and values</td></tr>
                 <tr><td><code>hardware.json</code></td><td>WMI snapshot: OS, CPU, GPU, motherboard, RAM</td></tr>
-                <tr><td><code>settings.json</code></td><td>Current user settings</td></tr>
                 <tr><td><code>sidecar-service.txt</code></td><td>rigstats-sensor Windows Service state</td></tr>
-                <tr><td><code>sysinfo.json</code></td><td>sysinfo snapshot: CPU, disk, network, RAM</td></tr>
                 <tr><td><code>environment.txt</code></td><td>Windows build, architecture, computer name</td></tr>
+                <tr><td><code>event-log.txt</code></td><td>Recent Windows Event Log entries matching RIGStats</td></tr>
+                <tr><td><code>sysinfo.json</code></td><td>sysinfo snapshot: CPU, disk, network, RAM</td></tr>
+                <tr><td><code>displays.json</code></td><td>Connected monitors and which one was auto-selected</td></tr>
               </tbody>
             </table>
           </div>

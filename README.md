@@ -39,7 +39,7 @@ Both install the same signed NSIS installer, which also registers the sensor sid
 ## Prerequisites
 
 - **Windows 10/11 x64** — the app and sensor sidecar are Windows-only
-- **Rust stable** — install via [rustup.rs](https://rustup.rs)
+- **Rust** — install [rustup.rs](https://rustup.rs); the toolchain version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml), so `rustup` auto-installs the exact version CI uses the first time you run `cargo` in this repo
 - **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` (required for the sensor sidecar)
 - **Visual Studio 2022 Build Tools** with "Desktop development with C++" workload (for linking)
 - **NSIS** (installer builds only) — `choco install nsis -y`
@@ -191,8 +191,8 @@ Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (se
 | Core load (%) | LHM — `GPU Core` load |
 | Core temperature (°C) | LHM — `GPU Core` temperature |
 | Hot spot temperature (°C) | LHM — `GPU Hot Spot` temperature |
-| Core clock (MHz) | LHM — `GPU Core` clock |
-| Memory clock (MHz) | LHM — `GPU Memory` clock |
+| Core clock (GHz) | LHM — `GPU Core` clock |
+| Memory clock (MHz) | LHM — `GPU Memory` clock — collected but not yet shown in the panel |
 | Package power (W) | LHM — `GPU Package` power |
 | Fan speed (RPM) | LHM — `GPU Fan` |
 | VRAM used / total (GB) | LHM — `GPU Memory Used` / `GPU Memory Total` |
@@ -207,7 +207,7 @@ Supports NVIDIA and AMD discrete GPUs through LHM. Intel Arc GPUs should work bu
 | --- | --- |
 | Used / free / total (GB) | sysinfo |
 | Memory type (DDR–DDR5) | WMI `Win32_PhysicalMemory.SMBIOSMemoryType` |
-| Speed (MHz) | WMI `Win32_PhysicalMemory.ConfiguredClockSpeed` / `Speed` |
+| Speed (MT/s) | WMI `Win32_PhysicalMemory.ConfiguredClockSpeed` / `Speed` |
 | Manufacturer & part number | WMI `Win32_PhysicalMemory` |
 | DIMM temperature (°C) | LHM — SensorId prefix `/memory/dimm/` — DDR5 and equipped DDR4 |
 

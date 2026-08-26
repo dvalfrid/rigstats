@@ -3,7 +3,7 @@
 ## Requirements
 
 - Windows 10/11 (x64)
-- Rust: <https://rustup.rs>
+- Rust: <https://rustup.rs> — the toolchain version is pinned in `rust-toolchain.toml` at the repo root, so `rustup` auto-installs the correct version (matching CI) the first time you run `cargo` here; no manual `rustup default`/`rustup override` needed
 - .NET 10 SDK: `winget install Microsoft.DotNet.SDK.10`
 - Visual Studio 2022 Build Tools with Desktop development with C++
 - NSIS (for building the installer): `choco install nsis -y`

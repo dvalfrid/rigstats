@@ -20,6 +20,18 @@ To require it before merge:
 4. Enable required status checks
 5. Select `Verify (Windows)`
 
+### Pinned Rust toolchain
+
+`build.yml`, `verify.yml`, and `release.yml` all install Rust via
+`dtolnay/rust-toolchain@1.98.0` — a specific version, not `@stable`. `@stable`
+floated to whatever Rust shipped that day, which twice broke CI on an
+unrelated push (a new clippy lint, then a new rustc future-incompat lint)
+with no code change to blame. `rust-toolchain.toml` at the repo root pins the
+same version for local development, so `rustup` auto-installs it the first
+time `cargo` runs in the repo — no drift between a contributor's machine and
+CI. Bumping the pin (both the workflow `@version` refs and
+`rust-toolchain.toml`) is a deliberate, standalone commit.
+
 ## Build Workflow
 
 The repository includes `.github/workflows/build.yml`.
