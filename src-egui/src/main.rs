@@ -9,6 +9,7 @@ use rigstats_egui::geometry::{
     monitor_rect_at, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
     profile_to_size, resolve_pinned_position,
 };
+use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
@@ -182,6 +183,23 @@ struct RigStatsApp {
     recording_blink_on: bool,
     /// When the blink last flipped.
     recording_blink_at: Instant,
+    // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
+    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
+    /// reports a fatal device error. Checked once per frame in `update()`.
+    gpu_lost: Arc<AtomicBool>,
+    /// True once the `gpu_lost` relaunch-and-close sequence has been kicked
+    /// off, so it only runs once even though `update()` keeps being called
+    /// for the few frames it takes `ViewportCommand::Close` to take effect.
+    gpu_relaunch_triggered: bool,
+    /// When this app instance was created. Used to tell a GPU error that
+    /// strikes again within seconds of a relaunch (still-unsettled GPU
+    /// state — back off) from one after a long healthy run (a fresh,
+    /// unrelated hiccup — always retry).
+    gpu_started_at: Instant,
+    /// Consecutive fast GPU-relaunch failures, carried in from the
+    /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
+    /// this one. `0` for a normal (non-relaunch) start.
+    gpu_retry_count: u32,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -213,6 +231,9 @@ impl RigStatsApp {
         updater_open: Arc<AtomicBool>,
         updater_focus: Arc<AtomicBool>,
         poll_paused: Arc<AtomicBool>,
+        gpu_lost: Arc<AtomicBool>,
+        gpu_started_at: Instant,
+        gpu_retry_count: u32,
     ) -> Self {
         let init_settings = current_settings.lock_safe().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -312,6 +333,10 @@ impl RigStatsApp {
             recording_active: false,
             recording_blink_on: true,
             recording_blink_at: Instant::now(),
+            gpu_lost,
+            gpu_relaunch_triggered: false,
+            gpu_started_at,
+            gpu_retry_count,
         }
     }
 
@@ -365,6 +390,51 @@ impl RigStatsApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
         self.last_fitted_height = None;
         self.reapply_window_props_frames = 4;
+    }
+
+    /// Fired once, from `ui()`, when `gpu_guard`'s device-error callbacks
+    /// have flagged a fatal wgpu error (most commonly a hybrid iGPU/dGPU
+    /// switch invalidating the D3D12 device mid-session). Spawns a fresh
+    /// instance of the app — unless a persistent-failure budget is
+    /// exhausted — and closes this one gracefully via
+    /// `ViewportCommand::Close`. Deliberately never `process::exit`: an
+    /// abrupt exit skips wgpu's teardown and can leak GPU/desktop-heap
+    /// resources across the spawn, the same failure mode already worked
+    /// around for the wallpaper host (see its `refresh_settings` doc comment).
+    fn trigger_gpu_relaunch(&self, ctx: &egui::Context) {
+        const MAX_RETRIES: u32 = 3;
+        // Only count against the retry budget if THIS process itself died
+        // within seconds of starting — a GPU error after a long healthy run
+        // (the common case: hybrid-GPU switches happen at most a few times a
+        // day) always gets a full, unthrottled retry.
+        let fast_fail = self.gpu_started_at.elapsed() < Duration::from_secs(10);
+        let attempt = if fast_fail {
+            self.gpu_retry_count + 1
+        } else {
+            1
+        };
+        if attempt > MAX_RETRIES {
+            debug::log_error(
+                &self.dir,
+                "gpu: device error repeated too quickly — giving up on relaunch \
+                 (reopen RIGStats manually once the GPU state has settled)",
+            );
+        } else {
+            match std::env::current_exe().and_then(|exe| {
+                std::process::Command::new(exe)
+                    .env("RIGSTATS_GPU_RETRY_COUNT", attempt.to_string())
+                    .spawn()
+            }) {
+                Ok(_) => debug::log_warn(
+                    &self.dir,
+                    &format!("gpu: device error — relaunching (attempt {attempt}/{MAX_RETRIES})"),
+                ),
+                Err(e) => {
+                    debug::log_error(&self.dir, &format!("gpu: relaunch failed — {e}"));
+                }
+            }
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
     /// Drive the wallpaper-host lifecycle each frame.
@@ -601,6 +671,17 @@ impl eframe::App for RigStatsApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // A fatal wgpu device error (see `gpu_guard`) was flagged from off the
+        // UI thread. Don't touch the (likely dead) device any further this
+        // frame — kick off the relaunch-and-close sequence once and bail.
+        if self.gpu_lost.load(Ordering::Relaxed) {
+            if !self.gpu_relaunch_triggered {
+                self.gpu_relaunch_triggered = true;
+                self.trigger_gpu_relaunch(ui.ctx());
+            }
+            return;
+        }
+
         // On the first frame: locate the HWND. With a DComp swap chain
         // (dcomp_available), apply WS_EX_NOREDIRECTIONBITMAP once — required
         // for it to actually composite (see `set_no_redirection_bitmap`'s doc
@@ -2469,6 +2550,25 @@ fn main() {
             let dir_arc = Arc::new(dir.clone());
             let dashboard_runtime = DashboardRuntime::new(&cc.egui_ctx, &s);
 
+            // Survive a hybrid iGPU/dGPU switch: without this, a fatal wgpu
+            // device error (e.g. the D3D12 adapter going away) falls through
+            // to wgpu's default handler and panics the whole process — see
+            // `gpu_guard`. `update()` checks this flag every frame.
+            let gpu_lost = Arc::new(AtomicBool::new(false));
+            if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+                install_gpu_loss_guard(
+                    render_state,
+                    cc.egui_ctx.clone(),
+                    dir_arc.clone(),
+                    gpu_lost.clone(),
+                );
+            }
+            let gpu_started_at = Instant::now();
+            let gpu_retry_count: u32 = std::env::var("RIGSTATS_GPU_RETRY_COUNT")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0);
+
             // Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
             // active.  With `show_viewport_immediate`, all panels are rendered
             // synchronously as part of the parent frame, so one `request_repaint()`
@@ -2590,6 +2690,9 @@ fn main() {
                 updater_open_bg,
                 updater_focus_bg,
                 poll_paused,
+                gpu_lost,
+                gpu_started_at,
+                gpu_retry_count,
             )))
         }),
     )

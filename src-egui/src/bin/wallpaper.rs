@@ -19,12 +19,13 @@ use rigstats_egui::geometry::{
     compute_landscape_window_height, compute_window_height, guard_panel_position,
     pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
+use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_wallpaper, win_opacity};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -59,6 +60,12 @@ struct WallpaperHost {
     /// dropped before the window is fully realized, which would leave a black gap
     /// or a clipped bottom panel until something else triggers a resize.
     startup_fit_frames: u8,
+    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
+    /// reports a fatal device error (e.g. a hybrid iGPU/dGPU switch). The
+    /// main app's `update_wallpaper_mode` supervisor already respawns this
+    /// host on any exit, so on error we just need to close cleanly — no
+    /// self-relaunch logic needed here.
+    gpu_lost: Arc<AtomicBool>,
 }
 
 impl WallpaperHost {
@@ -121,6 +128,15 @@ impl eframe::App for WallpaperHost {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // A fatal wgpu device error was flagged from off the UI thread (see
+        // `gpu_guard`). Close cleanly rather than touching the (likely dead)
+        // device further — the supervisor in the main app respawns us.
+        if self.gpu_lost.load(Ordering::Relaxed) {
+            debug::log_warn(&self.dir, "rigstats-wallpaper: gpu device error, closing");
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
+
         // Exit if the supervising main app has gone (covers the case where it was
         // killed without cleanly stopping us).
         #[cfg(windows)]
@@ -347,8 +363,10 @@ fn main() {
     };
 
     // `dir` is moved into the eframe closure (the host owns it); keep a copy for
-    // logging the run result after run_native returns.
+    // logging the run result after run_native returns, and an `Arc` copy for
+    // the GPU-loss guard's callbacks.
     let log_dir = dir.clone();
+    let dir_arc = Arc::new(dir.clone());
 
     let run_result = eframe::run_native(
         TITLE,
@@ -372,6 +390,16 @@ fn main() {
                 hb_ctx.request_repaint();
             });
 
+            let gpu_lost = Arc::new(AtomicBool::new(false));
+            if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+                install_gpu_loss_guard(
+                    render_state,
+                    cc.egui_ctx.clone(),
+                    dir_arc.clone(),
+                    gpu_lost.clone(),
+                );
+            }
+
             let host = WallpaperHost {
                 runtime: DashboardRuntime::new(&cc.egui_ctx, &s),
                 receiver: rx,
@@ -385,6 +413,7 @@ fn main() {
                 last_parent_check: Instant::now(),
                 last_fitted_height: None,
                 startup_fit_frames: 8,
+                gpu_lost,
             };
             Ok(Box::new(host))
         }),
