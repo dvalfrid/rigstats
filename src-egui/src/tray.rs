@@ -1,10 +1,11 @@
 //! System tray icon, menu, and tray-command channel, plus small panel-label
 //! helpers. Extracted from `main.rs`.
 
+use crate::menu_icons;
 use crate::theme;
 use eframe::egui;
 use tray_icon::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
+    menu::{IconMenuItem, Menu, PredefinedMenuItem},
     Icon, TrayIconBuilder,
 };
 
@@ -31,7 +32,7 @@ pub struct Tray {
     pub quit_id: tray_icon::menu::MenuId,
     pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
-    recording_item: tray_icon::menu::MenuItem,
+    recording_item: IconMenuItem,
 }
 
 fn load_tray_icon() -> Icon {
@@ -54,20 +55,32 @@ pub fn load_app_icon() -> egui::IconData {
 }
 
 pub fn build_tray(logging_enabled: bool) -> Tray {
-    let floating_item = MenuItem::new("Toggle Floating Mode", true, None);
+    let floating_item = IconMenuItem::new(
+        "Toggle Floating Mode",
+        true,
+        Some(menu_icons::floating()),
+        None,
+    );
     let recording_label = if logging_enabled {
         "Stop Recording"
     } else {
         "Start Recording"
     };
-    let recording_item = MenuItem::new(recording_label, true, None);
-    let settings_item = MenuItem::new("Settings", true, None);
-    let about_item = MenuItem::new("About", true, None);
-    let status_item = MenuItem::new("Status", true, None);
-    let history_item = MenuItem::new("Session History", true, None);
-    let updater_item = MenuItem::new("Check for Updates", true, None);
-    let docs_item = MenuItem::new("Help / Docs", true, None);
-    let quit_item = MenuItem::new("Quit", true, None);
+    let recording_icon = if logging_enabled {
+        menu_icons::record_dot(255)
+    } else {
+        menu_icons::record_start()
+    };
+    let recording_item = IconMenuItem::new(recording_label, true, Some(recording_icon), None);
+    let settings_item = IconMenuItem::new("Settings", true, Some(menu_icons::settings()), None);
+    let about_item = IconMenuItem::new("About", true, Some(menu_icons::about()), None);
+    let status_item = IconMenuItem::new("Status", true, Some(menu_icons::status()), None);
+    let history_item =
+        IconMenuItem::new("Session History", true, Some(menu_icons::history()), None);
+    let updater_item =
+        IconMenuItem::new("Check for Updates", true, Some(menu_icons::updater()), None);
+    let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
+    let quit_item = IconMenuItem::new("Quit", true, Some(menu_icons::quit()), None);
 
     let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
@@ -137,6 +150,11 @@ impl Tray {
             "Start Recording"
         };
         self.recording_item.set_text(label);
+        self.recording_item.set_icon(Some(if enabled {
+            menu_icons::record_dot(255)
+        } else {
+            menu_icons::record_start()
+        }));
         self.set_icon_variant(enabled);
         let tooltip = if enabled {
             "RIGStats \u{2014} Recording"
@@ -146,11 +164,17 @@ impl Tray {
         let _ = self.icon.set_tooltip(Some(tooltip));
     }
 
-    /// Swaps just the tray icon glyph between the plain and dot variants,
-    /// leaving the menu label and tooltip untouched — used to blink the
-    /// recording indicator while a session is active.
+    /// Swaps both the tray icon glyph and the recording menu row's icon
+    /// between bright/dim red — used to blink the recording indicator in
+    /// sync while a session is active.
     pub fn set_recording_blink(&self, dot_visible: bool) {
         self.set_icon_variant(dot_visible);
+        self.recording_item
+            .set_icon(Some(menu_icons::record_dot(if dot_visible {
+                255
+            } else {
+                90
+            })));
     }
 
     fn set_icon_variant(&self, dot: bool) {

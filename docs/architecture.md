@@ -111,7 +111,9 @@ rig-dashboard/
 │   │   ├── dashboard.rs    Shared DashboardView render core + PanelThresholds
 │   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
 │   │   ├── poll.rs         Poll thread, PollStats/DriveInfo/ProcessInfo data types
+│   │   ├── gpu_guard.rs    wgpu device-loss guard (uncaptured-error/device-lost callbacks)
 │   │   ├── tray.rs         System tray icon, menu, TrayCmd, panel-label helpers
+│   │   ├── menu_icons.rs   Procedurally-drawn tray context-menu glyph icons
 │   │   ├── theme.rs        AppTheme, colours, panel_frame(), dialog button API
 │   │   ├── brand.rs        Brand logo PNG loading
 │   │   ├── tempcolor.rs    temp_color() — value → green/yellow/red
@@ -179,7 +181,9 @@ rig-dashboard/
 | `dashboard.rs` | `DashboardRuntime` (owned telemetry→renderer glue: sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView` (borrowed per-frame render state + `draw_one_panel`/`render_landscape_grid`); `PanelThresholds` |
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping; pauses (releases the sensor pipe) when the main app is in wallpaper mode |
+| `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
+| `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
 | `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API, `apply_dashboard_fonts` |
 | `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |

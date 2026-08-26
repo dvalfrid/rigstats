@@ -9,6 +9,7 @@ pub mod dashboard;
 pub mod geometry;
 pub mod gpu_guard;
 pub mod lock_ext;
+pub mod menu_icons;
 pub mod panels;
 pub mod poll;
 pub mod ring;
