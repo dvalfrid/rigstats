@@ -13,7 +13,7 @@ use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
-use rigstats_egui::{panels, theme, update_check, windows, PollStats};
+use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
 use std::cell::RefCell;
@@ -200,6 +200,10 @@ struct RigStatsApp {
     /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
     /// this one. `0` for a normal (non-relaunch) start.
     gpu_retry_count: u32,
+    // ── Threshold alerts ─────────────────────────────────────────────────────
+    /// Last time a notification fired for a given `"<component>_<level>"` key,
+    /// e.g. `"cpu_warn"` — enforces `Settings.alert_cooldown_secs` per alert.
+    alert_cooldowns: HashMap<String, Instant>,
 }
 
 /// Per-panel state for throttling "always behind" Z-order enforcement.
@@ -337,6 +341,7 @@ impl RigStatsApp {
             gpu_relaunch_triggered: false,
             gpu_started_at,
             gpu_retry_count,
+            alert_cooldowns: HashMap::new(),
         }
     }
 
@@ -446,6 +451,64 @@ impl RigStatsApp {
     /// Explorer restart destroyed its WorkerW-child window). On leaving: kill the
     /// host, resume polling, and restore our window.
     #[cfg(windows)]
+    /// Checks the just-arrived `self.runtime.latest` sample against
+    /// `Settings.thresholds` and fires a Windows balloon-tip notification for
+    /// any newly-breached, not-yet-cooled-down component. Pure comparison
+    /// logic lives in `alerts::pending_alerts`; this just applies the
+    /// notify-on-warn/crit gates and the per-alert cooldown, and sends.
+    fn check_alerts(&mut self) {
+        let (notify_warn, notify_crit, cooldown_secs, settings) = {
+            let s = self.current_settings.lock_safe();
+            (
+                s.notify_on_warn,
+                s.notify_on_crit,
+                s.alert_cooldown_secs,
+                s.clone(),
+            )
+        };
+        if !notify_warn && !notify_crit {
+            return;
+        }
+        for alert in alerts::pending_alerts(&self.runtime.latest, &settings) {
+            let gated = match alert.level {
+                alerts::AlertLevel::Warn => !notify_warn,
+                alerts::AlertLevel::Crit => !notify_crit,
+            };
+            if gated {
+                continue;
+            }
+            let level_key = match alert.level {
+                alerts::AlertLevel::Warn => "warn",
+                alerts::AlertLevel::Crit => "crit",
+            };
+            let key = format!("{}_{level_key}", alert.component);
+            let due = self
+                .alert_cooldowns
+                .get(&key)
+                .map_or(true, |last| last.elapsed().as_secs() >= cooldown_secs);
+            if !due {
+                continue;
+            }
+            self.alert_cooldowns.insert(key, Instant::now());
+
+            let (title, icon) = match alert.level {
+                alerts::AlertLevel::Warn => {
+                    ("RIGStats — Warning", windows::settings::NotifyIcon::Warning)
+                }
+                alerts::AlertLevel::Crit => {
+                    ("RIGStats — Critical", windows::settings::NotifyIcon::Error)
+                }
+            };
+            let message = format!("{}: {:.0}", alert.label, alert.value);
+            // Fire on a background thread — the notification script blocks
+            // for several seconds (Start-Sleep before disposing the tray
+            // icon) and must never stall a UI frame.
+            std::thread::spawn(move || {
+                windows::settings::send_notification(title, &message, icon);
+            });
+        }
+    }
+
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
         let want = self.window_layer == "wallpaper" && !self.floating_mode;
         if want && !self.wallpaper_active {
@@ -741,7 +804,10 @@ impl eframe::App for RigStatsApp {
         }
 
         // Pull latest stats from poll thread; push to sparklines only on new data.
-        self.runtime.drain(&self.receiver);
+        let new_stats = self.runtime.drain(&self.receiver);
+        if new_stats {
+            self.check_alerts();
+        }
 
         // Apply settings saved from the settings window.
         if self.settings_reload.swap(false, Ordering::Relaxed) {

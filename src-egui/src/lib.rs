@@ -4,6 +4,7 @@
 //! WorkerW desktop-wallpaper host process) link against this crate so the
 //! panel rendering core lives in exactly one place. See `docs/architecture.md`.
 
+pub mod alerts;
 pub mod brand;
 pub mod dashboard;
 pub mod geometry;

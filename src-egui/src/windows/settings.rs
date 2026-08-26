@@ -1224,19 +1224,52 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
     });
 }
 
-fn send_test_notification() {
-    let script = concat!(
-        "Add-Type -AssemblyName System.Windows.Forms; ",
-        "$n = New-Object System.Windows.Forms.NotifyIcon; ",
-        "$n.Icon = [System.Drawing.SystemIcons]::Information; ",
-        "$n.Visible = $true; ",
-        "$n.ShowBalloonTip(3000,'RigStats','Test notification',[System.Windows.Forms.ToolTipIcon]::Info); ",
-        "Start-Sleep 4; $n.Dispose()"
+/// Severity of a [`send_notification`] balloon tip — controls both the tray
+/// glyph shown briefly while the balloon is up and the small icon inside it.
+#[derive(Clone, Copy)]
+pub enum NotifyIcon {
+    Info,
+    Warning,
+    Error,
+}
+
+/// Shows a real Windows balloon-tip notification via a hidden PowerShell
+/// `System.Windows.Forms.NotifyIcon` — the only notification mechanism this
+/// app uses; there is no toast/WinRT dependency. Blocks the calling thread
+/// for the duration of the balloon (script does `Start-Sleep` before
+/// disposing the icon), so callers outside a deliberate button click (which
+/// can tolerate a brief pause) should call this from a background thread.
+pub fn send_notification(title: &str, message: &str, icon: NotifyIcon) {
+    let icon_name = match icon {
+        NotifyIcon::Info => "Information",
+        NotifyIcon::Warning => "Warning",
+        NotifyIcon::Error => "Error",
+    };
+    let tooltip_icon = match icon {
+        NotifyIcon::Info => "Info",
+        NotifyIcon::Warning => "Warning",
+        NotifyIcon::Error => "Error",
+    };
+    // PowerShell single-quoted string escape: a literal `'` is written as `''`.
+    let esc = |s: &str| s.replace('\'', "''");
+    let script = format!(
+        "Add-Type -AssemblyName System.Windows.Forms; \
+         $n = New-Object System.Windows.Forms.NotifyIcon; \
+         $n.Icon = [System.Drawing.SystemIcons]::{icon_name}; \
+         $n.Visible = $true; \
+         $n.ShowBalloonTip(5000,'{}','{}',[System.Windows.Forms.ToolTipIcon]::{tooltip_icon}); \
+         Start-Sleep 6; $n.Dispose()",
+        esc(title),
+        esc(message),
     );
     let _ = debug::run_hidden_command(
         "powershell",
-        &["-NoProfile", "-NonInteractive", "-Command", script],
+        &["-NoProfile", "-NonInteractive", "-Command", &script],
     );
+}
+
+fn send_test_notification() {
+    send_notification("RigStats", "Test notification", NotifyIcon::Info);
 }
 
 // ── Appearance tab ────────────────────────────────────────────────────────────

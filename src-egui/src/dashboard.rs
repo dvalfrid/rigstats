@@ -360,14 +360,18 @@ impl DashboardRuntime {
     }
 
     /// Drain pending [`PollStats`] from `rx` into the sparklines and `latest`.
-    pub fn drain(&mut self, rx: &mpsc::Receiver<PollStats>) {
+    /// Returns `true` if at least one new sample arrived (`latest` changed).
+    pub fn drain(&mut self, rx: &mpsc::Receiver<PollStats>) -> bool {
+        let mut changed = false;
         while let Ok(stats) = rx.try_recv() {
             self.cpu_spark.push(stats.cpu_load as f32);
             self.gpu_spark.push(stats.gpu_load.unwrap_or(0.0) as f32);
             self.net_up_spark.push(stats.net_up_mbps as f32);
             self.net_dn_spark.push(stats.net_down_mbps as f32);
             self.latest = stats;
+            changed = true;
         }
+        changed
     }
 
     /// Apply a new settings snapshot. Returns `true` if `visible_panels`
