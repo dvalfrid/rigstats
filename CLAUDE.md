@@ -121,6 +121,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`menu_icons.rs`** — procedurally-rasterized glyph icons for each tray context-menu row (no external image assets)
 - **`lock_ext.rs`** — `LockSafe::lock_safe()`: poison-tolerant `Mutex` locking used throughout `windows/*.rs`
 - **`gpu_guard.rs`** — `install_gpu_loss_guard`: wgpu device-error/device-lost callbacks that flag a fatal GPU error instead of panicking
+- **`single_instance.rs`** — `ensure_single_instance`: named-mutex guard checked first thing in `main()`; if another instance is already running, focuses its window (`FindWindowW`/`SetForegroundWindow`) and this process exits instead of starting a second one
 - **`theme.rs`** — `AppTheme`, color helpers, `panel_frame()`, sparkline/bar helpers, `avail_color()`, dialog button API (`dialog_btn_primary`/`dialog_btn_secondary`)
 - **`ring.rs`** — ring gauge renderer; **`spark.rs`** — sparkline ring buffer; **`tempcolor.rs`** — `temp_color()` value→green/yellow/red
 - **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`

@@ -125,6 +125,7 @@ rig-dashboard/
 │   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
 │   │   ├── win32_wallpaper.rs  Progman/WorkerW discovery + SetParent reparenting
 │   │   ├── win32_behind.rs Always-Behind window layer: apply_behind/prepare_for_drag/keep_behind
+│   │   ├── single_instance.rs  Named-mutex + FindWindowW guard: focuses an already-running instance
 │   │   ├── panels/         One file per panel (cpu, gpu, ram, net, disk, …)
 │   │   └── windows/        Secondary windows (settings, about, status, updater, history)
 │   ├── assets/             Embedded PNGs (brand logos, tray icon)
@@ -193,6 +194,7 @@ rig-dashboard/
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
 | `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
+| `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `power`, `battery`, `clock`, `header` |
 | `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs` |
 

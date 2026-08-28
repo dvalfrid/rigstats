@@ -35,7 +35,7 @@ rfd = "0.15"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt"] }
+winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "errhandlingapi"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

@@ -14,6 +14,8 @@ pub mod menu_icons;
 pub mod panels;
 pub mod poll;
 pub mod ring;
+#[cfg(windows)]
+pub mod single_instance;
 pub mod spark;
 pub mod tempcolor;
 pub mod theme;

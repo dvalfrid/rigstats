@@ -2332,6 +2332,13 @@ impl RigStatsApp {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 fn main() {
+    // If another instance is already running, focus it and exit instead of
+    // starting a second one.
+    #[cfg(windows)]
+    if rigstats_egui::single_instance::ensure_single_instance() {
+        return;
+    }
+
     // Opt the process into dark mode for OS-drawn UI elements (tray context menu).
     #[cfg(windows)]
     win32_dark_mode::enable();
