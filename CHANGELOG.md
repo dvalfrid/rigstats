@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.38.1](https://github.com/dvalfrid/rigstats/compare/v1.38.0...v1.38.1) (2026-09-05)
+
+
+### Bug Fixes
+
+* **ci:** dispatch the Release workflow against main, not the release tag ([35bca25](https://github.com/dvalfrid/rigstats/commit/35bca2556123936be8665bce319871bcab4ec0c3))
+
 ## [1.38.0](https://github.com/dvalfrid/rigstats/compare/v1.37.0...v1.38.0) (2026-09-05)
 
 
