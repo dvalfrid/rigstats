@@ -8,6 +8,32 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.38.0](https://github.com/dvalfrid/rigstats/compare/v1.37.0...v1.38.0) (2026-09-05)
+
+
+### Features
+
+* **history:** add session recording and history viewer ([429f1b8](https://github.com/dvalfrid/rigstats/commit/429f1b8d6be4d766e8fba7b59bc4ca8b9639b701)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** put synced chart values on their own curves ([522a139](https://github.com/dvalfrid/rigstats/commit/522a139e67f079539114c7f711451125845230d4)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** whole-row click target and synced multi-chart hover values ([d78b45f](https://github.com/dvalfrid/rigstats/commit/d78b45f7448c8a3c7cc4c261affa6a6c6851e7df)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **startup:** prevent launching a second RIGStats instance ([f4c9d2b](https://github.com/dvalfrid/rigstats/commit/f4c9d2b407697b14d5ed108bf4fe76062ec6ad52)), closes [#180](https://github.com/dvalfrid/rigstats/issues/180)
+* **tray:** add procedurally-drawn icons to the tray menu rows ([26cae81](https://github.com/dvalfrid/rigstats/commit/26cae81fb8dd7117f91a461c46b9ce44012f64e9)), closes [#178](https://github.com/dvalfrid/rigstats/issues/178)
+* **tray:** blink the recording indicator instead of a static dot ([9362390](https://github.com/dvalfrid/rigstats/commit/9362390246f6a3fb5e4e0767967631f4f515d9fb)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+
+
+### Bug Fixes
+
+* **alerts:** fire threshold notifications automatically ([650229c](https://github.com/dvalfrid/rigstats/commit/650229c7f4e1adc85dd50023c0aad6acd04646df)), closes [#179](https://github.com/dvalfrid/rigstats/issues/179)
+* **ci:** add manual trigger to winget-submit as fallback for tag-ref reruns ([999ecc2](https://github.com/dvalfrid/rigstats/commit/999ecc2ba9e37089e2fb412d05abb070f706b429))
+* **gpu:** guard against fatal wgpu device errors instead of panicking ([47091fb](https://github.com/dvalfrid/rigstats/commit/47091fb090bcfb2d384bc8838d3ad5f71acc8aac)), closes [#176](https://github.com/dvalfrid/rigstats/issues/176)
+* **history:** harden session index against corruption and cross-process races ([3ee9186](https://github.com/dvalfrid/rigstats/commit/3ee91868c0e9bc6933e9bdb91b6a6acfde524090)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** log when a session's CSV file can't be opened ([150547f](https://github.com/dvalfrid/rigstats/commit/150547f848b9110b1823dca91f5215bd5c36931c)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** polish session list and detail UI ([640c87c](https://github.com/dvalfrid/rigstats/commit/640c87c25bf27a36ea4da56e1e55da8df04864db)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** refresh session list when recording starts or stops ([4401f47](https://github.com/dvalfrid/rigstats/commit/4401f47d617ca1bc5895e3b7ef6b8f6a01726ea2)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** satisfy newer clippy's unnecessary_sort_by lint ([fef9373](https://github.com/dvalfrid/rigstats/commit/fef937343cb9e6c8667b6dcdb609f3f4e750b016)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** stop chart y-axis from getting stuck out of range ([92c83e9](https://github.com/dvalfrid/rigstats/commit/92c83e9d19418cd695c9727e87eb3f90a6cb33c9)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+* **history:** suffix float literals CI's newer rustc now requires ([0d4a8ec](https://github.com/dvalfrid/rigstats/commit/0d4a8ec2a1a9967ddeeef45571ca673b8bebe021)), closes [#175](https://github.com/dvalfrid/rigstats/issues/175)
+
 ## [1.37.0](https://github.com/dvalfrid/rigstats/compare/v1.36.0...v1.37.0) (2026-08-21)
 
 
