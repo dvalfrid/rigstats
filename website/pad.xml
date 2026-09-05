@@ -25,7 +25,7 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.38.0</Program_Version>
+		<Program_Version>1.38.1</Program_Version>
 		<Program_Release_Month>09</Program_Release_Month>
 		<Program_Release_Day>05</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>history: add session recording and history viewer; history: put synced chart values on their own curves; history: whole-row click target and synced multi-chart hover values; startup: prevent launching a second RIGStats instance; tray: add procedurally-drawn icons to the tray menu rows; tray: blink the recording indicator instead of a static dot; alerts: fire threshold notifications automatically; ci: add manual trigger to winget-submit as fallback for tag-ref reruns; gpu: guard against fatal wgpu device errors instead of panicking; history: harden session index against corruption and cross-process races; history: log when a session's CSV file can't be opened; history: polish session list and detail UI; history: refresh session list when recording starts or stops; history: satisfy newer clippy's unnecessary_sort_by lint; history: stop chart y-axis from getting stuck out of range; history: suffix float literals CI's newer rustc now requires</Program_Change_Info>
+		<Program_Change_Info>ci: dispatch the Release workflow against main, not the release tag</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.38.0/RIGStats_1.38.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.38.1/RIGStats_1.38.1_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
