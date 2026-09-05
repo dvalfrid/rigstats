@@ -13,21 +13,21 @@ static LAST_LHM_OFFLINE_LOG_SECS: AtomicU64 = AtomicU64::new(0);
 /// Called each stats tick to log sidecar pipe connect/disconnect transitions.
 /// Throttles repeated "still offline" messages to once per 30 seconds.
 pub fn track_lhm_connection_state(dir: &Path, connected: bool) {
-  if connected {
-    if !LHM_WAS_CONNECTED.swap(true, Ordering::Relaxed) {
-      append_debug_log(dir, "sidecar pipe connection restored");
-    }
-  } else {
-    let was_connected = LHM_WAS_CONNECTED.swap(false, Ordering::Relaxed);
-    if was_connected {
-      log_warn(dir, "sidecar pipe connection lost");
-    }
+    if connected {
+        if !LHM_WAS_CONNECTED.swap(true, Ordering::Relaxed) {
+            append_debug_log(dir, "sidecar pipe connection restored");
+        }
+    } else {
+        let was_connected = LHM_WAS_CONNECTED.swap(false, Ordering::Relaxed);
+        if was_connected {
+            log_warn(dir, "sidecar pipe connection lost");
+        }
 
-    let now = unix_now_secs();
-    let last = LAST_LHM_OFFLINE_LOG_SECS.load(Ordering::Relaxed);
-    if now.saturating_sub(last) >= 30 {
-      LAST_LHM_OFFLINE_LOG_SECS.store(now, Ordering::Relaxed);
-      log_warn(dir, "sidecar pipe still offline");
+        let now = unix_now_secs();
+        let last = LAST_LHM_OFFLINE_LOG_SECS.load(Ordering::Relaxed);
+        if now.saturating_sub(last) >= 30 {
+            LAST_LHM_OFFLINE_LOG_SECS.store(now, Ordering::Relaxed);
+            log_warn(dir, "sidecar pipe still offline");
+        }
     }
-  }
 }

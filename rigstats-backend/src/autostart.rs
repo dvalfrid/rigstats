@@ -11,16 +11,17 @@
 
 use std::io;
 use winreg::{
-  enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE},
-  RegKey,
+    enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE},
+    RegKey,
 };
 
 const RUN_PATH: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-const APPROVED_PATH: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+const APPROVED_PATH: &str =
+    r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
 const VALUE_NAME: &str = "RigStats";
 
 fn hkcu() -> RegKey {
-  RegKey::predef(HKEY_CURRENT_USER)
+    RegKey::predef(HKEY_CURRENT_USER)
 }
 
 /// Returns `true` if `exe` sits under a cargo `target/debug` or `target/release`
@@ -31,18 +32,18 @@ fn hkcu() -> RegKey {
 /// enabled, so running the app from `cargo build` and saving settings must
 /// never point the real Run key at a `target\` exe.
 fn is_cargo_build_artifact(exe: &std::path::Path) -> bool {
-  let mut components = exe.components().peekable();
-  while let Some(c) = components.next() {
-    if c.as_os_str().eq_ignore_ascii_case("target") {
-      if let Some(next) = components.peek() {
-        let name = next.as_os_str();
-        if name.eq_ignore_ascii_case("debug") || name.eq_ignore_ascii_case("release") {
-          return true;
+    let mut components = exe.components().peekable();
+    while let Some(c) = components.next() {
+        if c.as_os_str().eq_ignore_ascii_case("target") {
+            if let Some(next) = components.peek() {
+                let name = next.as_os_str();
+                if name.eq_ignore_ascii_case("debug") || name.eq_ignore_ascii_case("release") {
+                    return true;
+                }
+            }
         }
-      }
     }
-  }
-  false
+    false
 }
 
 /// Adds (or updates) the autostart registry value pointing at the current exe,
@@ -51,25 +52,24 @@ fn is_cargo_build_artifact(exe: &std::path::Path) -> bool {
 /// No-ops (returns `Ok`) when running from a local cargo build — see
 /// [`is_cargo_build_artifact`].
 pub fn register_autostart() -> Result<(), String> {
-  let exe = std::env::current_exe().map_err(|e| format!("Cannot resolve exe path: {e}"))?;
-  if is_cargo_build_artifact(&exe) {
-    return Ok(());
-  }
-  let value = format!("\"{}\"", exe.to_string_lossy());
+    let exe = std::env::current_exe().map_err(|e| format!("Cannot resolve exe path: {e}"))?;
+    if is_cargo_build_artifact(&exe) {
+        return Ok(());
+    }
+    let value = format!("\"{}\"", exe.to_string_lossy());
 
-  let run = hkcu()
-    .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
-    .map_err(|e| format!("Cannot open Run key for writing: {e}"))?;
-  run
-    .set_value(VALUE_NAME, &value)
-    .map_err(|e| format!("Cannot write Run value: {e}"))?;
+    let run = hkcu()
+        .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
+        .map_err(|e| format!("Cannot open Run key for writing: {e}"))?;
+    run.set_value(VALUE_NAME, &value)
+        .map_err(|e| format!("Cannot write Run value: {e}"))?;
 
-  // Remove StartupApproved entry — absence means "enabled" to Windows.
-  if let Ok(approved) = hkcu().open_subkey_with_flags(APPROVED_PATH, KEY_WRITE) {
-    let _ = approved.delete_value(VALUE_NAME); // ignore "not found"
-  }
+    // Remove StartupApproved entry — absence means "enabled" to Windows.
+    if let Ok(approved) = hkcu().open_subkey_with_flags(APPROVED_PATH, KEY_WRITE) {
+        let _ = approved.delete_value(VALUE_NAME); // ignore "not found"
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Removes the autostart registry value and any StartupApproved entry.
@@ -78,37 +78,37 @@ pub fn register_autostart() -> Result<(), String> {
 /// No-ops (returns `Ok`) when running from a local cargo build — see
 /// [`is_cargo_build_artifact`].
 pub fn unregister_autostart() -> Result<(), String> {
-  if std::env::current_exe().is_ok_and(|e| is_cargo_build_artifact(&e)) {
-    return Ok(());
-  }
+    if std::env::current_exe().is_ok_and(|e| is_cargo_build_artifact(&e)) {
+        return Ok(());
+    }
 
-  let run = hkcu()
-    .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
-    .map_err(|e| format!("Cannot open Run key for writing: {e}"))?;
+    let run = hkcu()
+        .open_subkey_with_flags(RUN_PATH, KEY_WRITE)
+        .map_err(|e| format!("Cannot open Run key for writing: {e}"))?;
 
-  match run.delete_value(VALUE_NAME) {
-    Ok(()) => {}
-    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-    Err(e) => return Err(format!("Cannot delete Run value: {e}")),
-  }
+    match run.delete_value(VALUE_NAME) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("Cannot delete Run value: {e}")),
+    }
 
-  // Clean up StartupApproved (best-effort).
-  if let Ok(approved) = hkcu().open_subkey_with_flags(APPROVED_PATH, KEY_WRITE) {
-    let _ = approved.delete_value(VALUE_NAME);
-  }
+    // Clean up StartupApproved (best-effort).
+    if let Ok(approved) = hkcu().open_subkey_with_flags(APPROVED_PATH, KEY_WRITE) {
+        let _ = approved.delete_value(VALUE_NAME);
+    }
 
-  Ok(())
+    Ok(())
 }
 
 /// Returns `true` if the Run key value exists, regardless of StartupApproved.
 /// Used at startup to decide whether to re-register a missing entry, without
 /// overriding a Windows Settings > Startup disable.
 pub fn is_run_key_present() -> bool {
-  hkcu()
-    .open_subkey_with_flags(RUN_PATH, KEY_READ)
-    .ok()
-    .and_then(|key| key.get_value::<String, _>(VALUE_NAME).ok())
-    .is_some()
+    hkcu()
+        .open_subkey_with_flags(RUN_PATH, KEY_READ)
+        .ok()
+        .and_then(|key| key.get_value::<String, _>(VALUE_NAME).ok())
+        .is_some()
 }
 
 /// Returns `true` only if the autostart entry exists **and** has not been
@@ -120,54 +120,62 @@ pub fn is_run_key_present() -> bool {
 /// The `debug_log` callback receives diagnostic lines so callers can write
 /// them to the application log without this module depending on AppHandle.
 pub fn is_autostart_registered_with_log(mut debug_log: impl FnMut(&str)) -> bool {
-  let hkcu = hkcu();
+    let hkcu = hkcu();
 
-  // 1. The Run value must exist.
-  let run_present = hkcu
-    .open_subkey_with_flags(RUN_PATH, KEY_READ)
-    .ok()
-    .and_then(|key| key.get_value::<String, _>(VALUE_NAME).ok())
-    .is_some();
+    // 1. The Run value must exist.
+    let run_present = hkcu
+        .open_subkey_with_flags(RUN_PATH, KEY_READ)
+        .ok()
+        .and_then(|key| key.get_value::<String, _>(VALUE_NAME).ok())
+        .is_some();
 
-  debug_log(&format!("autostart: Run key present = {run_present}"));
-  if !run_present {
-    return false;
-  }
+    debug_log(&format!("autostart: Run key present = {run_present}"));
+    if !run_present {
+        return false;
+    }
 
-  // 2. Check StartupApproved — first byte 0x03 means Windows has disabled it.
-  match hkcu.open_subkey_with_flags(APPROVED_PATH, KEY_READ) {
-    Err(_) => debug_log("autostart: StartupApproved key absent (= enabled)"),
-    Ok(approved) => match approved.get_raw_value(VALUE_NAME) {
-      Err(_) => debug_log("autostart: StartupApproved entry absent (= enabled)"),
-      Ok(raw) => {
-        let first = raw.bytes.first().copied().unwrap_or(0x02);
-        debug_log(&format!("autostart: StartupApproved first byte = 0x{first:02x}"));
-        // 0x02 = explicitly enabled; absent = default enabled.
-        // Any other byte (0x00, 0x01, 0x03, …) is some form of disabled.
-        if first != 0x02 {
-          debug_log("autostart: disabled via Windows Settings");
-          return false;
-        }
-      }
-    },
-  }
+    // 2. Check StartupApproved — first byte 0x03 means Windows has disabled it.
+    match hkcu.open_subkey_with_flags(APPROVED_PATH, KEY_READ) {
+        Err(_) => debug_log("autostart: StartupApproved key absent (= enabled)"),
+        Ok(approved) => match approved.get_raw_value(VALUE_NAME) {
+            Err(_) => debug_log("autostart: StartupApproved entry absent (= enabled)"),
+            Ok(raw) => {
+                let first = raw.bytes.first().copied().unwrap_or(0x02);
+                debug_log(&format!(
+                    "autostart: StartupApproved first byte = 0x{first:02x}"
+                ));
+                // 0x02 = explicitly enabled; absent = default enabled.
+                // Any other byte (0x00, 0x01, 0x03, …) is some form of disabled.
+                if first != 0x02 {
+                    debug_log("autostart: disabled via Windows Settings");
+                    return false;
+                }
+            }
+        },
+    }
 
-  true
+    true
 }
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  use std::path::PathBuf;
+    use super::*;
+    use std::path::PathBuf;
 
-  #[test]
-  fn detects_debug_and_release_build_artifacts() {
-    assert!(is_cargo_build_artifact(&PathBuf::from(r"C:\repo\target\debug\rigstats.exe")));
-    assert!(is_cargo_build_artifact(&PathBuf::from(r"C:\repo\target\release\rigstats.exe")));
-  }
+    #[test]
+    fn detects_debug_and_release_build_artifacts() {
+        assert!(is_cargo_build_artifact(&PathBuf::from(
+            r"C:\repo\target\debug\rigstats.exe"
+        )));
+        assert!(is_cargo_build_artifact(&PathBuf::from(
+            r"C:\repo\target\release\rigstats.exe"
+        )));
+    }
 
-  #[test]
-  fn does_not_flag_installed_exe() {
-    assert!(!is_cargo_build_artifact(&PathBuf::from(r"C:\Program Files\RIGStats\rigstats.exe")));
-  }
+    #[test]
+    fn does_not_flag_installed_exe() {
+        assert!(!is_cargo_build_artifact(&PathBuf::from(
+            r"C:\Program Files\RIGStats\rigstats.exe"
+        )));
+    }
 }

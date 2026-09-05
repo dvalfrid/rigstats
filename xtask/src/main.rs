@@ -79,24 +79,29 @@ fn task_test() -> Result<(), String> {
 }
 
 fn task_clippy() -> Result<(), String> {
-    run(Command::new("cargo").args([
-        "clippy",
-        "--manifest-path",
-        "src-egui/Cargo.toml",
-        "--",
-        "-D",
-        "warnings",
-    ]))?;
+    for manifest in ["rigstats-backend/Cargo.toml", "src-egui/Cargo.toml"] {
+        run(Command::new("cargo").args([
+            "clippy",
+            "--manifest-path",
+            manifest,
+            "--",
+            "-D",
+            "warnings",
+        ]))?;
+    }
     Ok(())
 }
 
 fn task_fmt(check: bool) -> Result<(), String> {
-    let mut cmd = Command::new("cargo");
-    cmd.args(["fmt", "--manifest-path", "src-egui/Cargo.toml"]);
-    if check {
-        cmd.args(["--", "--check"]);
+    for manifest in ["rigstats-backend/Cargo.toml", "src-egui/Cargo.toml"] {
+        let mut cmd = Command::new("cargo");
+        cmd.args(["fmt", "--manifest-path", manifest]);
+        if check {
+            cmd.args(["--", "--check"]);
+        }
+        run(&mut cmd)?;
     }
-    run(&mut cmd)
+    Ok(())
 }
 
 fn task_setup() -> Result<(), String> {
@@ -158,23 +163,10 @@ fn task_verify() -> Result<(), String> {
     run(Command::new("cargo").args(["test", "--manifest-path", "src-egui/Cargo.toml"]))?;
 
     println!("── clippy ──────────────────────────────────────────────────────");
-    run(Command::new("cargo").args([
-        "clippy",
-        "--manifest-path",
-        "src-egui/Cargo.toml",
-        "--",
-        "-D",
-        "warnings",
-    ]))?;
+    task_clippy()?;
 
     println!("── fmt check ───────────────────────────────────────────────────");
-    run(Command::new("cargo").args([
-        "fmt",
-        "--manifest-path",
-        "src-egui/Cargo.toml",
-        "--",
-        "--check",
-    ]))?;
+    task_fmt(true)?;
 
     println!("── winget dependencies ─────────────────────────────────────────");
     check_winget_dependencies()?;

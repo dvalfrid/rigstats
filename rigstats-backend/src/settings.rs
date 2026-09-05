@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PanelLayout {
-  pub x: i32,
-  pub y: i32,
+    pub x: i32,
+    pub y: i32,
 }
 
 // --- Component thresholds --------------------------------------------------
@@ -24,61 +24,61 @@ pub struct PanelLayout {
 /// - Battery: fires when charge % **drops below** the threshold (warn > crit).
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ComponentThresholds {
-  pub warn: Option<u8>,
-  pub crit: Option<u8>,
+    pub warn: Option<u8>,
+    pub crit: Option<u8>,
 }
 
 /// Default threshold map applied on fresh installs and as migration fallback.
 pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
-  [
-    (
-      "cpu",
-      ComponentThresholds {
-        warn: Some(80),
-        crit: Some(90),
-      },
-    ),
-    (
-      "gpu",
-      ComponentThresholds {
-        warn: Some(80),
-        crit: Some(90),
-      },
-    ),
-    (
-      "ram",
-      ComponentThresholds {
-        warn: Some(50),
-        crit: Some(65),
-      },
-    ),
-    (
-      "disk",
-      ComponentThresholds {
-        warn: Some(55),
-        crit: Some(70),
-      },
-    ),
-    (
-      // Battery charge: fires when % drops BELOW threshold (warn > crit).
-      "battery",
-      ComponentThresholds {
-        warn: Some(20),
-        crit: Some(10),
-      },
-    ),
-    (
-      // Battery power draw: fires when watts exceed threshold (warn < crit).
-      "battery_power",
-      ComponentThresholds {
-        warn: Some(15),
-        crit: Some(25),
-      },
-    ),
-  ]
-  .into_iter()
-  .map(|(k, v)| (k.to_string(), v))
-  .collect()
+    [
+        (
+            "cpu",
+            ComponentThresholds {
+                warn: Some(80),
+                crit: Some(90),
+            },
+        ),
+        (
+            "gpu",
+            ComponentThresholds {
+                warn: Some(80),
+                crit: Some(90),
+            },
+        ),
+        (
+            "ram",
+            ComponentThresholds {
+                warn: Some(50),
+                crit: Some(65),
+            },
+        ),
+        (
+            "disk",
+            ComponentThresholds {
+                warn: Some(55),
+                crit: Some(70),
+            },
+        ),
+        (
+            // Battery charge: fires when % drops BELOW threshold (warn > crit).
+            "battery",
+            ComponentThresholds {
+                warn: Some(20),
+                crit: Some(10),
+            },
+        ),
+        (
+            // Battery power draw: fires when watts exceed threshold (warn < crit).
+            "battery_power",
+            ComponentThresholds {
+                warn: Some(15),
+                crit: Some(25),
+            },
+        ),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect()
 }
 
 // --- Settings struct -------------------------------------------------------
@@ -86,263 +86,266 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
-  /// Panel alpha in the range [0.0, 1.0].
-  #[serde(default = "default_opacity")]
-  pub opacity: f64,
-  /// Active colour theme key (e.g. `"dark-cyan"`).
-  #[serde(default = "default_theme")]
-  pub theme: String,
-  /// User-defined model label shown in the header panel.
-  #[serde(default = "default_model_name")]
-  pub model_name: String,
-  /// Active dashboard size profile.
-  #[serde(default = "default_dashboard_profile")]
-  pub dashboard_profile: String,
-  /// Keep the dashboard window above other windows.
-  #[serde(default)]
-  pub always_on_top: bool,
-  /// Ordered list of visible dashboard panels.
-  #[serde(default = "default_visible_panels")]
-  pub visible_panels: Vec<String>,
-  /// Launch the dashboard automatically when the user logs in.
-  #[serde(default)]
-  pub autostart_enabled: bool,
-  /// Version seen on last launch, used to detect first run after an update.
-  #[serde(default)]
-  pub last_seen_version: String,
-  /// Per-component temperature alert thresholds.
-  /// Keys: "cpu", "gpu", "ram", "disk" (and any future components).
-  #[serde(default)]
-  pub thresholds: HashMap<String, ComponentThresholds>,
-  /// Minimum seconds between repeated notifications for the same component+level.
-  /// Floored at 60 s on save to prevent notification spam.
-  #[serde(default = "default_alert_cooldown_secs")]
-  pub alert_cooldown_secs: u64,
-  /// Whether to send notifications when a WARNING threshold is crossed.
-  #[serde(default = "default_true")]
-  pub notify_on_warn: bool,
-  /// Whether to send notifications when a CRITICAL threshold is crossed.
-  #[serde(default = "default_true")]
-  pub notify_on_crit: bool,
-  /// Open each visible panel as its own frameless window instead of one portrait window.
-  #[serde(default)]
-  pub floating_mode: bool,
-  /// Scale factor for floating panel windows in the range [0.4, 1.0].
-  #[serde(default = "default_floating_panel_scale")]
-  pub floating_panel_scale: f64,
-  /// Last known screen position for each floating panel, keyed by panel key.
-  #[serde(default)]
-  pub panel_layouts: HashMap<String, PanelLayout>,
-  /// Schema version used to detect and apply one-time migrations.
-  /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
-  #[serde(default)]
-  pub settings_version: u8,
-  /// User's preferred GPU device name for stable display when multiple GPUs are available.
-  /// If set and the GPU exists, that GPU will be displayed. Otherwise, auto-selection by load is used.
-  #[serde(default)]
-  pub preferred_gpu: Option<String>,
-  /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), `"behind"`
-  /// (HWND_BOTTOM), or `"wallpaper"` (reparented into the desktop WorkerW layer
-  /// via the `rigstats-wallpaper` host process — survives Win+D).
-  #[serde(default = "default_window_layer")]
-  pub window_layer: String,
-  /// When true, floating panel windows cannot be moved by dragging.
-  #[serde(default)]
-  pub floating_panels_locked: bool,
-  /// Number of days to retain finished, unpinned recording sessions before automatic pruning.
-  #[serde(default = "default_log_retention_days")]
-  pub log_retention_days: u32,
-  /// Fill the whole monitor in non-floating mode; panels keep their size, the
-  /// dashboard background fills the rest.
-  #[serde(default)]
-  pub fullscreen_mode: bool,
-  /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
-  #[serde(default = "default_fullscreen_align")]
-  pub fullscreen_align: String,
-  /// When true, the non-floating (landscape/portrait) dashboard window is pinned:
-  /// it cannot be dragged and its position is restored from `pinned_positions`
-  /// across restarts instead of auto-targeting the matching monitor.
-  #[serde(default)]
-  pub dashboard_pinned: bool,
-  /// Pinned window position `[x, y]` for the non-floating dashboard, keyed by
-  /// dashboard profile (positions differ per profile/monitor).
-  #[serde(default)]
-  pub pinned_positions: HashMap<String, [i32; 2]>,
-  /// Screen position `[x, y]` for the wallpaper-mode host window. Captured from
-  /// the main window when switching into wallpaper mode (so the user positions it
-  /// in a normal layer, then switches), and used by the `rigstats-wallpaper` host
-  /// instead of centring on the monitor. `None` until first set.
-  #[serde(default)]
-  pub wallpaper_position: Option<[i32; 2]>,
-  /// User-specified PSU rated wattage for the System Power panel bar scale.
-  /// `None` = automatic reference (500 W desktop / 120 W laptop).
-  #[serde(default)]
-  pub psu_watts: Option<u16>,
+    /// Panel alpha in the range [0.0, 1.0].
+    #[serde(default = "default_opacity")]
+    pub opacity: f64,
+    /// Active colour theme key (e.g. `"dark-cyan"`).
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    /// User-defined model label shown in the header panel.
+    #[serde(default = "default_model_name")]
+    pub model_name: String,
+    /// Active dashboard size profile.
+    #[serde(default = "default_dashboard_profile")]
+    pub dashboard_profile: String,
+    /// Keep the dashboard window above other windows.
+    #[serde(default)]
+    pub always_on_top: bool,
+    /// Ordered list of visible dashboard panels.
+    #[serde(default = "default_visible_panels")]
+    pub visible_panels: Vec<String>,
+    /// Launch the dashboard automatically when the user logs in.
+    #[serde(default)]
+    pub autostart_enabled: bool,
+    /// Version seen on last launch, used to detect first run after an update.
+    #[serde(default)]
+    pub last_seen_version: String,
+    /// Per-component temperature alert thresholds.
+    /// Keys: "cpu", "gpu", "ram", "disk" (and any future components).
+    #[serde(default)]
+    pub thresholds: HashMap<String, ComponentThresholds>,
+    /// Minimum seconds between repeated notifications for the same component+level.
+    /// Floored at 60 s on save to prevent notification spam.
+    #[serde(default = "default_alert_cooldown_secs")]
+    pub alert_cooldown_secs: u64,
+    /// Whether to send notifications when a WARNING threshold is crossed.
+    #[serde(default = "default_true")]
+    pub notify_on_warn: bool,
+    /// Whether to send notifications when a CRITICAL threshold is crossed.
+    #[serde(default = "default_true")]
+    pub notify_on_crit: bool,
+    /// Open each visible panel as its own frameless window instead of one portrait window.
+    #[serde(default)]
+    pub floating_mode: bool,
+    /// Scale factor for floating panel windows in the range [0.4, 1.0].
+    #[serde(default = "default_floating_panel_scale")]
+    pub floating_panel_scale: f64,
+    /// Last known screen position for each floating panel, keyed by panel key.
+    #[serde(default)]
+    pub panel_layouts: HashMap<String, PanelLayout>,
+    /// Schema version used to detect and apply one-time migrations.
+    /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
+    #[serde(default)]
+    pub settings_version: u8,
+    /// User's preferred GPU device name for stable display when multiple GPUs are available.
+    /// If set and the GPU exists, that GPU will be displayed. Otherwise, auto-selection by load is used.
+    #[serde(default)]
+    pub preferred_gpu: Option<String>,
+    /// Window z-layer mode: `"normal"`, `"on_top"` (always on top), `"behind"`
+    /// (HWND_BOTTOM), or `"wallpaper"` (reparented into the desktop WorkerW layer
+    /// via the `rigstats-wallpaper` host process — survives Win+D).
+    #[serde(default = "default_window_layer")]
+    pub window_layer: String,
+    /// When true, floating panel windows cannot be moved by dragging.
+    #[serde(default)]
+    pub floating_panels_locked: bool,
+    /// Number of days to retain finished, unpinned recording sessions before automatic pruning.
+    #[serde(default = "default_log_retention_days")]
+    pub log_retention_days: u32,
+    /// Fill the whole monitor in non-floating mode; panels keep their size, the
+    /// dashboard background fills the rest.
+    #[serde(default)]
+    pub fullscreen_mode: bool,
+    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
+    #[serde(default = "default_fullscreen_align")]
+    pub fullscreen_align: String,
+    /// When true, the non-floating (landscape/portrait) dashboard window is pinned:
+    /// it cannot be dragged and its position is restored from `pinned_positions`
+    /// across restarts instead of auto-targeting the matching monitor.
+    #[serde(default)]
+    pub dashboard_pinned: bool,
+    /// Pinned window position `[x, y]` for the non-floating dashboard, keyed by
+    /// dashboard profile (positions differ per profile/monitor).
+    #[serde(default)]
+    pub pinned_positions: HashMap<String, [i32; 2]>,
+    /// Screen position `[x, y]` for the wallpaper-mode host window. Captured from
+    /// the main window when switching into wallpaper mode (so the user positions it
+    /// in a normal layer, then switches), and used by the `rigstats-wallpaper` host
+    /// instead of centring on the monitor. `None` until first set.
+    #[serde(default)]
+    pub wallpaper_position: Option<[i32; 2]>,
+    /// User-specified PSU rated wattage for the System Power panel bar scale.
+    /// `None` = automatic reference (500 W desktop / 120 W laptop).
+    #[serde(default)]
+    pub psu_watts: Option<u16>,
 
-  // ---- Legacy migration shims (schema version 0) --------------------------
-  // These fields existed in older settings files as eight flat values.
-  // They are read from disk but never written back (`skip_serializing`).
-  // `load_settings` copies them into `thresholds` exactly once, then bumps
-  // `settings_version` to 1 so the migration never re-runs.
-  #[serde(default, skip_serializing)]
-  warning_cpu_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  critical_cpu_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  warning_gpu_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  critical_gpu_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  warning_ram_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  critical_ram_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  warning_disk_temp: Option<u8>,
-  #[serde(default, skip_serializing)]
-  critical_disk_temp: Option<u8>,
+    // ---- Legacy migration shims (schema version 0) --------------------------
+    // These fields existed in older settings files as eight flat values.
+    // They are read from disk but never written back (`skip_serializing`).
+    // `load_settings` copies them into `thresholds` exactly once, then bumps
+    // `settings_version` to 1 so the migration never re-runs.
+    #[serde(default, skip_serializing)]
+    warning_cpu_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    critical_cpu_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    warning_gpu_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    critical_gpu_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    warning_ram_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    critical_ram_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    warning_disk_temp: Option<u8>,
+    #[serde(default, skip_serializing)]
+    critical_disk_temp: Option<u8>,
 }
 
 fn default_alert_cooldown_secs() -> u64 {
-  60
+    60
 }
 
 fn default_true() -> bool {
-  true
+    true
 }
 
 fn default_floating_panel_scale() -> f64 {
-  1.0
+    1.0
 }
 
 fn default_theme() -> String {
-  "dark-cyan".to_string()
+    "dark-cyan".to_string()
 }
 
 fn default_log_retention_days() -> u32 {
-  7
+    7
 }
 
 fn default_window_layer() -> String {
-  "normal".to_string()
+    "normal".to_string()
 }
 
 fn default_fullscreen_align() -> String {
-  "center".to_string()
+    "center".to_string()
 }
 
 fn default_opacity() -> f64 {
-  0.55
+    0.55
 }
 
 fn default_model_name() -> String {
-  String::new()
+    String::new()
 }
 
 fn default_dashboard_profile() -> String {
-  "portrait-xl".to_string()
+    "portrait-xl".to_string()
 }
 
 fn default_visible_panels() -> Vec<String> {
-  vec![
-    "header".to_string(),
-    "clock".to_string(),
-    "cpu".to_string(),
-    "gpu".to_string(),
-    "ram".to_string(),
-    "net".to_string(),
-    "disk".to_string(),
-  ]
+    vec![
+        "header".to_string(),
+        "clock".to_string(),
+        "cpu".to_string(),
+        "gpu".to_string(),
+        "ram".to_string(),
+        "net".to_string(),
+        "disk".to_string(),
+    ]
 }
 
 impl Default for Settings {
-  fn default() -> Self {
-    Self {
-      opacity: default_opacity(),
-      theme: default_theme(),
-      model_name: default_model_name(),
-      dashboard_profile: default_dashboard_profile(),
-      always_on_top: false,
-      visible_panels: default_visible_panels(),
-      autostart_enabled: false,
-      last_seen_version: String::new(),
-      thresholds: default_thresholds(),
-      alert_cooldown_secs: default_alert_cooldown_secs(),
-      notify_on_warn: true,
-      notify_on_crit: true,
-      floating_mode: false,
-      floating_panel_scale: default_floating_panel_scale(),
-      panel_layouts: HashMap::new(),
-      settings_version: 1, // New installs start at current version — no migration needed.
-      preferred_gpu: None,
-      window_layer: default_window_layer(),
-      floating_panels_locked: false,
-      log_retention_days: default_log_retention_days(),
-      fullscreen_mode: false,
-      fullscreen_align: default_fullscreen_align(),
-      dashboard_pinned: false,
-      pinned_positions: HashMap::new(),
-      wallpaper_position: None,
-      psu_watts: None,
-      warning_cpu_temp: None,
-      critical_cpu_temp: None,
-      warning_gpu_temp: None,
-      critical_gpu_temp: None,
-      warning_ram_temp: None,
-      critical_ram_temp: None,
-      warning_disk_temp: None,
-      critical_disk_temp: None,
+    fn default() -> Self {
+        Self {
+            opacity: default_opacity(),
+            theme: default_theme(),
+            model_name: default_model_name(),
+            dashboard_profile: default_dashboard_profile(),
+            always_on_top: false,
+            visible_panels: default_visible_panels(),
+            autostart_enabled: false,
+            last_seen_version: String::new(),
+            thresholds: default_thresholds(),
+            alert_cooldown_secs: default_alert_cooldown_secs(),
+            notify_on_warn: true,
+            notify_on_crit: true,
+            floating_mode: false,
+            floating_panel_scale: default_floating_panel_scale(),
+            panel_layouts: HashMap::new(),
+            settings_version: 1, // New installs start at current version — no migration needed.
+            preferred_gpu: None,
+            window_layer: default_window_layer(),
+            floating_panels_locked: false,
+            log_retention_days: default_log_retention_days(),
+            fullscreen_mode: false,
+            fullscreen_align: default_fullscreen_align(),
+            dashboard_pinned: false,
+            pinned_positions: HashMap::new(),
+            wallpaper_position: None,
+            psu_watts: None,
+            warning_cpu_temp: None,
+            critical_cpu_temp: None,
+            warning_gpu_temp: None,
+            critical_gpu_temp: None,
+            warning_ram_temp: None,
+            critical_ram_temp: None,
+            warning_disk_temp: None,
+            critical_disk_temp: None,
+        }
     }
-  }
 }
 
 // --- File I/O --------------------------------------------------------------
 
 pub fn settings_path(dir: &Path) -> PathBuf {
-  dir.join("rigstats-settings.json")
+    dir.join("rigstats-settings.json")
 }
 
 pub fn load_settings(dir: &Path) -> Settings {
-  // On parse/read failure, return defaults to keep startup robust.
-  let path = settings_path(dir);
-  let mut settings = match fs::read_to_string(&path) {
-    Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
-      Ok(s) => s,
-      Err(e) => {
-        crate::debug::log_error(dir, &format!("settings: parse error — {e}, using defaults"));
-        Settings::default()
-      }
-    },
-    Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
-    Err(e) => {
-      crate::debug::log_error(dir, &format!("settings: read error — {e}, using defaults"));
-      Settings::default()
+    // On parse/read failure, return defaults to keep startup robust.
+    let path = settings_path(dir);
+    let mut settings = match fs::read_to_string(&path) {
+        Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
+            Ok(s) => s,
+            Err(e) => {
+                crate::debug::log_error(
+                    dir,
+                    &format!("settings: parse error — {e}, using defaults"),
+                );
+                Settings::default()
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
+        Err(e) => {
+            crate::debug::log_error(dir, &format!("settings: read error — {e}, using defaults"));
+            Settings::default()
+        }
+    };
+
+    // Migrate always_on_top bool → window_layer string (pre-1.24 settings files).
+    // window_layer defaults to "normal", so if an old file had always_on_top: true
+    // and no window_layer field, we promote it to "on_top" here.
+    if settings.window_layer == default_window_layer() && settings.always_on_top {
+        settings.window_layer = "on_top".to_string();
     }
-  };
+    // Keep always_on_top in sync so main.rs startup reads the right value.
+    settings.always_on_top = settings.window_layer == "on_top";
 
-  // Migrate always_on_top bool → window_layer string (pre-1.24 settings files).
-  // window_layer defaults to "normal", so if an old file had always_on_top: true
-  // and no window_layer field, we promote it to "on_top" here.
-  if settings.window_layer == default_window_layer() && settings.always_on_top {
-    settings.window_layer = "on_top".to_string();
-  }
-  // Keep always_on_top in sync so main.rs startup reads the right value.
-  settings.always_on_top = settings.window_layer == "on_top";
-
-  // One-time migration from schema version 0 (flat threshold fields) to
-  // version 1 (thresholds map). Runs once, then persists the new format.
-  if settings.settings_version == 0 {
-    migrate_v0_thresholds(&mut settings);
-    settings.settings_version = 1;
-    // Persist immediately so the migration is not repeated on the next launch.
-    // Failures are non-fatal: the migrated settings are held in memory and
-    // will be written again the next time the user saves settings — but log it
-    // so a recurring migration (e.g. a read-only appdata dir) is diagnosable.
-    if let Err(e) = persist_settings(dir, &settings) {
-      crate::debug::log_error(dir, &format!("settings: migration persist failed — {e}"));
+    // One-time migration from schema version 0 (flat threshold fields) to
+    // version 1 (thresholds map). Runs once, then persists the new format.
+    if settings.settings_version == 0 {
+        migrate_v0_thresholds(&mut settings);
+        settings.settings_version = 1;
+        // Persist immediately so the migration is not repeated on the next launch.
+        // Failures are non-fatal: the migrated settings are held in memory and
+        // will be written again the next time the user saves settings — but log it
+        // so a recurring migration (e.g. a read-only appdata dir) is diagnosable.
+        if let Err(e) = persist_settings(dir, &settings) {
+            crate::debug::log_error(dir, &format!("settings: migration persist failed — {e}"));
+        }
     }
-  }
 
-  settings
+    settings
 }
 
 /// Copies schema-version-0 flat threshold fields into the `thresholds` map.
@@ -352,20 +355,23 @@ pub fn load_settings(dir: &Path) -> Settings {
 /// default thresholds are applied so the dashboard starts with sensible alert
 /// levels rather than all alerts silently disabled.
 fn migrate_v0_thresholds(s: &mut Settings) {
-  let candidates = [
-    ("cpu", s.warning_cpu_temp, s.critical_cpu_temp),
-    ("gpu", s.warning_gpu_temp, s.critical_gpu_temp),
-    ("ram", s.warning_ram_temp, s.critical_ram_temp),
-    ("disk", s.warning_disk_temp, s.critical_disk_temp),
-  ];
-  let any_configured = candidates.iter().any(|(_, w, c)| w.is_some() || c.is_some());
-  if any_configured {
-    for (key, warn, crit) in candidates {
-      s.thresholds.insert(key.to_string(), ComponentThresholds { warn, crit });
+    let candidates = [
+        ("cpu", s.warning_cpu_temp, s.critical_cpu_temp),
+        ("gpu", s.warning_gpu_temp, s.critical_gpu_temp),
+        ("ram", s.warning_ram_temp, s.critical_ram_temp),
+        ("disk", s.warning_disk_temp, s.critical_disk_temp),
+    ];
+    let any_configured = candidates
+        .iter()
+        .any(|(_, w, c)| w.is_some() || c.is_some());
+    if any_configured {
+        for (key, warn, crit) in candidates {
+            s.thresholds
+                .insert(key.to_string(), ComponentThresholds { warn, crit });
+        }
+    } else {
+        s.thresholds = default_thresholds();
     }
-  } else {
-    s.thresholds = default_thresholds();
-  }
 }
 
 /// Writes `content` to `path` via an adjacent `.tmp` file that is renamed into
@@ -373,172 +379,181 @@ fn migrate_v0_thresholds(s: &mut Settings) {
 /// mid-write leaves either the old file intact or the new file complete —
 /// never a truncated or partially-written result.
 pub(crate) fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), String> {
-  let tmp = path.with_extension("json.tmp");
-  fs::write(&tmp, content).map_err(|e| e.to_string())?;
-  fs::rename(&tmp, path).map_err(|e| e.to_string())
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
 pub fn persist_settings(dir: &Path, settings: &Settings) -> Result<(), String> {
-  let path = settings_path(dir);
-  if let Some(parent) = path.parent() {
-    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-  }
-  let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-  atomic_write(&path, &json)
+    let path = settings_path(dir);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let json = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    atomic_write(&path, &json)
 }
 
 #[cfg(test)]
 mod tests {
-  use super::atomic_write;
+    use super::atomic_write;
 
-  #[test]
-  fn atomic_write_creates_file_with_correct_content() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("settings.json");
-    atomic_write(&path, r#"{"ok":true}"#).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"ok":true}"#);
-  }
+    #[test]
+    fn atomic_write_creates_file_with_correct_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        atomic_write(&path, r#"{"ok":true}"#).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"ok":true}"#);
+    }
 
-  #[test]
-  fn atomic_write_leaves_no_tmp_file_on_success() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("settings.json");
-    atomic_write(&path, "{}").unwrap();
-    assert!(!path.with_extension("json.tmp").exists());
-  }
+    #[test]
+    fn atomic_write_leaves_no_tmp_file_on_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        atomic_write(&path, "{}").unwrap();
+        assert!(!path.with_extension("json.tmp").exists());
+    }
 
-  #[test]
-  fn atomic_write_overwrites_existing_file() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("settings.json");
-    atomic_write(&path, r#"{"v":1}"#).unwrap();
-    atomic_write(&path, r#"{"v":2}"#).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"v":2}"#);
-  }
+    #[test]
+    fn atomic_write_overwrites_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        atomic_write(&path, r#"{"v":1}"#).unwrap();
+        atomic_write(&path, r#"{"v":2}"#).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"v":2}"#);
+    }
 
-  #[test]
-  fn atomic_write_replaces_stale_tmp_from_previous_crash() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("settings.json");
-    // Simulate a .tmp left behind by a previous hard-killed write.
-    std::fs::write(path.with_extension("json.tmp"), "corrupted").unwrap();
-    atomic_write(&path, r#"{"recovered":true}"#).unwrap();
-    assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"recovered":true}"#);
-    assert!(!path.with_extension("json.tmp").exists());
-  }
+    #[test]
+    fn atomic_write_replaces_stale_tmp_from_previous_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        // Simulate a .tmp left behind by a previous hard-killed write.
+        std::fs::write(path.with_extension("json.tmp"), "corrupted").unwrap();
+        atomic_write(&path, r#"{"recovered":true}"#).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            r#"{"recovered":true}"#
+        );
+        assert!(!path.with_extension("json.tmp").exists());
+    }
 
-  #[test]
-  fn default_thresholds_includes_battery_charge_and_power_keys() {
-    let t = super::default_thresholds();
-    let bat = t.get("battery").expect("battery key missing");
-    assert_eq!(bat.warn, Some(20), "battery warn should be 20 %");
-    assert_eq!(bat.crit, Some(10), "battery crit should be 10 %");
-    let pwr = t.get("battery_power").expect("battery_power key missing");
-    assert_eq!(pwr.warn, Some(15), "battery_power warn should be 15 W");
-    assert_eq!(pwr.crit, Some(25), "battery_power crit should be 25 W");
-  }
+    #[test]
+    fn default_thresholds_includes_battery_charge_and_power_keys() {
+        let t = super::default_thresholds();
+        let bat = t.get("battery").expect("battery key missing");
+        assert_eq!(bat.warn, Some(20), "battery warn should be 20 %");
+        assert_eq!(bat.crit, Some(10), "battery crit should be 10 %");
+        let pwr = t.get("battery_power").expect("battery_power key missing");
+        assert_eq!(pwr.warn, Some(15), "battery_power warn should be 15 W");
+        assert_eq!(pwr.crit, Some(25), "battery_power crit should be 25 W");
+    }
 
-  /// A v0 settings file as it would deserialize: empty `thresholds` map, the
-  /// legacy flat fields read from disk, version still 0.
-  fn v0_settings() -> super::Settings {
-    let mut s = super::Settings::default();
-    s.thresholds.clear();
-    s.settings_version = 0;
-    s
-  }
+    /// A v0 settings file as it would deserialize: empty `thresholds` map, the
+    /// legacy flat fields read from disk, version still 0.
+    fn v0_settings() -> super::Settings {
+        let mut s = super::Settings::default();
+        s.thresholds.clear();
+        s.settings_version = 0;
+        s
+    }
 
-  #[test]
-  fn migrate_preserves_user_values_when_any_flat_field_is_set() {
-    let mut s = v0_settings();
-    s.warning_cpu_temp = Some(72);
-    // critical_cpu_temp and every other flat field stay None.
-    super::migrate_v0_thresholds(&mut s);
+    #[test]
+    fn migrate_preserves_user_values_when_any_flat_field_is_set() {
+        let mut s = v0_settings();
+        s.warning_cpu_temp = Some(72);
+        // critical_cpu_temp and every other flat field stay None.
+        super::migrate_v0_thresholds(&mut s);
 
-    let cpu = s.thresholds.get("cpu").expect("cpu key");
-    assert_eq!(cpu.warn, Some(72), "user warn value must survive migration");
-    assert_eq!(cpu.crit, None, "unset flat field maps to None, not a default");
+        let cpu = s.thresholds.get("cpu").expect("cpu key");
+        assert_eq!(cpu.warn, Some(72), "user warn value must survive migration");
+        assert_eq!(
+            cpu.crit, None,
+            "unset flat field maps to None, not a default"
+        );
 
-    // The other components are still inserted, with their (None) flat values —
-    // defaults are NOT injected once any field was configured.
-    let gpu = s.thresholds.get("gpu").expect("gpu key");
-    assert_eq!(gpu.warn, None);
-    assert_eq!(gpu.crit, None);
-  }
+        // The other components are still inserted, with their (None) flat values —
+        // defaults are NOT injected once any field was configured.
+        let gpu = s.thresholds.get("gpu").expect("gpu key");
+        assert_eq!(gpu.warn, None);
+        assert_eq!(gpu.crit, None);
+    }
 
-  #[test]
-  fn migrate_applies_defaults_when_all_flat_fields_are_none() {
-    let mut s = v0_settings();
-    super::migrate_v0_thresholds(&mut s);
-    let defaults = super::default_thresholds();
-    assert_eq!(
-      s.thresholds.get("cpu"),
-      defaults.get("cpu"),
-      "unconfigured v0 install must inherit default cpu thresholds"
-    );
-    assert_eq!(s.thresholds.get("battery"), defaults.get("battery"));
-  }
+    #[test]
+    fn migrate_applies_defaults_when_all_flat_fields_are_none() {
+        let mut s = v0_settings();
+        super::migrate_v0_thresholds(&mut s);
+        let defaults = super::default_thresholds();
+        assert_eq!(
+            s.thresholds.get("cpu"),
+            defaults.get("cpu"),
+            "unconfigured v0 install must inherit default cpu thresholds"
+        );
+        assert_eq!(s.thresholds.get("battery"), defaults.get("battery"));
+    }
 
-  #[test]
-  fn load_settings_bumps_version_and_does_not_re_migrate() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = super::settings_path(dir.path());
-    // A minimal v0 file: version 0 plus one legacy flat field.
-    // Settings uses #[serde(rename_all = "camelCase")], so keys are camelCase.
-    std::fs::write(&path, r#"{"settingsVersion":0,"warningCpuTemp":81}"#).unwrap();
+    #[test]
+    fn load_settings_bumps_version_and_does_not_re_migrate() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        // A minimal v0 file: version 0 plus one legacy flat field.
+        // Settings uses #[serde(rename_all = "camelCase")], so keys are camelCase.
+        std::fs::write(&path, r#"{"settingsVersion":0,"warningCpuTemp":81}"#).unwrap();
 
-    let first = super::load_settings(dir.path());
-    assert_eq!(first.settings_version, 1, "migration must bump version to 1");
-    assert_eq!(
-      first.thresholds.get("cpu").and_then(|t| t.warn),
-      Some(81),
-      "flat value must be copied into the thresholds map"
-    );
+        let first = super::load_settings(dir.path());
+        assert_eq!(
+            first.settings_version, 1,
+            "migration must bump version to 1"
+        );
+        assert_eq!(
+            first.thresholds.get("cpu").and_then(|t| t.warn),
+            Some(81),
+            "flat value must be copied into the thresholds map"
+        );
 
-    // The migration must have been persisted, so a second load sees version 1
-    // and the same value without re-running the migration.
-    let second = super::load_settings(dir.path());
-    assert_eq!(second.settings_version, 1);
-    assert_eq!(second.thresholds.get("cpu").and_then(|t| t.warn), Some(81));
-  }
+        // The migration must have been persisted, so a second load sees version 1
+        // and the same value without re-running the migration.
+        let second = super::load_settings(dir.path());
+        assert_eq!(second.settings_version, 1);
+        assert_eq!(second.thresholds.get("cpu").and_then(|t| t.warn), Some(81));
+    }
 
-  #[test]
-  fn load_settings_promotes_legacy_always_on_top_to_window_layer() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = super::settings_path(dir.path());
-    // A pre-1.24 file: always_on_top set, no window_layer field at all.
-    std::fs::write(&path, r#"{"settingsVersion":1,"alwaysOnTop":true}"#).unwrap();
+    #[test]
+    fn load_settings_promotes_legacy_always_on_top_to_window_layer() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        // A pre-1.24 file: always_on_top set, no window_layer field at all.
+        std::fs::write(&path, r#"{"settingsVersion":1,"alwaysOnTop":true}"#).unwrap();
 
-    let s = super::load_settings(dir.path());
-    assert_eq!(
-      s.window_layer, "on_top",
-      "legacy always_on_top:true must promote the default window_layer to on_top"
-    );
-    assert!(
-      s.always_on_top,
-      "always_on_top must stay in sync with the resolved layer"
-    );
-  }
+        let s = super::load_settings(dir.path());
+        assert_eq!(
+            s.window_layer, "on_top",
+            "legacy always_on_top:true must promote the default window_layer to on_top"
+        );
+        assert!(
+            s.always_on_top,
+            "always_on_top must stay in sync with the resolved layer"
+        );
+    }
 
-  #[test]
-  fn load_settings_respects_explicit_window_layer_over_always_on_top() {
-    let dir = tempfile::tempdir().unwrap();
-    let path = super::settings_path(dir.path());
-    // A modern file: an explicit non-default layer must win, and always_on_top is
-    // re-derived from it (false here, since the layer is wallpaper, not on_top).
-    std::fs::write(
-      &path,
-      r#"{"settingsVersion":1,"windowLayer":"wallpaper","alwaysOnTop":true}"#,
-    )
-    .unwrap();
+    #[test]
+    fn load_settings_respects_explicit_window_layer_over_always_on_top() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        // A modern file: an explicit non-default layer must win, and always_on_top is
+        // re-derived from it (false here, since the layer is wallpaper, not on_top).
+        std::fs::write(
+            &path,
+            r#"{"settingsVersion":1,"windowLayer":"wallpaper","alwaysOnTop":true}"#,
+        )
+        .unwrap();
 
-    let s = super::load_settings(dir.path());
-    assert_eq!(
-      s.window_layer, "wallpaper",
-      "an explicit window_layer must not be overwritten by the legacy promotion"
-    );
-    assert!(
-      !s.always_on_top,
-      "always_on_top must be re-derived from the layer (wallpaper => false)"
-    );
-  }
+        let s = super::load_settings(dir.path());
+        assert_eq!(
+            s.window_layer, "wallpaper",
+            "an explicit window_layer must not be overwritten by the legacy promotion"
+        );
+        assert!(
+            !s.always_on_top,
+            "always_on_top must be re-derived from the layer (wallpaper => false)"
+        );
+    }
 }
