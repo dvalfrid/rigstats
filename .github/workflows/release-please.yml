@@ -36,6 +36,48 @@ jobs:
         if: ${{ steps.release.outputs.release_created != 'true' }}
         uses: actions/checkout@v4
 
+      - name: Sync Cargo.lock version into the release PR
+        if: ${{ steps.release.outputs.release_created != 'true' }}
+        shell: bash
+        run: |
+          if ! git ls-remote --exit-code --heads origin release-please--branches--main >/dev/null 2>&1; then
+            echo "No open release-please PR branch, nothing to sync"
+            exit 0
+          fi
+
+          git fetch origin release-please--branches--main:release-please--branches--main
+          git checkout release-please--branches--main
+
+          version=$(grep -m1 '^version = "' src-egui/Cargo.toml | sed -E 's/^version = "([^"]+)".*/\1/')
+          if [ -z "$version" ]; then
+            echo "::error::Could not find version in src-egui/Cargo.toml"
+            exit 1
+          fi
+
+          # release-please's "simple" strategy bumps src-egui/Cargo.toml but not
+          # Cargo.lock, so the lockfile's own package entry would otherwise drift
+          # on main until someone's next local `cargo` run re-wrote it. Carry the
+          # bump into the release commit itself; `cargo xtask verify` guards it.
+          sed -i "/^name = \"rigstats-egui\"\$/{n;s/^version = \".*\"/version = \"${version}\"/}" Cargo.lock
+          if ! awk -v want="version = \"${version}\"" '
+                /^name = "rigstats-egui"$/ { getline; ok = ($0 == want) }
+                END { exit(ok ? 0 : 1) }
+              ' Cargo.lock; then
+            echo "::error::Cargo.lock rigstats-egui entry did not sync to ${version}"
+            exit 1
+          fi
+
+          if git diff --quiet -- Cargo.lock; then
+            echo "Cargo.lock already at ${version}"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.lock
+          git commit -m "chore(release): sync Cargo.lock to ${version}"
+          git push origin HEAD:release-please--branches--main
+
       - name: Sync PAD version, release date and changelog
         if: ${{ steps.release.outputs.release_created != 'true' }}
         shell: bash

@@ -135,6 +135,9 @@ fn task_verify() -> Result<(), String> {
     println!("── pad.xml ─────────────────────────────────────────────────────");
     check_pad_xml()?;
 
+    println!("── Cargo.lock version ──────────────────────────────────────────");
+    check_cargo_lock_version()?;
+
     println!("── sidecar ─────────────────────────────────────────────────────");
     run(Command::new("dotnet").args([
         "publish",
@@ -401,6 +404,55 @@ fn check_pad_xml() -> Result<(), String> {
     if download_url != expected_url {
         return Err(format!(
             "website/pad.xml Primary_Download_URL ({download_url}) does not match expected ({expected_url})"
+        ));
+    }
+
+    Ok(())
+}
+
+/// The workspace `Cargo.lock` must carry the same `rigstats-egui` version as
+/// `src-egui/Cargo.toml`. `release-please` (`release-type: simple`) bumps the
+/// manifest but not the lockfile, so a stale value can slip onto `main` and
+/// re-dirty every contributor's working tree on the next `cargo` run. The
+/// release workflow now syncs it into the release PR; this is the backstop.
+fn check_cargo_lock_version() -> Result<(), String> {
+    let root = project_root();
+
+    let cargo_toml_path = root.join("src-egui/Cargo.toml");
+    let cargo_toml = std::fs::read_to_string(&cargo_toml_path)
+        .map_err(|e| format!("failed to read {}: {e}", cargo_toml_path.display()))?;
+    let app_version = cargo_toml
+        .lines()
+        .find(|line| line.trim_start().starts_with("version ="))
+        .and_then(|line| line.split('"').nth(1))
+        .ok_or_else(|| {
+            format!(
+                "no `version = \"...\"` line found in {}",
+                cargo_toml_path.display()
+            )
+        })?;
+
+    let lock_path = root.join("Cargo.lock");
+    let lock = std::fs::read_to_string(&lock_path)
+        .map_err(|e| format!("failed to read {}: {e}", lock_path.display()))?;
+    // In every `[[package]]` block Cargo writes `version` on the line right
+    // after `name`, so take the first `version` line following our package name.
+    let lock_version = lock
+        .lines()
+        .skip_while(|line| line.trim() != r#"name = "rigstats-egui""#)
+        .nth(1)
+        .and_then(|line| line.split('"').nth(1))
+        .ok_or_else(|| {
+            format!(
+                "no `rigstats-egui` package entry found in {}",
+                lock_path.display()
+            )
+        })?;
+
+    if lock_version != app_version {
+        return Err(format!(
+            "Cargo.lock rigstats-egui version ({lock_version}) does not match \
+             src-egui/Cargo.toml version ({app_version}) — run `cargo build` and commit Cargo.lock"
         ));
     }
 
