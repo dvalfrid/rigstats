@@ -2148,6 +2148,9 @@ impl RigStatsApp {
                                 "process" => {
                                     panels::process::draw(ui, stats, 1.0, &app_theme, scale)
                                 }
+                                "gpu_processes" => {
+                                    panels::gpu_processes::draw(ui, stats, 1.0, &app_theme, scale)
+                                }
                                 "power" => panels::power::draw(
                                     ui,
                                     stats,

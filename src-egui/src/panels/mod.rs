@@ -3,6 +3,7 @@ pub mod clock;
 pub mod cpu;
 pub mod disk;
 pub mod gpu;
+pub mod gpu_processes;
 pub mod header;
 pub mod motherboard;
 pub mod net;

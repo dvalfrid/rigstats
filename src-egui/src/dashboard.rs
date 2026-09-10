@@ -202,6 +202,9 @@ impl DashboardView<'_> {
             "process" => {
                 let _ = panels::process::draw(ui, self.latest, opacity, self.app_theme, sc);
             }
+            "gpu_processes" => {
+                let _ = panels::gpu_processes::draw(ui, self.latest, opacity, self.app_theme, sc);
+            }
             "power" => {
                 let _ = panels::power::draw(
                     ui,

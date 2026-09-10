@@ -3,6 +3,7 @@
 //! `poll_loop` runs on the tokio runtime, samples hardware once per second, and
 //! sends a [`PollStats`] snapshot to the egui UI thread. Extracted from `main.rs`.
 
+use crate::gpu_process::{self, GpuEngineQuery, GpuProcessInfo};
 use crate::lock_ext::LockSafe;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use std::collections::HashMap;
@@ -82,6 +83,8 @@ pub struct PollStats {
     pub battery_power_w: Option<f64>,
     // Processes
     pub processes: Vec<ProcessInfo>,
+    // Per-process GPU engine usage (PDH \GPU Engine counters), top rows by util
+    pub gpu_processes: Vec<GpuProcessInfo>,
     // System
     pub uptime_secs: u64,
     pub hostname: String,
@@ -256,6 +259,22 @@ pub async fn poll_loop(
         .unwrap_or_default();
     debug::log_debug(&dir, &format!("hardware: gpu_name={gpu_name}"));
 
+    // Per-process GPU engine query — opened once and kept across ticks (PDH
+    // utilisation counters need two samples spaced in time; our ~1 Hz cadence
+    // supplies that). The LUID→adapter map rarely changes; refresh it lazily
+    // only while it's still empty (e.g. DXGI not ready at startup).
+    let gpu_engine_query = GpuEngineQuery::new();
+    debug::log_debug(
+        &dir,
+        &format!("hardware: gpu_engine_query={}", gpu_engine_query.is_some()),
+    );
+    let mut gpu_luid_map = gpu_process::adapter_luid_map();
+    debug::log_debug(
+        &dir,
+        &format!("hardware: gpu_adapters={}", gpu_luid_map.len()),
+    );
+    let mut last_luid_refresh = Instant::now();
+
     let mut sys = System::new();
     sys.refresh_cpu();
     let cpu_model = sys
@@ -333,6 +352,24 @@ pub async fn poll_loop(
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         processes.truncate(8);
+
+        // Per-process GPU engine usage. Cheap (~a few ms) at 1 Hz.
+        let gpu_processes = if let Some(query) = &gpu_engine_query {
+            if gpu_luid_map.is_empty() && last_luid_refresh.elapsed().as_secs() >= 30 {
+                gpu_luid_map = gpu_process::adapter_luid_map();
+                last_luid_refresh = Instant::now();
+            }
+            let proc_names: HashMap<u32, String> = sys
+                .processes()
+                .iter()
+                .map(|(pid, p)| (pid.as_u32(), p.name().to_string()))
+                .collect();
+            let mut rows = query.sample(&proc_names, &gpu_luid_map);
+            rows.truncate(8);
+            rows
+        } else {
+            Vec::new()
+        };
 
         disks.refresh();
         let mut disk_drives: Vec<DriveInfo> = disks
@@ -557,6 +594,7 @@ pub async fn poll_loop(
             battery_time_mins,
             battery_power_w,
             processes,
+            gpu_processes,
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),

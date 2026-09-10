@@ -9,6 +9,7 @@ pub mod brand;
 pub mod dashboard;
 pub mod geometry;
 pub mod gpu_guard;
+pub mod gpu_process;
 pub mod lock_ext;
 pub mod menu_icons;
 pub mod panels;
