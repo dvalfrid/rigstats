@@ -263,7 +263,7 @@ pub async fn poll_loop(
     // utilisation counters need two samples spaced in time; our ~1 Hz cadence
     // supplies that). The LUID→adapter map rarely changes; refresh it lazily
     // only while it's still empty (e.g. DXGI not ready at startup).
-    let gpu_engine_query = GpuEngineQuery::new();
+    let gpu_engine_query = GpuEngineQuery::new(&dir);
     debug::log_debug(
         &dir,
         &format!("hardware: gpu_engine_query={}", gpu_engine_query.is_some()),

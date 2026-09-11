@@ -1,3 +1,4 @@
+use crate::gpu_process;
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use chrono::Local;
@@ -615,6 +616,13 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         }",
     );
 
+    // Raw PDH `\GPU Engine(*)` instances + DXGI adapter list — the exact input
+    // `gpu_process::parse_instance`/`aggregate` consume, so a capture doubles as
+    // a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README).
+    // Blocks ~1s for PDH's two-spaced-collects requirement; fine here, this
+    // whole function already runs off the UI thread (see `spawn_collect`).
+    let gpu_engine_txt = gpu_process::dump_diagnostics();
+
     // ── Write ZIP ─────────────────────────────────────────────────────────────
 
     let zip_file = std::fs::File::create(&out_path)?;
@@ -635,6 +643,7 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         ("sysinfo.json", sysinfo_json.as_bytes()),
         ("event-log.txt", event_log_txt.as_bytes()),
         ("displays.json", displays_json.as_bytes()),
+        ("gpu-engine.txt", gpu_engine_txt.as_bytes()),
     ];
 
     for (name, data) in entries {

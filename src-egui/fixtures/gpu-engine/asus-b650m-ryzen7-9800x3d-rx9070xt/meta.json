@@ -1,0 +1,20 @@
+{
+  "slug": "asus-b650m-ryzen7-9800x3d-rx9070xt",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1789152381,
+  "rigstats_version": "1.38.0",
+  "os": "Windows 11 Home (build 26100)",
+  "gpu_driver": null,
+  "adapters": [
+    "AMD Radeon RX 9070 XT (dGPU)",
+    "AMD Radeon(TM) Graphics (iGPU)",
+    "Microsoft Basic Render Driver (software, Flags=2)"
+  ],
+  "gpu_state": "dual-active",
+  "notes": "Desktop idle-ish snapshot via `Status → Collect Diagnostics`; Microsoft.Media.Player was actively decoding video during capture (the dominant \"Video Codec Engine\"/\"Video Decode\" activity in the dump). This is the capture that surfaced the space-delimited engtype forms (\"Compute 0\" vs the docs' \"Compute_0\") and half a dozen engine-type strings not in the original compact_engine table: \"Video Decode\", \"Video Encode\" (docs assumed no space), \"Video JPEG\", \"Video Codec\"/\"Video Codec Engine\", \"High Priority 3D\"/\"High Priority Compute\", \"Timer\" — all now handled.",
+
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}

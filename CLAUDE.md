@@ -8,6 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|
 | `/commit-workflow` | Opening an issue, committing, roadmap sync |
 | `/sensor-fixture` | Adding a hardware sensor fixture |
+| `/gpu-engine-fixture` | Adding a GPU Engine (GPU Apps panel) fixture |
 | `/run-rigstats` | Building and launching the app |
 | `/verifier-gui` | Visually verifying a GUI change |
 
@@ -117,7 +118,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
 - **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types
-- **`gpu_process.rs`** — per-process GPU engine utilisation via PDH `\GPU Engine(*)` counters + DXGI LUID→adapter map (`GpuEngineQuery`, `GpuProcessInfo`); vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; Win32 FFI is `#![allow(unsafe_code)]`
+- **`gpu_process.rs`** — per-process GPU engine utilisation via PDH `\GPU Engine(*)` counters + DXGI LUID→adapter map (`GpuEngineQuery`, `GpuProcessInfo`); vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; Win32 FFI is `#![allow(unsafe_code)]`. Real-hardware regression corpus: `src-egui/fixtures/gpu-engine/` (see its README); `dump_diagnostics()` feeds `gpu-engine.txt` into the diagnostics ZIP so a user export doubles as a fixture. For adding a fixture, run `/gpu-engine-fixture`
 - **`tray.rs`** — system tray icon, `TrayCmd` enum, `load_app_icon`, `panel_label`/`panel_initial_h`
 - **`menu_icons.rs`** — procedurally-rasterized glyph icons for each tray context-menu row (no external image assets)
 - **`lock_ext.rs`** — `LockSafe::lock_safe()`: poison-tolerant `Mutex` locking used throughout `windows/*.rs`

@@ -260,6 +260,16 @@ Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and othe
 | Per-process CPU % of total system | sysinfo |
 | Per-process RAM usage (MB / GB) | sysinfo |
 
+### GPU Apps (opt-in)
+
+| Metric | Source |
+| --- | --- |
+| Top processes by GPU engine utilisation (%) | Windows PDH `\GPU Engine(*)\Utilization Percentage` — the same counters Task Manager's per-process GPU column reads |
+| Engine type(s) per process (3D, Decode, Encode, Compute, Copy, ...) | PDH GPU Engine instance name, sorted by that engine's own utilisation |
+| Physical GPU attribution (which app runs on which adapter) | DXGI adapter enumeration matched by LUID — shown when more than one GPU is active |
+
+Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor sidecar involved. See `src-egui/fixtures/gpu-engine/README.md` for the real-hardware regression corpus behind this panel's parsing.
+
 ### Battery (opt-in)
 
 | Metric | Source |
@@ -329,6 +339,7 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats | OS-level crash records not visible in the in-app debug log |
 | `sysinfo.json` | sysinfo snapshot: CPU, memory, disks, network, ping target | Verify what sysinfo sees on the machine |
 | `displays.json` | Connected monitors (position, resolution) and which one was auto-selected for the current dashboard profile | Diagnose window placement and wrong-monitor issues |
+| `gpu-engine.txt` | Raw Windows `\GPU Engine(*)` performance-counter instances (per-process, per physical GPU) plus the DXGI adapter list | Diagnose the GPU Apps panel — which app is attributed to which engine/GPU. Doubles as a ready-made regression fixture (`src-egui/fixtures/gpu-engine/`) |
 
 ---
 

@@ -496,6 +496,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `event-log.txt` | PowerShell `Get-WinEvent` | Windows Application Event Log: rigstats errors and critical events — catches OS-level crashes not recorded in the in-app log |
 | `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
 | `displays.json` | `geometry::win_monitor::list()` + `pick_window_rect_for_profile()` | Each monitor's position/resolution, `is_primary`, and `is_selected` for the active dashboard profile |
+| `gpu-engine.txt` | `gpu_process::dump_diagnostics()` | Raw PDH `\GPU Engine(*)` instance names/values + the full DXGI adapter list. The exact input `gpu_process::parse_instance`/`aggregate` consume — doubles as a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README, and `/gpu-engine-fixture`). Blocks ~1s (PDH needs two collects spaced in time). |
 
 ### `sysinfo.json` — key fields
 

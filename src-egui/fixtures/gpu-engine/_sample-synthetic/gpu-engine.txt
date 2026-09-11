@@ -1,0 +1,11 @@
+=== GPU Engine (\GPU Engine(*)\Utilization Percentage) ===
+pid_1234_luid_0x00000000_0x0000A1B2_phys_0_eng_0_engtype_3D	12.50
+pid_1234_luid_0x00000000_0x0000A1B2_phys_0_eng_1_engtype_Copy	0.00
+pid_1234_luid_0x00000000_0x0000A1B2_phys_0_eng_2_engtype_Compute_0	0.00
+pid_5678_luid_0x00000000_0x0000A1B2_phys_0_eng_0_engtype_3D	65.20
+pid_5678_luid_0x00000000_0x0000C3D4_phys_1_eng_0_engtype_VideoDecode	40.00
+
+=== DXGI Adapters ===
+LUID=0x00000000_0x0000A1B2	Description=Sample Discrete GPU	DedicatedVideoMemoryMB=8192	Flags=0
+LUID=0x00000000_0x0000C3D4	Description=Sample Integrated GPU	DedicatedVideoMemoryMB=512	Flags=0
+LUID=0x00000000_0x0000EF00	Description=Sample Software Adapter	DedicatedVideoMemoryMB=0	Flags=2

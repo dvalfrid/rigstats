@@ -1,0 +1,20 @@
+{
+  "slug": "_sample-synthetic",
+  "synthetic": true,
+  "contributor": "n/a",
+  "collected_at_unix": 0,
+  "rigstats_version": "n/a",
+  "os": "n/a",
+  "gpu_driver": null,
+  "adapters": [
+    "Sample Discrete GPU",
+    "Sample Integrated GPU",
+    "Sample Software Adapter (excluded from adapter_luid_map by Flags=2)"
+  ],
+  "gpu_state": "dual-active",
+  "notes": "Hand-written example of the gpu-engine.txt format — living documentation, not real hardware. Shows the underscore-delimited engtype form (docs) alongside the space-delimited form seen live; both parse.",
+
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}
