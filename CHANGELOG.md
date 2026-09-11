@@ -8,6 +8,23 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.39.0](https://github.com/dvalfrid/rigstats/compare/v1.38.0...v1.39.0) (2026-09-11)
+
+
+### Features
+
+* **gpu:** add per-process GPU engine panel (GPU Apps) ([a85d2ca](https://github.com/dvalfrid/rigstats/commit/a85d2cab79f708f215e160567f26d1691e4fdeb8)), closes [#182](https://github.com/dvalfrid/rigstats/issues/182)
+* **gpu:** collect GPU Engine diagnostics + build a regression fixture corpus ([92cd7b0](https://github.com/dvalfrid/rigstats/commit/92cd7b01739f276f38b4132348edc53236bc364a)), closes [#184](https://github.com/dvalfrid/rigstats/issues/184)
+* **gpu:** show engine type alongside GPU in GPU Apps rows ([b8ff551](https://github.com/dvalfrid/rigstats/commit/b8ff551f63fe7741ab1ccdf3c6eb46c53bacc36f))
+
+
+### Bug Fixes
+
+* **ci:** dispatch the Release workflow against main, not the release tag ([35bca25](https://github.com/dvalfrid/rigstats/commit/35bca2556123936be8665bce319871bcab4ec0c3))
+* **ci:** stop Release Please workflow failing after Cargo.lock sync ([f8690cc](https://github.com/dvalfrid/rigstats/commit/f8690cc1427172c561d89bf1ccad7297889caacf))
+* **gpu:** left-align the GPU/engine column in GPU Apps ([8c7ed89](https://github.com/dvalfrid/rigstats/commit/8c7ed898f66ef93f19749aafb3aed4e4320e41c2))
+* **gpu:** strip space-delimited GPU engine queue ordinals ([8e6de7a](https://github.com/dvalfrid/rigstats/commit/8e6de7a0bd500556be95ba53ad1734d3d1c0af86))
+
 ## [1.38.0](https://github.com/dvalfrid/rigstats/compare/v1.37.0...v1.38.0) (2026-09-05)
 
 
