@@ -69,14 +69,21 @@ jobs:
 
           if git diff --quiet -- Cargo.lock; then
             echo "Cargo.lock already at ${version}"
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add Cargo.lock
+            git commit -m "chore(release): sync Cargo.lock to ${version}"
+            git push origin HEAD:release-please--branches--main
           fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "chore(release): sync Cargo.lock to ${version}"
-          git push origin HEAD:release-please--branches--main
+          # Leave the workspace back on main (what actions/checkout started us
+          # on — this workflow only ever runs for pushes/dispatches against
+          # main). The next step fetches release-please--branches--main into a
+          # local ref of the same name, and git refuses to fetch into whichever
+          # branch is currently checked out in this worktree, so it can't still
+          # be checked out here.
+          git checkout main
 
       - name: Sync PAD version, release date and changelog
         if: ${{ steps.release.outputs.release_created != 'true' }}
