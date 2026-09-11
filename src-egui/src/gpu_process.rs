@@ -84,8 +84,10 @@ fn parse_hex_u32(s: &str) -> Option<u32> {
 
 /// Shorten a raw `engtype_` token to something that fits a narrow panel column.
 fn compact_engine(raw: &str) -> String {
-    // Drop a trailing "_<digits>" ordinal ("Compute_0" -> "Compute").
-    let base = match raw.rsplit_once('_') {
+    // Drop a trailing per-queue ordinal — observed as both "Compute_0" (docs)
+    // and "Compute 0" (space, seen live on an AMD driver), so strip whichever
+    // delimiter precedes a purely-numeric tail.
+    let base = match raw.rsplit_once(['_', ' ']) {
         Some((head, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => head,
         _ => raw,
     };
@@ -396,6 +398,15 @@ mod tests {
         let p = parse_instance("pid_9_luid_0x00000000_0x00001111_phys_1_eng_2_engtype_Graphics_1")
             .unwrap();
         assert_eq!(p.engine, "Graphics");
+    }
+
+    /// Observed live on an AMD driver: the per-queue ordinal is space-, not
+    /// underscore-, delimited ("Compute 0" rather than "Compute_0").
+    #[test]
+    fn parses_engtype_with_space_delimited_ordinal_suffix() {
+        let p = parse_instance("pid_9_luid_0x00000000_0x00001111_phys_0_eng_0_engtype_Compute 0")
+            .unwrap();
+        assert_eq!(p.engine, "Compute");
     }
 
     #[test]
