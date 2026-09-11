@@ -13,9 +13,9 @@ type RowColors = [egui::Color32; 3];
 
 /// Paint a table row at fixed absolute x positions (same technique as the
 /// PROCESSES panel — bypasses egui layout so columns never shift).
-/// Layout: NAME 42% / MID 36% / UTIL 22% of inner_w — MID is wider than in
-/// PROCESSES because full adapter names ("Radeon RX 9070 XT") live there while
-/// the GPU-app process names are short.
+/// Layout: NAME 36% / MID 42% / UTIL 22% of inner_w — MID is wider than in
+/// PROCESSES because it can carry both the adapter name and the engine type
+/// ("Radeon RX 9070 XT · 3D+Decode") while the GPU-app process names are short.
 fn paint_row(
     ui: &mut Ui,
     inner_w: f32,
@@ -35,8 +35,8 @@ fn paint_row(
     let cy = rect.center().y;
     let x0 = rect.min.x;
 
-    let name_w = inner_w * 0.42;
-    let mid_w = inner_w * 0.36;
+    let name_w = inner_w * 0.36;
+    let mid_w = inner_w * 0.42;
 
     // NAME — left-aligned, clipped to its column
     let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w - cell_pad, row_h));
@@ -96,6 +96,26 @@ fn short_adapter(name: &str) -> String {
     }
 }
 
+/// Format the panel's middle column: engine type(s) always, plus the physical
+/// adapter name when more than one GPU is active. Right-aligned and clipped
+/// (see `paint_row`), so on overflow the tail — the engine, the more
+/// frequently distinguishing part row-to-row — stays visible over the adapter
+/// name prefix.
+fn mid_cell(adapter: &str, engines: &[String], show_adapter: bool) -> String {
+    let mut e = engines.to_vec();
+    e.truncate(2);
+    let engine_str = e.join("+");
+    if !show_adapter {
+        return engine_str;
+    }
+    let adapter = short_adapter(adapter);
+    match (adapter.is_empty(), engine_str.is_empty()) {
+        (false, false) => format!("{adapter} · {engine_str}"),
+        (false, true) => adapter,
+        (true, _) => engine_str,
+    }
+}
+
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -150,13 +170,7 @@ pub fn draw(
             ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
             for p in &stats.gpu_processes {
                 let name = p.name.trim_end_matches(".exe");
-                let mid = if show_adapter {
-                    short_adapter(&p.adapter)
-                } else {
-                    let mut e = p.engines.clone();
-                    e.truncate(2);
-                    e.join("+")
-                };
+                let mid = mid_cell(&p.adapter, &p.engines, show_adapter);
                 paint_row(
                     ui,
                     inner_w,
@@ -182,7 +196,7 @@ pub fn draw(
 
 #[cfg(test)]
 mod tests {
-    use super::short_adapter;
+    use super::{mid_cell, short_adapter};
 
     #[test]
     fn drops_nvidia_vendor_prefix() {
@@ -206,5 +220,37 @@ mod tests {
     #[test]
     fn falls_back_when_only_vendor_present() {
         assert_eq!(short_adapter("AMD"), "AMD");
+    }
+
+    #[test]
+    fn mid_cell_single_gpu_shows_engine_only() {
+        let engines = vec!["3D".to_string(), "Decode".to_string()];
+        assert_eq!(
+            mid_cell("AMD Radeon RX 9070 XT", &engines, false),
+            "3D+Decode"
+        );
+    }
+
+    #[test]
+    fn mid_cell_multi_gpu_combines_adapter_and_engine() {
+        let engines = vec!["3D".to_string()];
+        assert_eq!(
+            mid_cell("AMD Radeon RX 9070 XT", &engines, true),
+            "Radeon RX 9070 XT · 3D"
+        );
+    }
+
+    #[test]
+    fn mid_cell_multi_gpu_falls_back_when_engine_unknown() {
+        assert_eq!(
+            mid_cell("AMD Radeon RX 9070 XT", &[], true),
+            "Radeon RX 9070 XT"
+        );
+    }
+
+    #[test]
+    fn mid_cell_multi_gpu_falls_back_when_adapter_unknown() {
+        let engines = vec!["Copy".to_string()];
+        assert_eq!(mid_cell("", &engines, true), "Copy");
     }
 }
