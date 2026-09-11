@@ -48,16 +48,18 @@ fn paint_row(
         colors[0],
     );
 
-    // MID — right-aligned inside its quarter, clipped so long adapter names
-    // don't bleed into NAME
-    let mid_right = x0 + name_w + mid_w - cell_pad;
-    let mid_clip = Rect::from_min_size(
-        pos2(x0 + name_w, rect.min.y),
-        Vec2::new(mid_w - cell_pad, row_h),
-    );
+    // MID — left-aligned, anchored right after NAME. Was right-aligned against
+    // UTIL, which let its start position drift row to row as content length
+    // varied ("Radeon Graphics · Decode" vs "RX 9070 XT · 3D") — since rows
+    // re-sort by % every tick, that made the column look like it jumped around
+    // continuously. Left-aligned to a fixed x, it only ever grows rightward;
+    // clipped so overflow doesn't bleed into UTIL.
+    let mid_x0 = x0 + name_w;
+    let mid_clip =
+        Rect::from_min_size(pos2(mid_x0, rect.min.y), Vec2::new(mid_w - cell_pad, row_h));
     ui.painter().with_clip_rect(mid_clip).text(
-        pos2(mid_right, cy),
-        Align2::RIGHT_CENTER,
+        pos2(mid_x0, cy),
+        Align2::LEFT_CENTER,
         mid,
         font_id.clone(),
         colors[1],
@@ -75,8 +77,9 @@ fn paint_row(
 
 /// Drop the vendor prefix from an adapter name so the model stands out in the
 /// narrow middle column ("NVIDIA GeForce RTX 4070" → "GeForce RTX 4070",
-/// "AMD Radeon(TM) Graphics" → "Radeon Graphics"). The column is right-aligned
-/// and clipped, so any remaining overflow keeps the most specific tail visible.
+/// "AMD Radeon(TM) Graphics" → "Radeon Graphics"). The column is left-aligned
+/// and clipped, so this also keeps the visible head of an overlong name
+/// meaningful rather than starting mid-word.
 fn short_adapter(name: &str) -> String {
     let drop = ["nvidia", "amd", "intel", "corporation"];
     let kept: Vec<String> = name
@@ -97,10 +100,13 @@ fn short_adapter(name: &str) -> String {
 }
 
 /// Format the panel's middle column: engine type(s) always, plus the physical
-/// adapter name when more than one GPU is active. Right-aligned and clipped
-/// (see `paint_row`), so on overflow the tail — the engine, the more
-/// frequently distinguishing part row-to-row — stays visible over the adapter
-/// name prefix.
+/// adapter name when more than one GPU is active. Left-aligned and clipped
+/// (see `paint_row`) at a fixed x, so its start position stays put as rows
+/// re-sort by utilisation every tick — right-aligned against UTIL, it used to
+/// visibly jump around as different-length text landed in different rows.
+/// On overflow (a long adapter name in a narrow window) the engine suffix is
+/// what gets clipped; the column is sized generously enough in practice that
+/// this is rare.
 fn mid_cell(adapter: &str, engines: &[String], show_adapter: bool) -> String {
     let mut e = engines.to_vec();
     e.truncate(2);
