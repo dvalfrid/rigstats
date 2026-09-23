@@ -355,7 +355,17 @@ pub async fn poll_loop(
 
         // Per-process GPU engine usage. Cheap (~a few ms) at 1 Hz.
         let gpu_processes = if let Some(query) = &gpu_engine_query {
-            if gpu_luid_map.is_empty() && last_luid_refresh.elapsed().as_secs() >= 30 {
+            // Refresh periodically regardless of whether the map is already
+            // non-empty — not just when it's still empty. DXGI enumeration at
+            // startup can race a slower-initialising adapter (e.g. an iGPU
+            // whose driver finishes registering after the dGPU's), so the very
+            // first map can be short one real adapter without ever being fully
+            // empty; a startup-only "still empty" retry would never notice and
+            // that adapter's LUID would stay unattributed for the rest of the
+            // session. A plain periodic re-enumeration also picks up adapters
+            // that appear or disappear at runtime (eGPU hotplug, driver
+            // restart).
+            if last_luid_refresh.elapsed().as_secs() >= 30 {
                 gpu_luid_map = gpu_process::adapter_luid_map();
                 last_luid_refresh = Instant::now();
             }
