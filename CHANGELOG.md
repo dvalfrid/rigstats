@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.39.1](https://github.com/dvalfrid/rigstats/compare/v1.39.0...v1.39.1) (2026-09-24)
+
+
+### Bug Fixes
+
+* **gpu:** refresh the GPU adapter LUID map periodically, not just when empty ([347b266](https://github.com/dvalfrid/rigstats/commit/347b266dbe892db9be2cdca5e02590ce54e081d8))
+* **tray:** recording blink no longer freezes after the tray menu closes ([94c2587](https://github.com/dvalfrid/rigstats/commit/94c2587e0bf2b1bdbaade73ee1b6dfd28c6c0cd2)), closes [#177](https://github.com/dvalfrid/rigstats/issues/177)
+
 ## [1.39.0](https://github.com/dvalfrid/rigstats/compare/v1.38.0...v1.39.0) (2026-09-11)
 
 
