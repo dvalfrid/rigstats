@@ -1367,6 +1367,46 @@ re-investigating from scratch.
 
 ---
 
+## Upstream watch — winit #4608 (tray recording-blink freeze workaround)
+
+**Not a blocker** — unlike the DComp watch above, this one guards a *shipped,
+working* fix (#177: the tray recording indicator stopped blinking after
+opening/closing the system tray context menu), not an open roadmap feature.
+
+**Root cause identified upstream (2026-09-24):** on Windows,
+`winit::window::Window::request_redraw()` — and so `egui::Context`'s
+`request_repaint()`/`request_repaint_of()`, built on it — is silently ignored
+while a native popup menu (e.g. our tray icon's right-click context menu, via
+`TrackPopupMenu`) is shown, and never resumes afterward even once the menu
+closes. Tracked upstream as
+[winit#4608](https://github.com/rust-windowing/winit/issues/4608), open, no
+fix yet as of the last check. Confirmed empirically in this repo before
+finding the upstream report: dozens of `request_repaint()` calls made both
+from a background thread and synchronously right before the nested menu loop
+starts produced zero subsequent frames.
+
+**Fix shipped in #177:** `win_opacity::force_repaint()` (`src-egui/src/win_opacity.rs`)
+bypasses winit's redraw-request queue entirely and posts a real `WM_PAINT`
+directly via the Win32 `InvalidateRect` API, which winit honours regardless of
+its own repaint-request bookkeeping. Called synchronously on every tray-icon
+interaction (`TrayIconEvent::set_event_handler` in `main.rs`) and, while a
+session is recording, unconditionally on every tick of the tray-polling
+thread — a menu can stay open for an unbounded time, so a single pre-emptive
+call isn't enough; the polling thread runs independently of whatever nested
+loop is blocking the main thread, so the tick right after the menu closes
+lands a real repaint no matter how it closed.
+
+**Decision:** keep the workaround — it's the same `InvalidateRect` technique
+this codebase already used for a different deferred-viewport repaint issue,
+not a fragile hack, and it stays harmless even after winit fixes the root
+cause. A weekly scheduled check
+([Claude Code routine `trig_01G4L76vcP4am32VnF36tBUZ`](https://claude.ai/code/routines/trig_01G4L76vcP4am32VnF36tBUZ),
+Mondays 08:00 UTC) watches winit#4608 and comments on #177 if the upstream
+state changes, so the workaround can be simplified/removed later if wanted —
+not urgent either way.
+
+---
+
 ## UI performance — lighter rendering strategy ⏭
 
 Superseded by the egui migration (v1.27.0). The DOM rendering cost — WebView2 process overhead, layout/paint on every tick — is gone entirely. The egui binary sleeps between repaints and idles at ~0 % CPU.

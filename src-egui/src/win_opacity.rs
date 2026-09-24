@@ -27,7 +27,11 @@ pub fn find_hwnd(title: &str) -> isize {
 /// bypassing egui's request_repaint/request_repaint_of — which don't work reliably
 /// on Windows in some contexts (originally: non-focused deferred viewports; also
 /// used from `main.rs`'s tray `TrayIconEvent` handler, where the same unreliability
-/// showed up around Windows' modal `TrackPopupMenu` loop, see #177).
+/// showed up around Windows' modal `TrackPopupMenu` loop, see #177). The
+/// `TrackPopupMenu` case is a confirmed upstream winit bug, not app-specific —
+/// <https://github.com/rust-windowing/winit/issues/4608> — watched weekly (see
+/// the comment at the `main.rs` call site for the routine ID); revisit once
+/// that ships a fix, though this stays harmless either way.
 pub fn force_repaint(hwnd: isize) {
     if hwnd == 0 {
         return;

@@ -2573,14 +2573,23 @@ fn main() {
             // dozens of `ctx.request_repaint()` calls, made both from a background
             // polling thread and synchronously via `TrayIconEvent::set_event_handler`
             // right before the nested loop starts, produced zero subsequent frames):
-            // `egui::Context::request_repaint()`/`request_repaint_of()`. This isn't
-            // actually new to this codebase — `win_opacity::force_repaint`'s doc
-            // comment already notes `request_repaint_of` "doesn't work reliably ...
-            // on Windows" for a different deferred-viewport scenario, with the same
-            // fix used here: skip egui's repaint-scheduling layer entirely and post
-            // a real `WM_PAINT` straight to the window via `InvalidateRect`, which
-            // winit turns into a `RedrawRequested` no matter what state its own
-            // repaint bookkeeping thinks it's in.
+            // `egui::Context::request_repaint()`/`request_repaint_of()`. This is a
+            // confirmed upstream winit bug, not something specific to this app:
+            // https://github.com/rust-windowing/winit/issues/4608 — "redraw_request
+            // is ignored while the system popup menu is shown", open as of
+            // 2026-09-24, no fix yet. Weekly upstream check: Claude Code routine
+            // `trig_01G4L76vcP4am32VnF36tBUZ` (Mondays 08:00 UTC), comments on
+            // #177 if winit/eframe ships a fix — check that thread before
+            // re-investigating whether this workaround can be removed.
+            //
+            // This isn't actually new to this codebase either way —
+            // `win_opacity::force_repaint`'s doc comment already notes
+            // `request_repaint_of` "doesn't work reliably ... on Windows" for a
+            // different deferred-viewport scenario, with the same fix used here:
+            // skip egui's repaint-scheduling layer entirely and post a real
+            // `WM_PAINT` straight to the window via `InvalidateRect`, which winit
+            // turns into a `RedrawRequested` no matter what state its own repaint
+            // bookkeeping thinks it's in.
             //
             // `tray_icon::TrayIcon` is `Rc<RefCell<..>>`-backed internally — not
             // `Send` — so this can't live on a background thread; `TrayIconEvent`'s
