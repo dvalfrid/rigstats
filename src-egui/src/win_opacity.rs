@@ -23,11 +23,11 @@ pub fn find_hwnd(title: &str) -> isize {
     unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) as isize }
 }
 
-/// Post WM_PAINT to the window so its render loop runs on the next event loop tick.
-/// Used by the heartbeat thread to drive deferred viewport repaints at ~1 fps
-/// without going through egui's request_repaint_of (which doesn't work reliably
-/// for non-focused deferred viewports on Windows).
-#[allow(dead_code)]
+/// Post WM_PAINT to the window so its render loop runs on the next event loop tick,
+/// bypassing egui's request_repaint/request_repaint_of — which don't work reliably
+/// on Windows in some contexts (originally: non-focused deferred viewports; also
+/// used from `main.rs`'s tray `TrayIconEvent` handler, where the same unreliability
+/// showed up around Windows' modal `TrackPopupMenu` loop, see #177).
 pub fn force_repaint(hwnd: isize) {
     if hwnd == 0 {
         return;

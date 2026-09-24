@@ -179,6 +179,16 @@ struct RigStatsApp {
     // ── Tray recording indicator ───────────────────────────────────────────
     /// True while a session is being recorded — drives the blinking tray dot.
     recording_active: bool,
+    /// Mirrors `recording_active` for the tray-polling background thread (see
+    /// its use of `win_opacity::force_repaint` in `main()`, #177): while a
+    /// context menu is open, winit's own event loop — and so `ui()` — doesn't
+    /// run at all, and neither `request_repaint()`/`request_repaint_of()` nor a
+    /// single pre-emptive `force_repaint()` reliably revives it once the menu
+    /// closes (both empirically confirmed unreliable here). The poller instead
+    /// keeps posting `force_repaint()` on every tick for as long as this is
+    /// true, so the very next tick after the menu closes — whenever that is —
+    /// lands a real repaint no matter how it closed.
+    recording_active_shared: Arc<AtomicBool>,
     /// Current phase of the blink (dot shown vs. hidden).
     recording_blink_on: bool,
     /// When the blink last flipped.
@@ -238,6 +248,7 @@ impl RigStatsApp {
         gpu_lost: Arc<AtomicBool>,
         gpu_started_at: Instant,
         gpu_retry_count: u32,
+        recording_active_shared: Arc<AtomicBool>,
     ) -> Self {
         let init_settings = current_settings.lock_safe().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -335,6 +346,7 @@ impl RigStatsApp {
             wallpaper_spawn_fails: 0,
             wallpaper_teardown_at: None,
             recording_active: false,
+            recording_active_shared,
             recording_blink_on: true,
             recording_blink_at: Instant::now(),
             gpu_lost,
@@ -1032,11 +1044,13 @@ impl eframe::App for RigStatsApp {
                         logging::prune_old_sessions(&self.dir, retention_days);
                         self.tray.set_recording(false);
                         self.recording_active = false;
+                        self.recording_active_shared.store(false, Ordering::Relaxed);
                     } else {
                         match logging::start_session(&self.dir) {
                             Ok(_) => {
                                 self.tray.set_recording(true);
                                 self.recording_active = true;
+                                self.recording_active_shared.store(true, Ordering::Relaxed);
                                 self.recording_blink_on = true;
                                 self.recording_blink_at = Instant::now();
                             }
@@ -2546,6 +2560,38 @@ fn main() {
             // egui event loop via request_repaint().  Quit is handled here directly
             // with process::exit so it is never delayed by a missed repaint.
             let ctx = cc.egui_ctx.clone();
+
+            // Windows' `TrackPopupMenu` (shown on tray right-click) runs its own
+            // nested modal message loop on *this* thread — winit's own event loop,
+            // and therefore `RigStatsApp::ui()`, doesn't run at all while a context
+            // menu is open. Dismissing the menu without picking an item (Escape /
+            // click-away) never produces a `MenuEvent`, so nothing else reacts
+            // afterward and whatever was mid-animation (the recording blink) could
+            // stay frozen (#177).
+            //
+            // Tried and empirically confirmed *not* to fix it (logged evidence:
+            // dozens of `ctx.request_repaint()` calls, made both from a background
+            // polling thread and synchronously via `TrayIconEvent::set_event_handler`
+            // right before the nested loop starts, produced zero subsequent frames):
+            // `egui::Context::request_repaint()`/`request_repaint_of()`. This isn't
+            // actually new to this codebase — `win_opacity::force_repaint`'s doc
+            // comment already notes `request_repaint_of` "doesn't work reliably ...
+            // on Windows" for a different deferred-viewport scenario, with the same
+            // fix used here: skip egui's repaint-scheduling layer entirely and post
+            // a real `WM_PAINT` straight to the window via `InvalidateRect`, which
+            // winit turns into a `RedrawRequested` no matter what state its own
+            // repaint bookkeeping thinks it's in.
+            //
+            // `tray_icon::TrayIcon` is `Rc<RefCell<..>>`-backed internally — not
+            // `Send` — so this can't live on a background thread; `TrayIconEvent`'s
+            // `set_event_handler` (vs. the polled `receiver()`) runs synchronously
+            // on this thread for the right-click that *opens* the menu, before
+            // `TrackPopupMenu` blocks it — the earliest possible point to act.
+            tray_icon::TrayIconEvent::set_event_handler(Some(|_event| {
+                #[cfg(windows)]
+                win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
+            }));
+
             let quit_id = tray.quit_id.clone();
             let settings_id = tray.settings_id.clone();
             let about_id = tray.about_id.clone();
@@ -2556,6 +2602,10 @@ fn main() {
             let floating_id = tray.floating_id.clone();
             let recording_id = tray.recording_id.clone();
             let dir_tray = dir.clone();
+            // Mirrors `RigStatsApp.recording_active`; see the field's doc comment
+            // and the force_repaint call below for why (#177).
+            let recording_active_shared = Arc::new(AtomicBool::new(false));
+            let recording_active_tray = recording_active_shared.clone();
             std::thread::spawn(move || loop {
                 // Guard each iteration: a panic in a tray/Win32 call must not
                 // silently kill this thread, or tray clicks would stop working
@@ -2605,11 +2655,26 @@ fn main() {
                             repaint = true;
                         }
                     }
-                    // Drain tray-icon click events so they don't accumulate. We no
-                    // longer act on left-click — the dashboard is always visible.
-                    let _ = tray_icon::TrayIconEvent::receiver().try_recv();
+                    // tray-icon click/hover events are handled synchronously via
+                    // `TrayIconEvent::set_event_handler` above (registering a
+                    // handler stops them from reaching this channel at all — see
+                    // that comment for why), so there is nothing left to drain
+                    // here.
                     if repaint {
                         ctx.request_repaint();
+                    }
+                    // While recording, keep posting a real repaint on every tick
+                    // (see `recording_active_shared`'s doc comment, #177) rather
+                    // than only reacting to tray events — a context menu can stay
+                    // open for an arbitrary, unbounded time, and neither egui's
+                    // repaint request nor a single pre-emptive force_repaint()
+                    // reliably survives that. This thread runs independently of
+                    // whatever nested Win32 loop may be blocking the main thread,
+                    // so the very next tick after the menu closes — whenever that
+                    // is — lands a real WM_PAINT no matter how it closed.
+                    if recording_active_tray.load(Ordering::Relaxed) {
+                        #[cfg(windows)]
+                        win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
                     }
                 }));
                 if outcome.is_err() {
@@ -2769,6 +2834,7 @@ fn main() {
                 gpu_lost,
                 gpu_started_at,
                 gpu_retry_count,
+                recording_active_shared,
             )))
         }),
     )
