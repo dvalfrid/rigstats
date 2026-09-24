@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.39.0</Program_Version>
+		<Program_Version>1.39.1</Program_Version>
 		<Program_Release_Month>09</Program_Release_Month>
-		<Program_Release_Day>11</Program_Release_Day>
+		<Program_Release_Day>24</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>gpu: add per-process GPU engine panel (GPU Apps); gpu: collect GPU Engine diagnostics + build a regression fixture corpus; gpu: show engine type alongside GPU in GPU Apps rows; ci: dispatch the Release workflow against main, not the release tag; ci: stop Release Please workflow failing after Cargo.lock sync; gpu: left-align the GPU/engine column in GPU Apps; gpu: strip space-delimited GPU engine queue ordinals</Program_Change_Info>
+		<Program_Change_Info>gpu: refresh the GPU adapter LUID map periodically, not just when empty; tray: recording blink no longer freezes after the tray menu closes</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.39.0/RIGStats_1.39.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.39.1/RIGStats_1.39.1_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
