@@ -3394,7 +3394,7 @@ dependencies = [
 
 [[package]]
 name = "rigstats-egui"
-version = "1.39.0"
+version = "1.39.1"
 dependencies = [
  "chrono",
  "eframe",
