@@ -1,5 +1,5 @@
 use crate::lock_ext::LockSafe;
-use crate::overlay::ALL_OVERLAY_METRICS;
+use crate::overlay::{OverlayMetric, ALL_OVERLAY_METRICS};
 use crate::theme::{self, DialogColors};
 use rigstats_backend::{autostart, debug, settings};
 use std::path::{Path, PathBuf};
@@ -430,6 +430,7 @@ pub fn show(
                                     reload,
                                     dir.as_ref(),
                                     dcomp_available,
+                                    battery_present,
                                 ),
                                 _ => {}
                             }
@@ -1202,12 +1203,16 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
             });
         });
 
-        // Temperature rows — unit inline as muted suffix
-        for &(key, label) in &[
-            ("cpu", "CPU"),
-            ("gpu", "GPU"),
-            ("ram", "RAM"),
-            ("disk", "Disk"),
+        // Temperature/load rows — unit inline as muted suffix
+        for &(key, label, unit) in &[
+            ("cpu", "CPU", "°C"),
+            ("gpu", "GPU", "°C"),
+            ("cpu_load", "CPU Load", "%"),
+            ("gpu_load", "GPU Load", "%"),
+            ("ram", "RAM", "°C"),
+            ("ram_load", "RAM Usage", "%"),
+            ("disk", "Disk", "°C"),
+            ("disk_usage", "Disk Usage", "%"),
         ] {
             let e = draft.thresholds.entry(key.to_string()).or_insert_with(|| {
                 settings::default_thresholds()
@@ -1216,7 +1221,7 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
             });
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(label).size(13.0).color(dc.text));
-                ui.label(egui::RichText::new("°C").size(11.0).color(dc.muted));
+                ui.label(egui::RichText::new(unit).size(11.0).color(dc.muted));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     threshold_field(ui, &mut e.crit);
                     ui.add_space(4.0);
@@ -1370,6 +1375,7 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
 /// including while this dialog happens to be open — bypassing the draft
 /// keeps that external toggle from being silently reverted the next time any
 /// other field on this tab changes.
+#[allow(clippy::too_many_arguments)]
 fn draw_overlay(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -1378,6 +1384,7 @@ fn draw_overlay(
     reload: &Arc<AtomicBool>,
     dir: &Path,
     dcomp_available: bool,
+    battery_present: bool,
 ) {
     // Enable — bypasses the draft/Save/Cancel flow entirely: applies and
     // persists immediately, same as the tray "Toggle Overlay Mode" row and
@@ -1425,35 +1432,124 @@ fn draw_overlay(
         });
     });
 
-    // Metrics — one toggle row per registry entry, in registry order.
+    // Metrics — enabled ones first (in display order, reorderable via
+    // arrows), disabled ones after in registry order. Mirrors draw_panels'
+    // pattern for the main dashboard's panel list — `draw_overlay` renders
+    // metrics in `overlay_metrics`'s order, so this list *is* the sort order.
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         section_label(ui, dc, "Metrics");
+        ui.label(
+            egui::RichText::new("Use arrows to reorder · toggle to show/hide")
+                .size(11.0)
+                .color(dc.muted),
+        );
         ui.add_space(8.0);
+
+        let mut ordered: Vec<&OverlayMetric> = Vec::new();
+        for key in &draft.overlay_metrics {
+            if let Some(m) = ALL_OVERLAY_METRICS.iter().find(|m| m.key == key.as_str()) {
+                ordered.push(m);
+            }
+        }
         for m in ALL_OVERLAY_METRICS {
-            let mut on = draft.overlay_metrics.iter().any(|k| k.as_str() == m.key);
+            if !draft.overlay_metrics.iter().any(|k| k.as_str() == m.key) {
+                ordered.push(m);
+            }
+        }
+
+        let enabled_count = draft.overlay_metrics.len();
+        let mut toggle: Option<(&'static str, bool)> = None;
+        let mut reorder: Option<(&'static str, i32)> = None;
+
+        for m in &ordered {
+            let on = draft.overlay_metrics.iter().any(|k| k.as_str() == m.key);
+            // Mirrors draw_panels' battery row: no point offering a metric
+            // this rig can't produce. Disabled in debug builds so it can
+            // still be exercised without a physical battery.
+            let unavailable =
+                m.key == "battery_pct" && !battery_present && cfg!(not(debug_assertions));
+            let label_color = if unavailable { dc.muted } else { dc.text };
             inner_row(dc).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
                 ui.horizontal(|ui| {
                     ui.label(
                         egui::RichText::new(format!("{} ({})", m.label, m.unit.trim()))
                             .size(13.0)
-                            .color(dc.text),
+                            .color(label_color),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if toggle_switch(ui, dc, &mut on).changed() {
-                            if on {
-                                if !draft.overlay_metrics.iter().any(|k| k.as_str() == m.key) {
-                                    draft.overlay_metrics.push(m.key.to_string());
+                        if unavailable {
+                            // Static grayed-out toggle — no interaction.
+                            let desired = egui::vec2(44.0, 24.0);
+                            let (rect, _) = ui.allocate_exact_size(desired, egui::Sense::hover());
+                            if ui.is_rect_visible(rect) {
+                                let r = (rect.height() / 2.0) as u8;
+                                ui.painter().rect_filled(
+                                    rect,
+                                    egui::CornerRadius::same(r),
+                                    dc.toggle_off,
+                                );
+                                ui.painter().circle_filled(
+                                    egui::pos2(rect.left() + rect.height() / 2.0, rect.center().y),
+                                    rect.height() / 2.0 - 3.0,
+                                    dc.muted,
+                                );
+                            }
+                        } else {
+                            let mut v = on;
+                            if toggle_switch(ui, dc, &mut v).changed() {
+                                toggle = Some((m.key, v));
+                            }
+                        }
+                        if on && !unavailable {
+                            let idx = draft
+                                .overlay_metrics
+                                .iter()
+                                .position(|k| k.as_str() == m.key)
+                                .unwrap_or(0);
+                            ui.add_space(6.0);
+                            if idx + 1 < enabled_count {
+                                if arrow_btn(ui, dc, true).clicked() {
+                                    reorder = Some((m.key, 1));
                                 }
                             } else {
-                                draft.overlay_metrics.retain(|k| k.as_str() != m.key);
+                                ui.add_space(20.0);
                             }
+                            if idx > 0 {
+                                if arrow_btn(ui, dc, false).clicked() {
+                                    reorder = Some((m.key, -1));
+                                }
+                            } else {
+                                ui.add_space(20.0);
+                            }
+                        } else if on {
+                            ui.add_space(46.0);
                         }
                     });
                 });
             });
             ui.add_space(4.0);
+        }
+
+        if let Some((key, add)) = toggle {
+            if add {
+                if !draft.overlay_metrics.iter().any(|k| k.as_str() == key) {
+                    draft.overlay_metrics.push(key.to_string());
+                }
+            } else {
+                draft.overlay_metrics.retain(|k| k.as_str() != key);
+            }
+        }
+        if let Some((key, d)) = reorder {
+            if let Some(idx) = draft.overlay_metrics.iter().position(|k| k.as_str() == key) {
+                let new_idx = if d < 0 {
+                    idx.saturating_sub(1)
+                } else {
+                    (idx + 1).min(draft.overlay_metrics.len().saturating_sub(1))
+                };
+                draft.overlay_metrics.swap(idx, new_idx);
+            }
         }
     });
 

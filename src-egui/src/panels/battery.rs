@@ -4,8 +4,9 @@ use crate::tempcolor;
 use crate::{theme, PollStats};
 
 /// Charge colour: green when above warn, yellow when above crit, red when critical.
-/// Charging always uses accent (cyan).
-fn charge_color(pct: u8, charging: bool, charge_warn: u8, charge_crit: u8) -> Color32 {
+/// Charging always uses accent (cyan). Shared with the overlay's battery_pct
+/// chip (`overlay.rs`) so both surfaces treat "low charge is bad" consistently.
+pub(crate) fn charge_color(pct: u8, charging: bool, charge_warn: u8, charge_crit: u8) -> Color32 {
     if charging {
         return theme::C_ACCENT;
     }

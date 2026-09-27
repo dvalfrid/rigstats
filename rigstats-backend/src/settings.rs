@@ -21,6 +21,9 @@ pub struct PanelLayout {
 ///
 /// Semantics differ by component type:
 /// - Temperature (cpu/gpu/ram/disk): fires when reading **exceeds** the threshold.
+/// - Load/usage percentage (cpu_load/gpu_load/ram_load): fires when the
+///   reading **exceeds** the threshold, same direction as temperature but a
+///   distinct key since the values are percentages, not °C.
 /// - Battery: fires when charge % **drops below** the threshold (warn > crit).
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct ComponentThresholds {
@@ -46,6 +49,20 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
             },
         ),
         (
+            "cpu_load",
+            ComponentThresholds {
+                warn: Some(80),
+                crit: Some(95),
+            },
+        ),
+        (
+            "gpu_load",
+            ComponentThresholds {
+                warn: Some(80),
+                crit: Some(95),
+            },
+        ),
+        (
             "ram",
             ComponentThresholds {
                 warn: Some(50),
@@ -53,10 +70,27 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
             },
         ),
         (
+            "ram_load",
+            ComponentThresholds {
+                warn: Some(80),
+                crit: Some(95),
+            },
+        ),
+        (
             "disk",
             ComponentThresholds {
                 warn: Some(55),
                 crit: Some(70),
+            },
+        ),
+        (
+            // Disk space used %, per drive — was a hardcoded 75/90 cutoff in
+            // the Disk panel's usage bar; matches those defaults now that
+            // it's user-configurable.
+            "disk_usage",
+            ComponentThresholds {
+                warn: Some(75),
+                crit: Some(90),
             },
         ),
         (

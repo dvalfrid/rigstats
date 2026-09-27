@@ -1,7 +1,7 @@
 use egui::{Color32, RichText, Ui, Vec2};
 use rigstats_backend::stats::DiskKind;
 
-use crate::tempcolor::temp_color;
+use crate::tempcolor::{color_hot, color_warn, temp_color};
 use crate::theme;
 use crate::PollStats;
 
@@ -34,12 +34,15 @@ fn fmt_speed_parts(mb: f64) -> (String, &'static str) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
     opacity: f32,
-    warn: u8,
-    crit: u8,
+    temp_warn: u8,
+    temp_crit: u8,
+    usage_warn: u8,
+    usage_crit: u8,
     th: &theme::AppTheme,
     sc: f32,
 ) -> egui::Rect {
@@ -142,10 +145,15 @@ pub fn draw(
                     }
 
                     let frac = drive.pct as f32 / 100.0;
-                    let bar_color = if drive.pct >= 90 {
-                        Color32::from_rgb(0xff, 0x3a, 0x1f)
-                    } else if drive.pct >= 75 {
-                        Color32::from_rgb(0xff, 0xb3, 0x00)
+                    // Below usage_warn keeps the panel's own accent color
+                    // (purple) rather than tempcolor's green "ok" — this bar
+                    // isn't a warn/crit-only indicator, it's always visible
+                    // and colored purple by default like every other panel's
+                    // primary bar.
+                    let bar_color = if drive.pct >= usage_crit {
+                        color_hot()
+                    } else if drive.pct >= usage_warn {
+                        color_warn()
                     } else {
                         theme::C_PUR
                     };
@@ -185,9 +193,10 @@ pub fn draw(
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let (s, c) = match drive.temp {
-                                    Some(t) => {
-                                        (format!("{t:.0}°C"), temp_color(Some(t), warn, crit))
-                                    }
+                                    Some(t) => (
+                                        format!("{t:.0}°C"),
+                                        temp_color(Some(t), temp_warn, temp_crit),
+                                    ),
                                     None => ("--".to_string(), theme::C_DIM),
                                 };
                                 ui.label(RichText::new(s).size(11.0 * sc).color(c));

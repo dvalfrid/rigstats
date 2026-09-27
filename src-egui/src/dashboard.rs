@@ -13,11 +13,20 @@ use eframe::egui;
 use rigstats_backend::settings;
 use std::sync::mpsc;
 
-/// Per-component warn/crit thresholds (°C) used for temperature colour coding.
+/// Per-component warn/crit thresholds used for colour coding. Most are °C;
+/// `cpu_load`/`gpu_load`/`ram_load` are percentages (kept distinct from
+/// `cpu`/`gpu`/`ram` since those are temperature thresholds — reusing them
+/// for a usage % was an overlay-only inconsistency the main dashboard never
+/// had: it colors RAM usage with a fixed color, and CPU/GPU load bars aren't
+/// colored by threshold at all).
 #[derive(Clone)]
 pub struct PanelThresholds {
     pub cpu: (u8, u8),
     pub gpu: (u8, u8),
+    pub cpu_load: (u8, u8),
+    pub gpu_load: (u8, u8),
+    pub ram_load: (u8, u8),
+    pub disk_usage: (u8, u8),
     pub gpu_hotspot: (u8, u8),
     pub ram: (u8, u8),
     pub disk: (u8, u8),
@@ -31,6 +40,10 @@ impl Default for PanelThresholds {
         Self {
             cpu: (80, 90),
             gpu: (80, 90),
+            cpu_load: (80, 95),
+            gpu_load: (80, 95),
+            ram_load: (80, 95),
+            disk_usage: (75, 90),
             gpu_hotspot: (90, 105),
             ram: (60, 70),
             disk: (50, 60),
@@ -52,6 +65,10 @@ impl PanelThresholds {
         Self {
             cpu: get("cpu", def.cpu),
             gpu: get("gpu", def.gpu),
+            cpu_load: get("cpu_load", def.cpu_load),
+            gpu_load: get("gpu_load", def.gpu_load),
+            ram_load: get("ram_load", def.ram_load),
+            disk_usage: get("disk_usage", def.disk_usage),
             gpu_hotspot: def.gpu_hotspot, // not user-configurable
             ram: get("ram", def.ram),
             disk: get("disk", def.disk),
@@ -184,6 +201,8 @@ impl DashboardView<'_> {
                     opacity,
                     self.thresholds.disk.0,
                     self.thresholds.disk.1,
+                    self.thresholds.disk_usage.0,
+                    self.thresholds.disk_usage.1,
                     self.app_theme,
                     sc,
                 );

@@ -2713,6 +2713,8 @@ impl RigStatsApp {
                                     1.0,
                                     self.runtime.thresholds.disk.0,
                                     self.runtime.thresholds.disk.1,
+                                    self.runtime.thresholds.disk_usage.0,
+                                    self.runtime.thresholds.disk_usage.1,
                                     &app_theme,
                                     scale,
                                 ),

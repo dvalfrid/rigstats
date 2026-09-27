@@ -3,7 +3,8 @@
 //! metrics, meant to sit over a game without stealing input.
 
 use crate::dashboard::PanelThresholds;
-use crate::tempcolor::temp_color;
+use crate::panels::battery::charge_color;
+use crate::tempcolor::{color_unknown, temp_color};
 use crate::theme;
 use crate::PollStats;
 use eframe::egui;
@@ -26,14 +27,17 @@ const FRAME_MARGIN_Y: f32 = 6.0;
 const WIDTH_PROBE_VALUE: f64 = 9999.9;
 
 /// One selectable overlay metric: how to label it, extract its value from a
-/// [`PollStats`] snapshot, and (optionally) which [`PanelThresholds`] field
-/// colours it warn/crit.
+/// [`PollStats`] snapshot, and (optionally) how to colour it from the
+/// current thresholds. `color` takes the full snapshot (not just the
+/// extracted value) because some metrics need more than a scalar + a single
+/// warn/crit pair — e.g. battery needs the `charging` flag too, to match
+/// the main dashboard's battery panel.
 pub struct OverlayMetric {
     pub key: &'static str,
     pub label: &'static str,
     pub unit: &'static str,
     pub extract: fn(&PollStats) -> Option<f64>,
-    pub threshold_key: Option<&'static str>,
+    pub color: Option<fn(&PollStats, &PanelThresholds) -> Color32>,
 }
 
 fn ram_pct(s: &PollStats) -> Option<f64> {
@@ -59,6 +63,49 @@ fn battery_pct(s: &PollStats) -> Option<f64> {
     s.battery_charge_pct.map(|p| p as f64)
 }
 
+fn cpu_load_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(Some(s.cpu_load as f64), t.cpu_load.0, t.cpu_load.1)
+}
+
+fn cpu_temp_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(s.cpu_temp, t.cpu.0, t.cpu.1)
+}
+
+fn gpu_load_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(s.gpu_load, t.gpu_load.0, t.gpu_load.1)
+}
+
+fn gpu_temp_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(s.gpu_temp, t.gpu.0, t.gpu.1)
+}
+
+fn gpu_hotspot_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(s.gpu_hotspot, t.gpu_hotspot.0, t.gpu_hotspot.1)
+}
+
+fn ram_pct_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    // `t.ram` is RAM *temperature* (°C) — a usage percentage needs its own
+    // threshold, same reasoning as cpu_load/gpu_load above. Reusing `t.ram`
+    // here previously meant normal RAM usage (e.g. 70%) coincidentally read
+    // as "critical" against a 70°C-designed cutoff.
+    temp_color(ram_pct(s), t.ram_load.0, t.ram_load.1)
+}
+
+/// Low charge is bad (inverted vs. every other threshold here) and charging
+/// overrides to accent regardless of level — same rule as the main
+/// dashboard's battery panel, via the shared `charge_color`.
+fn battery_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    match s.battery_charge_pct {
+        Some(pct) => charge_color(
+            pct,
+            s.battery_charging.unwrap_or(false),
+            t.battery.0,
+            t.battery.1,
+        ),
+        None => color_unknown(),
+    }
+}
+
 /// All metrics selectable in the Overlay settings tab, in the order they're
 /// offered there. `key` values are what's persisted in `Settings.overlay_metrics`.
 pub const ALL_OVERLAY_METRICS: &[OverlayMetric] = &[
@@ -67,164 +114,152 @@ pub const ALL_OVERLAY_METRICS: &[OverlayMetric] = &[
         label: "CPU",
         unit: "%",
         extract: |s| Some(s.cpu_load as f64),
-        threshold_key: None,
+        color: Some(cpu_load_color),
     },
     OverlayMetric {
         key: "cpu_temp",
         label: "CPU",
         unit: "°C",
         extract: |s| s.cpu_temp,
-        threshold_key: Some("cpu"),
+        color: Some(cpu_temp_color),
     },
     OverlayMetric {
         key: "cpu_freq",
         label: "CPU",
         unit: " GHz",
         extract: cpu_freq_ghz,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "cpu_power",
         label: "CPU",
         unit: " W",
         extract: |s| s.cpu_power,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_load",
         label: "GPU",
         unit: "%",
         extract: |s| s.gpu_load,
-        threshold_key: Some("gpu"),
+        color: Some(gpu_load_color),
     },
     OverlayMetric {
         key: "gpu_temp",
         label: "GPU",
         unit: "°C",
         extract: |s| s.gpu_temp,
-        threshold_key: Some("gpu"),
+        color: Some(gpu_temp_color),
     },
     OverlayMetric {
         key: "gpu_hotspot",
         label: "HOTSPOT",
         unit: "°C",
         extract: |s| s.gpu_hotspot,
-        threshold_key: Some("gpu_hotspot"),
+        color: Some(gpu_hotspot_color),
     },
     OverlayMetric {
         key: "gpu_core_clock",
         label: "GPU CLK",
         unit: " MHz",
         extract: |s| s.gpu_freq_mhz,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_mem_clock",
         label: "GPU MEM",
         unit: " MHz",
         extract: |s| s.gpu_mem_freq_mhz,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_vram_used",
         label: "VRAM",
         unit: " MB",
         extract: |s| s.gpu_vram_used_mb,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_vram_pct",
         label: "VRAM",
         unit: "%",
         extract: gpu_vram_pct,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_power",
         label: "GPU",
         unit: " W",
         extract: |s| s.gpu_power,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "gpu_fan",
         label: "GPU FAN",
         unit: "%",
         extract: |s| s.gpu_fan,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "ram_used",
         label: "RAM",
         unit: " GB",
         extract: ram_used_gb,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "ram_pct",
         label: "RAM",
         unit: "%",
         extract: ram_pct,
-        threshold_key: Some("ram"),
+        color: Some(ram_pct_color),
     },
     OverlayMetric {
         key: "net_up",
         label: "UP",
         unit: " Mbps",
         extract: |s| Some(s.net_up_mbps),
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "net_down",
         label: "DOWN",
         unit: " Mbps",
         extract: |s| Some(s.net_down_mbps),
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "net_ping",
         label: "PING",
         unit: " ms",
         extract: |s| s.net_ping_ms,
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "disk_read",
         label: "READ",
         unit: " MB/s",
         extract: |s| Some(s.disk_read_mbps),
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "disk_write",
         label: "WRITE",
         unit: " MB/s",
         extract: |s| Some(s.disk_write_mbps),
-        threshold_key: None,
+        color: None,
     },
     OverlayMetric {
         key: "battery_pct",
         label: "BATT",
         unit: "%",
         extract: battery_pct,
-        threshold_key: None,
+        color: Some(battery_color),
     },
 ];
 
 fn find_metric(key: &str) -> Option<&'static OverlayMetric> {
     ALL_OVERLAY_METRICS.iter().find(|m| m.key == key)
-}
-
-fn threshold_color(thresholds: &PanelThresholds, key: &str, value: Option<f64>) -> Color32 {
-    let (warn, crit) = match key {
-        "cpu" => thresholds.cpu,
-        "gpu" => thresholds.gpu,
-        "gpu_hotspot" => thresholds.gpu_hotspot,
-        "ram" => thresholds.ram,
-        "disk" => thresholds.disk,
-        _ => return theme::C_TEXT,
-    };
-    temp_color(value, warn, crit)
 }
 
 /// Formats a chip's label/value/unit text — shared by `draw_chip` (the real
@@ -246,8 +281,8 @@ fn draw_chip(
     sc: f32,
 ) {
     let value = (m.extract)(latest);
-    let color = match m.threshold_key {
-        Some(key) => threshold_color(thresholds, key, value),
+    let color = match m.color {
+        Some(f) => f(latest, thresholds),
         None => th.stat_label,
     };
     let text = chip_text(m, value);
@@ -485,6 +520,7 @@ pub fn draw_overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tempcolor::{color_hot, color_ok, color_warn};
 
     #[test]
     fn every_metric_extractor_runs_against_default_stats() {
@@ -549,6 +585,76 @@ mod tests {
     #[test]
     fn find_metric_returns_none_for_unknown_key() {
         assert!(find_metric("not_a_real_key").is_none());
+    }
+
+    #[test]
+    fn cpu_load_color_uses_the_dedicated_load_threshold_not_the_temp_one() {
+        // cpu_load is a percentage — it must not be colored by `thresholds.cpu`
+        // (a °C threshold), only by the separate `thresholds.cpu_load`.
+        let mut stats = PollStats::default();
+        let mut t = PanelThresholds::default();
+        t.cpu = (10, 20); // deliberately tiny, so a bug reusing it would show red
+        t.cpu_load = (80, 95);
+        stats.cpu_load = 50;
+        assert_eq!(cpu_load_color(&stats, &t), color_ok());
+        stats.cpu_load = 96;
+        assert_eq!(cpu_load_color(&stats, &t), color_hot());
+    }
+
+    #[test]
+    fn gpu_load_color_uses_the_dedicated_load_threshold_not_the_temp_one() {
+        let mut stats = PollStats::default();
+        let mut t = PanelThresholds::default();
+        t.gpu = (10, 20);
+        t.gpu_load = (80, 95);
+        stats.gpu_load = Some(50.0);
+        assert_eq!(gpu_load_color(&stats, &t), color_ok());
+        stats.gpu_load = Some(96.0);
+        assert_eq!(gpu_load_color(&stats, &t), color_hot());
+    }
+
+    #[test]
+    fn ram_pct_color_uses_the_dedicated_usage_threshold_not_the_temp_one() {
+        // ram_pct is usage % — must not be colored by `thresholds.ram` (RAM
+        // temperature, °C), only by the separate `thresholds.ram_load`.
+        let mut stats = PollStats::default();
+        let mut t = PanelThresholds::default();
+        t.ram = (10, 20);
+        t.ram_load = (80, 95);
+        stats.ram_used = 70;
+        stats.ram_total = 100; // 70% usage — must not read as critical
+        assert_eq!(ram_pct_color(&stats, &t), color_ok());
+        stats.ram_used = 96;
+        assert_eq!(ram_pct_color(&stats, &t), color_hot());
+    }
+
+    #[test]
+    fn battery_color_is_inverted_low_charge_is_bad() {
+        let mut stats = PollStats::default();
+        let t = PanelThresholds::default(); // battery: warn=20, crit=10
+        stats.battery_charge_pct = Some(50);
+        stats.battery_charging = Some(false);
+        assert_eq!(battery_color(&stats, &t), color_ok());
+        stats.battery_charge_pct = Some(15);
+        assert_eq!(battery_color(&stats, &t), color_warn());
+        stats.battery_charge_pct = Some(5);
+        assert_eq!(battery_color(&stats, &t), color_hot());
+    }
+
+    #[test]
+    fn battery_color_charging_overrides_to_accent_regardless_of_level() {
+        let mut stats = PollStats::default();
+        let t = PanelThresholds::default();
+        stats.battery_charge_pct = Some(5); // would be critical if discharging
+        stats.battery_charging = Some(true);
+        assert_eq!(battery_color(&stats, &t), theme::C_ACCENT);
+    }
+
+    #[test]
+    fn battery_color_unknown_when_no_reading() {
+        let stats = PollStats::default();
+        let t = PanelThresholds::default();
+        assert_eq!(battery_color(&stats, &t), color_unknown());
     }
 
     #[test]
