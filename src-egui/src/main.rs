@@ -6,11 +6,12 @@ use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
     compute_landscape_window_height, compute_window_height, dialog_center, guard_panel_position,
-    monitor_rect_at, pick_window_rect_for_profile, profile_is_landscape, profile_scale,
-    profile_to_size, resolve_pinned_position,
+    is_position_on_screen, monitor_rect_at, overlay_anchor_position, pick_window_rect_for_profile,
+    profile_is_landscape, profile_scale, profile_to_size, resolve_pinned_position,
 };
 use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::lock_ext::LockSafe;
+use rigstats_egui::overlay::{content_inset, draw_overlay, estimate_window_size};
 use rigstats_egui::poll::poll_loop;
 use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
 use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
@@ -35,6 +36,10 @@ struct RigStatsApp {
     runtime: DashboardRuntime,
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
+    /// Fires on the fixed Ctrl+Alt+O global hotkey (see `hotkey.rs`); drained
+    /// in `ui()` to flip `overlay_click_through` the same way the tray's
+    /// "Lock/Unlock Overlay" row does.
+    hotkey_rx: mpsc::Receiver<()>,
     opacity: f32,
     /// Cached from settings — "on_top", "behind", or "normal".
     window_layer: String,
@@ -176,6 +181,95 @@ struct RigStatsApp {
     /// being TerminateProcess-d), and this deadline triggers a `kill()` fallback
     /// if it has not exited in time.
     wallpaper_teardown_at: Option<Instant>,
+    // ── Overlay (issue #183) ────────────────────────────────────────────────
+    // An independent add-on window — not a `window_layer` value — that can be
+    // shown/hidden regardless of what the main window (Normal/Floating/
+    // Wallpaper/etc.) is doing, the same way in-game overlays coexist with
+    // whatever else is on screen. Rendered via its own `show_viewport_immediate`
+    // viewport (`render_overlay_viewport`), mirroring how floating panels each
+    // own a secondary viewport, rather than reusing the root window.
+    /// Whether the overlay viewport was shown last frame — edge-detects
+    /// enable/disable transitions so `overlay_hwnd`/`overlay_positioned` reset
+    /// cleanly each time it's freshly (re-)enabled.
+    overlay_active: bool,
+    /// Cached from settings — the overlay's on/off state.
+    overlay_enabled: bool,
+    /// Single source of truth for click-through: the tray, the global
+    /// hotkey, and the Settings switch all just flip and persist this —
+    /// applied immediately (bypassing Settings dialog Save/Cancel) via the
+    /// guarded `MousePassthrough` dispatch inside the overlay's own viewport.
+    overlay_click_through: bool,
+    /// Last click-through value actually sent via `MousePassthrough` —
+    /// avoids re-sending the same viewport command every frame.
+    last_applied_click_through: Option<bool>,
+    /// HWND of the overlay's own OS window, found by title once per
+    /// activation (like the root window's `self.hwnd`) and reset to 0 when
+    /// the overlay is disabled, since the window is destroyed and a fresh one
+    /// is created next time it's shown.
+    overlay_hwnd: isize,
+    /// Whether the overlay's initial position (anchor or saved free-drag
+    /// spot) has been applied for the current activation — mirrors floating
+    /// panels' `panels_positioned`: after the first frame, a `"free"`-anchored
+    /// overlay's position is OS-owned (via drag) rather than re-sent, which
+    /// would fight the OS and cause sub-pixel blur. Reset to `false` whenever
+    /// the overlay transitions from disabled to enabled.
+    overlay_positioned: bool,
+    /// Content inset (`overlay::content_inset`) applied last frame, used to
+    /// detect a Background/Scale-driven change so a `"free"`-anchored
+    /// overlay's saved drag position can be compensated by the same delta —
+    /// otherwise, since a `"free"` position's window origin is never
+    /// resent once dragged (see `overlay_anchor_position`'s doc comment),
+    /// toggling Background would grow the window from that fixed origin and
+    /// visibly shift the content by the new padding instead of leaving it
+    /// in place.
+    overlay_last_content_inset: Option<[f32; 2]>,
+    /// Scale value the overlay is currently rendered/sized at. `None` until
+    /// the first commit after activation. Deliberately lags the live
+    /// `Settings.overlay_scale` value while `overlay_pending_scale` is still
+    /// settling — see that field's doc comment for why.
+    overlay_committed_scale: Option<f32>,
+    /// Most recent live `overlay_scale` value seen, and when it was first
+    /// seen. A Scale slider drag fires many intermediate values in quick
+    /// succession, and every value that changes the measured overlay size
+    /// re-triggers the DComp hide/burst/reveal cycle below — committing on
+    /// every intermediate tick turned one drag into a rapid string of
+    /// hide/reveal flickers (visibly "jumping" text, and the overlay's own
+    /// always-on-top window repeatedly toggling visibility over whatever it
+    /// overlaps, e.g. the Settings dialog). `overlay_committed_scale` only
+    /// adopts this value once it's held steady for `OVERLAY_SCALE_DEBOUNCE`.
+    overlay_pending_scale: Option<f32>,
+    overlay_pending_scale_since: Instant,
+    /// Last overlay content size seen, used to detect a resize (metric
+    /// list/layout/scale/background edit) so `set_no_redirection_bitmap` can
+    /// be re-applied afterward — its DComp binding doesn't automatically
+    /// follow the window through a resize (diagnosed from a partially
+    /// transparent/partially opaque-white render right after resizing).
+    overlay_last_size: Option<[f32; 2]>,
+    /// Frames left to keep re-applying `set_no_redirection_bitmap` after a
+    /// detected resize — mirrors `reapply_window_props_frames`'s "a
+    /// transition needs a few frames to fully stick" shape.
+    overlay_reapply_dcomp_frames: u8,
+    /// True while the overlay window is deliberately kept invisible
+    /// (`with_visible(false)`) so the user never sees the transient
+    /// DWM-redirection-bitmap white box that appears before
+    /// `set_no_redirection_bitmap`'s reapply burst has had a few frames to
+    /// take effect. Set whenever a burst starts (fresh show or resize);
+    /// cleared once the burst completes (or `overlay_reveal_safety_frames`
+    /// times out), at which point the window is made visible for the first
+    /// time already fully per-pixel transparent.
+    overlay_pending_reveal: bool,
+    /// Hard cap on how long `overlay_pending_reveal` may hide the window,
+    /// decremented every frame regardless of whether the HWND has been
+    /// found yet — guards against the window staying invisible forever if
+    /// `find_hwnd` ever fails to match.
+    overlay_reveal_safety_frames: u8,
+    /// Current free-drag position for the overlay this session. Loaded from
+    /// `Settings.overlay_position` at startup; updated on drag and persisted
+    /// (debounced via `overlay_position_dirty`), mirroring `floating_positions`.
+    overlay_position: Option<[f32; 2]>,
+    /// Set true when the overlay is dragged this frame; consumed in `ui()`
+    /// to debounce the settings write to once per tick.
+    overlay_position_dirty: bool,
     // ── Tray recording indicator ───────────────────────────────────────────
     /// True while a session is being recorded — drives the blinking tray dot.
     recording_active: bool,
@@ -233,6 +327,7 @@ impl RigStatsApp {
         runtime: DashboardRuntime,
         receiver: mpsc::Receiver<PollStats>,
         tray_rx: mpsc::Receiver<TrayCmd>,
+        hotkey_rx: mpsc::Receiver<()>,
         opacity: f32,
         dcomp_available: bool,
         tray: Tray,
@@ -260,6 +355,7 @@ impl RigStatsApp {
             runtime,
             receiver,
             tray_rx,
+            hotkey_rx,
             opacity,
             window_layer: init_settings.window_layer.clone(),
             tray,
@@ -345,6 +441,24 @@ impl RigStatsApp {
             wallpaper_last_spawn: None,
             wallpaper_spawn_fails: 0,
             wallpaper_teardown_at: None,
+            overlay_active: false,
+            overlay_enabled: init_settings.overlay_enabled,
+            overlay_click_through: init_settings.overlay_click_through,
+            last_applied_click_through: None,
+            overlay_hwnd: 0,
+            overlay_positioned: false,
+            overlay_last_content_inset: None,
+            overlay_committed_scale: None,
+            overlay_pending_scale: None,
+            overlay_pending_scale_since: Instant::now(),
+            overlay_last_size: None,
+            overlay_reapply_dcomp_frames: 0,
+            overlay_pending_reveal: false,
+            overlay_reveal_safety_frames: 0,
+            overlay_position: init_settings
+                .overlay_position
+                .map(|p| [p[0] as f32, p[1] as f32]),
+            overlay_position_dirty: false,
             recording_active: false,
             recording_active_shared,
             recording_blink_on: true,
@@ -564,10 +678,24 @@ impl RigStatsApp {
             // layer and hand it to the host, so the workflow is: position the
             // window where you want it in Normal mode, then switch to wallpaper.
             // Persisted before the host is spawned below so it reads the value.
+            //
+            // Guarded: `last_fixed_pos` is only updated while `!wallpaper_active`
+            // (see the fixed-mode render branch), but on the very frame a prior
+            // mode transition's `OuterPosition` command was issued, the OS may
+            // not have applied it yet — `ctx.input().outer_rect` can still
+            // report the *previous* position for a frame or two. If wallpaper
+            // mode is toggled off and back on again quickly, that stale read
+            // can be the off-screen parked coordinate itself, which would
+            // otherwise get saved as `wallpaper_position` and send the host to
+            // the wrong monitor (or off every monitor) next time. Only trust a
+            // `last_fixed_pos` that's actually on a connected monitor; if it
+            // isn't, keep whatever `wallpaper_position` was already saved.
             if let Some([x, y]) = self.last_fixed_pos {
-                let mut s = self.current_settings.lock_safe();
-                s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
-                self.persist_settings_logged(&s);
+                if is_position_on_screen([x, y]) {
+                    let mut s = self.current_settings.lock_safe();
+                    s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
+                    self.persist_settings_logged(&s);
+                }
             }
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                 -32000.0, -32000.0,
@@ -713,6 +841,419 @@ impl RigStatsApp {
             }
         }
     }
+
+    /// Show/hide the overlay's own secondary viewport this frame, independent
+    /// of `window_layer`/`floating_mode` — the whole point of the add-on
+    /// design is that it coexists with whatever the main window is doing.
+    /// Called unconditionally every frame; a no-op if `overlay_enabled` and
+    /// `overlay_active` (last frame's shown-state) are both false.
+    ///
+    /// Mirrors `render_floating_panels`' per-viewport shape: size and anchor
+    /// position are recomputed from current settings every shown frame (cheap
+    /// pure functions) and simply passed into the `ViewportBuilder`, which
+    /// egui diffs and only actually moves/resizes the OS window when the
+    /// value changes — so a metric-list/layout/scale/anchor/margin edit is
+    /// picked up live with no manual "did it change" bookkeeping needed.
+    /// `"free"`-anchor position is the one exception: after the first shown
+    /// frame of an activation it's OS-owned (via drag), matching floating
+    /// panels' `panels_positioned` — re-sending it every frame would fight
+    /// the OS and cause sub-pixel blur.
+    fn render_overlay_viewport(&mut self, ctx: &egui::Context) {
+        /// Frames to wait (re-applying `set_no_redirection_bitmap` on the
+        /// first two, plus a forced resize + repaint every frame) after the
+        /// overlay is shown or resized. Only the first two frames do real
+        /// work (the resize nudge below, then its snap-back landing the
+        /// second reconfigure); the rest are margin for DWM to settle.
+        /// Kept small deliberately: while hidden, each frame's paint/present
+        /// cycle is throttled to a measured, fixed ~100 ms regardless of
+        /// what work happens inside it (confirmed empirically — cutting the
+        /// expensive per-frame `set_no_redirection_bitmap` calls from 30 to
+        /// 2 made no difference to total burst time), almost certainly
+        /// Windows/DXGI throttling paint delivery for invisible windows —
+        /// so every extra margin frame here is ~100 ms of directly visible
+        /// reveal delay, not a free safety net.
+        const OVERLAY_DCOMP_BURST_FRAMES: u8 = 6;
+        /// Hard cap on how long the window may stay hidden waiting for the
+        /// burst above to complete, in case the HWND is never found.
+        const OVERLAY_REVEAL_SAFETY_FRAMES: u8 = 90;
+
+        /// How long a live Scale value must hold steady before the overlay
+        /// actually commits to it (see `overlay_pending_scale`'s doc comment).
+        const OVERLAY_SCALE_DEBOUNCE: Duration = Duration::from_millis(300);
+
+        let want = self.overlay_enabled;
+        if want && !self.overlay_active {
+            self.overlay_active = true;
+            self.overlay_positioned = false;
+            self.overlay_hwnd = 0;
+            // Commit to whatever Scale is live right now instead of
+            // whatever was mid-debounce the last time the overlay was
+            // shown (e.g. Scale changed while the overlay was off).
+            self.overlay_committed_scale = None;
+            // Keep the freshly-created window invisible until the DComp
+            // reapply burst below has settled — the user must never see the
+            // transient DWM-redirection-bitmap white box, only the final,
+            // correctly-composited frame.
+            self.overlay_pending_reveal = self.dcomp_available;
+            self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
+            debug::log_debug(&self.dir, "overlay: showing");
+        } else if !want && self.overlay_active {
+            self.overlay_active = false;
+            debug::log_debug(&self.dir, "overlay: hiding");
+        }
+        if !want {
+            return;
+        }
+
+        let (metrics, layout, anchor, margin, live_scale, opacity, background) = {
+            let s = self.current_settings.lock_safe();
+            (
+                s.overlay_metrics.clone(),
+                s.overlay_layout.clone(),
+                s.overlay_anchor.clone(),
+                s.overlay_margin as f32,
+                s.overlay_scale.clamp(0.5, 2.0) as f32,
+                s.overlay_opacity.clamp(0.05, 1.0) as f32,
+                s.overlay_background,
+            )
+        };
+        if self.overlay_pending_scale != Some(live_scale) {
+            self.overlay_pending_scale = Some(live_scale);
+            self.overlay_pending_scale_since = Instant::now();
+        }
+        if self.overlay_committed_scale != Some(live_scale)
+            && (self.overlay_committed_scale.is_none()
+                || self.overlay_pending_scale_since.elapsed() >= OVERLAY_SCALE_DEBOUNCE)
+        {
+            self.overlay_committed_scale = Some(live_scale);
+        }
+        let scale = self.overlay_committed_scale.unwrap_or(live_scale);
+        let measured = estimate_window_size(ctx, &metrics, &layout, scale, background);
+        let size = [measured.x, measured.y];
+        if self.overlay_last_size != Some(size) {
+            self.overlay_last_size = Some(size);
+            // The DComp "no redirection bitmap" binding doesn't automatically
+            // follow the window through a resize (confirmed: the white-box
+            // artifact appears specifically right after changing Scale) —
+            // re-apply for a few frames after any detected size change, the
+            // same "transition needs a moment to stick" shape as
+            // `reapply_window_props_frames`. Also re-hide for the duration of
+            // the burst: a live resize (e.g. dragging the Scale slider) is
+            // exactly the other case that leaves a stuck white patch behind,
+            // and hiding is a cheap, total fix for it too.
+            self.overlay_reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
+            if self.dcomp_available {
+                self.overlay_pending_reveal = true;
+                self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
+            }
+        }
+
+        // Anchors to the primary monitor (origin at 0,0) — a game overlay's
+        // whole purpose is sitting on the display the user is actually
+        // looking at; `"free"` drag lets the user move it elsewhere.
+        let monitor = monitor_rect_at([0.0, 0.0]).unwrap_or([0.0, 0.0, 1920.0, 1080.0]);
+        let inset = content_inset(scale, background);
+        let inset = [inset.x, inset.y];
+        // A "free" position's content sits at window_origin + inset (top-left
+        // aligned — see draw_overlay's h_align/content_layout for "free").
+        // If the inset just changed (Background/Scale edited while already
+        // dragged), shift the saved origin by the same delta and resend it
+        // this frame so the content itself doesn't move — otherwise the
+        // window would keep its old origin and the new padding would push
+        // the content inward by the delta instead.
+        let mut inset_compensated = false;
+        if let (Some(prev), Some(pos)) = (self.overlay_last_content_inset, self.overlay_position) {
+            if prev != inset {
+                self.overlay_position =
+                    Some([pos[0] - (inset[0] - prev[0]), pos[1] - (inset[1] - prev[1])]);
+                inset_compensated = true;
+            }
+        }
+        self.overlay_last_content_inset = Some(inset);
+        let needs_position = !self.overlay_positioned;
+        let pos: Option<[f32; 2]> = if anchor == "free" {
+            if needs_position {
+                let fallback = overlay_anchor_position("top-right", margin, size, monitor, inset);
+                Some(
+                    self.overlay_position
+                        .map(|p| guard_panel_position(p, fallback))
+                        .unwrap_or(fallback),
+                )
+            } else if inset_compensated {
+                self.overlay_position
+            } else {
+                None // OS/drag owns it now — don't fight it by resending.
+            }
+        } else {
+            // Non-"free" anchors are never user-dragged (drag always claims
+            // "free" immediately, see below), so it's always safe — and
+            // necessary, since a resize changes where the anchored corner
+            // sits — to keep recomputing and applying this every frame.
+            Some(overlay_anchor_position(
+                &anchor, margin, size, monitor, inset,
+            ))
+        };
+        if needs_position {
+            self.overlay_positioned = true;
+        }
+
+        // EXPERIMENTAL (reverting to investigate further — see
+        // overlay-addon-wholewindow-fade tag for the known-working
+        // whole-window-opacity fallback to return to if this doesn't pan
+        // out): re-attempting true per-pixel DComp transparency without the
+        // CentralPanel wrapper, since an earlier screenshot showed *partial*
+        // success (part of the window genuinely transparent with crisp text,
+        // part an opaque white box) rather than uniform failure — suggesting
+        // the DComp visual is being created but not consistently covering
+        // the whole window, not that it fundamentally doesn't work here.
+        let mut vp_builder = egui::ViewportBuilder::default()
+            .with_title("RigStats \u{2014} Overlay")
+            .with_inner_size(size)
+            .with_decorations(false)
+            .with_resizable(false)
+            .with_taskbar(false)
+            .with_always_on_top()
+            .with_transparent(self.dcomp_available)
+            // Held hidden until the reapply burst below settles, so the
+            // very first frame the user ever sees is already correctly
+            // per-pixel composited — see `overlay_pending_reveal`'s doc.
+            .with_visible(!self.overlay_pending_reveal);
+        if let Some([x, y]) = pos {
+            vp_builder = vp_builder.with_position([x, y]);
+        }
+
+        let th = self.runtime.app_theme;
+        let latest = &self.runtime.latest;
+        let thresholds = &self.runtime.thresholds;
+        let click_through = self.overlay_click_through;
+        let dcomp_available = self.dcomp_available;
+        let mut hwnd = self.overlay_hwnd;
+        // The overlay's own hwnd stays hidden (`with_visible(false)`) for
+        // most of the reveal burst below — invalidating a hidden window
+        // doesn't reliably queue a dispatched WM_PAINT the way it does for a
+        // visible one, so `force_repaint(hwnd)` alone left the burst mostly
+        // stalled on the app's ~1 fps idle heartbeat instead of running at
+        // "as fast as possible" (observed: revealing the overlay took
+        // 3-5 s instead of a fraction of a second). The main window is
+        // always visible, so forcing its repaint too reliably drives the
+        // next `ui()` call regardless of the overlay's own visibility state.
+        let main_hwnd = self.hwnd;
+        let mut applied_click_through = self.last_applied_click_through;
+        let current_settings = self.current_settings.clone();
+        let dir = self.dir.clone();
+        let mut drag_pos: Option<[f32; 2]> = None;
+        let mut reapply_dcomp_frames = self.overlay_reapply_dcomp_frames;
+        let mut pending_reveal = self.overlay_pending_reveal;
+        let mut reveal_safety_frames = self.overlay_reveal_safety_frames;
+
+        ctx.show_viewport_immediate(
+            egui::ViewportId::from_hash_of("overlay"),
+            vp_builder,
+            |child_ui, _class| {
+                #[cfg(windows)]
+                {
+                    if hwnd == 0 {
+                        hwnd = win_opacity::find_hwnd("RigStats \u{2014} Overlay");
+                        if hwnd != 0 {
+                            // Freshly created: its own first paint/present
+                            // cycle may not have completed yet, so applying
+                            // the fix exactly once, right now, is "too early"
+                            // — confirmed empirically: the very first show
+                            // stayed white while a later *resize* (an
+                            // already-established, already-painted window)
+                            // reliably fixed itself. Treat creation the same
+                            // as a resize: a multi-frame burst, not a
+                            // one-shot immediate apply.
+                            reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
+                        }
+                    }
+                    if hwnd != 0 {
+                        if dcomp_available {
+                            if reapply_dcomp_frames > 0 {
+                                let frames_before_this_tick = reapply_dcomp_frames;
+                                if frames_before_this_tick == OVERLAY_DCOMP_BURST_FRAMES {
+                                    // First frame of the burst: force a
+                                    // genuine size *change* (not just a style
+                                    // bit) — empirically, the swap chain only
+                                    // seems to pick up per-pixel-alpha
+                                    // support on an actual resize/reconfigure,
+                                    // not merely from WS_EX_NOREDIRECTIONBITMAP
+                                    // being set (which alone leaves a region
+                                    // of the surface stuck showing opaque
+                                    // white). Nudge to a different size now;
+                                    // the builder's real target `size` (sent
+                                    // every frame regardless) snaps it back
+                                    // next frame, triggering a second real
+                                    // reconfigure — mirroring exactly what
+                                    // manually dragging Scale down-then-up
+                                    // was observed to fix.
+                                    child_ui.ctx().send_viewport_cmd(
+                                        egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                                            size[0] + 2.0,
+                                            size[1],
+                                        )),
+                                    );
+                                }
+                                reapply_dcomp_frames = reapply_dcomp_frames.saturating_sub(1);
+                                // `set_no_redirection_bitmap`'s SetWindowPos(SWP_FRAMECHANGED)
+                                // is a genuinely expensive, synchronous DWM
+                                // round-trip (measured ~106 ms per call) — calling
+                                // it on all `OVERLAY_DCOMP_BURST_FRAMES` frames
+                                // turned the burst into a ~3 s wall-clock cost,
+                                // invisible in the old (shown-throughout) version
+                                // of this fix but directly blocking reveal now
+                                // that the window stays hidden until the burst
+                                // settles. Only the first two frames correspond
+                                // to an actual reconfigure (the nudge above, then
+                                // the size snapping back next frame per that
+                                // comment) — the remaining frames only need to
+                                // keep repainting/counting down to give the
+                                // reconfigure time to land, not re-apply the
+                                // already-set style bit again.
+                                if frames_before_this_tick >= OVERLAY_DCOMP_BURST_FRAMES - 1 {
+                                    win_opacity::set_no_redirection_bitmap(hwnd);
+                                }
+                                // A style/frame change alone doesn't reliably
+                                // force DWM to recomposite the DComp visual at
+                                // its new size — nudge a real repaint too, and
+                                // force the next frame to arrive quickly
+                                // rather than waiting for the app's normal
+                                // ~1 Hz tick, so the whole burst actually
+                                // lands within a fraction of a second.
+                                win_opacity::force_repaint(hwnd);
+                                win_opacity::force_repaint(main_hwnd);
+                                child_ui.ctx().request_repaint();
+                            }
+                            if reapply_dcomp_frames == 0 && pending_reveal {
+                                // Burst settled — reveal now, already
+                                // correctly composited, instead of waiting
+                                // for the builder diff on the next frame.
+                                pending_reveal = false;
+                                child_ui
+                                    .ctx()
+                                    .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                            }
+                        } else {
+                            win_opacity::set_opacity(hwnd, opacity);
+                            pending_reveal = false;
+                        }
+                    } else if pending_reveal {
+                        // HWND not found yet this frame (window still being
+                        // created) — the burst above hasn't started, so tick
+                        // the independent safety timeout instead of hiding
+                        // forever if `find_hwnd` never matches.
+                        reveal_safety_frames = reveal_safety_frames.saturating_sub(1);
+                        if reveal_safety_frames == 0 {
+                            pending_reveal = false;
+                            child_ui
+                                .ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                        }
+                        win_opacity::force_repaint(main_hwnd);
+                        child_ui.ctx().request_repaint();
+                    }
+                }
+
+                // The one and only place MousePassthrough is sent for this
+                // viewport: guarded so it's only dispatched on an actual change.
+                if applied_click_through != Some(click_through) {
+                    applied_click_through = Some(click_through);
+                    child_ui
+                        .ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::MousePassthrough(click_through));
+                }
+
+                let resp = draw_overlay(
+                    child_ui, &th, latest, thresholds, &metrics, &layout, &anchor, scale, opacity,
+                    background,
+                );
+
+                // Always draggable when unlocked, regardless of the configured
+                // anchor — matching every other draggable element in this app
+                // (no separate "enable dragging" mode to find first). Starting
+                // a drag claims free positioning immediately (persisted right
+                // away) so the anchor logic above doesn't fight the drag by
+                // recomputing the anchored position next frame.
+                if !click_through {
+                    if resp.response.drag_started() && anchor != "free" {
+                        let mut s = current_settings.lock_safe();
+                        s.overlay_anchor = "free".to_string();
+                        if let Err(e) = settings::persist_settings(&dir, &s) {
+                            debug::log_error(&dir, &format!("settings: persist failed — {e}"));
+                        }
+                    }
+                    if resp.response.drag_started() {
+                        child_ui
+                            .ctx()
+                            .send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                    }
+                    // Only track/persist position while an actual drag is in
+                    // progress or just finished — reading the window's current
+                    // position on every ordinary frame would otherwise overwrite
+                    // a saved free-drag position whenever a non-"free" anchor
+                    // moves the window on its own (a margin change, etc.).
+                    if resp.response.dragged() || resp.response.drag_stopped() {
+                        if let Some(outer) = child_ui.ctx().input(|i| i.viewport().outer_rect) {
+                            drag_pos = Some([outer.left().round(), outer.top().round()]);
+                        }
+                    }
+                }
+            },
+        );
+
+        self.overlay_hwnd = hwnd;
+        self.overlay_reapply_dcomp_frames = reapply_dcomp_frames;
+        self.overlay_pending_reveal = pending_reveal;
+        self.overlay_reveal_safety_frames = reveal_safety_frames;
+        self.last_applied_click_through = applied_click_through;
+        if let Some(pos) = drag_pos {
+            if self.overlay_position != Some(pos) {
+                self.overlay_position = Some(pos);
+                self.overlay_position_dirty = true;
+            }
+        }
+        if self.overlay_position_dirty {
+            self.overlay_position_dirty = false;
+            if let Some([x, y]) = self.overlay_position {
+                let mut s = self.current_settings.lock_safe();
+                s.overlay_position = Some([x.round() as i32, y.round() as i32]);
+                self.persist_settings_logged(&s);
+            }
+        }
+    }
+
+    /// Flips `overlay_click_through`, persists it immediately, and updates
+    /// the tray row's label/icon. Shared by the tray's "Lock/Unlock Overlay"
+    /// row and the global hotkey (`hotkey.rs`) — both are just different
+    /// triggers for the same action.
+    fn toggle_overlay_lock(&mut self) {
+        let mut s = self.current_settings.lock_safe();
+        s.overlay_click_through = !s.overlay_click_through;
+        self.overlay_click_through = s.overlay_click_through;
+        self.persist_settings_logged(&s);
+        drop(s);
+        self.tray.set_overlay_lock(self.overlay_click_through);
+    }
+
+    /// Flips `window_layer` between `"overlay"` and `"normal"` — i.e. show/hide
+    /// the overlay itself, the way a game-overlay hotkey is expected to work
+    /// (distinct from `toggle_overlay_lock`, which only locks/unlocks
+    /// click-through on an already-visible overlay). Shared by the tray's
+    /// "Toggle Overlay Mode" row and the global hotkey.
+    ///
+    /// Overlay is mutually exclusive with floating/fullscreen/pinned
+    /// dashboard, same as Desktop Wallpaper — force them off on entry
+    /// (one-way, like the Settings dialog's own layer-switch handler).
+    fn toggle_overlay_mode(&mut self) {
+        let mut s = self.current_settings.lock_safe();
+        s.overlay_enabled = !s.overlay_enabled;
+        self.overlay_enabled = s.overlay_enabled;
+        self.persist_settings_logged(&s);
+        // `render_overlay_viewport` (called every frame) picks up the change
+        // on the next frame and shows/hides the overlay's own viewport —
+        // independent of window_layer/floating_mode, so nothing else here
+        // needs to change.
+    }
 }
 
 impl eframe::App for RigStatsApp {
@@ -779,6 +1320,21 @@ impl eframe::App for RigStatsApp {
         #[cfg(windows)]
         self.update_wallpaper_mode(ui.ctx());
 
+        // Global hotkey (Ctrl+Alt+O) — same action as the tray's "Toggle
+        // Overlay Mode" row: show/hide the overlay itself, the conventional
+        // in-game-overlay hotkey behavior (not the click-through lock, which
+        // has no reason to be toggled as often and stays tray/Settings-only).
+        // Drained here, before `render_overlay_viewport` below, so a keypress
+        // takes effect the same frame it's noticed instead of one frame late.
+        while self.hotkey_rx.try_recv().is_ok() {
+            self.toggle_overlay_mode();
+        }
+
+        // Show/hide the overlay's own add-on viewport — independent of
+        // window_layer/floating_mode, so it coexists with whatever the main
+        // window below is doing.
+        self.render_overlay_viewport(ui.ctx());
+
         // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
         if self.reapply_window_props_frames > 0 {
@@ -844,6 +1400,8 @@ impl eframe::App for RigStatsApp {
                 .store(self.floating_mode, Ordering::Relaxed);
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            self.overlay_click_through = s.overlay_click_through;
+            self.overlay_enabled = s.overlay_enabled;
             let was_fullscreen = self.fullscreen_mode;
             self.fullscreen_mode = s.fullscreen_mode;
             self.fullscreen_align = s.fullscreen_align.clone();
@@ -1031,6 +1589,12 @@ impl eframe::App for RigStatsApp {
                         }
                     }
                 }
+                TrayCmd::ToggleOverlay => {
+                    self.toggle_overlay_mode();
+                }
+                TrayCmd::ToggleOverlayLock => {
+                    self.toggle_overlay_lock();
+                }
                 TrayCmd::ToggleRecording => {
                     // The active session lives in the on-disk index, not in-process
                     // state — the same source both this app's and the wallpaper
@@ -1120,6 +1684,7 @@ impl eframe::App for RigStatsApp {
             let [px, py] = dialog_center(560.0, 600.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
+            let dcomp_available = self.dcomp_available;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
@@ -1146,6 +1711,7 @@ impl eframe::App for RigStatsApp {
                         &saved,
                         &reload,
                         &dc,
+                        dcomp_available,
                     );
                 },
             );
@@ -2553,8 +3119,17 @@ fn main() {
 
             // A fresh launch never has an active recording session — any session left
             // open by an unclean shutdown was already closed by reconcile_sessions_on_startup.
-            let tray = build_tray(false);
+            let overlay_locked_init = current_settings_shared.lock_safe().overlay_click_through;
+            let tray = build_tray(false, overlay_locked_init);
             let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
+
+            // Global hotkey (fixed Ctrl+Alt+O in v1) to toggle overlay
+            // click-through without leaving the game. The listener thread
+            // outlives this closure (runs for the process lifetime), so the
+            // JoinHandle is intentionally dropped rather than joined.
+            let (hotkey_tx, hotkey_rx) = mpsc::channel::<()>();
+            #[cfg(windows)]
+            let _ = rigstats_egui::hotkey::spawn(dir.clone(), hotkey_tx, cc.egui_ctx.clone());
 
             // Spawn a thread that polls tray events at 50 ms intervals and wakes the
             // egui event loop via request_repaint().  Quit is handled here directly
@@ -2610,6 +3185,8 @@ fn main() {
             let docs_id = tray.docs_id.clone();
             let floating_id = tray.floating_id.clone();
             let recording_id = tray.recording_id.clone();
+            let overlay_id = tray.overlay_id.clone();
+            let overlay_lock_id = tray.overlay_lock_id.clone();
             let dir_tray = dir.clone();
             // Mirrors `RigStatsApp.recording_active`; see the field's doc comment
             // and the force_repaint call below for why (#177).
@@ -2644,6 +3221,10 @@ fn main() {
                             Some(TrayCmd::ToggleFloating)
                         } else if ev.id == recording_id {
                             Some(TrayCmd::ToggleRecording)
+                        } else if ev.id == overlay_id {
+                            Some(TrayCmd::ToggleOverlay)
+                        } else if ev.id == overlay_lock_id {
+                            Some(TrayCmd::ToggleOverlayLock)
                         } else if ev.id == settings_id {
                             Some(TrayCmd::OpenSettings)
                         } else if ev.id == about_id {
@@ -2828,6 +3409,7 @@ fn main() {
                 dashboard_runtime,
                 rx,
                 tray_rx,
+                hotkey_rx,
                 opacity,
                 dcomp_available,
                 tray,

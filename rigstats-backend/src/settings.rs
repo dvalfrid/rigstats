@@ -178,6 +178,46 @@ pub struct Settings {
     /// `None` = automatic reference (500 W desktop / 120 W laptop).
     #[serde(default)]
     pub psu_watts: Option<u16>,
+    /// Ordered list of metric keys shown in Overlay mode (see `overlay.rs`).
+    #[serde(default = "default_overlay_metrics")]
+    pub overlay_metrics: Vec<String>,
+    /// Overlay strip layout: `"horizontal"` | `"vertical"` | `"grid"`.
+    #[serde(default = "default_overlay_layout")]
+    pub overlay_layout: String,
+    /// Overlay screen anchor: `"top-left"` | `"top-right"` | `"bottom-left"` |
+    /// `"bottom-right"` | `"free"` (user-dragged, see `overlay_position`).
+    #[serde(default = "default_overlay_anchor")]
+    pub overlay_anchor: String,
+    /// Margin in px from the anchored corner. Unused when `overlay_anchor == "free"`.
+    #[serde(default = "default_overlay_margin")]
+    pub overlay_margin: i32,
+    /// Screen position `[x, y]` for a free-dragged overlay. `None` until first set.
+    #[serde(default)]
+    pub overlay_position: Option<[i32; 2]>,
+    /// Overlay content scale factor.
+    #[serde(default = "default_overlay_scale")]
+    pub overlay_scale: f64,
+    /// Overlay window alpha in the range [0.0, 1.0]. Independent of `opacity`,
+    /// which controls the non-overlay dashboard window.
+    #[serde(default = "default_overlay_opacity")]
+    pub overlay_opacity: f64,
+    /// Draw a background card behind overlay text. When false, text renders
+    /// directly over whatever is beneath it (the per-pixel-alpha stack).
+    #[serde(default = "default_true")]
+    pub overlay_background: bool,
+    /// When true, mouse clicks pass through the overlay window. Applied
+    /// immediately when toggled (tray, hotkey, or Settings), independent of
+    /// the Settings dialog's Save/Cancel flow.
+    #[serde(default)]
+    pub overlay_click_through: bool,
+    /// Whether the overlay is currently shown, as an independent add-on
+    /// window that coexists with whatever `window_layer`/`floating_mode` the
+    /// main dashboard is in — not a `window_layer` value itself. Applied
+    /// immediately when toggled (tray, hotkey, or Settings), same as
+    /// `overlay_click_through` and for the same reason (it can be flipped
+    /// from outside the Settings dialog while it's open).
+    #[serde(default)]
+    pub overlay_enabled: bool,
 
     // ---- Legacy migration shims (schema version 0) --------------------------
     // These fields existed in older settings files as eight flat values.
@@ -228,6 +268,36 @@ fn default_window_layer() -> String {
 
 fn default_fullscreen_align() -> String {
     "center".to_string()
+}
+
+fn default_overlay_metrics() -> Vec<String> {
+    vec![
+        "cpu_load".to_string(),
+        "cpu_temp".to_string(),
+        "gpu_load".to_string(),
+        "gpu_temp".to_string(),
+        "ram_pct".to_string(),
+    ]
+}
+
+fn default_overlay_layout() -> String {
+    "horizontal".to_string()
+}
+
+fn default_overlay_anchor() -> String {
+    "top-right".to_string()
+}
+
+fn default_overlay_margin() -> i32 {
+    16
+}
+
+fn default_overlay_scale() -> f64 {
+    1.0
+}
+
+fn default_overlay_opacity() -> f64 {
+    0.85
 }
 
 fn default_opacity() -> f64 {
@@ -283,6 +353,16 @@ impl Default for Settings {
             pinned_positions: HashMap::new(),
             wallpaper_position: None,
             psu_watts: None,
+            overlay_metrics: default_overlay_metrics(),
+            overlay_layout: default_overlay_layout(),
+            overlay_anchor: default_overlay_anchor(),
+            overlay_margin: default_overlay_margin(),
+            overlay_position: None,
+            overlay_scale: default_overlay_scale(),
+            overlay_opacity: default_overlay_opacity(),
+            overlay_background: true,
+            overlay_click_through: false,
+            overlay_enabled: false,
             warning_cpu_temp: None,
             critical_cpu_temp: None,
             warning_gpu_temp: None,
@@ -555,5 +635,40 @@ mod tests {
             !s.always_on_top,
             "always_on_top must be re-derived from the layer (wallpaper => false)"
         );
+    }
+
+    #[test]
+    fn load_settings_defaults_overlay_fields_when_absent_from_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        // A settings file predating the overlay fields entirely.
+        std::fs::write(&path, r#"{"settingsVersion":1}"#).unwrap();
+
+        let s = super::load_settings(dir.path());
+        assert_eq!(s.overlay_metrics, super::default_overlay_metrics());
+        assert_eq!(s.overlay_layout, "horizontal");
+        assert_eq!(s.overlay_anchor, "top-right");
+        assert_eq!(s.overlay_margin, 16);
+        assert_eq!(s.overlay_position, None);
+        assert_eq!(s.overlay_scale, 1.0);
+        assert_eq!(s.overlay_opacity, 0.85);
+        assert!(s.overlay_background);
+        assert!(!s.overlay_click_through);
+        assert!(!s.overlay_enabled);
+    }
+
+    #[test]
+    fn persist_then_load_round_trips_overlay_metrics_order() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = super::Settings::default();
+        s.overlay_metrics = vec![
+            "gpu_temp".to_string(),
+            "cpu_load".to_string(),
+            "net_ping".to_string(),
+        ];
+        super::persist_settings(dir.path(), &s).unwrap();
+
+        let loaded = super::load_settings(dir.path());
+        assert_eq!(loaded.overlay_metrics, s.overlay_metrics);
     }
 }

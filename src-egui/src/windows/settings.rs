@@ -1,4 +1,5 @@
 use crate::lock_ext::LockSafe;
+use crate::overlay::ALL_OVERLAY_METRICS;
 use crate::theme::{self, DialogColors};
 use rigstats_backend::{autostart, debug, settings};
 use std::path::{Path, PathBuf};
@@ -280,6 +281,7 @@ pub fn show(
     saved: &Arc<Mutex<settings::Settings>>,
     reload: &Arc<AtomicBool>,
     dc: &DialogColors,
+    dcomp_available: bool,
 ) {
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
@@ -356,8 +358,14 @@ pub fn show(
                     ui.horizontal(|ui| {
                         let spacing = 4.0;
                         ui.spacing_mut().item_spacing.x = spacing;
-                        const TAB_LABELS: [&str; 5] =
-                            ["Display", "Panels", "Alerts", "Appearance", "General"];
+                        const TAB_LABELS: [&str; 6] = [
+                            "Display",
+                            "Panels",
+                            "Alerts",
+                            "Appearance",
+                            "General",
+                            "Overlay",
+                        ];
                         // Size every tab equally to fill the bar so all of them
                         // always fit (5 fixed-width tabs would overflow the dialog).
                         let n = TAB_LABELS.len() as f32;
@@ -385,13 +393,20 @@ pub fn show(
                             let tab = st.tab;
                             let battery_present = st.battery_present;
                             // The currently *applied* window layer. Live preview forces
-                            // window_layer back to `original` (it's Save-only), so until
-                            // Save the app still runs in `original.window_layer` even if
-                            // the draft selects another. The Display tab grays its
-                            // wallpaper-incompatible controls based on this (reality), not
-                            // the draft, so switching away from wallpaper doesn't falsely
-                            // enable controls before the switch actually takes effect.
-                            let applied_layer = st.original.window_layer.clone();
+                            // window_layer back to whatever is actually running (it's
+                            // Save-only), so until Save the app keeps running its current
+                            // layer even if the draft selects another. Read from the live
+                            // `saved` settings, not `st.original` (a dialog-open-time
+                            // snapshot) — the layer can also change from outside this
+                            // dialog while it's open (tray "Toggle Overlay Mode", the
+                            // global hotkey), and `original` would then be stale, causing
+                            // the live-preview push below to silently revert that external
+                            // change back to whatever the layer was when the dialog opened.
+                            // The Display tab grays its wallpaper-incompatible controls
+                            // based on this (reality), not the draft, so switching away
+                            // from wallpaper doesn't falsely enable controls before the
+                            // switch actually takes effect.
+                            let applied_layer = saved.lock_safe().window_layer.clone();
                             // While the *applied* layer is Desktop Wallpaper the visible
                             // dashboard is the separate host process rendering from disk,
                             // so nothing in Settings previews live — every change (profile,
@@ -407,6 +422,15 @@ pub fn show(
                                 2 => draw_alerts(ui, dc, draft),
                                 3 => draw_appearance(ui, dc, draft),
                                 4 => draw_general(ui, dc, draft, dir.as_ref()),
+                                5 => draw_overlay(
+                                    ui,
+                                    dc,
+                                    draft,
+                                    saved,
+                                    reload,
+                                    dir.as_ref(),
+                                    dcomp_available,
+                                ),
                                 _ => {}
                             }
                         });
@@ -424,7 +448,17 @@ pub fn show(
         if st.draft != st.last_preview {
             st.last_preview = st.draft.clone();
             let mut preview = st.draft.clone();
-            preview.window_layer = st.original.window_layer.clone();
+            // The live value, not `st.original` — see the `applied_layer` comment
+            // above for why a stale dialog-open-time snapshot is wrong here.
+            preview.window_layer = saved.lock_safe().window_layer.clone();
+            // overlay_click_through and overlay_enabled both bypass the
+            // draft/Save/Cancel flow entirely (applied and persisted
+            // immediately by their own switches, the tray, or the hotkey) —
+            // pushing the draft's stale copy here would clobber a change made
+            // through one of those paths while this dialog is open, so
+            // always carry the current live values forward.
+            preview.overlay_click_through = saved.lock_safe().overlay_click_through;
+            preview.overlay_enabled = saved.lock_safe().overlay_enabled;
             *saved.lock_safe() = preview;
             reload.store(true, Ordering::Relaxed);
             main_ctx.request_repaint_of(egui::ViewportId::ROOT);
@@ -438,11 +472,14 @@ pub fn show(
         } else {
             autostart::unregister_autostart()
         };
-        let save_result = settings::persist_settings(dir.as_ref(), &st.draft);
+        let mut to_persist = st.draft.clone();
+        to_persist.overlay_click_through = saved.lock_safe().overlay_click_through;
+        to_persist.overlay_enabled = saved.lock_safe().overlay_enabled;
+        let save_result = settings::persist_settings(dir.as_ref(), &to_persist);
         match (save_result, autostart_result) {
             (Ok(()), Ok(())) => {
                 // Push the full draft (including window_layer, profile, etc.) to main app.
-                *saved.lock_safe() = st.draft.clone();
+                *saved.lock_safe() = to_persist;
                 reload.store(true, Ordering::Relaxed);
                 st.error = None;
                 open.store(false, Ordering::Relaxed);
@@ -456,9 +493,19 @@ pub fn show(
         }
     }
     if action_cancel {
-        // Revert live preview back to original.
+        // Revert live preview back to original — except window_layer,
+        // overlay_click_through, and overlay_enabled, none of which was ever
+        // part of the draft being cancelled: window_layer only previews live
+        // via the *live* value (see the comments above), so cancelling must
+        // preserve that same live value rather than snapping back to a stale
+        // dialog-open-time snapshot (which would undo an external tray/hotkey
+        // change the user never asked this dialog to revert).
         let st = state.lock_safe();
-        *saved.lock_safe() = st.original.clone();
+        let mut reverted = st.original.clone();
+        reverted.window_layer = saved.lock_safe().window_layer.clone();
+        reverted.overlay_click_through = saved.lock_safe().overlay_click_through;
+        reverted.overlay_enabled = saved.lock_safe().overlay_enabled;
+        *saved.lock_safe() = reverted;
         reload.store(true, Ordering::Relaxed);
         drop(st);
         open.store(false, Ordering::Relaxed);
@@ -467,7 +514,11 @@ pub fn show(
     if ctx.input(|i| i.viewport().close_requested()) {
         // Treat window-close as cancel (revert preview).
         let st = state.lock_safe();
-        *saved.lock_safe() = st.original.clone();
+        let mut reverted = st.original.clone();
+        reverted.window_layer = saved.lock_safe().window_layer.clone();
+        reverted.overlay_click_through = saved.lock_safe().overlay_click_through;
+        reverted.overlay_enabled = saved.lock_safe().overlay_enabled;
+        *saved.lock_safe() = reverted;
         reload.store(true, Ordering::Relaxed);
         drop(st);
         open.store(false, Ordering::Relaxed);
@@ -1304,6 +1355,319 @@ fn draw_appearance(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::S
                             ui.selectable_value(&mut draft.theme, key.to_string(), *key);
                         }
                     });
+            });
+        });
+    });
+}
+
+// ── Overlay tab ───────────────────────────────────────────────────────────────
+
+/// `saved`/`reload`/`dir` are needed for the Enable and Click-Through
+/// switches, which (unlike every other field here) bypass the draft/Save/
+/// Cancel flow entirely — see the top and bottom cards of this function. The
+/// overlay is an independent add-on window (not a `window_layer` value), so
+/// it can be toggled from the tray or the global hotkey at any time,
+/// including while this dialog happens to be open — bypassing the draft
+/// keeps that external toggle from being silently reverted the next time any
+/// other field on this tab changes.
+fn draw_overlay(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    draft: &mut settings::Settings,
+    saved: &Arc<Mutex<settings::Settings>>,
+    reload: &Arc<AtomicBool>,
+    dir: &Path,
+    dcomp_available: bool,
+) {
+    // Enable — bypasses the draft/Save/Cancel flow entirely: applies and
+    // persists immediately, same as the tray "Toggle Overlay Mode" row and
+    // the global hotkey.
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Overlay");
+        ui.add_space(8.0);
+        let mut enabled = saved.lock_safe().overlay_enabled;
+        inner_row(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new("Show Overlay")
+                            .size(13.0)
+                            .color(dc.text),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "Compact metric strip shown over everything else, independent \
+                             of Window Layer/Floating Mode. Applies immediately — not \
+                             affected by Cancel.",
+                        )
+                        .size(11.0)
+                        .color(dc.muted),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if toggle_switch(ui, dc, &mut enabled).changed() {
+                        let mut s = saved.lock_safe();
+                        s.overlay_enabled = enabled;
+                        let s_clone = s.clone();
+                        drop(s);
+                        if let Err(e) = settings::persist_settings(dir, &s_clone) {
+                            debug::append_debug_log(
+                                dir,
+                                &format!("settings: overlay enabled persist failed — {e}"),
+                            );
+                        }
+                        reload.store(true, Ordering::Relaxed);
+                    }
+                });
+            });
+        });
+    });
+
+    // Metrics — one toggle row per registry entry, in registry order.
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Metrics");
+        ui.add_space(8.0);
+        for m in ALL_OVERLAY_METRICS {
+            let mut on = draft.overlay_metrics.iter().any(|k| k.as_str() == m.key);
+            inner_row(dc).show(ui, |ui| {
+                ui.set_min_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{} ({})", m.label, m.unit.trim()))
+                            .size(13.0)
+                            .color(dc.text),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if toggle_switch(ui, dc, &mut on).changed() {
+                            if on {
+                                if !draft.overlay_metrics.iter().any(|k| k.as_str() == m.key) {
+                                    draft.overlay_metrics.push(m.key.to_string());
+                                }
+                            } else {
+                                draft.overlay_metrics.retain(|k| k.as_str() != m.key);
+                            }
+                        }
+                    });
+                });
+            });
+            ui.add_space(4.0);
+        }
+    });
+
+    // Layout & anchor
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Layout");
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("Arrangement")
+                    .size(12.0)
+                    .color(dc.muted),
+            );
+            ui.add_space(8.0);
+            let label = match draft.overlay_layout.as_str() {
+                "vertical" => "Vertical",
+                "grid" => "Grid",
+                _ => "Horizontal",
+            };
+            let w = ui.available_width();
+            egui::ComboBox::from_id_salt("overlay_layout")
+                .selected_text(label)
+                .width(w)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut draft.overlay_layout,
+                        "horizontal".to_string(),
+                        "Horizontal",
+                    );
+                    ui.selectable_value(
+                        &mut draft.overlay_layout,
+                        "vertical".to_string(),
+                        "Vertical",
+                    );
+                    ui.selectable_value(&mut draft.overlay_layout, "grid".to_string(), "Grid");
+                });
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Anchor").size(12.0).color(dc.muted));
+            ui.add_space(8.0);
+            let label = match draft.overlay_anchor.as_str() {
+                "top-left" => "Top-Left",
+                "bottom-left" => "Bottom-Left",
+                "bottom-right" => "Bottom-Right",
+                "free" => "Free (drag to position)",
+                _ => "Top-Right",
+            };
+            let w = ui.available_width();
+            egui::ComboBox::from_id_salt("overlay_anchor")
+                .selected_text(label)
+                .width(w)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut draft.overlay_anchor,
+                        "top-left".to_string(),
+                        "Top-Left",
+                    );
+                    ui.selectable_value(
+                        &mut draft.overlay_anchor,
+                        "top-right".to_string(),
+                        "Top-Right",
+                    );
+                    ui.selectable_value(
+                        &mut draft.overlay_anchor,
+                        "bottom-left".to_string(),
+                        "Bottom-Left",
+                    );
+                    ui.selectable_value(
+                        &mut draft.overlay_anchor,
+                        "bottom-right".to_string(),
+                        "Bottom-Right",
+                    );
+                    ui.selectable_value(
+                        &mut draft.overlay_anchor,
+                        "free".to_string(),
+                        "Free (drag to position)",
+                    );
+                });
+        });
+        if draft.overlay_anchor != "free" {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Margin").size(12.0).color(dc.muted));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{} px", draft.overlay_margin))
+                            .size(12.0)
+                            .color(dc.text),
+                    );
+                    let mut margin = draft.overlay_margin as f32;
+                    let slider = egui::Slider::new(&mut margin, 0.0_f32..=64.0_f32)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    if ui.add(slider).changed() {
+                        draft.overlay_margin = margin.round() as i32;
+                    }
+                });
+            });
+        }
+    });
+
+    // Appearance
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Appearance");
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Scale").size(12.0).color(dc.muted));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(format!("{:.0}%", draft.overlay_scale * 100.0))
+                        .size(12.0)
+                        .color(dc.text),
+                );
+                let mut scale = draft.overlay_scale as f32;
+                let slider = egui::Slider::new(&mut scale, 0.5_f32..=2.0_f32)
+                    .step_by(0.05)
+                    .show_value(false)
+                    .trailing_fill(true);
+                if ui.add(slider).changed() {
+                    draft.overlay_scale = scale as f64;
+                }
+            });
+        });
+        ui.add_space(6.0);
+        let pct = (draft.overlay_opacity * 100.0).round() as u32;
+        // Opacity only has a visible effect without Background on the
+        // whole-window-fade fallback (no DComp support) — with DComp, no
+        // Background means the window is already per-pixel transparent
+        // outside the text via draw_overlay's Frame::NONE path, and Opacity
+        // is never read in that branch at all.
+        let opacity_matters = draft.overlay_background || !dcomp_available;
+        ui.add_enabled_ui(opacity_matters, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Opacity").size(12.0).color(dc.muted));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{pct}%"))
+                            .size(12.0)
+                            .color(dc.text),
+                    );
+                    let mut opacity = draft.overlay_opacity as f32;
+                    let slider = egui::Slider::new(&mut opacity, 0.05_f32..=1.0_f32)
+                        .step_by(0.05)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    if ui.add(slider).changed() {
+                        draft.overlay_opacity = opacity as f64;
+                    }
+                });
+            });
+        });
+        ui.add_space(8.0);
+        inner_row(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Background").size(13.0).color(dc.text));
+                    ui.label(
+                        egui::RichText::new("Frosted card behind the text")
+                            .size(11.0)
+                            .color(dc.muted),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    toggle_switch(ui, dc, &mut draft.overlay_background);
+                });
+            });
+        });
+    });
+
+    // Click-through — bypasses the draft/Save/Cancel flow entirely: applies
+    // and persists immediately, same as the tray "Lock/Unlock Overlay" row
+    // and the global hotkey, so it can never be left stuck locked mid-edit.
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Click-Through");
+        ui.add_space(8.0);
+        let mut locked = saved.lock_safe().overlay_click_through;
+        inner_row(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        egui::RichText::new("Lock (click-through)")
+                            .size(13.0)
+                            .color(dc.text),
+                    );
+                    ui.label(
+                        egui::RichText::new(
+                            "Mouse clicks pass through to the game underneath. Applies \
+                             immediately — not affected by Cancel.",
+                        )
+                        .size(11.0)
+                        .color(dc.muted),
+                    );
+                });
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if toggle_switch(ui, dc, &mut locked).changed() {
+                        let mut s = saved.lock_safe();
+                        s.overlay_click_through = locked;
+                        let s_clone = s.clone();
+                        drop(s);
+                        if let Err(e) = settings::persist_settings(dir, &s_clone) {
+                            debug::append_debug_log(
+                                dir,
+                                &format!("settings: overlay click-through persist failed — {e}"),
+                            );
+                        }
+                        reload.store(true, Ordering::Relaxed);
+                    }
+                });
             });
         });
     });

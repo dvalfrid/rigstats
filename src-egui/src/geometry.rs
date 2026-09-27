@@ -220,6 +220,25 @@ pub fn guard_panel_position(pos: [f32; 2], fallback: [f32; 2]) -> [f32; 2] {
     pos
 }
 
+/// True when `pos` is on (or within the 60 px overhang margin of) any
+/// currently connected monitor. Windows-aware wrapper around
+/// [`position_on_any_monitor`] for call sites that need a plain validity
+/// check rather than `guard_panel_position`'s "use this or fall back" shape —
+/// e.g. before trusting a just-read window position that might reflect a
+/// stale off-screen-parked value from a mode transition whose move command
+/// hasn't taken effect yet.
+pub fn is_position_on_screen(pos: [f32; 2]) -> bool {
+    #[cfg(windows)]
+    {
+        position_on_any_monitor(pos, &win_monitor::list())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = pos;
+        true
+    }
+}
+
 /// True when `pos` lies on (or within the 60 px overhang margin of) any monitor
 /// in `monitors`. Pure core of [`guard_panel_position`] and the pinned-position
 /// check, split out so it can be unit-tested without enumerating real monitors.
@@ -352,12 +371,44 @@ fn select_profile_monitor(monitors: &[(i32, i32, i32, i32)], pw: f32, ph: f32) -
     }
 }
 
+/// Screen position `[x, y]` for an overlay of `size` anchored to a corner of
+/// `monitor` (`[x, y, w, h]`, e.g. from [`monitor_rect_at`]) with `margin` px
+/// clearance. Unknown/`"free"` anchors fall back to top-right, since callers
+/// use a saved drag position instead of this function for `"free"`.
+///
+/// `content_inset` (from `overlay::content_inset`) is the background card's
+/// own inner padding — `[0.0, 0.0]` when Background is off. `size` already
+/// includes it (see `overlay::estimate_window_size`), so placing the
+/// window's outer edge `margin` from the monitor edge would put the actual
+/// *content* an extra `content_inset` further in whenever Background is on.
+/// Subtracting it back out here keeps the content itself pinned at `margin`
+/// from the monitor edge regardless of the Background setting, so toggling
+/// it only adds a card behind the text in place instead of shifting the
+/// text inward.
+pub fn overlay_anchor_position(
+    anchor: &str,
+    margin: f32,
+    size: [f32; 2],
+    monitor: [f32; 4],
+    content_inset: [f32; 2],
+) -> [f32; 2] {
+    let [mx, my, mw, mh] = monitor;
+    let [w, h] = size;
+    let [ix, iy] = content_inset;
+    match anchor {
+        "top-left" => [mx + margin - ix, my + margin - iy],
+        "bottom-left" => [mx + margin - ix, my + mh - h - margin + iy],
+        "bottom-right" => [mx + mw - w - margin + ix, my + mh - h - margin + iy],
+        _ => [mx + mw - w - margin + ix, my + margin - iy], // "top-right" (default)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         compute_landscape_window_height, landscape_grid_layout, monitor_containing_point,
-        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
-        select_profile_monitor,
+        overlay_anchor_position, position_on_any_monitor, profile_is_landscape, profile_to_size,
+        resolve_pinned_position, select_profile_monitor,
     };
 
     #[test]
@@ -601,6 +652,64 @@ mod tests {
         assert_eq!(
             resolve_pinned_position(true, Some([3000, 10]), &monitors),
             None
+        );
+    }
+
+    #[test]
+    fn overlay_anchor_position_for_each_corner() {
+        let monitor = [0.0, 0.0, 1920.0, 1080.0];
+        let size = [200.0, 40.0];
+        let margin = 10.0;
+        assert_eq!(
+            overlay_anchor_position("top-left", margin, size, monitor, [0.0, 0.0]),
+            [10.0, 10.0]
+        );
+        assert_eq!(
+            overlay_anchor_position("top-right", margin, size, monitor, [0.0, 0.0]),
+            [1920.0 - 200.0 - 10.0, 10.0]
+        );
+        assert_eq!(
+            overlay_anchor_position("bottom-left", margin, size, monitor, [0.0, 0.0]),
+            [10.0, 1080.0 - 40.0 - 10.0]
+        );
+        assert_eq!(
+            overlay_anchor_position("bottom-right", margin, size, monitor, [0.0, 0.0]),
+            [1920.0 - 200.0 - 10.0, 1080.0 - 40.0 - 10.0]
+        );
+    }
+
+    #[test]
+    fn overlay_anchor_position_unknown_anchor_falls_back_to_top_right() {
+        let monitor = [0.0, 0.0, 1920.0, 1080.0];
+        let size = [200.0, 40.0];
+        assert_eq!(
+            overlay_anchor_position("free", 10.0, size, monitor, [0.0, 0.0]),
+            overlay_anchor_position("top-right", 10.0, size, monitor, [0.0, 0.0])
+        );
+    }
+
+    #[test]
+    fn overlay_anchor_position_content_inset_keeps_content_pinned() {
+        // With Background on, `size` grows by the card's padding but the
+        // *content* (inset by that same padding inside the window) must
+        // still land at exactly `margin` from the monitor edge — i.e. the
+        // window's outer edge moves further out by `content_inset`, not the
+        // content moving in.
+        let monitor = [0.0, 0.0, 1920.0, 1080.0];
+        let margin = 10.0;
+        let inset = [8.0, 6.0];
+        let size = [200.0, 40.0];
+        let [wx, wy] = overlay_anchor_position("top-left", margin, size, monitor, inset);
+        // content's top-left = window's top-left + inset
+        assert_eq!([wx + inset[0], wy + inset[1]], [margin, margin]);
+
+        let [wx, wy] = overlay_anchor_position("bottom-right", margin, size, monitor, inset);
+        // content's bottom-right = window's bottom-right - inset
+        let content_br = [wx + size[0] - inset[0], wy + size[1] - inset[1]];
+        assert_eq!(
+            content_br,
+            [1920.0 - margin, 1080.0 - margin],
+            "content's far corner must stay margin px from the monitor edge"
         );
     }
 }

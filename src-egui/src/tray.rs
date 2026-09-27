@@ -19,6 +19,8 @@ pub enum TrayCmd {
     OpenHistory,
     ToggleFloating,
     ToggleRecording,
+    ToggleOverlay,
+    ToggleOverlayLock,
 }
 
 pub struct Tray {
@@ -32,7 +34,10 @@ pub struct Tray {
     pub quit_id: tray_icon::menu::MenuId,
     pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
+    pub overlay_id: tray_icon::menu::MenuId,
+    pub overlay_lock_id: tray_icon::menu::MenuId,
     recording_item: IconMenuItem,
+    overlay_lock_item: IconMenuItem,
 }
 
 fn load_tray_icon() -> Icon {
@@ -54,7 +59,7 @@ pub fn load_app_icon() -> egui::IconData {
     }
 }
 
-pub fn build_tray(logging_enabled: bool) -> Tray {
+pub fn build_tray(logging_enabled: bool, overlay_locked: bool) -> Tray {
     let floating_item = IconMenuItem::new(
         "Toggle Floating Mode",
         true,
@@ -72,6 +77,23 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
         menu_icons::record_start()
     };
     let recording_item = IconMenuItem::new(recording_label, true, Some(recording_icon), None);
+    let overlay_item = IconMenuItem::new(
+        "Toggle Overlay Mode",
+        true,
+        Some(menu_icons::overlay()),
+        None,
+    );
+    let overlay_lock_label = if overlay_locked {
+        "Unlock Overlay"
+    } else {
+        "Lock Overlay"
+    };
+    let overlay_lock_item = IconMenuItem::new(
+        overlay_lock_label,
+        true,
+        Some(menu_icons::lock(overlay_locked)),
+        None,
+    );
     let settings_item = IconMenuItem::new("Settings", true, Some(menu_icons::settings()), None);
     let about_item = IconMenuItem::new("About", true, Some(menu_icons::about()), None);
     let status_item = IconMenuItem::new("Status", true, Some(menu_icons::status()), None);
@@ -84,6 +106,8 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
 
     let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
+    let overlay_id = overlay_item.id().clone();
+    let overlay_lock_id = overlay_lock_item.id().clone();
     let settings_id = settings_item.id().clone();
     let about_id = about_item.id().clone();
     let status_id = status_item.id().clone();
@@ -94,6 +118,8 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
 
     let menu = Menu::new();
     let _ = menu.append(&floating_item);
+    let _ = menu.append(&overlay_item);
+    let _ = menu.append(&overlay_lock_item);
     let _ = menu.append(&recording_item);
     let _ = menu.append(&history_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
@@ -138,7 +164,10 @@ pub fn build_tray(logging_enabled: bool) -> Tray {
         quit_id,
         floating_id,
         recording_id,
+        overlay_id,
+        overlay_lock_id,
         recording_item,
+        overlay_lock_item,
     }
 }
 
@@ -175,6 +204,21 @@ impl Tray {
             } else {
                 90
             })));
+    }
+
+    /// Flips the "Lock/Unlock Overlay" row's label and padlock icon to match
+    /// the current click-through state. Called from the tray toggle itself,
+    /// the global hotkey, and the Settings dialog's Click-Through switch —
+    /// whichever path changed `Settings.overlay_click_through`.
+    pub fn set_overlay_lock(&self, locked: bool) {
+        let label = if locked {
+            "Unlock Overlay"
+        } else {
+            "Lock Overlay"
+        };
+        self.overlay_lock_item.set_text(label);
+        self.overlay_lock_item
+            .set_icon(Some(menu_icons::lock(locked)));
     }
 
     fn set_icon_variant(&self, dot: bool) {

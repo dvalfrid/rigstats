@@ -204,3 +204,25 @@ pub fn quit() -> Icon {
         (ring || stem).then_some(NEUTRAL)
     })
 }
+
+/// Thin strip outline with three dots — Toggle Overlay Mode.
+pub fn overlay() -> Icon {
+    rasterize(|x, y| {
+        let outline = rect_stroke(x, y, 6.0, 12.0, 26.0, 20.0, 2.0);
+        let dot = |cx: f32| dist(x, y, cx, 16.0) <= 1.6;
+        (outline || dot(11.0) || dot(16.0) || dot(21.0)).then_some(NEUTRAL)
+    })
+}
+
+/// Padlock, shackle closed or open — Lock/Unlock Overlay.
+pub fn lock(locked: bool) -> Icon {
+    rasterize(move |x, y| {
+        let body = rect_stroke(x, y, 9.0, 16.0, 23.0, 25.0, 2.0);
+        let shackle = if locked {
+            in_ring(x, y, 16.0, 15.0, 5.0, 2.0) && y <= 16.0
+        } else {
+            in_ring(x, y, 12.0, 13.0, 5.0, 2.0) && y <= 13.0
+        };
+        (body || shackle).then_some(NEUTRAL)
+    })
+}

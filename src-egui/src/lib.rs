@@ -10,8 +10,11 @@ pub mod dashboard;
 pub mod geometry;
 pub mod gpu_guard;
 pub mod gpu_process;
+#[cfg(windows)]
+pub mod hotkey;
 pub mod lock_ext;
 pub mod menu_icons;
+pub mod overlay;
 pub mod panels;
 pub mod poll;
 pub mod ring;
