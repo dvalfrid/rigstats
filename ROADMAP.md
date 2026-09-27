@@ -42,6 +42,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🔲 Planned (3.0), phases #187–#193 |
 
 ---
 
@@ -102,6 +103,13 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | 🔲 Planned |
+| [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
+| [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | 🔲 Planned |
+| [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits | v3.0 | 🔲 Planned |
+| [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles | v3.0 | 🔲 Planned |
+| [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | 🔲 Planned |
+| [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | 🔲 Planned |
+| [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1544,3 +1552,28 @@ no way to look at it inside the app. This turned that into named, browsable
   rendering as "no data".
 
 Full design detail and history are in the issue.
+---
+
+## Control Center — hardware control 🔲 (Milestone 3.0)
+
+Extends RIGStats from monitoring to control — a "desktop G-Helper" focused on
+ASUS ROG desktop boards: fan curves, CPU power limits, AMD Curve Optimizer, GPU
+power profiles, Aura RGB, Windows power plan, and one-click / hotkey switching
+between Silent, Balanced, Gaming and Eco — without Armoury Crate.
+
+The sensor service becomes the single hardware owner, exposing a new
+authenticated control pipe beside the unchanged telemetry pipe. Everything the
+user touches is a **profile**; the UI is capability-driven and integrated into
+the tray, hotkey, header chip, existing panels and one Control Center window.
+
+Full design: [docs/control-architecture.md](docs/control-architecture.md).
+
+| Phase | Issue |
+| --- | --- |
+| 0 — Control foundation | [#187](https://github.com/dvalfrid/rigstats/issues/187) |
+| 1 — Fan control | [#188](https://github.com/dvalfrid/rigstats/issues/188) |
+| 2 — CPU power limits | [#189](https://github.com/dvalfrid/rigstats/issues/189) |
+| 3 — GPU power profiles | [#190](https://github.com/dvalfrid/rigstats/issues/190) |
+| 4 — AMD Curve Optimizer | [#191](https://github.com/dvalfrid/rigstats/issues/191) |
+| 5 — ASUS Aura RGB | [#192](https://github.com/dvalfrid/rigstats/issues/192) |
+| 6 — Armoury Crate replacement | [#193](https://github.com/dvalfrid/rigstats/issues/193) |
