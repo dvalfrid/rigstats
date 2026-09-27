@@ -146,13 +146,18 @@
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
-          <h3>Session recording &amp; history<span class="badge-soon">Coming in v1.38</span></h3>
+          <h3>Session recording &amp; history</h3>
           <p>Start and stop recording sessions straight from the tray menu — the tray icon blinks while one is live. Browse, chart, rename, pin, and delete past sessions in the History window.</p>
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
-          <h3>Redesigned tray menu<span class="badge-soon">Coming in v1.38</span></h3>
+          <h3>Redesigned tray menu</h3>
           <p>Every tray menu row has its own procedurally-drawn icon — no bundled images — with a blinking red dot on Stop Recording while a session is live.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Game overlay mode<span class="badge-soon">Coming in v1.40.0</span></h3>
+          <p>A compact, click-through metric strip that sits over any fullscreen game or app. Corner-anchored or free-dragged, with a global Ctrl+Alt+O hotkey to show or hide it without alt-tabbing.</p>
         </li>
       </ul>
     </div>
@@ -216,21 +221,55 @@
     </div>
   </section>
 
+  <!-- Game overlay mode -->
+  <section class="section" id="overlay-mode">
+    <div class="container">
+      <header class="section-head">
+        <h2>Game Overlay Mode<span class="badge-soon">Coming in v1.40.0</span></h2>
+        <p>A compact metric strip that floats over any fullscreen game or app — no alt-tabbing, no separate monitor required. Pick which metrics to show, anchor a corner or drag it anywhere, and toggle it on or off with a global hotkey.</p>
+      </header>
+      <div class="floating-showcase">
+        <div class="dual-shots">
+          <div class="screen-wrap screen-wrap--wide">
+            <img src="images/overlay-mode.png" alt="RIGStats compact overlay strip in the top-left corner while playing a game, showing CPU and GPU temperature, load, clocks, power, VRAM, RAM usage, and ping" class="hero-img">
+          </div>
+          <div class="screen-wrap">
+            <img src="images/overlay-mode-close.png" alt="Close-up of the overlay's metric strip, with warn/crit values colored yellow and orange" class="hero-img">
+          </div>
+        </div>
+        <ul class="floating-features">
+          <li>Corner-anchored (drag-free) or free-dragged anywhere on screen</li>
+          <li>Choose which metrics appear and reorder them with arrows</li>
+          <li>Adjustable scale, opacity, and an optional frosted background card</li>
+          <li>Click-through by default — mouse clicks pass to the game underneath</li>
+          <li>Global <strong>Ctrl+Alt+O</strong> hotkey shows/hides it without leaving the game</li>
+          <li>Toggle from the tray menu or Settings — independent of window layer or floating mode</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
   <!-- Session recording -->
   <section class="section section-alt" id="recording">
     <div class="container">
       <header class="section-head">
-        <h2>Recording, Right From the Tray<span class="badge-soon">Coming in v1.38</span></h2>
+        <h2>Recording, Right From the Tray</h2>
         <p>Every menu row now has its own procedurally-drawn icon — no external image assets — and starting a recording is one click away.</p>
       </header>
       <div class="floating-showcase">
-        <div class="screen-wrap">
-          <img src="images/tray-menue-recording.png" alt="RIGStats tray menu while a session is recording — a red dot icon next to Stop Recording, with procedurally-drawn icons on every row" class="hero-img">
+        <div class="dual-shots">
+          <div class="screen-wrap">
+            <img src="images/tray-menue.png" alt="RIGStats tray menu showing Toggle Floating Mode, Toggle Overlay Mode, Lock Overlay, Start Recording, Session History, and app rows, each with a procedurally-drawn icon" class="hero-img">
+          </div>
+          <div class="screen-wrap">
+            <img src="images/tray-menue-recording.png" alt="The same tray menu while a session is recording — a red dot icon next to Stop Recording" class="hero-img">
+          </div>
         </div>
         <ul class="floating-features">
           <li>Toggle <strong>Start/Stop Recording</strong> from the tray menu — no dialog needed</li>
           <li>The tray icon blinks a red dot while a session is live, so it's obvious at a glance</li>
           <li>Open <strong>Session History</strong> from the same menu to browse and chart past sessions</li>
+          <li><strong>Toggle Overlay Mode</strong> and <strong>Lock Overlay</strong> (click-through) rows show/hide and lock the game overlay without opening Settings<span class="badge-soon">Coming in v1.40.0</span></li>
           <li>Every menu row's icon is drawn procedurally at startup — no bundled image assets</li>
         </ul>
       </div>
@@ -241,7 +280,7 @@
   <section class="section section-alt" id="panels">
     <div class="container">
       <header class="section-head">
-        <h2>Eleven Live Panels (7 default + 4 optional)</h2>
+        <h2>Twelve Live Panels (7 default + 5 optional)</h2>
         <p>Each panel tracks exactly what matters for that component — with sparkline history so you see trends, not just a snapshot.</p>
       </header>
 
@@ -370,6 +409,22 @@
 
         <article class="panel-card">
           <div class="panel-img-wrap">
+            <img src="images/gpu-apps-panel.png" alt="GPU Apps panel screenshot">
+          </div>
+          <div class="panel-body">
+            <h3>GPU Apps</h3>
+            <p>Task-Manager-style per-process GPU usage — see exactly which game, encoder, or background app is actually using the GPU, not just overall load. Attributes each process to a physical adapter when more than one GPU is active. Optional panel, enabled in Settings.</p>
+            <ul>
+              <li>Top processes by GPU usage (%)</li>
+              <li>Engine type per process (3D, Video Decode, etc.)</li>
+              <li>Physical adapter attribution on multi-GPU systems</li>
+            </ul>
+            <span class="source-tag">PDH</span>
+          </div>
+        </article>
+
+        <article class="panel-card">
+          <div class="panel-img-wrap">
             <img src="images/battery-panel.png" alt="Battery panel screenshot">
           </div>
           <div class="panel-body">
@@ -467,19 +522,21 @@
             <button class="settings-tab" data-img="settings-alerts-dialog.png" role="tab" aria-selected="false">Alerts</button>
             <button class="settings-tab" data-img="settings-appearance-dialog.png" role="tab" aria-selected="false">Appearance</button>
             <button class="settings-tab" data-img="settings-general-dialog.png" role="tab" aria-selected="false">General</button>
+            <button class="settings-tab" data-img="settings-overlay-dialog.png" role="tab" aria-selected="false">Overlay</button>
           </div>
           <div class="dialog-img-wrap">
             <img id="settings-preview" src="images/settings-display-dialog.png" alt="Settings — Display tab" class="dialog-img">
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Five focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state. In <strong>Desktop Wallpaper</strong> mode the dashboard is a separate background process, so settings apply on <strong>Save</strong> instead of live preview, no-op controls grey out, and the display profile is locked — switch to a non-wallpaper layer to change it.</p>
+            <p>Six focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state. In <strong>Desktop Wallpaper</strong> mode the dashboard is a separate background process, so settings apply on <strong>Save</strong> instead of live preview, no-op controls grey out, and the display profile is locked — switch to a non-wallpaper layer to change it.</p>
             <ul>
               <li><strong>Display</strong> — display profile, window layer (Normal / Always on Top / Always Behind / Desktop Wallpaper — lives in the wallpaper layer and survives Win+D), opacity, floating mode and panel scale, fill screen and alignment</li>
               <li><strong>Panels</strong> — toggle panel visibility, use arrows to reorder, set PSU rated wattage</li>
-              <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk (°C) and battery charge % and power W</li>
+              <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk temperature (°C), CPU/GPU/RAM/Disk usage (%), and battery charge % and power W</li>
               <li><strong>Appearance</strong> — override model name, colour theme</li>
               <li><strong>General</strong> — launch at startup, stats CSV logging and retention</li>
+              <li><strong>Overlay</strong> — enable the game overlay, choose and reorder metrics, layout/anchor/scale/opacity/background, click-through lock<span class="badge-soon">Coming in v1.40.0</span></li>
             </ul>
           </div>
         </article>
@@ -506,7 +563,7 @@
             <img src="images/session-history-dialog.png" alt="Session History window screenshot — session list on the left, CPU/GPU/RAM charts on the right" class="dialog-img">
           </div>
           <div class="dialog-body">
-            <h3>Session History<span class="badge-soon">Coming in v1.38</span></h3>
+            <h3>Session History</h3>
             <p>Browse and chart past recording sessions. Each session gets its own CPU/GPU/RAM/network/disk/ping charts with synced hover, so you can see exactly what happened during a gaming session or stress test.</p>
             <ul>
               <li>Pin, rename, reveal in Explorer, or delete any session</li>

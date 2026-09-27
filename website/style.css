@@ -874,3 +874,14 @@ code {
   max-width: 420px;
   margin: 0 auto 48px;
 }
+
+/* ── Two stacked shots (e.g. main + close-up, or before/after states) ── */
+.dual-shots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.dual-shots .screen-wrap:not(.screen-wrap--wide) .hero-img {
+  max-height: 280px;
+}

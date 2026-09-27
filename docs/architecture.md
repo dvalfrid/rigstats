@@ -97,17 +97,23 @@ viewport (a separate OS window). The main window is moved off-screen (`-32000,
 -32000`) rather than hidden so egui continues ticking. Panel positions are
 persisted to settings on change via a dirty-flag debounce.
 
-**Overlay mode** (`window_layer == "overlay"`, issue #183): the same root
-window (no separate process/viewport) renders a compact, always-on-top,
-optionally click-through strip of user-selected metrics (`overlay.rs`)
-instead of the portrait/landscape dashboard, corner-anchored or free-dragged.
-`RigStatsApp::update_overlay_mode` mirrors `update_wallpaper_mode`'s per-frame
-"derive want from settings, act only on the enter/leave edge" shape but
-without any child-process supervision. Click-through uses
-`egui::ViewportCommand::MousePassthrough` — no raw Win32 FFI is needed for
-it, unlike Always-Behind (`win32_behind.rs`). A fixed global hotkey
-(`hotkey.rs`, `Ctrl+Alt+O`) shows/hides the overlay without leaving the
-game — the conventional in-game-overlay toggle; locking/unlocking
+**Overlay mode** (`Settings.overlay_enabled`, issue #183): an independent
+add-on, not a `window_layer` value — it renders in its own always-on-top
+viewport (`RigStatsApp::render_overlay_viewport` in `main.rs`) showing a
+compact, optionally click-through strip of user-selected metrics
+(`overlay.rs`), corner-anchored or free-dragged, and coexists with whatever
+the main window (portrait/landscape/floating/wallpaper) is doing underneath.
+Click-through uses `egui::ViewportCommand::MousePassthrough` — no raw Win32
+FFI is needed for it, unlike Always-Behind (`win32_behind.rs`). Per-pixel
+transparency (where DComp is available) required a hide → reapply-burst →
+reveal sequence to avoid a transient white box on activation/resize (the
+DWM redirection-bitmap binding doesn't reliably follow a live resize), tuned
+to a handful of frames after measuring that a hidden window's paint/present
+cadence is throttled to a fixed ~100 ms/frame regardless of work done inside
+it. A live Scale-slider drag debounces before committing to a new size, to
+avoid re-triggering that burst on every intermediate value. A fixed global
+hotkey (`hotkey.rs`, `Ctrl+Alt+O`) shows/hides the overlay without leaving
+the game — the conventional in-game-overlay toggle; locking/unlocking
 click-through is a separate, less-frequent action left to the tray row
 and Settings switch only.
 
@@ -201,7 +207,7 @@ rig-dashboard/
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping; pauses (releases the sensor pipe) when the main app is in wallpaper mode |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
 | `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process |
-| `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/extractor/threshold-key) and `draw_overlay` — the compact chip renderer for Overlay mode |
+| `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract` fn/`color` fn) and `draw_overlay` — the compact chip renderer for the overlay add-on |
 | `hotkey.rs` | Global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on a dedicated thread) — fixed `Ctrl+Alt+O`, shows/hides the overlay |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
@@ -343,12 +349,20 @@ after an upgrade.
 
 Alert thresholds are stored as `thresholds: HashMap<String, ComponentThresholds>`
 where `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys
-are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"battery"`.
+are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"cpu_load"`, `"gpu_load"`,
+`"ram_load"`, `"disk_usage"`, `"battery"`, `"battery_power"`.
 
 Threshold semantics differ by key:
 
 - **Temperature keys** (`cpu`/`gpu`/`ram`/`disk`): alert fires when the reading
   **exceeds** the threshold. `warn < crit` is enforced.
+- **Load/usage percentage keys** (`cpu_load`/`gpu_load`/`ram_load`/
+  `disk_usage`): same "exceeds" direction as temperature, but a distinct key
+  since the values are percentages, not °C — kept separate from `cpu`/`gpu`/
+  `ram`/`disk` (which are temperature-only) so a load % reading is never
+  colored against a °C-calibrated cutoff. Read into `PanelThresholds` in
+  `dashboard.rs` and consumed by the overlay's per-metric `color` functions
+  (`overlay.rs`) and the main Disk panel's per-drive usage bar.
 - **Battery key**: alert fires when charge % **drops below** the threshold.
   `warn > crit` is enforced (warn at 20 %, crit at 10 % is the default).
   Only fires when discharging. Alert message: "Battery WARNING — 18% remaining".
