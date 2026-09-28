@@ -997,15 +997,14 @@ impl RigStatsApp {
             self.overlay_positioned = true;
         }
 
-        // EXPERIMENTAL (reverting to investigate further — see
-        // overlay-addon-wholewindow-fade tag for the known-working
-        // whole-window-opacity fallback to return to if this doesn't pan
-        // out): re-attempting true per-pixel DComp transparency without the
-        // CentralPanel wrapper, since an earlier screenshot showed *partial*
-        // success (part of the window genuinely transparent with crisp text,
-        // part an opaque white box) rather than uniform failure — suggesting
-        // the DComp visual is being created but not consistently covering
-        // the whole window, not that it fundamentally doesn't work here.
+        // True per-pixel DComp transparency, without a CentralPanel wrapper.
+        // Confirmed working (activation and live Scale-drag resize both stay
+        // artifact-free) once paired with the hide/reapply-burst/reveal
+        // sequence below — see `overlay_pending_reveal`'s doc for why that's
+        // needed. If DComp is ever unavailable on a given system, the
+        // `dcomp_available` branches throughout this function fall back to
+        // whole-window opacity instead (see the `overlay-addon-wholewindow-fade`
+        // tag for that fallback's history).
         let mut vp_builder = egui::ViewportBuilder::default()
             .with_title("RigStats \u{2014} Overlay")
             .with_inner_size(size)
