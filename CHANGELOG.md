@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.40.0](https://github.com/dvalfrid/rigstats/compare/v1.39.0...v1.40.0) (2026-09-28)
+
+
+### Features
+
+* **overlay:** add compact click-through game-overlay mode ([d736aad](https://github.com/dvalfrid/rigstats/commit/d736aad58bb5d37e59b700d0ca6c81f332d8366b)), closes [#183](https://github.com/dvalfrid/rigstats/issues/183)
+* **overlay:** reorder overlay metrics and color them consistently with Alerts ([a3208ef](https://github.com/dvalfrid/rigstats/commit/a3208ef48608479b1e693b25124430d47c8a6d43)), closes [#186](https://github.com/dvalfrid/rigstats/issues/186)
+
+
+### Bug Fixes
+
+* **floating:** add real per-pixel DComp transparency instead of dimming text too ([8bd82fc](https://github.com/dvalfrid/rigstats/commit/8bd82fc6d835a9103b474cb23337769493611a67)), closes [#169](https://github.com/dvalfrid/rigstats/issues/169)
+* **gpu:** refresh the GPU adapter LUID map periodically, not just when empty ([347b266](https://github.com/dvalfrid/rigstats/commit/347b266dbe892db9be2cdca5e02590ce54e081d8))
+* **overlay:** only re-hide the window on the first resize, not every Scale change ([e6d56a0](https://github.com/dvalfrid/rigstats/commit/e6d56a0ff18cd0152323459e957d95160f353515))
+* **tray:** recording blink no longer freezes after the tray menu closes ([94c2587](https://github.com/dvalfrid/rigstats/commit/94c2587e0bf2b1bdbaade73ee1b6dfd28c6c0cd2)), closes [#177](https://github.com/dvalfrid/rigstats/issues/177)
+
 ## [1.39.0](https://github.com/dvalfrid/rigstats/compare/v1.38.0...v1.39.0) (2026-09-11)
 
 
