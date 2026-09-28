@@ -226,22 +226,6 @@ struct RigStatsApp {
     /// visibly shift the content by the new padding instead of leaving it
     /// in place.
     overlay_last_content_inset: Option<[f32; 2]>,
-    /// Scale value the overlay is currently rendered/sized at. `None` until
-    /// the first commit after activation. Deliberately lags the live
-    /// `Settings.overlay_scale` value while `overlay_pending_scale` is still
-    /// settling — see that field's doc comment for why.
-    overlay_committed_scale: Option<f32>,
-    /// Most recent live `overlay_scale` value seen, and when it was first
-    /// seen. A Scale slider drag fires many intermediate values in quick
-    /// succession, and every value that changes the measured overlay size
-    /// re-triggers the DComp hide/burst/reveal cycle below — committing on
-    /// every intermediate tick turned one drag into a rapid string of
-    /// hide/reveal flickers (visibly "jumping" text, and the overlay's own
-    /// always-on-top window repeatedly toggling visibility over whatever it
-    /// overlaps, e.g. the Settings dialog). `overlay_committed_scale` only
-    /// adopts this value once it's held steady for `OVERLAY_SCALE_DEBOUNCE`.
-    overlay_pending_scale: Option<f32>,
-    overlay_pending_scale_since: Instant,
     /// Last overlay content size seen, used to detect a resize (metric
     /// list/layout/scale/background edit) so `set_no_redirection_bitmap` can
     /// be re-applied afterward — its DComp binding doesn't automatically
@@ -467,9 +451,6 @@ impl RigStatsApp {
             overlay_hwnd: 0,
             overlay_positioned: false,
             overlay_last_content_inset: None,
-            overlay_committed_scale: None,
-            overlay_pending_scale: None,
-            overlay_pending_scale_since: Instant::now(),
             overlay_last_size: None,
             overlay_reapply_dcomp_frames: 0,
             overlay_pending_reveal: false,
@@ -896,19 +877,17 @@ impl RigStatsApp {
         /// burst above to complete, in case the HWND is never found.
         const OVERLAY_REVEAL_SAFETY_FRAMES: u8 = 90;
 
-        /// How long a live Scale value must hold steady before the overlay
-        /// actually commits to it (see `overlay_pending_scale`'s doc comment).
-        const OVERLAY_SCALE_DEBOUNCE: Duration = Duration::from_millis(300);
-
         let want = self.overlay_enabled;
         if want && !self.overlay_active {
             self.overlay_active = true;
             self.overlay_positioned = false;
             self.overlay_hwnd = 0;
-            // Commit to whatever Scale is live right now instead of
-            // whatever was mid-debounce the last time the overlay was
-            // shown (e.g. Scale changed while the overlay was off).
-            self.overlay_committed_scale = None;
+            // Fresh window each activation (the old one was destroyed on
+            // hide) — force the resize-detection block below to treat this
+            // activation's first size as "first ever" again, so it gets the
+            // full hide/burst treatment rather than being silently skipped
+            // because a *previous* activation already recorded a size.
+            self.overlay_last_size = None;
             // Keep the freshly-created window invisible until the DComp
             // reapply burst below has settled — the user must never see the
             // transient DWM-redirection-bitmap white box, only the final,
@@ -924,7 +903,7 @@ impl RigStatsApp {
             return;
         }
 
-        let (metrics, layout, anchor, margin, live_scale, opacity, background) = {
+        let (metrics, layout, anchor, margin, scale, opacity, background) = {
             let s = self.current_settings.lock_safe();
             (
                 s.overlay_metrics.clone(),
@@ -936,34 +915,30 @@ impl RigStatsApp {
                 s.overlay_background,
             )
         };
-        if self.overlay_pending_scale != Some(live_scale) {
-            self.overlay_pending_scale = Some(live_scale);
-            self.overlay_pending_scale_since = Instant::now();
-        }
-        if self.overlay_committed_scale != Some(live_scale)
-            && (self.overlay_committed_scale.is_none()
-                || self.overlay_pending_scale_since.elapsed() >= OVERLAY_SCALE_DEBOUNCE)
-        {
-            self.overlay_committed_scale = Some(live_scale);
-        }
-        let scale = self.overlay_committed_scale.unwrap_or(live_scale);
         let measured = estimate_window_size(ctx, &metrics, &layout, scale, background);
         let size = [measured.x, measured.y];
         if self.overlay_last_size != Some(size) {
+            // Only the very first size (right after activation,
+            // self.overlay_last_size still None) gets the full hide/burst
+            // treatment. A later resize (e.g. dragging Scale) just resizes
+            // silently, same as floating panels' later content-driven
+            // resizes (#169) — confirmed by direct visual testing that the
+            // DComp binding, once correctly established by the activation
+            // burst, survives an ordinary resize without needing to be
+            // re-applied every time. An earlier finding (from *before* this
+            // session's hide/burst fix existed) had the white-box artifact
+            // appearing right after changing Scale; that no longer holds now
+            // that the underlying fix is actually correct. Scale is read
+            // live here (no debounce) since a resize no longer re-triggers
+            // any hide/reveal flicker for the debounce to guard against.
+            let is_first_size = self.overlay_last_size.is_none();
             self.overlay_last_size = Some(size);
-            // The DComp "no redirection bitmap" binding doesn't automatically
-            // follow the window through a resize (confirmed: the white-box
-            // artifact appears specifically right after changing Scale) —
-            // re-apply for a few frames after any detected size change, the
-            // same "transition needs a moment to stick" shape as
-            // `reapply_window_props_frames`. Also re-hide for the duration of
-            // the burst: a live resize (e.g. dragging the Scale slider) is
-            // exactly the other case that leaves a stuck white patch behind,
-            // and hiding is a cheap, total fix for it too.
-            self.overlay_reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
-            if self.dcomp_available {
-                self.overlay_pending_reveal = true;
-                self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
+            if is_first_size {
+                self.overlay_reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
+                if self.dcomp_available {
+                    self.overlay_pending_reveal = true;
+                    self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
+                }
             }
         }
 
