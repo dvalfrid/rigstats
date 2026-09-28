@@ -2,6 +2,7 @@
 use eframe::egui;
 use rigstats_backend::{debug, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
+use rigstats_egui::dcomp_burst::DcompRevealBurst;
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -133,9 +134,11 @@ struct RigStatsApp {
     /// CPU. Enforcement happens on creation, in a short burst after a drag, and
     /// then ~1/s as an idle safety net.
     behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
-    /// Per-panel DComp reveal-burst state for the floating-mode transparency
-    /// experiment (issue #169) — see `FloatingDcompState`.
-    floating_dcomp: RefCell<HashMap<String, FloatingDcompState>>,
+    /// Per-panel DComp reveal-burst state for floating mode's per-pixel
+    /// transparency (issue #169) — see `dcomp_burst::DcompRevealBurst`. Only
+    /// a panel's creation frame triggers a burst; a later content-driven
+    /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
+    floating_dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     floating_mode_arc: Arc<AtomicBool>,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
@@ -192,8 +195,8 @@ struct RigStatsApp {
     // viewport (`render_overlay_viewport`), mirroring how floating panels each
     // own a secondary viewport, rather than reusing the root window.
     /// Whether the overlay viewport was shown last frame — edge-detects
-    /// enable/disable transitions so `overlay_hwnd`/`overlay_positioned` reset
-    /// cleanly each time it's freshly (re-)enabled.
+    /// enable/disable transitions so `overlay_dcomp`/`overlay_positioned`
+    /// reset cleanly each time it's freshly (re-)enabled.
     overlay_active: bool,
     /// Cached from settings — the overlay's on/off state.
     overlay_enabled: bool,
@@ -205,11 +208,11 @@ struct RigStatsApp {
     /// Last click-through value actually sent via `MousePassthrough` —
     /// avoids re-sending the same viewport command every frame.
     last_applied_click_through: Option<bool>,
-    /// HWND of the overlay's own OS window, found by title once per
-    /// activation (like the root window's `self.hwnd`) and reset to 0 when
-    /// the overlay is disabled, since the window is destroyed and a fresh one
-    /// is created next time it's shown.
-    overlay_hwnd: isize,
+    /// DComp reveal-burst state for the overlay's own OS window — see
+    /// `dcomp_burst::DcompRevealBurst`. Reset (`start()`) each time the
+    /// overlay is freshly (re-)enabled, since the window is destroyed and a
+    /// fresh one is created next time it's shown.
+    overlay_dcomp: DcompRevealBurst,
     /// Whether the overlay's initial position (anchor or saved free-drag
     /// spot) has been applied for the current activation — mirrors floating
     /// panels' `panels_positioned`: after the first frame, a `"free"`-anchored
@@ -226,30 +229,12 @@ struct RigStatsApp {
     /// visibly shift the content by the new padding instead of leaving it
     /// in place.
     overlay_last_content_inset: Option<[f32; 2]>,
-    /// Last overlay content size seen, used to detect a resize (metric
-    /// list/layout/scale/background edit) so `set_no_redirection_bitmap` can
-    /// be re-applied afterward — its DComp binding doesn't automatically
-    /// follow the window through a resize (diagnosed from a partially
-    /// transparent/partially opaque-white render right after resizing).
+    /// Last overlay content size seen, used to detect the very first size
+    /// after each activation — only that first size gets the full DComp
+    /// hide/burst treatment (`overlay_dcomp.start()`); later resizes (e.g.
+    /// dragging Scale) just resize immediately, since the DComp binding
+    /// survives an ordinary resize once correctly established.
     overlay_last_size: Option<[f32; 2]>,
-    /// Frames left to keep re-applying `set_no_redirection_bitmap` after a
-    /// detected resize — mirrors `reapply_window_props_frames`'s "a
-    /// transition needs a few frames to fully stick" shape.
-    overlay_reapply_dcomp_frames: u8,
-    /// True while the overlay window is deliberately kept invisible
-    /// (`with_visible(false)`) so the user never sees the transient
-    /// DWM-redirection-bitmap white box that appears before
-    /// `set_no_redirection_bitmap`'s reapply burst has had a few frames to
-    /// take effect. Set whenever a burst starts (fresh show or resize);
-    /// cleared once the burst completes (or `overlay_reveal_safety_frames`
-    /// times out), at which point the window is made visible for the first
-    /// time already fully per-pixel transparent.
-    overlay_pending_reveal: bool,
-    /// Hard cap on how long `overlay_pending_reveal` may hide the window,
-    /// decremented every frame regardless of whether the HWND has been
-    /// found yet — guards against the window staying invisible forever if
-    /// `find_hwnd` ever fails to match.
-    overlay_reveal_safety_frames: u8,
     /// Current free-drag position for the overlay this session. Loaded from
     /// `Settings.overlay_position` at startup; updated on drag and persisted
     /// (debounced via `overlay_position_dirty`), mirroring `floating_positions`.
@@ -306,21 +291,6 @@ struct BehindEnforce {
     /// While `Instant::now() < force_until`, enforce every frame (short burst
     /// after a drag finishes so the panel snaps back behind promptly).
     force_until: Instant,
-}
-
-/// Per-floating-panel DComp reveal-burst state (issue #169 revisit) —
-/// mirrors the overlay's own single-viewport fields (`overlay_hwnd`/
-/// `overlay_reapply_dcomp_frames`/`overlay_pending_reveal`/
-/// `overlay_reveal_safety_frames`), just keyed per panel since floating mode
-/// has one secondary viewport per visible panel instead of one. Only the
-/// panel's creation frame triggers a burst (no `last_size` tracking) — a
-/// later content-driven resize keeps the old, non-hiding behavior.
-#[derive(Default)]
-struct FloatingDcompState {
-    hwnd: isize,
-    reapply_frames: u8,
-    pending_reveal: bool,
-    reveal_safety_frames: u8,
 }
 
 impl RigStatsApp {
@@ -448,13 +418,10 @@ impl RigStatsApp {
             overlay_enabled: init_settings.overlay_enabled,
             overlay_click_through: init_settings.overlay_click_through,
             last_applied_click_through: None,
-            overlay_hwnd: 0,
+            overlay_dcomp: DcompRevealBurst::default(),
             overlay_positioned: false,
             overlay_last_content_inset: None,
             overlay_last_size: None,
-            overlay_reapply_dcomp_frames: 0,
-            overlay_pending_reveal: false,
-            overlay_reveal_safety_frames: 0,
             overlay_position: init_settings
                 .overlay_position
                 .map(|p| [p[0] as f32, p[1] as f32]),
@@ -859,41 +826,19 @@ impl RigStatsApp {
     /// panels' `panels_positioned` — re-sending it every frame would fight
     /// the OS and cause sub-pixel blur.
     fn render_overlay_viewport(&mut self, ctx: &egui::Context) {
-        /// Frames to wait (re-applying `set_no_redirection_bitmap` on the
-        /// first two, plus a forced resize + repaint every frame) after the
-        /// overlay is shown or resized. Only the first two frames do real
-        /// work (the resize nudge below, then its snap-back landing the
-        /// second reconfigure); the rest are margin for DWM to settle.
-        /// Kept small deliberately: while hidden, each frame's paint/present
-        /// cycle is throttled to a measured, fixed ~100 ms regardless of
-        /// what work happens inside it (confirmed empirically — cutting the
-        /// expensive per-frame `set_no_redirection_bitmap` calls from 30 to
-        /// 2 made no difference to total burst time), almost certainly
-        /// Windows/DXGI throttling paint delivery for invisible windows —
-        /// so every extra margin frame here is ~100 ms of directly visible
-        /// reveal delay, not a free safety net.
-        const OVERLAY_DCOMP_BURST_FRAMES: u8 = 6;
-        /// Hard cap on how long the window may stay hidden waiting for the
-        /// burst above to complete, in case the HWND is never found.
-        const OVERLAY_REVEAL_SAFETY_FRAMES: u8 = 90;
-
         let want = self.overlay_enabled;
         if want && !self.overlay_active {
             self.overlay_active = true;
             self.overlay_positioned = false;
-            self.overlay_hwnd = 0;
             // Fresh window each activation (the old one was destroyed on
             // hide) — force the resize-detection block below to treat this
-            // activation's first size as "first ever" again, so it gets the
-            // full hide/burst treatment rather than being silently skipped
+            // activation's first size as "first ever" again, so it calls
+            // `overlay_dcomp.start()` (which keeps the window hidden until
+            // the reapply burst below settles — the user must never see the
+            // transient DWM-redirection-bitmap white box, only the final,
+            // correctly-composited frame) instead of being silently skipped
             // because a *previous* activation already recorded a size.
             self.overlay_last_size = None;
-            // Keep the freshly-created window invisible until the DComp
-            // reapply burst below has settled — the user must never see the
-            // transient DWM-redirection-bitmap white box, only the final,
-            // correctly-composited frame.
-            self.overlay_pending_reveal = self.dcomp_available;
-            self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
             debug::log_debug(&self.dir, "overlay: showing");
         } else if !want && self.overlay_active {
             self.overlay_active = false;
@@ -934,11 +879,7 @@ impl RigStatsApp {
             let is_first_size = self.overlay_last_size.is_none();
             self.overlay_last_size = Some(size);
             if is_first_size {
-                self.overlay_reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
-                if self.dcomp_available {
-                    self.overlay_pending_reveal = true;
-                    self.overlay_reveal_safety_frames = OVERLAY_REVEAL_SAFETY_FRAMES;
-                }
+                self.overlay_dcomp.start(self.dcomp_available);
             }
         }
 
@@ -1009,8 +950,8 @@ impl RigStatsApp {
             .with_transparent(self.dcomp_available)
             // Held hidden until the reapply burst below settles, so the
             // very first frame the user ever sees is already correctly
-            // per-pixel composited — see `overlay_pending_reveal`'s doc.
-            .with_visible(!self.overlay_pending_reveal);
+            // per-pixel composited — see `DcompRevealBurst`'s doc.
+            .with_visible(!self.overlay_dcomp.pending_reveal());
         if let Some([x, y]) = pos {
             vp_builder = vp_builder.with_position([x, y]);
         }
@@ -1020,7 +961,6 @@ impl RigStatsApp {
         let thresholds = &self.runtime.thresholds;
         let click_through = self.overlay_click_through;
         let dcomp_available = self.dcomp_available;
-        let mut hwnd = self.overlay_hwnd;
         // The overlay's own hwnd stays hidden (`with_visible(false)`) for
         // most of the reveal burst below — invalidating a hidden window
         // doesn't reliably queue a dispatched WM_PAINT the way it does for a
@@ -1035,9 +975,7 @@ impl RigStatsApp {
         let current_settings = self.current_settings.clone();
         let dir = self.dir.clone();
         let mut drag_pos: Option<[f32; 2]> = None;
-        let mut reapply_dcomp_frames = self.overlay_reapply_dcomp_frames;
-        let mut pending_reveal = self.overlay_pending_reveal;
-        let mut reveal_safety_frames = self.overlay_reveal_safety_frames;
+        let dcomp = &mut self.overlay_dcomp;
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("overlay"),
@@ -1045,105 +983,57 @@ impl RigStatsApp {
             |child_ui, _class| {
                 #[cfg(windows)]
                 {
-                    if hwnd == 0 {
-                        hwnd = win_opacity::find_hwnd("RigStats \u{2014} Overlay");
-                        if hwnd != 0 {
-                            // Freshly created: its own first paint/present
-                            // cycle may not have completed yet, so applying
-                            // the fix exactly once, right now, is "too early"
-                            // — confirmed empirically: the very first show
-                            // stayed white while a later *resize* (an
-                            // already-established, already-painted window)
-                            // reliably fixed itself. Treat creation the same
-                            // as a resize: a multi-frame burst, not a
-                            // one-shot immediate apply.
-                            reapply_dcomp_frames = OVERLAY_DCOMP_BURST_FRAMES;
+                    if dcomp_available {
+                        let tick = dcomp.tick(
+                            || win_opacity::find_hwnd("RigStats \u{2014} Overlay"),
+                            dcomp_available,
+                        );
+                        if tick.just_started {
+                            // Force a genuine size *change* (not just a style
+                            // bit) — empirically, the swap chain only seems to
+                            // pick up per-pixel-alpha support on an actual
+                            // resize/reconfigure, not merely from
+                            // WS_EX_NOREDIRECTIONBITMAP being set (which alone
+                            // leaves a region of the surface stuck showing
+                            // opaque white). Nudge to a different size now;
+                            // the builder's real target `size` (sent every
+                            // frame regardless) snaps it back next frame,
+                            // triggering a second real reconfigure —
+                            // mirroring exactly what manually dragging Scale
+                            // down-then-up was observed to fix.
+                            child_ui
+                                .ctx()
+                                .send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::Vec2::new(size[0] + 2.0, size[1]),
+                                ));
                         }
-                    }
-                    if hwnd != 0 {
-                        if dcomp_available {
-                            if reapply_dcomp_frames > 0 {
-                                let frames_before_this_tick = reapply_dcomp_frames;
-                                if frames_before_this_tick == OVERLAY_DCOMP_BURST_FRAMES {
-                                    // First frame of the burst: force a
-                                    // genuine size *change* (not just a style
-                                    // bit) — empirically, the swap chain only
-                                    // seems to pick up per-pixel-alpha
-                                    // support on an actual resize/reconfigure,
-                                    // not merely from WS_EX_NOREDIRECTIONBITMAP
-                                    // being set (which alone leaves a region
-                                    // of the surface stuck showing opaque
-                                    // white). Nudge to a different size now;
-                                    // the builder's real target `size` (sent
-                                    // every frame regardless) snaps it back
-                                    // next frame, triggering a second real
-                                    // reconfigure — mirroring exactly what
-                                    // manually dragging Scale down-then-up
-                                    // was observed to fix.
-                                    child_ui.ctx().send_viewport_cmd(
-                                        egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                                            size[0] + 2.0,
-                                            size[1],
-                                        )),
-                                    );
-                                }
-                                reapply_dcomp_frames = reapply_dcomp_frames.saturating_sub(1);
-                                // `set_no_redirection_bitmap`'s SetWindowPos(SWP_FRAMECHANGED)
-                                // is a genuinely expensive, synchronous DWM
-                                // round-trip (measured ~106 ms per call) — calling
-                                // it on all `OVERLAY_DCOMP_BURST_FRAMES` frames
-                                // turned the burst into a ~3 s wall-clock cost,
-                                // invisible in the old (shown-throughout) version
-                                // of this fix but directly blocking reveal now
-                                // that the window stays hidden until the burst
-                                // settles. Only the first two frames correspond
-                                // to an actual reconfigure (the nudge above, then
-                                // the size snapping back next frame per that
-                                // comment) — the remaining frames only need to
-                                // keep repainting/counting down to give the
-                                // reconfigure time to land, not re-apply the
-                                // already-set style bit again.
-                                if frames_before_this_tick >= OVERLAY_DCOMP_BURST_FRAMES - 1 {
-                                    win_opacity::set_no_redirection_bitmap(hwnd);
-                                }
-                                // A style/frame change alone doesn't reliably
-                                // force DWM to recomposite the DComp visual at
-                                // its new size — nudge a real repaint too, and
-                                // force the next frame to arrive quickly
-                                // rather than waiting for the app's normal
-                                // ~1 Hz tick, so the whole burst actually
-                                // lands within a fraction of a second.
-                                win_opacity::force_repaint(hwnd);
-                                win_opacity::force_repaint(main_hwnd);
-                                child_ui.ctx().request_repaint();
-                            }
-                            if reapply_dcomp_frames == 0 && pending_reveal {
-                                // Burst settled — reveal now, already
-                                // correctly composited, instead of waiting
-                                // for the builder diff on the next frame.
-                                pending_reveal = false;
-                                child_ui
-                                    .ctx()
-                                    .send_viewport_cmd(egui::ViewportCommand::Visible(true));
-                            }
-                        } else {
-                            win_opacity::set_opacity(hwnd, opacity);
-                            pending_reveal = false;
+                        if tick.reapply_style {
+                            win_opacity::set_no_redirection_bitmap(dcomp.hwnd());
                         }
-                    } else if pending_reveal {
-                        // HWND not found yet this frame (window still being
-                        // created) — the burst above hasn't started, so tick
-                        // the independent safety timeout instead of hiding
-                        // forever if `find_hwnd` never matches.
-                        reveal_safety_frames = reveal_safety_frames.saturating_sub(1);
-                        if reveal_safety_frames == 0 {
-                            pending_reveal = false;
+                        if tick.force_repaint {
+                            // A style/frame change alone doesn't reliably
+                            // force DWM to recomposite the DComp visual at its
+                            // new size — nudge a real repaint too, and force
+                            // the next frame to arrive quickly rather than
+                            // waiting for the app's normal ~1 Hz tick, so the
+                            // whole burst actually lands within a fraction of
+                            // a second. `force_repaint` no-ops on a 0 hwnd, so
+                            // this is safe even while still waiting to find it.
+                            win_opacity::force_repaint(dcomp.hwnd());
+                            win_opacity::force_repaint(main_hwnd);
+                            child_ui.ctx().request_repaint();
+                        }
+                        if tick.reveal {
+                            // Burst settled (or the safety timeout hit) —
+                            // reveal now instead of waiting for the builder
+                            // diff on the next frame.
                             child_ui
                                 .ctx()
                                 .send_viewport_cmd(egui::ViewportCommand::Visible(true));
                         }
-                        win_opacity::force_repaint(main_hwnd);
-                        child_ui.ctx().request_repaint();
+                    } else {
+                        let hwnd = win_opacity::find_hwnd("RigStats \u{2014} Overlay");
+                        win_opacity::set_opacity(hwnd, opacity);
                     }
                 }
 
@@ -1194,10 +1084,6 @@ impl RigStatsApp {
             },
         );
 
-        self.overlay_hwnd = hwnd;
-        self.overlay_reapply_dcomp_frames = reapply_dcomp_frames;
-        self.overlay_pending_reveal = pending_reveal;
-        self.overlay_reveal_safety_frames = reveal_safety_frames;
         self.last_applied_click_through = applied_click_through;
         if let Some(pos) = drag_pos {
             if self.overlay_position != Some(pos) {
@@ -2499,8 +2385,6 @@ impl RigStatsApp {
         let dcomp_available = self.dcomp_available;
         let content_opacity = if dcomp_available { opacity } else { 1.0 };
         let main_hwnd = self.hwnd;
-        const FLOATING_DCOMP_BURST_FRAMES: u8 = 6;
-        const FLOATING_DCOMP_REVEAL_SAFETY_FRAMES: u8 = 90;
 
         for idx in 0..self.runtime.visible_panels.len() {
             let key = self.runtime.visible_panels[idx].clone();
@@ -2527,8 +2411,8 @@ impl RigStatsApp {
             // Pull this panel's DComp burst state out of the map for the
             // duration of this iteration (put back after show_viewport_immediate
             // returns) — same "extract, mutate as a local, write back" shape
-            // the overlay uses for its own (single, not per-key) burst fields.
-            let mut dcomp_st = self
+            // the overlay uses for its own (single, not per-key) burst state.
+            let mut dcomp = self
                 .floating_dcomp
                 .borrow_mut()
                 .remove(&key)
@@ -2537,9 +2421,7 @@ impl RigStatsApp {
                 // Fresh panel: hide until the burst below settles, exactly
                 // like the overlay's first show — the burst itself starts
                 // once the closure below actually finds the HWND.
-                dcomp_st.hwnd = 0;
-                dcomp_st.pending_reveal = dcomp_available;
-                dcomp_st.reveal_safety_frames = FLOATING_DCOMP_REVEAL_SAFETY_FRAMES;
+                dcomp.start(dcomp_available);
             }
 
             // Title shared between ViewportBuilder and Win32 FindWindowW lookup.
@@ -2551,7 +2433,7 @@ impl RigStatsApp {
                 .with_resizable(false)
                 .with_taskbar(false)
                 .with_transparent(dcomp_available)
-                .with_visible(!dcomp_st.pending_reveal)
+                .with_visible(!dcomp.pending_reveal())
                 .with_window_level(window_level);
 
             let is_behind = window_level == egui::WindowLevel::AlwaysOnBottom;
@@ -2947,58 +2829,39 @@ impl RigStatsApp {
                             // back to whole-window WS_EX_LAYERED dimming.
                             #[cfg(windows)]
                             {
-                                if dcomp_st.hwnd == 0 {
-                                    dcomp_st.hwnd = win_opacity::find_hwnd(&win_title);
-                                    if dcomp_st.hwnd != 0 {
-                                        dcomp_st.reapply_frames = FLOATING_DCOMP_BURST_FRAMES;
-                                        if dcomp_available {
-                                            // Force a genuine resize/reconfigure on
-                                            // creation — same reasoning as the
-                                            // overlay's own first-burst-frame nudge.
-                                            ctx.send_viewport_cmd(
-                                                egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                                                    panel_w + 2.0,
-                                                    initial_h,
-                                                )),
-                                            );
-                                        }
+                                if dcomp_available {
+                                    let tick = dcomp.tick(
+                                        || win_opacity::find_hwnd(&win_title),
+                                        dcomp_available,
+                                    );
+                                    if tick.just_started {
+                                        // Force a genuine resize/reconfigure on
+                                        // creation — same reasoning as the
+                                        // overlay's own first-burst-frame nudge.
+                                        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                            egui::Vec2::new(panel_w + 2.0, initial_h),
+                                        ));
                                     }
-                                }
-                                if dcomp_st.hwnd != 0 {
-                                    if dcomp_available {
-                                        if dcomp_st.reapply_frames > 0 {
-                                            dcomp_st.reapply_frames -= 1;
-                                            win_opacity::set_no_redirection_bitmap(dcomp_st.hwnd);
-                                            win_opacity::force_repaint(dcomp_st.hwnd);
-                                            win_opacity::force_repaint(main_hwnd);
-                                            ctx.request_repaint();
-                                        }
-                                        if dcomp_st.reapply_frames == 0 && dcomp_st.pending_reveal {
-                                            dcomp_st.pending_reveal = false;
-                                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(
-                                                true,
-                                            ));
-                                        }
-                                    } else {
-                                        win_opacity::set_opacity(dcomp_st.hwnd, opacity);
-                                        dcomp_st.pending_reveal = false;
+                                    if tick.reapply_style {
+                                        win_opacity::set_no_redirection_bitmap(dcomp.hwnd());
                                     }
-                                } else if dcomp_st.pending_reveal {
-                                    dcomp_st.reveal_safety_frames =
-                                        dcomp_st.reveal_safety_frames.saturating_sub(1);
-                                    if dcomp_st.reveal_safety_frames == 0 {
-                                        dcomp_st.pending_reveal = false;
+                                    if tick.force_repaint {
+                                        win_opacity::force_repaint(dcomp.hwnd());
+                                        win_opacity::force_repaint(main_hwnd);
+                                        ctx.request_repaint();
+                                    }
+                                    if tick.reveal {
                                         ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
                                     }
-                                    ctx.request_repaint();
+                                } else {
+                                    let hwnd = win_opacity::find_hwnd(&win_title);
+                                    win_opacity::set_opacity(hwnd, opacity);
                                 }
                             }
                         });
                 },
             );
-            self.floating_dcomp
-                .borrow_mut()
-                .insert(key.clone(), dcomp_st);
+            self.floating_dcomp.borrow_mut().insert(key.clone(), dcomp);
         }
     }
 
