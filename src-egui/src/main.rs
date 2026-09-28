@@ -133,6 +133,9 @@ struct RigStatsApp {
     /// CPU. Enforcement happens on creation, in a short burst after a drag, and
     /// then ~1/s as an idle safety net.
     behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
+    /// Per-panel DComp reveal-burst state for the floating-mode transparency
+    /// experiment (issue #169) — see `FloatingDcompState`.
+    floating_dcomp: RefCell<HashMap<String, FloatingDcompState>>,
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     floating_mode_arc: Arc<AtomicBool>,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
@@ -321,6 +324,21 @@ struct BehindEnforce {
     force_until: Instant,
 }
 
+/// Per-floating-panel DComp reveal-burst state (issue #169 revisit) —
+/// mirrors the overlay's own single-viewport fields (`overlay_hwnd`/
+/// `overlay_reapply_dcomp_frames`/`overlay_pending_reveal`/
+/// `overlay_reveal_safety_frames`), just keyed per panel since floating mode
+/// has one secondary viewport per visible panel instead of one. Only the
+/// panel's creation frame triggers a burst (no `last_size` tracking) — a
+/// later content-driven resize keeps the old, non-hiding behavior.
+#[derive(Default)]
+struct FloatingDcompState {
+    hwnd: isize,
+    reapply_frames: u8,
+    pending_reveal: bool,
+    reveal_safety_frames: u8,
+}
+
 impl RigStatsApp {
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -401,6 +419,7 @@ impl RigStatsApp {
             initial_floating_applied: false,
             panels_positioned: HashSet::new(),
             behind_enforce: RefCell::new(HashMap::new()),
+            floating_dcomp: RefCell::new(HashMap::new()),
             floating_mode_arc,
             os_dark_mode: {
                 #[cfg(windows)]
@@ -2491,6 +2510,22 @@ impl RigStatsApp {
         drop(s);
 
         let opacity = self.opacity;
+        // Per-pixel DComp transparency for floating panels (issue #169):
+        // confirmed working by replaying the overlay's full fix, not just
+        // the style bit — forced resize nudge + repeated reapply/
+        // force_repaint burst + hidden until settled, both on panel
+        // creation and on any later content-driven resize. A prior, lighter
+        // attempt (style bit + relying on the natural one-shot creation
+        // resize alone, no hide/burst) reproduced the same washed-out
+        // white/gray result the original 2026-08-21 investigation on #169
+        // found — the repeated reapply+force_repaint burst while hidden
+        // turned out to be the missing piece, exactly as it was for the
+        // overlay.
+        let dcomp_available = self.dcomp_available;
+        let content_opacity = if dcomp_available { opacity } else { 1.0 };
+        let main_hwnd = self.hwnd;
+        const FLOATING_DCOMP_BURST_FRAMES: u8 = 6;
+        const FLOATING_DCOMP_REVEAL_SAFETY_FRAMES: u8 = 90;
 
         for idx in 0..self.runtime.visible_panels.len() {
             let key = self.runtime.visible_panels[idx].clone();
@@ -2514,6 +2549,24 @@ impl RigStatsApp {
                 self.panels_positioned.insert(key.clone());
             }
 
+            // Pull this panel's DComp burst state out of the map for the
+            // duration of this iteration (put back after show_viewport_immediate
+            // returns) — same "extract, mutate as a local, write back" shape
+            // the overlay uses for its own (single, not per-key) burst fields.
+            let mut dcomp_st = self
+                .floating_dcomp
+                .borrow_mut()
+                .remove(&key)
+                .unwrap_or_default();
+            if needs_position {
+                // Fresh panel: hide until the burst below settles, exactly
+                // like the overlay's first show — the burst itself starts
+                // once the closure below actually finds the HWND.
+                dcomp_st.hwnd = 0;
+                dcomp_st.pending_reveal = dcomp_available;
+                dcomp_st.reveal_safety_frames = FLOATING_DCOMP_REVEAL_SAFETY_FRAMES;
+            }
+
             // Title shared between ViewportBuilder and Win32 FindWindowW lookup.
             let win_title = format!("RigStats \u{2014} {}", panel_label(&key));
             let mut vp_builder = egui::ViewportBuilder::default()
@@ -2522,6 +2575,8 @@ impl RigStatsApp {
                 .with_decorations(false)
                 .with_resizable(false)
                 .with_taskbar(false)
+                .with_transparent(dcomp_available)
+                .with_visible(!dcomp_st.pending_reveal)
                 .with_window_level(window_level);
 
             let is_behind = window_level == egui::WindowLevel::AlwaysOnBottom;
@@ -2629,9 +2684,19 @@ impl RigStatsApp {
                         }
                     }
 
+                    // Transparent when DComp is driving real per-pixel alpha (each
+                    // panel's own theme::panel_frame paints the visible background,
+                    // premultiplied by content_opacity below) — opaque PANEL_FILL
+                    // for the WS_EX_LAYERED fallback, which dims whatever's here
+                    // uniformly and needs solid content behind it to look right.
+                    let central_fill = if dcomp_available {
+                        egui::Color32::TRANSPARENT
+                    } else {
+                        theme::PANEL_FILL
+                    };
                     #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
                     egui::CentralPanel::default()
-                        .frame(egui::Frame::none().fill(theme::PANEL_FILL))
+                        .frame(egui::Frame::none().fill(central_fill))
                         .show(ctx, |ui| {
                             // ── Drag & lock state ─────────────────────────────
                             let locked = lock_arc.load(Ordering::Relaxed);
@@ -2643,14 +2708,19 @@ impl RigStatsApp {
                             // overlay the drag dots and padlock without extra height.
                             let mut new_pref: Option<String> = None;
                             let panel_rect = match key.as_str() {
-                                "header" => {
-                                    panels::header::draw(ui, stats, tex, 1.0, &app_theme, scale)
-                                }
+                                "header" => panels::header::draw(
+                                    ui,
+                                    stats,
+                                    tex,
+                                    content_opacity,
+                                    &app_theme,
+                                    scale,
+                                ),
                                 "clock" => {
                                     let r = panels::clock::draw(
                                         ui,
                                         stats.uptime_secs,
-                                        1.0,
+                                        content_opacity,
                                         &app_theme,
                                         float_update_ver.as_deref(),
                                         scale,
@@ -2671,7 +2741,7 @@ impl RigStatsApp {
                                     stats,
                                     cspark,
                                     tex,
-                                    1.0,
+                                    content_opacity,
                                     self.runtime.thresholds.cpu.0,
                                     self.runtime.thresholds.cpu.1,
                                     &app_theme,
@@ -2683,7 +2753,7 @@ impl RigStatsApp {
                                         stats,
                                         gspark,
                                         tex,
-                                        1.0,
+                                        content_opacity,
                                         &app_theme,
                                         self.runtime.thresholds.gpu.0,
                                         self.runtime.thresholds.gpu.1,
@@ -2697,19 +2767,25 @@ impl RigStatsApp {
                                 "ram" => panels::ram::draw(
                                     ui,
                                     stats,
-                                    1.0,
+                                    content_opacity,
                                     self.runtime.thresholds.ram.0,
                                     self.runtime.thresholds.ram.1,
                                     &app_theme,
                                     scale,
                                 ),
                                 "net" => panels::net::draw(
-                                    ui, stats, nuspark, ndspark, 1.0, &app_theme, scale,
+                                    ui,
+                                    stats,
+                                    nuspark,
+                                    ndspark,
+                                    content_opacity,
+                                    &app_theme,
+                                    scale,
                                 ),
                                 "disk" => panels::disk::draw(
                                     ui,
                                     stats,
-                                    1.0,
+                                    content_opacity,
                                     self.runtime.thresholds.disk.0,
                                     self.runtime.thresholds.disk.1,
                                     self.runtime.thresholds.disk_usage.0,
@@ -2720,22 +2796,30 @@ impl RigStatsApp {
                                 "motherboard" => panels::motherboard::draw(
                                     ui,
                                     stats,
-                                    1.0,
+                                    content_opacity,
                                     self.runtime.thresholds.mb.0,
                                     self.runtime.thresholds.mb.1,
                                     &app_theme,
                                     scale,
                                 ),
-                                "process" => {
-                                    panels::process::draw(ui, stats, 1.0, &app_theme, scale)
-                                }
-                                "gpu_processes" => {
-                                    panels::gpu_processes::draw(ui, stats, 1.0, &app_theme, scale)
-                                }
+                                "process" => panels::process::draw(
+                                    ui,
+                                    stats,
+                                    content_opacity,
+                                    &app_theme,
+                                    scale,
+                                ),
+                                "gpu_processes" => panels::gpu_processes::draw(
+                                    ui,
+                                    stats,
+                                    content_opacity,
+                                    &app_theme,
+                                    scale,
+                                ),
                                 "power" => panels::power::draw(
                                     ui,
                                     stats,
-                                    1.0,
+                                    content_opacity,
                                     &app_theme,
                                     scale,
                                     self.runtime.psu_watts,
@@ -2743,7 +2827,7 @@ impl RigStatsApp {
                                 "battery" => panels::battery::draw(
                                     ui,
                                     stats,
-                                    1.0,
+                                    content_opacity,
                                     &app_theme,
                                     scale,
                                     self.runtime.thresholds.battery.0,
@@ -2872,17 +2956,74 @@ impl RigStatsApp {
                                     ));
                                 }
                             }
+                            // A later content-driven resize deliberately does NOT
+                            // retrigger the hide/burst below (unlike the overlay,
+                            // which only resizes on a deliberate user action like
+                            // dragging Scale) — several of these panels' heights
+                            // fluctuate with live data (e.g. GPU Apps'/Processes'
+                            // row count), so retriggering on every such change
+                            // caused near-constant hide/reveal flicker, worse than
+                            // just leaving the resize non-hiding as before.
 
-                            // Apply opacity to this panel's OS window.
+                            // Apply per-pixel DComp transparency — full burst
+                            // treatment (forced resize nudge, repeated reapply +
+                            // force_repaint, hidden until settled), same shape as
+                            // the overlay's fix, not just the style bit — or fall
+                            // back to whole-window WS_EX_LAYERED dimming.
                             #[cfg(windows)]
                             {
-                                let title = format!("RigStats \u{2014} {}", panel_label(&key));
-                                let hwnd = win_opacity::find_hwnd(&title);
-                                win_opacity::set_opacity(hwnd, opacity);
+                                if dcomp_st.hwnd == 0 {
+                                    dcomp_st.hwnd = win_opacity::find_hwnd(&win_title);
+                                    if dcomp_st.hwnd != 0 {
+                                        dcomp_st.reapply_frames = FLOATING_DCOMP_BURST_FRAMES;
+                                        if dcomp_available {
+                                            // Force a genuine resize/reconfigure on
+                                            // creation — same reasoning as the
+                                            // overlay's own first-burst-frame nudge.
+                                            ctx.send_viewport_cmd(
+                                                egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                                                    panel_w + 2.0,
+                                                    initial_h,
+                                                )),
+                                            );
+                                        }
+                                    }
+                                }
+                                if dcomp_st.hwnd != 0 {
+                                    if dcomp_available {
+                                        if dcomp_st.reapply_frames > 0 {
+                                            dcomp_st.reapply_frames -= 1;
+                                            win_opacity::set_no_redirection_bitmap(dcomp_st.hwnd);
+                                            win_opacity::force_repaint(dcomp_st.hwnd);
+                                            win_opacity::force_repaint(main_hwnd);
+                                            ctx.request_repaint();
+                                        }
+                                        if dcomp_st.reapply_frames == 0 && dcomp_st.pending_reveal {
+                                            dcomp_st.pending_reveal = false;
+                                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(
+                                                true,
+                                            ));
+                                        }
+                                    } else {
+                                        win_opacity::set_opacity(dcomp_st.hwnd, opacity);
+                                        dcomp_st.pending_reveal = false;
+                                    }
+                                } else if dcomp_st.pending_reveal {
+                                    dcomp_st.reveal_safety_frames =
+                                        dcomp_st.reveal_safety_frames.saturating_sub(1);
+                                    if dcomp_st.reveal_safety_frames == 0 {
+                                        dcomp_st.pending_reveal = false;
+                                        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                                    }
+                                    ctx.request_repaint();
+                                }
                             }
                         });
                 },
             );
+            self.floating_dcomp
+                .borrow_mut()
+                .insert(key.clone(), dcomp_st);
         }
     }
 
