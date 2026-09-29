@@ -839,6 +839,13 @@ impl RigStatsApp {
             // correctly-composited frame) instead of being silently skipped
             // because a *previous* activation already recorded a size.
             self.overlay_last_size = None;
+            // Same reasoning applies to the MousePassthrough guard below:
+            // the new window starts out click-through-less (it's a brand
+            // new HWND), but `overlay_click_through`'s logical value may be
+            // unchanged from the last activation, so the "only send on
+            // change" guard would otherwise skip resending it here — leaving
+            // the new window stuck capturing mouse input.
+            self.last_applied_click_through = None;
             debug::log_debug(&self.dir, "overlay: showing");
         } else if !want && self.overlay_active {
             self.overlay_active = false;
