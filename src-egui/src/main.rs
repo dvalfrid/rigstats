@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use eframe::egui;
-use rigstats_backend::{debug, logging, settings};
+use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
 #[cfg(windows)]
@@ -14,7 +14,9 @@ use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::overlay::{content_inset, draw_overlay, estimate_window_size};
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
-use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
+use rigstats_egui::tray::{
+    build_tray, gpu_choice_from_menu_id, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd,
+};
 use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
@@ -324,6 +326,7 @@ impl RigStatsApp {
             .iter()
             .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
             .collect();
+        let gpu_names = tray.gpu_menu.names();
         Self {
             runtime,
             receiver,
@@ -343,7 +346,7 @@ impl RigStatsApp {
             updater_focus,
             history_focus: Arc::new(AtomicBool::new(false)),
             settings_win: Arc::new(Mutex::new(
-                windows::settings::SettingsWindow::from_settings(&init_settings),
+                windows::settings::SettingsWindow::from_settings(&init_settings, gpu_names),
             )),
             status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
             status_refreshing: Arc::new(AtomicBool::new(false)),
@@ -1151,10 +1154,35 @@ impl RigStatsApp {
         // needs to change.
     }
 
+    /// Sets and persists the displayed GPU (`None` = automatic, highest VRAM).
+    /// Shared by the GPU panel's click dots, the tray "GPU" submenu, and the
+    /// floating GPU panel. The wallpaper host picks the persisted value up on
+    /// its next settings refresh.
+    fn select_gpu(&mut self, pref: Option<String>) {
+        let mut s = self.current_settings.lock_safe();
+        s.preferred_gpu = pref;
+        self.persist_settings_logged(&s);
+        let pref = s.preferred_gpu.clone();
+        drop(s);
+        self.apply_preferred_gpu(pref);
+        // Keep an open Settings dialog's draft in sync, otherwise its next
+        // live-preview push (or Cancel) would revert this change.
+        let mut win = self.settings_win.lock_safe();
+        win.draft.preferred_gpu = self.preferred_gpu.lock_safe().clone();
+        win.original.preferred_gpu = win.draft.preferred_gpu.clone();
+    }
+
+    /// Hands `pref` to the poll loop and ticks the matching tray row.
+    fn apply_preferred_gpu(&self, pref: Option<String>) {
+        self.tray.gpu_menu.set_selected(pref.as_deref());
+        *self.preferred_gpu.lock_safe() = pref;
+    }
+
     fn tray_open_settings(&mut self) {
         // Re-initialise draft from current settings each time the window opens.
         let s = self.current_settings.lock_safe().clone();
-        *self.settings_win.lock_safe() = windows::settings::SettingsWindow::from_settings(&s);
+        *self.settings_win.lock_safe() =
+            windows::settings::SettingsWindow::from_settings(&s, self.tray.gpu_menu.names());
         self.settings_open.store(true, Ordering::Relaxed);
         self.settings_focus.store(true, Ordering::Relaxed);
     }
@@ -1434,12 +1462,15 @@ impl eframe::App for RigStatsApp {
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             self.overlay_click_through = s.overlay_click_through;
             self.overlay_enabled = s.overlay_enabled;
+            let preferred_gpu = s.preferred_gpu.clone();
             let was_fullscreen = self.fullscreen_mode;
             self.fullscreen_mode = s.fullscreen_mode;
             self.fullscreen_align = s.fullscreen_align.clone();
             self.dashboard_pinned = s.dashboard_pinned;
             let profile = s.dashboard_profile.clone();
             drop(s);
+            // Settings → Display → GPU (live preview, Save, or Cancel revert).
+            self.apply_preferred_gpu(preferred_gpu);
             // Toggling fullscreen changes how the window is sized; clear the
             // fit-to-content guard so the next fixed frame re-snaps correctly, and
             // drop the cached centering height so it is re-measured.
@@ -1526,6 +1557,13 @@ impl eframe::App for RigStatsApp {
             }
         }
 
+        // Fill the tray "GPU" submenu and Settings' GPU list in once the
+        // background adapter detection reports back.
+        let pref = self.preferred_gpu.lock_safe().clone();
+        if let Some(names) = self.tray.gpu_menu.poll(pref.as_deref()) {
+            self.settings_win.lock_safe().set_gpu_names(names);
+        }
+
         // Handle tray commands forwarded by the background polling thread.
         while let Ok(cmd) = self.tray_rx.try_recv() {
             match cmd {
@@ -1539,6 +1577,7 @@ impl eframe::App for RigStatsApp {
                 TrayCmd::ToggleOverlay => self.toggle_overlay_mode(),
                 TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
                 TrayCmd::ToggleRecording => self.tray_toggle_recording(ui.ctx()),
+                TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
             }
         }
 
@@ -1906,11 +1945,9 @@ impl eframe::App for RigStatsApp {
             }
 
             // Apply GPU preference change made from the floating GPU panel.
-            if let Some(new_pref) = self.float_new_pref_gpu.lock_safe().take() {
-                *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
-                let mut s = self.current_settings.lock_safe();
-                s.preferred_gpu = Some(new_pref);
-                self.persist_settings_logged(&s);
+            let float_pref = self.float_new_pref_gpu.lock_safe().take();
+            if let Some(new_pref) = float_pref {
+                self.select_gpu(Some(new_pref));
             }
         } else {
             // ── Fixed mode — all panels in one portrait/landscape window ──────
@@ -2133,10 +2170,7 @@ impl eframe::App for RigStatsApp {
             }
 
             if let Some(new_pref) = new_preferred_gpu {
-                *self.preferred_gpu.lock_safe() = Some(new_pref.clone());
-                let mut s = self.current_settings.lock_safe();
-                s.preferred_gpu = Some(new_pref);
-                self.persist_settings_logged(&s);
+                self.select_gpu(Some(new_pref));
             }
         }
 
@@ -3121,7 +3155,24 @@ fn main() {
             // A fresh launch never has an active recording session — any session left
             // open by an unclean shutdown was already closed by reconcile_sessions_on_startup.
             let overlay_locked_init = current_settings_shared.lock_safe().overlay_click_through;
-            let tray = build_tray(false, overlay_locked_init);
+            // GPU adapter list for the tray "GPU" submenu and Settings. Detected
+            // in the background — it can take a second or more (WMI, or its
+            // PowerShell fallback) and must never delay startup; `GpuMenu::poll`
+            // fills the submenu in when it arrives. Also off this thread
+            // because WMI initialises COM as MTA, which fails on this
+            // (winit/OLE STA) thread.
+            let (gpu_names_tx, gpu_names_rx) = mpsc::channel::<Vec<String>>();
+            {
+                let dir = dir.clone();
+                let ctx = cc.egui_ctx.clone();
+                std::thread::spawn(move || {
+                    let names = hardware::detect_gpu_names();
+                    debug::log_debug(&dir, &format!("hardware: gpu_names={names:?}"));
+                    let _ = gpu_names_tx.send(names);
+                    ctx.request_repaint();
+                });
+            }
+            let tray = build_tray(false, overlay_locked_init, gpu_names_rx);
             let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
 
             // Global hotkey (fixed Ctrl+Alt+O in v1) to toggle overlay
@@ -3239,7 +3290,7 @@ fn main() {
                         } else if ev.id == docs_id {
                             Some(TrayCmd::OpenDocs)
                         } else {
-                            None
+                            gpu_choice_from_menu_id(&ev.id).map(TrayCmd::SelectGpu)
                         };
                         if let Some(c) = cmd {
                             let _ = tray_tx.send(c);

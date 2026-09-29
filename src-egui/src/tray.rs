@@ -4,8 +4,10 @@
 use crate::menu_icons;
 use crate::theme;
 use eframe::egui;
+use rigstats_backend::lhm;
+use std::sync::mpsc;
 use tray_icon::{
-    menu::{IconMenuItem, Menu, PredefinedMenuItem},
+    menu::{CheckMenuItem, IconMenuItem, Menu, MenuId, PredefinedMenuItem, Submenu},
     Icon, TrayIconBuilder,
 };
 
@@ -21,6 +23,98 @@ pub enum TrayCmd {
     ToggleRecording,
     ToggleOverlay,
     ToggleOverlayLock,
+    /// Set the displayed GPU; `None` = automatic (highest VRAM).
+    SelectGpu(Option<String>),
+}
+
+/// Menu-id prefix of the GPU submenu rows. Ids are derived from the choice
+/// itself (not generated), so the tray-polling thread can decode a click with
+/// [`gpu_choice_from_menu_id`] without sharing the (non-`Send`) menu items.
+const GPU_ID_AUTO: &str = "gpu:auto";
+const GPU_ID_PREFIX: &str = "gpu:name:";
+
+fn gpu_menu_id(name: Option<&str>) -> MenuId {
+    match name {
+        None => MenuId::new(GPU_ID_AUTO),
+        Some(n) => MenuId::new(format!("{GPU_ID_PREFIX}{n}")),
+    }
+}
+
+/// Decodes a GPU submenu click: `Some(None)` = Automatic, `Some(Some(name))`
+/// = that adapter, `None` = not a GPU submenu row.
+pub fn gpu_choice_from_menu_id(id: &MenuId) -> Option<Option<String>> {
+    let id = id.as_ref();
+    if id == GPU_ID_AUTO {
+        Some(None)
+    } else {
+        id.strip_prefix(GPU_ID_PREFIX)
+            .map(|name| Some(name.to_string()))
+    }
+}
+
+/// Index of the listed adapter matching `preferred` (`Settings.preferred_gpu`),
+/// or `None` for Automatic — when unset or matching no listed adapter. Uses
+/// the same WMI/LHM-tolerant matching as the poll loop's GPU selection
+/// (exact normalized name first), so the tick agrees with what's displayed.
+pub fn selected_gpu_index(names: &[String], preferred: Option<&str>) -> Option<usize> {
+    let pref = preferred?;
+    let pref_norm = lhm::normalize_gpu_name(pref);
+    names
+        .iter()
+        .position(|n| lhm::normalize_gpu_name(n) == pref_norm)
+        .or_else(|| names.iter().position(|n| lhm::gpu_names_match(n, pref)))
+}
+
+/// The tray "GPU" submenu: an "Automatic" row plus one check row per adapter.
+/// Rows are check items so the current choice shows as a tick. Starts empty
+/// (and disabled): adapter detection can take a while (WMI, or a PowerShell
+/// fallback), so it runs on a background thread and [`GpuMenu::poll`] fills
+/// the rows in once it reports back — startup never waits on it.
+pub struct GpuMenu {
+    submenu: Submenu,
+    auto_item: CheckMenuItem,
+    /// `(adapter name, row)` in menu order.
+    items: Vec<(String, CheckMenuItem)>,
+    names_rx: Option<mpsc::Receiver<Vec<String>>>,
+}
+
+impl GpuMenu {
+    /// Adapter names listed in the submenu, in menu order (empty until
+    /// detection has finished).
+    pub fn names(&self) -> Vec<String> {
+        self.items.iter().map(|(n, _)| n.clone()).collect()
+    }
+
+    /// Fills the rows in once background detection reports back. Returns the
+    /// detected names on the call that populated the menu, `None` otherwise.
+    pub fn poll(&mut self, preferred: Option<&str>) -> Option<Vec<String>> {
+        let names = match self.names_rx.as_ref()?.try_recv() {
+            Ok(names) => names,
+            Err(mpsc::TryRecvError::Empty) => return None,
+            Err(mpsc::TryRecvError::Disconnected) => Vec::new(),
+        };
+        self.names_rx = None;
+        let _ = self.submenu.append(&PredefinedMenuItem::separator());
+        for name in &names {
+            let item = CheckMenuItem::with_id(gpu_menu_id(Some(name)), name, true, false, None);
+            let _ = self.submenu.append(&item);
+            self.items.push((name.clone(), item));
+        }
+        // A single adapter leaves nothing to choose between.
+        self.submenu.set_enabled(names.len() > 1);
+        self.set_selected(preferred);
+        Some(names)
+    }
+
+    /// Ticks the row matching `preferred`, or "Automatic" (see
+    /// [`selected_gpu_index`]).
+    pub fn set_selected(&self, preferred: Option<&str>) {
+        let selected = selected_gpu_index(&self.names(), preferred);
+        self.auto_item.set_checked(selected.is_none());
+        for (i, (_, item)) in self.items.iter().enumerate() {
+            item.set_checked(Some(i) == selected);
+        }
+    }
 }
 
 pub struct Tray {
@@ -36,6 +130,7 @@ pub struct Tray {
     pub recording_id: tray_icon::menu::MenuId,
     pub overlay_id: tray_icon::menu::MenuId,
     pub overlay_lock_id: tray_icon::menu::MenuId,
+    pub gpu_menu: GpuMenu,
     recording_item: IconMenuItem,
     overlay_lock_item: IconMenuItem,
 }
@@ -59,7 +154,11 @@ pub fn load_app_icon() -> egui::IconData {
     }
 }
 
-pub fn build_tray(logging_enabled: bool, overlay_locked: bool) -> Tray {
+pub fn build_tray(
+    logging_enabled: bool,
+    overlay_locked: bool,
+    gpu_names_rx: mpsc::Receiver<Vec<String>>,
+) -> Tray {
     let floating_item = IconMenuItem::new(
         "Toggle Floating Mode",
         true,
@@ -104,6 +203,23 @@ pub fn build_tray(logging_enabled: bool, overlay_locked: bool) -> Tray {
     let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
     let quit_item = IconMenuItem::new("Quit", true, Some(menu_icons::quit()), None);
 
+    // GPU submenu — the only way to pick the displayed GPU in modes where the
+    // dashboard can't be clicked (Desktop Wallpaper). Adapter rows are added
+    // later by `GpuMenu::poll`.
+    let gpu_menu = GpuMenu {
+        submenu: Submenu::new("GPU", false),
+        auto_item: CheckMenuItem::with_id(
+            gpu_menu_id(None),
+            "Automatic (most VRAM)",
+            true,
+            true,
+            None,
+        ),
+        items: Vec::new(),
+        names_rx: Some(gpu_names_rx),
+    };
+    let _ = gpu_menu.submenu.append(&gpu_menu.auto_item);
+
     let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
     let overlay_id = overlay_item.id().clone();
@@ -122,6 +238,7 @@ pub fn build_tray(logging_enabled: bool, overlay_locked: bool) -> Tray {
     let _ = menu.append(&overlay_lock_item);
     let _ = menu.append(&recording_item);
     let _ = menu.append(&history_item);
+    let _ = menu.append(&gpu_menu.submenu);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -166,6 +283,7 @@ pub fn build_tray(logging_enabled: bool, overlay_locked: bool) -> Tray {
         recording_id,
         overlay_id,
         overlay_lock_id,
+        gpu_menu,
         recording_item,
         overlay_lock_item,
     }
@@ -262,5 +380,61 @@ pub fn panel_initial_h(key: &str) -> f32 {
     match key {
         "header" | "clock" => theme::PANEL_HEADER_H + 16.0,
         _ => theme::PANEL_DATA_H + 16.0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn g14() -> Vec<String> {
+        vec![
+            "AMD Radeon(TM) 890M Graphics".to_string(),
+            "NVIDIA GeForce RTX 5070 Ti Laptop GPU".to_string(),
+        ]
+    }
+
+    #[test]
+    fn gpu_menu_ids_round_trip() {
+        assert_eq!(gpu_choice_from_menu_id(&gpu_menu_id(None)), Some(None));
+        let name = "NVIDIA GeForce RTX 5070 Ti Laptop GPU";
+        assert_eq!(
+            gpu_choice_from_menu_id(&gpu_menu_id(Some(name))),
+            Some(Some(name.to_string()))
+        );
+    }
+
+    #[test]
+    fn gpu_menu_id_rejects_other_menu_rows() {
+        assert_eq!(gpu_choice_from_menu_id(&MenuId::new("42")), None);
+        assert_eq!(gpu_choice_from_menu_id(&MenuId::new("gpu:")), None);
+    }
+
+    #[test]
+    fn selected_gpu_index_none_preference_is_automatic() {
+        assert_eq!(selected_gpu_index(&g14(), None), None);
+    }
+
+    #[test]
+    fn selected_gpu_index_exact_name() {
+        assert_eq!(
+            selected_gpu_index(&g14(), Some("NVIDIA GeForce RTX 5070 Ti Laptop GPU")),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn selected_gpu_index_tolerates_lhm_spelling() {
+        // Saved from the GPU panel's click dots (LHM name, no "(TM)").
+        assert_eq!(
+            selected_gpu_index(&g14(), Some("AMD Radeon 890M Graphics")),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn selected_gpu_index_unknown_gpu_is_automatic() {
+        assert_eq!(selected_gpu_index(&g14(), Some("GTX 1080")), None);
+        assert_eq!(selected_gpu_index(&[], Some("GTX 1080")), None);
     }
 }

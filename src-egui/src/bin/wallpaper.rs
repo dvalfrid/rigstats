@@ -20,6 +20,7 @@ use rigstats_egui::geometry::{
     pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::gpu_guard::install_gpu_loss_guard;
+use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
 use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
@@ -66,6 +67,9 @@ struct WallpaperHost {
     /// host on any exit, so on error we just need to close cleanly — no
     /// self-relaunch logic needed here.
     gpu_lost: Arc<AtomicBool>,
+    /// Shared with `poll_loop`; refreshed from settings so a GPU picked in the
+    /// main app applies here without a relaunch.
+    preferred_gpu: Arc<Mutex<Option<String>>>,
 }
 
 impl WallpaperHost {
@@ -97,6 +101,9 @@ impl WallpaperHost {
             );
             return true;
         }
+        // Picked from the main app's tray "GPU" submenu or Settings — the
+        // only ways to change it while the dashboard is click-through.
+        *self.preferred_gpu.lock_safe() = s.preferred_gpu.clone();
         if self.runtime.apply_settings(&s) {
             // Panel set changed → content height changed; force a re-fit.
             self.last_fitted_height = None;
@@ -412,6 +419,7 @@ fn main() {
                 last_fitted_height: None,
                 startup_fit_frames: 8,
                 gpu_lost,
+                preferred_gpu: preferred_gpu_arc,
             };
             Ok(Box::new(host))
         }),

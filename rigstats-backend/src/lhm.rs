@@ -546,7 +546,8 @@ fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
 mod tests {
     use super::{
         extract_disk_temps, extract_motherboard, extract_network, extract_ram_temp, flatten_lhm,
-        parse_lhm, parse_val, select_gpu_idx, FlatNode, SidecarGpuDevice, SidecarPayload,
+        gpu_names_match, normalize_gpu_name, parse_lhm, parse_val, select_gpu_idx, FlatNode,
+        SidecarGpuDevice, SidecarPayload,
     };
     use serde_json::json;
 
@@ -1579,6 +1580,60 @@ mod tests {
     }
 
     #[test]
+    fn normalize_gpu_name_strips_marks_case_and_spacing() {
+        assert_eq!(
+            normalize_gpu_name("  AMD Radeon(TM)  890M Graphics "),
+            "amd radeon 890m graphics"
+        );
+        assert_eq!(
+            normalize_gpu_name("Intel(R) Arc(TM) A770 Graphics"),
+            "intel arc a770 graphics"
+        );
+        assert_eq!(normalize_gpu_name("Intel® Arc™ A770"), "intel arc a770");
+    }
+
+    #[test]
+    fn gpu_names_match_across_wmi_and_lhm_spellings() {
+        assert!(gpu_names_match(
+            "AMD Radeon(TM) 890M Graphics",
+            "AMD Radeon 890M Graphics"
+        ));
+        assert!(gpu_names_match(
+            "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+            "nvidia geforce rtx 5070 ti laptop gpu"
+        ));
+        assert!(!gpu_names_match(
+            "AMD Radeon(TM) 890M Graphics",
+            "NVIDIA GeForce RTX 5070 Ti Laptop GPU"
+        ));
+        assert!(!gpu_names_match("", "AMD Radeon 890M"));
+    }
+
+    #[test]
+    fn select_gpu_idx_matches_preferred_despite_trademark_marks() {
+        let devices = vec![
+            make_gpu("AMD Radeon 890M Graphics", 512.0, 0.0),
+            make_gpu("NVIDIA GeForce RTX 5070 Ti Laptop GPU", 12288.0, 0.0),
+        ];
+        assert_eq!(
+            select_gpu_idx(&devices, Some("AMD Radeon(TM) 890M Graphics")),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn select_gpu_idx_prefers_exact_over_substring_match() {
+        let devices = vec![
+            make_gpu("NVIDIA GeForce RTX 4090 D", 24576.0, 0.0),
+            make_gpu("NVIDIA GeForce RTX 4090", 24576.0, 0.0),
+        ];
+        assert_eq!(
+            select_gpu_idx(&devices, Some("NVIDIA GeForce RTX 4090")),
+            Some(1)
+        );
+    }
+
+    #[test]
     fn select_gpu_idx_falls_back_when_preferred_not_found() {
         let devices = vec![
             make_gpu("Radeon 890M", 512.0, 0.0),
@@ -1931,6 +1986,29 @@ struct SidecarMbVoltage {
     volts: f32,
 }
 
+/// Canonical form of a GPU adapter name for comparisons: lower-case, `(TM)`,
+/// `(R)`, `™` and `®` removed, whitespace collapsed. WMI and LHM don't always
+/// agree on these marks (e.g. "AMD Radeon(TM) 890M" vs "AMD Radeon 890M").
+pub fn normalize_gpu_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    let stripped = lower
+        .replace("(tm)", " ")
+        .replace("(r)", " ")
+        .replace(['™', '®'], " ");
+    stripped.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Whether two GPU adapter names refer to the same device — normalized
+/// equality, or one containing the other (a user preference saved from one
+/// source must still match the other's slightly different name).
+pub fn gpu_names_match(a: &str, b: &str) -> bool {
+    let (a, b) = (normalize_gpu_name(a), normalize_gpu_name(b));
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    a == b || a.contains(&b) || b.contains(&a)
+}
+
 /// Picks the GPU to display: preferred match → highest VRAM → tiebreak by load.
 /// Mirrors the selection logic in `extract_gpu` for the HTTP path.
 fn select_gpu_idx(devices: &[SidecarGpuDevice], preferred_gpu: Option<&str>) -> Option<usize> {
@@ -1938,11 +2016,13 @@ fn select_gpu_idx(devices: &[SidecarGpuDevice], preferred_gpu: Option<&str>) -> 
         return None;
     }
     if let Some(pref) = preferred_gpu {
-        let pref_norm = pref.trim().to_ascii_lowercase();
-        let pos = devices.iter().position(|d| {
-            let dn = d.name.trim().to_ascii_lowercase();
-            dn == pref_norm || dn.contains(&pref_norm) || pref_norm.contains(&dn)
-        });
+        // Exact (normalized) match first, so a preference can't be captured by
+        // another adapter whose name merely contains it.
+        let pref_norm = normalize_gpu_name(pref);
+        let pos = devices
+            .iter()
+            .position(|d| normalize_gpu_name(&d.name) == pref_norm)
+            .or_else(|| devices.iter().position(|d| gpu_names_match(&d.name, pref)));
         if pos.is_some() {
             return pos;
         }

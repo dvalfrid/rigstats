@@ -79,10 +79,12 @@ pub struct SettingsWindow {
     pub tab: usize,
     pub error: Option<String>,
     pub battery_present: bool,
+    /// Detected GPU adapter names for the Display tab's GPU selector.
+    gpu_names: Vec<String>,
 }
 
 impl SettingsWindow {
-    pub fn from_settings(s: &settings::Settings) -> Self {
+    pub fn from_settings(s: &settings::Settings, gpu_names: Vec<String>) -> Self {
         let mut draft = s.clone();
         draft.autostart_enabled = autostart::is_run_key_present();
         Self {
@@ -92,7 +94,14 @@ impl SettingsWindow {
             tab: 0,
             error: None,
             battery_present: detect_battery_present(),
+            gpu_names,
         }
+    }
+
+    /// Supplies the GPU list once background adapter detection finishes
+    /// (it may still be running when the dialog is first created).
+    pub fn set_gpu_names(&mut self, names: Vec<String>) {
+        self.gpu_names = names;
     }
 }
 
@@ -415,9 +424,10 @@ pub fn show(
                             if applied_layer == "wallpaper" {
                                 wallpaper_save_banner(ui, dc);
                             }
+                            let gpu_names = st.gpu_names.clone();
                             let draft = &mut st.draft;
                             match tab {
-                                0 => draw_display(ui, dc, draft, &applied_layer),
+                                0 => draw_display(ui, dc, draft, &applied_layer, &gpu_names),
                                 1 => draw_panels(ui, dc, draft, battery_present),
                                 2 => draw_alerts(ui, dc, draft),
                                 3 => draw_appearance(ui, dc, draft),
@@ -533,6 +543,7 @@ fn draw_display(
     dc: &DialogColors,
     draft: &mut settings::Settings,
     applied_layer: &str,
+    gpu_names: &[String],
 ) {
     // Desktop Wallpaper mode is display-only: floating and fill-screen have no
     // effect there (the host is sized to the profile, centred on its monitor), so
@@ -847,6 +858,49 @@ fn draw_display(
             });
         }
     });
+
+    // GPU — which adapter the GPU panel and overlay show on multi-GPU systems.
+    // Same choice as the tray "GPU" submenu and the GPU panel's click dots.
+    if gpu_names.len() > 1 {
+        card_frame(dc).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            section_label(ui, dc, "GPU");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new("Displayed GPU")
+                        .size(12.0)
+                        .color(dc.muted),
+                );
+                ui.add_space(8.0);
+                const AUTO: &str = "Automatic (most VRAM)";
+                // Same WMI/LHM-tolerant matching as the tray tick, so a
+                // preference saved under a slightly different spelling
+                // (e.g. from the GPU panel's click dots) still shows as the
+                // right adapter instead of an unlisted raw string.
+                let selected =
+                    crate::tray::selected_gpu_index(gpu_names, draft.preferred_gpu.as_deref());
+                let current = selected.map_or(AUTO, |i| gpu_names[i].as_str());
+                let w = ui.available_width();
+                egui::ComboBox::from_id_salt("preferred_gpu")
+                    .selected_text(current)
+                    .width(w)
+                    .show_ui(ui, |ui| {
+                        if ui.selectable_label(selected.is_none(), AUTO).clicked() {
+                            draft.preferred_gpu = None;
+                        }
+                        for (i, name) in gpu_names.iter().enumerate() {
+                            if ui
+                                .selectable_label(selected == Some(i), name.as_str())
+                                .clicked()
+                            {
+                                draft.preferred_gpu = Some(name.clone());
+                            }
+                        }
+                    });
+            });
+        });
+    }
 }
 
 // ── General tab ───────────────────────────────────────────────────────────────

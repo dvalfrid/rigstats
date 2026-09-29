@@ -200,29 +200,32 @@ where
 }
 
 #[cfg(windows)]
-fn get_gpu_name_from_shell() -> Option<String> {
-    let output = run_hidden_command(
+fn gpu_names_from_shell() -> Vec<String> {
+    let Ok(output) = run_hidden_command(
     "powershell",
     &[
       "-NoProfile",
       "-Command",
       "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | Out-String",
     ],
-  )
-  .ok()?;
+  ) else {
+        return Vec::new();
+    };
 
     if !output.status.success() {
-        return None;
+        return Vec::new();
     }
 
-    let text = String::from_utf8_lossy(&output.stdout);
-    let names = text
+    String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| line.trim().to_string())
         .filter(|line| !line.is_empty())
-        .collect::<Vec<_>>();
+        .collect()
+}
 
-    pick_best_gpu_name(names)
+#[cfg(windows)]
+fn get_gpu_name_from_shell() -> Option<String> {
+    pick_best_gpu_name(gpu_names_from_shell())
 }
 
 /// Detects the primary discrete GPU name.
@@ -247,6 +250,54 @@ pub fn detect_gpu_name() -> Option<String> {
     #[cfg(not(windows))]
     {
         None
+    }
+}
+
+/// Trims, drops empty and virtual/basic display adapters, and removes
+/// duplicates (by normalized name — two identical cards list once), keeping
+/// first-seen order.
+#[cfg(windows)]
+fn clean_gpu_names(raw: Vec<String>) -> Vec<String> {
+    let mut names: Vec<String> = Vec::new();
+    for name in raw {
+        let name = name.trim().to_string();
+        if name.is_empty() || is_ignored_adapter_name(&name) {
+            continue;
+        }
+        let norm = crate::lhm::normalize_gpu_name(&name);
+        if !names
+            .iter()
+            .any(|n| crate::lhm::normalize_gpu_name(n) == norm)
+        {
+            names.push(name);
+        }
+    }
+    names
+}
+
+/// Lists every physical GPU adapter name (virtual/basic display adapters
+/// filtered out, duplicates removed) — the choices for the "displayed GPU"
+/// selector. WMI names match the sidecar's LHM device names.
+/// Prefers WMI; falls back to PowerShell `Get-CimInstance`.
+pub fn detect_gpu_names() -> Vec<String> {
+    #[cfg(windows)]
+    {
+        let wmi_names: Vec<String> = wmi::COMLibrary::new()
+            .ok()
+            .and_then(|com| wmi::WMIConnection::new(com).ok())
+            .and_then(|conn| conn.query::<VideoControllerName>().ok())
+            .map(|rows| rows.into_iter().filter_map(|r| r.name).collect())
+            .unwrap_or_default();
+        clean_gpu_names(if wmi_names.is_empty() {
+            gpu_names_from_shell()
+        } else {
+            wmi_names
+        })
+    }
+
+    #[cfg(not(windows))]
+    {
+        Vec::new()
     }
 }
 
@@ -1508,7 +1559,8 @@ fn try_disk_type_map_via_shell() -> Option<std::collections::HashMap<String, Dis
 #[cfg(all(test, windows))]
 mod tests {
     use super::{
-        classify_system_brand, driver_age_days, gpu_name_score, map_memory_type, pick_best_gpu_name,
+        classify_system_brand, clean_gpu_names, driver_age_days, gpu_name_score, map_memory_type,
+        pick_best_gpu_name,
     };
 
     // map_memory_type
@@ -1663,5 +1715,39 @@ mod tests {
     fn pick_best_gpu_name_returns_none_for_empty_list() {
         let names: Vec<String> = vec![];
         assert_eq!(pick_best_gpu_name(names), None);
+    }
+
+    #[test]
+    fn clean_gpu_names_keeps_physical_adapters_in_order() {
+        let raw = vec![
+            "AMD Radeon(TM) 890M Graphics".to_string(),
+            "NVIDIA GeForce RTX 5070 Ti Laptop GPU".to_string(),
+        ];
+        assert_eq!(clean_gpu_names(raw.clone()), raw);
+    }
+
+    #[test]
+    fn clean_gpu_names_drops_virtual_empty_and_duplicates() {
+        let raw = vec![
+            "  ".to_string(),
+            "Microsoft Basic Display Adapter".to_string(),
+            " NVIDIA GeForce RTX 4090 ".to_string(),
+            "Parsec Virtual Display Adapter".to_string(),
+            "NVIDIA GeForce RTX 4090".to_string(),
+            "nvidia geforce rtx(tm) 4090".to_string(),
+            "Intel(R) UHD Graphics 770".to_string(),
+        ];
+        assert_eq!(
+            clean_gpu_names(raw),
+            vec![
+                "NVIDIA GeForce RTX 4090".to_string(),
+                "Intel(R) UHD Graphics 770".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn clean_gpu_names_empty_input() {
+        assert!(clean_gpu_names(Vec::new()).is_empty());
     }
 }
