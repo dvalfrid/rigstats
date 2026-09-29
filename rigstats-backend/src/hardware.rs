@@ -11,9 +11,15 @@ use serde::Deserialize;
 
 // --- WMI row structs -------------------------------------------------------
 // Field names must match the WMI property names exactly (PascalCase).
+// Structs used with typed `conn.query::<T>()` MUST carry a container
+// `#[serde(rename = "Win32_…")]`: the `wmi` crate builds `SELECT … FROM <name>`
+// from the serde container name, so without it the query targets a class that
+// doesn't exist, fails, and the caller silently falls back to a ~1 s PowerShell
+// process (#198). `wmi_classes_tests` below guards this.
 
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_VideoController")]
 struct VideoControllerName {
     #[serde(rename = "Name")]
     name: Option<String>,
@@ -21,13 +27,7 @@ struct VideoControllerName {
 
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
-struct VideoControllerMemory {
-    #[serde(rename = "AdapterRAM")]
-    adapter_ram: Option<u64>,
-}
-
-#[cfg(windows)]
-#[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_ComputerSystem")]
 struct ComputerSystem {
     #[serde(rename = "Manufacturer")]
     manufacturer: Option<String>,
@@ -37,6 +37,7 @@ struct ComputerSystem {
 
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_ComputerSystemProduct")]
 struct ComputerSystemProduct {
     #[serde(rename = "Version")]
     version: Option<String>,
@@ -46,6 +47,7 @@ struct ComputerSystemProduct {
 
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_BaseBoard")]
 struct BaseBoardInfo {
     #[serde(rename = "Manufacturer")]
     manufacturer: Option<String>,
@@ -72,6 +74,7 @@ struct PowerShellBrandInfo {
 
 #[cfg(windows)]
 #[derive(Deserialize, Debug)]
+#[serde(rename = "Win32_PhysicalMemory")]
 struct PhysicalMemory {
     #[serde(rename = "Speed")]
     speed: Option<u32>,
@@ -298,30 +301,6 @@ pub fn detect_gpu_names() -> Vec<String> {
     #[cfg(not(windows))]
     {
         Vec::new()
-    }
-}
-
-/// Detects the total VRAM in MB for the primary GPU.
-/// Returns `None` when WMI is unavailable or reports no usable value.
-/// LHM live data (`vram_total` in `LhmData`) is the preferred source; this is
-/// only used as a startup fallback before the first LHM tick arrives.
-pub fn detect_gpu_vram_total_mb() -> Option<f64> {
-    #[cfg(windows)]
-    {
-        let com = wmi::COMLibrary::new().ok()?;
-        let conn = wmi::WMIConnection::new(com).ok()?;
-        let rows: Vec<VideoControllerMemory> = conn.query().ok()?;
-        let best = rows.iter().filter_map(|r| r.adapter_ram).max().unwrap_or(0);
-        if best > 0 {
-            Some((best as f64 / 1_048_576.0).round())
-        } else {
-            None
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        None
     }
 }
 
@@ -800,16 +779,17 @@ fn map_memory_type(code: u16) -> Option<&'static str> {
     // that mostly overlap for DDR3+.  Both sources are tried in order, so this
     // single table must work for both.  LPDDR variants only appear in SMBIOSMemoryType.
     match code {
-        18 => Some("DDR"),    // MemoryType=18 (WMI), SMBIOSMemoryType overlaps are rare
-        20 => Some("DDR2"),   // MemoryType=20 (WMI DDR2 FB-DIMM, close enough)
-        24 => Some("DDR3"),   // MemoryType=24 / SMBIOSMemoryType=24
-        26 => Some("DDR4"),   // MemoryType=26 / SMBIOSMemoryType=26
-        27 => Some("LPDDR"),  // SMBIOSMemoryType=27
-        28 => Some("LPDDR2"), // SMBIOSMemoryType=28
-        29 => Some("LPDDR3"), // SMBIOSMemoryType=29
-        30 => Some("LPDDR4"), // SMBIOSMemoryType=30
-        34 => Some("DDR5"),   // MemoryType=34 / SMBIOSMemoryType=34
-        35 => Some("LPDDR5"), // SMBIOSMemoryType=35
+        18 => Some("DDR"),     // MemoryType=18 (WMI), SMBIOSMemoryType overlaps are rare
+        20 => Some("DDR2"),    // MemoryType=20 (WMI DDR2 FB-DIMM, close enough)
+        24 => Some("DDR3"),    // MemoryType=24 / SMBIOSMemoryType=24
+        26 => Some("DDR4"),    // MemoryType=26 / SMBIOSMemoryType=26
+        27 => Some("LPDDR"),   // SMBIOSMemoryType=27
+        28 => Some("LPDDR2"),  // SMBIOSMemoryType=28
+        29 => Some("LPDDR3"),  // SMBIOSMemoryType=29
+        30 => Some("LPDDR4"),  // SMBIOSMemoryType=30
+        34 => Some("DDR5"),    // MemoryType=34 / SMBIOSMemoryType=34
+        35 => Some("LPDDR5"),  // SMBIOSMemoryType=35
+        36 => Some("LPDDR5X"), // SMBIOSMemoryType=36 (matches the PowerShell fallback)
         _ => None,
     }
 }
@@ -1604,6 +1584,7 @@ mod tests {
         assert_eq!(map_memory_type(29), Some("LPDDR3"));
         assert_eq!(map_memory_type(30), Some("LPDDR4"));
         assert_eq!(map_memory_type(35), Some("LPDDR5"));
+        assert_eq!(map_memory_type(36), Some("LPDDR5X"));
     }
 
     #[test]
@@ -1749,5 +1730,53 @@ mod tests {
     #[test]
     fn clean_gpu_names_empty_input() {
         assert!(clean_gpu_names(Vec::new()).is_empty());
+    }
+}
+
+/// Every struct used with a typed `conn.query::<T>()` must query a real
+/// `Win32_*` class — see the note above the WMI row structs (#198).
+/// `wmi::build_query` is pure (no COM), so this runs anywhere tests do.
+#[cfg(all(test, windows))]
+mod wmi_classes_tests {
+    use super::{
+        BaseBoardInfo, ComputerSystem, ComputerSystemProduct, PhysicalMemory,
+        VideoControllerDriver, VideoControllerName,
+    };
+
+    fn from_class<'de, T: serde::Deserialize<'de>>() -> String {
+        let query = wmi::build_query::<T>(None).expect("query must build");
+        query
+            .split(" FROM ")
+            .nth(1)
+            .expect("query must have a FROM clause")
+            .trim()
+            .to_string()
+    }
+
+    #[test]
+    fn typed_wmi_structs_query_real_win32_classes() {
+        assert_eq!(from_class::<VideoControllerName>(), "Win32_VideoController");
+        assert_eq!(
+            from_class::<VideoControllerDriver>(),
+            "Win32_VideoController"
+        );
+        assert_eq!(from_class::<ComputerSystem>(), "Win32_ComputerSystem");
+        assert_eq!(
+            from_class::<ComputerSystemProduct>(),
+            "Win32_ComputerSystemProduct"
+        );
+        assert_eq!(from_class::<BaseBoardInfo>(), "Win32_BaseBoard");
+        assert_eq!(from_class::<PhysicalMemory>(), "Win32_PhysicalMemory");
+    }
+
+    #[test]
+    fn base_board_still_parses_powershell_json() {
+        // `detect_motherboard_name`'s PowerShell fallback deserializes the
+        // same struct from JSON; the container rename must not break that.
+        let b: BaseBoardInfo =
+            serde_json::from_str(r#"{"Manufacturer":"ASUSTeK COMPUTER INC.","Product":"GA403WR"}"#)
+                .expect("JSON must deserialize");
+        assert_eq!(b.manufacturer.as_deref(), Some("ASUSTeK COMPUTER INC."));
+        assert_eq!(b.product.as_deref(), Some("GA403WR"));
     }
 }
