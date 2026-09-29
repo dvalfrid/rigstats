@@ -8,6 +8,7 @@ pub mod alerts;
 pub mod brand;
 pub mod dashboard;
 pub mod dcomp_burst;
+pub mod dialog_reveal;
 pub mod geometry;
 pub mod gpu_guard;
 pub mod gpu_process;

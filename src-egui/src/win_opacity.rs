@@ -88,6 +88,29 @@ pub fn set_no_redirection_bitmap(hwnd: isize) {
     }
 }
 
+/// Turn off DWM's show/hide/close animations for `hwnd`
+/// (`DWMWA_TRANSITIONS_FORCEDISABLED`). DWM animates those from a snapshot
+/// of the window, which for our flip-model swap chains is often the blank
+/// (white) redirection surface rather than what we rendered — a white flash
+/// when a dialog closes, most visible on a slow (power-saving) GPU where the
+/// animation runs longer. Idempotent; no-op when `hwnd` is 0.
+pub fn disable_dwm_transitions(hwnd: isize) {
+    if hwnd == 0 {
+        return;
+    }
+    use winapi::um::dwmapi::DwmSetWindowAttribute;
+    const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
+    let disabled: i32 = 1; // BOOL TRUE
+    unsafe {
+        DwmSetWindowAttribute(
+            hwnd as HWND,
+            DWMWA_TRANSITIONS_FORCEDISABLED,
+            &disabled as *const i32 as *const _,
+            std::mem::size_of::<i32>() as u32,
+        );
+    }
+}
+
 /// Bring the window to the foreground using Win32 SetForegroundWindow,
 /// restoring it first if it's minimized. Used after show_viewport_immediate to
 /// ensure newly opened dialogs get focus. Requires AllowSetForegroundWindow to

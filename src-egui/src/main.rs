@@ -3,6 +3,7 @@ use eframe::egui;
 use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
+use rigstats_egui::dialog_reveal::DialogReveal;
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -269,6 +270,9 @@ struct RigStatsApp {
     font_atlas_rebuilt_at: Instant,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
+    /// Keeps each freshly opened dialog hidden until it has rendered (no
+    /// white flash) — see `dialog_reveal`.
+    dialog_reveal: DialogReveal,
     // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error. Checked once per frame in `update()`.
@@ -461,6 +465,7 @@ impl RigStatsApp {
             font_atlas_stale: false,
             font_atlas_rebuilt_at: Instant::now(),
             battery_present,
+            dialog_reveal: DialogReveal::default(),
             recording_blink_at: Instant::now(),
             gpu_lost,
             gpu_relaunch_triggered: false,
@@ -1220,6 +1225,51 @@ impl RigStatsApp {
         }
     }
 
+    /// Shared tail of every dialog's per-frame render (Settings, About,
+    /// Status, History, Updater), after its `show_viewport_immediate`:
+    /// dark title bar, hidden-until-rendered reveal (see `dialog_reveal`),
+    /// and bringing a newly opened dialog to the foreground.
+    ///
+    /// `visible` is what this frame's `ViewportBuilder` asked for. While
+    /// still hidden, frames are forced so the reveal isn't left waiting on
+    /// the ~1 fps idle heartbeat — `request_repaint` plus a real WM_PAINT to
+    /// the main window, the same combination `render_overlay_viewport` uses
+    /// for its hidden reveal burst. Focus waits until the dialog is visible
+    /// (a hidden window can't take the foreground), so the flag is kept set
+    /// until then.
+    fn finish_dialog_frame(
+        &mut self,
+        ctx: &egui::Context,
+        id: &'static str,
+        found_hwnd: isize,
+        wants_focus: bool,
+        focus: &Arc<AtomicBool>,
+        visible: bool,
+    ) {
+        self.dialog_reveal.rendered(id);
+        #[cfg(windows)]
+        {
+            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
+            // Set while the dialog is open so it's in place before it closes.
+            win_opacity::disable_dwm_transitions(found_hwnd);
+        }
+        if !visible {
+            ctx.request_repaint();
+            #[cfg(windows)]
+            win_opacity::force_repaint(self.hwnd);
+        }
+        if wants_focus {
+            // If found_hwnd == 0 the window wasn't ready yet; keep the flag
+            // so we retry on the next frame.
+            #[cfg(windows)]
+            if found_hwnd != 0 && visible {
+                win_opacity::bring_to_foreground(found_hwnd);
+            } else {
+                focus.store(true, Ordering::Relaxed);
+            }
+        }
+    }
+
     /// Sets and persists the displayed GPU (`None` = automatic, highest VRAM).
     /// Shared by the GPU panel's click dots, the tray "GPU" submenu, and the
     /// floating GPU panel. The wallpaper host picks the persisted value up on
@@ -1683,6 +1733,36 @@ impl eframe::App for RigStatsApp {
         }
         self.any_dialog_open_prev = any_dialog_open;
 
+        for (id, open) in [
+            ("settings", &self.settings_open),
+            ("about", &self.about_open),
+            ("status", &self.status_open),
+            ("history", &self.history_open),
+            ("updater", &self.updater_open),
+        ] {
+            self.dialog_reveal.track(id, open.load(Ordering::Relaxed));
+        }
+        // A dialog that closed this frame gets one last, content-less frame
+        // that only hides its window, so eframe drops its GPU surface from an
+        // already-hidden window next frame (no white flash on close — see
+        // `DialogReveal::take_closing`). Only `visible` is set on the
+        // builder: egui only applies fields that are set, so size/position
+        // are left untouched.
+        let closing = self.dialog_reveal.take_closing();
+        if !closing.is_empty() {
+            for id in closing {
+                ui.ctx().show_viewport_immediate(
+                    egui::ViewportId::from_hash_of(id),
+                    egui::ViewportBuilder::default().with_visible(false),
+                    |_, _| {},
+                );
+            }
+            // Make the teardown frame come promptly.
+            ui.ctx().request_repaint();
+            #[cfg(windows)]
+            win_opacity::force_repaint(self.hwnd);
+        }
+
         if self.settings_open.load(Ordering::Relaxed) {
             let open = self.settings_open.clone();
             let focus = self.settings_focus.clone();
@@ -1695,10 +1775,12 @@ impl eframe::App for RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let dcomp_available = self.dcomp_available;
+            let visible = self.dialog_reveal.visible("settings");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Settings")
+                    .with_visible(visible)
                     .with_inner_size([560.0, 600.0])
                     .with_position([px, py])
                     .with_resizable(false)
@@ -1725,19 +1807,14 @@ impl eframe::App for RigStatsApp {
                     );
                 },
             );
-            #[cfg(windows)]
-            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
-            // Bring dialog to foreground now that we have the HWND.
-            // If found_hwnd == 0 the window wasn't ready yet; restore the focus flag
-            // so we retry on the next frame (which fires within 100 ms since a dialog is open).
-            #[cfg(windows)]
-            if wants_focus {
-                if found_hwnd != 0 {
-                    win_opacity::bring_to_foreground(found_hwnd);
-                } else {
-                    focus.store(true, Ordering::Relaxed);
-                }
-            }
+            self.finish_dialog_frame(
+                ui.ctx(),
+                "settings",
+                found_hwnd,
+                wants_focus,
+                &focus,
+                visible,
+            );
         }
 
         if self.about_open.load(Ordering::Relaxed) {
@@ -1748,10 +1825,12 @@ impl eframe::App for RigStatsApp {
             let [px, py] = dialog_center(360.0, 280.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
+            let visible = self.dialog_reveal.visible("about");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
                     .with_title("About RigStats")
+                    .with_visible(visible)
                     .with_inner_size([380.0, 460.0])
                     .with_position([px, py])
                     .with_resizable(false)
@@ -1766,16 +1845,7 @@ impl eframe::App for RigStatsApp {
                     windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir, &dc);
                 },
             );
-            #[cfg(windows)]
-            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
-            #[cfg(windows)]
-            if wants_focus {
-                if found_hwnd != 0 {
-                    win_opacity::bring_to_foreground(found_hwnd);
-                } else {
-                    focus.store(true, Ordering::Relaxed);
-                }
-            }
+            self.finish_dialog_frame(ui.ctx(), "about", found_hwnd, wants_focus, &focus, visible);
         }
 
         if self.status_open.load(Ordering::Relaxed) {
@@ -1791,10 +1861,12 @@ impl eframe::App for RigStatsApp {
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.runtime.latest.lhm_connected;
             let wallpaper_active = self.wallpaper_active;
+            let visible = self.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Status")
+                    .with_visible(visible)
                     .with_inner_size([680.0, 720.0])
                     .with_position([px, py])
                     .with_taskbar(false)
@@ -1820,16 +1892,7 @@ impl eframe::App for RigStatsApp {
                     );
                 },
             );
-            #[cfg(windows)]
-            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
-            #[cfg(windows)]
-            if wants_focus {
-                if found_hwnd != 0 {
-                    win_opacity::bring_to_foreground(found_hwnd);
-                } else {
-                    focus.store(true, Ordering::Relaxed);
-                }
-            }
+            self.finish_dialog_frame(ui.ctx(), "status", found_hwnd, wants_focus, &focus, visible);
         }
 
         if self.history_open.load(Ordering::Relaxed) {
@@ -1843,10 +1906,12 @@ impl eframe::App for RigStatsApp {
             let [px, py] = dialog_center(820.0, 720.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
+            let visible = self.dialog_reveal.visible("history");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("history"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Session History")
+                    .with_visible(visible)
                     .with_inner_size([820.0, 720.0])
                     .with_position([px, py])
                     .with_taskbar(false)
@@ -1870,16 +1935,14 @@ impl eframe::App for RigStatsApp {
                     );
                 },
             );
-            #[cfg(windows)]
-            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
-            #[cfg(windows)]
-            if wants_focus {
-                if found_hwnd != 0 {
-                    win_opacity::bring_to_foreground(found_hwnd);
-                } else {
-                    focus.store(true, Ordering::Relaxed);
-                }
-            }
+            self.finish_dialog_frame(
+                ui.ctx(),
+                "history",
+                found_hwnd,
+                wants_focus,
+                &focus,
+                visible,
+            );
         }
 
         if self.updater_open.load(Ordering::Relaxed) {
@@ -1890,10 +1953,12 @@ impl eframe::App for RigStatsApp {
             let [px, py] = dialog_center(490.0, 560.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
+            let visible = self.dialog_reveal.visible("updater");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats Update")
+                    .with_visible(visible)
                     .with_inner_size([490.0, 560.0])
                     .with_position([px, py])
                     .with_resizable(false)
@@ -1908,16 +1973,14 @@ impl eframe::App for RigStatsApp {
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dc);
                 },
             );
-            #[cfg(windows)]
-            win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
-            #[cfg(windows)]
-            if wants_focus {
-                if found_hwnd != 0 {
-                    win_opacity::bring_to_foreground(found_hwnd);
-                } else {
-                    focus.store(true, Ordering::Relaxed);
-                }
-            }
+            self.finish_dialog_frame(
+                ui.ctx(),
+                "updater",
+                found_hwnd,
+                wants_focus,
+                &focus,
+                visible,
+            );
 
             // When the window sets status to Checking (manual button click),
             // kick off check+download on a plain OS thread — update_check is
