@@ -2136,7 +2136,8 @@ fn log_pipe_trouble_throttled(dir: &std::path::Path, msg: &str) {
     }
 }
 
-/// Persistent pipe reader stored in `AppState`.
+/// Persistent pipe reader, held by each `poll_loop` (`src-egui/src/poll.rs`)
+/// across ticks and reconnected by `fetch_lhm_pipe` after a disconnect.
 pub type LhmPipeReader = tokio::io::BufReader<tokio::net::windows::named_pipe::NamedPipeClient>;
 
 /// Upper bound on a single newline-delimited sidecar frame. A healthy sidecar

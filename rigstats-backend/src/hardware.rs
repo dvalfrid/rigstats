@@ -1,9 +1,12 @@
-//! Windows hardware detection via WMI and PowerShell fallbacks.
+//! Windows hardware detection via WMI, with PowerShell fallbacks.
 //!
-//! All public functions here are called once at startup; their results are
-//! stored in `AppState` so the per-tick hot path pays no WMI/process cost.
-//! Each function tries WMI first and falls back to a PowerShell CIM call on
-//! any COM/WMI failure, keeping the app functional even on locked-down systems.
+//! The `detect_*` functions are called once at startup — by each `poll_loop`
+//! (`src-egui/src/poll.rs`, via `spawn_blocking`) or a startup background
+//! thread in `main.rs` — and the caller keeps the result, so the per-tick hot
+//! path pays no WMI cost. `sample_battery_wmi` is the per-tick exception
+//! (cached 10 s by `poll_loop`). Each function tries WMI first and only
+//! falls back to a PowerShell CIM call (~1 s process start) when the WMI
+//! query itself fails, keeping the app functional on locked-down systems.
 
 use crate::debug::run_hidden_command;
 use crate::stats::DiskKind;
@@ -94,8 +97,9 @@ struct PhysicalMemory {
 
 // --- WMI availability probe ------------------------------------------------
 
-/// Verifies that WMI/CIM is reachable on the current system.
-/// Called once at startup; the result is stored in `AppState.wmi_available`.
+/// Verifies that WMI/CIM is reachable on the current system. Used by the
+/// Status dialog (WMI health) and by `poll_loop` to log why a battery read
+/// came back empty.
 pub fn probe_wmi_status() -> Result<(), String> {
     #[cfg(windows)]
     {

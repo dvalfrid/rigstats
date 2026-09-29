@@ -1,14 +1,8 @@
-//! Shared data contracts between backend and renderer.
-//! This module contains payload structures and mutable app state containers.
+//! `StatsPayload` and its sub-structs — the serialisable snapshot shape used by
+//! session recording (`logging::append_stats_row`, built from `PollStats` in
+//! `src-egui/src/poll.rs`), plus `DiskKind`.
 
 use serde::Serialize;
-use std::collections::HashMap;
-use std::sync::Mutex;
-use std::time::Instant;
-use sysinfo::{Disks, Networks, System};
-
-use crate::lhm::LhmData;
-use crate::settings::Settings;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CpuStats {
@@ -35,7 +29,6 @@ pub struct GpuStats {
     pub d3d_3d: Option<f64>,
     pub d3d_vdec: Option<f64>,
     /// Available GPU devices: `[(device_name, vram_total_mb), ...]`.
-    /// Used by the frontend to render GPU selector.
     pub available_gpus: Vec<(String, f64)>,
 }
 
@@ -140,61 +133,4 @@ pub struct StatsPayload {
     pub top_processes: Vec<ProcessEntry>,
     pub system_uptime_secs: u64,
     pub lhm_connected: bool,
-}
-
-/// Hardware metadata detected at startup and optionally refreshed by the WMI retry task.
-///
-/// Fields that could not be populated at startup (e.g. because WMI was not yet ready)
-/// are wrapped in `Mutex` so `spawn_wmi_retry` can update them without requiring a restart.
-/// Truly immutable fields (`ping_target`, `sysinfo_available`, `wmi_available`) need no lock.
-pub struct HardwareInfo {
-    /// Maps drive letter (e.g. `"C:"`) to physical disk model name detected at startup.
-    /// Used at each tick to match LHM temperature readings to sysinfo volumes by name
-    /// instead of by index, so inserting a USB drive never shifts other drives' temps.
-    pub disk_model_map: Mutex<HashMap<String, String>>,
-    /// Best-effort RAM descriptor (e.g. "DDR5 6000 MT/s").
-    pub ram_spec: Mutex<String>,
-    /// Best-effort RAM module details (e.g. "2x16 GB | Vendor | Part").
-    pub ram_details: Mutex<String>,
-    /// Best-effort VRAM total fallback in MB when live LHM data is unavailable.
-    /// `None` when WMI detection failed at startup.
-    pub gpu_vram_total_mb: Mutex<Option<f64>>,
-    /// Detected system board brand (e.g. "rog", "msi", "other").
-    pub system_brand: Mutex<String>,
-    /// Motherboard name (e.g. "ASUS PRIME B650M-A AX6 II"). `None` when WMI detection failed.
-    pub mb_name: Mutex<Option<String>>,
-    /// Preferred ping target (default gateway if available, otherwise public fallback).
-    pub ping_target: String,
-    /// Whether sysinfo returned a usable initial snapshot on startup.
-    pub sysinfo_available: bool,
-    /// Whether a WMI connection could be established on startup.
-    pub wmi_available: bool,
-}
-
-/// Per-tick runtime state shared across the poll thread and UI.
-pub struct AppState {
-    /// Persistent named pipe connection to the sensor sidecar (`rigstats-sensor.exe`).
-    /// `None` on startup or after a disconnect; reconnected transparently by `fetch_lhm_pipe`.
-    pub lhm_pipe: tokio::sync::Mutex<Option<crate::lhm::LhmPipeReader>>,
-    /// Persisted UI preferences mirrored in memory for fast reads.
-    pub settings: Mutex<Settings>,
-    /// Reused sysinfo collector to avoid reallocating sensors every tick.
-    pub system: Mutex<System>,
-    pub disks: Mutex<Disks>,
-    pub networks: Mutex<Networks>,
-    /// Timestamp of the previous network sample for throughput delta calculations.
-    pub last_net_sample: Mutex<Option<Instant>>,
-    /// Cached ping sample to avoid spawning an ICMP process on every tick.
-    pub last_ping_sample: Mutex<Option<(Instant, Option<f64>)>>,
-    /// Last successful LHM snapshot used when live HTTP polling fails transiently.
-    pub last_lhm: Mutex<Option<LhmData>>,
-    /// Per-component alert cooldown tracker. Key: "<component>_<level>" (e.g. "cpu_warning").
-    /// Stores the `Instant` of the last fired notification to enforce the 60-second cooldown.
-    pub last_alert: Mutex<HashMap<String, Instant>>,
-    /// Cached battery sample (refreshed every 10 s). Power draw can change quickly
-    /// (charger connect/disconnect) while charge % changes slowly.
-    pub last_battery_sample: Mutex<Option<(Instant, BatteryStats)>>,
-    /// Unix day index (seconds / 86400) of the last log-prune run.
-    /// Ensures `prune_old_sessions` runs at most once per calendar day.
-    pub last_log_prune_day: Mutex<Option<u64>>,
 }
