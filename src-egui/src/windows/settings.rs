@@ -78,13 +78,20 @@ pub struct SettingsWindow {
     last_preview: settings::Settings,
     pub tab: usize,
     pub error: Option<String>,
-    pub battery_present: bool,
+    /// Whether the system has a battery. Detected once at startup on a
+    /// background thread (see `RigStatsApp::new`) and read live here, so
+    /// opening the dialog never blocks on WMI.
+    battery_present: Arc<AtomicBool>,
     /// Detected GPU adapter names for the Display tab's GPU selector.
     gpu_names: Vec<String>,
 }
 
 impl SettingsWindow {
-    pub fn from_settings(s: &settings::Settings, gpu_names: Vec<String>) -> Self {
+    pub fn from_settings(
+        s: &settings::Settings,
+        gpu_names: Vec<String>,
+        battery_present: Arc<AtomicBool>,
+    ) -> Self {
         let mut draft = s.clone();
         draft.autostart_enabled = autostart::is_run_key_present();
         Self {
@@ -93,7 +100,7 @@ impl SettingsWindow {
             draft,
             tab: 0,
             error: None,
-            battery_present: detect_battery_present(),
+            battery_present,
             gpu_names,
         }
     }
@@ -103,20 +110,6 @@ impl SettingsWindow {
     pub fn set_gpu_names(&mut self, names: Vec<String>) {
         self.gpu_names = names;
     }
-}
-
-fn detect_battery_present() -> bool {
-    debug::run_hidden_command(
-        "powershell",
-        &[
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "if (Get-CimInstance Win32_Battery -EA SilentlyContinue) { 'yes' } else { 'no' }",
-        ],
-    )
-    .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "yes")
-    .unwrap_or(true)
 }
 
 // ── Frames ────────────────────────────────────────────────────────────────────
@@ -400,7 +393,7 @@ pub fn show(
                             ui.set_min_width(ui.available_width());
                             ui.spacing_mut().item_spacing.y = 8.0;
                             let tab = st.tab;
-                            let battery_present = st.battery_present;
+                            let battery_present = st.battery_present.load(Ordering::Relaxed);
                             // The currently *applied* window layer. Live preview forces
                             // window_layer back to whatever is actually running (it's
                             // Save-only), so until Save the app keeps running its current

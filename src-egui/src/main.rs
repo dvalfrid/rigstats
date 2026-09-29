@@ -267,6 +267,8 @@ struct RigStatsApp {
     font_atlas_stale: bool,
     /// Last forced font-atlas rebuild (see `refresh_font_atlas_after_minimize`).
     font_atlas_rebuilt_at: Instant,
+    /// Shared with `SettingsWindow`; set by a startup background thread.
+    battery_present: Arc<AtomicBool>,
     // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error. Checked once per frame in `update()`.
@@ -332,6 +334,20 @@ impl RigStatsApp {
             .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
             .collect();
         let gpu_names = tray.gpu_menu.names();
+        // Battery presence for Settings (Battery panel / overlay metric).
+        // Detected once in the background — it's a WMI query and used to run
+        // (as PowerShell, ~1 s) on the UI thread every time Settings opened.
+        // Starts `true` (option enabled) until the answer arrives.
+        let battery_present = Arc::new(AtomicBool::new(true));
+        {
+            let flag = battery_present.clone();
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                let present = hardware::detect_battery_present();
+                debug::log_debug(&dir, &format!("hardware: battery_present={present}"));
+                flag.store(present, Ordering::Relaxed);
+            });
+        }
         Self {
             runtime,
             receiver,
@@ -351,7 +367,11 @@ impl RigStatsApp {
             updater_focus,
             history_focus: Arc::new(AtomicBool::new(false)),
             settings_win: Arc::new(Mutex::new(
-                windows::settings::SettingsWindow::from_settings(&init_settings, gpu_names),
+                windows::settings::SettingsWindow::from_settings(
+                    &init_settings,
+                    gpu_names,
+                    battery_present.clone(),
+                ),
             )),
             status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
             status_refreshing: Arc::new(AtomicBool::new(false)),
@@ -440,6 +460,7 @@ impl RigStatsApp {
             recording_blink_on: true,
             font_atlas_stale: false,
             font_atlas_rebuilt_at: Instant::now(),
+            battery_present,
             recording_blink_at: Instant::now(),
             gpu_lost,
             gpu_relaunch_triggered: false,
@@ -1226,8 +1247,11 @@ impl RigStatsApp {
     fn tray_open_settings(&mut self) {
         // Re-initialise draft from current settings each time the window opens.
         let s = self.current_settings.lock_safe().clone();
-        *self.settings_win.lock_safe() =
-            windows::settings::SettingsWindow::from_settings(&s, self.tray.gpu_menu.names());
+        *self.settings_win.lock_safe() = windows::settings::SettingsWindow::from_settings(
+            &s,
+            self.tray.gpu_menu.names(),
+            self.battery_present.clone(),
+        );
         self.settings_open.store(true, Ordering::Relaxed);
         self.settings_focus.store(true, Ordering::Relaxed);
     }

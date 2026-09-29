@@ -274,7 +274,9 @@ pub async fn poll_loop(
         &dir,
         &format!("hardware: disk_type_map entries={}", disk_type_map.len()),
     );
-    let ping_target = hardware::detect_ping_target();
+    let ping_target = tokio::task::spawn_blocking(hardware::detect_ping_target)
+        .await
+        .unwrap_or_else(|_| "1.1.1.1".to_string());
     debug::log_debug(&dir, &format!("hardware: ping_target={ping_target}"));
     let mb_board: Option<String> = tokio::task::spawn_blocking(hardware::detect_motherboard_name)
         .await

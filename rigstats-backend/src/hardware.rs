@@ -991,11 +991,51 @@ pub fn detect_ram_details() -> String {
 
 // --- Ping target detection -------------------------------------------------
 
+#[cfg(windows)]
+#[derive(Deserialize, Debug)]
+struct NetAdapterGatewayRow {
+    #[serde(rename = "DefaultIPGateway")]
+    default_ip_gateway: Option<Vec<String>>,
+}
+
+/// First IPv4 default gateway across adapters, in adapter order (gateway
+/// lists can also hold IPv6 addresses, which the ping sampler doesn't use).
+fn first_ipv4_gateway<'a>(gateways: impl IntoIterator<Item = &'a str>) -> Option<String> {
+    gateways
+        .into_iter()
+        .map(str::trim)
+        .find(|g| g.parse::<std::net::Ipv4Addr>().is_ok())
+        .map(str::to_string)
+}
+
 /// Detects the default network gateway to use as the ping target.
-/// Falls back to `1.1.1.1` if no gateway is found.
+/// Prefers WMI; falls back to PowerShell `Get-CimInstance`, then `1.1.1.1`.
+/// Blocking (WMI/process) — call via `spawn_blocking` from async code.
 pub fn detect_ping_target() -> String {
     #[cfg(windows)]
     {
+        let wmi_rows: Option<Vec<NetAdapterGatewayRow>> = wmi::COMLibrary::new()
+            .ok()
+            .and_then(|com| wmi::WMIConnection::new(com).ok())
+            .and_then(|conn| {
+                conn.raw_query(
+                    "SELECT DefaultIPGateway FROM Win32_NetworkAdapterConfiguration \
+                     WHERE IPEnabled = TRUE",
+                )
+                .ok()
+            });
+        // WMI answered: trust it, even with no gateway (offline) — the
+        // PowerShell fallback would only find the same nothing, slower.
+        if let Some(rows) = wmi_rows {
+            return first_ipv4_gateway(
+                rows.iter()
+                    .filter_map(|r| r.default_ip_gateway.as_ref())
+                    .flatten()
+                    .map(String::as_str),
+            )
+            .unwrap_or_else(|| "1.1.1.1".to_string());
+        }
+
         let output = run_hidden_command(
       "powershell",
       &[
@@ -1063,6 +1103,34 @@ struct WmiBatteryStatusRow {
     /// Discharge rate in mW (valid when discharging; 0 when charging).
     #[serde(rename = "DischargeRate")]
     discharge_rate: Option<u32>,
+}
+
+/// Whether the system has a battery (gates the Battery panel/overlay metric
+/// in Settings). Unlike [`sample_battery_wmi`], a WMI *failure* returns `true`
+/// — erring toward leaving the option enabled rather than hiding it on a
+/// laptop — and only a successful, empty `Win32_Battery` query means "no".
+/// Blocking (WMI) — call off the UI thread.
+pub fn detect_battery_present() -> bool {
+    #[cfg(windows)]
+    {
+        #[derive(Deserialize)]
+        struct BatteryIdRow {
+            #[serde(rename = "DeviceID")]
+            _device_id: Option<String>,
+        }
+        wmi::COMLibrary::new()
+            .ok()
+            .and_then(|com| wmi::WMIConnection::new(com).ok())
+            .and_then(|conn| {
+                conn.raw_query::<BatteryIdRow>("SELECT DeviceID FROM Win32_Battery")
+                    .ok()
+            })
+            .map_or(true, |rows| !rows.is_empty())
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
 }
 
 /// Queries the first battery detected by WMI.
@@ -1539,8 +1607,8 @@ fn try_disk_type_map_via_shell() -> Option<std::collections::HashMap<String, Dis
 #[cfg(all(test, windows))]
 mod tests {
     use super::{
-        classify_system_brand, clean_gpu_names, driver_age_days, gpu_name_score, map_memory_type,
-        pick_best_gpu_name,
+        classify_system_brand, clean_gpu_names, driver_age_days, first_ipv4_gateway,
+        gpu_name_score, map_memory_type, pick_best_gpu_name,
     };
 
     // map_memory_type
@@ -1730,6 +1798,26 @@ mod tests {
     #[test]
     fn clean_gpu_names_empty_input() {
         assert!(clean_gpu_names(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn first_ipv4_gateway_skips_ipv6_and_keeps_adapter_order() {
+        let gws = ["fe80::1", "192.168.1.1", "10.0.0.1"];
+        assert_eq!(first_ipv4_gateway(gws), Some("192.168.1.1".to_string()));
+    }
+
+    #[test]
+    fn first_ipv4_gateway_trims_and_rejects_garbage() {
+        assert_eq!(
+            first_ipv4_gateway([" 10.0.0.138 "]),
+            Some("10.0.0.138".to_string())
+        );
+        assert_eq!(first_ipv4_gateway(["", "not-an-ip", "999.1.1.1"]), None);
+    }
+
+    #[test]
+    fn first_ipv4_gateway_none_when_offline() {
+        assert_eq!(first_ipv4_gateway(std::iter::empty::<&str>()), None);
     }
 }
 
