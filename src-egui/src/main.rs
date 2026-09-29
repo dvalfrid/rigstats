@@ -262,6 +262,11 @@ struct RigStatsApp {
     recording_blink_on: bool,
     /// When the blink last flipped.
     recording_blink_at: Instant,
+    /// Set while any viewport is minimized; see
+    /// `refresh_font_atlas_after_minimize`.
+    font_atlas_stale: bool,
+    /// Last forced font-atlas rebuild (see `refresh_font_atlas_after_minimize`).
+    font_atlas_rebuilt_at: Instant,
     // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error. Checked once per frame in `update()`.
@@ -433,6 +438,8 @@ impl RigStatsApp {
             recording_active: false,
             recording_active_shared,
             recording_blink_on: true,
+            font_atlas_stale: false,
+            font_atlas_rebuilt_at: Instant::now(),
             recording_blink_at: Instant::now(),
             gpu_lost,
             gpu_relaunch_triggered: false,
@@ -1154,6 +1161,44 @@ impl RigStatsApp {
         // needs to change.
     }
 
+    /// Works around lost font-atlas uploads, seen on a hybrid-GPU laptop at
+    /// 175 % scaling after Win+D / minimize: random characters in the overlay
+    /// rendered as blank gaps — a digit, `.`, `%` or `°` missing in one place
+    /// but fine in another (egui caches glyphs per sub-pixel offset, so the
+    /// same character at another x position is a separate atlas entry).
+    ///
+    /// egui keeps one font atlas shared by every viewport and uploads new
+    /// glyphs as part of whichever viewport's pass ends next; a glyph whose
+    /// upload is lost stays marked as cached but never reaches the GPU.
+    /// egui-wgpu 0.34 drops the upload on a surface-less early return (and
+    /// eframe skips it for a non-visible root) — fixed upstream in egui 0.35
+    /// (emilk/egui#8250). This forces a full, fresh atlas upload after any
+    /// observed minimize and periodically as a self-heal. Remove after the
+    /// egui upgrade (#199).
+    fn refresh_font_atlas_after_minimize(&mut self, ctx: &egui::Context) {
+        let any_minimized =
+            ctx.input(|i| i.raw.viewports.values().any(|v| v.minimized == Some(true)));
+        if any_minimized {
+            self.font_atlas_stale = true;
+            return;
+        }
+        // Also rebuild periodically: a Win+D minimizes the root window too,
+        // and a minimized root runs no frames at all, so the flag above never
+        // gets a chance to see it — and uploads can also be lost with nothing
+        // minimized (any surface-less viewport pass, e.g. the overlay while
+        // it's hidden for its reveal burst). Cheap: re-rasterizes the ~100
+        // glyphs in use.
+        const PERIODIC: Duration = Duration::from_secs(30);
+        if std::mem::take(&mut self.font_atlas_stale)
+            || self.font_atlas_rebuilt_at.elapsed() >= PERIODIC
+        {
+            self.font_atlas_rebuilt_at = Instant::now();
+            // The app uses egui's default fonts (text sizes are set via the
+            // style in `theme::apply_dashboard_fonts`, not here).
+            ctx.set_fonts(egui::FontDefinitions::default());
+        }
+    }
+
     /// Sets and persists the displayed GPU (`None` = automatic, highest VRAM).
     /// Shared by the GPU panel's click dots, the tray "GPU" submenu, and the
     /// floating GPU panel. The wallpaper host picks the persisted value up on
@@ -1375,6 +1420,8 @@ impl eframe::App for RigStatsApp {
                 }
             }
         }
+
+        self.refresh_font_atlas_after_minimize(ui.ctx());
 
         // Drive the wallpaper-host lifecycle (spawn/supervise/teardown).
         #[cfg(windows)]
