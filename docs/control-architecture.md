@@ -106,9 +106,23 @@ installer migration cost; "rigstats-service" is used here as the concept name.
 
 - Owns the one `LibreHardwareMonitor.Hardware.Computer` instance already opened
   by `SensorWorker`.
-- Exposes a single `SemaphoreSlim` hardware lock. The telemetry tick and every
+- Exposes a single `SemaphoreSlim` hardware lock. The telemetry sample and every
   provider write take the same lock, so a fan write never interleaves with a
   Super I/O read.
+- **Current telemetry model (since #196), which HardwareHost must absorb:**
+  - There is no fixed telemetry tick. The telemetry pipe accepts several clients
+    at once (`MaxClients = 4`, one task per client). Each client asks
+    `SensorWorker.GetFreshLine()` once per second.
+  - That method re-samples LHM (`Computer.Accept` + `SensorReader.Extract`) only
+    when the cached JSON line is older than 900 ms, so LHM is still read at
+    most ~1 Hz no matter how many clients are connected. It is idle when no
+    client is connected.
+  - The sample is guarded by a plain C# `lock (_sampleLock)`. That lock
+    becomes the HardwareHost lock. It has to change to the `SemaphoreSlim`
+    above, because a `lock`/`Monitor` can't be held across `await`, and
+    provider writes are async.
+  - The telemetry wire format must stay byte-for-byte unchanged. Only the
+    locking moves.
 - Providers receive `IHardwareHost`, never a raw `Computer`, which keeps them
   testable.
 
