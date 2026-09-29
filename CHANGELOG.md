@@ -8,6 +8,29 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.41.0](https://github.com/dvalfrid/rigstats/compare/v1.40.0...v1.41.0) (2026-09-29)
+
+
+### Features
+
+* **gpu:** select displayed GPU from tray menu and Settings ([417c8db](https://github.com/dvalfrid/rigstats/commit/417c8db5897a0205afde291745b84666307afa1f)), closes [#197](https://github.com/dvalfrid/rigstats/issues/197)
+
+
+### Bug Fixes
+
+* **dialogs:** remove white flash when opening and closing dialogs ([42d81ba](https://github.com/dvalfrid/rigstats/commit/42d81ba81d9b9e92ea6fcb73fa5b2da9b78ccbe0)), closes [#203](https://github.com/dvalfrid/rigstats/issues/203)
+* **dialogs:** restore minimized dialogs when reopened from tray ([4acb04d](https://github.com/dvalfrid/rigstats/commit/4acb04d4a9fe7b24857db5e3b2a60819c8c75893))
+* **hardware:** query real Win32 classes in typed WMI queries ([e5db3df](https://github.com/dvalfrid/rigstats/commit/e5db3df6f61bc335245b88ccfed3f1016e4b8162)), closes [#198](https://github.com/dvalfrid/rigstats/issues/198)
+* **overlay:** make the font-atlas self-heal actually run ([ee601b7](https://github.com/dvalfrid/rigstats/commit/ee601b7baa90e0a177d81f46bad8919458c40175)), closes [#199](https://github.com/dvalfrid/rigstats/issues/199)
+* **overlay:** rebuild font atlas to recover lost glyph uploads ([d6fb3ff](https://github.com/dvalfrid/rigstats/commit/d6fb3ff0992774f04ad57b67c2bc47cf8bd28821)), closes [#199](https://github.com/dvalfrid/rigstats/issues/199)
+* **overlay:** reset click-through guard on re-activation ([c77b1b7](https://github.com/dvalfrid/rigstats/commit/c77b1b7373cf4fc70d12ad993b1ec6f20e9d973a)), closes [#194](https://github.com/dvalfrid/rigstats/issues/194)
+* **overlay:** show live values while in wallpaper mode ([3a6d9a0](https://github.com/dvalfrid/rigstats/commit/3a6d9a0c2085dc06e8fd65cbee34027f7b220a0b)), closes [#196](https://github.com/dvalfrid/rigstats/issues/196)
+
+
+### Performance Improvements
+
+* **startup:** replace remaining PowerShell detections with WMI ([6699f8c](https://github.com/dvalfrid/rigstats/commit/6699f8c2fa99e776a3b43111bce7610780b03dbb)), closes [#201](https://github.com/dvalfrid/rigstats/issues/201)
+
 ## [1.40.0](https://github.com/dvalfrid/rigstats/compare/v1.39.0...v1.40.0) (2026-09-28)
 
 
