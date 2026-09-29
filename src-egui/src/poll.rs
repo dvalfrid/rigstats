@@ -8,10 +8,49 @@ use crate::lock_ext::LockSafe;
 use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
+
+// ── Poll mode ─────────────────────────────────────────────────────────────────
+
+/// How much work `poll_loop` does per tick. Shared with the UI thread via
+/// [`PollModeHandle`] so it can be switched live.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PollMode {
+    /// Everything — the process that renders the dashboard.
+    Full,
+    /// Only what the game overlay needs: the main app in wallpaper mode with
+    /// the overlay on (the wallpaper host owns the dashboard). Skips the
+    /// GPU-per-app query, the top-process list, the drive list, and session
+    /// recording (the host records — recording here too would duplicate rows).
+    Light,
+    /// Nothing — the main app in wallpaper mode with the overlay off.
+    Paused,
+}
+
+/// Lock-free, cloneable handle to a [`PollMode`].
+#[derive(Clone)]
+pub struct PollModeHandle(Arc<AtomicU8>);
+
+impl PollModeHandle {
+    pub fn new(mode: PollMode) -> Self {
+        Self(Arc::new(AtomicU8::new(mode as u8)))
+    }
+
+    pub fn set(&self, mode: PollMode) {
+        self.0.store(mode as u8, Ordering::Relaxed);
+    }
+
+    pub fn get(&self) -> PollMode {
+        match self.0.load(Ordering::Relaxed) {
+            x if x == PollMode::Light as u8 => PollMode::Light,
+            x if x == PollMode::Paused as u8 => PollMode::Paused,
+            _ => PollMode::Full,
+        }
+    }
+}
 
 // ── Data types exchanged between poll thread and UI thread ────────────────────
 
@@ -209,7 +248,7 @@ pub async fn poll_loop(
     dir: PathBuf,
     preferred_gpu: Arc<Mutex<Option<String>>>,
     settings_arc: Arc<Mutex<settings::Settings>>,
-    paused: Arc<AtomicBool>,
+    mode: PollModeHandle,
 ) {
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
@@ -299,10 +338,12 @@ pub async fn poll_loop(
     let mut first_tick_logged = false;
 
     loop {
-        // Paused (the main app is in wallpaper mode): release the sensor pipe so
-        // the wallpaper host process can own it (it accepts one client at a time)
-        // and skip the whole tick to save CPU. The host does the polling instead.
-        if paused.load(Ordering::Relaxed) {
+        // Paused (the main app is in wallpaper mode with the overlay off): the
+        // wallpaper host does the polling, so release the sensor pipe and skip
+        // the whole tick to save CPU.
+        let current = mode.get();
+        let light = current == PollMode::Light;
+        if current == PollMode::Paused {
             {
                 let mut p = pipe.lock().await;
                 *p = None;
@@ -336,16 +377,21 @@ pub async fn poll_loop(
         let cpu_cores: Vec<u8> = sys.cpus().iter().map(|c| c.cpu_usage() as u8).collect();
         let uptime_secs = System::uptime();
 
+        // Light mode skips the per-panel lists below; the process refresh above
+        // is still needed for the disk read/write totals.
         let num_cpus = sys.cpus().len().max(1) as f32;
-        let mut processes: Vec<ProcessInfo> = sys
-            .processes()
-            .values()
-            .map(|p| ProcessInfo {
-                name: p.name().to_string(),
-                cpu: p.cpu_usage() / num_cpus,
-                mem_mb: p.memory() / 1_048_576,
-            })
-            .collect();
+        let mut processes: Vec<ProcessInfo> = if light {
+            Vec::new()
+        } else {
+            sys.processes()
+                .values()
+                .map(|p| ProcessInfo {
+                    name: p.name().to_string(),
+                    cpu: p.cpu_usage() / num_cpus,
+                    mem_mb: p.memory() / 1_048_576,
+                })
+                .collect()
+        };
         processes.sort_by(|a, b| {
             b.cpu
                 .partial_cmp(&a.cpu)
@@ -354,7 +400,9 @@ pub async fn poll_loop(
         processes.truncate(8);
 
         // Per-process GPU engine usage. Cheap (~a few ms) at 1 Hz.
-        let gpu_processes = if let Some(query) = &gpu_engine_query {
+        let gpu_processes = if light {
+            Vec::new()
+        } else if let Some(query) = &gpu_engine_query {
             // Refresh periodically regardless of whether the map is already
             // non-empty — not just when it's still empty. DXGI enumeration at
             // startup can race a slower-initialising adapter (e.g. an iGPU
@@ -381,10 +429,12 @@ pub async fn poll_loop(
             Vec::new()
         };
 
-        disks.refresh();
+        if !light {
+            disks.refresh();
+        }
         let mut disk_drives: Vec<DriveInfo> = disks
             .iter()
-            .filter(|d| d.total_space() > 1_000_000_000)
+            .filter(|d| !light && d.total_space() > 1_000_000_000)
             .map(|d| {
                 let total = d.total_space();
                 let used = total.saturating_sub(d.available_space());
@@ -635,10 +685,15 @@ pub async fn poll_loop(
         // active session lives in the on-disk index (not in-process state) so
         // both this app's poll loop and the separate `rigstats-wallpaper` host's
         // poll loop pick up a tray-started recording, whichever one is currently
-        // the active poller.
-        let active_session = logging::load_sessions(&dir)
-            .into_iter()
-            .find(logging::SessionMeta::is_active);
+        // the active poller. In light mode the host is polling too, so it
+        // records and this loop must not (that would duplicate every row).
+        let active_session = if light {
+            None
+        } else {
+            logging::load_sessions(&dir)
+                .into_iter()
+                .find(logging::SessionMeta::is_active)
+        };
         if let Some(session) = active_session {
             let payload = poll_stats_to_log_payload(&stats);
             if let Err(e) = logging::append_stats_row(&payload, &dir, &session) {

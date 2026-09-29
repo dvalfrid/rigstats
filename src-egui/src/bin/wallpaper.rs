@@ -8,8 +8,8 @@
 //! restart (which destroys the WorkerW hierarchy and any child window) cannot
 //! take down the main app — the supervisor relaunches the host instead. While
 //! active the host is the telemetry owner: it runs `poll_loop`, owns the sensor
-//! pipe, and does CSV logging (the main app stops polling in wallpaper mode, so
-//! the single-client pipe is never contended). See `docs/architecture.md`.
+//! pipe, and does CSV logging (the main app stops polling in wallpaper mode, or
+//! only polls in light mode to feed the game overlay). See `docs/architecture.md`.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::egui;
@@ -20,7 +20,7 @@ use rigstats_egui::geometry::{
     pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::gpu_guard::install_gpu_loss_guard;
-use rigstats_egui::poll::poll_loop;
+use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
 use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_wallpaper, win_opacity};
@@ -312,10 +312,8 @@ fn main() {
     // by the on-disk session index (see `poll_loop`), so a tray-started
     // recording in the main app is picked up here too even though this is a
     // separate process.
-    let never_paused = Arc::new(AtomicBool::new(false));
-    runtime.spawn(
-        async move { poll_loop(tx, dir_poll, pref_poll, settings_poll, never_paused).await },
-    );
+    let full = PollModeHandle::new(PollMode::Full);
+    runtime.spawn(async move { poll_loop(tx, dir_poll, pref_poll, settings_poll, full).await });
 
     let viewport = egui::ViewportBuilder::default()
         .with_title(TITLE)

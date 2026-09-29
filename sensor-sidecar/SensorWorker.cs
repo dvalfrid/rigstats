@@ -116,6 +116,32 @@ public sealed class SensorWorker : BackgroundService
         catch { }
     }
 
+    // Several clients can be connected at once (e.g. the wallpaper host plus the
+    // main app feeding the game overlay). LHM is not thread-safe and sampling is
+    // the expensive part, so all clients share one cached sample: whichever
+    // client finds it stale re-samples under the lock, the others reuse it.
+    private const int MaxClients = 4;
+    private const long SampleMaxAgeMs = 900;
+    private readonly object _sampleLock = new();
+    private string? _latestLine;
+    private long _latestAtMs;
+
+    private string GetFreshLine()
+    {
+        lock (_sampleLock)
+        {
+            var now = Environment.TickCount64;
+            if (_latestLine is null || now - _latestAtMs >= SampleMaxAgeMs)
+            {
+                _computer.Accept(_visitor);
+                var payload = SensorReader.Extract(_computer);
+                _latestLine = JsonSerializer.Serialize(payload, _jsonOptions);
+                _latestAtMs = now;
+            }
+            return _latestLine;
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -123,7 +149,7 @@ public sealed class SensorWorker : BackgroundService
             var pipe = NamedPipeServerStreamAcl.Create(
                 "rigstats-sensors",
                 PipeDirection.Out,
-                maxNumberOfServerInstances: 1,
+                maxNumberOfServerInstances: MaxClients,
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous,
                 inBufferSize: 0,
@@ -133,29 +159,42 @@ public sealed class SensorWorker : BackgroundService
             try
             {
                 await pipe.WaitForConnectionAsync(stoppingToken);
-                Log("[rigstats-sensor] Client connected.");
-
-                try
-                {
-                    using var writer = new StreamWriter(pipe) { AutoFlush = true };
-                    while (pipe.IsConnected && !stoppingToken.IsCancellationRequested)
-                    {
-                        _computer.Accept(_visitor);
-                        var payload = SensorReader.Extract(_computer);
-                        await writer.WriteLineAsync(JsonSerializer.Serialize(payload, _jsonOptions));
-                        await Task.Delay(1000, stoppingToken);
-                    }
-                }
-                catch (IOException) { }
-
-                Log("[rigstats-sensor] Client disconnected.");
             }
-            catch (OperationCanceledException) { }
-            finally
+            catch (OperationCanceledException)
             {
                 await pipe.DisposeAsync();
+                break;
+            }
+
+            // Serve this client in the background and immediately offer the
+            // next pipe instance to another client.
+            _ = ServeClientAsync(pipe, stoppingToken);
+        }
+    }
+
+    private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
+    {
+        Log("[rigstats-sensor] Client connected.");
+        try
+        {
+            using var writer = new StreamWriter(pipe) { AutoFlush = true };
+            while (pipe.IsConnected && !stoppingToken.IsCancellationRequested)
+            {
+                await writer.WriteLineAsync(GetFreshLine());
+                await Task.Delay(1000, stoppingToken);
             }
         }
+        catch (IOException) { }
+        catch (OperationCanceledException) { }
+        catch (Exception e)
+        {
+            Log($"[rigstats-sensor] Client error: {e.Message}");
+        }
+        finally
+        {
+            await pipe.DisposeAsync();
+        }
+        Log("[rigstats-sensor] Client disconnected.");
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)

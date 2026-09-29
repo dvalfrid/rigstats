@@ -13,7 +13,7 @@ use rigstats_egui::geometry::{
 use rigstats_egui::gpu_guard::install_gpu_loss_guard;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::overlay::{content_inset, draw_overlay, estimate_window_size};
-use rigstats_egui::poll::poll_loop;
+use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
 use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
 use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
@@ -167,9 +167,10 @@ struct RigStatsApp {
     /// drive fast repaints) so the true content height reliably sticks.
     startup_fit_frames: u8,
     // ── Wallpaper (WorkerW) mode ───────────────────────────────────────────
-    /// Shared with `poll_loop`: set while in wallpaper mode so this app stops
-    /// polling and releases the sensor pipe to the `rigstats-wallpaper` host.
-    poll_paused: Arc<AtomicBool>,
+    /// Shared with `poll_loop`: `Paused`/`Light` while in wallpaper mode, where
+    /// the `rigstats-wallpaper` host is the dashboard's poller (see
+    /// `update_wallpaper_mode`).
+    poll_mode: PollModeHandle,
     /// Handle to the spawned `rigstats-wallpaper` host process, if running.
     wallpaper_child: Option<std::process::Child>,
     /// True while wallpaper mode is active; used to detect enter/leave transitions.
@@ -311,7 +312,7 @@ impl RigStatsApp {
         updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
         updater_open: Arc<AtomicBool>,
         updater_focus: Arc<AtomicBool>,
-        poll_paused: Arc<AtomicBool>,
+        poll_mode: PollModeHandle,
         gpu_lost: Arc<AtomicBool>,
         gpu_started_at: Instant,
         gpu_retry_count: u32,
@@ -408,7 +409,7 @@ impl RigStatsApp {
             last_applied_window_size: None,
             last_fitted_height: None,
             startup_fit_frames: 12,
-            poll_paused,
+            poll_mode,
             wallpaper_child: None,
             wallpaper_active: false,
             wallpaper_last_spawn: None,
@@ -630,7 +631,6 @@ impl RigStatsApp {
                 return;
             }
             self.wallpaper_active = true;
-            self.poll_paused.store(true, Ordering::Relaxed);
             // Reset the respawn throttle for a fresh session, and force-reap any
             // host still draining from a just-left session so we never end up with
             // two hosts when the user toggles back in quickly.
@@ -670,7 +670,6 @@ impl RigStatsApp {
             debug::log_debug(&self.dir, "wallpaper: entering — parking main window");
         } else if !want && self.wallpaper_active {
             self.wallpaper_active = false;
-            self.poll_paused.store(false, Ordering::Relaxed);
             // Graceful teardown: the floating/layer flag was already persisted to
             // disk by the caller, so the host self-exits cleanly within ~1 s (its
             // wgpu device tears down properly). We DO NOT TerminateProcess it here
@@ -684,6 +683,17 @@ impl RigStatsApp {
             self.restore_main_window(ctx);
             debug::log_debug(&self.dir, "wallpaper: leaving — restoring main window");
         }
+
+        // In wallpaper mode the host owns the dashboard; this app only polls
+        // (lightly) to feed the game overlay. Set every frame so an overlay
+        // toggle takes effect immediately.
+        self.poll_mode.set(if !self.wallpaper_active {
+            PollMode::Full
+        } else if self.overlay_enabled {
+            PollMode::Light
+        } else {
+            PollMode::Paused
+        });
 
         // Drain a host that is shutting down after leaving wallpaper mode: reap it
         // once it has self-exited; kill() only as a fallback if it overruns the
@@ -2997,12 +3007,12 @@ fn main() {
     let dir_clone = dir.clone();
     let pref_poll = preferred_gpu_arc.clone();
     let settings_poll = current_settings_shared.clone();
-    // Pause flag: set while in wallpaper mode so this app releases the sensor
-    // pipe to the `rigstats-wallpaper` host (which becomes the active poller).
-    let poll_paused = Arc::new(AtomicBool::new(false));
-    let poll_paused_loop = poll_paused.clone();
+    // Poll mode: switched by `update_wallpaper_mode` while in wallpaper mode,
+    // where the `rigstats-wallpaper` host becomes the dashboard's poller.
+    let poll_mode = PollModeHandle::new(PollMode::Full);
+    let poll_mode_loop = poll_mode.clone();
     runtime.spawn(async move {
-        poll_loop(tx, dir_clone, pref_poll, settings_poll, poll_paused_loop).await
+        poll_loop(tx, dir_clone, pref_poll, settings_poll, poll_mode_loop).await
     });
 
     // Wallpaper mode at startup: the host owns the on-screen dashboard, so place
@@ -3412,7 +3422,7 @@ fn main() {
                 updater_win_bg,
                 updater_open_bg,
                 updater_focus_bg,
-                poll_paused,
+                poll_mode,
                 gpu_lost,
                 gpu_started_at,
                 gpu_retry_count,

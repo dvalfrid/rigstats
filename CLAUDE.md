@@ -108,7 +108,7 @@ Cargo workspace with two members:
 | `rigstats-backend` | `rigstats-backend/` | Shared lib — telemetry, hardware detection, settings, logging |
 | `rigstats-egui` | `src-egui/` | egui library (`lib.rs`) + two binaries: `rigstats` (main app) and `rigstats-wallpaper` (WorkerW host). Both embed `dashboard::DashboardRuntime` and render via `dashboard::DashboardView`. |
 
-Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts one client at a time — in wallpaper mode only the host polls; the main app pauses its `poll_loop` via `poll_paused`.
+Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts several clients that share one cached sample per second. In wallpaper mode the host is the dashboard's poller; the main app's `poll_loop` (`PollMode` via `poll_mode`) is `Paused`, or `Light` while the game overlay is on (overlay metrics only — no per-app lists, no session recording).
 
 ### egui binary (`src-egui/src/`)
 
