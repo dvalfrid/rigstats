@@ -10,9 +10,10 @@
 use winapi::{
     shared::windef::HWND,
     um::winuser::{
-        FindWindowW, GetWindowLongW, SetForegroundWindow, SetLayeredWindowAttributes,
-        SetWindowLongW, SetWindowPos, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
+        FindWindowW, GetWindowLongW, IsIconic, SetForegroundWindow, SetLayeredWindowAttributes,
+        SetWindowLongW, SetWindowPos, ShowWindow, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED,
+        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, WS_EX_LAYERED,
+        WS_EX_NOREDIRECTIONBITMAP,
     },
 };
 
@@ -87,14 +88,23 @@ pub fn set_no_redirection_bitmap(hwnd: isize) {
     }
 }
 
-/// Bring the window to the foreground using Win32 SetForegroundWindow.
-/// Used after show_viewport_immediate to ensure newly opened dialogs get focus.
-/// Requires AllowSetForegroundWindow to have been called previously in the tray thread.
+/// Bring the window to the foreground using Win32 SetForegroundWindow,
+/// restoring it first if it's minimized. Used after show_viewport_immediate to
+/// ensure newly opened dialogs get focus. Requires AllowSetForegroundWindow to
+/// have been called previously in the tray thread.
+///
+/// The restore matters because dialogs have no taskbar button: once minimized
+/// (e.g. by Win+D / "Show desktop" — common in Desktop Wallpaper mode) the
+/// tray entry is the only way back, and SetForegroundWindow alone leaves a
+/// minimized window parked off-screen, so the dialog looked impossible to open.
 pub fn bring_to_foreground(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
     unsafe {
+        if IsIconic(hwnd as HWND) != 0 {
+            ShowWindow(hwnd as HWND, SW_RESTORE);
+        }
         SetForegroundWindow(hwnd as HWND);
     }
 }
