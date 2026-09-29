@@ -268,6 +268,10 @@ struct RigStatsApp {
     font_atlas_stale: bool,
     /// Last forced font-atlas rebuild (see `refresh_font_atlas_after_minimize`).
     font_atlas_rebuilt_at: Instant,
+    /// Flips on every forced rebuild so the `FontDefinitions` passed to
+    /// `set_fonts` always differs from whatever it last saw — `set_fonts`
+    /// silently no-ops otherwise (see `refresh_font_atlas_after_minimize`).
+    font_atlas_toggle: bool,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
     /// Keeps each freshly opened dialog hidden until it has rendered (no
@@ -464,6 +468,7 @@ impl RigStatsApp {
             recording_blink_on: true,
             font_atlas_stale: false,
             font_atlas_rebuilt_at: Instant::now(),
+            font_atlas_toggle: false,
             battery_present,
             dialog_reveal: DialogReveal::default(),
             recording_blink_at: Instant::now(),
@@ -1220,9 +1225,29 @@ impl RigStatsApp {
         {
             self.font_atlas_rebuilt_at = Instant::now();
             // The app uses egui's default fonts (text sizes are set via the
-            // style in `theme::apply_dashboard_fonts`, not here).
-            ctx.set_fonts(egui::FontDefinitions::default());
+            // style in `theme::apply_dashboard_fonts`, not here) — but
+            // `set_fonts` only schedules a rebuild if the passed-in
+            // `FontDefinitions` differs from what's currently active (see
+            // `Context::set_fonts`), so passing `default()` unchanged every
+            // time is a silent no-op forever. Alternate a sub-pixel,
+            // invisible nudge so it always compares unequal.
+            self.font_atlas_toggle = !self.font_atlas_toggle;
+            ctx.set_fonts(Self::font_definitions_for_rebuild(self.font_atlas_toggle));
         }
+    }
+
+    /// `FontDefinitions::default()` with an imperceptible nudge to the
+    /// primary font's tweak, alternated by `toggle` — see the call site in
+    /// `refresh_font_atlas_after_minimize` for why this is needed instead of
+    /// just passing `default()` directly.
+    fn font_definitions_for_rebuild(toggle: bool) -> egui::FontDefinitions {
+        let mut defs = egui::FontDefinitions::default();
+        if let Some(hack) = defs.font_data.get_mut("Hack") {
+            let mut data = (**hack).clone();
+            data.tweak.scale = if toggle { 1.0 + f32::EPSILON } else { 1.0 };
+            *hack = std::sync::Arc::new(data);
+        }
+        defs
     }
 
     /// Shared tail of every dialog's per-frame render (Settings, About,
@@ -3619,4 +3644,30 @@ fn main() {
 
     debug::append_debug_log(&dir, "shutdown: clean");
     runtime.shutdown_background();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression test for #199: `egui::Context::set_fonts` silently no-ops
+    /// if the passed-in `FontDefinitions` compares equal to what's already
+    /// active. `refresh_font_atlas_after_minimize` depends on
+    /// `font_definitions_for_rebuild(true)` and `(false)` always differing —
+    /// if a future edit collapses this back to a plain `default()` call (or
+    /// otherwise makes the two toggle states identical), the periodic/
+    /// minimize-triggered atlas rebuild becomes a dead no-op again, exactly
+    /// as it silently was before this fix, with no test failure to catch it.
+    #[test]
+    fn font_definitions_for_rebuild_toggle_states_differ() {
+        let off = RigStatsApp::font_definitions_for_rebuild(false);
+        let on = RigStatsApp::font_definitions_for_rebuild(true);
+        let scale = |defs: &egui::FontDefinitions| defs.font_data["Hack"].tweak.scale;
+        assert_ne!(
+            scale(&off),
+            scale(&on),
+            "the two toggle states must differ, or set_fonts's equality check \
+             will silently suppress every rebuild"
+        );
+    }
 }
