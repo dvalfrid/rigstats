@@ -14,17 +14,28 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
   <!--
     The production sidecar project is a self-contained single-file Exe, which a
-    test library cannot ProjectReference (NETSDK1150). SensorReader.cs has no
-    dependency beyond LibreHardwareMonitorLib (referenced above), so we compile
-    the file directly into the test assembly instead. This keeps the shipped
-    sidecar build untouched.
+    test library cannot ProjectReference (NETSDK1150). These files have no
+    dependency beyond what's referenced above, so we compile them directly
+    into the test assembly instead. This keeps the shipped sidecar build
+    untouched.
   -->
   <ItemGroup>
     <Compile Include="..\sensor-sidecar\SensorReader.cs" Link="SensorReader.cs" />
+    <Compile Include="..\sensor-sidecar\SensorWorker.cs" Link="SensorWorker.cs" />
+    <Compile Include="..\sensor-sidecar\Control\ControlProtocol.cs" Link="Control\ControlProtocol.cs" />
+    <Compile Include="..\sensor-sidecar\Control\SidecarLog.cs" Link="Control\SidecarLog.cs" />
+    <Compile Include="..\sensor-sidecar\Control\HardwareHost.cs" Link="Control\HardwareHost.cs" />
+    <Compile Include="..\sensor-sidecar\Control\ControlBroker.cs" Link="Control\ControlBroker.cs" />
+    <Compile Include="..\sensor-sidecar\Control\SafetyGuard.cs" Link="Control\SafetyGuard.cs" />
+    <Compile Include="..\sensor-sidecar\Control\ProfileStore.cs" Link="Control\ProfileStore.cs" />
+    <Compile Include="..\sensor-sidecar\Control\PipeClientVerifier.cs" Link="Control\PipeClientVerifier.cs" />
+    <Compile Include="..\sensor-sidecar\Control\ControlPipeWorker.cs" Link="Control\ControlPipeWorker.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\PowerPlanProvider.cs" Link="Control\Providers\PowerPlanProvider.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

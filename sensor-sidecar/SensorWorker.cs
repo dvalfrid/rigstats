@@ -1,62 +1,15 @@
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text.Json;
 using LibreHardwareMonitor.Hardware;
 using Microsoft.Extensions.Hosting;
+using SensorSidecar.Control;
 
 namespace SensorSidecar;
 
-public sealed class SensorWorker : BackgroundService
+public sealed class SensorWorker(IHardwareHost hardwareHost) : BackgroundService
 {
-    private static readonly string LogPath =
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "se.codeby.rigstats",
-            "rigstats-sensor.log");
-
-    private static void Log(string message)
-    {
-        var line = $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {message}";
-        Console.Error.WriteLine(line);
-        try
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-            File.AppendAllText(LogPath, line + Environment.NewLine);
-        }
-        catch { }
-    }
-
-    // Keep the log from growing indefinitely: when it exceeds 512 KB, truncate
-    // to the last 500 lines so recent context is always preserved.
-    private static void TruncateLogIfNeeded()
-    {
-        try
-        {
-            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
-            {
-                var lines = File.ReadAllLines(LogPath);
-                File.WriteAllLines(LogPath, lines.TakeLast(500));
-            }
-        }
-        catch { }
-    }
-
-    private readonly Computer _computer = new()
-    {
-        IsCpuEnabled = true,
-        IsGpuEnabled = true,
-        IsMemoryEnabled = true,
-        IsMotherboardEnabled = true,
-        IsStorageEnabled = true,
-    };
-
-    private readonly UpdateVisitor _visitor = new();
-
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-    };
+    private readonly IHardwareHost _hardwareHost = hardwareHost;
 
     // Allow BUILTIN\Users read access so user-mode RIGStats can connect when
     // this service runs as LocalSystem in session 0.
@@ -84,63 +37,19 @@ public sealed class SensorWorker : BackgroundService
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {
-        TruncateLogIfNeeded();
-        _computer.Open();
-        Log("[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\rigstats-sensors");
-        WriteSensorTree();
+        SidecarLog.TruncateIfNeeded();
+        SidecarLog.Log("[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\rigstats-sensors");
+        _hardwareHost.WriteSensorTree(SensorTreePath);
         return base.StartAsync(cancellationToken);
-    }
-
-    private void WriteSensorTree()
-    {
-        try
-        {
-            _computer.Accept(_visitor);
-            var lines = new System.Text.StringBuilder();
-            lines.AppendLine($"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
-            foreach (var hw in _computer.Hardware)
-            {
-                lines.AppendLine($"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
-                foreach (var s in hw.Sensors)
-                    lines.AppendLine($"  S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
-                foreach (var sub in hw.SubHardware)
-                {
-                    lines.AppendLine($"  SUB {sub.HardwareType,-18} id={sub.Identifier} name={sub.Name}");
-                    foreach (var s in sub.Sensors)
-                        lines.AppendLine($"    S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
-                }
-            }
-            Directory.CreateDirectory(Path.GetDirectoryName(SensorTreePath)!);
-            File.WriteAllText(SensorTreePath, lines.ToString());
-        }
-        catch { }
     }
 
     // Several clients can be connected at once (e.g. the wallpaper host plus the
     // main app feeding the game overlay). LHM is not thread-safe and sampling is
-    // the expensive part, so all clients share one cached sample: whichever
-    // client finds it stale re-samples under the lock, the others reuse it.
+    // the expensive part, so all clients share one cached sample via
+    // `IHardwareHost.GetTelemetryLineAsync` (see `Control/HardwareHost.cs`):
+    // whichever client finds it stale re-samples under the lock, the others
+    // reuse it.
     private const int MaxClients = 4;
-    private const long SampleMaxAgeMs = 900;
-    private readonly object _sampleLock = new();
-    private string? _latestLine;
-    private long _latestAtMs;
-
-    private string GetFreshLine()
-    {
-        lock (_sampleLock)
-        {
-            var now = Environment.TickCount64;
-            if (_latestLine is null || now - _latestAtMs >= SampleMaxAgeMs)
-            {
-                _computer.Accept(_visitor);
-                var payload = SensorReader.Extract(_computer);
-                _latestLine = JsonSerializer.Serialize(payload, _jsonOptions);
-                _latestAtMs = now;
-            }
-            return _latestLine;
-        }
-    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -174,13 +83,13 @@ public sealed class SensorWorker : BackgroundService
 
     private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
     {
-        Log("[rigstats-sensor] Client connected.");
+        SidecarLog.Log("[rigstats-sensor] Client connected.");
         try
         {
             using var writer = new StreamWriter(pipe) { AutoFlush = true };
             while (pipe.IsConnected && !stoppingToken.IsCancellationRequested)
             {
-                await writer.WriteLineAsync(GetFreshLine());
+                await writer.WriteLineAsync(await _hardwareHost.GetTelemetryLineAsync(stoppingToken));
                 await Task.Delay(1000, stoppingToken);
             }
         }
@@ -188,19 +97,18 @@ public sealed class SensorWorker : BackgroundService
         catch (OperationCanceledException) { }
         catch (Exception e)
         {
-            Log($"[rigstats-sensor] Client error: {e.Message}");
+            SidecarLog.Log($"[rigstats-sensor] Client error: {e.Message}");
         }
         finally
         {
             await pipe.DisposeAsync();
         }
-        Log("[rigstats-sensor] Client disconnected.");
+        SidecarLog.Log("[rigstats-sensor] Client disconnected.");
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        _computer.Close();
-        Log("[rigstats-sensor] Stopped.");
+        SidecarLog.Log("[rigstats-sensor] Stopped.");
         return base.StopAsync(cancellationToken);
     }
 }

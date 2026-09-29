@@ -1,0 +1,138 @@
+using LibreHardwareMonitor.Hardware;
+using Microsoft.Extensions.Hosting;
+using SensorSidecar; // UpdateVisitor, SensorReader
+
+namespace SensorSidecar.Control;
+
+/// The one thing allowed to touch the shared LHM `Computer` instance — every
+/// telemetry read and every provider write goes through here, under the same
+/// lock, so a fan write never interleaves with a Super I/O read. Extracted
+/// from `SensorWorker`'s own `_computer`/`_sampleLock`/`GetFreshLine()`
+/// (see `docs/control-architecture.md`, "HardwareHost"); the telemetry wire
+/// format is unchanged, only the ownership moved.
+public interface IHardwareHost
+{
+    /// The cached telemetry JSON line, re-sampling LHM only if the cache is
+    /// stale (replaces `SensorWorker.GetFreshLine()`).
+    Task<string> GetTelemetryLineAsync(CancellationToken ct);
+
+    /// Exclusive access to the raw `Computer` for a provider's `Capture`/
+    /// `Apply`/`Verify`. Unused by `PowerPlanProvider` (power plan is an OS
+    /// API, not LHM hardware) — for future providers (fan #188, etc.).
+    Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct);
+
+    /// Dumps the full sensor tree to disk for diagnostics.
+    void WriteSensorTree(string path);
+}
+
+public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
+{
+    private const long SampleMaxAgeMs = 900;
+
+    private readonly Computer _computer;
+    private readonly UpdateVisitor _visitor = new();
+    private readonly System.Text.Json.JsonSerializerOptions _telemetryJsonOptions = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower,
+    };
+
+    // A `lock`/`Monitor` can't be held across `await`, and provider `Apply`
+    // calls are async — a semaphore is the async-safe equivalent of the
+    // sample lock this replaces.
+    private readonly SemaphoreSlim _hardwareLock = new(1, 1);
+
+    private string? _latestLine;
+    private long _latestAtMs;
+
+    public HardwareHost()
+    {
+        _computer = new Computer
+        {
+            IsCpuEnabled = true,
+            IsGpuEnabled = true,
+            IsMemoryEnabled = true,
+            IsMotherboardEnabled = true,
+            IsStorageEnabled = true,
+        };
+    }
+
+    // IHostedService: opening/closing the shared Computer is lifecycle-bound
+    // to the whole service, not to any one worker — registered in
+    // `Program.cs` as both the `IHardwareHost` singleton and a hosted
+    // service resolving to that same instance.
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        _computer.Open();
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        _computer.Close();
+        return Task.CompletedTask;
+    }
+
+    /// Dumps the full sensor tree to disk for diagnostics — same shape as
+    /// `SensorWorker`'s previous `WriteSensorTree`, kept here since it reads
+    /// the same `_computer`/`_visitor`.
+    public void WriteSensorTree(string path)
+    {
+        try
+        {
+            _computer.Accept(_visitor);
+            var lines = new System.Text.StringBuilder();
+            lines.AppendLine($"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
+            foreach (var hw in _computer.Hardware)
+            {
+                lines.AppendLine($"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
+                foreach (var s in hw.Sensors)
+                    lines.AppendLine($"  S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                foreach (var sub in hw.SubHardware)
+                {
+                    lines.AppendLine($"  SUB {sub.HardwareType,-18} id={sub.Identifier} name={sub.Name}");
+                    foreach (var s in sub.Sensors)
+                        lines.AppendLine($"    S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                }
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, lines.ToString());
+        }
+        catch { }
+    }
+
+    public async Task<string> GetTelemetryLineAsync(CancellationToken ct)
+    {
+        await _hardwareLock.WaitAsync(ct);
+        try
+        {
+            var now = Environment.TickCount64;
+            if (_latestLine is null || now - _latestAtMs >= SampleMaxAgeMs)
+            {
+                _computer.Accept(_visitor);
+                var payload = SensorReader.Extract(_computer);
+                _latestLine = System.Text.Json.JsonSerializer.Serialize(payload, _telemetryJsonOptions);
+                _latestAtMs = now;
+            }
+            return _latestLine;
+        }
+        finally
+        {
+            _hardwareLock.Release();
+        }
+    }
+
+    public async Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct)
+    {
+        await _hardwareLock.WaitAsync(ct);
+        try
+        {
+            return action(_computer);
+        }
+        finally
+        {
+            _hardwareLock.Release();
+        }
+    }
+
+    public void Dispose() => _hardwareLock.Dispose();
+}

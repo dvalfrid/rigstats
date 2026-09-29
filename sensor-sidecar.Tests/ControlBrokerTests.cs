@@ -1,0 +1,144 @@
+using NSubstitute;
+using SensorSidecar.Control;
+using Xunit;
+
+namespace SensorSidecar.Tests;
+
+/// <summary>
+/// The doc-mandated broker guarantee: "a provider that fails mid-transaction
+/// must trigger full rollback." <see cref="ControlBroker"/> must never leave
+/// a profile apply half-done.
+/// </summary>
+public class ControlBrokerTests
+{
+    private static IControlProvider FakeProvider(string domain, bool verifyOk = true)
+    {
+        var p = Substitute.For<IControlProvider>();
+        p.Domain.Returns(domain);
+        p.Validate(Arg.Any<ProfilePart>()).Returns(ValidationResult.Success());
+        p.Capture().Returns(new Snapshot { Domain = domain });
+        p.Verify(Arg.Any<ProfilePart>()).Returns(verifyOk);
+        return p;
+    }
+
+    private static Profile ProfileWith(ProfilePart part) =>
+        new() { Id = "test", Name = "Test", Part = part };
+
+    [Fact]
+    public async Task ApplyProfileAsync_happy_path_applies_and_verifies_every_affected_domain()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        var broker = new ControlBroker([powerPlan]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced" }), CancellationToken.None);
+
+        Assert.True(result.Ok);
+        powerPlan.Received(1).Apply(Arg.Any<ProfilePart>());
+        powerPlan.Received(1).Verify(Arg.Any<ProfilePart>());
+        powerPlan.DidNotReceive().Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task ApplyProfileAsync_skips_domains_with_no_registered_provider()
+    {
+        var broker = new ControlBroker([]); // no providers at all
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced" }), CancellationToken.None);
+
+        Assert.True(result.Ok); // nothing to do is not a failure.
+    }
+
+    [Fact]
+    public async Task ApplyProfileAsync_rejects_up_front_without_applying_anything_when_validation_fails()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        powerPlan.Validate(Arg.Any<ProfilePart>()).Returns(ValidationResult.Failure("nope"));
+        var broker = new ControlBroker([powerPlan]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced" }), CancellationToken.None);
+
+        Assert.False(result.Ok);
+        powerPlan.DidNotReceive().Apply(Arg.Any<ProfilePart>());
+    }
+
+    [Fact]
+    public async Task ApplyProfileAsync_rolls_back_every_already_applied_provider_in_reverse_order_on_failure()
+    {
+        // power_plan and cpu_limit both apply cleanly; curve_opt's Apply throws.
+        // power_plan and cpu_limit must both be Restored, curve_opt (never
+        // successfully applied) must not be.
+        var order = new List<string>();
+
+        var powerPlan = FakeProvider("power_plan");
+        powerPlan.When(p => p.Restore(Arg.Any<Snapshot>())).Do(_ => order.Add("power_plan"));
+
+        var cpuLimit = FakeProvider("cpu_limit");
+        cpuLimit.When(p => p.Restore(Arg.Any<Snapshot>())).Do(_ => order.Add("cpu_limit"));
+
+        var curveOpt = FakeProvider("curve_opt");
+        curveOpt.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ => throw new InvalidOperationException("locked by BIOS"));
+
+        var broker = new ControlBroker([powerPlan, cpuLimit, curveOpt]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart
+            {
+                PowerPlan = "balanced",
+                CpuLimit = System.Text.Json.Nodes.JsonValue.Create("x"),
+                CurveOpt = System.Text.Json.Nodes.JsonValue.Create("y"),
+            }),
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Contains("locked by BIOS", result.Message);
+
+        // Applied in fixed order (power_plan, cpu_limit) then curve_opt failed —
+        // rollback must be in reverse order of what was actually applied.
+        Assert.Equal(["cpu_limit", "power_plan"], order);
+
+        curveOpt.DidNotReceive().Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task ApplyProfileAsync_rolls_back_when_verify_fails_even_though_apply_succeeded()
+    {
+        var powerPlan = FakeProvider("power_plan", verifyOk: false);
+        var broker = new ControlBroker([powerPlan]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced" }), CancellationToken.None);
+
+        Assert.False(result.Ok);
+        powerPlan.Received(1).Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task ApplyProfileAsync_serializes_concurrent_transactions()
+    {
+        var concurrent = 0;
+        var maxConcurrent = 0;
+        var provider = Substitute.For<IControlProvider>();
+        provider.Domain.Returns("power_plan");
+        provider.Validate(Arg.Any<ProfilePart>()).Returns(ValidationResult.Success());
+        provider.Capture().Returns(new Snapshot { Domain = "power_plan" });
+        provider.Verify(Arg.Any<ProfilePart>()).Returns(true);
+        provider.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ =>
+        {
+            var c = Interlocked.Increment(ref concurrent);
+            maxConcurrent = Math.Max(maxConcurrent, c);
+            Thread.Sleep(20);
+            Interlocked.Decrement(ref concurrent);
+        });
+
+        var broker = new ControlBroker([provider]);
+        var profile = ProfileWith(new ProfilePart { PowerPlan = "balanced" });
+
+        await Task.WhenAll(Enumerable.Range(0, 5)
+            .Select(_ => broker.ApplyProfileAsync(profile, CancellationToken.None)));
+
+        Assert.Equal(1, maxConcurrent);
+    }
+}
