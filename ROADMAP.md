@@ -2,6 +2,12 @@
 
 Planned features in rough priority order. Each item is scoped as a self-contained release.
 
+> **Historical notes:** the "Implementation notes" / "Behavior" text under
+> completed (✅) items records how a feature was built *at the time*. Up to
+> v1.27 RIGStats was a Tauri/WebView2 app, so older entries mention Tauri
+> commands, plugins and JS. For the current architecture see
+> [docs/architecture.md](docs/architecture.md).
+
 ---
 
 ## Status overview
@@ -800,8 +806,9 @@ reparented window and kill the app. Instead a dedicated **`rigstats-wallpaper`**
 host process owns the wallpaper window:
 
 1. The main `rigstats` app, on entering wallpaper mode, parks its own window
-   off-screen, **pauses its sensor polling** (releasing the single-client sensor
-   pipe), and spawns + supervises the host. It relaunches the host if it exits
+   off-screen, **pauses its sensor polling** (or polls only overlay metrics
+   while the game overlay is on — the sensor pipe serves several clients since
+   #196), and spawns + supervises the host. It relaunches the host if it exits
    and kills it on leaving the mode or quitting.
 2. The host finds the desktop `WorkerW` (on Windows 11 a child of `Progman`;
    on older Windows 10 the top-level sibling created by

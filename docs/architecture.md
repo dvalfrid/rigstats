@@ -130,12 +130,15 @@ rig-dashboard/
 │   │   ├── bin/wallpaper.rs  `rigstats-wallpaper` bin: WorkerW desktop-wallpaper host
 │   │   ├── dashboard.rs    Shared DashboardView render core + PanelThresholds
 │   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
-│   │   ├── poll.rs         Poll thread, PollStats/DriveInfo/ProcessInfo data types
+│   │   ├── poll.rs         Poll thread (PollMode Full/Light/Paused), PollStats/DriveInfo/ProcessInfo
+│   │   ├── alerts.rs       Pure threshold-breach detection (pending_alerts); cooldowns/notify in main.rs
+│   │   ├── dcomp_burst.rs  DcompRevealBurst — hidden reveal policy for per-pixel-transparent viewports
+│   │   ├── dialog_reveal.rs DialogReveal — dialogs hidden until rendered, hidden before torn down
 │   │   ├── gpu_process.rs  Per-process GPU engine % via PDH \GPU Engine counters + DXGI LUID→adapter map
 │   │   ├── gpu_guard.rs    wgpu device-loss guard (uncaptured-error/device-lost callbacks)
 │   │   ├── overlay.rs      Overlay mode: selectable metric registry + compact chip renderer
 │   │   ├── hotkey.rs       Global hotkey listener (fixed Ctrl+Alt+O — overlay show/hide toggle)
-│   │   ├── tray.rs         System tray icon, menu, TrayCmd, panel-label helpers
+│   │   ├── tray.rs         System tray icon, menu (incl. GPU submenu), TrayCmd, panel-label helpers
 │   │   ├── menu_icons.rs   Procedurally-drawn tray context-menu glyph icons
 │   │   ├── lock_ext.rs     LockSafe — poison-tolerant `.lock_safe()` mutex helper
 │   │   ├── theme.rs        AppTheme, colours, panel_frame(), dialog button API
@@ -144,7 +147,7 @@ rig-dashboard/
 │   │   ├── ring.rs         Ring gauge renderer
 │   │   ├── spark.rs        Sparkline ring buffer
 │   │   ├── update_check.rs Update detection, download, installer launch
-│   │   ├── win_opacity.rs  SetLayeredWindowAttributes wrapper
+│   │   ├── win_opacity.rs  Window opacity, DComp/DWM window styles, foreground/restore, force_repaint
 │   │   ├── win32_dark_mode.rs  Dark-mode tray context menu
 │   │   ├── win32_wallpaper.rs  Progman/WorkerW discovery + SetParent reparenting
 │   │   ├── win32_behind.rs Always-Behind window layer: apply_behind/prepare_for_drag/keep_behind
@@ -155,7 +158,7 @@ rig-dashboard/
 │   └── Cargo.toml
 ├── rigstats-backend/       Shared Rust lib (telemetry, hardware, settings)
 │   └── src/
-│       ├── stats.rs        StatsPayload and all sub-structs, HardwareInfo, AppState
+│       ├── stats.rs        StatsPayload + sub-structs (session-recording row shape), DiskKind
 │       ├── hardware.rs     WMI/PowerShell hardware detection at startup
 │       ├── lhm.rs          Named pipe client → LhmData; GPU selection
 │       ├── lhm_process.rs  LHM connection state tracking
@@ -164,7 +167,8 @@ rig-dashboard/
 │       ├── logging.rs      Session-based CSV stats logging, sessions.json index
 │       └── debug.rs        Debug log helpers
 ├── sensor-sidecar/         .NET 10 C# sidecar (rigstats-sensor.exe)
-│   ├── Program.cs          Entry point, pipe server loop
+│   ├── Program.cs          Entry point (Windows service host)
+│   ├── SensorWorker.cs     LHM Computer, multi-client telemetry pipe server, shared ≤1 Hz sample
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
 │   └── sensor-sidecar.csproj
 ├── sensor-sidecar.Tests/   xUnit tests: SensorReader.Extract rules + JSON contract
@@ -186,8 +190,8 @@ rig-dashboard/
 
 | Module | Responsibility |
 | --- | --- |
-| `stats.rs` | `StatsPayload` and all sub-structs; `HardwareInfo` (startup constants) and `AppState` (per-tick state) |
-| `hardware.rs` | WMI/PowerShell hardware detection at startup |
+| `stats.rs` | `StatsPayload` and its sub-structs — the serialisable row shape for session recording (built from `PollStats`); `DiskKind` |
+| `hardware.rs` | Hardware detection via WMI (PowerShell only as a fallback when WMI fails) |
 | `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
 | `lhm_process.rs` | `track_lhm_connection_state` — sidecar pipe connect/disconnect logging, 30 s "still offline" throttle |
 | `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
@@ -204,20 +208,23 @@ rig-dashboard/
 | `bin/wallpaper.rs` | `rigstats-wallpaper` bin: minimal eframe host that renders the dashboard into the desktop WorkerW layer |
 | `dashboard.rs` | `DashboardRuntime` (owned telemetry→renderer glue: sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView` (borrowed per-frame render state + `draw_one_panel`/`render_landscape_grid`); `PanelThresholds` |
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
-| `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping; pauses (releases the sensor pipe) when the main app is in wallpaper mode |
+| `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping. `PollMode` (shared via `PollModeHandle`): `Full` normally; in wallpaper mode (the host is the dashboard's poller) `Light` while the overlay is on — overlay metrics only, no per-app lists, no session recording — else `Paused` |
+| `alerts.rs` | `pending_alerts` — pure warn/crit threshold-breach detection (no I/O, unit-tested); `notify_on_*` checks, per-alert cooldowns and sending the notification are the caller's job in `main.rs` |
+| `dcomp_burst.rs` | `DcompRevealBurst` — decision logic for revealing a per-pixel-transparent (DComp) viewport only after its style/resize burst settles; used by the overlay and floating panels |
+| `dialog_reveal.rs` | `DialogReveal` — each dialog window is created hidden and revealed after it has rendered, and hidden for one frame before it's torn down (no white flash on open/close); see the dialog lifecycle under `windows/` below |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
 | `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process |
 | `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract` fn/`color` fn) and `draw_overlay` — the compact chip renderer for the overlay add-on |
 | `hotkey.rs` | Global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on a dedicated thread) — fixed `Ctrl+Alt+O`, shows/hides the overlay |
-| `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h` |
+| `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h`. `GpuMenu`: the "GPU ▸" submenu (Automatic + one check row per adapter), filled in once background adapter detection reports back; rows use deterministic ids decoded by `gpu_choice_from_menu_id` |
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
 | `lock_ext.rs` | `LockSafe` trait — `.lock_safe()` recovers a poisoned `Mutex` instead of panicking; used throughout `windows/*.rs` |
 | `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API, `apply_dashboard_fonts` |
 | `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
 | `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
-| `win_opacity.rs` | `SetLayeredWindowAttributes` wrapper for window-level opacity |
-| `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals |
+| `win_opacity.rs` | Raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores a minimized window first), `force_repaint`, `find_hwnd` |
+| `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals; `apply_titlebar_theme` (dark DWM title bar per dialog) |
 | `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
@@ -232,18 +239,18 @@ Entry point: settings load, window placement, and `eframe::run_native`, hosting 
 
 #### `stats.rs`
 
-Defines two shared state structs and all serializable telemetry payload
-structs.
-
-**`HardwareInfo`** — startup-detected constants, held behind a `Mutex` and read once at poll-thread start: `disk_model_map`, `ram_spec`, `ram_details`, `gpu_vram_total_mb`, `system_brand`, `mb_name`, `ping_target`, `sysinfo_available`, `wmi_available`.
-
-**`AppState`** — per-tick mutable state behind a `Mutex`: `lhm_pipe`, `settings`, `system`, `disks`, `networks`, `last_net_sample`, `last_ping_sample`, `last_lhm`, `last_alert`, `last_battery_sample`, `last_log_prune_day`. (Note: this struct is currently unused — nothing in `src-egui` constructs an `AppState`; see the note in Design Decisions.)
+Defines the serialisable `StatsPayload` and its sub-structs — the row shape
+written by session recording (`logging::append_stats_row`), built from each
+tick's `PollStats` by `poll_stats_to_log_payload` in `src-egui/src/poll.rs`.
+Live per-tick state (sysinfo collectors, the sensor-pipe reader, ping/battery
+caches, startup detection results) is held as locals of each `poll_loop`,
+not in a shared struct.
 
 **Payload structs:**
 
 | Struct | Contents |
 | --- | --- |
-| `StatsPayload` | Top-level payload returned by `get_stats()` |
+| `StatsPayload` | Top-level snapshot (one CSV row per tick while recording) |
 | `CpuStats` | Load, per-core loads, temp, freq, power |
 | `GpuStats` | Load, temps, clocks, VRAM, fan, power, D3D, and `available_gpus` selector metadata |
 | `RamStats` | Used/free/total, spec string, DIMM temp |
@@ -262,13 +269,20 @@ and capped at 8 entries before serialisation.
 
 #### `hardware.rs`
 
-All startup hardware detection. Each function tries WMI first, falls back to
-PowerShell CIM on failure.
+All startup hardware detection. Each function queries WMI (the `wmi` crate) and
+only falls back to a PowerShell `Get-CimInstance` process (~1 s each) when the
+WMI query itself fails. Row structs used with a typed `conn.query::<T>()` must
+carry a container `#[serde(rename = "Win32_…")]` — `wmi` derives the `FROM`
+class from the serde name, so a missing rename queries a non-existent class and
+silently forces the slow fallback (#198); `wmi_classes_tests` guards this.
+Callers run these off the UI thread (`spawn_blocking` in `poll_loop`, or a
+startup background thread in `main.rs`) and keep the results.
 
 | Function | What it detects |
 | --- | --- |
 | `detect_gpu_name` | Primary discrete GPU name |
-| `detect_gpu_vram_total_mb` | VRAM total (MB) |
+| `detect_gpu_names` | All physical adapter names (virtual/basic adapters filtered, deduped by normalized name) — the choices for the tray "GPU ▸" submenu and Settings → Display → GPU |
+| `detect_battery_present` | Whether a battery exists (gates the Battery panel / `battery_pct` overlay metric in Settings); a WMI failure counts as "present" |
 | `detect_gpu_drivers` | Installed GPU driver name/version/date per adapter (`Vec<GpuDriverInfo>`); `driver_age_days` derives age from `DriverDate` |
 | `detect_system_brand` | Brand key: `rog`, `msi`, `alienware`, etc. |
 | `classify_system_brand` | Brand classification logic |
@@ -277,14 +291,14 @@ PowerShell CIM on failure.
 | `detect_ram_spec` | Type + speed string, e.g. "DDR5 6000 MT/s" |
 | `detect_ram_details` | Stick count, capacity, vendor, part number |
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
-| `detect_ping_target` | Default gateway or public fallback |
+| `detect_ping_target` | First IPv4 default gateway (`Win32_NetworkAdapterConfiguration`), else `1.1.1.1` |
 | `probe_wmi_status` | Checks whether WMI is reachable |
 | `sample_battery_wmi` | Per-tick (cached 10 s) battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW) |
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
-Results are stored in `HardwareInfo` so LHM temperatures can be matched by model
-name rather than by index (stable when USB drives are inserted/removed).
+`poll_loop` keeps the map for its lifetime so LHM temperatures can be matched by
+model name rather than by index (stable when USB drives are inserted/removed).
 
 #### `lhm.rs`
 
@@ -293,7 +307,9 @@ Named pipe client that connects to `\\.\pipe\rigstats-sensors` (written by the
 into `LhmData`.
 
 `fetch_lhm_pipe` is called once per tick. It reuses an established connection
-stored in `AppState.lhm_pipe` (`tokio::sync::Mutex<Option<LhmPipeReader>>`).
+held by the calling `poll_loop` (`tokio::sync::Mutex<Option<LhmPipeReader>>`).
+The sidecar serves several clients at once (e.g. the wallpaper host plus the
+main app feeding the overlay) from one shared, at most ~1 Hz LHM sample.
 On connection failure, errors are logged at most once every 30 s via a
 `LAST_PIPE_FAIL_LOG_SECS` atomic to avoid log spam. The pipe client requests
 read-only access (`.write(false)` on `ClientOptions`) because the sidecar pipe
@@ -307,11 +323,17 @@ handles GPU selection and assembles `LhmData` from the payload.
 
 **GPU selection:** `SidecarPayload.gpu_devices` carries one `SidecarGpuDevice`
 per detected GPU (name, VRAM total, core load). `select_gpu_idx` picks the
-index using the same policy as the old HTTP parser:
+index:
 
-- Use `preferred_gpu` if it matches a candidate (case-insensitive substring)
+- Use `preferred_gpu` if it matches a candidate — exact match on the
+  normalized name first (`normalize_gpu_name`: case-insensitive, `(TM)`/`(R)`/
+  `™`/`®` stripped, whitespace collapsed, so WMI and LHM spellings agree), then
+  a normalized substring match (`gpu_names_match`)
 - Otherwise pick the highest VRAM GPU (stable default)
 - Tie-break by load
+
+The tray "GPU ▸" submenu and Settings' GPU list tick the same adapter via
+`tray::selected_gpu_index`, which uses the same matching.
 
 Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
 memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
@@ -395,6 +417,13 @@ Multi-GPU pinning adds one field:
 
 - **`preferred_gpu: Option<String>`** — user-selected GPU device name for stable
   display across ticks; `None` means use backend stable default (highest VRAM).
+  Set from three places, all through `RigStatsApp::select_gpu`: the GPU panel's
+  click dots (fixed/floating mode), the tray "GPU ▸" submenu, and Settings →
+  Display → GPU (only shown with more than one adapter). The tray and Settings
+  are the only ways in Desktop Wallpaper mode, where the dashboard is
+  click-through. The main app pushes it into its `poll_loop` on every settings
+  reload; the wallpaper host re-reads it from disk in `refresh_settings`, so a
+  change applies to the dashboard and the overlay within ~1 s.
 
 Fullscreen (fill-screen) mode adds two fields — both `#[serde(default ...)]`, no
 migration needed:
@@ -408,14 +437,36 @@ migration needed:
 
 #### `windows/` (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`)
 
-Secondary egui windows, each rendered via `show_viewport_immediate` from the
-tray-command handler in `main.rs` — not separate OS windows created through a
-Tauri-style `ensure_*_window` API. Every dialog is centred with
-`geometry::dialog_center(w, h)`, which enumerates real monitors via
-`geometry::win_monitor::list()` (falls back to `[100.0, 100.0]` when none are
-found) rather than tracking a tray-click position. Settings is 560×600; About,
-Status, and Updater have their own fixed sizes set at their
-`show_viewport_immediate` call sites.
+Secondary egui windows, each rendered via `show_viewport_immediate` from
+`RigStatsApp::ui` in `main.rs` while its `*_open` flag is set (tray commands set
+the flags). Every dialog is centred with `geometry::dialog_center(w, h)`, which
+enumerates real monitors via `geometry::win_monitor::list()` (falls back to
+`[100.0, 100.0]` when none are found) rather than tracking a tray-click
+position. Settings is 560×600; About, Status, History and Updater have their own
+fixed sizes set at their `show_viewport_immediate` call sites. Visual design:
+`src-egui/src/windows/CLAUDE.md`.
+
+**Dialog lifecycle** (every dialog must follow this — see #203):
+
+- **Open hidden, reveal when rendered.** The builder gets
+  `.with_visible(self.dialog_reveal.visible(id))`; the window renders
+  `DialogReveal::FRAMES` frames hidden before it's shown. A window shown before
+  its first wgpu present flashes white (worst on a slow/power-saving GPU).
+- **Hide before teardown.** `DialogReveal::track` queues a just-closed dialog;
+  it gets one content-less `with_visible(false)` frame, so eframe drops its GPU
+  surface from an already-hidden window.
+- **`finish_dialog_frame`** (after each dialog's `show_viewport_immediate`)
+  applies the dark title bar, disables DWM transitions
+  (`win_opacity::disable_dwm_transitions` — DWM's close animation used a white
+  snapshot of the flip-model swap chain), forces repaints while hidden, and
+  brings the dialog to the foreground once visible.
+- **Reopen restores.** Dialogs have no taskbar button, so
+  `win_opacity::bring_to_foreground` restores a minimized dialog (e.g. after
+  Win+D) before focusing it.
+
+A new dialog is added by giving it an `id`, a `*_open`/`*_focus` flag pair, a
+`dialog_reveal.track` entry, `.with_visible(visible)` on its builder, and a
+`finish_dialog_frame` call.
 
 Floating panel management lives in `render_floating_panels` (`main.rs`), not a
 separate `windows.rs` module:
@@ -433,14 +484,19 @@ separate `windows.rs` module:
   `egui::Sense::drag()`, so it can call `win32_behind::prepare_for_drag` first
   when the window layer is "Always Behind" (`SC_MOVE` needs the window
   active, which `WS_EX_NOACTIVATE` normally prevents).
-- The per-panel lock toggle flips `floating_lock_arc` (shared across all
-  panel viewports) rather than being a per-window Tauri command.
+- The per-panel lock toggle flips `floating_lock_arc`, shared across all
+  panel viewports.
 
-#### `updater.rs`
+#### Updates (`update_check.rs` + `windows/updater.rs`)
 
-`spawn_background_check` starts a loop that checks GitHub Releases every 6
-hours (first check after 10 s). Notifies the UI when a newer version is found.
-Also exposes `check_for_update`, `install_update`, and `open_updater_window`.
+`update_check.rs` is plain blocking I/O: `check()` fetches `latest.json` and
+compares versions, `download()` streams the installer with a progress
+callback, `installer_temp_path()` / `launch_installer()` run it, and
+`BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The background check is a tokio task
+spawned in `main.rs` (first check after 10 s, then every 6 h) that runs these
+via `spawn_blocking`, downloads an available update, and drives
+`windows/updater.rs`'s `UpdaterState`/`UpdateStatus` (shown by the Update
+dialog and the clock panel's update badge).
 
 #### `history.rs`
 
@@ -520,13 +576,14 @@ thread). Produces a self-contained ZIP for bug reports.
 | `debug.log` | `std::fs::read(debug_log_path)` | Current session: first lines always include `settings dir`, `os_dark_mode`, settings summary. Ends with `shutdown: clean` on normal exit. |
 | `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
-| `settings.json` | `AppState.settings` snapshot | All user settings |
-| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, connect/disconnect. Lifecycle events only — no parsed sensor values (that's `AppState.last_lhm`, not currently exported to the ZIP). |
+| `settings.json` | `rigstats-settings.json` read from disk | All persisted user settings |
+| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, per-client connect/disconnect. Lifecycle events only — no parsed sensor values. |
+| `sensor-tree.txt` | `%PROGRAMDATA%\se.codeby.rigstats\sensor-tree.txt` | Full LHM hardware/sensor tree written by the sidecar at service start — the raw input for `/sensor-fixture` |
 | `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
 | `environment.txt` | `std::env::var` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` — exposes child/standard account path redirections |
 | `event-log.txt` | PowerShell `Get-WinEvent` | Windows Application Event Log: rigstats errors and critical events — catches OS-level crashes not recorded in the in-app log |
-| `sysinfo.json` | `AppState` + WMI shell probes | See sysinfo diagnostics below |
+| `sysinfo.json` | sysinfo snapshot + WMI probe + RAM shell probe | See sysinfo diagnostics below |
 | `displays.json` | `geometry::win_monitor::list()` + `pick_window_rect_for_profile()` | Each monitor's position/resolution, `is_primary`, and `is_selected` for the active dashboard profile |
 | `gpu-engine.txt` | `gpu_process::dump_diagnostics()` | Raw PDH `\GPU Engine(*)` instance names/values + the full DXGI adapter list. The exact input `gpu_process::parse_instance`/`aggregate` consume — doubles as a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README, and `/gpu-engine-fixture`). Blocks ~1s (PDH needs two collects spaced in time). |
 
@@ -534,11 +591,16 @@ thread). Produces a self-contained ZIP for bug reports.
 
 | Field | What it tells you |
 | --- | --- |
-| `ramSpec` | What `detect_ram_spec()` produced at startup. `"RAM"` = detection failed — check `ramSpecShellTest`. |
-| `ramSpecShellTest` | Runs the exact same PowerShell command as `detect_ram_spec`. Has `stdout`, `stderr`, `exit_code`. Non-zero exit or non-empty `stderr` explains the failure immediately (e.g. the `\| Out-String` bug that caused exit 1 with "An empty pipe element is not allowed"). |
-| `diskModelMap` | Drive-letter → model-name map built at startup. Empty map = WMI join failed — check `diskModelMapProbe`. |
-| `diskModelMapProbe` | Runs the WMI three-table join used by `detect_disk_model_map`. Empty result means the BIOS doesn't expose the partition associations. |
-| `wmiAvailable` | Whether WMI was reachable at startup. `false` means all WMI-sourced fields (RAM type/speed, GPU VRAM, etc.) will be missing. |
+| `cpu_brand`, `cpu_count` | sysinfo's view of the CPU at collection time |
+| `total_memory_mb`, `used_memory_mb` | sysinfo memory snapshot |
+| `wmi_available` | `probe_wmi_status()` at collection time (`SELECT Caption FROM Win32_OperatingSystem`). `false` means WMI is unreachable, so every detection falls back to PowerShell (slow) or comes back empty |
+| `sysinfo_available` | Always `true` (kept for format compatibility) |
+| `ram_spec_probe` | Stdout of an independent PowerShell `Win32_PhysicalMemory` query ("<type> <speed> MT/s (<n> DIMMs)"), to compare with the `hardware: ram_spec=` line in `debug.log` when RAM detection looks wrong |
+
+The detected startup values themselves (`ram_spec`, `ram_details`, `mb_board`,
+`model_name`, `system_brand`, `gpu_name`, `gpu_names`, `ping_target`,
+`battery_present`, `disk_model_map entries`) are logged as `hardware: …` lines in
+`debug.log`.
 
 ---
 
@@ -615,10 +677,10 @@ thread). Produces a self-contained ZIP for bug reports.
 ### Desktop wallpaper mode (WorkerW)
 
 - **Why a separate process** — `window_layer == "wallpaper"` reparents a window into the desktop `WorkerW` (between wallpaper and icons) so it survives `Win+D`. A child window is destroyed when its parent is — cross-process included — so an Explorer restart would destroy the reparented window. Reparenting the *main* window would therefore kill the app; instead a dedicated **`rigstats-wallpaper`** host process owns the wallpaper window, and the main app supervises it.
-- **Supervisor** (`RigStatsApp::update_wallpaper_mode`, called each frame) — on entering wallpaper mode the main app parks its own window off-screen, sets the shared `poll_paused` flag (so `poll_loop` releases the single-client sensor pipe and the host becomes the active poller), and spawns the host. It relaunches the host if it exits (covers an Explorer restart that destroyed the host's window) and kills it on leaving the mode or quitting. Mutually exclusive with floating mode (floating wins).
+- **Supervisor** (`RigStatsApp::update_wallpaper_mode`, called each frame) — on entering wallpaper mode the main app parks its own window off-screen and spawns the host, which becomes the dashboard's poller. Each frame it also sets its own `poll_loop`'s `PollMode`: `Paused` in wallpaper mode (sensor pipe released, no work), or `Light` while the game overlay is on (the overlay is rendered by the main app, so it keeps polling overlay metrics — the sidecar serves both processes from one shared sample; per-app lists and session recording are skipped so the host alone records), and `Full` outside wallpaper mode. It relaunches the host if it exits (covers an Explorer restart that destroyed the host's window) and kills it on leaving the mode or quitting. Mutually exclusive with floating mode (floating wins).
 - **Host** (`bin/wallpaper.rs`) — a minimal eframe app whose window fits the dashboard rather than filling the monitor (that would break panel proportions): **landscape** uses the fixed profile size (the adaptive grid fills it), **portrait** fits the panel-stack content height (`compute_window_height` at creation, then a per-frame fit to `ui.min_rect()` exactly as the main app does in normal mode — otherwise the leftover of the full profile height renders as a black gap below the stack). Centred on the matching monitor, so the wallpaper shows around it. Renders the shared `DashboardView`. On the first frame it caches its HWND (via `FindWindow`, before reparenting — afterwards the window is a WorkerW *child* and `FindWindow` can no longer find it) and attaches. It re-attaches each tick if `is_attached` reports it was detached, and exits if its parent PID (`RIGSTATS_PARENT_PID`) disappears so it never orphans.
 - **Positioning** — the host window is placed at `Settings::wallpaper_position` (absolute screen coords, so it encodes both *which* monitor and *where*) when that point is still on a connected monitor, else centred on the profile-matching monitor. The supervisor captures that position from the main window's last on-screen position when **entering** wallpaper mode and persists it before spawning the host, so the workflow is: position the window in a normal layer, then switch to wallpaper. Leaving wallpaper mode restores the window to that spot. Verified to coexist with Wallpaper Engine (WE paints the wallpaper into the WorkerW; our child window sits above it).
 - **WorkerW discovery** (`win32_wallpaper::find_wallpaper_workerw`) — Windows 11 keeps the wallpaper `WorkerW` as a *child* of `Progman` (checked first, no spawn); older Windows 10 needs `SendMessageTimeout(Progman, 0x052C)` then the top-level `WorkerW` sibling after Progman; a legacy `SHELLDLL_DefView`-sibling enumeration is the final fallback. Reparented coordinates are translated to WorkerW-client space so the window stays on the correct monitor.
-- **v1 is display-only** — no mouse hook; drag/padlock are N/A and GPU selection uses Settings → preferred GPU. The host binary is also the artifact a future Wallpaper Engine "Application wallpaper" integration (ROADMAP, v3.0) will reuse. While `window_layer == "wallpaper"` is selected, Settings disables the controls that have no effect in this mode — Floating Mode and Fill Screen + Alignment — with an explanatory note. Opacity is supported (see below).
+- **v1 is display-only** — no mouse hook; drag/padlock are N/A, and the displayed GPU is chosen from the tray "GPU ▸" submenu or Settings → Display → GPU (the host picks the change up on its next settings refresh). The host binary is also the artifact a future Wallpaper Engine "Application wallpaper" integration (ROADMAP, v3.0) will reuse. While `window_layer == "wallpaper"` is selected, Settings disables the controls that have no effect in this mode — Floating Mode and Fill Screen + Alignment — with an explanatory note. Opacity is supported (see below).
 - **Settings apply on Save, not live preview** — the host is a separate process that reads `rigstats-settings.json` from disk (~1 Hz), while Settings live-preview only pushes the draft to the main app's in-memory `current_settings`. So theme/panel/threshold changes appear on **Save**, not while dragging. (A future enhancement could persist the draft to disk during preview in wallpaper mode.) A **display-profile** change on Save is applied by the host **self-exiting** when its `refresh_settings` sees the disk `dashboard_profile` differ from the one it started with; the supervisor's respawn-if-exited path then relaunches a fresh host for the new profile (new size/orientation/monitor), so a profile change in wallpaper mode takes effect on Save with a brief ~1 s relaunch flicker.
 - **Opacity in wallpaper mode is per-pixel, via DirectComposition, not `WS_EX_LAYERED`** — `WS_EX_LAYERED`/`LWA_ALPHA` (used for window opacity in the normal/behind modes) cannot be applied to a WorkerW *child* window (`SetParent` strips the layered ex-style; setting it on a child is rejected — verified). Instead, the host forces the DX12 backend with `wgpu::Dx12SwapchainKind::DxgiFromVisual` (`NativeOptions.wgpu_options` in `bin/wallpaper.rs`), which makes wgpu create a DirectComposition-backed, per-pixel-alpha swap chain from the window's HWND automatically, and applies `WS_EX_NOREDIRECTIONBITMAP` after window creation (`win_opacity::set_no_redirection_bitmap`) — required for the swap chain to actually composite over the wallpaper instead of being masked by DWM's own opaque redirection bitmap. `clear_color()` and `theme::panel_frame()` premultiply the dashboard's fill/border colors by the opacity setting to match the swap chain's `PreMultiplied` composite alpha mode. Verified empirically (issue #131) that `WS_EX_NOREDIRECTIONBITMAP` can be applied *after* the wgpu surface already exists — despite Microsoft's docs suggesting creation-time-only — so no eframe replacement was needed.

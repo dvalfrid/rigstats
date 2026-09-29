@@ -1,5 +1,9 @@
 # RigStats — egui migration plan
 
+> **Historical document.** This migration was completed in v1.27 (#97). It is
+> kept as a record of the plan; for the current architecture see
+> [architecture.md](architecture.md).
+
 Replaces the Tauri/WebView2 frontend with a native egui UI.
 **Goal:** eliminate the 2–4 % baseline CPU cost from the Chromium rendering loop.
 **Constraint:** Windows-first. Linux sensor backend is a separate future project.

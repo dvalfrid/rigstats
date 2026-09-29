@@ -1,8 +1,19 @@
 # egui dialog design system
 
-All secondary windows (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`) must follow this layout and colour contract. **Never deviate from these values without updating this file.**
+All secondary windows (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`) must follow this layout, colour and window-lifecycle contract. **Never deviate from these values without updating this file.**
 
 `history.rs` follows the same hero/footer frames, colour tokens, and button API, but adds a `SidePanel` (session list) + `CentralPanel` (chart detail) between them instead of a single central content area — a deliberate exception for its master/detail layout, not a contract violation to fix.
+
+## Window lifecycle (mandatory for every dialog, #203)
+
+A dialog's OS window must never be visible without rendered content, or it flashes white (badly on a slow/power-saving GPU). The call site in `main.rs` owns this, not the `windows/*.rs` file:
+
+1. Register the dialog in the `dialog_reveal.track(id, open)` loop in `RigStatsApp::ui` (next to the other dialogs).
+2. Before `show_viewport_immediate`: `let visible = self.dialog_reveal.visible("<id>");` and add `.with_visible(visible)` to the `ViewportBuilder` (right after `.with_title(...)`). Use the same `"<id>"` for `ViewportId::from_hash_of`.
+3. After `show_viewport_immediate`: call `self.finish_dialog_frame(ui.ctx(), "<id>", found_hwnd, wants_focus, &focus, visible)`. It applies the dark title bar, disables DWM transitions, keeps repaints coming while hidden, and focuses the dialog once it is visible. Don't hand-roll any of that per dialog.
+4. Closing needs nothing extra: when the `*_open` flag goes false, `track` queues the dialog for one hidden teardown frame automatically.
+
+See "Dialog lifecycle" in `docs/architecture.md` for why each step is needed.
 
 ## Layout skeleton
 

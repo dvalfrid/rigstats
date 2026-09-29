@@ -43,7 +43,7 @@ Follow Rust conventions without exception:
 | Kind | Convention | Example |
 |---|---|---|
 | Functions, variables | `snake_case` | `fetch_lhm`, `gpu_load` |
-| Types, traits, enums | `PascalCase` | `AppState`, `LhmData` |
+| Types, traits, enums | `PascalCase` | `PollStats`, `LhmData` |
 | Constants, statics | `SCREAMING_SNAKE_CASE` | `CREATE_NO_WINDOW` |
 | Modules | `snake_case` | `lhm_process`, `hardware` |
 
@@ -70,9 +70,9 @@ pub fn detect_gpu_name() -> Option<String> { ... }
 
 ### Unsafe and global mutable state
 
-- `unsafe_code = "deny"` applies to both crates (`src-egui`'s wallpaper binary is the one place that legitimately needs a documented, narrowly-scoped `#[allow(unsafe_code)]` — see `win_opacity.rs`)
+- `unsafe_code = "deny"` applies to both crates. Raw Win32/FFI code opts out with a narrowly-scoped, documented `#[allow(unsafe_code)]` — a module-level `#![allow(unsafe_code)]` for modules that are thin FFI shims (`win_opacity.rs`, `win32_*.rs`, `gpu_process.rs`, `hotkey.rs`, `single_instance.rs`), or an item-level `#[allow(unsafe_code)]` on the single block elsewhere (e.g. `geometry.rs`, `update_check.rs`, the tray thread in `main.rs`). Everything else stays safe Rust.
 - Global `static` variables must use atomic types (`AtomicBool`, `AtomicI32`, `AtomicU64`) — never `static mut`
-- Shared state (`AppState`, `RigStatsApp` fields) is always protected by `Mutex`
+- State shared across threads (`RigStatsApp` ↔ poll loop/tray/background threads) is always behind `Mutex` (via `lock_safe()`) or an `Arc<Atomic*>`
 
 ### `#[allow(...)]` attributes
 

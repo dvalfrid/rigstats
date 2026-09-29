@@ -117,9 +117,12 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`dashboard.rs`** — `DashboardRuntime`: owned telemetry→renderer glue (sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView<'a>`: borrowed per-frame render state; `PanelThresholds` (warn/crit pairs)
 - **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
-- **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types
+- **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types; `PollMode` (`Full`/`Light`/`Paused`, shared via `PollModeHandle`)
+- **`alerts.rs`** — `pending_alerts`: pure warn/crit threshold-breach detection; `notify_on_*`, cooldowns and sending live in `main.rs`
+- **`dcomp_burst.rs`** — `DcompRevealBurst`: hide-until-settled reveal policy for per-pixel-transparent (DComp) viewports — overlay and floating panels
+- **`dialog_reveal.rs`** — `DialogReveal`: every dialog is created hidden, revealed after it has rendered, and hidden for one frame before teardown (no white flash, #203). See "Dialog lifecycle" in `docs/architecture.md`
 - **`gpu_process.rs`** — per-process GPU engine utilisation via PDH `\GPU Engine(*)` counters + DXGI LUID→adapter map (`GpuEngineQuery`, `GpuProcessInfo`); vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; Win32 FFI is `#![allow(unsafe_code)]`. Real-hardware regression corpus: `src-egui/fixtures/gpu-engine/` (see its README); `dump_diagnostics()` feeds `gpu-engine.txt` into the diagnostics ZIP so a user export doubles as a fixture. For adding a fixture, run `/gpu-engine-fixture`
-- **`tray.rs`** — system tray icon, `TrayCmd` enum, `load_app_icon`, `panel_label`/`panel_initial_h`
+- **`tray.rs`** — system tray icon, `TrayCmd` enum, `load_app_icon`, `panel_label`/`panel_initial_h`; `GpuMenu` ("GPU ▸" submenu, filled in by background adapter detection; `selected_gpu_index` ticks the same adapter the poll loop displays)
 - **`menu_icons.rs`** — procedurally-rasterized glyph icons for each tray context-menu row (no external image assets)
 - **`lock_ext.rs`** — `LockSafe::lock_safe()`: poison-tolerant `Mutex` locking used throughout `windows/*.rs`
 - **`gpu_guard.rs`** — `install_gpu_loss_guard`: wgpu device-error/device-lost callbacks that flag a fatal GPU error instead of panicking
@@ -130,31 +133,34 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`ring.rs`** — ring gauge renderer; **`spark.rs`** — sparkline ring buffer; **`tempcolor.rs`** — `temp_color()` value→green/yellow/red
 - **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`. `gpu_processes.rs` ("GPU APPS") renders `PollStats.gpu_processes` — top apps by GPU %, attributed to a physical adapter when >1 GPU is active
 - **`brand.rs`** — embedded brand logo PNGs; `rig_logo`, `cpu_logo`, `gpu_logo`
-- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_immediate`. Dialog design contract: `src-egui/src/windows/CLAUDE.md`
+- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_immediate`. Dialog design + lifecycle contract: `src-egui/src/windows/CLAUDE.md` (new dialogs must use `DialogReveal` + `RigStatsApp::finish_dialog_frame`)
 - **`win32_wallpaper.rs`** — `find_wallpaper_workerw`, `attach`/`detach`, `process_alive`; used only by the wallpaper host
 - **`win32_behind.rs`** — `apply_behind`/`prepare_for_drag`/`keep_behind`: Always-Behind window layer support
-- **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup
-- **`win_opacity.rs`** — `SetLayeredWindowAttributes` wrapper for window-level opacity
-- **`update_check.rs`** — `check()` fetches `latest.json`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`
+- **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup; `apply_titlebar_theme` for dialog title bars
+- **`win_opacity.rs`** — raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores minimized first), `force_repaint`, `find_hwnd`
+- **`update_check.rs`** — `check()` fetches `latest.json`, `download`/`launch_installer`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The 10 s-then-6 h background check loop is spawned in `main.rs`
 
 ### Data flow
 
 ```text
 rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
     └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
-            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
+            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON,
+                several clients share one ≤1 Hz sample — SensorWorker.GetFreshLine)
                     └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
-sysinfo crate (CPU load/freq, RAM, disk, network)
-wmi crate (GPU name, VRAM, RAM spec/details, system brand)
-    └─► poll_loop (src-egui/main.rs): get_stats() → StatsPayload → mpsc::Sender
-            └─► egui UI thread: receives payload each 1 s tick → all panel draw() calls
+sysinfo crate (CPU load/freq, RAM, disk, network, processes)
+wmi crate (startup: GPU names, RAM spec/details, board, model, brand, ping target; per tick: battery)
+PDH \GPU Engine(*) (gpu_process.rs: per-app GPU %)
+    └─► poll_loop (src-egui/src/poll.rs): → PollStats → mpsc::SyncSender
+            ├─► egui UI thread: DashboardRuntime::drain each ~1 s tick → all panel draw() calls
+            └─► while recording: poll_stats_to_log_payload → StatsPayload → CSV row
 ```
 
 ### Backend (`rigstats-backend/src/`)
 
-- **`stats.rs`** — `StatsPayload` + sub-structs; `HardwareInfo` (startup constants behind `Mutex`). `AppState` (per-tick mutable state) is defined here but currently unused — nothing constructs one.
-- **`hardware.rs`** — WMI/CIM hardware detection: GPU, RAM, disk, system brand, model, motherboard, ping
-- **`lhm.rs`** — named pipe client → `LhmData`; `select_gpu_idx` (preferred → highest VRAM → load tie-break)
+- **`stats.rs`** — `StatsPayload` + sub-structs: the session-recording row shape (built from `PollStats` in `poll.rs`); `DiskKind`
+- **`hardware.rs`** — WMI hardware detection (PowerShell only when WMI fails): GPU names, RAM, disk, system brand, model, motherboard, ping target, battery. Typed `query::<T>()` structs need a `#[serde(rename = "Win32_…")]` container rename (#198, guarded by `wmi_classes_tests`)
+- **`lhm.rs`** — named pipe client → `LhmData`; `select_gpu_idx` (preferred → highest VRAM → load tie-break), `normalize_gpu_name`/`gpu_names_match` (WMI/LHM-tolerant name matching)
 - **`lhm_process.rs`** — connection state tracking (connect/disconnect logging, 30 s throttle)
 - **`logging.rs`** — session-based CSV stats logging: `start_session`/`end_session`, `append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`, `prune_old_sessions`, `reconcile_sessions_on_startup`. Session index (`rigstats-sessions.json`) writes are guarded by a cross-process file lock (`SessionsLock`) and mirrored to a `.bak` for corruption recovery.
 - **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`

@@ -149,8 +149,10 @@ Full rules are in [STANDARDS.md](STANDARDS.md). The essentials:
   max line width 120. `cargo fmt` handles it — never format manually.
 - Standard Rust naming: `snake_case` functions, `PascalCase` types,
   `SCREAMING_SNAKE_CASE` constants.
-- `unsafe_code = "forbid"` across the crate. Global `static` state uses atomics,
-  never `static mut`; shared state in `AppState` is `Mutex`-protected.
+- `unsafe_code = "deny"` in both crates; Win32 FFI modules opt out with a
+  scoped, documented `#[allow(unsafe_code)]` (see STANDARDS.md). Global
+  `static` state uses atomics, never `static mut`; state shared across threads
+  is behind `Mutex`/`Arc<Atomic*>`.
 - Fallible functions return `Result<T, String>`. Prefer `unwrap_or_else` over
   `unwrap`. Log via `append_debug_log` — never `eprintln!` or `dbg!` in production.
 - Keep domain logic in `rigstats-backend/`; `src-egui/` is UI and wiring only.
