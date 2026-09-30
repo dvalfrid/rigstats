@@ -1,4 +1,5 @@
 pub mod autostart;
+pub mod control;
 pub mod debug;
 pub mod hardware;
 pub mod lhm;
