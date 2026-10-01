@@ -10,6 +10,7 @@ use crate::geometry::landscape_grid_layout;
 use crate::spark::Sparkline;
 use crate::{brand, panels, theme, PollStats};
 use eframe::egui;
+use rigstats_backend::control::{ControlEvent, ControlState};
 use rigstats_backend::settings;
 use std::sync::mpsc;
 
@@ -91,6 +92,10 @@ pub struct DashboardView<'a> {
     pub app_theme: &'a theme::AppTheme,
     pub thresholds: &'a PanelThresholds,
     pub psu_watts: Option<u16>,
+    /// Control Center state (#187) — `ControlState::default()` (disconnected,
+    /// empty) on the wallpaper host, which never spawns `control_task`; the
+    /// header chip simply doesn't render an active profile there.
+    pub control: &'a ControlState,
 }
 
 impl DashboardView<'_> {
@@ -128,6 +133,7 @@ impl DashboardView<'_> {
                     opacity,
                     self.app_theme,
                     sc,
+                    self.control,
                 );
             }
             "clock" => {
@@ -363,6 +369,8 @@ pub struct DashboardRuntime {
     pub thresholds: PanelThresholds,
     pub psu_watts: Option<u16>,
     pub visible_panels: Vec<String>,
+    /// Control Center state (#187) — see `DashboardView::control`'s doc.
+    pub control: ControlState,
 }
 
 impl DashboardRuntime {
@@ -378,6 +386,7 @@ impl DashboardRuntime {
             thresholds: PanelThresholds::from_settings(s),
             psu_watts: s.psu_watts,
             visible_panels: s.visible_panels.clone(),
+            control: ControlState::default(),
         }
     }
 
@@ -392,6 +401,18 @@ impl DashboardRuntime {
             self.net_dn_spark.push(stats.net_down_mbps as f32);
             self.latest = stats;
             changed = true;
+        }
+        changed
+    }
+
+    /// Drain pending [`ControlEvent`]s from `rx`, folding each into
+    /// `control`. Same shape as `drain`, called alongside it — see
+    /// `RigStatsApp::update`'s call site (main.rs). Never called by the
+    /// wallpaper host, which has no control pipe connection.
+    pub fn drain_control(&mut self, rx: &mpsc::Receiver<ControlEvent>) -> bool {
+        let mut changed = false;
+        while let Ok(event) = rx.try_recv() {
+            changed |= self.control.apply(event);
         }
         changed
     }
@@ -421,6 +442,7 @@ impl DashboardRuntime {
             app_theme: &self.app_theme,
             thresholds: &self.thresholds,
             psu_watts: self.psu_watts,
+            control: &self.control,
         }
     }
 }

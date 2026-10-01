@@ -459,7 +459,7 @@ async fn handle_cmd(
 ) -> Result<(), ()> {
     match cmd {
         ControlCmd::ApplyProfile(id) => {
-            let params = serde_json::json!({ "id": id });
+            let params = serde_json::json!({ "id": id.clone() });
             let result = request(
                 writer,
                 reader,
@@ -472,6 +472,18 @@ async fn handle_cmd(
             .await?;
             if let Some(value) = result {
                 if let Ok(r) = serde_json::from_value::<ApplyResult>(value) {
+                    // The service doesn't push a separate "profile_changed"
+                    // event for the apply that just succeeded (only for
+                    // later out-of-band changes, e.g. a future admin tool) —
+                    // update active_profile from this same response instead
+                    // of waiting for one that never comes. Without this the
+                    // tray checkmark / header chip / Control Center's
+                    // highlighted row never move after a successful switch.
+                    if r.ok {
+                        let _ = event_tx.send(ControlEvent::ActiveProfile(Some(
+                            r.profile_id.clone().unwrap_or(id),
+                        )));
+                    }
                     let _ = event_tx.send(ControlEvent::ApplyResult(r));
                 }
             }

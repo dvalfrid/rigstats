@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use eframe::egui;
+use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
@@ -12,11 +13,13 @@ use rigstats_egui::geometry::{
     profile_is_landscape, profile_scale, profile_to_size, resolve_pinned_position,
 };
 use rigstats_egui::gpu_guard::install_gpu_loss_guard;
+use rigstats_egui::hotkey;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::overlay::{content_inset, draw_overlay, estimate_window_size};
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
 use rigstats_egui::tray::{
-    build_tray, gpu_choice_from_menu_id, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd,
+    build_tray, gpu_choice_from_menu_id, load_app_icon, panel_initial_h, panel_label,
+    profile_choice_from_menu_id, Tray, TrayCmd,
 };
 use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
@@ -40,10 +43,17 @@ struct RigStatsApp {
     runtime: DashboardRuntime,
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
-    /// Fires on the fixed Ctrl+Alt+O global hotkey (see `hotkey.rs`); drained
-    /// in `ui()` to flip `overlay_click_through` the same way the tray's
-    /// "Lock/Unlock Overlay" row does.
-    hotkey_rx: mpsc::Receiver<()>,
+    /// Fires on the fixed global hotkeys (see `hotkey.rs`): Ctrl+Alt+O to
+    /// flip `overlay_click_through` (same as the tray's "Lock/Unlock
+    /// Overlay" row), Ctrl+Alt+P to cycle the Control Center profile.
+    hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
+    /// Control Center (#187): events pushed by `control_task` (connect/
+    /// disconnect, capabilities, profile changes, apply results), drained
+    /// into `runtime.control` each frame — see `dashboard::DashboardRuntime::drain_control`.
+    control_rx: mpsc::Receiver<control::ControlEvent>,
+    /// Commands to `control_task` (apply a profile, refresh, release to
+    /// firmware) — sent from the tray, hotkey, and Control Center window.
+    control_cmd_tx: tokio::sync::mpsc::Sender<control::ControlCmd>,
     opacity: f32,
     /// Cached from settings — "on_top", "behind", or "normal".
     window_layer: String,
@@ -54,12 +64,17 @@ struct RigStatsApp {
     status_open: Arc<AtomicBool>,
     updater_open: Arc<AtomicBool>,
     history_open: Arc<AtomicBool>,
+    /// Control Center window (#187) — opened via the header panel's
+    /// active-profile chip (`"open_control_center"` temp flag, consumed in
+    /// `draw_one_panel`) or the tray.
+    control_open: Arc<AtomicBool>,
     // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
     settings_focus: Arc<AtomicBool>,
     about_focus: Arc<AtomicBool>,
     status_focus: Arc<AtomicBool>,
     updater_focus: Arc<AtomicBool>,
     history_focus: Arc<AtomicBool>,
+    control_focus: Arc<AtomicBool>,
     settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
     status_win: Arc<Mutex<windows::status::StatusState>>,
     status_refreshing: Arc<AtomicBool>,
@@ -74,6 +89,11 @@ struct RigStatsApp {
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
     preferred_gpu: Arc<Mutex<Option<String>>>,
+    /// Mirrors `runtime.control.active_profile` for `poll_loop`'s session-
+    /// recording CSV column — `poll_loop` runs on its own tokio task with no
+    /// access to `runtime`, so this is the cross-task handoff (see the
+    /// `drain_control` call site in `update()`).
+    active_profile_shared: Arc<Mutex<Option<String>>>,
     dir: Arc<PathBuf>,
     // Win32 HWND stored as isize for window-level opacity (SetLayeredWindowAttributes).
     // Found via FindWindowW on the first ui() frame; 0 until then.
@@ -317,7 +337,9 @@ impl RigStatsApp {
         runtime: DashboardRuntime,
         receiver: mpsc::Receiver<PollStats>,
         tray_rx: mpsc::Receiver<TrayCmd>,
-        hotkey_rx: mpsc::Receiver<()>,
+        hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
+        control_rx: mpsc::Receiver<control::ControlEvent>,
+        control_cmd_tx: tokio::sync::mpsc::Sender<control::ControlCmd>,
         opacity: f32,
         dcomp_available: bool,
         tray: Tray,
@@ -325,6 +347,7 @@ impl RigStatsApp {
         settings_reload: Arc<AtomicBool>,
         dir: Arc<PathBuf>,
         preferred_gpu: Arc<Mutex<Option<String>>>,
+        active_profile_shared: Arc<Mutex<Option<String>>>,
         floating_mode_arc: Arc<AtomicBool>,
         updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
         updater_open: Arc<AtomicBool>,
@@ -361,6 +384,8 @@ impl RigStatsApp {
             receiver,
             tray_rx,
             hotkey_rx,
+            control_rx,
+            control_cmd_tx,
             opacity,
             window_layer: init_settings.window_layer.clone(),
             tray,
@@ -369,11 +394,13 @@ impl RigStatsApp {
             status_open: Arc::new(AtomicBool::new(false)),
             updater_open,
             history_open: Arc::new(AtomicBool::new(false)),
+            control_open: Arc::new(AtomicBool::new(false)),
             settings_focus: Arc::new(AtomicBool::new(false)),
             about_focus: Arc::new(AtomicBool::new(false)),
             status_focus: Arc::new(AtomicBool::new(false)),
             updater_focus,
             history_focus: Arc::new(AtomicBool::new(false)),
+            control_focus: Arc::new(AtomicBool::new(false)),
             settings_win: Arc::new(Mutex::new(
                 windows::settings::SettingsWindow::from_settings(
                     &init_settings,
@@ -392,6 +419,7 @@ impl RigStatsApp {
             current_settings,
             settings_reload,
             preferred_gpu,
+            active_profile_shared,
             dir,
             hwnd: 0,
             dcomp_available,
@@ -1192,6 +1220,44 @@ impl RigStatsApp {
         // needs to change.
     }
 
+    /// Sends `ControlCmd::ApplyProfile` to `control_task` — shared by the
+    /// tray's profile submenu and `cycle_profile`. Fire-and-forget: the
+    /// result comes back later as a `ControlEvent::ApplyResult`/
+    /// `ActiveProfile`, folded into `runtime.control` by `drain_control`.
+    fn apply_profile(&mut self, id: String) {
+        let _ = self
+            .control_cmd_tx
+            .try_send(control::ControlCmd::ApplyProfile(id));
+    }
+
+    /// Ctrl+Alt+P: advances to the next profile in `runtime.control.profiles`
+    /// (wrapping), applies it, and fires a toast — same notification
+    /// mechanism as temperature alerts (`check_alerts`) — so the switch is
+    /// visible even when the dashboard itself isn't (floating/overlay/
+    /// wallpaper modes).
+    fn cycle_profile(&mut self) {
+        let profiles = &self.runtime.control.profiles;
+        if profiles.is_empty() {
+            return;
+        }
+        let current_idx = self
+            .runtime
+            .control
+            .active_profile
+            .as_deref()
+            .and_then(|active| profiles.iter().position(|p| p.id == active));
+        let next = &profiles[current_idx.map_or(0, |i| (i + 1) % profiles.len())];
+        let (id, name) = (next.id.clone(), next.name.clone());
+        self.apply_profile(id);
+        std::thread::spawn(move || {
+            windows::settings::send_notification(
+                "RIGStats — Profile",
+                &name,
+                windows::settings::NotifyIcon::Info,
+            );
+        });
+    }
+
     /// Works around lost font-atlas uploads, seen on a hybrid-GPU laptop at
     /// 175 % scaling after Win+D / minimize: random characters in the overlay
     /// rendered as blank gaps — a digit, `.`, `%` or `°` missing in one place
@@ -1526,14 +1592,19 @@ impl eframe::App for RigStatsApp {
         #[cfg(windows)]
         self.update_wallpaper_mode(ui.ctx());
 
-        // Global hotkey (Ctrl+Alt+O) — same action as the tray's "Toggle
-        // Overlay Mode" row: show/hide the overlay itself, the conventional
-        // in-game-overlay hotkey behavior (not the click-through lock, which
-        // has no reason to be toggled as often and stays tray/Settings-only).
-        // Drained here, before `render_overlay_viewport` below, so a keypress
-        // takes effect the same frame it's noticed instead of one frame late.
-        while self.hotkey_rx.try_recv().is_ok() {
-            self.toggle_overlay_mode();
+        // Global hotkeys — drained here, before `render_overlay_viewport`
+        // below, so a keypress takes effect the same frame it's noticed
+        // instead of one frame late.
+        while let Ok(event) = self.hotkey_rx.try_recv() {
+            match event {
+                // Same action as the tray's "Toggle Overlay Mode" row:
+                // show/hide the overlay itself, the conventional in-game-
+                // overlay hotkey behavior (not the click-through lock, which
+                // has no reason to be toggled as often and stays tray/
+                // Settings-only).
+                hotkey::HotkeyEvent::ToggleOverlay => self.toggle_overlay_mode(),
+                hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
+            }
         }
 
         // Show/hide the overlay's own add-on viewport — independent of
@@ -1581,6 +1652,20 @@ impl eframe::App for RigStatsApp {
         let new_stats = self.runtime.drain(&self.receiver);
         if new_stats {
             self.check_alerts();
+        }
+
+        // Control Center (#187): fold any control-pipe events (connect/
+        // disconnect, capabilities, profile list/active changes, apply
+        // results) into `runtime.control`. Same drain shape as telemetry,
+        // on its own channel/cadence — never blocks on the pipe.
+        if self.runtime.drain_control(&self.control_rx) {
+            self.tray.profile_menu.sync(
+                &self.runtime.control.profiles,
+                self.runtime.control.active_profile.as_deref(),
+            );
+            // Hand off to poll_loop for the session-recording CSV column —
+            // poll_loop runs on its own tokio task with no access to `runtime`.
+            *self.active_profile_shared.lock_safe() = self.runtime.control.active_profile.clone();
         }
 
         // Apply settings saved from the settings window.
@@ -1724,6 +1809,7 @@ impl eframe::App for RigStatsApp {
                 TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
                 TrayCmd::ToggleRecording => self.tray_toggle_recording(ui.ctx()),
                 TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
+                TrayCmd::SelectProfile(id) => self.apply_profile(id),
             }
         }
 
@@ -1748,7 +1834,8 @@ impl eframe::App for RigStatsApp {
             || self.about_open.load(Ordering::Relaxed)
             || self.status_open.load(Ordering::Relaxed)
             || self.updater_open.load(Ordering::Relaxed)
-            || self.history_open.load(Ordering::Relaxed);
+            || self.history_open.load(Ordering::Relaxed)
+            || self.control_open.load(Ordering::Relaxed);
         if !any_dialog_open && self.any_dialog_open_prev {
             let mut vis = egui::Visuals::dark();
             vis.panel_fill = egui::Color32::TRANSPARENT;
@@ -1764,6 +1851,7 @@ impl eframe::App for RigStatsApp {
             ("status", &self.status_open),
             ("history", &self.history_open),
             ("updater", &self.updater_open),
+            ("control", &self.control_open),
         ] {
             self.dialog_reveal.track(id, open.load(Ordering::Relaxed));
         }
@@ -1873,6 +1961,53 @@ impl eframe::App for RigStatsApp {
             self.finish_dialog_frame(ui.ctx(), "about", found_hwnd, wants_focus, &focus, visible);
         }
 
+        if self.control_open.load(Ordering::Relaxed) {
+            let open = self.control_open.clone();
+            let focus = self.control_focus.clone();
+            let mctx = main_ctx.clone();
+            let cmd_tx = self.control_cmd_tx.clone();
+            let [px, py] = dialog_center(640.0, 420.0);
+            let wants_focus = focus.load(Ordering::Relaxed);
+            let mut found_hwnd: isize = 0;
+            let visible = self.dialog_reveal.visible("control");
+            let control_state = self.runtime.control.clone();
+            ui.ctx().show_viewport_immediate(
+                egui::ViewportId::from_hash_of("control"),
+                egui::ViewportBuilder::default()
+                    .with_title("RigStats — Control Center")
+                    .with_visible(visible)
+                    .with_inner_size([640.0, 420.0])
+                    .with_position([px, py])
+                    .with_resizable(false)
+                    .with_taskbar(false)
+                    .with_icon(load_app_icon())
+                    .with_always_on_top(),
+                |child_ui, _class| {
+                    #[cfg(windows)]
+                    {
+                        found_hwnd = win_opacity::find_hwnd("RigStats — Control Center");
+                    }
+                    windows::control::show(
+                        child_ui.ctx(),
+                        &mctx,
+                        &open,
+                        &focus,
+                        &control_state,
+                        &cmd_tx,
+                        &dc,
+                    );
+                },
+            );
+            self.finish_dialog_frame(
+                ui.ctx(),
+                "control",
+                found_hwnd,
+                wants_focus,
+                &focus,
+                visible,
+            );
+        }
+
         if self.status_open.load(Ordering::Relaxed) {
             let open = self.status_open.clone();
             let focus = self.status_focus.clone();
@@ -1886,6 +2021,7 @@ impl eframe::App for RigStatsApp {
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.runtime.latest.lhm_connected;
             let wallpaper_active = self.wallpaper_active;
+            let control_state = self.runtime.control.clone();
             let visible = self.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
@@ -1913,6 +2049,7 @@ impl eframe::App for RigStatsApp {
                         &dir,
                         lhm_connected,
                         wallpaper_active,
+                        &control_state,
                         &dc,
                     );
                 },
@@ -2455,7 +2592,11 @@ impl RigStatsApp {
     }
 
     /// Draw a single panel via the shared [`DashboardView`], then consume the
-    /// clock panel's `"open_updater"` badge-click flag (host has no updater).
+    /// clock panel's `"open_updater"` badge-click flag (host has no updater)
+    /// and the header panel's `"open_control_center"` chip-click flag (#187;
+    /// host has no Control Center either — both flags are simply never
+    /// consumed there, matching `bin/wallpaper.rs`'s plain `draw_one_panel`
+    /// call with no flag-handling wrapper).
     fn draw_one_panel(
         &self,
         ui: &mut egui::Ui,
@@ -2473,6 +2614,15 @@ impl RigStatsApp {
                 .unwrap_or(false)
         {
             self.updater_open.store(true, Ordering::Relaxed);
+        }
+        if panel == "header"
+            && ui
+                .ctx()
+                .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_control_center")))
+                .unwrap_or(false)
+        {
+            self.control_open.store(true, Ordering::Relaxed);
+            self.control_focus.store(true, Ordering::Relaxed);
         }
         new_pref
     }
@@ -2670,6 +2820,7 @@ impl RigStatsApp {
             let ndspark = &self.runtime.net_dn_spark;
             let tex = &self.runtime.textures;
             let app_theme = self.runtime.app_theme;
+            let control = &self.runtime.control;
             let float_update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
                 let st = self.updater_win.lock_safe();
@@ -2680,6 +2831,8 @@ impl RigStatsApp {
                 }
             };
             let updater_open_arc = &self.updater_open;
+            let control_open_arc = &self.control_open;
+            let control_focus_arc = &self.control_focus;
             // On the very first frame a viewport is shown, `outer_rect` reports the
             // egui-default position (before the OS has honoured `with_position`).
             // Saving that would overwrite the loaded position, so we skip tracking
@@ -2779,14 +2932,30 @@ impl RigStatsApp {
                             // overlay the drag dots and padlock without extra height.
                             let mut new_pref: Option<String> = None;
                             let panel_rect = match key.as_str() {
-                                "header" => panels::header::draw(
-                                    ui,
-                                    stats,
-                                    tex,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                ),
+                                "header" => {
+                                    let r = panels::header::draw(
+                                        ui,
+                                        stats,
+                                        tex,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        control,
+                                    );
+                                    if ui
+                                        .ctx()
+                                        .data_mut(|d| {
+                                            d.remove_temp::<bool>(egui::Id::new(
+                                                "open_control_center",
+                                            ))
+                                        })
+                                        .unwrap_or(false)
+                                    {
+                                        control_open_arc.store(true, Ordering::Relaxed);
+                                        control_focus_arc.store(true, Ordering::Relaxed);
+                                    }
+                                    r
+                                }
                                 "clock" => {
                                     let r = panels::clock::draw(
                                         ui,
@@ -3204,8 +3373,21 @@ fn main() {
     // where the `rigstats-wallpaper` host becomes the dashboard's poller.
     let poll_mode = PollModeHandle::new(PollMode::Full);
     let poll_mode_loop = poll_mode.clone();
+    // Control Center (#187) active profile id, for the session-recording CSV
+    // column — updated by the UI thread whenever `ControlState.active_profile`
+    // changes (see the `drain_control` call site below).
+    let active_profile_arc: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let active_profile_poll = active_profile_arc.clone();
     runtime.spawn(async move {
-        poll_loop(tx, dir_clone, pref_poll, settings_poll, poll_mode_loop).await
+        poll_loop(
+            tx,
+            dir_clone,
+            pref_poll,
+            settings_poll,
+            poll_mode_loop,
+            active_profile_poll,
+        )
+        .await
     });
 
     // Wallpaper mode at startup: the host owns the on-screen dashboard, so place
@@ -3338,9 +3520,25 @@ fn main() {
             // click-through without leaving the game. The listener thread
             // outlives this closure (runs for the process lifetime), so the
             // JoinHandle is intentionally dropped rather than joined.
-            let (hotkey_tx, hotkey_rx) = mpsc::channel::<()>();
+            let (hotkey_tx, hotkey_rx) = mpsc::channel::<hotkey::HotkeyEvent>();
             #[cfg(windows)]
             let _ = rigstats_egui::hotkey::spawn(dir.clone(), hotkey_tx, cc.egui_ctx.clone());
+
+            // Control Center (#187): control_task owns the duplex
+            // \\.\pipe\rigstats-control connection on its own tokio task,
+            // the same way poll_loop owns the telemetry pipe. Commands go in
+            // over an async-native channel (the task awaits them); events
+            // come back over a std channel the UI drains with try_recv(),
+            // mirroring PollStats.
+            let (control_cmd_tx, control_cmd_rx) =
+                tokio::sync::mpsc::channel::<control::ControlCmd>(8);
+            let (control_event_tx, control_rx) = mpsc::channel::<control::ControlEvent>();
+            runtime.spawn(control::control_task(
+                control_cmd_rx,
+                control_event_tx,
+                dir.clone(),
+                env!("CARGO_PKG_VERSION").to_string(),
+            ));
 
             // Spawn a thread that polls tray events at 50 ms intervals and wakes the
             // egui event loop via request_repaint().  Quit is handled here directly
@@ -3448,8 +3646,10 @@ fn main() {
                             Some(TrayCmd::OpenUpdater)
                         } else if ev.id == docs_id {
                             Some(TrayCmd::OpenDocs)
+                        } else if let Some(pref) = gpu_choice_from_menu_id(&ev.id) {
+                            Some(TrayCmd::SelectGpu(pref))
                         } else {
-                            gpu_choice_from_menu_id(&ev.id).map(TrayCmd::SelectGpu)
+                            profile_choice_from_menu_id(&ev.id).map(TrayCmd::SelectProfile)
                         };
                         if let Some(c) = cmd {
                             let _ = tray_tx.send(c);
@@ -3621,6 +3821,8 @@ fn main() {
                 rx,
                 tray_rx,
                 hotkey_rx,
+                control_rx,
+                control_cmd_tx,
                 opacity,
                 dcomp_available,
                 tray,
@@ -3628,6 +3830,7 @@ fn main() {
                 settings_reload,
                 dir_arc,
                 preferred_gpu_arc,
+                active_profile_arc,
                 fm_arc_hb,
                 updater_win_bg,
                 updater_open_bg,

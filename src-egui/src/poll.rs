@@ -154,7 +154,10 @@ fn lhm_temp_for_model(wmi_model: &str, disk_temps: &[(String, f64)]) -> Option<f
 
 // ── Logging helpers ───────────────────────────────────────────────────────────
 
-fn poll_stats_to_log_payload(s: &PollStats) -> rigstats_backend::stats::StatsPayload {
+fn poll_stats_to_log_payload(
+    s: &PollStats,
+    active_profile: Option<String>,
+) -> rigstats_backend::stats::StatsPayload {
     use rigstats_backend::stats::{
         BatteryStats, CpuStats, DiskDrive, DiskStats, GpuStats, MotherboardStats, NetStats,
         ProcessEntry, RamStats, StatsPayload,
@@ -238,6 +241,7 @@ fn poll_stats_to_log_payload(s: &PollStats) -> rigstats_backend::stats::StatsPay
             .collect(),
         system_uptime_secs: s.uptime_secs,
         lhm_connected: s.lhm_connected,
+        active_profile,
     }
 }
 
@@ -249,6 +253,10 @@ pub async fn poll_loop(
     preferred_gpu: Arc<Mutex<Option<String>>>,
     settings_arc: Arc<Mutex<settings::Settings>>,
     mode: PollModeHandle,
+    // Control Center (#187) active profile id, updated by the UI thread
+    // whenever `ControlState.active_profile` changes. `None` forever on the
+    // wallpaper host, which never connects to the control pipe.
+    active_profile: Arc<Mutex<Option<String>>>,
 ) {
     let ram_spec = tokio::task::spawn_blocking(hardware::detect_ram_spec)
         .await
@@ -697,7 +705,7 @@ pub async fn poll_loop(
                 .find(logging::SessionMeta::is_active)
         };
         if let Some(session) = active_session {
-            let payload = poll_stats_to_log_payload(&stats);
+            let payload = poll_stats_to_log_payload(&stats, active_profile.lock_safe().clone());
             if let Err(e) = logging::append_stats_row(&payload, &dir, &session) {
                 debug::log_error(&dir, &format!("logging: csv write error — {e}"));
             }

@@ -133,4 +133,8 @@ pub struct StatsPayload {
     pub top_processes: Vec<ProcessEntry>,
     pub system_uptime_secs: u64,
     pub lhm_connected: bool,
+    /// Control Center (#187) active profile id (`"gaming"`, `"balanced"`, …)
+    /// at the moment this row was logged — `None` on the wallpaper host
+    /// (never connects to the control pipe) or before the app has connected.
+    pub active_profile: Option<String>,
 }

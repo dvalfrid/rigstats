@@ -2,6 +2,7 @@ use crate::gpu_process;
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use chrono::Local;
+use rigstats_backend::control::ControlState;
 use rigstats_backend::{debug, hardware};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -260,6 +261,62 @@ fn render_diagnostics(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState)
     });
 }
 
+/// Control Center (#187) summary — service-pipe connection, protocol
+/// version, and the last `apply_profile` result. `ControlState` already
+/// lives on the UI thread continuously (via `DashboardRuntime::drain_control`,
+/// no background load needed), so unlike `StatusState`'s fields this is
+/// passed straight through `show`'s params rather than cloned into it.
+fn render_control_center(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
+    section_label(ui, dc, "Control Center");
+    card_frame(dc).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        egui::Grid::new("control_status_grid")
+            .num_columns(2)
+            .min_col_width(180.0)
+            .spacing([8.0, 2.0])
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new("Service pipe")
+                        .size(11.0)
+                        .color(dc.muted),
+                );
+                ui.label(egui::RichText::new("Protocol").size(11.0).color(dc.muted));
+                ui.end_row();
+                let (conn_text, conn_color) = if control.protocol_mismatch.is_some() {
+                    ("Version mismatch", C_BAD)
+                } else if control.connected {
+                    ("Connected", C_GOOD)
+                } else {
+                    ("Disconnected", C_BAD)
+                };
+                ui.label(
+                    egui::RichText::new(conn_text)
+                        .size(13.0)
+                        .strong()
+                        .color(conn_color),
+                );
+                let protocol_text = match control.protocol_mismatch {
+                    Some(m) => format!("app v{} \u{2260} service v{}", m.expected, m.got),
+                    None => "v1".to_string(),
+                };
+                ui.label(egui::RichText::new(protocol_text).size(13.0).color(dc.text));
+                ui.end_row();
+            });
+        ui.add_space(6.0);
+        let (result_text, result_color) = match &control.last_apply_result {
+            Some(r) if r.ok => ("Applied successfully".to_string(), C_GOOD),
+            Some(r) => (
+                r.message
+                    .clone()
+                    .unwrap_or_else(|| "Apply failed".to_string()),
+                C_BAD,
+            ),
+            None => ("\u{2014}".to_string(), dc.muted),
+        };
+        meta_row(ui, dc, "Last Apply Result", &result_text, result_color);
+    });
+}
+
 fn render_components(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
     ui.add_space(8.0);
     ui.columns(2, |cols| {
@@ -400,7 +457,10 @@ fn run_ps_capture(script: &str) -> String {
     }
 }
 
-fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
+fn collect_and_open_diagnostics_impl(
+    dir: &Path,
+    capabilities_json: &str,
+) -> std::io::Result<PathBuf> {
     use std::io::Write as IoWrite;
     use zip::write::SimpleFileOptions;
 
@@ -495,6 +555,18 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
             .join("rigstats-install.log"),
     )
     .unwrap_or_else(|_| b"(install log not found)".to_vec());
+
+    // Control Center (#187) profile store. The control pipe's own log lines
+    // already land in `rigstats-sensor.log` (shared `SidecarLog` writer on
+    // the service side, see `sensor-sidecar/Control/SidecarLog.cs`), so
+    // that's covered by the existing `sidecar_log` entry above — no separate
+    // control-log entry needed.
+    let profiles_json = std::fs::read(
+        PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
+            .join("se.codeby.rigstats")
+            .join("profiles.json"),
+    )
+    .unwrap_or_else(|_| b"(profiles.json not found)".to_vec());
 
     let hardware_json = run_ps_capture(concat!(
         "try{",
@@ -638,6 +710,8 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
         ("sidecar-log.txt", &sidecar_log),
         ("sensor-tree.txt", &sensor_tree),
         ("sidecar-service.txt", service_txt.as_bytes()),
+        ("profiles.json", &profiles_json),
+        ("control-capabilities.json", capabilities_json.as_bytes()),
         ("hardware.json", hardware_json.as_bytes()),
         ("environment.txt", env_txt.as_bytes()),
         ("sysinfo.json", sysinfo_json.as_bytes()),
@@ -664,8 +738,8 @@ fn collect_and_open_diagnostics_impl(dir: &Path) -> std::io::Result<PathBuf> {
     Ok(out_path)
 }
 
-pub fn collect_and_open_diagnostics(dir: &Path) {
-    match collect_and_open_diagnostics_impl(dir) {
+pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
+    match collect_and_open_diagnostics_impl(dir, capabilities_json) {
         Ok(path) => debug::append_debug_log(
             dir,
             &format!("status: diagnostics collected at {}", path.display()),
@@ -680,13 +754,20 @@ pub fn collect_and_open_diagnostics(dir: &Path) {
 /// Run diagnostics collection on a background thread. The save dialog, multiple
 /// PowerShell/WMI/`sc.exe` probes and zip writing easily block for several
 /// seconds, so this must never run on the egui UI thread. No-op if a collection
-/// is already in flight.
-pub fn spawn_collect(collecting: Arc<AtomicBool>, dir: PathBuf, ctx: egui::Context) {
+/// is already in flight. `capabilities_json` is a snapshot taken on the UI
+/// thread (`ControlState.capabilities`, already live there — no need for this
+/// background thread to make its own control-pipe round-trip).
+pub fn spawn_collect(
+    collecting: Arc<AtomicBool>,
+    dir: PathBuf,
+    capabilities_json: String,
+    ctx: egui::Context,
+) {
     if collecting.swap(true, Ordering::Relaxed) {
         return;
     }
     std::thread::spawn(move || {
-        collect_and_open_diagnostics(&dir);
+        collect_and_open_diagnostics(&dir, &capabilities_json);
         collecting.store(false, Ordering::Relaxed);
         ctx.request_repaint();
     });
@@ -747,6 +828,7 @@ pub fn show(
     dir: &Arc<PathBuf>,
     pipe_connected: bool,
     wallpaper_active: bool,
+    control: &ControlState,
     dc: &DialogColors,
 ) {
     dc.apply_to_ctx(ctx);
@@ -844,10 +926,11 @@ pub fn show(
         .show(ctx, |ui| {
             // Reserve space for the debug log scroll — takes what's left after
             // Diagnostics (~130 px) + Dependencies (~130 px) + Debug Log header + note.
-            const STATIC_H: f32 = 300.0;
+            const STATIC_H: f32 = 360.0;
             let log_h = (ui.available_height() - STATIC_H).max(80.0);
 
             render_diagnostics(ui, dc, &st);
+            render_control_center(ui, dc, control);
             render_components(ui, dc, &st);
             render_debug_log(ui, dc, &st.log, log_h);
         });
@@ -868,7 +951,14 @@ pub fn show(
             .spawn();
     }
     if action_collect_diag {
-        spawn_collect(collecting.clone(), dir.as_ref().clone(), main_ctx.clone());
+        let capabilities_json =
+            serde_json::to_string_pretty(&control.capabilities).unwrap_or_default();
+        spawn_collect(
+            collecting.clone(),
+            dir.as_ref().clone(),
+            capabilities_json,
+            main_ctx.clone(),
+        );
     }
     if action_close {
         open.store(false, Ordering::Relaxed);

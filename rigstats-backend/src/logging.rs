@@ -71,7 +71,8 @@ impl Drop for SessionsLock {
 }
 
 const CSV_HEADER: &str = "timestamp_unix,cpu_load,cpu_temp,cpu_freq_mhz,gpu_load,gpu_temp,\
-gpu_vram_used_mb,ram_used_gb,disk_read_mbs,disk_write_mbs,net_up_mbps,net_down_mbps,ping_ms\n";
+gpu_vram_used_mb,ram_used_gb,disk_read_mbs,disk_write_mbs,net_up_mbps,net_down_mbps,ping_ms,\
+active_profile\n";
 
 pub fn unix_now_secs() -> u64 {
     SystemTime::now()
@@ -158,7 +159,7 @@ struct SessionsIndex {
 }
 
 /// One parsed row of a session's CSV file (mirrors [`CSV_HEADER`]).
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct SessionRow {
     pub timestamp_unix: u64,
     pub cpu_load: f64,
@@ -173,6 +174,9 @@ pub struct SessionRow {
     pub net_up_mbps: f64,
     pub net_down_mbps: f64,
     pub ping_ms: Option<f64>,
+    /// `None` for rows logged before this column existed, on the wallpaper
+    /// host, or while no profile is active yet.
+    pub active_profile: Option<String>,
 }
 
 pub fn sessions_index_path(dir: &Path) -> PathBuf {
@@ -323,9 +327,10 @@ pub fn append_stats_row(
     let gpu_temp = fmt_opt(payload.gpu.temp, 1);
     let gpu_vram = fmt_opt(payload.gpu.vram_used, 0);
     let ping_ms = fmt_opt(payload.net.ping_ms, 1);
+    let active_profile = payload.active_profile.as_deref().unwrap_or("");
     writeln!(
         w,
-        "{},{},{},{:.1},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{}",
+        "{},{},{},{:.1},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.3},{},{}",
         unix_now_secs(),
         payload.cpu.load,
         cpu_temp,
@@ -339,6 +344,7 @@ pub fn append_stats_row(
         payload.net.up,
         payload.net.down,
         ping_ms,
+        active_profile,
     )
 }
 
@@ -486,6 +492,9 @@ fn read_csv_rows(dir: &Path, path: &Path) -> Vec<SessionRow> {
             net_up_mbps: f[10].parse().unwrap_or(0.0),
             net_down_mbps: f[11].parse().unwrap_or(0.0),
             ping_ms: parse_opt_f64(f[12]),
+            // Absent in rows written before this column existed (#187) — an
+            // older/shorter row is not an error, just no profile info.
+            active_profile: f.get(13).filter(|s| !s.is_empty()).map(|s| s.to_string()),
         });
     }
     rows
@@ -714,6 +723,7 @@ mod tests {
             top_processes: vec![],
             system_uptime_secs: 0,
             lhm_connected: true,
+            active_profile: None,
         }
     }
 
@@ -758,6 +768,41 @@ mod tests {
         assert_eq!(updated.summary.peak_cpu_load, 60.0);
         assert_eq!(updated.summary.avg_gpu_load, Some(70.0));
         assert_eq!(updated.summary.peak_gpu_load, Some(80.0));
+    }
+
+    #[test]
+    fn append_stats_row_round_trips_active_profile() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let meta = start_session(dir.path()).unwrap();
+
+        let mut with_profile = sample_payload(40, Some(60.0), 1_073_741_824);
+        with_profile.active_profile = Some("gaming".to_string());
+        append_stats_row(&with_profile, dir.path(), &meta).unwrap();
+
+        let no_profile = sample_payload(40, Some(60.0), 1_073_741_824);
+        append_stats_row(&no_profile, dir.path(), &meta).unwrap();
+
+        let rows = read_session_rows(dir.path(), &meta);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].active_profile.as_deref(), Some("gaming"));
+        assert_eq!(rows[1].active_profile, None);
+    }
+
+    #[test]
+    fn read_csv_rows_treats_a_missing_trailing_column_as_no_profile() {
+        // Rows written before #187 added the column — must still parse.
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("rigstats-log-2024-01-01.csv");
+        fs::write(
+            &path,
+            "timestamp_unix,cpu_load,cpu_temp,cpu_freq_mhz,gpu_load,gpu_temp,gpu_vram_used_mb,ram_used_gb,disk_read_mbs,disk_write_mbs,net_up_mbps,net_down_mbps,ping_ms\n\
+             1704067200,10,,4000.0,,,,,0.0,0.0,0.0,0.0,\n",
+        )
+        .unwrap();
+
+        let rows = read_csv_rows(dir.path(), &path);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].active_profile, None);
     }
 
     #[test]

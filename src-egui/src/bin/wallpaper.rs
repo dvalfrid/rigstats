@@ -320,7 +320,21 @@ fn main() {
     // recording in the main app is picked up here too even though this is a
     // separate process.
     let full = PollModeHandle::new(PollMode::Full);
-    runtime.spawn(async move { poll_loop(tx, dir_poll, pref_poll, settings_poll, full).await });
+    // The wallpaper host never connects to the control pipe (#187 is a
+    // main-app concept — no dialogs/tray here), so this stays `None` forever;
+    // the session-recording CSV column is simply empty for rows it logs.
+    let no_active_profile: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    runtime.spawn(async move {
+        poll_loop(
+            tx,
+            dir_poll,
+            pref_poll,
+            settings_poll,
+            full,
+            no_active_profile,
+        )
+        .await
+    });
 
     let viewport = egui::ViewportBuilder::default()
         .with_title(TITLE)

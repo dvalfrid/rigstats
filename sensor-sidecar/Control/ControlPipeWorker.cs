@@ -43,47 +43,79 @@ public sealed class ControlPipeWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        SidecarLog.Log("[rigstats-control] Listening on \\\\.\\pipe\\rigstats-control");
         while (!stoppingToken.IsCancellationRequested)
         {
-            var pipe = NamedPipeServerStreamAcl.Create(
-                "rigstats-control",
-                PipeDirection.InOut,
-                maxNumberOfServerInstances: 1,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous,
-                inBufferSize: 0,
-                outBufferSize: 0,
-                pipeSecurity: _pipeSecurity);
-
             try
             {
-                await pipe.WaitForConnectionAsync(stoppingToken);
+                await AcceptOneAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
-                await pipe.DisposeAsync();
                 break;
             }
-
-            var verdict = verifier.Verify(pipe);
-            if (!verdict.Allowed)
+            catch (Exception e)
             {
-                // Reject silently over the wire (no protocol response to an
-                // unverified caller) but still log it — otherwise a
-                // legitimate rigstats.exe being rejected (e.g. after a
-                // signer mismatch) would be undiagnosable in the field.
-                SidecarLog.Log($"[rigstats-control] Client rejected: {verdict.Reason}");
-                await pipe.DisposeAsync();
-                continue;
+                // A BackgroundService that throws out of ExecuteAsync dies
+                // silently (the default BackgroundServiceExceptionBehavior is
+                // Ignore, not a host crash) — without this catch, any
+                // exception here (e.g. pipe/ACL construction failing) would
+                // leave the control pipe permanently unavailable with zero
+                // trace in the log. Back off briefly so a persistent failure
+                // doesn't spin the loop.
+                SidecarLog.Log($"[rigstats-control] ExecuteAsync error: {e}");
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
             }
-
-            SidecarLog.Log("[rigstats-control] Client connected.");
-            // Control is deliberately single-client (doc: "one client at a
-            // time") — serve fully before accepting the next connection,
-            // unlike the telemetry pipe's fire-and-forget-per-client loop.
-            await ServeClientAsync(pipe, stoppingToken);
-            SidecarLog.Log("[rigstats-control] Client disconnected.");
         }
+    }
+
+    private async Task AcceptOneAsync(CancellationToken stoppingToken)
+    {
+        var pipe = NamedPipeServerStreamAcl.Create(
+            "rigstats-control",
+            PipeDirection.InOut,
+            maxNumberOfServerInstances: 1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            inBufferSize: 0,
+            outBufferSize: 0,
+            pipeSecurity: _pipeSecurity);
+
+        try
+        {
+            await pipe.WaitForConnectionAsync(stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            await pipe.DisposeAsync();
+            throw;
+        }
+
+        var verdict = verifier.Verify(pipe);
+        if (!verdict.Allowed)
+        {
+            // Reject silently over the wire (no protocol response to an
+            // unverified caller) but still log it — otherwise a legitimate
+            // rigstats.exe being rejected (e.g. after a signer mismatch)
+            // would be undiagnosable in the field.
+            SidecarLog.Log($"[rigstats-control] Client rejected: {verdict.Reason}");
+            await pipe.DisposeAsync();
+            return;
+        }
+
+        SidecarLog.Log("[rigstats-control] Client connected.");
+        // Control is deliberately single-client (doc: "one client at a
+        // time") — serve fully before accepting the next connection, unlike
+        // the telemetry pipe's fire-and-forget-per-client loop.
+        await ServeClientAsync(pipe, stoppingToken);
+        SidecarLog.Log("[rigstats-control] Client disconnected.");
     }
 
     private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)

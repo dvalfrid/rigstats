@@ -4,6 +4,7 @@
 use crate::menu_icons;
 use crate::theme;
 use eframe::egui;
+use rigstats_backend::control::Profile;
 use rigstats_backend::lhm;
 use std::sync::mpsc;
 use tray_icon::{
@@ -25,6 +26,8 @@ pub enum TrayCmd {
     ToggleOverlayLock,
     /// Set the displayed GPU; `None` = automatic (highest VRAM).
     SelectGpu(Option<String>),
+    /// Apply a Control Center profile by id (#187).
+    SelectProfile(String),
 }
 
 /// Menu-id prefix of the GPU submenu rows. Ids are derived from the choice
@@ -117,6 +120,60 @@ impl GpuMenu {
     }
 }
 
+/// Menu-id prefix of the Control Center profile submenu rows (#187) — same
+/// choice-derived-id scheme as the GPU submenu above, for the same reason
+/// (decode a click without sharing non-`Send` menu items across threads).
+const PROFILE_ID_PREFIX: &str = "profile:id:";
+
+fn profile_menu_id(id: &str) -> MenuId {
+    MenuId::new(format!("{PROFILE_ID_PREFIX}{id}"))
+}
+
+/// Decodes a profile submenu click into the profile id, or `None` if `id`
+/// isn't a profile submenu row.
+pub fn profile_choice_from_menu_id(id: &MenuId) -> Option<String> {
+    id.as_ref()
+        .strip_prefix(PROFILE_ID_PREFIX)
+        .map(str::to_string)
+}
+
+/// The tray "Profile" submenu (#187): a check row per Control Center
+/// profile, ticked to match the active one. Unlike [`GpuMenu`] (filled once
+/// by background hardware detection), profiles arrive over the control pipe
+/// and already flow through the UI thread each frame via
+/// `DashboardRuntime::drain_control` — so [`ProfileMenu::sync`] just fills
+/// the rows in the first time a non-empty list shows up (profile
+/// editing/deleting has no UI yet in phase 0, so the list is static for
+/// practical purposes during a session) and re-ticks the active row on every
+/// call.
+pub struct ProfileMenu {
+    submenu: Submenu,
+    /// `(profile id, row)` in menu order.
+    items: Vec<(String, CheckMenuItem)>,
+}
+
+impl ProfileMenu {
+    pub fn sync(&mut self, profiles: &[Profile], active_id: Option<&str>) {
+        if self.items.is_empty() && !profiles.is_empty() {
+            for profile in profiles {
+                let item = CheckMenuItem::with_id(
+                    profile_menu_id(&profile.id),
+                    &profile.name,
+                    true,
+                    false,
+                    None,
+                );
+                let _ = self.submenu.append(&item);
+                self.items.push((profile.id.clone(), item));
+            }
+            self.submenu.set_enabled(true);
+        }
+        for (id, item) in &self.items {
+            item.set_checked(Some(id.as_str()) == active_id);
+        }
+    }
+}
+
 pub struct Tray {
     icon: tray_icon::TrayIcon,
     pub settings_id: tray_icon::menu::MenuId,
@@ -131,6 +188,7 @@ pub struct Tray {
     pub overlay_id: tray_icon::menu::MenuId,
     pub overlay_lock_id: tray_icon::menu::MenuId,
     pub gpu_menu: GpuMenu,
+    pub profile_menu: ProfileMenu,
     recording_item: IconMenuItem,
     overlay_lock_item: IconMenuItem,
 }
@@ -220,6 +278,13 @@ pub fn build_tray(
     };
     let _ = gpu_menu.submenu.append(&gpu_menu.auto_item);
 
+    // Profile submenu (#187) — starts empty/disabled; `ProfileMenu::sync`
+    // fills it in once the control pipe reports the profile list.
+    let profile_menu = ProfileMenu {
+        submenu: Submenu::new("Profile", false),
+        items: Vec::new(),
+    };
+
     let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
     let overlay_id = overlay_item.id().clone();
@@ -239,6 +304,7 @@ pub fn build_tray(
     let _ = menu.append(&recording_item);
     let _ = menu.append(&history_item);
     let _ = menu.append(&gpu_menu.submenu);
+    let _ = menu.append(&profile_menu.submenu);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -284,6 +350,7 @@ pub fn build_tray(
         overlay_id,
         overlay_lock_id,
         gpu_menu,
+        profile_menu,
         recording_item,
         overlay_lock_item,
     }
@@ -408,6 +475,27 @@ mod tests {
     fn gpu_menu_id_rejects_other_menu_rows() {
         assert_eq!(gpu_choice_from_menu_id(&MenuId::new("42")), None);
         assert_eq!(gpu_choice_from_menu_id(&MenuId::new("gpu:")), None);
+    }
+
+    #[test]
+    fn profile_menu_ids_round_trip() {
+        assert_eq!(
+            profile_choice_from_menu_id(&profile_menu_id("gaming")),
+            Some("gaming".to_string())
+        );
+        assert_eq!(
+            profile_choice_from_menu_id(&profile_menu_id("silent")),
+            Some("silent".to_string())
+        );
+    }
+
+    #[test]
+    fn profile_menu_id_rejects_other_menu_rows() {
+        assert_eq!(profile_choice_from_menu_id(&MenuId::new("42")), None);
+        assert_eq!(
+            profile_choice_from_menu_id(&gpu_menu_id(Some("NVIDIA"))),
+            None
+        );
     }
 
     #[test]
