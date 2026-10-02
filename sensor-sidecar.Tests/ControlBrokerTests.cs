@@ -67,9 +67,9 @@ public class ControlBrokerTests
     [Fact]
     public async Task ApplyProfileAsync_rolls_back_every_already_applied_provider_in_reverse_order_on_failure()
     {
-        // power_plan and cpu_limit both apply cleanly; curve_opt's Apply throws.
-        // power_plan and cpu_limit must both be Restored, curve_opt (never
-        // successfully applied) must not be.
+        // power_plan and cpu_limit both apply cleanly; curve_opt's Apply throws
+        // (possibly after a partial write). All three must be Restored, the
+        // failing one first.
         var order = new List<string>();
 
         var powerPlan = FakeProvider("power_plan");
@@ -80,6 +80,7 @@ public class ControlBrokerTests
 
         var curveOpt = FakeProvider("curve_opt");
         curveOpt.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ => throw new InvalidOperationException("locked by BIOS"));
+        curveOpt.When(p => p.Restore(Arg.Any<Snapshot>())).Do(_ => order.Add("curve_opt"));
 
         var broker = new ControlBroker([powerPlan, cpuLimit, curveOpt]);
 
@@ -95,11 +96,9 @@ public class ControlBrokerTests
         Assert.False(result.Ok);
         Assert.Contains("locked by BIOS", result.Message);
 
-        // Applied in fixed order (power_plan, cpu_limit) then curve_opt failed —
-        // rollback must be in reverse order of what was actually applied.
-        Assert.Equal(["cpu_limit", "power_plan"], order);
-
-        curveOpt.DidNotReceive().Restore(Arg.Any<Snapshot>());
+        // Applied in fixed order (power_plan, cpu_limit, curve_opt) —
+        // rollback is the reverse of what was touched.
+        Assert.Equal(["curve_opt", "cpu_limit", "power_plan"], order);
     }
 
     [Fact]

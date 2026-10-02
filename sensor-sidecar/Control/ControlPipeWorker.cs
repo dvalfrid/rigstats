@@ -2,7 +2,9 @@ using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
+using SensorSidecar.Control.Providers;
 
 namespace SensorSidecar.Control;
 
@@ -16,7 +18,9 @@ public sealed class ControlPipeWorker(
     ProfileStore profiles,
     SafetyGuard safetyGuard,
     IEnumerable<IControlProvider> providers,
-    IPipeClientVerifier verifier) : BackgroundService
+    IPipeClientVerifier verifier,
+    FanProvider fanProvider,
+    FanCurveLoop fanLoop) : BackgroundService
 {
     private const string AppVersion = "3.0.0"; // TODO: pull from the assembly/installer version once wired up.
     private const int ProtocolVersion = 1;
@@ -34,6 +38,12 @@ public sealed class ControlPipeWorker(
             AccessControlType.Allow));
         security.AddAccessRule(new PipeAccessRule(
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+            PipeAccessRights.FullControl,
+            AccessControlType.Allow));
+        // Same as the telemetry pipe: SYSTEM as a service, the admin user
+        // when run from an elevated console during development.
+        security.AddAccessRule(new PipeAccessRule(
+            WindowsIdentity.GetCurrent().User!,
             PipeAccessRights.FullControl,
             AccessControlType.Allow));
         return security;
@@ -56,13 +66,12 @@ public sealed class ControlPipeWorker(
             }
             catch (Exception e)
             {
-                // A BackgroundService that throws out of ExecuteAsync dies
-                // silently (the default BackgroundServiceExceptionBehavior is
-                // Ignore, not a host crash) — without this catch, any
-                // exception here (e.g. pipe/ACL construction failing) would
-                // leave the control pipe permanently unavailable with zero
-                // trace in the log. Back off briefly so a persistent failure
-                // doesn't spin the loop.
+                // A BackgroundService that throws out of ExecuteAsync stops
+                // the whole host (the default BackgroundServiceExceptionBehavior
+                // is StopHost) — without this catch, any exception here (e.g.
+                // pipe/ACL construction failing) would take telemetry and fan
+                // control down with it. Back off briefly so a persistent
+                // failure doesn't spin the loop.
                 SidecarLog.Log($"[rigstats-control] ExecuteAsync error: {e}");
                 try
                 {
@@ -118,18 +127,76 @@ public sealed class ControlPipeWorker(
         SidecarLog.Log("[rigstats-control] Client disconnected.");
     }
 
+    /// One connected client: responses and pushed events share the writer,
+    /// so every line goes out under `_writeLock`. Events are queued per
+    /// connection (bounded, drop-oldest) and only once the client has sent
+    /// `subscribe` — nothing from before the connection is ever replayed.
+    private sealed class Connection(StreamWriter writer) : IDisposable
+    {
+        private readonly SemaphoreSlim _writeLock = new(1, 1);
+
+        public Channel<ControlEventMessage> Events { get; } = Channel.CreateBounded<ControlEventMessage>(
+            new BoundedChannelOptions(64) { FullMode = BoundedChannelFullMode.DropOldest });
+
+        public bool Subscribed
+        {
+            get => Volatile.Read(ref _subscribed);
+            set => Volatile.Write(ref _subscribed, value);
+        }
+
+        private bool _subscribed;
+
+        public async Task WriteLineAsync<T>(T message, CancellationToken ct)
+        {
+            var json = JsonSerializer.Serialize(message, ControlJson.Options);
+            await _writeLock.WaitAsync(ct);
+            try
+            {
+                await writer.WriteLineAsync(json.AsMemory(), ct);
+            }
+            finally
+            {
+                _writeLock.Release();
+            }
+        }
+
+        public void Dispose() => _writeLock.Dispose();
+    }
+
     private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
     {
+        using var connectionCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        var ct = connectionCts.Token;
         try
         {
             using var reader = new StreamReader(pipe);
             await using var writer = new StreamWriter(pipe) { AutoFlush = true };
-            while (pipe.IsConnected && !stoppingToken.IsCancellationRequested)
+            using var connection = new Connection(writer);
+
+            void OnFanEvent(FanEvent e)
             {
-                var line = await reader.ReadLineAsync(stoppingToken);
-                if (line is null)
-                    break; // client disconnected.
-                await HandleLineAsync(line, writer, stoppingToken);
+                if (connection.Subscribed)
+                    connection.Events.Writer.TryWrite(ToEventMessage(e));
+            }
+
+            fanLoop.EventRaised += OnFanEvent;
+            var pump = PumpEventsAsync(connection, ct);
+            try
+            {
+                while (pipe.IsConnected && !ct.IsCancellationRequested)
+                {
+                    var line = await reader.ReadLineAsync(ct);
+                    if (line is null)
+                        break; // client disconnected.
+                    await HandleLineAsync(line, connection, ct);
+                }
+            }
+            finally
+            {
+                // Stop the pump before the writer it uses is disposed.
+                fanLoop.EventRaised -= OnFanEvent;
+                connectionCts.Cancel();
+                await pump;
             }
         }
         catch (IOException) { }
@@ -140,7 +207,25 @@ public sealed class ControlPipeWorker(
         }
     }
 
-    private async Task HandleLineAsync(string line, StreamWriter writer, CancellationToken ct)
+    private static async Task PumpEventsAsync(Connection connection, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var message in connection.Events.Reader.ReadAllAsync(ct))
+                await connection.WriteLineAsync(message, ct);
+        }
+        catch (OperationCanceledException) { }
+        catch (IOException) { } // client went away mid-write; the read loop notices too.
+    }
+
+    internal static ControlEventMessage ToEventMessage(FanEvent e) => e switch
+    {
+        FanEvent.SafetyTripped s => new ControlEventMessage { Event = "safety_tripped", Data = new { reason = s.Reason } },
+        FanEvent.DutyUpdate d => new ControlEventMessage { Event = "fan_duty", Data = new { duty = d.DutyByHeader } },
+        _ => throw new ArgumentOutOfRangeException(nameof(e)),
+    };
+
+    private async Task HandleLineAsync(string line, Connection connection, CancellationToken ct)
     {
         ControlRequest request;
         try
@@ -150,15 +235,15 @@ public sealed class ControlPipeWorker(
         }
         catch (JsonException e)
         {
-            await WriteAsync(writer, ControlResponse.Fail(0, "bad_request", e.Message), ct);
+            await connection.WriteLineAsync(ControlResponse.Fail(0, "bad_request", e.Message), ct);
             return;
         }
 
-        var response = await DispatchAsync(request, ct);
-        await WriteAsync(writer, response, ct);
+        var response = await DispatchAsync(request, connection, ct);
+        await connection.WriteLineAsync(response, ct);
     }
 
-    private async Task<ControlResponse> DispatchAsync(ControlRequest request, CancellationToken ct)
+    private async Task<ControlResponse> DispatchAsync(ControlRequest request, Connection connection, CancellationToken ct)
     {
         try
         {
@@ -174,8 +259,8 @@ public sealed class ControlPipeWorker(
                 "preview" => await HandleApplyProfileAsync(request, ct), // TODO(#187 follow-up): auto-revert timer; applies directly for now.
                 "confirm" => ControlResponse.Ok(request.Id, new { ok = true }),
                 "release_to_firmware" => HandleReleaseToFirmware(request),
-                "identify_fan" => ControlResponse.Fail(request.Id, "not_supported", "no fan provider registered yet."),
-                "subscribe" => ControlResponse.Ok(request.Id, new { subscribed = true }),
+                "identify_fan" => HandleIdentifyFan(request),
+                "subscribe" => HandleSubscribe(request, connection),
                 _ => ControlResponse.Fail(request.Id, "unknown_method", $"unknown method '{request.Method}'."),
             };
         }
@@ -229,9 +314,34 @@ public sealed class ControlPipeWorker(
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
 
-    private static async Task WriteAsync(StreamWriter writer, ControlResponse response, CancellationToken ct)
+    private static ControlResponse HandleSubscribe(ControlRequest request, Connection connection)
     {
-        var json = JsonSerializer.Serialize(response, ControlJson.Options);
-        await writer.WriteLineAsync(json.AsMemory(), ct);
+        connection.Subscribed = true;
+        return ControlResponse.Ok(request.Id, new { subscribed = true });
+    }
+
+    /// Answers at once and runs the 3 s spin in the background — the control
+    /// pipe serves one request at a time, so awaiting it would stall the UI.
+    private ControlResponse HandleIdentifyFan(ControlRequest request)
+    {
+        var header = request.Params?.GetProperty("header").GetString()
+            ?? throw new JsonException("missing header.");
+        if (!fanProvider.HasHeader(header))
+            return ControlResponse.Fail(request.Id, "not_found", $"fan header '{header}' not found.");
+
+        _ = IdentifyInBackgroundAsync(header);
+        return ControlResponse.Ok(request.Id, new { ok = true, duration_ms = (int)FanProvider.IdentifyDuration.TotalMilliseconds });
+    }
+
+    private async Task IdentifyInBackgroundAsync(string header)
+    {
+        try
+        {
+            await fanProvider.IdentifyAsync(header, FanProvider.IdentifyDuration, CancellationToken.None);
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] identify_fan {header} failed: {e}");
+        }
     }
 }

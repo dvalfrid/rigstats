@@ -84,12 +84,41 @@ public sealed class Snapshot
     public JsonNode? State { get; init; }
 }
 
+/// One fan header's curve, keyed by its LHM control identifier (e.g.
+/// `"lpc/nct6799d/0/control/1"`) in <see cref="ProfilePart.Fan"/>'s
+/// `Headers` map.
+public sealed class FanHeaderConfig
+{
+    /// User-facing label (LHM can't tell which header is the CPU cooler —
+    /// see `identify_fan` and the ROADMAP's "CPU fan speed" note).
+    public string? Label { get; init; }
+
+    /// Source temperature sensor: `"cpu_package"`, `"gpu"`, or a motherboard
+    /// temp sensor identifier.
+    public required string Source { get; init; }
+
+    /// `[[tempC, dutyPct], ...]`, sorted ascending by temperature.
+    /// `FanProvider.Validate` clamps duty values to the probed hardware
+    /// min/max and rejects an unsorted curve.
+    public required List<List<double>> Curve { get; init; }
+
+    /// Minimum temperature swing (°C) before the evaluated duty is allowed
+    /// to change again, so small fluctuations around a curve breakpoint
+    /// don't chatter the fan. See `FanCurveEvaluator.EvaluateHeader`.
+    public double HysteresisC { get; init; } = 3.0;
+}
+
+public sealed class FanPart
+{
+    public Dictionary<string, FanHeaderConfig>? Headers { get; init; }
+}
+
 /// One profile's per-domain settings. Every property is optional — a missing
-/// part leaves that domain untouched by `ControlBroker`. Only `PowerPlan` has
-/// a typed shape in phase 0 (#187); the other domains are raw JSON passthrough
-/// so `ProfileStore` round-trips them untouched even before their providers
-/// (fans #188, CPU limits #189, GPU #190, Curve Optimizer #191, Aura #192)
-/// exist — each phase replaces its own placeholder with a typed shape.
+/// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187)
+/// and `Fan` (#188) have typed shapes; the remaining domains are raw JSON
+/// passthrough so `ProfileStore` round-trips them untouched even before
+/// their providers (CPU limits #189, GPU #190, Curve Optimizer #191, Aura
+/// #192) exist — each phase replaces its own placeholder with a typed shape.
 public sealed class ProfilePart
 {
     /// Symbolic scheme name: `"power_saver"`, `"balanced"`, `"high_performance"`,
@@ -97,7 +126,7 @@ public sealed class ProfilePart
     /// well-known Windows scheme GUIDs.
     public string? PowerPlan { get; init; }
 
-    public JsonNode? Fan { get; init; }
+    public FanPart? Fan { get; init; }
     public JsonNode? CpuLimit { get; init; }
     public JsonNode? CurveOpt { get; init; }
     public JsonNode? Gpu { get; init; }

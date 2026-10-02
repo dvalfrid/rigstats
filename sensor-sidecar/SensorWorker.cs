@@ -26,6 +26,14 @@ public sealed class SensorWorker(IHardwareHost hardwareHost) : BackgroundService
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
             PipeAccessRights.FullControl,
             AccessControlType.Allow));
+        // The creating account needs CreateNewInstance to offer the next
+        // instance after the first client connects. As a service that is
+        // SYSTEM (already covered); run from an elevated console for
+        // development it is the admin user, who otherwise gets access denied.
+        security.AddAccessRule(new PipeAccessRule(
+            WindowsIdentity.GetCurrent().User!,
+            PipeAccessRights.FullControl,
+            AccessControlType.Allow));
         return security;
     }
 
@@ -55,15 +63,36 @@ public sealed class SensorWorker(IHardwareHost hardwareHost) : BackgroundService
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            var pipe = NamedPipeServerStreamAcl.Create(
-                "rigstats-sensors",
-                PipeDirection.Out,
-                maxNumberOfServerInstances: MaxClients,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous,
-                inBufferSize: 0,
-                outBufferSize: 0,
-                pipeSecurity: _pipeSecurity);
+            NamedPipeServerStream pipe;
+            try
+            {
+                pipe = NamedPipeServerStreamAcl.Create(
+                    "rigstats-sensors",
+                    PipeDirection.Out,
+                    maxNumberOfServerInstances: MaxClients,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous,
+                    inBufferSize: 0,
+                    outBufferSize: 0,
+                    pipeSecurity: _pipeSecurity);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // E.g. all MaxClients instances busy. Throwing out of
+                // ExecuteAsync would stop the whole host (the default
+                // BackgroundServiceExceptionBehavior is StopHost) — taking
+                // fan control down with telemetry. Back off and retry.
+                SidecarLog.Log($"[rigstats-sensor] Pipe instance unavailable: {e.Message}");
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                continue;
+            }
 
             try
             {

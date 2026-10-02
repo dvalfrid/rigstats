@@ -137,8 +137,19 @@ public static class SensorTreeLoader
         var s = Substitute.For<ISensor>();
         s.SensorType.Returns(type);
         s.Name.Returns(name);
-        s.Value.Returns(value);
         s.Identifier.Returns(ParseIdentifier(id));
+        if (type == SensorType.Control)
+        {
+            // Writable, so FanProvider can probe/drive real board layouts;
+            // the sensor value reads back the fake's PWM register.
+            var header = new FakeFanHeader(value);
+            s.Control.Returns(header.Control);
+            s.Value.Returns(_ => header.Register);
+        }
+        else
+        {
+            s.Value.Returns(value);
+        }
         return s;
     }
 }

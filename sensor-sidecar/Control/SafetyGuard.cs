@@ -2,10 +2,10 @@ using Microsoft.Extensions.Hosting;
 
 namespace SensorSidecar.Control;
 
-/// Phase-0 **skeleton** only — the fan critical-temp loop, sensor-loss
-/// override, and boot-crash guard from `docs/control-architecture.md`'s
-/// safety table are phase 1+ (they need a `FanProvider`/`CpuLimitProvider`
-/// that don't exist yet). What phase 0 needs and this provides:
+/// The cross-provider part of `docs/control-architecture.md`'s safety table.
+/// The fan critical-temp and sensor-loss overrides live in `FanCurveLoop`
+/// (#188); the boot-crash guard arrives with `CpuLimitProvider` (#189).
+/// What this provides:
 ///
 /// - Release-on-stop: every provider hands control back to firmware when the
 ///   service stops, cleanly or otherwise.

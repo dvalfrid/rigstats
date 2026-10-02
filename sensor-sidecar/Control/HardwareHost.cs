@@ -16,9 +16,14 @@ public interface IHardwareHost
     /// stale (replaces `SensorWorker.GetFreshLine()`).
     Task<string> GetTelemetryLineAsync(CancellationToken ct);
 
+    /// The same cached sample as <see cref="GetTelemetryLineAsync"/>, before
+    /// serialization — for service-side consumers (`FanCurveLoop`) that must
+    /// keep seeing fresh values even when no telemetry client is connected.
+    Task<SensorPayload> GetSampleAsync(CancellationToken ct);
+
     /// Exclusive access to the raw `Computer` for a provider's `Capture`/
     /// `Apply`/`Verify`. Unused by `PowerPlanProvider` (power plan is an OS
-    /// API, not LHM hardware) — for future providers (fan #188, etc.).
+    /// API, not LHM hardware).
     Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct);
 
     /// Dumps the full sensor tree to disk for diagnostics.
@@ -41,6 +46,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // sample lock this replaces.
     private readonly SemaphoreSlim _hardwareLock = new(1, 1);
 
+    private SensorPayload? _latestPayload;
     private string? _latestLine;
     private long _latestAtMs;
 
@@ -105,20 +111,40 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         await _hardwareLock.WaitAsync(ct);
         try
         {
-            var now = Environment.TickCount64;
-            if (_latestLine is null || now - _latestAtMs >= SampleMaxAgeMs)
-            {
-                _computer.Accept(_visitor);
-                var payload = SensorReader.Extract(_computer);
-                _latestLine = System.Text.Json.JsonSerializer.Serialize(payload, _telemetryJsonOptions);
-                _latestAtMs = now;
-            }
-            return _latestLine;
+            RefreshIfStale();
+            return _latestLine!;
         }
         finally
         {
             _hardwareLock.Release();
         }
+    }
+
+    public async Task<SensorPayload> GetSampleAsync(CancellationToken ct)
+    {
+        await _hardwareLock.WaitAsync(ct);
+        try
+        {
+            RefreshIfStale();
+            return _latestPayload!;
+        }
+        finally
+        {
+            _hardwareLock.Release();
+        }
+    }
+
+    // Caller holds _hardwareLock. One LHM read per SampleMaxAgeMs, however
+    // many telemetry clients and service-side consumers ask for it.
+    private void RefreshIfStale()
+    {
+        var now = Environment.TickCount64;
+        if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
+            return;
+        _computer.Accept(_visitor);
+        _latestPayload = SensorReader.Extract(_computer);
+        _latestLine = System.Text.Json.JsonSerializer.Serialize(_latestPayload, _telemetryJsonOptions);
+        _latestAtMs = now;
     }
 
     public async Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct)

@@ -124,4 +124,29 @@ public sealed class ProfileStoreTests : IDisposable
         Assert.NotEqual("temp", active);
         Assert.NotNull(active);
     }
+
+    [Fact]
+    public async Task Builtins_put_every_fan_header_on_bios_control()
+    {
+        var profiles = await _store.ListAsync(CancellationToken.None);
+
+        Assert.All(profiles, p => Assert.Empty(p.Part.Fan!.Headers!));
+    }
+
+    [Fact]
+    public async Task Builtins_saved_before_fan_support_gain_the_empty_fan_part()
+    {
+        await File.WriteAllTextAsync(_path, """
+            {"active":"gaming","profiles":[
+              {"id":"gaming","name":"Gaming","builtin":true,"part":{"power_plan":"high_performance"}},
+              {"id":"mine","name":"Mine","part":{"power_plan":"balanced"}}]}
+            """);
+
+        var profiles = await new ProfileStore(_path).ListAsync(CancellationToken.None);
+
+        var gaming = profiles.Single(p => p.Id == "gaming");
+        Assert.Equal("high_performance", gaming.Part.PowerPlan);
+        Assert.Empty(gaming.Part.Fan!.Headers!);
+        Assert.Null(profiles.Single(p => p.Id == "mine").Part.Fan); // user profiles are left as saved
+    }
 }

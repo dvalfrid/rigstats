@@ -68,6 +68,8 @@ struct RigStatsApp {
     /// active-profile chip (`"open_control_center"` temp flag, consumed in
     /// `draw_one_panel`) or the tray.
     control_open: Arc<AtomicBool>,
+    /// Control Center tab/selection and unsaved fan-curve draft (#188).
+    control_ui: windows::control::ControlUi,
     // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
     settings_focus: Arc<AtomicBool>,
     about_focus: Arc<AtomicBool>,
@@ -395,6 +397,7 @@ impl RigStatsApp {
             updater_open,
             history_open: Arc::new(AtomicBool::new(false)),
             control_open: Arc::new(AtomicBool::new(false)),
+            control_ui: windows::control::ControlUi::default(),
             settings_focus: Arc::new(AtomicBool::new(false)),
             about_focus: Arc::new(AtomicBool::new(false)),
             status_focus: Arc::new(AtomicBool::new(false)),
@@ -1970,17 +1973,18 @@ impl eframe::App for RigStatsApp {
             let focus = self.control_focus.clone();
             let mctx = main_ctx.clone();
             let cmd_tx = self.control_cmd_tx.clone();
-            let [px, py] = dialog_center(640.0, 420.0);
+            let [px, py] = dialog_center(780.0, 640.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let visible = self.dialog_reveal.visible("control");
             let control_state = self.runtime.control.clone();
+            let control_ui = &mut self.control_ui;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Control Center")
                     .with_visible(visible)
-                    .with_inner_size([640.0, 420.0])
+                    .with_inner_size([780.0, 640.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -1999,6 +2003,7 @@ impl eframe::App for RigStatsApp {
                         &control_state,
                         &cmd_tx,
                         &dc,
+                        control_ui,
                     );
                 },
             );

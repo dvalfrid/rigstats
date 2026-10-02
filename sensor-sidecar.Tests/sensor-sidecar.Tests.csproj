@@ -36,6 +36,10 @@
     <Compile Include="..\sensor-sidecar\Control\PipeClientVerifier.cs" Link="Control\PipeClientVerifier.cs" />
     <Compile Include="..\sensor-sidecar\Control\ControlPipeWorker.cs" Link="Control\ControlPipeWorker.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\PowerPlanProvider.cs" Link="Control\Providers\PowerPlanProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\FanProvider.cs" Link="Control\Providers\FanProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\FanCurveEvaluator.cs" Link="Control\Providers\FanCurveEvaluator.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\FanCurveLoop.cs" Link="Control\Providers\FanCurveLoop.cs" />
+    <Compile Include="..\sensor-sidecar\Control\ActiveProfileApplier.cs" Link="Control\ActiveProfileApplier.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

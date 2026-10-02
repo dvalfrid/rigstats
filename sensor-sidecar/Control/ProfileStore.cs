@@ -25,13 +25,46 @@ public sealed class ProfileStore
             "se.codeby.rigstats",
             "profiles.json");
 
-    private static readonly IReadOnlyList<Profile> BuiltinProfiles =
+    // Built-ins carry an explicit, empty fan part ("every header on BIOS
+    // control") rather than none: a missing part leaves the domain untouched,
+    // so switching from a profile with curves to one without would otherwise
+    // keep the old curves running while the Fans tab shows none.
+    private static List<Profile> BuiltinProfiles() =>
     [
-        new Profile { Id = "silent", Name = "Silent", Icon = "moon", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver" } },
-        new Profile { Id = "balanced", Name = "Balanced", Icon = "scale", Builtin = true, Part = new ProfilePart { PowerPlan = "balanced" } },
-        new Profile { Id = "gaming", Name = "Gaming", Icon = "bolt", Builtin = true, Part = new ProfilePart { PowerPlan = "high_performance" } },
-        new Profile { Id = "eco", Name = "Eco", Icon = "leaf", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver" } },
+        new Profile { Id = "silent", Name = "Silent", Icon = "moon", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans() } },
+        new Profile { Id = "balanced", Name = "Balanced", Icon = "scale", Builtin = true, Part = new ProfilePart { PowerPlan = "balanced", Fan = BiosFans() } },
+        new Profile { Id = "gaming", Name = "Gaming", Icon = "bolt", Builtin = true, Part = new ProfilePart { PowerPlan = "high_performance", Fan = BiosFans() } },
+        new Profile { Id = "eco", Name = "Eco", Icon = "leaf", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans() } },
     ];
+
+    private static FanPart BiosFans() => new() { Headers = [] };
+
+    /// Built-ins saved before fan support existed (#187) have no fan part —
+    /// give them the empty one `BuiltinProfiles` now seeds.
+    private static ProfileFile WithBiosFansOnBuiltins(ProfileFile file) => new()
+    {
+        Active = file.Active,
+        Profiles = file.Profiles
+            .Select(p => p.Builtin && p.Part.Fan is null
+                ? new Profile
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Icon = p.Icon,
+                    Builtin = true,
+                    Part = new ProfilePart
+                    {
+                        PowerPlan = p.Part.PowerPlan,
+                        Fan = BiosFans(),
+                        CpuLimit = p.Part.CpuLimit,
+                        CurveOpt = p.Part.CurveOpt,
+                        Gpu = p.Part.Gpu,
+                        Aura = p.Part.Aura,
+                    },
+                }
+                : p)
+            .ToList(),
+    };
 
     public async Task<ProfileFile> LoadAsync(CancellationToken ct)
     {
@@ -53,16 +86,18 @@ public sealed class ProfileStore
 
         if (!File.Exists(_path))
         {
-            _cached = new ProfileFile { Active = "balanced", Profiles = [.. BuiltinProfiles] };
+            _cached = new ProfileFile { Active = "balanced", Profiles = BuiltinProfiles() };
             await SaveUnlockedAsync(_cached, ct);
             return _cached;
         }
 
-        await using var stream = File.OpenRead(_path);
-        var loaded = await JsonSerializer.DeserializeAsync<ProfileFile>(stream, ControlJson.Options, ct)
-            ?? new ProfileFile { Active = "balanced", Profiles = [.. BuiltinProfiles] };
-        _cached = loaded;
-        return loaded;
+        ProfileFile? loaded;
+        await using (var stream = File.OpenRead(_path))
+            loaded = await JsonSerializer.DeserializeAsync<ProfileFile>(stream, ControlJson.Options, ct);
+        _cached = loaded is null
+            ? new ProfileFile { Active = "balanced", Profiles = BuiltinProfiles() }
+            : WithBiosFansOnBuiltins(loaded);
+        return _cached;
     }
 
     public async Task<IReadOnlyList<Profile>> ListAsync(CancellationToken ct) => (await LoadAsync(ct)).Profiles;

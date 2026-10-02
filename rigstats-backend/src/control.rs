@@ -13,6 +13,7 @@
 
 use crate::debug::{append_debug_log, log_error, log_warn};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender as SyncSender;
 use std::time::Duration;
@@ -79,7 +80,7 @@ pub struct ProfilePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub power_plan: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fan: Option<serde_json::Value>,
+    pub fan: Option<FanPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_limit: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,6 +89,48 @@ pub struct ProfilePart {
     pub gpu: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aura: Option<serde_json::Value>,
+}
+
+/// A profile's fan part (#188). Headers missing from `headers` are on BIOS
+/// control; an empty map releases every header when the profile applies.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FanPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headers: Option<BTreeMap<String, FanHeaderConfig>>,
+}
+
+/// One header's curve, keyed by LHM control identifier in [`FanPart`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FanHeaderConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// `"cpu_package"`, `"gpu"`, or `"mb:<label>"` — see [`FanCaps::sources`].
+    pub source: String,
+    /// `[tempC, dutyPct]` points, ascending by temperature.
+    pub curve: Vec<[f64; 2]>,
+    #[serde(default = "default_hysteresis_c")]
+    pub hysteresis_c: f64,
+}
+
+fn default_hysteresis_c() -> f64 {
+    3.0
+}
+
+/// The "fan" capability's `details`, typed.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct FanCaps {
+    #[serde(default)]
+    pub headers: Vec<FanHeaderCap>,
+    #[serde(default)]
+    pub sources: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FanHeaderCap {
+    pub id: String,
+    pub label: String,
+    pub min: f64,
+    pub max: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -141,6 +184,26 @@ pub struct ControlState {
     pub dry_run: bool,
     pub last_apply_result: Option<ApplyResult>,
     pub last_error: Option<String>,
+    /// Live commanded duty % per controlled header (`fan_duty` events).
+    pub fan_duty: BTreeMap<String, f64>,
+    /// Reason of the last critical-temperature override (`safety_tripped`).
+    pub safety_tripped: Option<String>,
+}
+
+impl ControlState {
+    /// The fan capability, when the service reports writable headers.
+    pub fn fan_caps(&self) -> Option<FanCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "fan" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    pub fn active(&self) -> Option<&Profile> {
+        let id = self.active_profile.as_deref()?;
+        self.profiles.iter().find(|p| p.id == id)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -170,6 +233,15 @@ impl ControlState {
             ControlEvent::DryRun(d) => self.dry_run = d,
             ControlEvent::ApplyResult(r) => self.last_apply_result = Some(r),
             ControlEvent::Error(e) => self.last_error = Some(e),
+            ControlEvent::FanDuty(duty) => {
+                // Arrives every second while curves run — only a change is
+                // worth a repaint.
+                if self.fan_duty == duty {
+                    return false;
+                }
+                self.fan_duty = duty;
+            }
+            ControlEvent::SafetyTripped(reason) => self.safety_tripped = Some(reason),
         }
         true
     }
@@ -195,6 +267,8 @@ pub enum ControlEvent {
     /// `last_apply_result`'s own `ok: false` — this is for requests like
     /// `apply_profile` on an unknown id, `save_profile`, etc.).
     Error(String),
+    FanDuty(BTreeMap<String, f64>),
+    SafetyTripped(String),
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -207,6 +281,14 @@ pub enum ControlCmd {
     /// Center window is opened).
     Refresh,
     ReleaseToFirmware,
+    /// Store `profile`, then apply it when `apply` (the Fans tab edits the
+    /// active profile, so its changes take effect on save).
+    SaveProfile {
+        profile: Box<Profile>,
+        apply: bool,
+    },
+    /// Spin one fan header to full speed for a few seconds.
+    IdentifyFan(String),
 }
 
 // ── The task ────────────────────────────────────────────────────────────
@@ -273,6 +355,18 @@ pub async fn control_task(
         append_debug_log(&dir, "control: connected to rigstats-control");
         let _ = event_tx.send(ControlEvent::Connected);
         fetch_and_publish(&mut writer, &mut reader, &mut next_id, &event_tx, &dir).await;
+        // Start the event stream (fan_duty, safety_tripped) — the service
+        // pushes nothing to a connection until it subscribes.
+        let _ = request(
+            &mut writer,
+            &mut reader,
+            &mut next_id,
+            "subscribe",
+            None,
+            &event_tx,
+            &dir,
+        )
+        .await;
 
         // Main loop: whichever happens first — a command from the UI, or a
         // line pushed by the server with nothing pending (an unsolicited
@@ -506,6 +600,63 @@ async fn handle_cmd(
             .await?;
             Ok(())
         }
+        ControlCmd::SaveProfile { profile, apply } => {
+            let id = profile.id.clone();
+            let params = serde_json::to_value(&profile).map_err(|_| ())?;
+            let saved = request(
+                writer,
+                reader,
+                next_id,
+                "save_profile",
+                Some(params),
+                event_tx,
+                dir,
+            )
+            .await?;
+            // `request` already forwarded an error response as
+            // ControlEvent::Error; don't apply a profile that wasn't stored.
+            if saved.is_some() {
+                if let Some(Ok(list)) = request(
+                    writer,
+                    reader,
+                    next_id,
+                    "list_profiles",
+                    None,
+                    event_tx,
+                    dir,
+                )
+                .await?
+                .map(serde_json::from_value::<Vec<Profile>>)
+                {
+                    let _ = event_tx.send(ControlEvent::Profiles(list));
+                }
+                if apply {
+                    Box::pin(handle_cmd(
+                        ControlCmd::ApplyProfile(id),
+                        writer,
+                        reader,
+                        next_id,
+                        event_tx,
+                        dir,
+                    ))
+                    .await?;
+                }
+            }
+            Ok(())
+        }
+        ControlCmd::IdentifyFan(header) => {
+            request(
+                writer,
+                reader,
+                next_id,
+                "identify_fan",
+                Some(serde_json::json!({ "header": header })),
+                event_tx,
+                dir,
+            )
+            .await?;
+            Ok(())
+        }
     }
 }
 
@@ -531,11 +682,9 @@ fn handle_pushed_line(text: &str, event_tx: &SyncSender<ControlEvent>, dir: &Pat
     }
 }
 
-/// `subscribe`'s event stream: `profile_changed`, `apply_result` are
-/// meaningful in phase 0; `safety_tripped`/`fan_duty` have no provider to
-/// emit them yet (fan control is phase 1, #188) — silently ignored rather
-/// than logged as unknown, since the service already advertises them in
-/// the protocol table for forward-compatibility.
+/// `subscribe`'s event stream: `profile_changed`, `apply_result`, and the
+/// fan loop's `fan_duty` / `safety_tripped` (#188). Unknown events are
+/// ignored, so a newer service can add events without breaking this app.
 fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
     match ev.event.as_str() {
         "profile_changed" => {
@@ -553,6 +702,25 @@ fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
                     let _ = event_tx.send(ControlEvent::ApplyResult(result));
                 }
             }
+        }
+        "fan_duty" => {
+            if let Some(duty) = ev
+                .data
+                .and_then(|mut d| d.get_mut("duty").map(serde_json::Value::take))
+                .and_then(|d| serde_json::from_value::<BTreeMap<String, f64>>(d).ok())
+            {
+                let _ = event_tx.send(ControlEvent::FanDuty(duty));
+            }
+        }
+        "safety_tripped" => {
+            let reason = ev
+                .data
+                .as_ref()
+                .and_then(|d| d.get("reason"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Critical temperature")
+                .to_owned();
+            let _ = event_tx.send(ControlEvent::SafetyTripped(reason));
         }
         _ => {}
     }
@@ -674,5 +842,74 @@ mod tests {
         let round_tripped: Profile =
             serde_json::from_str(&serde_json::to_string(&profile).unwrap()).unwrap();
         assert_eq!(round_tripped, profile);
+    }
+
+    #[test]
+    fn fan_part_round_trips_the_service_shape() {
+        // Same shape FanProvider's snapshot/ProfileStore write (snake_case,
+        // [temp, duty] pairs, header ids as map keys).
+        let json = r#"{"headers":{"/lpc/nct6799d/0/control/1":{"label":"CPU cooler","source":"cpu_package","curve":[[40.0,30.0],[85.0,100.0]],"hysteresis_c":3.0}}}"#;
+        let part: FanPart = serde_json::from_str(json).unwrap();
+        let header = &part.headers.as_ref().unwrap()["/lpc/nct6799d/0/control/1"];
+        assert_eq!(header.label.as_deref(), Some("CPU cooler"));
+        assert_eq!(header.curve, vec![[40.0, 30.0], [85.0, 100.0]]);
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+    }
+
+    #[test]
+    fn fan_header_hysteresis_defaults_when_missing() {
+        let header: FanHeaderConfig =
+            serde_json::from_str(r#"{"source":"gpu","curve":[[50,40]]}"#).unwrap();
+        assert!((header.hysteresis_c - 3.0).abs() < f64::EPSILON);
+        assert_eq!(header.label, None);
+    }
+
+    #[test]
+    fn fan_caps_are_read_only_from_a_supported_fan_capability() {
+        let details = serde_json::json!({
+            "headers": [{"id": "/lpc/x/0/control/0", "label": "Fan #1", "min": 0.0, "max": 100.0}],
+            "sources": ["cpu_package", "mb:System"],
+        });
+        let mut state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "fan".into(),
+                supported: true,
+                reason: None,
+                details: Some(details),
+            }],
+            ..ControlState::default()
+        };
+        let caps = state.fan_caps().unwrap();
+        assert_eq!(caps.headers[0].label, "Fan #1");
+        assert_eq!(caps.sources, vec!["cpu_package", "mb:System"]);
+
+        state.capabilities[0].supported = false;
+        assert!(state.fan_caps().is_none());
+    }
+
+    #[test]
+    fn fan_duty_event_updates_state_and_repaints_only_on_change() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ev: EventIn = serde_json::from_str(
+            r#"{"event":"fan_duty","data":{"duty":{"/lpc/nct6799d/0/control/1":42.5}}}"#,
+        )
+        .unwrap();
+        handle_event(ev, &tx);
+
+        let mut state = ControlState::default();
+        let event = rx.try_recv().unwrap();
+        assert!(state.apply(event.clone()));
+        assert!((state.fan_duty["/lpc/nct6799d/0/control/1"] - 42.5).abs() < f64::EPSILON);
+        assert!(!state.apply(event));
+    }
+
+    #[test]
+    fn safety_tripped_event_carries_the_reason() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ev: EventIn =
+            serde_json::from_str(r#"{"event":"safety_tripped","data":{"reason":"CPU 97°C"}}"#)
+                .unwrap();
+        handle_event(ev, &tx);
+        assert!(matches!(rx.try_recv(), Ok(ControlEvent::SafetyTripped(r)) if r == "CPU 97°C"));
     }
 }

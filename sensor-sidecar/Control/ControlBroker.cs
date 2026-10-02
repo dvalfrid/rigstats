@@ -65,14 +65,17 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             snapshots.Add((provider, provider.Capture()));
 
         // 3. Apply in the fixed order, verifying each as we go. On the first
-        //    failure, restore everything already applied, in reverse order.
+        //    failure, restore everything touched, in reverse order — including
+        //    the provider whose Apply threw: a multi-write provider (fans:
+        //    one write per header) can fail after some writes landed, and
+        //    restoring an untouched provider to its snapshot is harmless.
         var applied = new List<IControlProvider>();
         try
         {
             foreach (var provider in affected)
             {
-                provider.Apply(profile.Part);
                 applied.Add(provider);
+                provider.Apply(profile.Part);
                 if (!provider.Verify(profile.Part))
                     throw new ControlApplyException($"{provider.Domain} did not take effect after applying.");
             }

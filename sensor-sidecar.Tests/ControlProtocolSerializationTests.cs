@@ -100,4 +100,28 @@ public class ControlProtocolSerializationTests
         Assert.Contains("locked by BIOS", json);
         Assert.Contains("\"ok\":false", json);
     }
+
+    [Fact]
+    public void Fan_duty_event_keeps_header_ids_as_keys()
+    {
+        var message = ControlPipeWorker.ToEventMessage(new SensorSidecar.Control.Providers.FanEvent.DutyUpdate(
+            new Dictionary<string, double> { ["/lpc/nct6799d/0/control/1"] = 42.5 }));
+
+        var json = JsonSerializer.Serialize(message, ControlJson.Options);
+
+        Assert.Equal("""{"event":"fan_duty","data":{"duty":{"/lpc/nct6799d/0/control/1":42.5}}}""", json);
+    }
+
+    [Fact]
+    public void Safety_tripped_event_carries_the_reason()
+    {
+        var message = ControlPipeWorker.ToEventMessage(
+            new SensorSidecar.Control.Providers.FanEvent.SafetyTripped("CPU 97°C"));
+
+        var json = JsonSerializer.Serialize(message, ControlJson.Options);
+
+        using var doc = JsonDocument.Parse(json);
+        Assert.Equal("safety_tripped", doc.RootElement.GetProperty("event").GetString());
+        Assert.Equal("CPU 97°C", doc.RootElement.GetProperty("data").GetProperty("reason").GetString());
+    }
 }
