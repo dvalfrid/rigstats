@@ -1,17 +1,34 @@
 # Troubleshooting
 
-## Windows Defender Alert On Service Start
+## CPU Temperature / Package Power Missing, Or Defender Alert On Service Start
 
 Since v1.21.0, `LibreHardwareMonitorLib` uses **PawnIO** — a properly signed
-kernel driver — instead of WinRing0. The installer stages PawnIO into the
-Windows Driver Store via `pnputil` before starting the service, so Defender
-alerts should no longer occur on fresh installs.
+kernel driver — instead of WinRing0 to read CPU temperature, package power and
+other SMU/MSR sensors. The installer runs the official PawnIO setup
+(`build\pawnio\PawnIO_setup.exe -install -silent`) before starting the service.
+An existing PawnIO install from another tool (FanControl, LHM, …) is kept or
+upgraded, and uninstalling RIGStats leaves PawnIO in place.
 
-If you are running from source (dev environment) and see a Defender alert, it
-means PawnIO is not yet installed. Install it once from an elevated prompt:
+**Symptom of a missing PawnIO:** CPU temperature reads `0` / `--` and package
+power `0 W` (in `sensor-tree.txt`: `Core (Tctl/Tdie) val=0`, `Package val=0`).
+Check the service from any prompt:
 
 ```powershell
-pnputil /add-driver build\pawnio\pawnio.inf /install
+sc.exe query PawnIO
+```
+
+`STATE: 4 RUNNING` is correct. Error `1060` (service does not exist) means the
+PawnIO device was never created — the install log (`rigstats-install.log` in
+the diagnostics ZIP) records `pawnio_exit=` and `pawnio_service_query=`.
+Installers before #205 only staged the driver with `pnputil`, which never
+creates the device on a machine without another PawnIO consumer.
+
+**Fix (and the dev-environment setup when running from source):** install
+PawnIO once from an elevated prompt, then restart the sensor service:
+
+```powershell
+winget install namazso.PawnIO
+sc.exe stop rigstats-sensor; sc.exe start rigstats-sensor
 ```
 
 ## GPU Data Always Shows `--`

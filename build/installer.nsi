@@ -11,9 +11,7 @@
 ;   target\release\rigstats.exe
 ;   target\release\rigstats-wallpaper.exe
 ;   sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe
-;   build\pawnio\PawnIO.sys
-;   build\pawnio\pawnio.inf
-;   build\pawnio\PawnIO.cat
+;   build\pawnio\PawnIO_setup.exe  (official setup, pinned by PAWNIO_SETUP_SHA256)
 ;   assets\icon.ico
 ;   CHANGELOG.md
 
@@ -26,6 +24,11 @@ SetCompressor /SOLID lzma
 !ifndef VERSION
   !define VERSION "0.0.0"
 !endif
+
+; PawnIO 2.2.0 — https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0
+; Fail the build if the bundled setup is not exactly that release.
+!define PAWNIO_SETUP_SHA256 "1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032"
+!system 'certutil -hashfile build\pawnio\PawnIO_setup.exe SHA256 | findstr /I /X "${PAWNIO_SETUP_SHA256}"' = 0
 
 Name "RIGStats ${VERSION}"
 OutFile "target\release\RIGStats_${VERSION}_x64-setup.exe"
@@ -124,16 +127,29 @@ Section "RIGStats" SecMain
   File /nonfatal "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\libMonoPosixHelper.dll"
   File "CHANGELOG.md"
 
-  SetOutPath "$INSTDIR\pawnio"
-  File "build\pawnio\PawnIO.sys"
-  File "build\pawnio\pawnio.inf"
-  File "build\pawnio\PawnIO.cat"
+  ; Driver files staged here by versions before the PawnIO setup was bundled.
+  RMDir /r "$INSTDIR\pawnio"
 
   ; ── PawnIO kernel driver ──────────────────────────────────────────────────
-  nsExec::ExecToStack '"$WINDIR\Sysnative\pnputil.exe" /add-driver "$INSTDIR\pawnio\pawnio.inf" /install'
+  ; The official setup creates the Root\PawnIO device node and the PawnIO
+  ; service; `pnputil /add-driver` only staged the driver, so a machine without
+  ; another PawnIO consumer never got the service (#205). It also upgrades or
+  ; keeps an existing install shared with other tools. Run from the temp
+  ; plugins dir — nothing is left in $INSTDIR.
+  ; Exit 183 (ERROR_ALREADY_EXISTS) = same version already installed; fine.
+  ; The `sc query PawnIO` result below is the real success signal.
+  InitPluginsDir
+  SetOutPath "$PLUGINSDIR"
+  File "build\pawnio\PawnIO_setup.exe"
+  nsExec::ExecToStack '"$PLUGINSDIR\PawnIO_setup.exe" -install -silent'
   Pop $R0
   Pop $R1
-  DetailPrint "PawnIO install: exit $R0 — $R1"
+  DetailPrint "PawnIO install: exit $R0"
+  nsExec::ExecToStack '"$SYSDIR\sc.exe" query PawnIO'
+  Pop $R2
+  Pop $R3
+  DetailPrint "PawnIO service query: exit $R2"
+  SetOutPath "$INSTDIR"
 
   ; ── Remove old service entry, re-create with fresh binary path ────────────
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
@@ -188,6 +204,8 @@ Section "RIGStats" SecMain
   FileWrite $9 "install_dir=$INSTDIR$\r$\n"
   FileWrite $9 "pawnio_exit=$R0$\r$\n"
   FileWrite $9 "pawnio_output=$R1$\r$\n"
+  FileWrite $9 "pawnio_service_query_exit=$R2$\r$\n"
+  FileWrite $9 "pawnio_service_query=$R3$\r$\n"
   FileWrite $9 "service_create_exit=$4$\r$\n"
   FileWrite $9 "service_start_exit=$6$\r$\n"
   FileClose $9

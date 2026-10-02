@@ -212,6 +212,19 @@ src-egui/Cargo.toml`) before merging the release PR:
 - **Fresh install vs. upgrade** — if `settings.rs` migration logic changed
   this cycle, test loading an old-format `rigstats-settings.json` in addition
   to a clean install.
+- **PawnIO on a machine without it** (#205 — required once before the first
+  release that bundles `PawnIO_setup.exe`, then whenever the pinned PawnIO
+  version changes). Run on real hardware; a VM can't show CPU temp.
+  Elevated: `sc.exe stop rigstats-sensor`, then
+  `& "C:\Program Files\PawnIO\uninstall.exe" -uninstall`. Confirm the bug
+  reproduces (`sc.exe query PawnIO` → 1060, no `ROOT\PAWNIO` device in
+  `Get-PnpDevice`). Optionally stage the old driver like ≤ 1.41 did
+  (`git archive 73fbb65e5 build/pawnio | tar -x -C $env:TEMP`, then
+  `pnputil /add-driver $env:TEMP\build\pawnio\pawnio.inf /install`). Run the
+  installer, then check: `rigstats-install.log` has `pawnio_exit=0` (183 means
+  PawnIO was already there — not a real test), `sc.exe query PawnIO` is
+  RUNNING, and CPU temp/package power show in the dashboard without a reboot.
+  Recovery if it fails: `winget install namazso.PawnIO`.
 
 ## Testing an Installer Before Release
 

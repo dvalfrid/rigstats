@@ -34,7 +34,7 @@ Both install the same signed NSIS installer, which also registers the sensor sid
 | `xtask/` | Cargo xtask — build, verify, fmt, clippy, test tasks |
 | `docs/` | Architecture, setup, release, troubleshooting |
 | `website/` | Product landing page source — not served at runtime |
-| `build/` | NSIS installer script + signed PawnIO kernel driver |
+| `build/` | NSIS installer script + official PawnIO setup |
 
 ## Prerequisites
 
