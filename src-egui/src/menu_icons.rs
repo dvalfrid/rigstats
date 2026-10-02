@@ -141,6 +141,17 @@ pub fn history() -> Icon {
     })
 }
 
+/// Gauge with a needle — Control Center.
+pub fn control_center() -> Icon {
+    rasterize(|x, y| {
+        let cy = CENTER + 3.0;
+        let arc = in_ring(x, y, CENTER, cy, 10.0, 2.2) && y <= cy + 1.0;
+        let needle = seg_dist(x, y, CENTER, cy, CENTER + 6.0, cy - 6.0) <= 1.2;
+        let hub = dist(x, y, CENTER, cy) <= 2.2;
+        (arc || needle || hub).then_some(NEUTRAL)
+    })
+}
+
 /// Three sliders — Settings.
 pub fn settings() -> Icon {
     rasterize(|x, y| {

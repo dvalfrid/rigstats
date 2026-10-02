@@ -1802,6 +1802,10 @@ impl eframe::App for RigStatsApp {
                 TrayCmd::OpenAbout => self.tray_open_about(),
                 TrayCmd::OpenStatus => self.tray_open_status(ui.ctx()),
                 TrayCmd::OpenHistory => self.tray_open_history(ui.ctx()),
+                TrayCmd::OpenControlCenter => {
+                    self.control_open.store(true, Ordering::Relaxed);
+                    self.control_focus.store(true, Ordering::Relaxed);
+                }
                 TrayCmd::OpenUpdater => self.tray_open_updater(),
                 TrayCmd::OpenDocs => self.tray_open_docs(ui.ctx()),
                 TrayCmd::ToggleFloating => self.tray_toggle_floating(ui.ctx()),
@@ -3590,6 +3594,7 @@ fn main() {
             let about_id = tray.about_id.clone();
             let status_id = tray.status_id.clone();
             let history_id = tray.history_id.clone();
+            let control_id = tray.control_id.clone();
             let updater_id = tray.updater_id.clone();
             let docs_id = tray.docs_id.clone();
             let floating_id = tray.floating_id.clone();
@@ -3642,6 +3647,8 @@ fn main() {
                             Some(TrayCmd::OpenStatus)
                         } else if ev.id == history_id {
                             Some(TrayCmd::OpenHistory)
+                        } else if ev.id == control_id {
+                            Some(TrayCmd::OpenControlCenter)
                         } else if ev.id == updater_id {
                             Some(TrayCmd::OpenUpdater)
                         } else if ev.id == docs_id {

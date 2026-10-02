@@ -20,6 +20,7 @@ pub enum TrayCmd {
     OpenUpdater,
     OpenDocs,
     OpenHistory,
+    OpenControlCenter,
     ToggleFloating,
     ToggleRecording,
     ToggleOverlay,
@@ -182,6 +183,7 @@ pub struct Tray {
     pub updater_id: tray_icon::menu::MenuId,
     pub docs_id: tray_icon::menu::MenuId,
     pub history_id: tray_icon::menu::MenuId,
+    pub control_id: tray_icon::menu::MenuId,
     pub quit_id: tray_icon::menu::MenuId,
     pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
@@ -256,6 +258,12 @@ pub fn build_tray(
     let status_item = IconMenuItem::new("Status", true, Some(menu_icons::status()), None);
     let history_item =
         IconMenuItem::new("Session History", true, Some(menu_icons::history()), None);
+    let control_item = IconMenuItem::new(
+        "Control Center…",
+        true,
+        Some(menu_icons::control_center()),
+        None,
+    );
     let updater_item =
         IconMenuItem::new("Check for Updates", true, Some(menu_icons::updater()), None);
     let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
@@ -293,6 +301,7 @@ pub fn build_tray(
     let about_id = about_item.id().clone();
     let status_id = status_item.id().clone();
     let history_id = history_item.id().clone();
+    let control_id = control_item.id().clone();
     let updater_id = updater_item.id().clone();
     let docs_id = docs_item.id().clone();
     let quit_id = quit_item.id().clone();
@@ -305,6 +314,7 @@ pub fn build_tray(
     let _ = menu.append(&history_item);
     let _ = menu.append(&gpu_menu.submenu);
     let _ = menu.append(&profile_menu.submenu);
+    let _ = menu.append(&control_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -344,6 +354,7 @@ pub fn build_tray(
         updater_id,
         docs_id,
         history_id,
+        control_id,
         quit_id,
         floating_id,
         recording_id,
