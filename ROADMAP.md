@@ -43,7 +43,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) — main window | ✅ Done (Normal/Always-on-Top/Always-Behind) |
-| Background-only transparency (per-pixel alpha) — floating mode | 🚧 Blocked upstream — [egui#3632](https://github.com/emilk/egui/issues/3632)/[PR#8116](https://github.com/emilk/egui/pull/8116), watched weekly, see #169 |
+| Background-only transparency (per-pixel alpha) — floating mode | ✅ Done (v1.40) — DComp reveal burst, no upstream fix needed, see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
@@ -100,6 +100,7 @@ script to refresh it.
 | [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
+| [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | ✅ Done |
 | [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v2.0 | ✅ Done |
 | [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
@@ -109,7 +110,6 @@ script to refresh it.
 | [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
-| [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits | v3.0 | 🔲 Planned |
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles | v3.0 | 🔲 Planned |
@@ -888,9 +888,10 @@ mode's per-panel independent positioning/dragging
 own small window living in the desktop background layer instead of the
 wallpaper host's current single fixed layout. Single host process (not one
 process per panel, to avoid N independent telemetry pollers). Deliberately
-**opaque only** — per-pixel transparency would hit the same
-non-root-immediate-viewport limitation found in #169, so it's excluded here
-and left as a follow-up once that's resolved. Full design, risks, and
+**opaque only** — per-pixel transparency was excluded here because of the
+non-root-immediate-viewport limitation found in #169; #169 has since been
+solved with the DComp reveal burst (`dcomp_burst.rs`), so it is now a
+reasonable follow-up rather than a blocker. Full design, risks, and
 acceptance criteria are in the issue — not duplicated here.
 
 ## Desktop background mode — WE Application wallpaper 🔲
@@ -1379,6 +1380,17 @@ Mondays 08:00 UTC) watches egui#3632/#8116 and comments on #169/#170 if the
 upstream state changes. Revisit once that fix ships in a released
 `eframe`/`egui-wgpu` version — check that comment thread first before
 re-investigating from scratch.
+
+**Resolved 2026-09-28 without upstream — shipped in v1.40.0
+([`8bd82fc6d`](https://github.com/dvalfrid/rigstats/commit/8bd82fc6d), #169
+closed).** The overlay (#183) showed that a secondary viewport *can* get
+per-pixel alpha: one post-creation `set_no_redirection_bitmap` isn't enough,
+but creating the window hidden, forcing a genuine resize, reapplying the style
+with `force_repaint` over several frames and only then revealing it is — and
+re-running that burst on later content-driven resizes. Floating panels use the
+same burst (shared as `dcomp_burst.rs` / `DcompRevealBurst`): translucent
+background, crisp opaque text, several panels at once. The upstream watch on
+egui#3632/#8116 is no longer needed for #169.
 
 ---
 
