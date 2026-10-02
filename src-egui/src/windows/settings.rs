@@ -218,10 +218,25 @@ fn drag_handle(ui: &mut egui::Ui, dc: &DialogColors) {
 
 /// Styled tab button. Returns true when clicked. `width` lets the caller size
 /// all tabs equally to fill the available bar width (so 5 tabs always fit).
-fn tab_btn(ui: &mut egui::Ui, dc: &DialogColors, label: &str, active: bool, width: f32) -> bool {
+pub(crate) fn tab_btn(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    label: &str,
+    active: bool,
+    width: f32,
+) -> bool {
     let mut clicked = false;
     ui.scope(|ui| {
         let cr = egui::CornerRadius::same(5);
+        // egui 0.34 buttons paint `weak_bg_fill`; `bg_fill` alone never shows.
+        let w = &mut ui.visuals_mut().widgets;
+        if active {
+            w.inactive.weak_bg_fill = dc.tab_active;
+            w.hovered.weak_bg_fill = dc.tab_active;
+        } else {
+            w.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+            w.hovered.weak_bg_fill = dc.card;
+        }
         if active {
             ui.visuals_mut().widgets.inactive.bg_fill = dc.tab_active;
             ui.visuals_mut().widgets.inactive.fg_stroke =
