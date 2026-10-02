@@ -107,6 +107,8 @@ struct NoteSection {
 }
 
 struct NoteItem {
+    /// Conventional-commit scope (`**gpu:**` in the changelog), shown bold.
+    scope: Option<String>,
     text: String,
     /// Short commit hash and optional URL (for hyperlink rendering).
     hash: Option<(String, String)>,
@@ -162,7 +164,8 @@ fn parse_notes(markdown: &str) -> Vec<ReleaseEntry> {
             }
             if let Some(sec) = cur_section.as_mut() {
                 let (text, hash) = extract_hash(raw);
-                sec.items.push(NoteItem { text, hash });
+                let (scope, text) = split_scope(&text);
+                sec.items.push(NoteItem { scope, text, hash });
             }
         }
     }
@@ -251,6 +254,18 @@ fn strip_issue_refs(s: &str) -> String {
         }
     }
     s.to_string()
+}
+
+/// Splits release-please's leading `**scope:** ` off an item, so it renders
+/// as a bold label instead of literal asterisks.
+fn split_scope(text: &str) -> (Option<String>, String) {
+    text.strip_prefix("**")
+        .and_then(|rest| rest.split_once(":**"))
+        .filter(|(scope, _)| !scope.is_empty() && !scope.contains("**"))
+        .map_or_else(
+            || (None, text.to_owned()),
+            |(scope, rest)| (Some(scope.to_owned()), rest.trim_start().to_owned()),
+        )
 }
 
 /// Extract trailing commit hash from an item line.
@@ -379,6 +394,14 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui:
                 ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
                 ui.set_max_width(text_w);
 
+                if let Some(scope) = &item.scope {
+                    ui.label(
+                        egui::RichText::new(format!("{scope}:"))
+                            .strong()
+                            .color(dc.title)
+                            .font(egui::FontId::proportional(12.0)),
+                    );
+                }
                 ui.label(
                     egui::RichText::new(&item.text)
                         .color(dc.item)
@@ -676,5 +699,42 @@ pub fn show(
         }
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_scope_takes_the_bold_scope_off_the_front() {
+        assert_eq!(
+            split_scope("**gpu:** select displayed GPU from tray menu"),
+            (
+                Some("gpu".to_owned()),
+                "select displayed GPU from tray menu".to_owned()
+            )
+        );
+        assert_eq!(split_scope("plain item"), (None, "plain item".to_owned()));
+        assert_eq!(
+            split_scope("**Breaking:** changed"),
+            (Some("Breaking".to_owned()), "changed".to_owned())
+        );
+        // Bold text that isn't a scope prefix is left alone.
+        assert_eq!(
+            split_scope("**bold** text"),
+            (None, "**bold** text".to_owned())
+        );
+    }
+
+    #[test]
+    fn parsed_items_carry_scope_text_and_hash_separately() {
+        let notes = parse_notes(
+            "## [1.41.0](https://x) (2026-09-29)\n\n### Features\n\n* **gpu:** select displayed GPU ([417c8db](https://github.com/x/commit/417c8db))\n",
+        );
+        let item = &notes[0].sections[0].items[0];
+        assert_eq!(item.scope.as_deref(), Some("gpu"));
+        assert_eq!(item.text, "select displayed GPU");
+        assert_eq!(item.hash.as_ref().map(|h| h.0.as_str()), Some("417c8db"));
     }
 }
