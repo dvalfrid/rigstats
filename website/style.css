@@ -505,6 +505,7 @@ code {
 /* ── Settings tab switcher ──────────────────────────────────── */
 .settings-tabs {
   display: flex;
+  flex-wrap: wrap; /* six tabs don't fit one row in the card */
   background: #0a0f1a;
   border-bottom: 1px solid var(--border);
   padding: 0 12px;

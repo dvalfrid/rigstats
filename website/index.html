@@ -67,6 +67,7 @@
     </a>
     <ul class="nav-links">
       <li><a href="#panels">Panels</a></li>
+      <li><a href="#control-center">Control Center</a></li>
       <li><a href="#dialogs">Dialogs</a></li>
       <li><a href="#download">Download</a></li>
       <li><a href="#support">Support</a></li>
@@ -158,8 +159,13 @@
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
-          <h3>Game overlay mode<span class="badge-soon">Coming in v1.40.0</span></h3>
+          <h3>Game overlay mode</h3>
           <p>A compact, click-through metric strip that sits over any fullscreen game or app. Corner-anchored or free-dragged, with a global Ctrl+Alt+O hotkey to show or hide it without alt-tabbing.</p>
+        </li>
+        <li class="feature-card">
+          <div class="feature-dot"></div>
+          <h3>Control Center &amp; fan curves<span class="badge-soon">Coming in v1.42.0</span></h3>
+          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed.</p>
         </li>
       </ul>
     </div>
@@ -227,7 +233,7 @@
   <section class="section" id="overlay-mode">
     <div class="container">
       <header class="section-head">
-        <h2>Game Overlay Mode<span class="badge-soon">Coming in v1.40.0</span></h2>
+        <h2>Game Overlay Mode</h2>
         <p>An FPS-style, click-through overlay that floats over any fullscreen game or app — no alt-tabbing, no separate monitor required. Pick which metrics to show, anchor a corner or drag it anywhere, and toggle it on or off with a global hotkey.</p>
       </header>
       <div class="floating-showcase">
@@ -271,8 +277,39 @@
           <li>Toggle <strong>Start/Stop Recording</strong> from the tray menu — no dialog needed</li>
           <li>The tray icon blinks a red dot while a session is live, so it's obvious at a glance</li>
           <li>Open <strong>Session History</strong> from the same menu to browse and chart past sessions</li>
-          <li><strong>Toggle Overlay Mode</strong> and <strong>Lock Overlay</strong> (click-through) rows show/hide and lock the game overlay without opening Settings<span class="badge-soon">Coming in v1.40.0</span></li>
+          <li><strong>Toggle Overlay Mode</strong> and <strong>Lock Overlay</strong> (click-through) rows show/hide and lock the game overlay without opening Settings</li>
           <li>Every menu row's icon is drawn procedurally at startup — no bundled image assets</li>
+          <li><strong>Profile</strong> switches the active Control Center profile, and <strong>Control Center…</strong> opens it</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Control Center -->
+  <section class="section" id="control-center">
+    <div class="container">
+      <header class="section-head">
+        <h2>Control Center &amp; Fan Curves<span class="badge-soon">Coming in v1.42.0</span></h2>
+        <p>Profiles bundle your power plan and fan curves, and switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
+      </header>
+      <div class="floating-showcase">
+        <div class="dual-shots">
+          <div class="screen-wrap screen-wrap--wide">
+            <img src="images/control-center-fans.png" alt="Control Center, Fans tab: a fan curve editor with draggable points, the channel's measured fans (Fan #2 and Fan #5), live duty, and several fans sharing one curve" class="hero-img">
+          </div>
+          <div class="screen-wrap">
+            <img src="images/tray-menue-profile.png" alt="Tray menu with the Profile submenu open, listing Silent, Gaming, Eco and Balanced with a check on the active profile" class="hero-img">
+          </div>
+        </div>
+        <ul class="floating-features">
+          <li><strong>Silent, Balanced, Gaming, Eco</strong> — switch from the tray, the header chip, or <strong>Ctrl+Alt+P</strong></li>
+          <li>Per-fan curves with draggable points, following CPU, GPU or a motherboard temperature</li>
+          <li><strong>Same curve on</strong> runs several fans on one curve</li>
+          <li><strong>Identify</strong> spins a fan channel and measures which fans respond — channel and fan numbers don't always match</li>
+          <li>Click a fan in the Motherboard panel to open its curve</li>
+          <li>Safety in the service: CPU above 95 °C or GPU above 90 °C sends every controlled fan to 100 %, and a lost temperature sensor does the same for its fan</li>
+          <li>Stopping the service hands every fan back to the BIOS</li>
+          <li>Shown only when your motherboard exposes writable fan control</li>
         </ul>
       </div>
     </div>
@@ -538,7 +575,7 @@
               <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk temperature (°C), CPU/GPU/RAM/Disk usage (%), and battery charge % and power W</li>
               <li><strong>Appearance</strong> — override model name, colour theme</li>
               <li><strong>General</strong> — launch at startup, stats CSV logging and retention</li>
-              <li><strong>Overlay</strong> — enable the game overlay, choose and reorder metrics, layout/anchor/scale/opacity/background, click-through lock<span class="badge-soon">Coming in v1.40.0</span></li>
+              <li><strong>Overlay</strong> — enable the game overlay, choose and reorder metrics, layout/anchor/scale/opacity/background, click-through lock</li>
             </ul>
           </div>
         </article>
