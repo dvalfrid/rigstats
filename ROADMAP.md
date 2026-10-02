@@ -101,6 +101,7 @@ script to refresh it.
 | [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
 | [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
 | [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v2.0 | ✅ Done |
+| [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
@@ -110,7 +111,6 @@ script to refresh it.
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
-| [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | 🔲 Planned |
 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits | v3.0 | 🔲 Planned |
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles | v3.0 | 🔲 Planned |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | 🔲 Planned |
