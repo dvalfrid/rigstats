@@ -46,9 +46,19 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // sample lock this replaces.
     private readonly SemaphoreSlim _hardwareLock = new(1, 1);
 
+    // How long StopAsync waits for an in-flight sample/write before closing
+    // the Computer anyway — an LHM call stuck in a driver must not hang
+    // service shutdown.
+    private static readonly TimeSpan CloseLockTimeout = TimeSpan.FromSeconds(5);
+
     private SensorPayload? _latestPayload;
     private string? _latestLine;
     private long _latestAtMs;
+
+    // Set under _hardwareLock by StopAsync; every locked path checks it so a
+    // straggler (a telemetry client mid-request, the identify spin, the
+    // Program.cs release backstop) gets an exception, not a closed Computer.
+    private bool _closed;
 
     public HardwareHost()
     {
@@ -72,10 +82,29 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _computer.Close();
-        return Task.CompletedTask;
+        // Close under the lock, so it can't race a sample or fan write that
+        // is still running (#204).
+        var acquired = await _hardwareLock.WaitAsync(CloseLockTimeout, CancellationToken.None);
+        try
+        {
+            if (!acquired)
+                SidecarLog.Log("[rigstats-sensor] Hardware still busy at shutdown; closing anyway.");
+            _closed = true;
+            _computer.Close();
+        }
+        finally
+        {
+            if (acquired)
+                _hardwareLock.Release();
+        }
+    }
+
+    private void ThrowIfClosed()
+    {
+        if (_closed)
+            throw new InvalidOperationException("Hardware host is stopped.");
     }
 
     /// Dumps the full sensor tree to disk for diagnostics — same shape as
@@ -138,6 +167,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // many telemetry clients and service-side consumers ask for it.
     private void RefreshIfStale()
     {
+        ThrowIfClosed();
         var now = Environment.TickCount64;
         if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
             return;
@@ -152,6 +182,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         await _hardwareLock.WaitAsync(ct);
         try
         {
+            ThrowIfClosed();
             return action(_computer);
         }
         finally

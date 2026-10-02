@@ -12,14 +12,22 @@ public static class SidecarLog
             "se.codeby.rigstats",
             "rigstats-sensor.log");
 
+    // Telemetry clients log from concurrent tasks (e.g. all disconnecting at
+    // service stop); unserialized appends hit sharing violations and the
+    // swallowed exception silently dropped lines (#204).
+    private static readonly object FileLock = new();
+
     public static void Log(string message)
     {
         var line = $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {message}";
         Console.Error.WriteLine(line);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-            File.AppendAllText(LogPath, line + Environment.NewLine);
+            lock (FileLock)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+                File.AppendAllText(LogPath, line + Environment.NewLine);
+            }
         }
         catch { }
     }
@@ -30,10 +38,13 @@ public static class SidecarLog
     {
         try
         {
-            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
+            lock (FileLock)
             {
-                var lines = File.ReadAllLines(LogPath);
-                File.WriteAllLines(LogPath, lines.TakeLast(500));
+                if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
+                {
+                    var lines = File.ReadAllLines(LogPath);
+                    File.WriteAllLines(LogPath, lines.TakeLast(500));
+                }
             }
         }
         catch { }

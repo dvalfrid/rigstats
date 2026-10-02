@@ -43,4 +43,42 @@ public class HardwareHostTests
 
         Assert.Equal(1, maxConcurrent);
     }
+
+    [Fact]
+    public async Task StopAsync_waits_for_an_in_flight_call_before_closing()
+    {
+        var host = new HardwareHost();
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+
+        var inFlight = Task.Run(() => host.WithHardwareLockAsync(_ =>
+        {
+            entered.Set();
+            release.Wait();
+            return 0;
+        }, CancellationToken.None));
+        entered.Wait();
+
+        var stop = host.StopAsync(CancellationToken.None);
+        await Task.Delay(200);
+        Assert.False(stop.IsCompleted);
+
+        release.Set();
+        await inFlight;
+        await stop;
+    }
+
+    [Fact]
+    public async Task Calls_after_StopAsync_throw_instead_of_touching_the_closed_computer()
+    {
+        var host = new HardwareHost();
+        await host.StopAsync(CancellationToken.None);
+
+        var touched = false;
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.WithHardwareLockAsync(_ => touched = true, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.GetTelemetryLineAsync(CancellationToken.None));
+        Assert.False(touched);
+    }
 }
