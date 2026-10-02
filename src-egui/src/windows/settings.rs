@@ -1460,6 +1460,9 @@ fn draw_overlay(
             ui.set_min_width(ui.available_width());
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
+                    // Leave room for the toggle, or the long description
+                    // wraps underneath it.
+                    ui.set_max_width(ui.available_width() - 64.0);
                     ui.label(
                         egui::RichText::new("Show Overlay")
                             .size(13.0)
