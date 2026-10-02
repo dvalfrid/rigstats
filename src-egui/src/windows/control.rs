@@ -411,9 +411,14 @@ fn power_tab(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
                 ui.set_min_width(ui.available_width());
                 section_label(ui, dc, "Power");
                 ui.add_space(8.0);
-                let active_name = control.active().map_or("—", |p| p.name.as_str());
+                // The plan the active profile sets — not the profile's own
+                // name, which a "Gaming" profile would have shown here.
+                let plan = control
+                    .active()
+                    .and_then(|p| p.part.power_plan.as_deref())
+                    .map_or_else(|| "—".to_owned(), power_plan_name);
                 ui.label(
-                    egui::RichText::new(format!("Active power plan: {active_name}"))
+                    egui::RichText::new(format!("Active power plan: {plan}"))
                         .size(12.0)
                         .color(dc.text),
                 );
@@ -421,6 +426,19 @@ fn power_tab(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
             });
         }
     }
+}
+
+/// Readable name for `ProfilePart.power_plan`'s symbolic scheme names (see
+/// `PowerPlanProvider` in the service).
+fn power_plan_name(plan: &str) -> String {
+    match plan {
+        "power_saver" => "Power saver",
+        "balanced" => "Balanced",
+        "high_performance" => "High performance",
+        "ultimate_performance" => "Ultimate performance",
+        other => other,
+    }
+    .to_owned()
 }
 
 fn dry_run_note(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
@@ -1161,6 +1179,13 @@ mod tests {
         assert!(same_curve(&headers["b"], &shared));
         assert_eq!(headers["c"].label, None); // a BIOS header joins with no label
         assert!(same_curve(&headers["c"], &shared));
+    }
+
+    #[test]
+    fn power_plan_names_are_readable() {
+        assert_eq!(power_plan_name("high_performance"), "High performance");
+        assert_eq!(power_plan_name("power_saver"), "Power saver");
+        assert_eq!(power_plan_name("custom"), "custom");
     }
 
     #[test]
