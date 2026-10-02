@@ -18,10 +18,10 @@ pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
     opacity: f32,
-    warn: u8,
-    crit: u8,
+    (warn, crit): (u8, u8),
     th: &theme::AppTheme,
     sc: f32,
+    fans_clickable: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H * sc);
@@ -74,11 +74,35 @@ pub fn draw(
                                     );
                                     ui.end_row();
                                     for (label, rpm) in &stats.mb_fans {
-                                        ui.label(
-                                            RichText::new(short_label(label))
-                                                .size(11.0 * sc)
-                                                .color(th.text_muted),
-                                        );
+                                        let name = RichText::new(short_label(label))
+                                            .size(11.0 * sc)
+                                            .color(th.text_muted);
+                                        if fans_clickable {
+                                            // Opens the curve of whichever channel
+                                            // drives this fan (#188) — the main app
+                                            // consumes the flag; see `draw_one_panel`.
+                                            let resp = ui
+                                                .add(
+                                                    egui::Label::new(name)
+                                                        .sense(egui::Sense::click()),
+                                                )
+                                                .on_hover_text("Open this fan's curve");
+                                            if resp.hovered() {
+                                                ui.ctx().set_cursor_icon(
+                                                    egui::CursorIcon::PointingHand,
+                                                );
+                                            }
+                                            if resp.clicked() {
+                                                ui.ctx().data_mut(|d| {
+                                                    d.insert_temp(
+                                                        egui::Id::new("open_fan_curve"),
+                                                        label.clone(),
+                                                    )
+                                                });
+                                            }
+                                        } else {
+                                            ui.label(name);
+                                        }
                                         ui.label(
                                             RichText::new(format!("{rpm:.0}"))
                                                 .size(11.0 * sc)

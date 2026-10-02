@@ -70,6 +70,8 @@ struct RigStatsApp {
     control_open: Arc<AtomicBool>,
     /// Control Center tab/selection and unsaved fan-curve draft (#188).
     control_ui: windows::control::ControlUi,
+    /// `runtime.control.safety_trips` already notified about.
+    seen_safety_trips: u32,
     // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
     settings_focus: Arc<AtomicBool>,
     about_focus: Arc<AtomicBool>,
@@ -398,6 +400,7 @@ impl RigStatsApp {
             history_open: Arc::new(AtomicBool::new(false)),
             control_open: Arc::new(AtomicBool::new(false)),
             control_ui: windows::control::ControlUi::default(),
+            seen_safety_trips: 0,
             settings_focus: Arc::new(AtomicBool::new(false)),
             about_focus: Arc::new(AtomicBool::new(false)),
             status_focus: Arc::new(AtomicBool::new(false)),
@@ -1261,6 +1264,29 @@ impl RigStatsApp {
         });
     }
 
+    /// One warning toast per critical-temperature fan override (#188), in the
+    /// same notification style as temperature alerts. The service sends
+    /// `safety_tripped` only on entering the critical state, so each counted
+    /// event is a new trip.
+    fn notify_fan_safety_trip(&mut self) {
+        let control = &self.runtime.control;
+        if control.safety_trips <= self.seen_safety_trips {
+            return;
+        }
+        self.seen_safety_trips = control.safety_trips;
+        let reason = control
+            .safety_tripped
+            .clone()
+            .unwrap_or_else(|| "Critical temperature".to_owned());
+        std::thread::spawn(move || {
+            windows::settings::send_notification(
+                "RIGStats — Fan safety",
+                &format!("{reason}. All controlled fans set to 100 %."),
+                windows::settings::NotifyIcon::Warning,
+            );
+        });
+    }
+
     /// Works around lost font-atlas uploads, seen on a hybrid-GPU laptop at
     /// 175 % scaling after Win+D / minimize: random characters in the overlay
     /// rendered as blank gaps — a digit, `.`, `%` or `°` missing in one place
@@ -1669,6 +1695,7 @@ impl eframe::App for RigStatsApp {
             // Hand off to poll_loop for the session-recording CSV column —
             // poll_loop runs on its own tokio task with no access to `runtime`.
             *self.active_profile_shared.lock_safe() = self.runtime.control.active_profile.clone();
+            self.notify_fan_safety_trip();
         }
 
         // Apply settings saved from the settings window.
@@ -2501,6 +2528,18 @@ impl eframe::App for RigStatsApp {
     }
 }
 
+/// Motherboard-panel fan click (#188): consumes the panel's `"open_fan_curve"`
+/// flag and hands the fan's label on to the Control Center, which resolves
+/// it to the header driving that fan. Returns whether the window should open.
+fn take_fan_curve_request(ctx: &egui::Context) -> bool {
+    let Some(label) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new("open_fan_curve")))
+    else {
+        return false;
+    };
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new(windows::control::SELECT_FAN_ID), label));
+    true
+}
+
 // ── Floating panel helpers ────────────────────────────────────────────────────
 
 /// Returns the accent colour for a given floating panel key.
@@ -2630,6 +2669,10 @@ impl RigStatsApp {
                 .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_control_center")))
                 .unwrap_or(false)
         {
+            self.control_open.store(true, Ordering::Relaxed);
+            self.control_focus.store(true, Ordering::Relaxed);
+        }
+        if panel == "motherboard" && take_fan_curve_request(ui.ctx()) {
             self.control_open.store(true, Ordering::Relaxed);
             self.control_focus.store(true, Ordering::Relaxed);
         }
@@ -3042,15 +3085,22 @@ impl RigStatsApp {
                                     &app_theme,
                                     scale,
                                 ),
-                                "motherboard" => panels::motherboard::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    self.runtime.thresholds.mb.0,
-                                    self.runtime.thresholds.mb.1,
-                                    &app_theme,
-                                    scale,
-                                ),
+                                "motherboard" => {
+                                    let r = panels::motherboard::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        self.runtime.thresholds.mb,
+                                        &app_theme,
+                                        scale,
+                                        control.has_fan_control(),
+                                    );
+                                    if take_fan_curve_request(ui.ctx()) {
+                                        control_open_arc.store(true, Ordering::Relaxed);
+                                        control_focus_arc.store(true, Ordering::Relaxed);
+                                    }
+                                    r
+                                }
                                 "process" => panels::process::draw(
                                     ui,
                                     stats,

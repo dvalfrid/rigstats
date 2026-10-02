@@ -131,6 +131,10 @@ pub struct FanHeaderCap {
     pub label: String,
     pub min: f64,
     pub max: f64,
+    /// RPM sensors this header drove when last identified (persisted by
+    /// the service); `None` until it has been identified.
+    #[serde(default)]
+    pub drives: Option<Vec<String>>,
 }
 
 /// An RPM sensor that sped up while a header was identified (#207).
@@ -196,6 +200,9 @@ pub struct ControlState {
     pub fan_duty: BTreeMap<String, f64>,
     /// Reason of the last critical-temperature override (`safety_tripped`).
     pub safety_tripped: Option<String>,
+    /// Number of `safety_tripped` events this session, so the app can raise
+    /// one notification per trip (the reason text alone may repeat).
+    pub safety_trips: u32,
     /// Per header id: the RPM sensors its last identify made speed up
     /// (`fan_identified`). Channel and RPM sensor numbers don't always match.
     pub fan_identified: BTreeMap<String, Vec<FanResponder>>,
@@ -209,6 +216,35 @@ impl ControlState {
             .find(|c| c.domain == "fan" && c.supported)
             .and_then(|c| c.details.clone())
             .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    /// Cheap check (no `details` parsing) for per-frame use by panels.
+    pub fn has_fan_control(&self) -> bool {
+        self.capabilities
+            .iter()
+            .any(|c| c.domain == "fan" && c.supported)
+    }
+
+    /// The header that drives the RPM sensor `fan_label` ("Fan #5"), as
+    /// measured by identify: this session's result first, then the map the
+    /// service persisted. Never guessed from names — on some boards one
+    /// channel drives several fans.
+    pub fn header_for_fan(&self, fan_label: &str) -> Option<String> {
+        self.fan_identified
+            .iter()
+            .find(|(_, rs)| rs.iter().any(|r| r.label == fan_label))
+            .map(|(id, _)| id.clone())
+            .or_else(|| {
+                self.fan_caps()?
+                    .headers
+                    .into_iter()
+                    .find(|h| {
+                        h.drives
+                            .as_ref()
+                            .is_some_and(|d| d.iter().any(|l| l == fan_label))
+                    })
+                    .map(|h| h.id)
+            })
     }
 
     pub fn active(&self) -> Option<&Profile> {
@@ -252,7 +288,10 @@ impl ControlState {
                 }
                 self.fan_duty = duty;
             }
-            ControlEvent::SafetyTripped(reason) => self.safety_tripped = Some(reason),
+            ControlEvent::SafetyTripped(reason) => {
+                self.safety_tripped = Some(reason);
+                self.safety_trips += 1;
+            }
             ControlEvent::FanIdentified { header, responders } => {
                 self.fan_identified.insert(header, responders);
             }
@@ -955,6 +994,40 @@ mod tests {
             vec!["Fan #2", "Fan #5"]
         );
         assert!((responders[0].peak_rpm - 2015.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn header_for_fan_prefers_this_sessions_identify_then_the_stored_map() {
+        let details = serde_json::json!({
+            "headers": [
+                {"id": "c0", "label": "Fan #1", "min": 0.0, "max": 100.0, "drives": ["Fan #1"]},
+                {"id": "c1", "label": "Fan #2", "min": 0.0, "max": 100.0, "drives": ["Fan #2", "Fan #5"]},
+                {"id": "c4", "label": "Fan #5", "min": 0.0, "max": 100.0},
+            ],
+        });
+        let mut state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "fan".into(),
+                supported: true,
+                reason: None,
+                details: Some(details),
+            }],
+            ..ControlState::default()
+        };
+        assert!(state.has_fan_control());
+        // Not "c4": channel 5's name matches, but channel 2 drives that fan.
+        assert_eq!(state.header_for_fan("Fan #5").as_deref(), Some("c1"));
+        assert_eq!(state.header_for_fan("Fan #7"), None);
+
+        state.fan_identified.insert(
+            "c4".into(),
+            vec![FanResponder {
+                label: "Fan #7".into(),
+                before_rpm: 900.0,
+                peak_rpm: 1800.0,
+            }],
+        );
+        assert_eq!(state.header_for_fan("Fan #7").as_deref(), Some("c4"));
     }
 
     #[test]

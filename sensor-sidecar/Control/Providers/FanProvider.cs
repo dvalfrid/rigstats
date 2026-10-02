@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using LibreHardwareMonitor.Hardware;
 
@@ -24,8 +25,15 @@ public sealed record FanIdentifyResult(string Header, IReadOnlyList<FanResponder
 /// configuration `FanCurveLoop` reads, and is the only thing that touches
 /// `IControl` directly (through `IHardwareHost`, never a raw `Computer`).
 /// With `dryRun`, every write is skipped and `Verify` trusts the request.
-public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvider
+/// `channelMapPath` persists which fans each header drives (null in tests).
+public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channelMapPath = null) : IControlProvider
 {
+    // Which RPM sensors each header drives, as last measured by identify
+    // (#207) — persisted so the Motherboard panel can open the right curve
+    // after a restart, and reported by Probe() so it is in the diagnostics
+    // ZIP's capabilities too.
+    private readonly ConcurrentDictionary<string, string[]> _drives = LoadDrives(channelMapPath);
+
     /// Readback may differ from the commanded duty by the 0–255 PWM register
     /// rounding (~0.4 %) plus firmware step granularity; anything further
     /// off means firmware overrode the write.
@@ -67,12 +75,18 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
         var details = new JsonObject
         {
             ["headers"] = new JsonArray(headers
-                .Select(h => (JsonNode)new JsonObject
+                .Select(h =>
                 {
-                    ["id"] = h.Id,
-                    ["label"] = h.Label,
-                    ["min"] = h.Min,
-                    ["max"] = h.Max,
+                    var header = new JsonObject
+                    {
+                        ["id"] = h.Id,
+                        ["label"] = h.Label,
+                        ["min"] = h.Min,
+                        ["max"] = h.Max,
+                    };
+                    if (_drives.TryGetValue(h.Id, out var drives))
+                        header["drives"] = new JsonArray(drives.Select(d => (JsonNode)JsonValue.Create(d)).ToArray());
+                    return (JsonNode)header;
                 })
                 .ToArray()),
             ["sources"] = new JsonArray(FanCurveEvaluator.AvailableSources(sample)
@@ -264,7 +278,47 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
                 }
             }
         }
-        return stillOwner ? new FanIdentifyResult(headerId, Responders(before, peak)) : null;
+        if (!stillOwner)
+            return null;
+        var result = new FanIdentifyResult(headerId, Responders(before, peak));
+        // Dry-run never spun anything, so its "measurement" means nothing.
+        if (!dryRun)
+        {
+            _drives[headerId] = result.Responders.Select(r => r.Label).ToArray();
+            SaveDrives();
+        }
+        return result;
+    }
+
+    private static ConcurrentDictionary<string, string[]> LoadDrives(string? path)
+    {
+        try
+        {
+            if (path is not null && File.Exists(path)
+                && JsonSerializer.Deserialize<Dictionary<string, string[]>>(File.ReadAllText(path)) is { } map)
+                return new ConcurrentDictionary<string, string[]>(map);
+        }
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        {
+            SidecarLog.Log($"[rigstats-control] Ignoring unreadable fan channel map: {e.Message}");
+        }
+        return new ConcurrentDictionary<string, string[]>();
+    }
+
+    private void SaveDrives()
+    {
+        if (channelMapPath is null)
+            return;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(channelMapPath)!);
+            File.WriteAllText(channelMapPath, JsonSerializer.Serialize(
+                new SortedDictionary<string, string[]>(_drives), new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            SidecarLog.Log($"[rigstats-control] Could not save the fan channel map: {e.Message}");
+        }
     }
 
     /// A tach sensor "responded" when its peak rose clearly above where it

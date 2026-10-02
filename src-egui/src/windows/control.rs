@@ -63,6 +63,10 @@ const PRESETS: [(&str, &[[f64; 2]]); 3] = [
     ),
 ];
 
+/// egui temp-data key carrying a Motherboard-panel fan label ("Fan #5") from
+/// the main window to [`show`], which resolves it to the header driving it.
+pub const SELECT_FAN_ID: &str = "control_select_fan";
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 enum Tab {
     #[default]
@@ -85,9 +89,31 @@ pub struct ControlUi {
     draft: Option<FanDraft>,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
+    /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
+    notice: Option<String>,
 }
 
 impl ControlUi {
+    /// A Motherboard-panel fan was clicked: show the Fans tab on the header
+    /// that drives it, or explain how to find it when it hasn't been
+    /// identified yet.
+    fn select_fan(&mut self, fan: &str, control: &ControlState) {
+        self.tab = Tab::Fans;
+        self.dragging = None;
+        match control.header_for_fan(fan) {
+            Some(header) => {
+                self.selected_header = Some(header);
+                self.notice = None;
+            }
+            None => {
+                self.notice = Some(format!(
+                    "{fan} isn't linked to a fan channel yet. Run Identify on each channel \
+                     below; the one that makes {fan} speed up drives it."
+                ));
+            }
+        }
+    }
+
     /// The headers being edited, creating the draft from `saved` on first
     /// edit.
     fn edit(
@@ -153,6 +179,9 @@ pub fn show(
     }
 
     let fan_caps = control.fan_caps();
+    if let Some(fan) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new(SELECT_FAN_ID))) {
+        ui_state.select_fan(&fan, control);
+    }
     if fan_caps.is_none() {
         ui_state.tab = Tab::Power;
     }
@@ -235,6 +264,7 @@ pub fn show(
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
                     open.store(false, Ordering::Relaxed);
+                    ui_state.notice = None;
                     main_ctx.request_repaint_of(egui::ViewportId::ROOT);
                 }
                 if dirty {
@@ -340,6 +370,7 @@ pub fn show(
 
     if ctx.input(|i| i.viewport().close_requested()) {
         open.store(false, Ordering::Relaxed);
+        ui_state.notice = None;
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 }
@@ -448,6 +479,15 @@ fn fans_tab(
     // Other headers currently running the selected header's curve.
     let group = curve_group(&shown, &header.id);
 
+    if let Some(notice) = &ui_state.notice {
+        ui.label(
+            egui::RichText::new(notice)
+                .size(11.0)
+                .color(egui::Color32::from_rgb(0xff, 0x99, 0x55)),
+        );
+        ui.add_space(6.0);
+    }
+
     // ── Which profile is being edited ────────────────────────────────────
     ui.horizontal(|ui| {
         ui.label(
@@ -521,7 +561,10 @@ fn fans_tab(
     let (text, detail) = if spinning {
         ("Measuring which fans speed up…".to_owned(), None)
     } else {
-        identify_summary(control.fan_identified.get(&header.id).map(Vec::as_slice))
+        identify_summary(
+            control.fan_identified.get(&header.id).map(Vec::as_slice),
+            header.drives.as_deref(),
+        )
     };
     let resp = ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
     if let Some(detail) = detail {
@@ -885,8 +928,16 @@ fn remove_point(curve: &mut Vec<[f64; 2]>, i: usize) {
 /// The line under the header picker, plus an RPM breakdown for its tooltip.
 /// Channel numbers and RPM sensor numbers don't always match (one channel
 /// can drive several fans), so the measured result is what to trust.
-fn identify_summary(responders: Option<&[FanResponder]>) -> (String, Option<String>) {
-    match responders {
+/// `measured` is this session's identify (with RPM); `stored` is what the
+/// service remembered from an earlier one.
+fn identify_summary(
+    measured: Option<&[FanResponder]>,
+    stored: Option<&[String]>,
+) -> (String, Option<String>) {
+    let labels: Option<Vec<&str>> = measured
+        .map(|rs| rs.iter().map(|r| r.label.as_str()).collect())
+        .or_else(|| stored.map(|s| s.iter().map(String::as_str).collect()));
+    match labels.as_deref() {
         None => (
             "Use Identify to see which fans this channel drives.".to_owned(),
             None,
@@ -896,21 +947,19 @@ fn identify_summary(responders: Option<&[FanResponder]>) -> (String, Option<Stri
                 .to_owned(),
             None,
         ),
-        Some(rs) => (
-            format!(
-                "Drives: {}",
-                rs.iter()
-                    .map(|r| r.label.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Some(
-                rs.iter()
+        Some(ls) => {
+            let detail = match measured {
+                Some(rs) => rs
+                    .iter()
                     .map(|r| format!("{}: {:.0} to {:.0} rpm", r.label, r.before_rpm, r.peak_rpm))
                     .collect::<Vec<_>>()
                     .join("\n"),
-            ),
-        ),
+                None => {
+                    "Measured by an earlier Identify. Run it again if you moved fans.".to_owned()
+                }
+            };
+            (format!("Drives: {}", ls.join(", ")), Some(detail))
+        }
     }
 }
 
@@ -1116,8 +1165,10 @@ mod tests {
 
     #[test]
     fn identify_summary_names_the_driven_fans() {
-        assert!(identify_summary(None).0.starts_with("Use Identify"));
-        assert!(identify_summary(Some(&[])).0.starts_with("No fan sped up"));
+        assert!(identify_summary(None, None).0.starts_with("Use Identify"));
+        assert!(identify_summary(Some(&[]), None)
+            .0
+            .starts_with("No fan sped up"));
 
         let rs = [
             FanResponder {
@@ -1131,12 +1182,24 @@ mod tests {
                 peak_rpm: 1988.0,
             },
         ];
-        let (text, detail) = identify_summary(Some(&rs));
+        let (text, detail) = identify_summary(Some(&rs), None);
         assert_eq!(text, "Drives: Fan #2, Fan #5");
         assert_eq!(
             detail.as_deref(),
             Some("Fan #2: 996 to 2015 rpm\nFan #5: 1007 to 1988 rpm")
         );
+
+        // After a restart only the service's stored map is known.
+        let stored = ["Fan #2".to_owned(), "Fan #5".to_owned()];
+        let (text, detail) = identify_summary(None, Some(&stored));
+        assert_eq!(text, "Drives: Fan #2, Fan #5");
+        assert!(detail
+            .unwrap()
+            .starts_with("Measured by an earlier Identify"));
+        // A fresh measurement wins over the stored one.
+        assert!(identify_summary(Some(&[]), Some(&stored))
+            .0
+            .starts_with("No fan sped up"));
     }
 
     #[test]

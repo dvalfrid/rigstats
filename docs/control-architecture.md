@@ -1,6 +1,7 @@
 # Control Center — Hardware Control Architecture
 
-> Status: **Design / planned** (Milestone 3.0). Tracked per phase in GitHub
+> Status: phases 0 (foundation, #187) and 1 (fan control, #188) are implemented;
+> the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
 ## Contents
@@ -19,6 +20,7 @@
 - [Testing strategy](#testing-strategy)
 - [Licensing](#licensing)
 - [Delivery phases](#delivery-phases)
+- [Phase 1 — fan control as built](#phase-1--fan-control-as-built)
 - [Open questions](#open-questions)
 
 ---
@@ -181,8 +183,8 @@ Transactions are serialised — there is never more than one in flight.
 | `preview` | Apply temporarily; auto-revert after N seconds unless `confirm` arrives (display-mode-change pattern). |
 | `confirm` | Keep a previewed change. |
 | `release_to_firmware` | Panic button: every provider → `ReleaseToFirmware()`. |
-| `identify_fan` | Spin one header to 100 % for 3 s so the user can see/hear which fan it is. |
-| `subscribe` | Start event stream: `profile_changed`, `apply_result`, `safety_tripped`, `fan_duty`. |
+| `identify_fan` | Spin one header to 100 % for 5 s so the user can see/hear which fan it is; the service measures which RPM sensors respond and reports them (`fan_identified`). |
+| `subscribe` | Start event stream: `profile_changed`, `apply_result`, `safety_tripped`, `fan_duty`, `fan_identified`. |
 
 ---
 
@@ -344,12 +346,47 @@ phase 0.
 
 ---
 
+## Phase 1 — fan control as built
+
+What phase 1 (#188) shipped, and what testing on real hardware changed in the
+design above:
+
+- **Headers** are LHM `Control` sensors under `/lpc/` (Super I/O); GPU fan
+  controls are excluded. A board with none reports the `fan` domain as
+  unsupported, so the Fans tab is hidden.
+- **Curve loop** (`FanCurveLoop`) reads the same cached sample as the
+  telemetry pipe (`IHardwareHost.GetSampleAsync`), so it keeps sampling with
+  no client connected. Sources: `cpu_package`, `gpu` (hottest GPU, so an idle
+  iGPU can't mask a hot dGPU) and `mb:<label>`. Hysteresis only damps falling
+  temperatures. Critical thresholds are fixed: CPU 95 °C, GPU 90 °C.
+- **Every write** goes through one clamped, locked `FanProvider.ApplyDuty`
+  that never touches a released header; `Verify` re-reads the PWM register
+  (±5 %), so firmware that overrides writes fails the transaction.
+- **Start-up**: the service re-applies the active profile
+  (`ActiveProfileApplier`). Built-in profiles carry an explicit empty fan
+  part (BIOS control) so switching to them releases earlier curves.
+- **Channels ≠ fans.** On an ASUS PRIME B650M-A (NCT6799D) one control
+  channel drives two RPM sensors and channel numbers don't match RPM sensor
+  numbers. So `identify_fan` measures which RPM sensors rise during the spin;
+  the result is persisted in `%ProgramData%\se.codeby.rigstats\fan-channels.json`,
+  reported as `drives` per header in the capability set, and used for the
+  Motherboard panel's "click a fan → its curve". Nothing is ever matched by
+  name.
+- **Shared curves** are a UI concept only: the profile still stores one curve
+  per header, and headers with an identical curve + source + hysteresis are
+  shown and edited as one group ("Same curve on").
+- **Diagnostics** (#207): profile applies/rollbacks, verify failures and
+  identify results are logged to `rigstats-sensor.log`; with
+  `control-capabilities.json` and `sensor-tree.txt` they are in every
+  diagnostics ZIP. Every sensor-tree fixture also runs `FanProvider.Probe()`.
+
 ## Open questions
 
 - Which PawnIO modules (IntelMSR, AMD SMU generations) are available and signed
   for our target CPUs? Needs verification before phase 2/4.
 - Which ROG boards expose writable fan control through LHM, and which firmware
-  overrides it? Collect via diagnostics exports.
+  overrides it? Diagnostics exports now record it (verify failures and the
+  measured channel→fan mapping, #207) — collect and turn them into fixtures.
 - Aura controller USB IDs and protocol variants across ROG board generations.
 - Service rename (`rigstats-sensor` → `rigstats-service`): worth the installer
   migration, or keep the name?

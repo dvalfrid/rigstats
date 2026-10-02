@@ -326,6 +326,50 @@ public class FanProviderTests
     }
 
     [Fact]
+    public async Task Identified_mapping_survives_a_restart_and_is_reported_by_probe()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rigstats-fan-channels-{Guid.NewGuid()}.json");
+        try
+        {
+            var computer = FanSamples.Board(2);
+            var host = new FakeHardwareHost(computer);
+            var channel0 = FanSamples.Header(computer, 0);
+            host.SampleSource = () => FanSamples.Temps() with
+            {
+                MbFans = [new MbFan("Fan #1", 400 + 16 * (channel0.Register ?? 0))],
+            };
+            await new FanProvider(host, dryRun: false, path).IdentifyAsync(
+                FanSamples.HeaderId(0), TimeSpan.FromMilliseconds(20), CancellationToken.None, TimeSpan.FromMilliseconds(5));
+
+            var caps = new FanProvider(new FakeHardwareHost(computer), dryRun: false, path).Probe();
+
+            var headers = caps.Details!["headers"]!.AsArray();
+            Assert.Equal(["Fan #1"], headers[0]!["drives"]!.AsArray().Select(d => d!.GetValue<string>()));
+            Assert.Null(headers[1]!["drives"]); // never identified
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void An_unreadable_channel_map_is_ignored()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rigstats-fan-channels-{Guid.NewGuid()}.json");
+        File.WriteAllText(path, "{ not json");
+        try
+        {
+            var caps = new FanProvider(new FakeHardwareHost(FanSamples.Board(1)), dryRun: false, path).Probe();
+            Assert.Null(caps.Details!["headers"]![0]!["drives"]);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Identify_returns_null_when_released_before_it_finishes()
     {
         var (provider, _, _) = Setup();

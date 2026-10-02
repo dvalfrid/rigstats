@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🔲 Planned (3.0), phases #187–#193 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188) done; phases #187–#193 |
 
 ---
 
@@ -1584,3 +1584,19 @@ Full design: [docs/control-architecture.md](docs/control-architecture.md).
 | 4 — AMD Curve Optimizer | [#191](https://github.com/dvalfrid/rigstats/issues/191) |
 | 5 — ASUS Aura RGB | [#192](https://github.com/dvalfrid/rigstats/issues/192) |
 | 6 — Armoury Crate replacement | [#193](https://github.com/dvalfrid/rigstats/issues/193) |
+
+### Phase 1 — Fan control ✅
+
+Per-header fan curves evaluated in the service (~1 Hz), so they keep running
+with the app closed and survive reboots (the active profile is re-applied at
+service start). The Fans tab in the Control Center edits the active profile:
+BIOS or Curve per channel, the temperature it follows (CPU, hottest GPU, a
+motherboard sensor), "Start from" shapes, a drag-the-points curve editor, and
+"Same curve on" to run several fans on one curve. Safety lives in the service:
+CPU >95 °C or GPU >90 °C forces every controlled fan to 100 % (with a
+notification), a lost source sensor forces its fan to 100 %, every write is
+clamped and read back, and stopping the service returns all fans to the BIOS.
+Identify spins a channel and measures which fans respond — channel and fan
+numbers don't always match — and that mapping lets a fan in the Motherboard
+panel open its own curve. Diagnostics exports record apply outcomes and the
+mapping (#207).

@@ -42,7 +42,13 @@ builder.Services.AddHostedService<ControlPipeWorker>();
 // the control pipe can read its event stream. Registered after SafetyGuard:
 // hosted services stop in reverse order, so the loop is stopped before
 // SafetyGuard hands every header back to the BIOS.
-builder.Services.AddSingleton(sp => new FanProvider(sp.GetRequiredService<IHardwareHost>(), dryRun));
+builder.Services.AddSingleton(sp => new FanProvider(
+    sp.GetRequiredService<IHardwareHost>(),
+    dryRun,
+    Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+        "se.codeby.rigstats",
+        "fan-channels.json")));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<FanProvider>());
 builder.Services.AddSingleton<FanCurveLoop>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanCurveLoop>());

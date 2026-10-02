@@ -133,7 +133,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`ring.rs`** — ring gauge renderer; **`spark.rs`** — sparkline ring buffer; **`tempcolor.rs`** — `temp_color()` value→green/yellow/red
 - **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`. `gpu_processes.rs` ("GPU APPS") renders `PollStats.gpu_processes` — top apps by GPU %, attributed to a physical adapter when >1 GPU is active
 - **`brand.rs`** — embedded brand logo PNGs; `rig_logo`, `cpu_logo`, `gpu_logo`
-- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`; secondary viewports via `show_viewport_immediate`. Dialog design + lifecycle contract: `src-egui/src/windows/CLAUDE.md` (new dialogs must use `DialogReveal` + `RigStatsApp::finish_dialog_frame`)
+- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`, `control.rs` (Control Center: profiles, Power/Fans tabs, fan curve editor; fan channels are mapped to fans only by measured identify results, never by name); secondary viewports via `show_viewport_immediate`. Dialog design + lifecycle contract: `src-egui/src/windows/CLAUDE.md` (new dialogs must use `DialogReveal` + `RigStatsApp::finish_dialog_frame`)
 - **`win32_wallpaper.rs`** — `find_wallpaper_workerw`, `attach`/`detach`, `process_alive`; used only by the wallpaper host
 - **`win32_behind.rs`** — `apply_behind`/`prepare_for_drag`/`keep_behind`: Always-Behind window layer support
 - **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup; `apply_titlebar_theme` for dialog title bars
@@ -162,6 +162,7 @@ PDH \GPU Engine(*) (gpu_process.rs: per-app GPU %)
 - **`hardware.rs`** — WMI hardware detection (PowerShell only when WMI fails): GPU names, RAM, disk, system brand, model, motherboard, ping target, battery. Typed `query::<T>()` structs need a `#[serde(rename = "Win32_…")]` container rename (#198, guarded by `wmi_classes_tests`)
 - **`lhm.rs`** — named pipe client → `LhmData`; `select_gpu_idx` (preferred → highest VRAM → load tie-break), `normalize_gpu_name`/`gpu_names_match` (WMI/LHM-tolerant name matching)
 - **`lhm_process.rs`** — connection state tracking (connect/disconnect logging, 30 s throttle)
+- **`control.rs`** — Control Center pipe client (`\\.\pipe\rigstats-control`, duplex): `control_task` → `ControlState` (capabilities, profiles, live `fan_duty`, `fan_identified`, safety trips); `ControlCmd`; typed fan profile/capability structs. Service side lives in `sensor-sidecar/Control/` (`ControlBroker`, `FanProvider`, `FanCurveLoop`, `PowerPlanProvider`). Design + phase-1 notes: `docs/control-architecture.md`
 - **`logging.rs`** — session-based CSV stats logging: `start_session`/`end_session`, `append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`, `prune_old_sessions`, `reconcile_sessions_on_startup`. Session index (`rigstats-sessions.json`) writes are guarded by a cross-process file lock (`SessionsLock`) and mirrored to a `.bak` for corruption recovery.
 - **`settings.rs`** — `Settings` struct + JSON persistence to `%APPDATA%\se.codeby.rigstats\`
 - **`debug.rs`** — `log_debug`/`log_warn`/`log_error`; `reset_debug_log` rotates log to `rigstats-debug-prev.log`

@@ -218,10 +218,10 @@ impl DashboardView<'_> {
                     ui,
                     self.latest,
                     opacity,
-                    self.thresholds.mb.0,
-                    self.thresholds.mb.1,
+                    self.thresholds.mb,
                     self.app_theme,
                     sc,
+                    self.control.has_fan_control(),
                 );
             }
             "process" => {
