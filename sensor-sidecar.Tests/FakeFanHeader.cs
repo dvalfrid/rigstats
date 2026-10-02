@@ -63,9 +63,13 @@ public sealed class FakeHardwareHost(IComputer computer) : IHardwareHost
 {
     public SensorPayload Sample { get; set; } = FanSamples.Temps();
 
+    /// When set, each sample is computed on demand (e.g. RPM that follows a
+    /// fake header's PWM register) instead of returning `Sample`.
+    public Func<SensorPayload>? SampleSource { get; set; }
+
     public Task<string> GetTelemetryLineAsync(CancellationToken ct) => throw new NotSupportedException();
 
-    public Task<SensorPayload> GetSampleAsync(CancellationToken ct) => Task.FromResult(Sample);
+    public Task<SensorPayload> GetSampleAsync(CancellationToken ct) => Task.FromResult(SampleSource?.Invoke() ?? Sample);
 
     public Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct) =>
         Task.FromResult(action(computer));

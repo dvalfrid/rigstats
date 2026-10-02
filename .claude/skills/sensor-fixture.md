@@ -19,7 +19,7 @@ When the user gives you a `sensor-tree.txt` (or a diagnostics ZIP / its folder p
    ```powershell
    dotnet test sensor-sidecar.Tests/sensor-sidecar.Tests.csproj -c Release
    ```
-   The auto-discovering `FixtureTests` theory now covers the new machine — no code change needed.
+   The auto-discovering `FixtureTests` theory now covers the new machine — no code change needed. So does `FanProviderTests.Probe_holds_for_every_sensor_tree_fixture` (fan control, #207): its writable `/lpc/` `Control` sensors become fan headers and every advertised curve source must resolve. If the export's `sidecar-log.txt` has `Identify ... ->` or `Fan verify failed` lines, note the board in `meta.json`'s `notes` — they record which channel drives which fan and which firmware overrides writes.
 
 6. **Generate the golden snapshot:**
    ```powershell

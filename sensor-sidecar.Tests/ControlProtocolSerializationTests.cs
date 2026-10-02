@@ -113,6 +113,23 @@ public class ControlProtocolSerializationTests
     }
 
     [Fact]
+    public void Fan_identified_event_lists_the_responding_rpm_sensors()
+    {
+        var result = new SensorSidecar.Control.Providers.FanIdentifyResult(
+            "/lpc/nct6799d/0/control/1",
+            [new SensorSidecar.Control.Providers.FanResponder("Fan #2", 996, 2015)]);
+
+        var json = JsonSerializer.Serialize(ControlPipeWorker.ToIdentifiedMessage(result), ControlJson.Options);
+
+        Assert.Equal(
+            """{"event":"fan_identified","data":{"header":"/lpc/nct6799d/0/control/1","responders":[{"label":"Fan #2","before_rpm":996,"peak_rpm":2015}]}}""",
+            json);
+        Assert.Equal(
+            "/lpc/nct6799d/0/control/1 -> Fan #2 (996 -> 2015 rpm)",
+            ControlPipeWorker.DescribeIdentify(result));
+    }
+
+    [Fact]
     public void Safety_tripped_event_carries_the_reason()
     {
         var message = ControlPipeWorker.ToEventMessage(

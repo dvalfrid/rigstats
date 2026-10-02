@@ -133,6 +133,14 @@ pub struct FanHeaderCap {
     pub max: f64,
 }
 
+/// An RPM sensor that sped up while a header was identified (#207).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct FanResponder {
+    pub label: String,
+    pub before_rpm: f64,
+    pub peak_rpm: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Profile {
     pub id: String,
@@ -188,6 +196,9 @@ pub struct ControlState {
     pub fan_duty: BTreeMap<String, f64>,
     /// Reason of the last critical-temperature override (`safety_tripped`).
     pub safety_tripped: Option<String>,
+    /// Per header id: the RPM sensors its last identify made speed up
+    /// (`fan_identified`). Channel and RPM sensor numbers don't always match.
+    pub fan_identified: BTreeMap<String, Vec<FanResponder>>,
 }
 
 impl ControlState {
@@ -242,6 +253,9 @@ impl ControlState {
                 self.fan_duty = duty;
             }
             ControlEvent::SafetyTripped(reason) => self.safety_tripped = Some(reason),
+            ControlEvent::FanIdentified { header, responders } => {
+                self.fan_identified.insert(header, responders);
+            }
         }
         true
     }
@@ -269,6 +283,10 @@ pub enum ControlEvent {
     Error(String),
     FanDuty(BTreeMap<String, f64>),
     SafetyTripped(String),
+    FanIdentified {
+        header: String,
+        responders: Vec<FanResponder>,
+    },
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -722,6 +740,20 @@ fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
                 .to_owned();
             let _ = event_tx.send(ControlEvent::SafetyTripped(reason));
         }
+        "fan_identified" => {
+            #[derive(Deserialize)]
+            struct Identified {
+                header: String,
+                #[serde(default)]
+                responders: Vec<FanResponder>,
+            }
+            if let Some(Ok(id)) = ev.data.map(serde_json::from_value::<Identified>) {
+                let _ = event_tx.send(ControlEvent::FanIdentified {
+                    header: id.header,
+                    responders: id.responders,
+                });
+            }
+        }
         _ => {}
     }
 }
@@ -901,6 +933,28 @@ mod tests {
         assert!(state.apply(event.clone()));
         assert!((state.fan_duty["/lpc/nct6799d/0/control/1"] - 42.5).abs() < f64::EPSILON);
         assert!(!state.apply(event));
+    }
+
+    #[test]
+    fn fan_identified_event_records_the_responders_per_header() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ev: EventIn = serde_json::from_str(
+            r#"{"event":"fan_identified","data":{"header":"/lpc/x/0/control/1","responders":[{"label":"Fan #2","before_rpm":996,"peak_rpm":2015},{"label":"Fan #5","before_rpm":1007,"peak_rpm":1988}]}}"#,
+        )
+        .unwrap();
+        handle_event(ev, &tx);
+
+        let mut state = ControlState::default();
+        assert!(state.apply(rx.try_recv().unwrap()));
+        let responders = &state.fan_identified["/lpc/x/0/control/1"];
+        assert_eq!(
+            responders
+                .iter()
+                .map(|r| r.label.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Fan #2", "Fan #5"]
+        );
+        assert!((responders[0].peak_rpm - 2015.0).abs() < f64::EPSILON);
     }
 
     #[test]

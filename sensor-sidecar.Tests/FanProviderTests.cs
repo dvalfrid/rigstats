@@ -71,6 +71,35 @@ public class FanProviderTests
         Assert.Equal(expected > 0, caps.Supported);
     }
 
+    /// Every sensor tree a user sends in (see fixtures/README.md) becomes a
+    /// fan-support regression test with no new code (#207).
+    [Theory]
+    [MemberData(nameof(FixtureTests.Fixtures), MemberType = typeof(FixtureTests))]
+    public void Probe_holds_for_every_sensor_tree_fixture(string slug)
+    {
+        var computer = SensorTreeLoader.LoadFile(Path.Combine(FixturesRoot, slug, "sensor-tree.txt"));
+        var sample = SensorReader.Extract(computer);
+        var caps = new FanProvider(new FakeHardwareHost(computer) { Sample = sample }, dryRun: false).Probe();
+
+        var writable = computer.Hardware
+            .SelectMany(hw => hw.Sensors.Concat(hw.SubHardware.SelectMany(sub => sub.Sensors)))
+            .Count(s => s.SensorType == SensorType.Control
+                && s.Identifier.ToString().StartsWith("/lpc/", StringComparison.Ordinal));
+        var headers = caps.Details!["headers"]!.AsArray();
+        Assert.Equal(writable, headers.Count);
+        Assert.Equal(writable > 0, caps.Supported);
+        Assert.All(headers, h =>
+        {
+            Assert.StartsWith("/lpc/", h!["id"]!.GetValue<string>());
+            Assert.True(h["min"]!.GetValue<double>() <= h["max"]!.GetValue<double>());
+        });
+
+        // Every advertised source must resolve in the same sample.
+        var sources = caps.Details["sources"]!.AsArray().Select(s => s!.GetValue<string>()).ToList();
+        Assert.Equal(sources.Count, sources.Distinct().Count());
+        Assert.All(sources, s => Assert.NotNull(FanCurveEvaluator.ResolveSource(sample, s)));
+    }
+
     [Fact]
     public void Validate_rejects_unknown_headers_sources_and_malformed_curves()
     {
@@ -240,7 +269,7 @@ public class FanProviderTests
         provider.Apply(Part((0, Curve())));
         var header = FanSamples.Header(computer, 0);
 
-        var identify = provider.IdentifyAsync(FanSamples.HeaderId(0), Timeout.InfiniteTimeSpan, CancellationToken.None);
+        var identify = provider.IdentifyAsync(FanSamples.HeaderId(0), TimeSpan.FromMinutes(5), CancellationToken.None);
         provider.ApplyDuty(FanSamples.HeaderId(0), 40); // a loop tick during identify
         Assert.Equal(100, header.Register);
 
@@ -257,7 +286,7 @@ public class FanProviderTests
     {
         var (provider, _, computer) = Setup();
         using var cts = new CancellationTokenSource();
-        var identify = provider.IdentifyAsync(FanSamples.HeaderId(0), Timeout.InfiniteTimeSpan, cts.Token);
+        var identify = provider.IdentifyAsync(FanSamples.HeaderId(0), TimeSpan.FromMinutes(5), cts.Token);
 
         provider.ReleaseToFirmware();
         var header = FanSamples.Header(computer, 0);
@@ -267,6 +296,62 @@ public class FanProviderTests
         cts.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => identify);
         Assert.Equal(releases, header.Releases); // the stale identify's end is a no-op
+    }
+
+    [Fact]
+    public async Task Identify_reports_every_rpm_sensor_the_channel_drives()
+    {
+        // Like the B650M-A: channel 1 drives both "Fan #2" and "Fan #5".
+        var (provider, host, computer) = Setup(headers: 3);
+        var channel1 = FanSamples.Header(computer, 1);
+        host.SampleSource = () => FanSamples.Temps() with
+        {
+            MbFans =
+            [
+                new MbFan("Fan #2", 400 + 16 * (channel1.Register ?? 0)),
+                new MbFan("Fan #3", 1000),
+                new MbFan("Fan #5", 380 + 16 * (channel1.Register ?? 0)),
+            ],
+        };
+
+        var result = await provider.IdentifyAsync(
+            FanSamples.HeaderId(1), TimeSpan.FromMilliseconds(30), CancellationToken.None, TimeSpan.FromMilliseconds(5));
+
+        Assert.NotNull(result);
+        Assert.Equal(FanSamples.HeaderId(1), result.Header);
+        Assert.Equal(["Fan #2", "Fan #5"], result.Responders.Select(r => r.Label).Order());
+        var fan2 = result.Responders.Single(r => r.Label == "Fan #2");
+        Assert.Equal(1040, fan2.BeforeRpm);
+        Assert.Equal(2000, fan2.PeakRpm);
+    }
+
+    [Fact]
+    public async Task Identify_returns_null_when_released_before_it_finishes()
+    {
+        var (provider, _, _) = Setup();
+        var identify = provider.IdentifyAsync(
+            FanSamples.HeaderId(0), TimeSpan.FromMilliseconds(60), CancellationToken.None, TimeSpan.FromMilliseconds(5));
+
+        provider.ReleaseToFirmware();
+
+        Assert.Null(await identify);
+    }
+
+    [Theory]
+    [InlineData(1000, 1100, false)] // +100: below the 150 rpm floor
+    [InlineData(1000, 1200, true)]
+    [InlineData(2000, 2250, false)] // +250: below 15 % of a fast fan
+    [InlineData(2000, 2400, true)]
+    [InlineData(0, 600, true)]      // a stopped fan (absent from the sample) starting up
+    public void Responders_need_a_clear_rise(double before, double peak, bool responded)
+    {
+        var beforeMap = new Dictionary<string, double>();
+        if (before > 0)
+            beforeMap["Fan #1"] = before;
+
+        var responders = FanProvider.Responders(beforeMap, new Dictionary<string, double> { ["Fan #1"] = peak });
+
+        Assert.Equal(responded, responders.Count == 1);
     }
 
     [Fact]

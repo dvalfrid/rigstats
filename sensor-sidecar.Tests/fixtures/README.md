@@ -131,6 +131,12 @@ the LHM tree via `SensorTreeLoader`, runs `SensorReader.Extract`, and asserts
 structural invariants (GPU count matches, fans > 0, temps ≥ 5 °C, voltages > 0.1 V,
 plausible CPU temp). Adding a folder = adding coverage automatically.
 
+Fan control gets the same treatment: `FanProviderTests.Probe_holds_for_every_sensor_tree_fixture`
+runs `FanProvider.Probe()` on every tree — one fan header per writable `/lpc/` `Control`
+sensor (GPU fan controls excluded), `min ≤ max`, and every temperature source it offers
+resolves in the same sample. Boards with no writable headers must report the fan domain
+as unsupported.
+
 ### Golden snapshots (`expected.json`)
 
 A fixture may also ship an `expected.json` — the full extracted `SensorPayload`

@@ -9,6 +9,12 @@ namespace SensorSidecar.Control.Providers;
 /// RPM sensors `SensorReader` already extracts).
 internal readonly record struct FanHeaderInfo(string Id, string Label, double Min, double Max);
 
+/// One RPM sensor that sped up while a header was being identified.
+public sealed record FanResponder(string Label, double BeforeRpm, double PeakRpm);
+
+/// Which RPM sensors a control header actually drives, measured by `identify_fan`.
+public sealed record FanIdentifyResult(string Header, IReadOnlyList<FanResponder> Responders);
+
 /// `IControlProvider` for fan headers (#188, Control Center phase 1).
 /// Unlike `PowerPlanProvider`'s one-shot apply, a fan "apply" just replaces
 /// which curves are active — the actual duty values are recomputed every
@@ -30,7 +36,7 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
     private readonly ConcurrentDictionary<string, FanHeaderConfig> _active = new();
 
     /// How long `identify_fan` holds a header at full speed.
-    public static readonly TimeSpan IdentifyDuration = TimeSpan.FromSeconds(3);
+    public static readonly TimeSpan IdentifyDuration = TimeSpan.FromSeconds(5);
 
     // Serialises ApplyDuty against release, so a FanCurveLoop tick that
     // computed its duty just before ReleaseToFirmware can't re-claim a
@@ -146,26 +152,30 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
         lock (_writeLock)
             commanded = new Dictionary<string, double>(_commanded);
 
-        return host.WithHardwareLockAsync(computer =>
+        var failure = host.WithHardwareLockAsync(computer =>
         {
             var controlSensors = FindControlSensors(computer).ToDictionary(s => s.Identifier.ToString());
             foreach (var id in part.Fan.Headers.Keys)
             {
                 if (!controlSensors.TryGetValue(id, out var sensor) || sensor.Control is null)
-                    return false;
+                    return $"{id} not found";
                 if (sensor.Control.ControlMode != ControlMode.Software)
-                    return false;
+                    return $"{id} mode={sensor.Control.ControlMode}, expected Software";
                 // ControlMode is only LHM's own bookkeeping — re-read the
                 // PWM register itself, so firmware that silently overrides
                 // the write is reported as not controllable.
                 sensor.Hardware.Update();
-                if (!commanded.TryGetValue(id, out var duty)
-                    || sensor.Value is not { } actual
-                    || Math.Abs(actual - duty) > VerifyTolerancePct)
-                    return false;
+                if (!commanded.TryGetValue(id, out var duty))
+                    return $"{id} was never commanded";
+                if (sensor.Value is not { } actual || Math.Abs(actual - duty) > VerifyTolerancePct)
+                    return $"{id} commanded={duty:F0}% readback={sensor.Value?.ToString("F0") ?? "none"}% (firmware override?)";
             }
-            return true;
+            return null;
         }, CancellationToken.None).GetAwaiter().GetResult();
+
+        if (failure is not null)
+            SidecarLog.Log($"[rigstats-control] Fan verify failed: {failure}");
+        return failure is null;
     }
 
     public void Restore(Snapshot snapshot)
@@ -205,12 +215,20 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
     /// CPU cooler), then hands it back — to its curve if a profile controls
     /// it, otherwise to firmware. Works on headers no profile controls yet,
     /// which is the point: labelling comes before writing a curve.
-    public async Task IdentifyAsync(string headerId, TimeSpan duration, CancellationToken ct)
+    ///
+    /// While spinning, it also measures which RPM sensors respond (#207):
+    /// LHM's control channels and tach sensors don't always map 1:1 (one
+    /// channel can drive several fans). Returns null when the identify was
+    /// superseded or released before it finished.
+    public async Task<FanIdentifyResult?> IdentifyAsync(
+        string headerId, TimeSpan duration, CancellationToken ct, TimeSpan? sampleEvery = null)
     {
         var header = Headers().FirstOrDefault(h => h.Id == headerId);
         if (header.Id is null)
-            return; // Unknown header — the pipe checks HasHeader first.
+            return null; // Unknown header — the pipe checks HasHeader first.
+        var interval = sampleEvery ?? TimeSpan.FromSeconds(1);
 
+        var before = await FanRpm(ct);
         long token;
         lock (_writeLock)
         {
@@ -219,15 +237,24 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
             WriteSoftware(headerId, header.Max);
         }
 
+        var peak = new Dictionary<string, double>(before);
+        bool stillOwner;
         try
         {
-            await Task.Delay(duration, ct);
+            var end = DateTime.UtcNow + duration;
+            for (var left = duration; left > TimeSpan.Zero; left = end - DateTime.UtcNow)
+            {
+                await Task.Delay(left < interval ? left : interval, ct);
+                foreach (var (label, rpm) in await FanRpm(ct))
+                    peak[label] = Math.Max(peak.GetValueOrDefault(label), rpm);
+            }
         }
         finally
         {
             lock (_writeLock)
             {
-                if (_identifying.TryGetValue(headerId, out var owner) && owner == token)
+                stillOwner = _identifying.TryGetValue(headerId, out var owner) && owner == token;
+                if (stillOwner)
                 {
                     _identifying.Remove(headerId);
                     if (_commanded.TryGetValue(headerId, out var duty))
@@ -237,7 +264,26 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun) : IControlProvi
                 }
             }
         }
+        return stillOwner ? new FanIdentifyResult(headerId, Responders(before, peak)) : null;
     }
+
+    /// A tach sensor "responded" when its peak rose clearly above where it
+    /// started — enough to rule out normal BIOS-curve drift on other fans.
+    internal const double MinRiseRpm = 150;
+    internal const double MinRiseFraction = 0.15;
+
+    internal static List<FanResponder> Responders(
+        IReadOnlyDictionary<string, double> before, IReadOnlyDictionary<string, double> peak) =>
+        peak
+            .Select(kv => new FanResponder(kv.Key, before.GetValueOrDefault(kv.Key), kv.Value))
+            .Where(r => r.PeakRpm - r.BeforeRpm >= Math.Max(MinRiseRpm, r.BeforeRpm * MinRiseFraction))
+            .OrderByDescending(r => r.PeakRpm - r.BeforeRpm)
+            .ToList();
+
+    private async Task<Dictionary<string, double>> FanRpm(CancellationToken ct) =>
+        (await host.GetSampleAsync(ct)).MbFans
+            .GroupBy(f => f.Label)
+            .ToDictionary(g => g.Key, g => (double)g.First().Rpm);
 
     /// Clamps `duty` to the header's probed hardware min/max and writes it —
     /// the single point every duty write (first-apply, restore, and every

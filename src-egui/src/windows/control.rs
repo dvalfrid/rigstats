@@ -11,7 +11,8 @@
 use crate::theme::{self, DialogColors};
 use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
-    ControlCmd, ControlState, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, Profile,
+    ControlCmd, ControlState, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder,
+    Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,7 +26,7 @@ const T_MAX: f64 = 100.0;
 const GRAB_RADIUS: f32 = 12.0;
 const CURVE_COLOR: egui::Color32 = egui::Color32::from_rgb(0x3a, 0x9b, 0xff);
 /// Mirrors `FanProvider.IdentifyDuration` in the service.
-const IDENTIFY_DURATION: Duration = Duration::from_secs(3);
+const IDENTIFY_DURATION: Duration = Duration::from_secs(5);
 
 /// Starting curves offered when a header is switched to curve control.
 /// Floors stay at ≥25 % so common fans never stall at idle.
@@ -503,7 +504,7 @@ fn fans_tab(
                 .request_repaint_after(until.saturating_duration_since(Instant::now()));
         } else if theme::dialog_btn_secondary(ui, "Identify", dc)
             .on_hover_text(
-                "Run this fan at full speed for 3 seconds so you can tell which one it is.",
+                "Run this fan channel at full speed for 5 seconds so you can hear which fan it is, and see which fan speeds respond.",
             )
             .clicked()
         {
@@ -511,7 +512,22 @@ fn fans_tab(
             ui_state.identifying = Some((header.id.clone(), Instant::now() + IDENTIFY_DURATION));
         }
     });
-    ui.add_space(10.0);
+
+    // ── What this channel drives (measured by identify, #207) ────────────
+    let spinning = ui_state
+        .identifying
+        .as_ref()
+        .is_some_and(|(id, until)| id == &header.id && Instant::now() < *until);
+    let (text, detail) = if spinning {
+        ("Measuring which fans speed up…".to_owned(), None)
+    } else {
+        identify_summary(control.fan_identified.get(&header.id).map(Vec::as_slice))
+    };
+    let resp = ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
+    if let Some(detail) = detail {
+        resp.on_hover_text(detail);
+    }
+    ui.add_space(8.0);
 
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
@@ -866,6 +882,38 @@ fn remove_point(curve: &mut Vec<[f64; 2]>, i: usize) {
     }
 }
 
+/// The line under the header picker, plus an RPM breakdown for its tooltip.
+/// Channel numbers and RPM sensor numbers don't always match (one channel
+/// can drive several fans), so the measured result is what to trust.
+fn identify_summary(responders: Option<&[FanResponder]>) -> (String, Option<String>) {
+    match responders {
+        None => (
+            "Use Identify to see which fans this channel drives.".to_owned(),
+            None,
+        ),
+        Some([]) => (
+            "No fan sped up: nothing connected, already at full speed, or not controllable."
+                .to_owned(),
+            None,
+        ),
+        Some(rs) => (
+            format!(
+                "Drives: {}",
+                rs.iter()
+                    .map(|r| r.label.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            Some(
+                rs.iter()
+                    .map(|r| format!("{}: {:.0} to {:.0} rpm", r.label, r.before_rpm, r.peak_rpm))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+        ),
+    }
+}
+
 /// Two headers share a curve when everything but their label matches.
 fn same_curve(a: &FanHeaderConfig, b: &FanHeaderConfig) -> bool {
     a.source == b.source && a.curve == b.curve && a.hysteresis_c == b.hysteresis_c
@@ -1064,6 +1112,31 @@ mod tests {
         assert!(same_curve(&headers["b"], &shared));
         assert_eq!(headers["c"].label, None); // a BIOS header joins with no label
         assert!(same_curve(&headers["c"], &shared));
+    }
+
+    #[test]
+    fn identify_summary_names_the_driven_fans() {
+        assert!(identify_summary(None).0.starts_with("Use Identify"));
+        assert!(identify_summary(Some(&[])).0.starts_with("No fan sped up"));
+
+        let rs = [
+            FanResponder {
+                label: "Fan #2".into(),
+                before_rpm: 996.0,
+                peak_rpm: 2015.0,
+            },
+            FanResponder {
+                label: "Fan #5".into(),
+                before_rpm: 1007.0,
+                peak_rpm: 1988.0,
+            },
+        ];
+        let (text, detail) = identify_summary(Some(&rs));
+        assert_eq!(text, "Drives: Fan #2, Fan #5");
+        assert_eq!(
+            detail.as_deref(),
+            Some("Fan #2: 996 to 2015 rpm\nFan #5: 1007 to 1988 rpm")
+        );
     }
 
     #[test]

@@ -45,6 +45,20 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         if (affected.Count == 0)
             return ApplyResult.Success(profile.Id);
 
+        // Every outcome lands in rigstats-sensor.log, which ships in the
+        // diagnostics ZIP — the record of which boards/firmware accept which
+        // writes (#207).
+        var result = Apply(profile, affected);
+        var domains = string.Join(", ", affected.Select(p => p.Domain));
+        SidecarLog.Log(result.Ok
+            ? $"[rigstats-control] Applied profile '{profile.Id}' ({domains})."
+            : $"[rigstats-control] Profile '{profile.Id}' not applied ({domains}), rolled back: {result.Message}");
+        return result;
+    }
+
+    private static ApplyResult Apply(Profile profile, List<IControlProvider> affected)
+    {
+
         // 1. Validate every affected domain up front — reject before touching
         //    anything if any single part is invalid.
         foreach (var provider in affected)
@@ -89,11 +103,12 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
                 {
                     applied[i].Restore(snapshot);
                 }
-                catch
+                catch (Exception restoreError)
                 {
                     // Best-effort rollback — a restore failure doesn't change
                     // the outcome (the transaction already failed), but must
                     // not stop the remaining providers from being restored.
+                    SidecarLog.Log($"[rigstats-control] Rollback of {applied[i].Domain} failed: {restoreError.Message}");
                 }
             }
             return ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {e.Message}");
