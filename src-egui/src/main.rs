@@ -2052,7 +2052,7 @@ impl eframe::App for RigStatsApp {
             let collecting = self.status_collecting.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(680.0, 720.0);
+            let [px, py] = dialog_center(680.0, 820.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.runtime.latest.lhm_connected;
@@ -2064,7 +2064,7 @@ impl eframe::App for RigStatsApp {
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Status")
                     .with_visible(visible)
-                    .with_inner_size([680.0, 720.0])
+                    .with_inner_size([680.0, 820.0])
                     .with_position([px, py])
                     .with_taskbar(false)
                     .with_icon(load_app_icon())
