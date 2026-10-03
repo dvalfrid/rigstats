@@ -106,6 +106,10 @@ builder.Services.AddSingleton(_ =>
     // ASUS Aura monitors and the monitor light bar (#212).
     var hid = Hid.Enumerate();
     devices.AddRange(AsusMonitorDevice.Discover(hid));
+    // ASUS TUF-protocol keyboards — the ROG Azoth X via the Omni receiver (#213).
+    devices.AddRange(AsusKeyboardDevice.Discover(hid));
+    // ASUS headsets on the GearLink protocol — the ROG Delta II via its dongle.
+    devices.AddRange(AsusHeadsetDevice.Discover(hid));
     // Any HID LampArray device (Windows Dynamic Lighting standard), any brand.
     devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
     if (devices.Count > 0)

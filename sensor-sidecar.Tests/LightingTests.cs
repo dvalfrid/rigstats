@@ -520,7 +520,8 @@ public class LightingDiagnosticsTests
     [InlineData((ushort)0x0B05, (ushort)0x1BA3, (ushort)0xFF72, "aura_monitor")]
     [InlineData((ushort)0x0B05, (ushort)0x1AC8, (ushort)0xFF72, "aura_light_bar")]
     [InlineData((ushort)0x1532, (ushort)0x0099, (ushort)0x0059, "lamp_array")]
-    [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFF00, null)]
+    [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFF00, "asus_keyboard_channel")]
+    [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFFC0, null)]
     public void Collections_are_classified(ushort vid, ushort pid, ushort page, string? expected)
     {
         Assert.Equal(expected, LightingDiagnostics.KnownAs(Hid(vid, pid, page)));
@@ -531,5 +532,138 @@ public class LightingDiagnosticsTests
     {
         Assert.Equal(5, Hid(0x0B05, 0x1ACE, 0x59, "05").Interface);
         Assert.Null(new HidDeviceInfo(@"\?\hid#vid_0b05&pid_19af#x", 0x0B05, 0x19AF, 0, 0, 0, 0).Interface);
+    }
+}
+
+/// <summary>
+/// ASUS TUF-protocol keyboards (#213): the ROG Azoth X via the ROG Omni
+/// receiver — replies and commands as captured on the hardware.
+/// </summary>
+public class AsusKeyboardTests
+{
+    private static byte[] Hex(string hex) => Convert.FromHexString(hex);
+
+    [Fact]
+    public void The_keyboard_channel_answers_get_layout_with_a_layout()
+    {
+        // Captured on the Omni receiver: keyboard (report 0x02), mouse (0x03).
+        Assert.True(AsusKeyboardDevice.IsKeyboardLayoutReply(Hex("0212120000020B000000000000000000"), 0x02));
+        Assert.False(AsusKeyboardDevice.IsKeyboardLayoutReply(Hex("03121200000000000000000000000000"), 0x03));
+        Assert.False(AsusKeyboardDevice.IsKeyboardLayoutReply(Hex("0212000000080007"), 0x02)); // a version reply
+        Assert.False(AsusKeyboardDevice.IsKeyboardLayoutReply(Hex("0212120000020B00"), 0x03)); // other report id
+    }
+
+    [Theory]
+    [InlineData(AuraEffect.Static, "02512C00001E64000002FF0000")]
+    [InlineData(AuraEffect.Breathing, "02512C01001E64000002FF0000")]
+    [InlineData(AuraEffect.SpectrumCycle, "02512C02001E64000002FF0000")]
+    public void Effects_are_the_commands_verified_on_the_azoth_x(AuraEffect effect, string expected)
+    {
+        var report = AsusKeyboardDevice.EffectReport(AsusKeyboardDevice.Model(0x1ACE)!, 0x02, 64, effect, 0xFF, 0x00, 0x00);
+
+        Assert.Equal(64, report.Length);
+        Assert.Equal(expected, Convert.ToHexString(report[..13]));
+    }
+
+    [Fact]
+    public void Off_is_static_black()
+    {
+        var report = AsusKeyboardDevice.EffectReport(AsusKeyboardDevice.Model(0x1ACE)!, 0x02, 64, AuraEffect.Off, 0xFF, 0xFF, 0xFF);
+
+        Assert.Equal(0x00, report[3]);
+        Assert.Equal(new byte[] { 0, 0, 0 }, report[10..13]);
+    }
+
+    [Theory]
+    [InlineData((ushort)0x1ACE, "Keyboard via ROG Omni receiver", 100, (byte)30, true)]
+    [InlineData((ushort)0x1A83, "ROG Azoth", 4, (byte)30, true)]
+    [InlineData((ushort)0x1AB3, "ROG Strix Scope II", 4, (byte)30, true)]
+    [InlineData((ushort)0x194B, "TUF Gaming K3", 4, (byte)8, true)]
+    [InlineData((ushort)0x1899, "TUF Gaming K5", 4, (byte)30, false)]
+    [InlineData((ushort)0x1945, "TUF Gaming K1", 4, (byte)1, false)]
+    public void OpenRGB_documented_models_are_known(ushort pid, string name, int brightnessMax, byte speed, bool perKey)
+    {
+        var model = AsusKeyboardDevice.Model(pid)!;
+
+        Assert.Equal((name, brightnessMax, speed, perKey), (model.Name, model.BrightnessMax, model.Speed, model.PerKey));
+    }
+
+    [Fact]
+    public void Out_of_scope_keyboards_are_not_offered()
+    {
+        Assert.Null(AsusKeyboardDevice.Model(0x184D)); // ROG Claymore: other command layout
+        Assert.Null(AsusKeyboardDevice.Model(0x190C)); // Strix Scope TKL: direct per-key only
+        Assert.Null(AsusKeyboardDevice.Model(0x19AF)); // the motherboard controller
+    }
+
+    [Fact]
+    public void Keyboards_without_the_per_key_marker_put_the_colour_one_byte_earlier()
+    {
+        var k5 = AsusKeyboardDevice.EffectReport(AsusKeyboardDevice.Model(0x1899)!, 0x00, 65, AuraEffect.Static, 1, 2, 3);
+        var scope = AsusKeyboardDevice.EffectReport(AsusKeyboardDevice.Model(0x1AB3)!, 0x00, 65, AuraEffect.Static, 1, 2, 3);
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, k5[9..12]);
+        Assert.Equal(new byte[] { 0x02, 1, 2, 3 }, scope[9..13]);
+        Assert.Equal(0x04, scope[6]); // brightness max on the 0–4 scale
+    }
+}
+
+/// <summary>
+/// ASUS GearLink-protocol headsets: the ROG Delta II — frames and replies
+/// as captured on the hardware.
+/// </summary>
+public class AsusHeadsetTests
+{
+    private static byte[] Hex(string hex) => Convert.FromHexString(hex);
+
+    [Fact]
+    public void The_lighting_write_is_the_frame_verified_on_the_delta_ii()
+    {
+        var data = AsusHeadsetDevice.LightingData(AuraEffect.Static, 0x00, 0x00, 0xFF);
+        var frame = AsusHeadsetDevice.Frame(0xCC, 64, 0x51, 40, data);
+
+        Assert.Equal(64, frame.Length);
+        Assert.Equal("CC51280000016400" + "00FF", Convert.ToHexString(frame[..10]));
+    }
+
+    [Theory]
+    [InlineData(AuraEffect.Static, (byte)0x01)]
+    [InlineData(AuraEffect.Breathing, (byte)0x02)]
+    [InlineData(AuraEffect.SpectrumCycle, (byte)0x04)]
+    public void Effects_use_gearlinks_numbering(AuraEffect effect, byte id)
+    {
+        Assert.Equal(id, AsusHeadsetDevice.LightingData(effect, 1, 2, 3)[0]);
+    }
+
+    [Fact]
+    public void Off_is_static_at_brightness_zero()
+    {
+        Assert.Equal(new byte[] { 0x01, 0, 0, 0, 0 }, AsusHeadsetDevice.LightingData(AuraEffect.Off, 9, 9, 9));
+    }
+
+    [Fact]
+    public void A_write_is_verified_by_the_read_back()
+    {
+        var blue = AsusHeadsetDevice.LightingData(AuraEffect.Static, 0x00, 0x00, 0xFF);
+
+        // Captured: get lighting after the blue write, and before it (red, 50).
+        Assert.True(AsusHeadsetDevice.ReadBackMatches(Hex("CC1203000001640000FF000000000000"), 0xCC, blue));
+        Assert.False(AsusHeadsetDevice.ReadBackMatches(Hex("CC120300000132FF0000000000000000"), 0xCC, blue));
+        Assert.False(AsusHeadsetDevice.ReadBackMatches(Hex("CC512800000000000000000000000000"), 0xCC, blue)); // the set ack
+        Assert.False(AsusHeadsetDevice.ReadBackMatches(null, 0xCC, blue));
+    }
+
+    [Fact]
+    public void Firmware_comes_from_device_info()
+    {
+        // Captured reply to get deviceInfo (key 0).
+        Assert.Equal("headset 0.9.4.0, dongle 0.9.4.0", AsusHeadsetDevice.FirmwareText(Hex("CC12000000000904000009040000000000")));
+    }
+
+    [Fact]
+    public void Only_known_headsets()
+    {
+        Assert.Equal("ROG Delta II", AsusHeadsetDevice.Model(0x1AFA));
+        Assert.Null(AsusHeadsetDevice.Model(0x1ACE));
     }
 }

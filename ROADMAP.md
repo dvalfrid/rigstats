@@ -1673,3 +1673,5 @@ Native protocols only (no OpenRGB process), current hardware only.
 Since #212 Aura Sync also reaches ROG Aura monitors, the Aura Monitor Light Bar
 and any Windows Dynamic Lighting (HID LampArray) keyboard or mouse, any brand —
 the ROG Harpe Ace through the Omni receiver among them.
+ROG keyboards of the Azoth / Strix / TUF family — including the Azoth X through
+the Omni receiver — and the ROG Delta II headset follow too.

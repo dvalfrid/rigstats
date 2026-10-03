@@ -5,7 +5,8 @@ namespace SensorSidecar.Control.Lighting;
 
 /// One HID collection as Windows enumerates it.
 public sealed record HidDeviceInfo(string Path, ushort VendorId, ushort ProductId, ushort UsagePage, ushort Usage,
-    int OutputReportLength, int InputReportLength, int FeatureReportLength = 0, string? Product = null)
+    int OutputReportLength, int InputReportLength, int FeatureReportLength = 0, string? Product = null,
+    byte? OutputReportId = null)
 {
     /// The USB interface number from the path ("mi_02" → 2), or null.
     public int? Interface
@@ -100,12 +101,26 @@ public static class Hid
             if (HidP_GetCaps(preparsed, out var caps) != HidpStatusSuccess)
                 return null;
             return new HidDeviceInfo(path, attributes.VendorId, attributes.ProductId, caps.UsagePage, caps.Usage,
-                caps.OutputReportByteLength, caps.InputReportByteLength, caps.FeatureReportByteLength, Product(handle));
+                caps.OutputReportByteLength, caps.InputReportByteLength, caps.FeatureReportByteLength, Product(handle),
+                OutputReportId(preparsed, caps));
         }
         finally
         {
             HidD_FreePreparsedData(preparsed);
         }
+    }
+
+    /// The report id of the collection's output report (from its first
+    /// output value), or null when it has none.
+    private static byte? OutputReportId(IntPtr preparsed, HidpCaps caps)
+    {
+        var count = caps.NumberOutputValueCaps;
+        if (count == 0)
+            return null;
+        var values = new HidpValueCaps[count];
+        return HidP_GetValueCaps(HidpOutput, values, ref count, preparsed) == HidpStatusSuccess && count > 0
+            ? values[0].ReportID
+            : null;
     }
 
     private static string? Product(SafeFileHandle handle)
@@ -210,6 +225,33 @@ public static class Hid
         public ushort NumberFeatureDataIndices;
     }
 
+    private const int HidpOutput = 1;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct HidpValueCaps
+    {
+        public ushort UsagePage;
+        public byte ReportID;
+        public byte IsAlias;
+        public ushort BitField;
+        public ushort LinkCollection;
+        public ushort LinkUsage;
+        public ushort LinkUsagePage;
+        public byte IsRange;
+        public byte IsStringRange;
+        public byte IsDesignatorRange;
+        public byte IsAbsolute;
+        public byte HasNull;
+        public byte Reserved;
+        public ushort BitSize;
+        public ushort ReportCount;
+        public ushort Reserved2a, Reserved2b, Reserved2c, Reserved2d, Reserved2e;
+        public uint UnitsExp;
+        public uint Units;
+        public int LogicalMin, LogicalMax, PhysicalMin, PhysicalMax;
+        public ushort UsageMin, UsageMax, StringMin, StringMax, DesignatorMin, DesignatorMax, DataIndexMin, DataIndexMax;
+    }
+
     [DllImport("hid.dll")]
     private static extern void HidD_GetHidGuid(out Guid guid);
 
@@ -227,6 +269,9 @@ public static class Hid
 
     [DllImport("hid.dll")]
     private static extern int HidP_GetCaps(IntPtr preparsed, out HidpCaps caps);
+
+    [DllImport("hid.dll")]
+    private static extern int HidP_GetValueCaps(int type, [Out] HidpValueCaps[] caps, ref ushort length, IntPtr preparsed);
 
     [DllImport("setupapi.dll", SetLastError = true)]
     private static extern IntPtr SetupDiGetClassDevs(ref Guid classGuid, IntPtr enumerator, IntPtr parent, uint flags);

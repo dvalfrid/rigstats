@@ -59,6 +59,11 @@ public static class LightingDiagnostics
     {
         if (h.UsagePage == LampArrayDevice.LightingPage)
             return "lamp_array";
+        if (h.VendorId == AuraUsb.AsusVendorId && AsusHeadsetDevice.Model(h.ProductId) is not null && h.UsagePage == 0xFF00)
+            return "asus_headset";
+        if (h.VendorId == AuraUsb.AsusVendorId && AsusKeyboardDevice.Model(h.ProductId) is { } keyboard
+            && (keyboard.Receiver ? h.UsagePage is >= 0xFF00 and <= 0xFF02 : h.UsagePage == 0xFF00))
+            return "asus_keyboard_channel";
         if (h.VendorId != AuraUsb.AsusVendorId || h.UsagePage != AuraUsb.AuraUsagePage)
             return null;
         if (AuraUsb.Family(h.ProductId) is { } family)

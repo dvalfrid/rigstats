@@ -294,7 +294,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
-| `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
+| `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), ASUS TUF-protocol keyboards incl. via the ROG Omni receiver (`AsusKeyboardDevice`), ASUS GearLink-protocol headsets (`AsusHeadsetDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
 
 ---
 
@@ -572,9 +572,36 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   device's own descriptor (`HidP_*`); colours go out as a range update over
   all lamps; control is taken by clearing AutonomousMode and handed back on
   release / service stop.
+- **ASUS keyboards, TUF protocol family** (`AsusKeyboardDevice`, #213) —
+  OpenRGB's `AsusAuraTUFKeyboardController` models (ROG Azoth, Falchion,
+  Strix Flare / Flare II, Strix Scope / RX / NX / II / II 96, TUF K1/K3/
+  K5/K7) on their vendor collection (usage page `0xFF00`), plus any keyboard
+  paired to the **ROG Omni receiver** (`1ACE`): the receiver has one vendor
+  channel per paired device (`0xFF00`–`0xFF02`, own report id), and the
+  keyboard's is the one that answers "get layout" (`0x12 0x12`) with a
+  layout. Effect: `0x51 0x2C mode 0 speed brightness …` with the keyboard's
+  own static / breathing / colour cycle — nothing animated over the radio;
+  not saved to the keyboard (no `0x50 0x55`). Per model: brightness scale
+  (0–4 per OpenRGB; **0–100 on the Azoth X**, measured — 4 looked off),
+  speed scale, and K1/K5 without the per-key marker. Verified: ROG Azoth X
+  through the Omni receiver. Not covered: ROG Claymore (other layout,
+  2018), Strix Scope TKL family (direct per-key only).
+- **ASUS headsets, GearLink protocol** (`AsusHeadsetDevice`) — not in
+  OpenRGB; the protocol is GearLink's own declarative command schema (read
+  as documentation): report `0xCC` on usage page `0xFF00`, frame
+  `[command, key, index0, index1, data…]`, command `0x12` get / `0x51` set;
+  lighting set key 40 / get key 3 = `effectId, brightness 0–100, R, G, B`
+  (static 1, breathing 2, colour cycle 4). The only lighting device with
+  readback, so every write is **verified by reading it back**. Verified:
+  ROG Delta II through its 2.4 GHz dongle (`1AFA`).
 - **Software effects.** Monitors, the light bar and LampArray devices have
   no built-in effects, so breathing and spectrum cycle are drawn by the
   service (`SoftwareEffect` / `SoftwareEffectLoop`, 25 frames a second).
+- **Finding protocols without OpenRGB.** The ASUS ones above came from:
+  read-only "get" probes (`0x12 0x00` version, `0x12 0x12` layout) whose
+  replies identify channels; one reversible write at a time with the user
+  watching; and ASUS GearLink — a WebHID web app whose public bundles carry
+  each device's command schema, and whose console can log every report.
 - **Diagnostics.** At start the service writes `lighting-devices.json`
   (in every diagnostics ZIP): each device's raw data (Aura firmware + config
   table, monitor config reply, LampArray kind/lamps/update interval/report
@@ -616,12 +643,13 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   particular the onboard-LED zone (`0x1B` > 0) and the addressable family
   are untested. Each user's diagnostics export carries the firmware and
   config table; turn them into `fixtures/aura/` files.
-- More lighting devices (#212, umbrella) — still open: the ROG Azoth X
-  keyboard (not LampArray, not in OpenRGB — protocol research, starting from
-  the original Azoth's), the light bar's desk lamp (only its RGB is done; the
-  lamp needs a USB capture of ASUS's own control), other ASUS peripherals,
-  then other vendors' current devices. Any Dynamic Lighting device already
-  works through `LampArrayDevice`.
+- More lighting devices (#212, umbrella) — still open: the Azoth X by
+  cable (its wired USB id isn't known yet, #213), the light bar's desk lamp
+  (#214 — GearLink may hold its schema too), more ASUS headsets on the
+  GearLink protocol (only the Delta II is listed), the TUF keyboard models
+  OpenRGB documents but nobody has tested here, other ASUS peripherals, then
+  other vendors' current devices. Any Dynamic Lighting device already works
+  through `LampArrayDevice`.
 - The colour picker only updates the lights when the pointer stops (the
   egui colour picker reports the change late); check with the egui
   upgrade (#200).
