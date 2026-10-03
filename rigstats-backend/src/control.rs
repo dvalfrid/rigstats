@@ -86,7 +86,7 @@ pub struct ProfilePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub curve_opt: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub gpu: Option<serde_json::Value>,
+    pub gpu: Option<GpuPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aura: Option<serde_json::Value>,
 }
@@ -124,6 +124,51 @@ impl AmdCpuLimit {
     pub fn is_stock(&self) -> bool {
         self.ppt_w.is_none() && self.tdc_a.is_none() && self.edc_a.is_none()
     }
+}
+
+/// A profile's GPU power limits (#190). Adapters missing from `adapters`
+/// (or a `None` value) go back to what was in force before RIGStats changed
+/// them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct GpuPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapters: Option<BTreeMap<String, GpuAdapterConfig>>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct GpuAdapterConfig {
+    /// Offset from the driver default in % (0 = default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub power_limit_pct: Option<i32>,
+}
+
+/// The "gpu" capability's `details`, typed.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct GpuCaps {
+    #[serde(default)]
+    pub adapters: Vec<GpuAdapterCap>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct GpuAdapterCap {
+    /// PNP device instance path.
+    pub id: String,
+    pub name: String,
+    pub min: i32,
+    pub max: i32,
+    #[serde(default = "one")]
+    pub step: i32,
+    #[serde(default)]
+    pub default: i32,
+    /// In force before RIGStats changed it — what "no value" means.
+    #[serde(default)]
+    pub original: i32,
+    #[serde(default)]
+    pub current: i32,
+}
+
+fn one() -> i32 {
+    1
 }
 
 /// The "cpu_limit" capability's `details`, typed. Limits only go down:
@@ -322,6 +367,35 @@ impl ControlState {
             return None;
         }
         self.active()?.part.cpu_limit.as_ref()?.amd?.ppt_w
+    }
+
+    /// The GPU capability, when the service can set a power limit here.
+    pub fn gpu_caps(&self) -> Option<GpuCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "gpu" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    /// The power limit the active profile sets on the GPU named
+    /// `gpu_name` (as the GPU panel shows it), for that panel — `None` when
+    /// it leaves the GPU at its original value.
+    pub fn active_gpu_limit(&self, gpu_name: &str) -> Option<i32> {
+        let caps = self.gpu_caps()?;
+        let adapter = caps
+            .adapters
+            .iter()
+            .find(|a| crate::lhm::gpu_names_match(&a.name, gpu_name))?;
+        self.active()?
+            .part
+            .gpu
+            .as_ref()?
+            .adapters
+            .as_ref()?
+            .get(&adapter.id)?
+            .power_limit_pct
+            .filter(|&pct| pct != adapter.original)
     }
 
     pub fn active(&self) -> Option<&Profile> {
@@ -1311,6 +1385,84 @@ mod tests {
             rx.try_recv(),
             Ok(ControlEvent::PreviewEnded { kept: false })
         ));
+    }
+
+    #[test]
+    fn gpu_part_matches_the_service_shape() {
+        let json = r#"{"adapters":{"PCI\\VEN_1002&DEV_7550":{"power_limit_pct":-15}}}"#;
+        let part: GpuPart = serde_json::from_str(json).unwrap();
+        let adapter = part.adapters.as_ref().unwrap()["PCI\\VEN_1002&DEV_7550"];
+        assert_eq!(adapter.power_limit_pct, Some(-15));
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+        assert_eq!(
+            serde_json::from_str::<GpuPart>("{}").unwrap(),
+            GpuPart::default()
+        );
+    }
+
+    fn gpu_state(profile_pct: Option<i32>, original: i32) -> ControlState {
+        let details = serde_json::json!({
+            "adapters": [{
+                "id": "pci-9070", "name": "AMD Radeon RX 9070 XT",
+                "min": -30, "max": 10, "step": 1, "default": 0,
+                "original": original, "current": profile_pct.unwrap_or(original),
+            }],
+        });
+        let mut adapters = BTreeMap::new();
+        adapters.insert(
+            "pci-9070".to_owned(),
+            GpuAdapterConfig {
+                power_limit_pct: profile_pct,
+            },
+        );
+        ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "gpu".into(),
+                supported: true,
+                reason: None,
+                details: Some(details),
+            }],
+            profiles: vec![Profile {
+                id: "p".into(),
+                name: "P".into(),
+                icon: None,
+                builtin: false,
+                part: ProfilePart {
+                    gpu: Some(GpuPart {
+                        adapters: Some(adapters),
+                    }),
+                    ..Default::default()
+                },
+            }],
+            active_profile: Some("p".into()),
+            ..ControlState::default()
+        }
+    }
+
+    #[test]
+    fn gpu_caps_parse_the_capability_details() {
+        let caps = gpu_state(None, 0).gpu_caps().unwrap();
+        let adapter = &caps.adapters[0];
+        assert_eq!(adapter.name, "AMD Radeon RX 9070 XT");
+        assert_eq!((adapter.min, adapter.max, adapter.step), (-30, 10, 1));
+    }
+
+    #[test]
+    fn active_gpu_limit_matches_the_panels_gpu_by_name() {
+        let state = gpu_state(Some(-15), 0);
+        // LHM and ADLX spell names differently; the panel uses LHM's.
+        assert_eq!(state.active_gpu_limit("AMD Radeon RX 9070 XT"), Some(-15));
+        assert_eq!(state.active_gpu_limit("AMD Radeon(TM) Graphics"), None);
+
+        // No value, or the original value, is nothing worth showing.
+        assert_eq!(
+            gpu_state(None, 0).active_gpu_limit("AMD Radeon RX 9070 XT"),
+            None
+        );
+        assert_eq!(
+            gpu_state(Some(5), 5).active_gpu_limit("AMD Radeon RX 9070 XT"),
+            None
+        );
     }
 
     #[test]

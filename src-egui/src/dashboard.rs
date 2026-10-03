@@ -173,6 +173,7 @@ impl DashboardView<'_> {
                     self.thresholds.gpu_hotspot.0,
                     self.thresholds.gpu_hotspot.1,
                     sc,
+                    self.control.active_gpu_limit(&self.latest.gpu_name),
                 )
                 .0
                 {

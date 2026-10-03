@@ -1,7 +1,8 @@
 # Control Center — Hardware Control Architecture
 
-> Status: phases 0 (foundation, #187), 1 (fan control, #188) and 2 (CPU power
-> limits, AMD part, #189) are implemented;
+> Status: phases 0 (foundation, #187), 1 (fan control, #188), 2 (CPU power
+> limits, AMD part, #189) and 3 (GPU power limit, AMD part, #190) are
+> implemented;
 > the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
@@ -23,6 +24,7 @@
 - [Delivery phases](#delivery-phases)
 - [Phase 1 — fan control as built](#phase-1--fan-control-as-built)
 - [Phase 2 — CPU power limits as built](#phase-2--cpu-power-limits-as-built)
+- [Phase 3 — GPU power limit as built](#phase-3--gpu-power-limit-as-built)
 - [Open questions](#open-questions)
 
 ---
@@ -287,7 +289,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | SMU mailbox (per-core / all-core offset) | Highest risk. Boot-crash guard + preview mandatory. |
-| `GpuProvider` | NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver). AMD: ADLX tuning services. | Official SDKs only in v1 — no undocumented clock offsets. |
+| `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
 | `AuraProvider` | USB HID to the ASUS Aura controller on ROG boards | Implemented in-service; must detect and yield to Armoury Crate / LightingService. |
 
 ---
@@ -342,7 +344,8 @@ phase 0.
 | 1 | [#188](https://github.com/dvalfrid/rigstats/issues/188) | Fan control | Low–medium | `control-fans` |
 | 2 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | CPU power limits (AMD PPT/TDC/EDC) | Medium | `control-cpu-limits` |
 | 2b | [#209](https://github.com/dvalfrid/rigstats/issues/209) | CPU power limits (Intel PL1/PL2) | Medium | `control-cpu-limits-intel` |
-| 3 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | GPU power profiles | Low–medium | `control-gpu` |
+| 3 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | GPU power limit (AMD, ADLX) | Low–medium | `control-gpu` |
+| 3b | [#210](https://github.com/dvalfrid/rigstats/issues/210) | GPU power limit (NVIDIA, NVML) | Low–medium | `control-gpu-nvidia` |
 | 4 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | AMD Curve Optimizer | High | `control-curve-optimizer` |
 | 5 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | ASUS Aura RGB | Medium | `control-aura` |
 | 6 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | Armoury Crate replacement (coexistence, guided removal, validated boards) | Low | `control-armoury-crate` |
@@ -426,6 +429,43 @@ What phase 2 (#189) shipped — AMD only; Intel is #209:
   when it writes a non-BIOS value; the marker is consumed at start and
   `ActiveProfileApplier` then drops `cpu_limit` (and later `curve_opt`).
 
+## Phase 3 — GPU power limit as built
+
+What phase 3 (#190) shipped — AMD only; NVIDIA (NVML) is #210:
+
+- **ADLX from C#, no wrapper.** `AdlxGpuPower` loads `amdadlx64.dll` (part
+  of the Adrenalin driver) and calls the SDK's C interface — plain vtables —
+  through delegates with the slot numbers from the ADLX headers; no native
+  helper DLL, no `unsafe`. It initializes with the runtime's own version
+  (`ADLXQueryFullVersion`). Works from session 0 as SYSTEM, checked on an RX
+  9070 XT with ADLX runtime 1.5. Every call takes one pass over the GPU list
+  and releases what it acquired — **before** `ADLXTerminate` on failure: a
+  release after terminate is an access violation that .NET cannot catch and
+  would take the whole service down.
+- **The knob** is Adrenalin's Power Limit: a % offset from the driver default
+  within the driver's own range (−30 … +10 % on the 9070 XT; other cards
+  differ, the range is always read from the driver). The full range is
+  offered — it is an official, driver-enforced setting. Adapters are keyed by
+  PNP device instance path; only adapters where `IsSupportedManualPowerTuning`
+  says yes are listed (an iGPU says no), and a profile entry for a GPU that is
+  gone is skipped, not rejected.
+- **Original, not default.** A profile without a value means the value in
+  force before RIGStats first changed that adapter (the user's own Adrenalin
+  setting), recorded at the first write together with whether all tuning was
+  at factory settings, in
+  `%ProgramData%\se.codeby.rigstats\gpu-power-original.json`. Release and
+  service stop restore it and clear the record; it survives a crash.
+- **Adrenalin's Default/Custom.** Any power-limit write switches Adrenalin's
+  tuning to "Custom", and setting the value back doesn't switch it back. So
+  returning to an original that was at factory settings is an ADLX
+  `ResetToFactory` (Adrenalin shows "Default" again). A user's own Custom
+  tuning is never factory-reset — only its value is restored.
+- **Same flow as CPU limits:** GPU tab edits go through `preview` (15 s,
+  Keep/Undo); verify reads the limit back; the GPU panel shows the active
+  profile's limit under POWER (`PL -15 %`), matched to the displayed GPU by
+  name. Not a boot-crash-guarded domain: the value is inside the driver's
+  own range.
+
 ## Open questions
 
 - PM table layouts for Ryzen generations other than Granite Ridge `0x620105`
@@ -434,6 +474,13 @@ What phase 2 (#189) shipped — AMD only; Intel is #209:
   collect diagnostics exports and add them to `AmdSmuMap.Layout`.
 - Curve Optimizer (phase 4) uses the same `RyzenSMU` module's
   `send_smu_command`; its command ids need the same per-generation care.
+- ADLX power tuning is verified on one card (RX 9070 XT, ADLX 1.5). Which
+  other Radeon generations, Pro drivers and AMD laptops report it, and do
+  any misbehave? A native crash inside ADLX would take the service down —
+  if that ever shows up in the field, move ADLX into a small helper process.
+- Does an ADLX power limit persist across a reboot (Adrenalin re-applying
+  "Custom")? Harmless either way — the original is persisted and the active
+  profile is re-applied at start — but worth knowing.
 - Which ROG boards expose writable fan control through LHM, and which firmware
   overrides it? Diagnostics exports now record it (verify failures and the
   measured channel→fan mapping, #207) — collect and turn them into fixtures.

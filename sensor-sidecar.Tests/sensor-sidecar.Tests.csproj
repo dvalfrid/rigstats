@@ -44,6 +44,8 @@
     <Compile Include="..\sensor-sidecar\Control\Providers\PawnIoModule.cs" Link="Control\Providers\PawnIoModule.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\RyzenSmu.cs" Link="Control\Providers\RyzenSmu.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\CpuLimitProvider.cs" Link="Control\Providers\CpuLimitProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\AdlxGpuPower.cs" Link="Control\Providers\AdlxGpuPower.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\GpuPowerProvider.cs" Link="Control\Providers\GpuPowerProvider.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

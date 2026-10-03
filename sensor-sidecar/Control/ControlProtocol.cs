@@ -131,12 +131,27 @@ public sealed class CpuLimitPart
     public JsonNode? Intel { get; init; }
 }
 
+/// One GPU's power limit (#190), keyed by adapter id in <see cref="GpuPart.Adapters"/>.
+public sealed class GpuAdapterConfig
+{
+    /// Offset from the driver default in % (0 = default). Null = the value
+    /// that was in force before RIGStats first changed it.
+    public int? PowerLimitPct { get; init; }
+}
+
+/// A profile's GPU part. Adapters missing from `Adapters` go back to the
+/// value they had before RIGStats changed them.
+public sealed class GpuPart
+{
+    public Dictionary<string, GpuAdapterConfig>? Adapters { get; init; }
+}
+
 /// One profile's per-domain settings. Every property is optional — a missing
 /// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187),
-/// `Fan` (#188) and `CpuLimit` (#189) have typed shapes; the remaining
-/// domains are raw JSON passthrough so `ProfileStore` round-trips them
-/// untouched even before their providers (GPU #190, Curve Optimizer #191,
-/// Aura #192) exist — each phase replaces its own placeholder with a typed shape.
+/// `Fan` (#188), `CpuLimit` (#189) and `Gpu` (#190) have typed shapes; the
+/// remaining domains are raw JSON passthrough so `ProfileStore` round-trips
+/// them untouched even before their providers (Curve Optimizer #191, Aura
+/// #192) exist — each phase replaces its own placeholder with a typed shape.
 public sealed class ProfilePart
 {
     /// Symbolic scheme name: `"power_saver"`, `"balanced"`, `"high_performance"`,
@@ -147,7 +162,7 @@ public sealed class ProfilePart
     public FanPart? Fan { get; init; }
     public CpuLimitPart? CpuLimit { get; init; }
     public JsonNode? CurveOpt { get; init; }
-    public JsonNode? Gpu { get; init; }
+    public GpuPart? Gpu { get; init; }
     public JsonNode? Aura { get; init; }
 }
 

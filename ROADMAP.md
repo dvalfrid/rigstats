@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188) and AMD CPU limits (#189) done; phases #187–#193, #209 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189) and AMD GPU power limit (#190) done; phases #187–#193, #209, #210 |
 
 ---
 
@@ -104,6 +104,7 @@ script to refresh it.
 | [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v2.0 | ✅ Done |
 | [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | ✅ Done |
 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC) | v3.0 | ✅ Done |
+| [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
@@ -112,11 +113,11 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
-| [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles | v3.0 | 🔲 Planned |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | 🔲 Planned |
 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | 🔲 Planned |
 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | v3.0 | 🔲 Planned |
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
+| [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1594,7 +1595,8 @@ Full design: [docs/control-architecture.md](docs/control-architecture.md).
 | 1 — Fan control | [#188](https://github.com/dvalfrid/rigstats/issues/188) |
 | 2 — CPU power limits (AMD) | [#189](https://github.com/dvalfrid/rigstats/issues/189) |
 | 2b — CPU power limits (Intel) | [#209](https://github.com/dvalfrid/rigstats/issues/209) |
-| 3 — GPU power profiles | [#190](https://github.com/dvalfrid/rigstats/issues/190) |
+| 3 — GPU power profiles (AMD) | [#190](https://github.com/dvalfrid/rigstats/issues/190) |
+| 3b — GPU power limit (NVIDIA) | [#210](https://github.com/dvalfrid/rigstats/issues/210) |
 | 4 — AMD Curve Optimizer | [#191](https://github.com/dvalfrid/rigstats/issues/191) |
 | 5 — ASUS Aura RGB | [#192](https://github.com/dvalfrid/rigstats/issues/192) |
 | 6 — Armoury Crate replacement | [#193](https://github.com/dvalfrid/rigstats/issues/193) |
@@ -1629,3 +1631,16 @@ are not re-applied at the next start. The CPU panel shows the active limit
 checked on real hardware (Ryzen 9000 / Granite Ridge); other CPUs don't show
 the tab, and their diagnostics export records what's needed to add them. Intel
 PL1/PL2 is #209.
+
+### Phase 3 — GPU power limit (AMD) ✅
+
+The GPU tab in the Control Center sets the GPU power limit per profile —
+the same setting as the Power Limit in AMD Adrenalin, over the driver's own
+range (−30 … +10 % on an RX 9070 XT). New limits are tried for 15 s and
+revert unless kept, every write is read back, and the GPU panel shows the
+active limit (`PL -15 %`). A profile without a value, a release and a service
+stop all go back to what was set before RIGStats changed anything; when that
+was Adrenalin's Default, it is Default again afterwards (not "Custom"). Works
+from the service through ADLX, which ships with the Adrenalin driver; GPUs or
+drivers without power tuning (e.g. an iGPU) don't show the tab. NVIDIA (NVML)
+is #210.

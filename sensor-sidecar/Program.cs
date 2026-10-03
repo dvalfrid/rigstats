@@ -74,6 +74,13 @@ builder.Services.AddSingleton<IControlProvider>(sp =>
         CpuLimitProvider.CurrentBootTime());
 });
 
+// Control Center phase 3 (#190): GPU power limit — AMD via ADLX (the
+// Adrenalin driver's own SDK); NVIDIA (NVML) is #210.
+builder.Services.AddSingleton<IControlProvider>(_ => new GpuPowerProvider(
+    AdlxGpuPower.TryLoad(),
+    dryRun,
+    Path.Combine(programData, "gpu-power-original.json")));
+
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();

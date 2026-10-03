@@ -151,7 +151,7 @@ public sealed class ProfileStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Builtins_saved_before_cpu_limits_gain_bios_limits_and_keep_their_fans()
+    public async Task Builtins_saved_before_cpu_and_gpu_limits_gain_empty_parts_and_keep_their_fans()
     {
         await File.WriteAllTextAsync(_path, """
             {"active":"silent","profiles":[
@@ -162,6 +162,8 @@ public sealed class ProfileStoreTests : IDisposable
 
         Assert.NotNull(silent.Part.CpuLimit);
         Assert.Null(silent.Part.CpuLimit.Amd); // = BIOS values
+        Assert.NotNull(silent.Part.Gpu);
+        Assert.Null(silent.Part.Gpu.Adapters); // = driver / original values
         Assert.Single(silent.Part.Fan!.Headers!);
     }
 }

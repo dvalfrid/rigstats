@@ -3053,6 +3053,7 @@ impl RigStatsApp {
                                         self.runtime.thresholds.gpu_hotspot.0,
                                         self.runtime.thresholds.gpu_hotspot.1,
                                         scale,
+                                        self.runtime.control.active_gpu_limit(&stats.gpu_name),
                                     );
                                     new_pref = r.0;
                                     r.1

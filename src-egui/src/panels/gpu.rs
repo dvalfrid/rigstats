@@ -39,6 +39,8 @@ pub fn draw(
     hotspot_warn: u8,
     hotspot_crit: u8,
     sc: f32,
+    // The active profile's power limit for this GPU (#190), shown under POWER.
+    power_limit_pct: Option<i32>,
 ) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
 
@@ -176,6 +178,17 @@ pub fn draw(
                         ui.label(RichText::new(&freq_s).size(14.0 * sc).color(freq_c));
                         ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(pwr_c));
                         ui.end_row();
+                        if let Some(pct) = power_limit_pct {
+                            for _ in 0..3 {
+                                ui.label("");
+                            }
+                            ui.label(
+                                RichText::new(format!("PL {pct:+} %"))
+                                    .size(10.0 * sc)
+                                    .color(th.text_muted),
+                            );
+                            ui.end_row();
+                        }
                     });
             });
         });

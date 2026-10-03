@@ -14,7 +14,8 @@ use crate::theme::{self, DialogColors};
 use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, ControlCmd, ControlState, CpuLimitCaps, CpuLimitPart,
-    FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder, Profile,
+    FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig,
+    GpuCaps, GpuPart, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -78,6 +79,7 @@ enum Tab {
     Power,
     Fans,
     Cpu,
+    Gpu,
 }
 
 /// Unsaved edits to one profile's fan headers.
@@ -94,6 +96,13 @@ struct CpuDraft {
     limits: AmdCpuLimit,
 }
 
+/// Unsaved GPU power limits per adapter id; a missing adapter = its original value.
+#[derive(Debug, Clone, PartialEq)]
+struct GpuDraft {
+    profile_id: String,
+    limits: BTreeMap<String, i32>,
+}
+
 /// Per-window UI state, owned by `RigStatsApp` across frames.
 #[derive(Debug, Default)]
 pub struct ControlUi {
@@ -101,6 +110,7 @@ pub struct ControlUi {
     selected_header: Option<String>,
     draft: Option<FanDraft>,
     cpu_draft: Option<CpuDraft>,
+    gpu_draft: Option<GpuDraft>,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
     /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
@@ -150,8 +160,14 @@ impl ControlUi {
         self.awaiting = None; // a preview starting or ending answers the click.
         if !running && reverted {
             self.cpu_draft = None;
+            self.gpu_draft = None;
         }
         true
+    }
+
+    /// CPU and GPU limit edits are tried first (preview, auto-revert).
+    fn has_limit_draft(&self) -> bool {
+        self.cpu_draft.is_some() || self.gpu_draft.is_some()
     }
 
     fn await_reply(&mut self, control: &ControlState) {
@@ -240,6 +256,23 @@ fn with_drafts(profile: &Profile, ui_state: &ControlUi) -> Profile {
         profile.part.cpu_limit = Some(CpuLimitPart {
             amd: (!draft.limits.is_stock()).then_some(draft.limits),
             intel,
+        });
+    }
+    if let Some(draft) = &ui_state.gpu_draft {
+        let adapters: BTreeMap<String, GpuAdapterConfig> = draft
+            .limits
+            .iter()
+            .map(|(id, &pct)| {
+                (
+                    id.clone(),
+                    GpuAdapterConfig {
+                        power_limit_pct: Some(pct),
+                    },
+                )
+            })
+            .collect();
+        profile.part.gpu = Some(GpuPart {
+            adapters: (!adapters.is_empty()).then_some(adapters),
         });
     }
     profile
@@ -364,6 +397,133 @@ fn cpu_tab(
     }
 }
 
+/// The active profile's GPU limits that are set (a missing adapter = original).
+fn saved_gpu_limits(profile: Option<&Profile>) -> BTreeMap<String, i32> {
+    profile
+        .and_then(|p| p.part.gpu.as_ref())
+        .and_then(|g| g.adapters.as_ref())
+        .map(|adapters| {
+            adapters
+                .iter()
+                .filter_map(|(id, c)| Some((id.clone(), c.power_limit_pct?)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// "−15 %", "+5 %", "0 %".
+fn pct_text(value: i32) -> String {
+    if value == 0 {
+        "0 %".to_owned()
+    } else {
+        format!("{value:+} %")
+    }
+}
+
+fn gpu_tab(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    caps: &GpuCaps,
+    saved: &BTreeMap<String, i32>,
+    ui_state: &mut ControlUi,
+) {
+    let Some(profile_id) = control.active_profile.clone() else {
+        return;
+    };
+    let mut limits = ui_state
+        .gpu_draft
+        .as_ref()
+        .map_or_else(|| saved.clone(), |d| d.limits.clone());
+    let before = limits.clone();
+
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "GPU power limit");
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(
+                "The same setting as the Power Limit in AMD Adrenalin, relative to the \
+                 driver default. Lower runs cooler and quieter; higher allows more boost. \
+                 New limits are tried first and revert by themselves unless you keep them.",
+            )
+            .size(11.0)
+            .color(dc.muted),
+        );
+        ui.add_space(10.0);
+        ui.add_enabled_ui(control.preview.is_none(), |ui| {
+            for adapter in &caps.adapters {
+                gpu_limit_row(ui, dc, adapter, &mut limits);
+            }
+        });
+        ui.add_space(8.0);
+        let now = caps
+            .adapters
+            .iter()
+            .map(|a| format!("{} {}", a.name, pct_text(a.current)))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        ui.label(
+            egui::RichText::new(format!("In force now: {now}"))
+                .size(11.0)
+                .color(dc.muted),
+        );
+        dry_run_note(ui, dc, control);
+    });
+
+    if limits != before {
+        ui_state.gpu_draft = Some(GpuDraft { profile_id, limits });
+    }
+}
+
+/// One adapter: name, an "Original" reset and a slider over the driver's
+/// range. A value equal to the original is stored as no value at all.
+fn gpu_limit_row(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    adapter: &GpuAdapterCap,
+    limits: &mut BTreeMap<String, i32>,
+) {
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(&adapter.name)
+                .size(12.0)
+                .color(dc.muted),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let text = match limits.get(&adapter.id) {
+                Some(&v) => pct_text(v),
+                None => format!("{} (original)", pct_text(adapter.original)),
+            };
+            ui.add_sized(
+                [86.0, 18.0],
+                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+            );
+            let mut v = limits.get(&adapter.id).copied().unwrap_or(adapter.original);
+            let slider = egui::Slider::new(&mut v, adapter.min..=adapter.max)
+                .step_by(f64::from(adapter.step.max(1)))
+                .show_value(false)
+                .trailing_fill(true);
+            if ui.add(slider).changed() {
+                set_gpu_limit(limits, adapter, v);
+            }
+            if theme::dialog_btn_secondary_compact(ui, "Original", dc, egui::vec2(70.0, 20.0))
+                .clicked()
+            {
+                limits.remove(&adapter.id);
+            }
+        });
+    });
+}
+
+fn set_gpu_limit(limits: &mut BTreeMap<String, i32>, adapter: &GpuAdapterCap, value: i32) {
+    if value == adapter.original {
+        limits.remove(&adapter.id);
+    } else {
+        limits.insert(adapter.id.clone(), value);
+    }
+}
+
 fn limit_row(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -418,14 +578,17 @@ pub fn show(
         ui_state.select_fan(&fan, control);
     }
     let cpu_caps = control.cpu_caps();
+    let gpu_caps = control.gpu_caps();
     match ui_state.tab {
         Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
         Tab::Cpu if cpu_caps.is_none() => ui_state.tab = Tab::Power,
+        Tab::Gpu if gpu_caps.is_none() => ui_state.tab = Tab::Power,
         _ => {}
     }
     let active = control.active();
     let saved_headers = saved_fan_headers(active);
     let saved_cpu = saved_cpu_limits(active);
+    let saved_gpu = saved_gpu_limits(active);
     // A draft belongs to one profile; switching profiles (or the save
     // landing, which makes the draft equal what's stored) ends it.
     if let Some(draft) = &ui_state.draft {
@@ -441,13 +604,19 @@ pub fn show(
             ui_state.cpu_draft = None;
         }
     }
+    if let Some(draft) = &ui_state.gpu_draft {
+        let other_profile = Some(draft.profile_id.as_str()) != control.active_profile.as_deref();
+        if other_profile || draft.limits == saved_gpu {
+            ui_state.gpu_draft = None;
+        }
+    }
     // A try just started or ended: the limits in force changed, so re-read
     // them ("In force now"). Ended without Keep: drop the CPU draft so the
     // sliders show what is in force again, not the values that were undone.
     if ui_state.track_preview(control.preview.is_some(), control.preview_reverted) {
         let _ = cmd_tx.try_send(ControlCmd::Refresh);
     }
-    let dirty = ui_state.draft.is_some() || ui_state.cpu_draft.is_some();
+    let dirty = ui_state.draft.is_some() || ui_state.has_limit_draft();
     // The countdown needs a repaint every second without user input.
     let preview_left = control
         .preview
@@ -554,7 +723,7 @@ pub fn show(
                     ui.add_space(6.0);
                     // CPU limits are tried first (auto-revert); fan-only
                     // edits are saved directly, as before.
-                    let label = if ui_state.cpu_draft.is_some() {
+                    let label = if ui_state.has_limit_draft() {
                         "Try new limits"
                     } else {
                         "Save & apply"
@@ -562,7 +731,7 @@ pub fn show(
                     if theme::dialog_btn_primary(ui, label).clicked() {
                         if let Some(profile) = active {
                             let profile = with_drafts(profile, ui_state);
-                            let cmd = if ui_state.cpu_draft.is_some() {
+                            let cmd = if ui_state.has_limit_draft() {
                                 ControlCmd::Preview(Box::new(profile))
                             } else {
                                 ControlCmd::SaveProfile {
@@ -578,6 +747,7 @@ pub fn show(
                     if theme::dialog_btn_secondary(ui, "Revert", dc).clicked() {
                         ui_state.draft = None;
                         ui_state.cpu_draft = None;
+                        ui_state.gpu_draft = None;
                         ui_state.dragging = None;
                     }
                     ui.add_space(10.0);
@@ -641,7 +811,7 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
         .show(ctx, |ui| {
-            if fan_caps.is_some() || cpu_caps.is_some() {
+            if fan_caps.is_some() || cpu_caps.is_some() || gpu_caps.is_some() {
                 ui.horizontal(|ui| {
                     if tab_btn(ui, dc, "Power", ui_state.tab == Tab::Power, 90.0) {
                         ui_state.tab = Tab::Power;
@@ -655,11 +825,19 @@ pub fn show(
                     {
                         ui_state.tab = Tab::Cpu;
                     }
+                    if gpu_caps.is_some() && tab_btn(ui, dc, "GPU", ui_state.tab == Tab::Gpu, 90.0)
+                    {
+                        ui_state.tab = Tab::Gpu;
+                    }
                 });
                 ui.add_space(10.0);
             }
             if let (Tab::Cpu, Some(caps)) = (ui_state.tab, &cpu_caps) {
                 cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
+                return;
+            }
+            if let (Tab::Gpu, Some(caps)) = (ui_state.tab, &gpu_caps) {
+                gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
                 return;
             }
             match (ui_state.tab, &fan_caps) {
@@ -1661,5 +1839,75 @@ mod tests {
             profile_id: None,
         });
         assert!(!ui.busy(&control));
+    }
+    fn rx9070() -> GpuAdapterCap {
+        GpuAdapterCap {
+            id: "pci-9070".into(),
+            name: "AMD Radeon RX 9070 XT".into(),
+            min: -30,
+            max: 10,
+            step: 1,
+            default: 0,
+            original: 0,
+            current: 0,
+        }
+    }
+
+    #[test]
+    fn gpu_percentages_read_naturally() {
+        assert_eq!(pct_text(-15), "-15 %");
+        assert_eq!(pct_text(5), "+5 %");
+        assert_eq!(pct_text(0), "0 %");
+    }
+
+    #[test]
+    fn a_gpu_limit_at_the_original_value_is_stored_as_none() {
+        let mut limits = BTreeMap::new();
+        set_gpu_limit(&mut limits, &rx9070(), -15);
+        assert_eq!(limits.get("pci-9070"), Some(&-15));
+        set_gpu_limit(&mut limits, &rx9070(), 0);
+        assert!(limits.is_empty());
+    }
+
+    #[test]
+    fn with_drafts_folds_gpu_limits_into_the_profile() {
+        let profile = Profile {
+            id: "gaming".into(),
+            name: "Gaming".into(),
+            icon: None,
+            builtin: true,
+            part: Default::default(),
+        };
+        let mut ui = ControlUi {
+            gpu_draft: Some(GpuDraft {
+                profile_id: "gaming".into(),
+                limits: BTreeMap::from([("pci-9070".to_owned(), -15)]),
+            }),
+            ..Default::default()
+        };
+        let merged = with_drafts(&profile, &ui);
+        assert_eq!(saved_gpu_limits(Some(&merged)).get("pci-9070"), Some(&-15));
+
+        // Back to the original: an empty part, not a stored 0.
+        ui.gpu_draft.as_mut().unwrap().limits.clear();
+        assert_eq!(
+            with_drafts(&profile, &ui).part.gpu,
+            Some(GpuPart { adapters: None })
+        );
+    }
+
+    #[test]
+    fn a_reverted_try_drops_the_gpu_draft_too() {
+        let mut ui = ControlUi {
+            gpu_draft: Some(GpuDraft {
+                profile_id: "gaming".into(),
+                limits: BTreeMap::from([("pci-9070".to_owned(), -15)]),
+            }),
+            ..Default::default()
+        };
+        assert!(ui.has_limit_draft());
+        ui.track_preview(true, false);
+        ui.track_preview(false, true);
+        assert!(!ui.has_limit_draft());
     }
 }
