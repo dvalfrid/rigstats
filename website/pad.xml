@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.41.0</Program_Version>
-		<Program_Release_Month>09</Program_Release_Month>
-		<Program_Release_Day>29</Program_Release_Day>
+		<Program_Version>1.42.0</Program_Version>
+		<Program_Release_Month>10</Program_Release_Month>
+		<Program_Release_Day>03</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>gpu: select displayed GPU from tray menu and Settings; dialogs: remove white flash when opening and closing dialogs; dialogs: restore minimized dialogs when reopened from tray; hardware: query real Win32 classes in typed WMI queries; overlay: make the font-atlas self-heal actually run; overlay: rebuild font atlas to recover lost glyph uploads; overlay: reset click-through guard on re-activation; overlay: show live values while in wallpaper mode; startup: replace remaining PowerShell detections with WMI</Program_Change_Info>
+		<Program_Change_Info>control: add fan control with per-header curves; control: add the Control Center service-side foundation; control: add the Rust control pipe client; control: choose each profile's power plan and manage profiles; control: control the light bar's desk lamp, also from the tray; control: find a headset switched on after the service started; control: find lighting devices plugged in or switched while running; control: light ASUS Aura monitors, the light bar and Dynamic Lighting devices; control: light ROG keyboards and the ROG Delta II with Aura Sync; control: light the ROG Azoth X by cable too; control: lower AMD CPU power limits per profile; control: open a fan's curve from the Motherboard panel; control: set ASUS Aura lighting per profile with Aura Sync; control: set the AMD GPU power limit per profile; control: undervolt with AMD Curve Optimizer per profile; control: wire the Control Center into the egui UI; diagnostics: record fan/power control outcomes and fan channel mapping; diagnostics: record lighting devices and a HID scan in the export; tray: open the Control Center from the tray menu; control: show the active profile's power plan, not its name; installer: install PawnIO with its official setup; sensor: close the hardware only after telemetry clients are done; settings: show which settings tab is selected; settings: wrap the overlay description before its toggle; status: give the debug log room again; updater: show changelog scopes as labels, not raw markdown</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.41.0/RIGStats_1.41.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.42.0/RIGStats_1.42.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
