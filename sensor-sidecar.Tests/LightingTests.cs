@@ -172,8 +172,11 @@ public class AuraUsbTests
 /// </summary>
 public class LightingProviderTests
 {
-    private sealed class FakeDevice(string id = "aura-usb-19af", bool fails = false) : ILightingDevice
+    private sealed class FakeDevice(string id = "aura-usb-19af", bool fails = false, string? blocked = null) : ILightingDevice
     {
+        public string? Blocked => blocked;
+        public int Releases { get; private set; }
+        public void Release() => Releases++;
         public string Id => id;
         public string Name => $"Device {id}";
         public string Kind => "motherboard";
@@ -229,6 +232,40 @@ public class LightingProviderTests
         Provider(gone, board).Apply(Lights("static", "#00ff00")); // no throw
 
         Assert.Single(board.Applied);
+    }
+
+    [Fact]
+    public void A_device_owned_by_windows_dynamic_lighting_is_skipped_and_explained()
+    {
+        var mouse = new FakeDevice("lamparray-0b05-1ace-1", blocked: "Controlled by Windows Dynamic Lighting.");
+        var board = new FakeDevice();
+        var provider = Provider(mouse, board);
+
+        provider.Apply(Lights("static", "#ff0000"));
+
+        Assert.Empty(mouse.Applied);
+        Assert.Single(board.Applied);
+        var devices = provider.Probe().Details!["devices"]!.AsArray();
+        Assert.StartsWith("Controlled by Windows", devices[0]!["blocked"]!.GetValue<string>());
+        Assert.Null(devices[1]!["blocked"]);
+    }
+
+    [Fact]
+    public void Only_blocked_devices_is_not_a_failure()
+    {
+        Provider(new FakeDevice(blocked: "Windows")).Apply(Lights("static")); // no throw
+    }
+
+    [Fact]
+    public void Release_hands_every_device_back()
+    {
+        var board = new FakeDevice();
+        var mouse = new FakeDevice("mouse");
+
+        Provider(board, mouse).ReleaseToFirmware();
+
+        Assert.Equal(1, board.Releases);
+        Assert.Equal(1, mouse.Releases);
     }
 
     [Fact]
@@ -323,5 +360,102 @@ public class LightingProviderTests
         var json = JsonSerializer.Serialize(Lights("static", "#ff0033", 0.8), ControlJson.Options);
 
         Assert.Contains("\"aura\":{\"effect\":\"static\",\"color\":\"#ff0033\",\"brightness\":0.8}", json);
+    }
+}
+
+/// <summary>
+/// ASUS Aura monitors and the light bar (#212): direct-mode frames, and the
+/// service-drawn breathing / spectrum effects.
+/// </summary>
+public class AsusMonitorTests
+{
+    [Theory]
+    [InlineData((ushort)0x1BA3, "ROG Strix XG27AQDMG", "monitor")]
+    [InlineData((ushort)0x1AC8, "ROG Aura Monitor Light Bar", "light_bar")]
+    public void Current_family_models_are_known(ushort pid, string name, string kind)
+    {
+        Assert.Equal((name, kind), AsusMonitorDevice.Model(pid));
+    }
+
+    [Fact]
+    public void Old_feature_report_monitors_are_out_of_scope()
+    {
+        Assert.Null(AsusMonitorDevice.Model(0x198C)); // XG27AQ
+        Assert.Null(AsusMonitorDevice.Model(0x19AF)); // the motherboard controller
+    }
+
+    [Fact]
+    public void A_direct_frame_sets_every_led()
+    {
+        var frame = AsusMonitorDevice.DirectFrame(3, 0xFF, 0x00, 0x33);
+
+        Assert.Equal(65, frame.Length);
+        Assert.Equal(new byte[] { 0xEC, 0x40, 0x84, 0x00, 0x03 }, frame[..5]);
+        Assert.Equal(new byte[] { 0xFF, 0x00, 0x33, 0xFF, 0x00, 0x33, 0xFF, 0x00, 0x33 }, frame[5..14]);
+        Assert.All(frame[14..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void Off_and_static_are_single_frames()
+    {
+        Assert.False(SoftwareEffect.IsAnimated(AuraEffect.Static));
+        Assert.False(SoftwareEffect.IsAnimated(AuraEffect.Off));
+        Assert.True(SoftwareEffect.IsAnimated(AuraEffect.Breathing));
+        Assert.Equal(((byte)0, (byte)0, (byte)0), SoftwareEffect.Frame(AuraEffect.Off, 255, 255, 255, TimeSpan.Zero));
+        Assert.Equal(((byte)10, (byte)20, (byte)30), SoftwareEffect.Frame(AuraEffect.Static, 10, 20, 30, TimeSpan.FromSeconds(3)));
+    }
+
+    [Fact]
+    public void Breathing_goes_dark_full_dark_over_one_period()
+    {
+        var half = SoftwareEffect.BreathingPeriod / 2;
+
+        Assert.Equal(((byte)0, (byte)0, (byte)0), SoftwareEffect.Frame(AuraEffect.Breathing, 200, 100, 50, TimeSpan.Zero));
+        Assert.Equal(((byte)200, (byte)100, (byte)50), SoftwareEffect.Frame(AuraEffect.Breathing, 200, 100, 50, half));
+        Assert.Equal(((byte)0, (byte)0, (byte)0), SoftwareEffect.Frame(AuraEffect.Breathing, 200, 100, 50, SoftwareEffect.BreathingPeriod));
+    }
+
+    [Fact]
+    public void Spectrum_walks_the_hue_circle()
+    {
+        Assert.Equal(((byte)255, (byte)0, (byte)0), SoftwareEffect.Hue(0));
+        Assert.Equal(((byte)0, (byte)255, (byte)0), SoftwareEffect.Hue(120));
+        Assert.Equal(((byte)0, (byte)0, (byte)255), SoftwareEffect.Hue(240));
+        Assert.Equal(SoftwareEffect.Hue(0), SoftwareEffect.Frame(AuraEffect.SpectrumCycle, 1, 2, 3, SoftwareEffect.SpectrumPeriod));
+    }
+
+    [Fact]
+    public void The_effect_loop_draws_the_first_frame_at_once_and_stops()
+    {
+        var frames = new List<(byte, byte, byte)>();
+        using var loop = new SoftwareEffectLoop("test", (r, g, b) => { lock (frames) frames.Add((r, g, b)); });
+
+        loop.Start(AuraEffect.Static, 1, 2, 3);
+        Assert.Equal((1, 2, 3), Assert.Single(frames));
+
+        loop.Start(AuraEffect.SpectrumCycle, 0, 0, 0);
+        Thread.Sleep(150);
+        loop.Stop();
+        int count;
+        lock (frames)
+            count = frames.Count;
+        Thread.Sleep(150);
+        lock (frames)
+            Assert.Equal(count, frames.Count); // nothing after Stop
+        Assert.True(count >= 3);
+    }
+}
+
+/// <summary>HID LampArray (Windows Dynamic Lighting standard) helpers.</summary>
+public class LampArrayTests
+{
+    [Theory]
+    [InlineData(1u, "keyboard")]
+    [InlineData(2u, "mouse")]
+    [InlineData(7u, "chassis")]
+    [InlineData(99u, "peripheral")]
+    public void Lamp_array_kinds_have_names(uint kind, string name)
+    {
+        Assert.Equal(name, LampArrayDevice.KindName(kind));
     }
 }

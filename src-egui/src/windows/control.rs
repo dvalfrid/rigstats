@@ -143,6 +143,9 @@ pub struct ControlUi {
     co_per_core: bool,
     /// An inline rename or delete confirmation in the profile list.
     profile_edit: Option<ProfileEdit>,
+    /// The window was open last frame — opening it re-reads the service's
+    /// capabilities (another app may have taken or released a device since).
+    shown: bool,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
     /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
@@ -762,7 +765,23 @@ fn lighting_tab(
                     .size(12.0)
                     .color(dc.text),
             )
-            .on_hover_text(format!("Firmware {}", device.firmware));
+            .on_hover_text(if device.firmware.is_empty() {
+                device.kind.replace('_', " ")
+            } else {
+                format!(
+                    "{}, firmware {}",
+                    device.kind.replace('_', " "),
+                    device.firmware
+                )
+            });
+            if let Some(blocked) = &device.blocked {
+                // Skipped by Aura Sync until the other controller lets go.
+                ui.label(
+                    egui::RichText::new(blocked)
+                        .size(11.0)
+                        .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+                );
+            }
         }
         ui.add_space(10.0);
 
@@ -1006,6 +1025,10 @@ pub fn show(
     ui_state: &mut ControlUi,
 ) {
     dc.apply_to_ctx(ctx);
+    if !ui_state.shown {
+        ui_state.shown = true;
+        let _ = cmd_tx.try_send(ControlCmd::Refresh);
+    }
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
@@ -1153,6 +1176,7 @@ pub fn show(
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
                     ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
+                    ui_state.shown = false;
                     open.store(false, Ordering::Relaxed);
                     ui_state.notice = None;
                     main_ctx.request_repaint_of(egui::ViewportId::ROOT);
@@ -1355,6 +1379,7 @@ pub fn show(
 
     if ctx.input(|i| i.viewport().close_requested()) {
         ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
+        ui_state.shown = false;
         open.store(false, Ordering::Relaxed);
         ui_state.notice = None;
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);

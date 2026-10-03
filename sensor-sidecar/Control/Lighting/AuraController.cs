@@ -14,8 +14,15 @@ public interface ILightingDevice
     string Firmware { get; }
     IReadOnlyList<AuraZone> Zones { get; }
 
+    /// Why another controller owns this device right now (e.g. Windows
+    /// Dynamic Lighting), or null — a blocked device is skipped, not fought.
+    string? Blocked { get; }
+
     /// One effect and colour on every zone. Throws when the device is gone.
     void Apply(AuraEffect effect, byte red, byte green, byte blue);
+
+    /// Hands the device back to its own effect (service stop, release).
+    void Release();
 }
 
 /// The first known Aura USB controller on this machine, kept open for the
@@ -33,6 +40,7 @@ public sealed class AuraController : ILightingDevice, IDisposable
     public string Kind => "motherboard";
     public string Firmware { get; }
     public AuraFamily Family { get; }
+    public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; }
 
     private AuraController(HidDeviceInfo info, IHidDevice device, AuraFamily family, string firmware, IReadOnlyList<AuraZone> zones)
@@ -106,6 +114,10 @@ public sealed class AuraController : ILightingDevice, IDisposable
 
     public void Apply(AuraEffect effect, byte red, byte green, byte blue) =>
         Send(AuraUsb.SetEffect(Family, Zones, effect, red, green, blue));
+
+    /// Nothing to hand back: the controller keeps the last effect until the
+    /// next cold boot restores its saved one.
+    public void Release() { }
 
     private void Send(IReadOnlyList<byte[]> reports)
     {

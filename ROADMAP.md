@@ -1670,3 +1670,6 @@ lighting setting leaves the lights alone. If Armoury Crate (LightingService)
 is running, the tab says so instead of fighting it over the lights. Checked
 on a PRIME B650M-A; other boards' diagnostics exports become test fixtures.
 Native protocols only (no OpenRGB process), current hardware only.
+Since #212 Aura Sync also reaches ROG Aura monitors, the Aura Monitor Light Bar
+and any Windows Dynamic Lighting (HID LampArray) keyboard or mouse, any brand —
+the ROG Harpe Ace through the Omni receiver among them.

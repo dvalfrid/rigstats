@@ -51,6 +51,9 @@
     <Compile Include="..\sensor-sidecar\Control\Lighting\AuraUsb.cs" Link="Control\Lighting\AuraUsb.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\AuraController.cs" Link="Control\Lighting\AuraController.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\LightingProvider.cs" Link="Control\Lighting\LightingProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\SoftwareEffect.cs" Link="Control\Lighting\SoftwareEffect.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\AsusMonitorDevice.cs" Link="Control\Lighting\AsusMonitorDevice.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\LampArrayDevice.cs" Link="Control\Lighting\LampArrayDevice.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

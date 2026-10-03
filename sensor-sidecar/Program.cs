@@ -103,6 +103,13 @@ builder.Services.AddSingleton(_ =>
     var devices = new List<ILightingDevice>();
     if (AuraController.TryOpen(out var reason) is { } motherboard)
         devices.Add(motherboard);
+    // ASUS Aura monitors and the monitor light bar (#212).
+    var hid = Hid.Enumerate();
+    devices.AddRange(AsusMonitorDevice.Discover(hid));
+    // Any HID LampArray device (Windows Dynamic Lighting standard), any brand.
+    devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
+    if (devices.Count > 0)
+        reason = "";
     return new LightingProvider(devices, reason, LightingProvider.DetectConflict, dryRun);
 });
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());

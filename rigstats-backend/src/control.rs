@@ -160,6 +160,9 @@ pub struct AuraDeviceCap {
     pub kind: String,
     #[serde(default)]
     pub firmware: String,
+    /// Why another controller owns it (Windows Dynamic Lighting) — skipped.
+    #[serde(default)]
+    pub blocked: Option<String>,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }

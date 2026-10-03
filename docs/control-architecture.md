@@ -294,7 +294,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
-| `LightingProvider` | Aura Sync over `ILightingDevice`s — today the ASUS Aura USB motherboard controller (`AuraController`, Windows HID APIs) | Implemented in-service; yields to Armoury Crate / LightingService. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
+| `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
 
 ---
 
@@ -543,13 +543,43 @@ controller, not one board:
   built-ins change nobody's lighting. The controller can't report its
   effect: `Verify` trusts a successful write, `Capture` returns what the
   service last set, release leaves the lights as they are.
-- **Armoury Crate:** if LightingService or Armoury Crate is running, the
-  domain is unsupported with `conflict: true` — the Lighting tab shows the
-  explanation instead of disappearing (a machine with no controller gets no
-  tab at all). Writes are skipped while the conflict lasts.
+- **Armoury Crate / OpenRGB:** if LightingService, Armoury Crate or OpenRGB
+  (app or service) is running, the domain is unsupported with
+  `conflict: true` — the Lighting tab shows the explanation instead of
+  disappearing (a machine with no lighting device gets no tab at all).
+  Writes are skipped while the conflict lasts. Opening the Control Center
+  re-reads the capabilities, so closing the other app takes effect at once.
 - **UI:** effect, colour and brightness with a live preview (`aura_preview`,
   throttled to ~10 Hz); Save & apply stores it in the profile; Revert or
   closing the window puts the saved lighting back.
+
+### More lighting devices (#212)
+
+Each is one more `ILightingDevice`; all verified on the dev rig:
+
+- **ASUS Aura monitors and the ROG Aura Monitor Light Bar**
+  (`AsusMonitorDevice`) — the current family (XG27AQDMG `1BA3`, XG27ACDNG,
+  XG27UCG, PG32UCDM/UCDMR/UCDP, light bar `1AC8`), same `0xEC` framing as
+  the motherboard: LED count at byte 32 of the config reply, direct mode
+  (`0x35 … 0xFF`), frames `0x40 0x84 0x00 <n> RGB…`. Two identical monitors
+  are two devices. The older feature-report family (XG27AQ, XG279Q, ...)
+  is out of scope (legacy).
+- **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
+  standard behind Windows Dynamic Lighting (usage page `0x59`), so one
+  implementation covers every current keyboard, mouse or accessory that
+  supports Dynamic Lighting, any brand (first: ROG Harpe Ace via the ROG
+  Omni receiver, `1ACE`). Report ids and field layout come from the
+  device's own descriptor (`HidP_*`); colours go out as a range update over
+  all lamps; control is taken by clearing AutonomousMode and handed back on
+  release / service stop.
+- **Software effects.** Monitors, the light bar and LampArray devices have
+  no built-in effects, so breathing and spectrum cycle are drawn by the
+  service (`SoftwareEffect` / `SoftwareEffectLoop`, 25 frames a second).
+- **Per-device blockers.** While Windows Dynamic Lighting is on for a
+  signed-in user (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
+  Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the
+  LampArray devices itself: they report `blocked` and Aura Sync skips them,
+  the Lighting tab explains it per device, and the rest keep syncing.
 
 ## Open questions
 
@@ -580,11 +610,12 @@ controller, not one board:
   particular the onboard-LED zone (`0x1B` > 0) and the addressable family
   are untested. Each user's diagnostics export carries the firmware and
   config table; turn them into `fixtures/aura/` files.
-- More lighting devices (#212, umbrella): ASUS Aura monitors and the
-  monitor light bar first (documented in OpenRGB, testable on the dev rig),
-  then the ROG Omni receiver's peripherals (Azoth X, Harpe Ace — not in
-  OpenRGB, needs protocol research), other ASUS peripherals, then other
-  vendors' current devices.
+- More lighting devices (#212, umbrella) — still open: the ROG Azoth X
+  keyboard (not LampArray, not in OpenRGB — protocol research, starting from
+  the original Azoth's), the light bar's desk lamp (only its RGB is done; the
+  lamp needs a USB capture of ASUS's own control), other ASUS peripherals,
+  then other vendors' current devices. Any Dynamic Lighting device already
+  works through `LampArrayDevice`.
 - The colour picker only updates the lights when the pointer stops (the
   egui colour picker reports the change late); check with the egui
   upgrade (#200).

@@ -56,6 +56,7 @@ public sealed class LightingProvider(
                     ["name"] = d.Name,
                     ["kind"] = d.Kind,
                     ["firmware"] = d.Firmware,
+                    ["blocked"] = d.Blocked,
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,
@@ -100,9 +101,22 @@ public sealed class LightingProvider(
             Set(previous);
     }
 
-    /// Lights are harmless — release leaves them as they are; each device
-    /// shows its own saved effect again after the next cold boot.
-    public void ReleaseToFirmware() { }
+    /// Each device goes back to its own effect where it has one (LampArray
+    /// devices); the Aura controllers keep the last effect until a cold boot.
+    public void ReleaseToFirmware()
+    {
+        foreach (var device in devices)
+        {
+            try
+            {
+                device.Release();
+            }
+            catch (Exception e)
+            {
+                SidecarLog.Log($"[rigstats-control] Lighting release on {device.Name} failed: {e.Message}");
+            }
+        }
+    }
 
     /// Applies `aura` at once, outside any transaction — the Lighting tab's
     /// live preview while a colour is being picked.
@@ -129,9 +143,11 @@ public sealed class LightingProvider(
         else
         {
             // One unplugged device must not keep the others dark; only when
-            // every device fails does the profile apply fail.
+            // every device fails does the profile apply fail. A device another
+            // controller owns (Windows Dynamic Lighting) is skipped.
             var failures = new List<string>();
-            foreach (var device in devices)
+            var targets = devices.Where(d => d.Blocked is null).ToList();
+            foreach (var device in targets)
             {
                 try
                 {
@@ -143,7 +159,7 @@ public sealed class LightingProvider(
                     SidecarLog.Log($"[rigstats-control] Lighting on {device.Name} failed: {e.Message}");
                 }
             }
-            if (failures.Count == devices.Count)
+            if (targets.Count > 0 && failures.Count == targets.Count)
                 throw new InvalidOperationException($"Lighting not set ({string.Join("; ", failures)}).");
         }
         lock (_lock)
@@ -172,8 +188,8 @@ public sealed class LightingProvider(
     }
 
     /// What holds the lighting besides us, or null: Armoury Crate's
-    /// LightingService (or its app) rewrites the controllers itself, so the
-    /// two would fight over every change.
+    /// LightingService (or its app) or OpenRGB rewrite the devices themselves,
+    /// so the two would fight over every change.
     public static string? DetectConflict()
     {
         try
@@ -182,6 +198,9 @@ public sealed class LightingProvider(
                 return "Armoury Crate (LightingService)";
             if (Process.GetProcessesByName("ArmouryCrate").Length > 0)
                 return "Armoury Crate";
+            // OpenRGB drives the same devices (and redraws them constantly).
+            if (Process.GetProcessesByName("OpenRGB").Length > 0)
+                return "OpenRGB";
         }
         catch
         {
