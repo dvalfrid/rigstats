@@ -126,6 +126,14 @@ impl AmdCpuLimit {
     }
 }
 
+/// One Windows power scheme from the "power_plan" capability: `id` is the
+/// symbolic name for the well-known schemes ("balanced", ...) or the GUID.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct PowerScheme {
+    pub id: String,
+    pub name: String,
+}
+
 /// A profile's Curve Optimizer offsets (#191), in CO counts. A core's
 /// value is `per_core[index]`, else `all_core`, else the BIOS value.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -401,6 +409,16 @@ impl ControlState {
         self.active()?.part.cpu_limit.as_ref()?.amd?.ppt_w
     }
 
+    /// The power schemes a profile can choose from.
+    pub fn power_schemes(&self) -> Vec<PowerScheme> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "power_plan" && c.supported)
+            .and_then(|c| c.details.as_ref()?.get("schemes").cloned())
+            .and_then(|s| serde_json::from_value(s).ok())
+            .unwrap_or_default()
+    }
+
     /// The Curve Optimizer capability, when this CPU supports it.
     pub fn curve_opt_caps(&self) -> Option<CurveOptCaps> {
         self.capabilities
@@ -567,6 +585,11 @@ pub enum ControlCmd {
     IdentifyFan(String),
     /// Apply an edited, unsaved profile for a while; the service reverts it
     /// unless [`ControlCmd::ConfirmPreview`] keeps it (which also saves it).
+    /// Delete a custom profile; the service applies whichever profile becomes
+    /// active if it was the active one.
+    DeleteProfile(String),
+    /// Put a built-in profile back to its defaults (re-applied when active).
+    ResetProfile(String),
     Preview(Box<Profile>),
     ConfirmPreview {
         keep: bool,
@@ -946,6 +969,39 @@ async fn handle_cmd(
                 dir,
             )
             .await?;
+            Ok(())
+        }
+        ControlCmd::DeleteProfile(id) => {
+            request(
+                writer,
+                reader,
+                next_id,
+                "delete_profile",
+                Some(serde_json::json!({ "id": id })),
+                event_tx,
+                dir,
+            )
+            .await?;
+            fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
+            Ok(())
+        }
+        ControlCmd::ResetProfile(id) => {
+            if let Some(value) = request(
+                writer,
+                reader,
+                next_id,
+                "reset_profile",
+                Some(serde_json::json!({ "id": id })),
+                event_tx,
+                dir,
+            )
+            .await?
+            {
+                if let Ok(r) = serde_json::from_value::<ApplyResult>(value) {
+                    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+                }
+            }
+            fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
             Ok(())
         }
         ControlCmd::Preview(profile) => {
@@ -1544,6 +1600,25 @@ mod tests {
         assert_eq!((caps.min, caps.max, caps.cores), (-30, 0, 8));
         assert!(caps.per_core);
         assert_eq!(caps.current[0], -15);
+    }
+
+    #[test]
+    fn power_schemes_come_from_the_power_plan_capability() {
+        let state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "power_plan".into(),
+                supported: true,
+                reason: None,
+                details: Some(serde_json::json!({
+                    "schemes": [{"id": "balanced", "name": "Balanced"}, {"id": "e9a42b02", "name": "Ultimate"}],
+                })),
+            }],
+            ..ControlState::default()
+        };
+        let schemes = state.power_schemes();
+        assert_eq!(schemes.len(), 2);
+        assert_eq!(schemes[1].name, "Ultimate");
+        assert!(ControlState::default().power_schemes().is_empty());
     }
 
     #[test]

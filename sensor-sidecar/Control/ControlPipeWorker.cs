@@ -268,6 +268,7 @@ public sealed class ControlPipeWorker(
                 "list_profiles" => ControlResponse.Ok(request.Id, await profiles.ListAsync(ct)),
                 "save_profile" => await HandleSaveProfileAsync(request, ct),
                 "delete_profile" => await HandleDeleteProfileAsync(request, ct),
+                "reset_profile" => await HandleResetProfileAsync(request, ct),
                 "apply_profile" => await HandleApplyProfileAsync(request, ct),
                 "preview" => await HandlePreviewAsync(request, ct),
                 "confirm" => await HandleConfirmAsync(request, ct),
@@ -306,10 +307,36 @@ public sealed class ControlPipeWorker(
     {
         var id = request.Params?.GetProperty("id").GetString()
             ?? throw new JsonException("missing id.");
-        var deleted = await profiles.DeleteProfileAsync(id, ct);
-        return deleted
-            ? ControlResponse.Ok(request.Id, new { ok = true })
-            : ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
+        var wasActive = await profiles.GetActiveIdAsync(ct) == id;
+        if (!await profiles.DeleteProfileAsync(id, ct))
+            return ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
+        // The store falls back to another profile as active; apply it, so the
+        // hardware follows what the UI now shows as active.
+        if (wasActive)
+            await ApplyActiveAsync(ct);
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
+
+    /// `{"id": "gaming"}` — a built-in back to its defaults, re-applied when
+    /// it is the active profile.
+    private async Task<ControlResponse> HandleResetProfileAsync(ControlRequest request, CancellationToken ct)
+    {
+        var id = request.Params?.GetProperty("id").GetString()
+            ?? throw new JsonException("missing id.");
+        if (await profiles.ResetBuiltinAsync(id, ct) is null)
+            return ControlResponse.Fail(request.Id, "not_builtin", $"profile '{id}' is not a built-in profile.");
+        var result = await profiles.GetActiveIdAsync(ct) == id
+            ? await ApplyActiveAsync(ct)
+            : ApplyResult.Success(id);
+        return ControlResponse.Ok(request.Id, result);
+    }
+
+    private async Task<ApplyResult> ApplyActiveAsync(CancellationToken ct)
+    {
+        var activeId = await profiles.GetActiveIdAsync(ct);
+        if (activeId is null || await profiles.GetAsync(activeId, ct) is not { } active)
+            return ApplyResult.Failure(activeId ?? "", "No active profile.");
+        return await broker.ApplyProfileAsync(active, ct);
     }
 
     private async Task<ControlResponse> HandleApplyProfileAsync(ControlRequest request, CancellationToken ct)

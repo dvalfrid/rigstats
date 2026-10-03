@@ -183,7 +183,8 @@ Transactions are serialised — there is never more than one in flight.
 | `hello` | Protocol version handshake. On mismatch the UI disables control and says why. |
 | `capabilities` | Per-domain capability sets (headers, ranges, locked flags). |
 | `get_state` | Active profile, dry-run flag, `crash_guard_notice` (set when the boot-crash guard skipped risky parts this boot). |
-| `list_profiles` / `save_profile` / `delete_profile` | Profile CRUD (the store is service-owned). |
+| `list_profiles` / `save_profile` / `delete_profile` | Profile CRUD (the store is service-owned). Saving keeps a profile's place in the list; deleting the active profile makes Balanced (else the first) active and applies it. |
+| `reset_profile` | A built-in profile back to its defaults; re-applied when it is the active profile. |
 | `apply_profile` | Transactional apply (see ControlBroker). |
 | `preview` | `{"profile": {...}, "seconds": 15}` — apply an edited, unsaved profile; the service reverts it after N seconds (default 15, max 60) unless `confirm` arrives (display-mode-change pattern). A new `apply_profile`/`preview` reverts a pending one first. |
 | `confirm` | `{"keep": true}` stores the previewed profile and makes it active; `{"keep": false}` reverts now. |

@@ -121,8 +121,7 @@ public sealed class ProfileStoreTests : IDisposable
         await _store.DeleteProfileAsync("temp", CancellationToken.None);
 
         var active = await _store.GetActiveIdAsync(CancellationToken.None);
-        Assert.NotEqual("temp", active);
-        Assert.NotNull(active);
+        Assert.Equal("balanced", active); // the neutral fallback, not the first (Silent)
     }
 
     [Fact]
@@ -167,5 +166,48 @@ public sealed class ProfileStoreTests : IDisposable
         Assert.NotNull(silent.Part.CurveOpt);
         Assert.Null(silent.Part.CurveOpt.AllCore); // = BIOS values
         Assert.Single(silent.Part.Fan!.Headers!);
+    }
+
+    [Fact]
+    public async Task ResetBuiltin_restores_the_defaults_and_refuses_custom_profiles()
+    {
+        var gaming = await _store.GetAsync("gaming", CancellationToken.None);
+        await _store.SaveProfileAsync(new Profile
+        {
+            Id = "gaming",
+            Name = "My Gaming",
+            Icon = gaming!.Icon,
+            Builtin = true,
+            Part = new ProfilePart { PowerPlan = "power_saver", CpuLimit = new CpuLimitPart { Amd = new AmdCpuLimit { PptW = 88 } } },
+        }, CancellationToken.None);
+        await _store.SaveProfileAsync(new Profile { Id = "mine", Name = "Mine", Part = new ProfilePart() }, CancellationToken.None);
+
+        var reset = await _store.ResetBuiltinAsync("gaming", CancellationToken.None);
+
+        Assert.Equal("Gaming", reset!.Name);
+        var stored = await new ProfileStore(_path).GetAsync("gaming", CancellationToken.None);
+        Assert.Equal("high_performance", stored!.Part.PowerPlan);
+        Assert.Null(stored.Part.CpuLimit!.Amd);
+        Assert.Null(await _store.ResetBuiltinAsync("mine", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Saving_an_existing_profile_keeps_its_place_and_new_ones_go_last()
+    {
+        var before = (await _store.ListAsync(CancellationToken.None)).Select(p => p.Id).ToList();
+        var silent = await _store.GetAsync("silent", CancellationToken.None);
+
+        await _store.SaveProfileAsync(new Profile
+        {
+            Id = "silent",
+            Name = "Quiet",
+            Icon = silent!.Icon,
+            Builtin = true,
+            Part = silent.Part,
+        }, CancellationToken.None);
+        await _store.SaveProfileAsync(new Profile { Id = "mine", Name = "Mine", Part = new ProfilePart() }, CancellationToken.None);
+
+        var after = (await new ProfileStore(_path).ListAsync(CancellationToken.None)).Select(p => p.Id).ToList();
+        Assert.Equal(before.Append("mine"), after);
     }
 }

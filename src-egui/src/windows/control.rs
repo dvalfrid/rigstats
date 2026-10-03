@@ -15,7 +15,7 @@ use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, ControlCmd, ControlState, CpuLimitCaps, CpuLimitPart,
     CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder,
-    GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, Profile,
+    GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, PowerScheme, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -96,6 +96,13 @@ struct CpuDraft {
     limits: AmdCpuLimit,
 }
 
+/// What the profile list's action row is doing.
+#[derive(Debug, Clone, PartialEq)]
+enum ProfileEdit {
+    Renaming { id: String, name: String },
+    ConfirmDelete { id: String },
+}
+
 /// Unsaved Curve Optimizer offsets for one profile.
 #[derive(Debug, Clone, PartialEq)]
 struct CoDraft {
@@ -121,6 +128,8 @@ pub struct ControlUi {
     co_draft: Option<CoDraft>,
     /// Curve Optimizer per-core sliders shown (UI only).
     co_per_core: bool,
+    /// An inline rename or delete confirmation in the profile list.
+    profile_edit: Option<ProfileEdit>,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
     /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
@@ -345,12 +354,11 @@ fn cpu_tab(
         // No edits while a try is running: Keep/Undo in the footer first.
         ui.add_enabled_ui(control.preview.is_none(), |ui| {
             ui.horizontal(|ui| {
-                let size = egui::vec2(84.0, 22.0);
-                if theme::dialog_btn_secondary_compact(ui, "BIOS", dc, size).clicked() {
+                if theme::dialog_btn_secondary(ui, "BIOS", dc).clicked() {
                     limits = AmdCpuLimit::default();
                 }
                 for (name, values) in CPU_PRESETS {
-                    if theme::dialog_btn_secondary_compact(ui, name, dc, size).clicked() {
+                    if theme::dialog_btn_secondary(ui, name, dc).clicked() {
                         limits = preset_limits(values, &caps.stock);
                     }
                 }
@@ -529,9 +537,7 @@ fn curve_opt_card(
                     if ui.add(slider).changed() {
                         part.all_core = Some(v);
                     }
-                    if theme::dialog_btn_secondary_compact(ui, "BIOS", dc, egui::vec2(60.0, 20.0))
-                        .clicked()
-                    {
+                    if theme::dialog_btn_secondary(ui, "BIOS", dc).clicked() {
                         part = CurveOptPart::default();
                     }
                 });
@@ -611,10 +617,7 @@ fn co_core_row(
                     .get_or_insert_with(BTreeMap::new)
                     .insert(key.clone(), v);
             }
-            if own.is_some()
-                && theme::dialog_btn_secondary_compact(ui, "All", dc, egui::vec2(44.0, 20.0))
-                    .clicked()
-            {
+            if own.is_some() && theme::dialog_btn_secondary(ui, "All", dc).clicked() {
                 if let Some(map) = part.per_core.as_mut() {
                     map.remove(&key);
                 }
@@ -733,9 +736,7 @@ fn gpu_limit_row(
             if ui.add(slider).changed() {
                 set_gpu_limit(limits, adapter, v);
             }
-            if theme::dialog_btn_secondary_compact(ui, "Original", dc, egui::vec2(70.0, 20.0))
-                .clicked()
-            {
+            if theme::dialog_btn_secondary(ui, "Original", dc).clicked() {
                 limits.remove(&adapter.id);
             }
         });
@@ -1005,7 +1006,7 @@ pub fn show(
     // ── Profiles (left) ──────────────────────────────────────────────────
     egui::SidePanel::left("control_profiles")
         .resizable(false)
-        .exact_width(180.0)
+        .exact_width(210.0)
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(10)))
         .show(ctx, |ui| {
             section_label(ui, dc, "Profiles");
@@ -1039,6 +1040,12 @@ pub fn show(
                     let _ = cmd_tx.try_send(ControlCmd::ApplyProfile(profile.id.clone()));
                 }
                 ui.add_space(2.0);
+            }
+            // Not while a try runs or a click awaits its answer: both act on
+            // the active profile.
+            if control.connected && control.preview.is_none() && !busy {
+                ui.add_space(8.0);
+                profile_actions(ui, dc, control, ui_state, cmd_tx);
             }
         });
 
@@ -1098,7 +1105,7 @@ pub fn show(
                         cmd_tx,
                     );
                 }
-                _ => power_tab(ui, dc, control),
+                _ => power_tab(ui, dc, control, cmd_tx),
             }
         });
 
@@ -1109,7 +1116,12 @@ pub fn show(
     }
 }
 
-fn power_tab(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
+fn power_tab(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+) {
     let power = control
         .capabilities
         .iter()
@@ -1143,23 +1155,253 @@ fn power_tab(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
         Some(_) => {
             card_frame(dc).show(ui, |ui| {
                 ui.set_min_width(ui.available_width());
-                section_label(ui, dc, "Power");
+                section_label(ui, dc, "Windows power plan");
+                ui.add_space(4.0);
+                ui.label(
+                    egui::RichText::new(
+                        "The power plan this profile switches Windows to. A power plan is \
+                         not risky, so a change is saved and applied at once.",
+                    )
+                    .size(11.0)
+                    .color(dc.muted),
+                );
                 ui.add_space(8.0);
+                let Some(active) = control.active() else {
+                    return;
+                };
                 // The plan the active profile sets — not the profile's own
                 // name, which a "Gaming" profile would have shown here.
-                let plan = control
-                    .active()
-                    .and_then(|p| p.part.power_plan.as_deref())
-                    .map_or_else(|| "—".to_owned(), power_plan_name);
-                ui.label(
-                    egui::RichText::new(format!("Active power plan: {plan}"))
-                        .size(12.0)
-                        .color(dc.text),
-                );
+                let current = active.part.power_plan.clone();
+                let mut chosen = current.clone();
+                let schemes = control.power_schemes();
+                ui.horizontal(|ui| {
+                    // As tall as the standard button beside it, so the row lines up.
+                    ui.spacing_mut().interact_size.y = 26.0;
+                    ui.add_sized(
+                        [62.0, 26.0],
+                        egui::Label::new(
+                            egui::RichText::new("Power plan").size(12.0).color(dc.muted),
+                        ),
+                    );
+                    let combo = egui::ComboBox::from_id_salt("control_power_plan")
+                        .width(220.0)
+                        .selected_text(chosen.as_deref().map_or_else(
+                            || "Leave unchanged".to_owned(),
+                            |id| scheme_name(id, &schemes),
+                        ))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut chosen, None, "Leave unchanged");
+                            for scheme in &schemes {
+                                ui.selectable_value(
+                                    &mut chosen,
+                                    Some(scheme.id.clone()),
+                                    &scheme.name,
+                                );
+                            }
+                        });
+                    // Re-read the schemes on open, so a plan just created in
+                    // Windows' Power Options shows up without a restart.
+                    if combo.response.clicked() {
+                        let _ = cmd_tx.try_send(ControlCmd::Refresh);
+                    }
+                    ui.add_space(6.0);
+                    if theme::dialog_btn_secondary(ui, "Edit power plans…", dc)
+                        .on_hover_text(
+                            "Opens Windows' Power Options, where plans are created and edited",
+                        )
+                        .clicked()
+                    {
+                        open_power_options();
+                    }
+                });
+                if chosen != current {
+                    let mut profile = active.clone();
+                    profile.part.power_plan = chosen;
+                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                        profile: Box::new(profile),
+                        apply: true,
+                    });
+                }
                 dry_run_note(ui, dc, control);
             });
         }
     }
+}
+
+/// A copy of `source` as a new custom profile, with an id and a name no
+/// existing profile uses ("Gaming copy", "Gaming copy 2", ...).
+fn duplicate_profile(source: &Profile, existing: &[Profile]) -> Profile {
+    let taken_name = |n: &str| existing.iter().any(|p| p.name.eq_ignore_ascii_case(n));
+    let base = format!("{} copy", source.name);
+    let name = (1..)
+        .map(|i| {
+            if i == 1 {
+                base.clone()
+            } else {
+                format!("{base} {i}")
+            }
+        })
+        .find(|n| !taken_name(n))
+        .unwrap_or(base);
+    Profile {
+        id: unique_profile_id(&name, existing),
+        name,
+        icon: source.icon.clone(),
+        builtin: false,
+        part: source.part.clone(),
+    }
+}
+
+/// A lower-case slug of `name`, made unique against the existing ids.
+fn unique_profile_id(name: &str, existing: &[Profile]) -> String {
+    let slug: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    let slug = if slug.is_empty() {
+        "profile".to_owned()
+    } else {
+        slug
+    };
+    let taken = |id: &str| existing.iter().any(|p| p.id == id);
+    (1..)
+        .map(|i| {
+            if i == 1 {
+                slug.clone()
+            } else {
+                format!("{slug}-{i}")
+            }
+        })
+        .find(|id| !taken(id))
+        .unwrap_or(slug)
+}
+
+/// Duplicate / Rename / Delete (custom) or Reset (built-in) for the active
+/// profile, with rename and delete confirmed inline.
+fn profile_actions(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    ui_state: &mut ControlUi,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+) {
+    let Some(active) = control.active() else {
+        return;
+    };
+    // An edit for a profile that is no longer the active one is stale.
+    let stale = match &ui_state.profile_edit {
+        Some(ProfileEdit::Renaming { id, .. } | ProfileEdit::ConfirmDelete { id }) => {
+            *id != active.id
+        }
+        None => false,
+    };
+    if stale {
+        ui_state.profile_edit = None;
+    }
+
+    match ui_state.profile_edit.clone() {
+        Some(ProfileEdit::Renaming { id, mut name }) => {
+            let edit = ui.add(egui::TextEdit::singleline(&mut name).desired_width(f32::INFINITY));
+            let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let trimmed = name.trim().to_owned();
+            let mut done = false;
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if (theme::dialog_btn_secondary(ui, "Save", dc).clicked() || enter)
+                    && !trimmed.is_empty()
+                {
+                    let mut profile = active.clone();
+                    profile.name = trimmed.clone();
+                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                        profile: Box::new(profile),
+                        apply: false,
+                    });
+                    done = true;
+                }
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                    done = true;
+                }
+            });
+            ui_state.profile_edit = (!done).then_some(ProfileEdit::Renaming { id, name });
+        }
+        Some(ProfileEdit::ConfirmDelete { id }) => {
+            ui.label(
+                egui::RichText::new(format!("Delete {}?", active.name))
+                    .size(11.0)
+                    .color(dc.text),
+            );
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if theme::dialog_btn_secondary(ui, "Delete", dc).clicked() {
+                    let _ = cmd_tx.try_send(ControlCmd::DeleteProfile(id.clone()));
+                    ui_state.profile_edit = None;
+                }
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                    ui_state.profile_edit = None;
+                }
+            });
+        }
+        None => {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                if theme::dialog_btn_secondary(ui, "Duplicate", dc).clicked() {
+                    let copy = duplicate_profile(active, &control.profiles);
+                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                        profile: Box::new(copy),
+                        apply: true,
+                    });
+                }
+                if theme::dialog_btn_secondary(ui, "Rename", dc).clicked() {
+                    ui_state.profile_edit = Some(ProfileEdit::Renaming {
+                        id: active.id.clone(),
+                        name: active.name.clone(),
+                    });
+                }
+            });
+            ui.add_space(4.0);
+            // In a row like the buttons above: egui places a button's text by
+            // the surrounding layout, so a lone button in this left-aligned
+            // column would have its label pushed left.
+            ui.horizontal(|ui| {
+                if active.builtin {
+                    // Built-ins can't be deleted, only put back.
+                    if theme::dialog_btn_secondary(ui, "Reset", dc)
+                        .on_hover_text("Back to this built-in profile's defaults")
+                        .clicked()
+                    {
+                        let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
+                    }
+                } else if theme::dialog_btn_secondary(ui, "Delete", dc).clicked() {
+                    ui_state.profile_edit = Some(ProfileEdit::ConfirmDelete {
+                        id: active.id.clone(),
+                    });
+                }
+            });
+        }
+    }
+}
+
+/// Windows' classic Power Options (`powercfg.cpl`) — still the only place
+/// plans are created and edited; the Settings app only picks a mode. Runs
+/// in the user's session from the app, not the service.
+fn open_power_options() {
+    let _ = std::process::Command::new("control.exe")
+        .arg("powercfg.cpl")
+        .spawn();
+}
+
+/// The scheme's own name as Windows reports it, else the readable symbolic
+/// name (a scheme that is gone still shows something sensible).
+fn scheme_name(id: &str, schemes: &[PowerScheme]) -> String {
+    schemes
+        .iter()
+        .find(|s| s.id == id)
+        .map_or_else(|| power_plan_name(id), |s| s.name.clone())
 }
 
 /// Readable name for `ProfilePart.power_plan`'s symbolic scheme names (see
@@ -1402,7 +1644,7 @@ fn fans_tab(
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Start from").size(12.0).color(dc.text));
             for (name, points) in PRESETS {
-                if theme::dialog_btn_secondary_compact(ui, name, dc, egui::vec2(84.0, 22.0))
+                if theme::dialog_btn_secondary(ui, name, dc)
                     .on_hover_text(
                         "Replace this curve with a ready-made shape you can adjust. \
                          Not linked to the profiles of the same name.",
@@ -2210,5 +2452,62 @@ mod tests {
         assert!(per_core_shown(false, &per_core));
         assert!(!per_core_shown(false, &CurveOptPart::default()));
         assert!(per_core_shown(true, &CurveOptPart::default()));
+    }
+    fn named(id: &str, name: &str) -> Profile {
+        Profile {
+            id: id.into(),
+            name: name.into(),
+            icon: Some("bolt".into()),
+            builtin: true,
+            part: rigstats_backend::control::ProfilePart {
+                power_plan: Some("high_performance".into()),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn duplicates_get_a_free_name_and_id_and_are_custom() {
+        let gaming = named("gaming", "Gaming");
+        let mut existing = vec![gaming.clone()];
+
+        let first = duplicate_profile(&gaming, &existing);
+        assert_eq!(
+            (first.id.as_str(), first.name.as_str()),
+            ("gaming-copy", "Gaming copy")
+        );
+        assert!(!first.builtin);
+        assert_eq!(first.part, gaming.part);
+        assert_eq!(first.icon, gaming.icon);
+
+        existing.push(first);
+        let second = duplicate_profile(&gaming, &existing);
+        assert_eq!(
+            (second.id.as_str(), second.name.as_str()),
+            ("gaming-copy-2", "Gaming copy 2")
+        );
+    }
+
+    #[test]
+    fn profile_ids_are_slugs() {
+        assert_eq!(
+            unique_profile_id("Late Night  Gaming!", &[]),
+            "late-night-gaming"
+        );
+        assert_eq!(unique_profile_id("???", &[]), "profile");
+        assert_eq!(
+            unique_profile_id("Gaming", &[named("gaming", "Gaming")]),
+            "gaming-2"
+        );
+    }
+
+    #[test]
+    fn scheme_names_come_from_windows_with_a_readable_fallback() {
+        let schemes = vec![PowerScheme {
+            id: "balanced".into(),
+            name: "Balanserad".into(),
+        }];
+        assert_eq!(scheme_name("balanced", &schemes), "Balanserad"); // localized Windows name
+        assert_eq!(scheme_name("power_saver", &schemes), "Power saver");
     }
 }

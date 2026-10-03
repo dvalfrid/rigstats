@@ -136,13 +136,31 @@ public sealed class ProfileStore
         try
         {
             var file = await LoadUnlockedAsync(ct);
-            var profiles = file.Profiles.Where(p => p.Id != profile.Id).Append(profile).ToList();
+            // Replace in place: editing, renaming or resetting a profile must
+            // not move it to the end of the list. New profiles are appended.
+            var profiles = file.Profiles.ToList();
+            var index = profiles.FindIndex(p => p.Id == profile.Id);
+            if (index >= 0)
+                profiles[index] = profile;
+            else
+                profiles.Add(profile);
             await SaveUnlockedAsync(new ProfileFile { Active = file.Active, Profiles = profiles }, ct);
         }
         finally
         {
             _fileLock.Release();
         }
+    }
+
+    /// Puts a built-in profile back to its defaults. Null when `id` isn't a
+    /// built-in (a custom profile has no defaults to go back to).
+    public async Task<Profile?> ResetBuiltinAsync(string id, CancellationToken ct)
+    {
+        var defaults = BuiltinProfiles().FirstOrDefault(p => p.Id == id);
+        if (defaults is null)
+            return null;
+        await SaveProfileAsync(defaults, ct);
+        return defaults;
     }
 
     public async Task<bool> DeleteProfileAsync(string id, CancellationToken ct)
@@ -158,7 +176,11 @@ public sealed class ProfileStore
                 throw new InvalidOperationException($"Built-in profile '{id}' cannot be deleted.");
 
             var profiles = file.Profiles.Where(p => p.Id != id).ToList();
-            var active = file.Active == id ? (profiles.FirstOrDefault()?.Id ?? "balanced") : file.Active;
+            // Balanced is the neutral fallback; a deleted profile must not
+            // silently switch the machine to e.g. Silent just because it is first.
+            var active = file.Active == id
+                ? (profiles.FirstOrDefault(p => p.Id == "balanced") ?? profiles.FirstOrDefault())?.Id ?? "balanced"
+                : file.Active;
             await SaveUnlockedAsync(new ProfileFile { Active = active, Profiles = profiles }, ct);
             return true;
         }
