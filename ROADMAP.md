@@ -107,6 +107,7 @@ script to refresh it.
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | v3.0 | ✅ Done |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | ✅ Done |
 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | ✅ Done |
+| [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
