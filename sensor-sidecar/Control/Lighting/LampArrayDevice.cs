@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text.Json.Nodes;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
 
@@ -44,6 +45,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     private readonly SoftwareEffectLoop _loop;
     private readonly Func<bool> _dynamicLightingOn;
     private bool _hostControlled;
+    private readonly JsonObject _diagnostics;
 
     public string Id { get; }
     public string Name { get; }
@@ -65,8 +67,10 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     }
 
     private LampArrayDevice(SafeFileHandle handle, IntPtr preparsed, HidpCaps caps, string id, string name,
-        string kind, int lamps, ReportField rangeUpdate, ReportField control, Func<bool> dynamicLightingOn)
+        string kind, int lamps, ReportField rangeUpdate, ReportField control, Func<bool> dynamicLightingOn,
+        JsonObject diagnostics)
     {
+        _diagnostics = diagnostics;
         _handle = handle;
         _preparsed = preparsed;
         _featureLength = caps.FeatureReportByteLength;
@@ -149,8 +153,25 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
             SidecarLog.Log($"[rigstats-control] Lighting: LampArray '{product}' 0x{info.VendorId:X4}:0x{info.ProductId:X4}, " +
                 $"{kind}, {lamps} lamp(s), min update {interval} µs.");
             ok = true;
+            var diagnostics = new JsonObject
+            {
+                ["vendor_id"] = $"{info.VendorId:X4}",
+                ["product_id"] = $"{info.ProductId:X4}",
+                ["interface"] = info.Interface,
+                ["product"] = product,
+                ["lamp_array_kind"] = kind,
+                ["lamp_count"] = lamps,
+                ["min_update_interval_us"] = interval,
+                ["bounding_box_um"] = new JsonArray(
+                    Value(preparsed, HidReportType.Feature, 0x04, report),
+                    Value(preparsed, HidReportType.Feature, 0x05, report),
+                    Value(preparsed, HidReportType.Feature, 0x06, report)),
+                // Which report carries each usage — the descriptor layout a fix needs.
+                ["reports"] = new JsonObject(fields.OrderBy(f => f.Key).Select(f =>
+                    new KeyValuePair<string, JsonNode?>($"0x{f.Key:X2}", $"{f.Value.Type} 0x{f.Value.ReportId:X2}"))),
+            };
             return new LampArrayDevice(handle, preparsed, caps, $"lamparray-{info.VendorId:x4}-{info.ProductId:x4}-{nth}",
-                name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn);
+                name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn, diagnostics);
         }
         finally
         {
@@ -171,6 +192,8 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         }
         _loop.Start(effect, red, green, blue);
     }
+
+    public JsonObject Diagnostics() => _diagnostics.DeepClone().AsObject();
 
     /// Back to the device's own effect.
     public void Release()

@@ -575,6 +575,12 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
 - **Software effects.** Monitors, the light bar and LampArray devices have
   no built-in effects, so breathing and spectrum cycle are drawn by the
   service (`SoftwareEffect` / `SoftwareEffectLoop`, 25 frames a second).
+- **Diagnostics.** At start the service writes `lighting-devices.json`
+  (in every diagnostics ZIP): each device's raw data (Aura firmware + config
+  table, monitor config reply, LampArray kind/lamps/update interval/report
+  layout), the conflict state, and a scan of every HID collection on the
+  machine (no paths or serials) — entries RIGStats doesn't know
+  (`known_as: null`) are the candidates for new support.
 - **Per-device blockers.** While Windows Dynamic Lighting is on for a
   signed-in user (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
   Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the

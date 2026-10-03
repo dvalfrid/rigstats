@@ -5,7 +5,20 @@ namespace SensorSidecar.Control.Lighting;
 
 /// One HID collection as Windows enumerates it.
 public sealed record HidDeviceInfo(string Path, ushort VendorId, ushort ProductId, ushort UsagePage, ushort Usage,
-    int OutputReportLength, int InputReportLength);
+    int OutputReportLength, int InputReportLength, int FeatureReportLength = 0, string? Product = null)
+{
+    /// The USB interface number from the path ("mi_02" → 2), or null.
+    public int? Interface
+    {
+        get
+        {
+            var at = Path.IndexOf("&mi_", StringComparison.OrdinalIgnoreCase);
+            return at >= 0 && at + 6 <= Path.Length && int.TryParse(Path.AsSpan(at + 4, 2), System.Globalization.NumberStyles.HexNumber, null, out var mi)
+                ? mi
+                : null;
+        }
+    }
+}
 
 /// One open HID device: fixed-size reports out, with a timed read back.
 /// A seam so the Aura protocol is testable against a fake device.
@@ -87,12 +100,21 @@ public static class Hid
             if (HidP_GetCaps(preparsed, out var caps) != HidpStatusSuccess)
                 return null;
             return new HidDeviceInfo(path, attributes.VendorId, attributes.ProductId, caps.UsagePage, caps.Usage,
-                caps.OutputReportByteLength, caps.InputReportByteLength);
+                caps.OutputReportByteLength, caps.InputReportByteLength, caps.FeatureReportByteLength, Product(handle));
         }
         finally
         {
             HidD_FreePreparsedData(preparsed);
         }
+    }
+
+    private static string? Product(SafeFileHandle handle)
+    {
+        var buffer = new byte[256];
+        if (!HidD_GetProductString(handle, buffer, buffer.Length))
+            return null;
+        var text = System.Text.Encoding.Unicode.GetString(buffer).TrimEnd('\0').Trim();
+        return text.Length > 0 ? text : null;
     }
 
     private sealed class WindowsHidDevice : IHidDevice
@@ -190,6 +212,9 @@ public static class Hid
 
     [DllImport("hid.dll")]
     private static extern void HidD_GetHidGuid(out Guid guid);
+
+    [DllImport("hid.dll", SetLastError = true)]
+    private static extern bool HidD_GetProductString(SafeFileHandle device, byte[] buffer, int length);
 
     [DllImport("hid.dll", SetLastError = true)]
     private static extern bool HidD_GetAttributes(SafeFileHandle device, ref HiddAttributes attributes);

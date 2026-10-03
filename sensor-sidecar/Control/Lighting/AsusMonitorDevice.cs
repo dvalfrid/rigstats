@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace SensorSidecar.Control.Lighting;
 
 /// ASUS Aura monitors and the ROG Aura Monitor Light Bar (#212) — the
@@ -28,9 +30,12 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
     public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; }
 
-    private AsusMonitorDevice(HidDeviceInfo info, IHidDevice device, string id, string name, string kind, int leds)
+    private readonly string _config;
+
+    private AsusMonitorDevice(HidDeviceInfo info, IHidDevice device, string id, string name, string kind, int leds, string config)
     {
         _info = info;
+        _config = config;
         _device = device;
         Id = id;
         Name = name;
@@ -83,7 +88,7 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
                 found.Add(new AsusMonitorDevice(info, device,
                     $"asus-monitor-{info.ProductId:x4}-{nth}",
                     nth == 1 ? model : $"{model} ({nth})",
-                    kind, leds));
+                    kind, leds, reply is null ? "" : Convert.ToHexString(reply)));
             }
             catch (Exception e)
             {
@@ -100,6 +105,16 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
             Send([Report(Effect, 0x00, 0x00, 0x00, DirectMode, 0x00, 0x00, 0x01)]);
         _loop.Start(effect, red, green, blue);
     }
+
+    public JsonObject Diagnostics() => new()
+    {
+        ["vendor_id"] = $"{_info.VendorId:X4}",
+        ["product_id"] = $"{_info.ProductId:X4}",
+        ["interface"] = _info.Interface,
+        ["product"] = _info.Product,
+        ["leds"] = Zones[0].Leds,
+        ["config_reply"] = _config,
+    };
 
     /// Stops a running animation; the monitor keeps its last frame.
     public void Release() => _loop.Stop();

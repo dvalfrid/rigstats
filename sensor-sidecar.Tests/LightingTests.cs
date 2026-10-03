@@ -177,6 +177,7 @@ public class LightingProviderTests
         public string? Blocked => blocked;
         public int Releases { get; private set; }
         public void Release() => Releases++;
+        public System.Text.Json.Nodes.JsonObject Diagnostics() => new() { ["product_id"] = "19AF", ["config_table"] = "1E9F" };
         public string Id => id;
         public string Name => $"Device {id}";
         public string Kind => "motherboard";
@@ -457,5 +458,78 @@ public class LampArrayTests
     public void Lamp_array_kinds_have_names(uint kind, string name)
     {
         Assert.Equal(name, LampArrayDevice.KindName(kind));
+    }
+}
+
+/// <summary>
+/// lighting-devices.json in the diagnostics export: recognised devices with
+/// their raw data, and every HID collection — without machine identifiers.
+/// </summary>
+public class LightingDiagnosticsTests
+{
+    private sealed class Device : ILightingDevice
+    {
+        public string Id => "aura-usb-19af";
+        public string Name => "ASUS Aura motherboard controller";
+        public string Kind => "motherboard";
+        public string Firmware => "AULA3-AR32-0304";
+        public string? Blocked => null;
+        public IReadOnlyList<AuraZone> Zones { get; } = [new("argb1", "ARGB header 1", true, 0, 1)];
+        public void Apply(AuraEffect effect, byte red, byte green, byte blue) { }
+        public void Release() { }
+        public System.Text.Json.Nodes.JsonObject Diagnostics() => new() { ["config_table"] = "1E9F03" };
+    }
+
+    private static HidDeviceInfo Hid(ushort vid, ushort pid, ushort page, string mi = "00") => new(
+        $@"\?\hid#vid_{vid:x4}&pid_{pid:x4}&mi_{mi}#9&2bc98134&0&0000#{{4d1e55b2-f16f-11cf-88cb-001111000030}}",
+        vid, pid, page, 0x01, 65, 65, 0, "Some device");
+
+    [Fact]
+    public void Devices_carry_their_raw_data_and_the_scan_lists_every_collection()
+    {
+        var hid = new[] { Hid(0x0B05, 0x19AF, 0xFF72, "02"), Hid(0x046D, 0xC547, 0xFF00) };
+
+        var doc = LightingDiagnostics.Build(hid, [new Device()], "", null, dynamicLightingOn: true);
+
+        var device = doc["devices"]![0]!;
+        Assert.Equal("1E9F03", device["config_table"]!.GetValue<string>());
+        Assert.Equal("motherboard", device["kind"]!.GetValue<string>());
+        Assert.True(doc["windows_dynamic_lighting_on"]!.GetValue<bool>());
+
+        var scan = doc["hid_scan"]!.AsArray();
+        Assert.Equal(2, scan.Count);
+        Assert.Equal("046D", scan[0]!["vendor_id"]!.GetValue<string>()); // sorted by vendor
+        Assert.Null(scan[0]!["known_as"]); // unknown → a candidate for new support
+        Assert.Equal("aura_motherboard", scan[1]!["known_as"]!.GetValue<string>());
+        Assert.Equal(2, scan[1]!["interface"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void Nothing_identifies_the_machine()
+    {
+        var doc = LightingDiagnostics.Build([Hid(0x0B05, 0x19AF, 0xFF72)], [], "No lighting controller found.", null, false);
+
+        var json = doc.ToJsonString();
+        Assert.DoesNotContain("2bc98134", json); // instance id from the HID path
+        Assert.DoesNotContain(@"\?\", json);
+        Assert.Equal("No lighting controller found.", doc["unavailable_reason"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData((ushort)0x0B05, (ushort)0x19AF, (ushort)0xFF72, "aura_motherboard")]
+    [InlineData((ushort)0x0B05, (ushort)0x1BA3, (ushort)0xFF72, "aura_monitor")]
+    [InlineData((ushort)0x0B05, (ushort)0x1AC8, (ushort)0xFF72, "aura_light_bar")]
+    [InlineData((ushort)0x1532, (ushort)0x0099, (ushort)0x0059, "lamp_array")]
+    [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFF00, null)]
+    public void Collections_are_classified(ushort vid, ushort pid, ushort page, string? expected)
+    {
+        Assert.Equal(expected, LightingDiagnostics.KnownAs(Hid(vid, pid, page)));
+    }
+
+    [Fact]
+    public void The_interface_number_comes_from_the_hid_path()
+    {
+        Assert.Equal(5, Hid(0x0B05, 0x1ACE, 0x59, "05").Interface);
+        Assert.Null(new HidDeviceInfo(@"\?\hid#vid_0b05&pid_19af#x", 0x0B05, 0x19AF, 0, 0, 0, 0).Interface);
     }
 }

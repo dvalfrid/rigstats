@@ -11,3 +11,8 @@ Adding a board: a user's diagnostics ZIP has a `rigstats-sensor.log` line
 Copy the product id, firmware and `config` hex into a new file here, write
 the zones you expect (from the board's spec: onboard RGB → a `mainboard`
 zone, one `argbN` per addressable header), and run the tests.
+
+Newer exports also carry `lighting-devices.json`: each device's
+`product_id`, `firmware` and `config_table` are there directly, and
+`hid_scan` lists every HID collection on the machine — entries with
+`"known_as": null` are devices RIGStats doesn't support yet.

@@ -549,6 +549,17 @@ fn collect_and_open_diagnostics_impl(
     )
     .unwrap_or_else(|_| b"(sensor-tree.txt not found)".to_vec());
 
+    // Written by the service at start (#212): the lighting devices it drives,
+    // with firmware / config tables / LampArray layout, and every HID
+    // collection on the machine — so a user's export is enough to add or
+    // fix support for their board, monitor or keyboard.
+    let lighting_devices = std::fs::read(
+        PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
+            .join("se.codeby.rigstats")
+            .join("lighting-devices.json"),
+    )
+    .unwrap_or_else(|_| b"(lighting-devices.json not found)".to_vec());
+
     let install_log = std::fs::read(
         PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
             .join("se.codeby.rigstats")
@@ -712,6 +723,7 @@ fn collect_and_open_diagnostics_impl(
         ("sidecar-service.txt", service_txt.as_bytes()),
         ("profiles.json", &profiles_json),
         ("control-capabilities.json", capabilities_json.as_bytes()),
+        ("lighting-devices.json", &lighting_devices),
         ("hardware.json", hardware_json.as_bytes()),
         ("environment.txt", env_txt.as_bytes()),
         ("sysinfo.json", sysinfo_json.as_bytes()),

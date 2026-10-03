@@ -110,6 +110,11 @@ builder.Services.AddSingleton(_ =>
     devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
     if (devices.Count > 0)
         reason = "";
+    // For the diagnostics export: what was found, and every HID collection
+    // seen, so unknown devices can be supported from a user's export.
+    LightingDiagnostics.Write(
+        Path.Combine(programData, "lighting-devices.json"),
+        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn()));
     return new LightingProvider(devices, reason, LightingProvider.DetectConflict, dryRun);
 });
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());

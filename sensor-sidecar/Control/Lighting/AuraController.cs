@@ -1,3 +1,5 @@
+using System.Text.Json.Nodes;
+
 namespace SensorSidecar.Control.Lighting;
 
 /// One lighting device RIGStats can drive — the motherboard's controller
@@ -23,6 +25,10 @@ public interface ILightingDevice
 
     /// Hands the device back to its own effect (service stop, release).
     void Release();
+
+    /// Everything a test fixture or bug fix needs (ids, firmware, raw
+    /// config) for the diagnostics export's `lighting-devices.json`.
+    JsonObject Diagnostics();
 }
 
 /// The first known Aura USB controller on this machine, kept open for the
@@ -43,9 +49,12 @@ public sealed class AuraController : ILightingDevice, IDisposable
     public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; }
 
-    private AuraController(HidDeviceInfo info, IHidDevice device, AuraFamily family, string firmware, IReadOnlyList<AuraZone> zones)
+    private readonly byte[] _configTable;
+
+    private AuraController(HidDeviceInfo info, IHidDevice device, AuraFamily family, string firmware, IReadOnlyList<AuraZone> zones, byte[] configTable)
     {
         _info = info;
+        _configTable = configTable;
         _device = device;
         Family = family;
         Firmware = firmware;
@@ -98,7 +107,7 @@ public sealed class AuraController : ILightingDevice, IDisposable
                 SidecarLog.Log($"[rigstats-control] Aura: 0x{info.ProductId:X4} {family} firmware '{firmware}', " +
                     $"config {Convert.ToHexString(table)}, zones {string.Join(", ", zones.Select(z => $"{z.Id}({z.Leds})"))}.");
                 reason = "";
-                return new AuraController(info, device, family, firmware, zones);
+                return new AuraController(info, device, family, firmware, zones, table);
             }
             catch (Exception e)
             {
@@ -114,6 +123,16 @@ public sealed class AuraController : ILightingDevice, IDisposable
 
     public void Apply(AuraEffect effect, byte red, byte green, byte blue) =>
         Send(AuraUsb.SetEffect(Family, Zones, effect, red, green, blue));
+
+    public JsonObject Diagnostics() => new()
+    {
+        ["vendor_id"] = $"{_info.VendorId:X4}",
+        ["product_id"] = $"{_info.ProductId:X4}",
+        ["interface"] = _info.Interface,
+        ["family"] = Family.ToString(),
+        ["firmware"] = Firmware,
+        ["config_table"] = Convert.ToHexString(_configTable),
+    };
 
     /// Nothing to hand back: the controller keeps the last effect until the
     /// next cold boot restores its saved one.
