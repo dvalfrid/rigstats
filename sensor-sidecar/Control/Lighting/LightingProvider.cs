@@ -15,24 +15,160 @@ namespace SensorSidecar.Control.Lighting;
 /// Devices can't report their current effect, so `Verify` trusts a
 /// successful write and `Capture` returns what this service last set. A
 /// profile without a lighting part leaves the lights alone.
-public sealed class LightingProvider(
-    IReadOnlyList<ILightingDevice> devices,
-    string unavailableReason,
-    Func<string?> conflict,
-    bool dryRun) : IControlProvider
+///
+/// Devices come and go (a keyboard switched from its receiver to the cable,
+/// a monitor turned on), so the list is looked for again when the Control
+/// Center asks for capabilities and before a profile applies — at most every
+/// two seconds, never per live-preview step, and the devices are only probed
+/// again when the set of HID collections changed. A device still there is
+/// kept as it is; a new one gets the current lighting at once.
+public sealed record LightingScan(IReadOnlyList<ILightingDevice> Devices, string UnavailableReason);
+
+public sealed class LightingProvider : IControlProvider
 {
     private static readonly string[] Effects = ["off", "static", "breathing", "spectrum_cycle"];
+    private const long RescanIntervalMs = 2000;
+
+    private readonly Func<IReadOnlyList<HidDeviceInfo>> _enumerate;
+    private readonly Func<IReadOnlyList<HidDeviceInfo>, LightingScan> _discover;
+    private readonly Func<string?> _conflict;
+    private readonly bool _dryRun;
+    private readonly Action<IReadOnlyList<HidDeviceInfo>, IReadOnlyList<ILightingDevice>, string>? _scanned;
+    private readonly Func<long> _clock;
 
     private readonly object _lock = new();
+    private readonly object _scanLock = new();
     private AuraPart? _current;
+    private volatile IReadOnlyList<ILightingDevice> _devices = [];
+    private volatile string _unavailableReason = "";
+    private string? _fingerprint;
+    private long _lastScan;
+
+    /// `enumerate` lists the HID collections, `discover` turns them into
+    /// devices; `scanned` sees every completed discovery (the diagnostics
+    /// file). The first discovery runs here, logged in full.
+    public LightingProvider(
+        Func<IReadOnlyList<HidDeviceInfo>> enumerate,
+        Func<IReadOnlyList<HidDeviceInfo>, LightingScan> discover,
+        Func<string?> conflict,
+        bool dryRun,
+        Action<IReadOnlyList<HidDeviceInfo>, IReadOnlyList<ILightingDevice>, string>? scanned = null,
+        Func<long>? clock = null)
+    {
+        _enumerate = enumerate;
+        _discover = discover;
+        _conflict = conflict;
+        _dryRun = dryRun;
+        _scanned = scanned;
+        _clock = clock ?? (() => Environment.TickCount64);
+        Rescan(force: true);
+    }
+
+    /// A fixed device list (tests).
+    public LightingProvider(IReadOnlyList<ILightingDevice> devices, string unavailableReason, Func<string?> conflict, bool dryRun)
+        : this(() => [], _ => new LightingScan(devices, unavailableReason), conflict, dryRun)
+    {
+    }
+
+    public IReadOnlyList<ILightingDevice> Devices => _devices;
 
     public string Domain => "aura";
 
+    /// Looks for added and removed devices (see the class comment).
+    public void Rescan(bool force = false)
+    {
+        lock (_scanLock)
+        {
+            var now = _clock();
+            if (!force && _fingerprint is not null && now - _lastScan < RescanIntervalMs)
+                return;
+            _lastScan = now;
+
+            IReadOnlyList<HidDeviceInfo> hid;
+            try
+            {
+                hid = _enumerate();
+            }
+            catch (Exception e)
+            {
+                SidecarLog.Log($"[rigstats-control] Lighting: device scan failed: {e.Message}");
+                return;
+            }
+            var fingerprint = string.Join("\n", hid.Select(h => h.Path).Order(StringComparer.OrdinalIgnoreCase));
+            var first = _fingerprint is null;
+            if (!first && fingerprint == _fingerprint)
+                return;
+            _fingerprint = fingerprint;
+
+            LightingScan scan;
+            using (first ? null : LightingLog.Quiet())
+                scan = _discover(hid);
+
+            // Keep the instance already driving a device (its handle, its
+            // running effect); the fresh duplicate is closed.
+            var old = _devices;
+            var merged = new List<ILightingDevice>();
+            var added = new List<ILightingDevice>();
+            foreach (var device in scan.Devices)
+            {
+                if (old.FirstOrDefault(o => o.Id == device.Id) is { } kept)
+                {
+                    merged.Add(kept);
+                    if (!ReferenceEquals(kept, device))
+                        (device as IDisposable)?.Dispose();
+                }
+                else
+                {
+                    merged.Add(device);
+                    added.Add(device);
+                }
+            }
+            var gone = old.Where(o => !merged.Contains(o)).ToList();
+            _devices = merged;
+            _unavailableReason = scan.UnavailableReason;
+
+            foreach (var device in gone)
+                (device as IDisposable)?.Dispose();
+            if (!first && (added.Count > 0 || gone.Count > 0))
+            {
+                SidecarLog.Log("[rigstats-control] Lighting devices changed: " + string.Join(", ",
+                    added.Select(d => $"+ {d.Name}").Concat(gone.Select(d => $"- {d.Name}"))) + ".");
+            }
+            _scanned?.Invoke(hid, merged, scan.UnavailableReason);
+            if (!first)
+                ApplyCurrent(added);
+        }
+    }
+
+    /// Gives newly found devices the lighting the others already show.
+    private void ApplyCurrent(IReadOnlyList<ILightingDevice> added)
+    {
+        AuraPart? current;
+        lock (_lock)
+            current = _current;
+        if (current is null || added.Count == 0 || _dryRun || _conflict() is not null)
+            return;
+        var (effect, red, green, blue) = Resolve(current);
+        foreach (var device in added.Where(d => d.Blocked is null))
+        {
+            try
+            {
+                device.Apply(effect, red, green, blue);
+            }
+            catch (Exception e)
+            {
+                SidecarLog.Log($"[rigstats-control] Lighting on {device.Name} failed: {e.Message}");
+            }
+        }
+    }
+
     public CapabilitySet Probe()
     {
+        Rescan();
+        var devices = _devices;
         if (devices.Count == 0)
-            return new CapabilitySet { Domain = Domain, Supported = false, Reason = unavailableReason };
-        if (conflict() is { } other)
+            return new CapabilitySet { Domain = Domain, Supported = false, Reason = _unavailableReason };
+        if (_conflict() is { } other)
         {
             // Flagged, so the UI explains it instead of hiding the tab.
             return new CapabilitySet
@@ -89,7 +225,10 @@ public sealed class LightingProvider(
     public void Apply(ProfilePart part)
     {
         if (part.Aura is { } aura)
+        {
+            Rescan();
             Set(aura);
+        }
     }
 
     /// A lighting write can't be read back; a write that didn't throw counts.
@@ -105,7 +244,7 @@ public sealed class LightingProvider(
     /// devices); the Aura controllers keep the last effect until a cold boot.
     public void ReleaseToFirmware()
     {
-        foreach (var device in devices)
+        foreach (var device in _devices)
         {
             try
             {
@@ -128,15 +267,16 @@ public sealed class LightingProvider(
 
     private void Set(AuraPart aura)
     {
+        var devices = _devices;
         if (devices.Count == 0)
             return;
-        if (conflict() is { } other)
+        if (_conflict() is { } other)
         {
             SidecarLog.Log($"[rigstats-control] Lighting skipped: {other} controls the lighting.");
             return;
         }
         var (effect, red, green, blue) = Resolve(aura);
-        if (dryRun)
+        if (_dryRun)
         {
             SidecarLog.Log($"[rigstats-control] dry-run: lighting -> {effect} #{red:x2}{green:x2}{blue:x2} on {devices.Count} device(s)");
         }

@@ -172,8 +172,10 @@ public class AuraUsbTests
 /// </summary>
 public class LightingProviderTests
 {
-    private sealed class FakeDevice(string id = "aura-usb-19af", bool fails = false, string? blocked = null) : ILightingDevice
+    private sealed class FakeDevice(string id = "aura-usb-19af", bool fails = false, string? blocked = null) : ILightingDevice, IDisposable
     {
+        public bool Disposed { get; private set; }
+        public void Dispose() => Disposed = true;
         public string? Blocked => blocked;
         public int Releases { get; private set; }
         public void Release() => Releases++;
@@ -347,6 +349,103 @@ public class LightingProviderTests
         Assert.Empty(board.Applied);
         live.Preview(new AuraPart { Effect = "off" });
         Assert.Single(board.Applied);
+    }
+
+    /// A machine whose HID collections and found devices the test changes,
+    /// with a clock it moves.
+    private sealed class Machine
+    {
+        public List<string> Paths { get; } = ["board"];
+        public Func<List<ILightingDevice>> Found { get; set; } = () => [];
+        public long Now { get; set; }
+        public int Discoveries { get; private set; }
+        public int Scanned { get; private set; }
+
+        public LightingProvider Provider() => new(
+            () => Paths.Select(p => new HidDeviceInfo(p, 0x0B05, 0x19AF, 0xFF72, 1, 65, 65)).ToList(),
+            _ =>
+            {
+                Discoveries++;
+                return new LightingScan(Found(), "No lighting controller found.");
+            },
+            () => null,
+            dryRun: false,
+            (_, _, _) => Scanned++,
+            () => Now);
+    }
+
+    [Fact]
+    public void Rescan_keeps_present_devices_and_closes_the_fresh_duplicates()
+    {
+        var board = new FakeDevice();
+        var machine = new Machine { Found = () => [board] };
+        var provider = machine.Provider();
+        var duplicate = new FakeDevice();
+        var keyboard = new FakeDevice("asus-keyboard-1c24-1");
+        machine.Found = () => [duplicate, keyboard];
+        machine.Paths.Add("keyboard");
+        machine.Now = 5000;
+
+        provider.Rescan();
+
+        Assert.Equal(new ILightingDevice[] { board, keyboard }, provider.Devices);
+        Assert.True(duplicate.Disposed);
+        Assert.False(board.Disposed);
+        Assert.Equal(2, machine.Scanned); // diagnostics rewritten
+    }
+
+    [Fact]
+    public void A_new_device_gets_the_current_lighting_and_a_gone_one_is_closed()
+    {
+        var board = new FakeDevice();
+        var receiver = new FakeDevice("asus-keyboard-1ace-1");
+        var machine = new Machine { Found = () => [board, receiver] };
+        var provider = machine.Provider();
+        provider.Apply(Lights("static", "#ff0000"));
+
+        // The keyboard switched from its receiver to the cable.
+        var cable = new FakeDevice("asus-keyboard-1c24-1");
+        machine.Found = () => [new FakeDevice(), cable];
+        machine.Paths.Add("cable");
+        machine.Now = 5000;
+        provider.Probe();
+
+        Assert.True(receiver.Disposed);
+        Assert.Equal((AuraEffect.Static, (byte)255, (byte)0, (byte)0), Assert.Single(cable.Applied));
+        Assert.Single(board.Applied); // not re-applied
+    }
+
+    [Fact]
+    public void Rescan_is_throttled_and_skips_discovery_when_nothing_changed()
+    {
+        var machine = new Machine { Found = () => [new FakeDevice()] };
+        var provider = machine.Provider();
+
+        machine.Paths.Add("keyboard");
+        machine.Now = 1000;
+        provider.Rescan(); // within two seconds of the first scan
+        Assert.Equal(1, machine.Discoveries);
+
+        machine.Now = 3000;
+        provider.Rescan();
+        Assert.Equal(2, machine.Discoveries);
+
+        machine.Now = 6000;
+        provider.Rescan(); // same collections: no probing
+        Assert.Equal(2, machine.Discoveries);
+    }
+
+    [Fact]
+    public void Preview_never_rescans()
+    {
+        var machine = new Machine { Found = () => [new FakeDevice()] };
+        var provider = machine.Provider();
+        machine.Paths.Add("keyboard");
+        machine.Now = 5000;
+
+        provider.Preview(new AuraPart { Effect = "static" });
+
+        Assert.Equal(1, machine.Discoveries);
     }
 
     [Fact]

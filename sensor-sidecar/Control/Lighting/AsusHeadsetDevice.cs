@@ -68,19 +68,19 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
                 var reply = Request(device, info, reportId, Get, DeviceInfoKey, []);
                 if (reply is null)
                 {
-                    SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} did not answer (off or out of range?).");
+                    LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} did not answer (off or out of range?).");
                     device.Dispose();
                     continue;
                 }
                 var firmware = FirmwareText(reply);
                 var nth = found.Count + 1;
-                SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} report 0x{reportId:X2}, firmware {firmware}.");
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} report 0x{reportId:X2}, firmware {firmware}.");
                 found.Add(new AsusHeadsetDevice(info, device, reportId,
                     $"asus-headset-{info.ProductId:x4}-{nth}", nth == 1 ? model : $"{model} ({nth})", firmware));
             }
             catch (Exception e)
             {
-                SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} not usable: {e.Message}");
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} not usable: {e.Message}");
                 device?.Dispose();
             }
         }

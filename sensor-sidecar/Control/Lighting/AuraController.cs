@@ -73,7 +73,7 @@ public sealed class AuraController : ILightingDevice, IDisposable
         catch (Exception e)
         {
             reason = "Lighting is unavailable: USB devices could not be listed.";
-            SidecarLog.Log($"[rigstats-control] Aura: HID enumeration failed: {e.Message}");
+            LightingLog.Discovery($"[rigstats-control] Aura: HID enumeration failed: {e.Message}");
             return null;
         }
 
@@ -97,21 +97,21 @@ public sealed class AuraController : ILightingDevice, IDisposable
                 var table = device.Read(ReplyTimeout) is { } cfg ? AuraUsb.ParseConfigTable(cfg) : null;
                 if (table is null)
                 {
-                    SidecarLog.Log($"[rigstats-control] Aura: 0x{info.ProductId:X4} gave no config table.");
+                    LightingLog.Discovery($"[rigstats-control] Aura: 0x{info.ProductId:X4} gave no config table.");
                     device.Dispose();
                     continue;
                 }
                 var zones = AuraUsb.Zones(family, table);
                 // The firmware and table are what a fixture needs to add or
                 // fix a board — they land in the diagnostics ZIP via this log.
-                SidecarLog.Log($"[rigstats-control] Aura: 0x{info.ProductId:X4} {family} firmware '{firmware}', " +
+                LightingLog.Discovery($"[rigstats-control] Aura: 0x{info.ProductId:X4} {family} firmware '{firmware}', " +
                     $"config {Convert.ToHexString(table)}, zones {string.Join(", ", zones.Select(z => $"{z.Id}({z.Leds})"))}.");
                 reason = "";
                 return new AuraController(info, device, family, firmware, zones, table);
             }
             catch (Exception e)
             {
-                SidecarLog.Log($"[rigstats-control] Aura: 0x{info.ProductId:X4} not usable: {e.Message}");
+                LightingLog.Discovery($"[rigstats-control] Aura: 0x{info.ProductId:X4} not usable: {e.Message}");
                 device?.Dispose();
             }
         }

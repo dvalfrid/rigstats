@@ -79,11 +79,11 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
                 var leds = reply is { Length: > ConfigLedCountIndex } ? reply[ConfigLedCountIndex] : 0;
                 if (leds == 0)
                 {
-                    SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} reported no LEDs.");
+                    LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} reported no LEDs.");
                     device.Dispose();
                     continue;
                 }
-                SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4}, {leds} LED(s), " +
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4}, {leds} LED(s), " +
                     $"config {(reply is null ? "-" : Convert.ToHexString(reply))}.");
                 found.Add(new AsusMonitorDevice(info, device,
                     $"asus-monitor-{info.ProductId:x4}-{nth}",
@@ -92,7 +92,7 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
             }
             catch (Exception e)
             {
-                SidecarLog.Log($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} not usable: {e.Message}");
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} not usable: {e.Message}");
                 device?.Dispose();
             }
         }

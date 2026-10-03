@@ -97,30 +97,31 @@ builder.Services.AddSingleton<IControlProvider>(_ => new GpuPowerProvider(
 
 // Control Center phase 5 (#192): lighting — ASUS Aura USB controllers. Also
 // registered as itself for the control pipe's live preview, like FanProvider.
-builder.Services.AddSingleton(_ =>
-{
-    // Every lighting device found; monitors and peripherals join this list later.
-    var devices = new List<ILightingDevice>();
-    if (AuraController.TryOpen(out var reason) is { } motherboard)
-        devices.Add(motherboard);
-    // ASUS Aura monitors and the monitor light bar (#212).
-    var hid = Hid.Enumerate();
-    devices.AddRange(AsusMonitorDevice.Discover(hid));
-    // ASUS TUF-protocol keyboards — the ROG Azoth X via the Omni receiver (#213).
-    devices.AddRange(AsusKeyboardDevice.Discover(hid));
-    // ASUS headsets on the GearLink protocol — the ROG Delta II via its dongle.
-    devices.AddRange(AsusHeadsetDevice.Discover(hid));
-    // Any HID LampArray device (Windows Dynamic Lighting standard), any brand.
-    devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
-    if (devices.Count > 0)
-        reason = "";
+builder.Services.AddSingleton(_ => new LightingProvider(
+    Hid.Enumerate,
+    hid =>
+    {
+        // Every lighting device found; looked for again when devices change.
+        var devices = new List<ILightingDevice>();
+        if (AuraController.TryOpen(out var reason) is { } motherboard)
+            devices.Add(motherboard);
+        // ASUS Aura monitors and the monitor light bar (#212).
+        devices.AddRange(AsusMonitorDevice.Discover(hid));
+        // ASUS TUF-protocol keyboards — the ROG Azoth X via the Omni receiver or cable (#213).
+        devices.AddRange(AsusKeyboardDevice.Discover(hid));
+        // ASUS headsets on the GearLink protocol — the ROG Delta II via its dongle.
+        devices.AddRange(AsusHeadsetDevice.Discover(hid));
+        // Any HID LampArray device (Windows Dynamic Lighting standard), any brand.
+        devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
+        return new LightingScan(devices, devices.Count > 0 ? "" : reason);
+    },
+    LightingProvider.DetectConflict,
+    dryRun,
     // For the diagnostics export: what was found, and every HID collection
     // seen, so unknown devices can be supported from a user's export.
-    LightingDiagnostics.Write(
+    (hid, devices, reason) => LightingDiagnostics.Write(
         Path.Combine(programData, "lighting-devices.json"),
-        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn()));
-    return new LightingProvider(devices, reason, LightingProvider.DetectConflict, dryRun);
-});
+        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn()))));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
 // Last: every provider exists and the hardware is open by the time the

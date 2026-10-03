@@ -115,7 +115,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
             }
             catch (Exception e)
             {
-                SidecarLog.Log($"[rigstats-control] Lighting: LampArray 0x{info.VendorId:X4}:0x{info.ProductId:X4} not usable: {e.Message}");
+                LightingLog.Discovery($"[rigstats-control] Lighting: LampArray 0x{info.VendorId:X4}:0x{info.ProductId:X4} not usable: {e.Message}");
             }
         }
         return found;
@@ -140,7 +140,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
                 || !fields.TryGetValue(LampIdStart, out var rangeUpdate)
                 || !fields.TryGetValue(AutonomousMode, out var control))
             {
-                SidecarLog.Log($"[rigstats-control] Lighting: LampArray 0x{info.ProductId:X4} lacks a range update or control report.");
+                LightingLog.Discovery($"[rigstats-control] Lighting: LampArray 0x{info.ProductId:X4} lacks a range update or control report.");
                 return null;
             }
 
@@ -150,7 +150,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
             var interval = Value(preparsed, HidReportType.Feature, MinUpdateInterval, report);
             var product = Product(handle) ?? $"LampArray {info.VendorId:X4}:{info.ProductId:X4}";
             var name = nth == 1 ? product : $"{product} ({nth})";
-            SidecarLog.Log($"[rigstats-control] Lighting: LampArray '{product}' 0x{info.VendorId:X4}:0x{info.ProductId:X4}, " +
+            LightingLog.Discovery($"[rigstats-control] Lighting: LampArray '{product}' 0x{info.VendorId:X4}:0x{info.ProductId:X4}, " +
                 $"{kind}, {lamps} lamp(s), min update {interval} µs.");
             ok = true;
             var diagnostics = new JsonObject

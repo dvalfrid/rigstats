@@ -139,7 +139,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
                 }
                 var version = Ask(device, info, reportId, GetVersion);
                 var nth = found.Count(f => f._model.Name == model.Name) + 1;
-                SidecarLog.Log($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}, " +
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}, " +
                     $"layout {Hex(layout, 8)}, version {Hex(version, 16)}.");
                 found.Add(new AsusKeyboardDevice(info, device, model, reportId,
                     $"asus-keyboard-{info.ProductId:x4}-{nth}",
@@ -148,7 +148,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
             }
             catch (Exception e)
             {
-                SidecarLog.Log($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} not usable: {e.Message}");
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} not usable: {e.Message}");
                 device?.Dispose();
             }
         }

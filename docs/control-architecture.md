@@ -603,7 +603,16 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   replies identify channels; one reversible write at a time with the user
   watching; and ASUS GearLink — a WebHID web app whose public bundles carry
   each device's command schema, and whose console can log every report.
-- **Diagnostics.** At start the service writes `lighting-devices.json`
+- **Devices coming and going.** `LightingProvider.Rescan` looks again when
+  the Control Center asks for capabilities and before a profile applies
+  (at most every 2 s, never per live-preview step). Devices are probed again
+  only when the set of HID collections changed (e.g. a keyboard switched
+  from its receiver to the cable). Devices still there keep their instance;
+  new ones get the current lighting at once; gone ones are closed. Only the
+  first discovery is logged in full, later ones log just "+ X, - Y". Known
+  gap: a headset switched on behind an already-plugged dongle changes no
+  HID collection, so it is found at the next service start.
+- **Diagnostics.** After every discovery the service writes `lighting-devices.json`
   (in every diagnostics ZIP): each device's raw data (Aura firmware + config
   table, monitor config reply, LampArray kind/lamps/update interval/report
   layout), the conflict state, and a scan of every HID collection on the
