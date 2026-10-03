@@ -15,7 +15,8 @@ use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
-    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, PowerScheme, Profile,
+    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, LampPart,
+    PowerScheme, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -808,10 +809,7 @@ fn lighting_tab(
                     }
                 });
             if effect != part.as_ref().and_then(|p| p.effect.clone()) {
-                part = effect.map(|e| AuraPart {
-                    effect: Some(e),
-                    ..part.clone().unwrap_or_default()
-                });
+                part = with_effect(part.take(), effect);
             }
         });
 
@@ -844,6 +842,10 @@ fn lighting_tab(
                 }
             });
         }
+        if caps.devices.iter().any(|d| d.lamp && d.blocked.is_none()) {
+            ui.add_space(10.0);
+            lamp_rows(ui, dc, &mut part);
+        }
         dry_run_note(ui, dc, control);
 
         if part != before {
@@ -851,6 +853,113 @@ fn lighting_tab(
                 ui_state.aura_pending = Some(p.clone());
             }
             ui_state.aura_draft = Some(AuraDraft { profile_id, part });
+        }
+    });
+}
+
+/// The lighting with a new effect (`None` = leave the RGB as is). A part
+/// that then sets nothing is no part at all.
+fn with_effect(part: Option<AuraPart>, effect: Option<String>) -> Option<AuraPart> {
+    let lamp = part.as_ref().and_then(|p| p.lamp.clone());
+    match effect {
+        Some(e) => Some(AuraPart {
+            effect: Some(e),
+            ..part.unwrap_or_default()
+        }),
+        None => lamp.map(|lamp| AuraPart {
+            lamp: Some(lamp),
+            ..Default::default()
+        }),
+    }
+}
+
+/// The lighting with a new lamp setting (`None` = leave the lamp as is).
+fn with_lamp(part: Option<AuraPart>, lamp: Option<LampPart>) -> Option<AuraPart> {
+    match (part, lamp) {
+        (Some(p), None) if p.effect.is_none() => None,
+        (Some(p), lamp) => Some(AuraPart { lamp, ..p }),
+        (None, lamp) => lamp.map(|lamp| AuraPart {
+            lamp: Some(lamp),
+            ..Default::default()
+        }),
+    }
+}
+
+/// Desk lamp (#214): on/off, brightness and colour temperature, separate
+/// from the Aura Sync effect.
+fn lamp_rows(ui: &mut egui::Ui, dc: &DialogColors, part: &mut Option<AuraPart>) {
+    let lamp = part.as_ref().and_then(|p| p.lamp.clone());
+    ui.horizontal(|ui| {
+        ui.spacing_mut().interact_size.y = 26.0;
+        ui.add_sized(
+            [80.0, 26.0],
+            egui::Label::new(egui::RichText::new("Desk lamp").size(12.0).color(dc.muted)),
+        );
+        let mut on = lamp.as_ref().map(|l| l.on);
+        let text = match on {
+            None => "Leave as is",
+            Some(true) => "On",
+            Some(false) => "Off",
+        };
+        egui::ComboBox::from_id_salt("control_aura_lamp")
+            .width(220.0)
+            .selected_text(text)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut on, None, "Leave as is");
+                ui.selectable_value(&mut on, Some(true), "On");
+                ui.selectable_value(&mut on, Some(false), "Off");
+            });
+        if on != lamp.as_ref().map(|l| l.on) {
+            // Brightness and warmth are kept while the lamp is off.
+            let next = on.map(|on| LampPart {
+                on,
+                brightness: lamp
+                    .as_ref()
+                    .and_then(|l| l.brightness)
+                    .or(Some(LampPart::DEFAULT_BRIGHTNESS)),
+                temperature: lamp
+                    .as_ref()
+                    .and_then(|l| l.temperature)
+                    .or(Some(LampPart::DEFAULT_KELVIN)),
+            });
+            *part = with_lamp(part.take(), next);
+        }
+    });
+
+    let Some(l) = part.as_mut().and_then(|p| p.lamp.as_mut()).filter(|l| l.on) else {
+        return;
+    };
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            [80.0, 22.0],
+            egui::Label::new(egui::RichText::new("Brightness").size(12.0).color(dc.muted)),
+        );
+        let mut pct = (l.brightness.unwrap_or(LampPart::DEFAULT_BRIGHTNESS) * 100.0).round() as i32;
+        let slider = egui::Slider::new(&mut pct, 1..=100)
+            .suffix(" %")
+            .trailing_fill(true);
+        if ui.add(slider).changed() {
+            l.brightness = Some(f64::from(pct) / 100.0);
+        }
+    });
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        ui.add_sized(
+            [80.0, 22.0],
+            egui::Label::new(
+                egui::RichText::new("Temperature")
+                    .size(12.0)
+                    .color(dc.muted),
+            ),
+        );
+        let mut kelvin = l.temperature.unwrap_or(LampPart::DEFAULT_KELVIN);
+        let slider = egui::Slider::new(&mut kelvin, LampPart::MIN_KELVIN..=LampPart::MAX_KELVIN)
+            .step_by(100.0)
+            .suffix(" K")
+            .trailing_fill(true);
+        if ui.add(slider).changed() {
+            l.temperature = Some(kelvin);
         }
     });
 }
@@ -2795,12 +2904,39 @@ mod tests {
     }
 
     #[test]
+    fn the_lamp_and_the_effect_are_set_and_left_independently() {
+        let lamp = LampPart {
+            on: false,
+            brightness: None,
+            temperature: None,
+        };
+        // A lamp alone: the RGB is left as is.
+        let part = with_lamp(None, Some(lamp.clone())).unwrap();
+        assert_eq!(part.effect, None);
+        // Adding an effect keeps the lamp; leaving the effect again too.
+        let part = with_effect(Some(part), Some("static".into())).unwrap();
+        assert_eq!(part.lamp, Some(lamp.clone()));
+        let part = with_effect(Some(part), None).unwrap();
+        assert_eq!((part.effect, part.lamp), (None, Some(lamp)));
+        // Leaving both as is is no lighting part at all.
+        assert_eq!(with_lamp(Some(AuraPart::default()), None), None);
+        let effect_only = with_lamp(
+            Some(AuraPart {
+                effect: Some("off".into()),
+                ..Default::default()
+            }),
+            None,
+        );
+        assert_eq!(effect_only.and_then(|p| p.effect).as_deref(), Some("off"));
+    }
+
+    #[test]
     fn discarding_a_lighting_draft_puts_the_saved_lights_back() {
         let (tx, mut rx) = tokio::sync::mpsc::channel(4);
         let saved = AuraPart {
             effect: Some("static".into()),
             color: Some("#00ff00".into()),
-            brightness: None,
+            ..Default::default()
         };
         let mut ui = ControlUi {
             aura_draft: Some(AuraDraft {

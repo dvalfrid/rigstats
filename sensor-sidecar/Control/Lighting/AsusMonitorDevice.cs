@@ -8,12 +8,22 @@ namespace SensorSidecar.Control.Lighting;
 /// direct mode only: no built-in effects, so breathing and spectrum cycle
 /// are drawn by the service (<see cref="SoftwareEffectLoop"/>). Older Aura
 /// monitors (feature-report protocol: XG27AQ, XG279Q, ...) are out of scope.
-public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
+///
+/// The light bar also has a white desk lamp (#214): channel 1 of the same
+/// effect command, static with two values — the 6500 K and the 2700 K
+/// channel — instead of R, G, B; "get" 0x31 on channel 1 reads them back.
+/// From ASUS DisplayWidget Center's `ScreenLightBarHid.dll` (read as
+/// documentation, no code copied), verified on hardware.
+public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(1);
 
     private const byte ConfigLedCountIndex = 32;
     private const byte Effect = 0x35;
+    private const byte GetEffect = 0x31;
+    private const byte ReadFlag = 0x80;
+    private const byte LampChannel = 0x01;
+    private const byte Static = 0x01;
     private const byte Direct = 0x40;
     private const byte DirectApplyChannel = 0x84; // apply (0x80) | direct channel 4
     private const byte DirectMode = 0xFF;
@@ -22,6 +32,8 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
     private readonly HidDeviceInfo _info;
     private readonly SoftwareEffectLoop _loop;
     private IHidDevice? _device;
+    // What the lamp last showed while lit — switched back on to that.
+    private (byte Cool, byte Warm)? _lampWhenOn;
 
     public string Id { get; }
     public string Name { get; }
@@ -118,6 +130,79 @@ public sealed class AsusMonitorDevice : ILightingDevice, IDisposable
 
     /// Stops a running animation; the monitor keeps its last frame.
     public void Release() => _loop.Stop();
+
+    public bool HasLamp => Kind == "light_bar";
+
+    public void SetLamp(LampPart lamp)
+    {
+        if (!HasLamp)
+            return;
+        var values = Lamp.Channels(lamp);
+        lock (_lock)
+            WriteLamp(values);
+    }
+
+    public bool LampOn()
+    {
+        lock (_lock)
+            return HasLamp && ReadLamp() is { } now && now != (0, 0);
+    }
+
+    public void SwitchLamp(bool on)
+    {
+        if (!HasLamp)
+            return;
+        lock (_lock)
+        {
+            if (on)
+            {
+                WriteLamp(_lampWhenOn ?? Lamp.Channels(new LampPart { On = true }));
+                return;
+            }
+            if (ReadLamp() is { } now && now != (0, 0))
+                _lampWhenOn = now;
+            WriteLamp((0, 0));
+        }
+    }
+
+    // Caller holds _lock. Writes, then reads back what the lamp took.
+    private void WriteLamp((byte Cool, byte Warm) values)
+    {
+        Send([LampReport(values.Cool, values.Warm)]);
+        var back = ReadLamp();
+        if (back != values)
+            throw new IOException($"{Name} did not take the lamp setting (read back {(back is { } b ? $"{b.Cool}/{b.Warm}" : "nothing")}).");
+        if (values != (0, 0))
+            _lampWhenOn = values;
+    }
+
+    // Caller holds _lock. The get command, then the same with the read flag
+    // set, then the reply (as DisplayWidget Center does).
+    private (byte Cool, byte Warm)? ReadLamp()
+    {
+        var device = _device ?? throw new ObjectDisposedException(Name);
+        device.Write(Report(GetEffect, LampChannel));
+        device.Write(Report(GetEffect | ReadFlag, LampChannel));
+        for (var i = 0; i < 4; i++)
+        {
+            if (device.Read(ReplyTimeout) is not { } reply)
+                return null;
+            if (ParseLampReply(reply) is { } values)
+                return values;
+        }
+        return null;
+    }
+
+    /// `[0xEC, 0x35, channel 1, 0, 0, static, 0, 0, 1, 6500K, 2700K]`.
+    public static byte[] LampReport(byte cool, byte warm) =>
+        Report(Effect, LampChannel, 0x00, 0x00, Static, 0x00, 0x00, 0x01, cool, warm);
+
+    /// The lamp's two values from a get-effect reply on channel 1 (they
+    /// sit one byte later than in the set command), or null for another reply.
+    public static (byte Cool, byte Warm)? ParseLampReply(byte[] reply) =>
+        reply.Length >= 12 && reply[0] == AuraUsb.ReportId && reply[1] == GetEffect && reply[2] == LampChannel
+            ? (reply[10], reply[11])
+            : null;
 
     private void Draw(byte red, byte green, byte blue)
     {

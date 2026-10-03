@@ -139,6 +139,30 @@ pub struct AuraPart {
     /// 0–1.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brightness: Option<f64>,
+    /// White lamps beside the RGB (the ROG light bar's desk lamp, #214).
+    /// `None` leaves them alone; a part with a lamp and no effect leaves the
+    /// RGB alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lamp: Option<LampPart>,
+}
+
+/// A white lamp: on or off, how bright (0–1 of its allowed maximum) and how
+/// warm (kelvin, 2700–6500).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LampPart {
+    pub on: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<u32>,
+}
+
+impl LampPart {
+    pub const MIN_KELVIN: u32 = 2700;
+    pub const MAX_KELVIN: u32 = 6500;
+    /// The service's defaults for a lamp switched on without values.
+    pub const DEFAULT_BRIGHTNESS: f64 = 0.5;
+    pub const DEFAULT_KELVIN: u32 = 4000;
 }
 
 /// The "aura" capability's `details`, typed. Aura Sync: the profile's one
@@ -163,6 +187,9 @@ pub struct AuraDeviceCap {
     /// Why another controller owns it (Windows Dynamic Lighting) — skipped.
     #[serde(default)]
     pub blocked: Option<String>,
+    /// Has a white lamp beside its RGB (`AuraPart::lamp`).
+    #[serde(default)]
+    pub lamp: bool,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }
@@ -469,6 +496,12 @@ impl ControlState {
             .and_then(|d| serde_json::from_value(d).ok())
     }
 
+    /// A lighting device with a desk lamp is connected (the tray toggle).
+    pub fn has_lamp(&self) -> bool {
+        self.aura_caps()
+            .is_some_and(|c| c.devices.iter().any(|d| d.lamp && d.blocked.is_none()))
+    }
+
     /// Why lighting is blocked by another app (Armoury Crate) — the one
     /// unsupported case the Lighting tab shows instead of hiding. `None`
     /// when it works or there is simply no controller.
@@ -665,6 +698,9 @@ pub enum ControlCmd {
     /// Set the lights at once without saving — the Lighting tab's live
     /// preview while an effect or colour is being picked.
     AuraPreview(AuraPart),
+    /// Switch the desk lamp(s) off, or back on as they last were (the tray).
+    /// Not saved in any profile.
+    ToggleLamp,
     /// Delete a custom profile; the service applies whichever profile becomes
     /// active if it was the active one.
     DeleteProfile(String),
@@ -1062,6 +1098,10 @@ async fn handle_cmd(
                 dir,
             )
             .await?;
+            Ok(())
+        }
+        ControlCmd::ToggleLamp => {
+            request(writer, reader, next_id, "lamp_toggle", None, event_tx, dir).await?;
             Ok(())
         }
         ControlCmd::DeleteProfile(id) => {
@@ -1719,6 +1759,15 @@ mod tests {
         let json = r##"{"effect":"static","color":"#ff0033","brightness":0.8}"##;
         let part: AuraPart = serde_json::from_str(json).unwrap();
         assert_eq!(part.effect.as_deref(), Some("static"));
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+    }
+
+    #[test]
+    fn a_lamp_only_part_matches_the_service_shape() {
+        let json = r#"{"lamp":{"on":true,"brightness":0.5,"temperature":4000}}"#;
+        let part: AuraPart = serde_json::from_str(json).unwrap();
+        assert_eq!(part.effect, None);
+        assert_eq!(part.lamp.as_ref().map(|l| l.on), Some(true));
         assert_eq!(serde_json::to_string(&part).unwrap(), json);
     }
 

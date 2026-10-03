@@ -615,6 +615,18 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   headset isn't connected, on each rescan, until it is. The dongle answers
   by itself, so "not connected" is a deviceInfo reply whose headset version
   is all zeros.
+- **Desk lamp (#214).** The ROG light bar's white lamp is channel 1 of the
+  same `0xEC 0x35` effect command (static, the 6500 K and 2700 K channel
+  values instead of R, G, B); `0xEC 0x31` / `0xB1` on channel 1 reads them
+  back, so every lamp write is verified. Found in ASUS DisplayWidget
+  Center's `ScreenLightBarHid.dll` (read as documentation). Brightness sets
+  the total, at most 178 — DisplayWidget Center's 70 % power budget —
+  and temperature (2700–6500 K) splits it. A profile's `aura.lamp`
+  (`on`, `brightness`, `temperature`) is independent of the RGB effect (a
+  part with only a lamp leaves the RGB alone). The tray's "Toggle Desk
+  Lamp" (`lamp_toggle`, shown only while a lamp is connected) reads the
+  lamp first — its own button switches it too — and turns it off, or back
+  on as it last was; not saved in a profile.
 - **Diagnostics.** After every discovery the service writes `lighting-devices.json`
   (in every diagnostics ZIP): each device's raw data (Aura firmware + config
   table, monitor config reply, LampArray kind/lamps/update interval/report

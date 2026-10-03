@@ -1692,6 +1692,8 @@ impl eframe::App for RigStatsApp {
                 &self.runtime.control.profiles,
                 self.runtime.control.active_profile.as_deref(),
             );
+            self.tray
+                .set_lamp_available(self.runtime.control.has_lamp());
             // Hand off to poll_loop for the session-recording CSV column —
             // poll_loop runs on its own tokio task with no access to `runtime`.
             *self.active_profile_shared.lock_safe() = self.runtime.control.active_profile.clone();
@@ -1842,6 +1844,11 @@ impl eframe::App for RigStatsApp {
                 TrayCmd::ToggleOverlay => self.toggle_overlay_mode(),
                 TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
                 TrayCmd::ToggleRecording => self.tray_toggle_recording(ui.ctx()),
+                TrayCmd::ToggleLamp => {
+                    let _ = self
+                        .control_cmd_tx
+                        .try_send(control::ControlCmd::ToggleLamp);
+                }
                 TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
                 TrayCmd::SelectProfile(id) => self.apply_profile(id),
             }
@@ -3654,6 +3661,7 @@ fn main() {
             let control_id = tray.control_id.clone();
             let updater_id = tray.updater_id.clone();
             let docs_id = tray.docs_id.clone();
+            let lamp_id = tray.lamp_id.clone();
             let floating_id = tray.floating_id.clone();
             let recording_id = tray.recording_id.clone();
             let overlay_id = tray.overlay_id.clone();
@@ -3710,6 +3718,8 @@ fn main() {
                             Some(TrayCmd::OpenUpdater)
                         } else if ev.id == docs_id {
                             Some(TrayCmd::OpenDocs)
+                        } else if ev.id == lamp_id {
+                            Some(TrayCmd::ToggleLamp)
                         } else if let Some(pref) = gpu_choice_from_menu_id(&ev.id) {
                             Some(TrayCmd::SelectGpu(pref))
                         } else {

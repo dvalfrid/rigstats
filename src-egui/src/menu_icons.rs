@@ -225,6 +225,17 @@ pub fn overlay() -> Icon {
     })
 }
 
+/// Desk lamp: shade, stem and foot — Toggle Desk Lamp.
+pub fn lamp() -> Icon {
+    rasterize(|x, y| {
+        let shade = in_triangle(x, y, (11.0, 7.0), (21.0, 7.0), (25.0, 16.0))
+            || in_triangle(x, y, (11.0, 7.0), (25.0, 16.0), (7.0, 16.0));
+        let stem = seg_dist(x, y, CENTER, 16.0, CENTER, 24.0) <= 1.2;
+        let foot = seg_dist(x, y, 10.0, 25.0, 22.0, 25.0) <= 1.3;
+        (shade || stem || foot).then_some(NEUTRAL)
+    })
+}
+
 /// Padlock, shackle closed or open — Lock/Unlock Overlay.
 pub fn lock(locked: bool) -> Icon {
     rasterize(move |x, y| {

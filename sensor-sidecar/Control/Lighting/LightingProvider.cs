@@ -160,12 +160,11 @@ public sealed class LightingProvider : IControlProvider
             current = _current;
         if (current is null || added.Count == 0 || _dryRun || _conflict() is not null)
             return;
-        var (effect, red, green, blue) = Resolve(current);
-        foreach (var device in added.Where(d => d.Blocked is null))
+        foreach (var device in added.Where(d => d.Blocked is null && Touches(d, current)))
         {
             try
             {
-                device.Apply(effect, red, green, blue);
+                Write(device, current);
             }
             catch (Exception e)
             {
@@ -205,6 +204,7 @@ public sealed class LightingProvider : IControlProvider
                     ["kind"] = d.Kind,
                     ["firmware"] = d.Firmware,
                     ["blocked"] = d.Blocked,
+                    ["lamp"] = d is ILampDevice { HasLamp: true },
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,
@@ -287,10 +287,11 @@ public sealed class LightingProvider : IControlProvider
             SidecarLog.Log($"[rigstats-control] Lighting skipped: {other} controls the lighting.");
             return;
         }
-        var (effect, red, green, blue) = Resolve(aura);
         if (_dryRun)
         {
-            SidecarLog.Log($"[rigstats-control] dry-run: lighting -> {effect} #{red:x2}{green:x2}{blue:x2} on {devices.Count} device(s)");
+            var (effect, red, green, blue) = Resolve(aura);
+            var lamp = aura.Lamp is { } l ? $", lamp {Lamp.Channels(l)}" : "";
+            SidecarLog.Log($"[rigstats-control] dry-run: lighting -> {(SetsRgb(aura) ? $"{effect} #{red:x2}{green:x2}{blue:x2}" : "RGB as is")}{lamp} on {devices.Count} device(s)");
         }
         else
         {
@@ -298,12 +299,12 @@ public sealed class LightingProvider : IControlProvider
             // every device fails does the profile apply fail. A device another
             // controller owns (Windows Dynamic Lighting) is skipped.
             var failures = new List<string>();
-            var targets = devices.Where(d => d.Blocked is null).ToList();
+            var targets = devices.Where(d => d.Blocked is null && Touches(d, aura)).ToList();
             foreach (var device in targets)
             {
                 try
                 {
-                    device.Apply(effect, red, green, blue);
+                    Write(device, aura);
                 }
                 catch (Exception e)
                 {
@@ -318,7 +319,46 @@ public sealed class LightingProvider : IControlProvider
             _current = aura;
     }
 
+    /// The tray's lamp toggle: every lamp off when any is lit, else every
+    /// lamp on again as it last was. Reads the lamps first — their own
+    /// buttons switch them too. Returns whether they are on now, or null
+    /// when there is no lamp. Not saved in any profile.
+    public bool? ToggleLamp()
+    {
+        Rescan();
+        var lamps = _devices.OfType<ILampDevice>().Where(d => d.HasLamp).ToList();
+        if (lamps.Count == 0)
+            return null;
+        var on = !lamps.Any(l => l.LampOn());
+        if (_dryRun)
+        {
+            SidecarLog.Log($"[rigstats-control] dry-run: lamp -> {(on ? "on" : "off")}");
+            return on;
+        }
+        foreach (var lamp in lamps)
+            lamp.SwitchLamp(on);
+        return on;
+    }
+
+    /// The RGB effect (unless the part only sets a lamp), then the lamp.
+    private static void Write(ILightingDevice device, AuraPart aura)
+    {
+        if (SetsRgb(aura))
+        {
+            var (effect, red, green, blue) = Resolve(aura);
+            device.Apply(effect, red, green, blue);
+        }
+        if (aura.Lamp is { } lamp && device is ILampDevice { HasLamp: true } lampDevice)
+            lampDevice.SetLamp(lamp);
+    }
+
+    private static bool Touches(ILightingDevice device, AuraPart aura) =>
+        SetsRgb(aura) || (aura.Lamp is not null && device is ILampDevice { HasLamp: true });
+
     // ── Pure helpers (unit-tested) ─────────────────────────────────────
+
+    /// A part with only a lamp leaves the RGB as it is.
+    public static bool SetsRgb(AuraPart aura) => aura.Effect is not null || aura.Lamp is null;
 
     public static AuraEffect? ParseEffect(string? effect) => effect switch
     {

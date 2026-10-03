@@ -142,6 +142,23 @@ public sealed class AuraPart
 
     /// 0–1, scales the colour.
     public double? Brightness { get; init; }
+
+    /// White lamps beside the RGB (the ROG light bar's desk lamp, #214);
+    /// null leaves them alone. A part with a lamp and no effect leaves the
+    /// RGB alone.
+    public LampPart? Lamp { get; init; }
+}
+
+/// A white lamp: on or off, how bright and how warm.
+public sealed class LampPart
+{
+    public bool On { get; init; }
+
+    /// 0–1 of the lamp's allowed maximum.
+    public double? Brightness { get; init; }
+
+    /// Colour temperature in kelvin, 2700 (warm) – 6500 (cool).
+    public int? Temperature { get; init; }
 }
 
 /// Curve Optimizer offsets (#191), in CO counts (negative = less voltage).

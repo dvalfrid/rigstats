@@ -25,6 +25,8 @@ pub enum TrayCmd {
     ToggleRecording,
     ToggleOverlay,
     ToggleOverlayLock,
+    /// Switch the light bar's desk lamp off or back on (#214).
+    ToggleLamp,
     /// Set the displayed GPU; `None` = automatic (highest VRAM).
     SelectGpu(Option<String>),
     /// Apply a Control Center profile by id (#187).
@@ -189,11 +191,20 @@ pub struct Tray {
     pub recording_id: tray_icon::menu::MenuId,
     pub overlay_id: tray_icon::menu::MenuId,
     pub overlay_lock_id: tray_icon::menu::MenuId,
+    pub lamp_id: tray_icon::menu::MenuId,
     pub gpu_menu: GpuMenu,
     pub profile_menu: ProfileMenu,
     recording_item: IconMenuItem,
     overlay_lock_item: IconMenuItem,
+    /// "Toggle Desk Lamp" — in the menu only while a lamp is connected
+    /// ([`Tray::set_lamp_available`]).
+    menu: Menu,
+    lamp_item: IconMenuItem,
+    lamp_shown: bool,
 }
+
+/// Where "Toggle Desk Lamp" goes: right after "Control Center…".
+const LAMP_ITEM_POSITION: usize = 8;
 
 fn load_tray_icon() -> Icon {
     let bytes = include_bytes!("../../assets/tray.png");
@@ -267,6 +278,7 @@ pub fn build_tray(
     let updater_item =
         IconMenuItem::new("Check for Updates", true, Some(menu_icons::updater()), None);
     let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
+    let lamp_item = IconMenuItem::new("Toggle Desk Lamp", true, Some(menu_icons::lamp()), None);
     let quit_item = IconMenuItem::new("Quit", true, Some(menu_icons::quit()), None);
 
     // GPU submenu — the only way to pick the displayed GPU in modes where the
@@ -305,6 +317,7 @@ pub fn build_tray(
     let updater_id = updater_item.id().clone();
     let docs_id = docs_item.id().clone();
     let quit_id = quit_item.id().clone();
+    let lamp_id = lamp_item.id().clone();
 
     let menu = Menu::new();
     let _ = menu.append(&floating_item);
@@ -340,7 +353,7 @@ pub fn build_tray(
         "RIGStats"
     };
     let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
+        .with_menu(Box::new(menu.clone()))
         .with_icon(icon)
         .with_tooltip(tooltip)
         .build()
@@ -360,10 +373,14 @@ pub fn build_tray(
         recording_id,
         overlay_id,
         overlay_lock_id,
+        lamp_id,
         gpu_menu,
         profile_menu,
         recording_item,
         overlay_lock_item,
+        menu,
+        lamp_item,
+        lamp_shown: false,
     }
 }
 
@@ -415,6 +432,22 @@ impl Tray {
         self.overlay_lock_item.set_text(label);
         self.overlay_lock_item
             .set_icon(Some(menu_icons::lock(locked)));
+    }
+
+    /// Shows "Toggle Desk Lamp" while a lighting device with a lamp is
+    /// connected, and takes it out of the menu otherwise.
+    pub fn set_lamp_available(&mut self, available: bool) {
+        if available == self.lamp_shown {
+            return;
+        }
+        let done = if available {
+            self.menu.insert(&self.lamp_item, LAMP_ITEM_POSITION)
+        } else {
+            self.menu.remove(&self.lamp_item)
+        };
+        if done.is_ok() {
+            self.lamp_shown = available;
+        }
     }
 
     fn set_icon_variant(&self, dot: bool) {

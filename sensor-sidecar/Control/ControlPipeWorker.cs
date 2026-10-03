@@ -271,6 +271,7 @@ public sealed class ControlPipeWorker(
                 "delete_profile" => await HandleDeleteProfileAsync(request, ct),
                 "reset_profile" => await HandleResetProfileAsync(request, ct),
                 "aura_preview" => HandleAuraPreview(request),
+                "lamp_toggle" => HandleLampToggle(request),
                 "apply_profile" => await HandleApplyProfileAsync(request, ct),
                 "preview" => await HandlePreviewAsync(request, ct),
                 "confirm" => await HandleConfirmAsync(request, ct),
@@ -405,6 +406,13 @@ public sealed class ControlPipeWorker(
         lighting.Preview(aura);
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
+
+    /// Switches the desk lamp(s) off or back on (the tray). Like the
+    /// preview, harmless and unsaved, so it skips the broker transaction.
+    private ControlResponse HandleLampToggle(ControlRequest request) =>
+        lighting.ToggleLamp() is { } on
+            ? ControlResponse.Ok(request.Id, new { ok = true, on })
+            : ControlResponse.Fail(request.Id, "no_lamp", "No lighting device with a lamp is connected.");
 
     private ControlResponse HandleReleaseToFirmware(ControlRequest request)
     {

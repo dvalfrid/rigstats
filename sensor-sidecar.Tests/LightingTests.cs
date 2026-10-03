@@ -468,6 +468,71 @@ public class LightingProviderTests
         Assert.Equal((AuraEffect.Static, (byte)0, (byte)0, (byte)255), Assert.Single(headset.Applied));
     }
 
+    private sealed class FakeLightBar : ILightingDevice, ILampDevice
+    {
+        public string Id => "asus-monitor-1ac8-1";
+        public string Name => "ROG Aura Monitor Light Bar";
+        public string Kind => "light_bar";
+        public string Firmware => "";
+        public string? Blocked => null;
+        public IReadOnlyList<AuraZone> Zones { get; } = [new("leds", "Light bar", true, 0, 3)];
+        public bool HasLamp => true;
+        public List<AuraEffect> Applied { get; } = [];
+        public List<LampPart> Lamps { get; } = [];
+        public void Apply(AuraEffect effect, byte red, byte green, byte blue) => Applied.Add(effect);
+        public void SetLamp(LampPart lamp) => Lamps.Add(lamp);
+        public bool Lit { get; set; }
+        public bool LampOn() => Lit;
+        public void SwitchLamp(bool on) => Lit = on;
+        public void Release() { }
+        public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
+    }
+
+    [Fact]
+    public void A_lamp_only_part_sets_the_lamp_and_leaves_the_rgb_alone()
+    {
+        var board = new FakeDevice();
+        var bar = new FakeLightBar();
+        var provider = Provider(board, bar);
+
+        provider.Apply(new ProfilePart { Aura = new AuraPart { Lamp = new LampPart { On = false } } });
+
+        Assert.Empty(board.Applied);
+        Assert.Empty(bar.Applied);
+        Assert.False(Assert.Single(bar.Lamps).On);
+        var devices = provider.Probe().Details!["devices"]!.AsArray();
+        Assert.False(devices[0]!["lamp"]!.GetValue<bool>());
+        Assert.True(devices[1]!["lamp"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    public void The_lamp_toggle_turns_every_lamp_off_when_any_is_lit()
+    {
+        var first = new FakeLightBar { Lit = true };
+        var second = new FakeLightBar();
+        var provider = Provider(new FakeDevice(), first, second);
+
+        Assert.False(provider.ToggleLamp());
+        Assert.False(first.Lit || second.Lit);
+        Assert.True(provider.ToggleLamp());
+        Assert.True(first.Lit && second.Lit);
+        Assert.Null(Provider(new FakeDevice()).ToggleLamp()); // no lamp
+    }
+
+    [Fact]
+    public void An_effect_and_a_lamp_set_both()
+    {
+        var bar = new FakeLightBar();
+
+        Provider(bar).Apply(new ProfilePart
+        {
+            Aura = new AuraPart { Effect = "static", Lamp = new LampPart { On = true, Brightness = 0.5 } },
+        });
+
+        Assert.Equal(AuraEffect.Static, Assert.Single(bar.Applied));
+        Assert.Single(bar.Lamps);
+    }
+
     [Fact]
     public void Preview_never_rescans()
     {
@@ -516,6 +581,40 @@ public class AsusMonitorTests
         Assert.Null(AsusMonitorDevice.Model(0x198C)); // XG27AQ
         Assert.Null(AsusMonitorDevice.Model(0x19AF)); // the motherboard controller
     }
+
+    [Fact]
+    public void The_lamp_report_is_the_static_effect_on_channel_1()
+    {
+        var report = AsusMonitorDevice.LampReport(12, 20);
+
+        Assert.Equal(65, report.Length);
+        Assert.Equal(new byte[] { 0xEC, 0x35, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 12, 20 }, report[..11]);
+        Assert.All(report[11..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void The_lamp_reads_back_from_the_get_effect_reply()
+    {
+        // Captured from the light bar with the lamp at 12/20.
+        var reply = Hex("EC310110000127FFFF000C1400000000");
+
+        Assert.Equal(((byte)12, (byte)20), AsusMonitorDevice.ParseLampReply(reply));
+        Assert.Null(AsusMonitorDevice.ParseLampReply(Hex("EC300000001B00000000000000000000"))); // a config reply
+    }
+
+    [Theory]
+    [InlineData(false, 1.0, 4000, 0, 0)]
+    [InlineData(true, 1.0, 2700, 0, 178)] // full and warm: the 70 % budget, all warm
+    [InlineData(true, 1.0, 6500, 178, 0)]
+    [InlineData(true, 0.5, 4600, 44, 45)] // 89 split in the middle
+    [InlineData(true, 0.0, 2700, 0, 1)] // on still lights
+    [InlineData(true, 2.0, 9000, 178, 0)] // clamped
+    public void Lamp_channels_split_brightness_by_temperature(bool on, double brightness, int kelvin, int cool, int warm)
+    {
+        Assert.Equal(((byte)cool, (byte)warm), Lamp.Channels(new LampPart { On = on, Brightness = brightness, Temperature = kelvin }));
+    }
+
+    private static byte[] Hex(string hex) => Convert.FromHexString(hex);
 
     [Fact]
     public void A_direct_frame_sets_every_led()

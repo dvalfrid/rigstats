@@ -31,6 +31,53 @@ public interface ILightingDevice
     JsonObject Diagnostics();
 }
 
+/// A lighting device with a white lamp beside its RGB (#214) — the ROG
+/// light bar's desk lamp. Separate from the Aura Sync effect.
+public interface ILampDevice
+{
+    /// False for models of the same family without a lamp (a monitor).
+    bool HasLamp { get; }
+
+    /// Sets the lamp and verifies it by reading it back; throws when the
+    /// device didn't take it.
+    void SetLamp(LampPart lamp);
+
+    /// Whether the lamp is lit now, read from the device (its own button
+    /// may have switched it).
+    bool LampOn();
+
+    /// Off, or on again at the brightness and warmth it last had (the tray
+    /// toggle). Verified like `SetLamp`.
+    void SwitchLamp(bool on);
+}
+
+/// The light bar lamp's two white channels (6500 K and 2700 K, 0–255 each).
+public static class Lamp
+{
+    public const int MinKelvin = 2700;
+    public const int MaxKelvin = 6500;
+
+    /// ASUS DisplayWidget Center never drives the two channels together past
+    /// 70 % of 255 — the lamp's power budget; full brightness here is that.
+    public const int MaxTotal = 178;
+
+    public const double DefaultBrightness = 0.5;
+    public const int DefaultKelvin = 4000;
+
+    /// Brightness sets the total, temperature splits it between the cool
+    /// and the warm channel. On at the lowest brightness still lights.
+    public static (byte Cool, byte Warm) Channels(LampPart lamp)
+    {
+        if (!lamp.On)
+            return (0, 0);
+        var brightness = Math.Clamp(lamp.Brightness ?? DefaultBrightness, 0, 1);
+        var kelvin = Math.Clamp(lamp.Temperature ?? DefaultKelvin, MinKelvin, MaxKelvin);
+        var total = Math.Max(1, (int)Math.Round(brightness * MaxTotal));
+        var cool = (int)Math.Round(total * (kelvin - MinKelvin) / (double)(MaxKelvin - MinKelvin));
+        return ((byte)cool, (byte)(total - cool));
+    }
+}
+
 /// The first known Aura USB controller on this machine, kept open for the
 /// service's lifetime. Re-opens once if a write fails (USB reset, resume).
 public sealed class AuraController : ILightingDevice, IDisposable
