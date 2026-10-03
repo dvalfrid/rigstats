@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188) done; phases #187–#193 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188) and AMD CPU limits (#189) done; phases #187–#193, #209 |
 
 ---
 
@@ -103,6 +103,7 @@ script to refresh it.
 | [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | ✅ Done |
 | [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v2.0 | ✅ Done |
 | [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | ✅ Done |
+| [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC) | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
@@ -111,11 +112,11 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
-| [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits | v3.0 | 🔲 Planned |
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles | v3.0 | 🔲 Planned |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | 🔲 Planned |
 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | 🔲 Planned |
 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | v3.0 | 🔲 Planned |
+| [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1591,7 +1592,8 @@ Full design: [docs/control-architecture.md](docs/control-architecture.md).
 | --- | --- |
 | 0 — Control foundation | [#187](https://github.com/dvalfrid/rigstats/issues/187) |
 | 1 — Fan control | [#188](https://github.com/dvalfrid/rigstats/issues/188) |
-| 2 — CPU power limits | [#189](https://github.com/dvalfrid/rigstats/issues/189) |
+| 2 — CPU power limits (AMD) | [#189](https://github.com/dvalfrid/rigstats/issues/189) |
+| 2b — CPU power limits (Intel) | [#209](https://github.com/dvalfrid/rigstats/issues/209) |
 | 3 — GPU power profiles | [#190](https://github.com/dvalfrid/rigstats/issues/190) |
 | 4 — AMD Curve Optimizer | [#191](https://github.com/dvalfrid/rigstats/issues/191) |
 | 5 — ASUS Aura RGB | [#192](https://github.com/dvalfrid/rigstats/issues/192) |
@@ -1612,3 +1614,18 @@ Identify spins a channel and measures which fans respond — channel and fan
 numbers don't always match — and that mapping lets a fan in the Motherboard
 panel open its own curve. Diagnostics exports record apply outcomes and the
 mapping (#207).
+
+### Phase 2 — CPU power limits (AMD) ✅
+
+The CPU tab in the Control Center lowers the AMD package limits — PPT (power),
+TDC (sustained current) and EDC (peak current) — per profile, with AMD's 105 W
+and 65 W Eco Mode values as one-click starting points. Limits only go down: the
+maximum is what the BIOS set at boot, so a profile can make the CPU cooler and
+quieter but never pushes it past its configured limits. New limits are tried
+first and revert by themselves after 15 s unless kept; every write is read back
+from the SMU, and if the PC goes down within 3 minutes of a change, the limits
+are not re-applied at the next start. The CPU panel shows the active limit
+(`PPT 88 W`). Supported for now: desktop Ryzen whose SMU table layout has been
+checked on real hardware (Ryzen 9000 / Granite Ridge); other CPUs don't show
+the tab, and their diagnostics export records what's needed to add them. Intel
+PL1/PL2 is #209.

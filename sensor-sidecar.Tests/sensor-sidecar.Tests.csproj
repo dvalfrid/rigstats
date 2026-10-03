@@ -40,6 +40,10 @@
     <Compile Include="..\sensor-sidecar\Control\Providers\FanCurveEvaluator.cs" Link="Control\Providers\FanCurveEvaluator.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\FanCurveLoop.cs" Link="Control\Providers\FanCurveLoop.cs" />
     <Compile Include="..\sensor-sidecar\Control\ActiveProfileApplier.cs" Link="Control\ActiveProfileApplier.cs" />
+    <Compile Include="..\sensor-sidecar\Control\BootCrashGuard.cs" Link="Control\BootCrashGuard.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\PawnIoModule.cs" Link="Control\Providers\PawnIoModule.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\RyzenSmu.cs" Link="Control\Providers\RyzenSmu.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\CpuLimitProvider.cs" Link="Control\Providers\CpuLimitProvider.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

@@ -143,7 +143,8 @@ $features = @(
   # bodies carry detailed task lists that the managed branch would overwrite.
   @{ id="control-foundation"; kind="planned"; pin=187; milestone="v3.0"; title="Control Center phase 0: control foundation" }
   @{ id="control-fans"; kind="done"; pin=188; milestone="v3.0"; title="Control Center phase 1: fan control" }
-  @{ id="control-cpu-limits"; kind="planned"; pin=189; milestone="v3.0"; title="Control Center phase 2: CPU power limits" }
+  @{ id="control-cpu-limits"; kind="done"; pin=189; milestone="v3.0"; title="Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC)" }
+  @{ id="control-cpu-limits-intel"; kind="planned"; pin=209; milestone="v3.0"; title="Control Center phase 2b: Intel CPU power limits (PL1/PL2)" }
   @{ id="control-gpu"; kind="planned"; pin=190; milestone="v3.0"; title="Control Center phase 3: GPU power profiles" }
   @{ id="control-curve-optimizer"; kind="planned"; pin=191; milestone="v3.0"; title="Control Center phase 4: AMD Curve Optimizer" }
   @{ id="control-aura"; kind="planned"; pin=192; milestone="v3.0"; title="Control Center phase 5: ASUS Aura RGB" }

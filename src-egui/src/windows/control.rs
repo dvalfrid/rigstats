@@ -1,18 +1,20 @@
 //! Control Center window — profiles on the left, capability-driven tabs on
-//! the right: "Power" (#187) and "Fans" (#188, shown only when the service
-//! reports writable fan headers — unsupported features are hidden, not
-//! greyed out). Follows the dialog contract in `src-egui/src/windows/CLAUDE.md`:
+//! the right: "Power" (#187), "Fans" (#188) and "CPU" (#189) — Fans and CPU
+//! only when the service reports the capability; unsupported features are
+//! hidden, not greyed out. Follows the dialog contract in `src-egui/src/windows/CLAUDE.md`:
 //! three panels sharing `dialog_frame`, `DialogColors`, `theme::dialog_btn_*`.
 //! Actions are fire-and-forget `ControlCmd`s sent to `control_task`; results
 //! come back later as `ControlEvent`s already folded into `control` by the
 //! time this renders. The only local state is [`ControlUi`]: the selected
-//! tab/header and an unsaved draft of the active profile's fan curves.
+//! tab/header and unsaved drafts of the active profile's fan curves and CPU
+//! limits. CPU limit changes go through `preview`: the service reverts them
+//! by itself unless "Keep" arrives in time.
 
 use crate::theme::{self, DialogColors};
 use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
-    ControlCmd, ControlState, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder,
-    Profile,
+    AmdCpuLimit, AmdLimitValues, ApplyResult, ControlCmd, ControlState, CpuLimitCaps, CpuLimitPart,
+    FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,6 +29,9 @@ const GRAB_RADIUS: f32 = 12.0;
 const CURVE_COLOR: egui::Color32 = egui::Color32::from_rgb(0x3a, 0x9b, 0xff);
 /// Mirrors `FanProvider.IdentifyDuration` in the service.
 const IDENTIFY_DURATION: Duration = Duration::from_secs(5);
+/// Footer buttons stay disabled at most this long waiting for the service
+/// (its request timeout is 5 s).
+const AWAIT_TIMEOUT: Duration = Duration::from_secs(6);
 
 /// Starting curves offered when a header is switched to curve control.
 /// Floors stay at ≥25 % so common fans never stall at idle.
@@ -72,6 +77,7 @@ enum Tab {
     #[default]
     Power,
     Fans,
+    Cpu,
 }
 
 /// Unsaved edits to one profile's fan headers.
@@ -81,16 +87,37 @@ struct FanDraft {
     headers: BTreeMap<String, FanHeaderConfig>,
 }
 
+/// Unsaved edits to one profile's AMD limits; `None` = the BIOS value.
+#[derive(Debug, Clone, PartialEq)]
+struct CpuDraft {
+    profile_id: String,
+    limits: AmdCpuLimit,
+}
+
 /// Per-window UI state, owned by `RigStatsApp` across frames.
 #[derive(Debug, Default)]
 pub struct ControlUi {
     tab: Tab,
     selected_header: Option<String>,
     draft: Option<FanDraft>,
+    cpu_draft: Option<CpuDraft>,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
     /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
     notice: Option<String>,
+    /// A `preview` was running last frame — to notice it ending.
+    previewing: bool,
+    /// A Try/Keep/Undo/Save click the service hasn't answered yet: the
+    /// footer buttons stay disabled, so a second click can't land on the
+    /// button that replaces the first one (Keep → Try) or confirm twice.
+    awaiting: Option<Awaiting>,
+}
+
+#[derive(Debug)]
+struct Awaiting {
+    since: Instant,
+    /// `last_apply_result` at click time — a new one is an answer.
+    result: Option<ApplyResult>,
 }
 
 impl ControlUi {
@@ -112,6 +139,38 @@ impl ControlUi {
                 ));
             }
         }
+    }
+
+    /// Follows a `preview` across frames; true when one started or ended.
+    fn track_preview(&mut self, running: bool, reverted: bool) -> bool {
+        if running == self.previewing {
+            return false;
+        }
+        self.previewing = running;
+        self.awaiting = None; // a preview starting or ending answers the click.
+        if !running && reverted {
+            self.cpu_draft = None;
+        }
+        true
+    }
+
+    fn await_reply(&mut self, control: &ControlState) {
+        self.awaiting = Some(Awaiting {
+            since: Instant::now(),
+            result: control.last_apply_result.clone(),
+        });
+    }
+
+    /// Whether a click is still unanswered. A new apply result answers it;
+    /// the request timeout bounds it if no answer ever comes.
+    fn busy(&mut self, control: &ControlState) -> bool {
+        let answered = self.awaiting.as_ref().is_some_and(|a| {
+            a.result != control.last_apply_result || a.since.elapsed() > AWAIT_TIMEOUT
+        });
+        if answered {
+            self.awaiting = None;
+        }
+        self.awaiting.is_some()
     }
 
     /// The headers being edited, creating the draft from `saved` on first
@@ -161,6 +220,182 @@ fn saved_fan_headers(profile: Option<&Profile>) -> BTreeMap<String, FanHeaderCon
         .unwrap_or_default()
 }
 
+fn saved_cpu_limits(profile: Option<&Profile>) -> AmdCpuLimit {
+    profile
+        .and_then(|p| p.part.cpu_limit.as_ref())
+        .and_then(|c| c.amd)
+        .unwrap_or_default()
+}
+
+/// The active profile with every unsaved draft folded in.
+fn with_drafts(profile: &Profile, ui_state: &ControlUi) -> Profile {
+    let mut profile = profile.clone();
+    if let Some(draft) = &ui_state.draft {
+        profile.part.fan = Some(FanPart {
+            headers: Some(draft.headers.clone()),
+        });
+    }
+    if let Some(draft) = &ui_state.cpu_draft {
+        let intel = profile.part.cpu_limit.and_then(|c| c.intel);
+        profile.part.cpu_limit = Some(CpuLimitPart {
+            amd: (!draft.limits.is_stock()).then_some(draft.limits),
+            intel,
+        });
+    }
+    profile
+}
+
+/// AMD's own Eco Mode limits (PPT W, TDC A, EDC A), offered as starting
+/// points; anything above this CPU's BIOS value stays at the BIOS value.
+const CPU_PRESETS: [(&str, [f64; 3]); 2] = [
+    ("105 W Eco", [142.0, 110.0, 170.0]),
+    ("65 W Eco", [88.0, 75.0, 150.0]),
+];
+
+/// A limit at or above the BIOS value is no limit at all — stored as `None`.
+fn below_stock(value: f64, stock: f64) -> Option<f64> {
+    (value.round() < stock.round()).then_some(value.round())
+}
+
+fn preset_limits([ppt, tdc, edc]: [f64; 3], stock: &AmdLimitValues) -> AmdCpuLimit {
+    AmdCpuLimit {
+        ppt_w: below_stock(ppt, stock.ppt_w),
+        tdc_a: below_stock(tdc, stock.tdc_a),
+        edc_a: below_stock(edc, stock.edc_a),
+    }
+}
+
+fn cpu_tab(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    caps: &CpuLimitCaps,
+    saved: &AmdCpuLimit,
+    ui_state: &mut ControlUi,
+) {
+    let Some(profile_id) = control.active_profile.clone() else {
+        return;
+    };
+    let mut limits = ui_state.cpu_draft.as_ref().map_or(*saved, |d| d.limits);
+    let before = limits;
+
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "CPU power limits");
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(format!(
+                "AMD Ryzen ({}). Lower limits run cooler and quieter; the maximum is what \
+                 the BIOS set. New limits are tried first and revert by themselves unless \
+                 you keep them.",
+                caps.generation
+            ))
+            .size(11.0)
+            .color(dc.muted),
+        );
+        if let Some(notice) = &control.crash_guard_notice {
+            ui.add_space(6.0);
+            ui.label(
+                egui::RichText::new(notice)
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+            );
+        }
+        ui.add_space(10.0);
+
+        // No edits while a try is running: Keep/Undo in the footer first.
+        ui.add_enabled_ui(control.preview.is_none(), |ui| {
+            ui.horizontal(|ui| {
+                let size = egui::vec2(84.0, 22.0);
+                if theme::dialog_btn_secondary_compact(ui, "BIOS", dc, size).clicked() {
+                    limits = AmdCpuLimit::default();
+                }
+                for (name, values) in CPU_PRESETS {
+                    if theme::dialog_btn_secondary_compact(ui, name, dc, size).clicked() {
+                        limits = preset_limits(values, &caps.stock);
+                    }
+                }
+            });
+            ui.add_space(8.0);
+            limit_row(
+                ui,
+                dc,
+                "PPT (package power)",
+                "W",
+                &mut limits.ppt_w,
+                caps.min.ppt_w,
+                caps.stock.ppt_w,
+            );
+            limit_row(
+                ui,
+                dc,
+                "TDC (sustained current)",
+                "A",
+                &mut limits.tdc_a,
+                caps.min.tdc_a,
+                caps.stock.tdc_a,
+            );
+            limit_row(
+                ui,
+                dc,
+                "EDC (peak current)",
+                "A",
+                &mut limits.edc_a,
+                caps.min.edc_a,
+                caps.stock.edc_a,
+            );
+        });
+
+        ui.add_space(8.0);
+        let now = caps.current;
+        ui.label(
+            egui::RichText::new(format!(
+                "In force now: PPT {:.0} W · TDC {:.0} A · EDC {:.0} A",
+                now.ppt_w, now.tdc_a, now.edc_a
+            ))
+            .size(11.0)
+            .color(dc.muted),
+        );
+        dry_run_note(ui, dc, control);
+    });
+
+    if limits != before {
+        ui_state.cpu_draft = Some(CpuDraft { profile_id, limits });
+    }
+}
+
+fn limit_row(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    label: &str,
+    unit: &str,
+    value: &mut Option<f64>,
+    min: f64,
+    stock: f64,
+) {
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(label).size(12.0).color(dc.muted));
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let text = match value {
+                Some(v) => format!("{v:.0} {unit}"),
+                None => format!("{stock:.0} {unit} (BIOS)"),
+            };
+            ui.add_sized(
+                [86.0, 18.0],
+                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+            );
+            let mut v = value.unwrap_or(stock) as f32;
+            let slider = egui::Slider::new(&mut v, min as f32..=stock as f32)
+                .step_by(1.0)
+                .show_value(false)
+                .trailing_fill(true);
+            if ui.add(slider).changed() {
+                *value = below_stock(f64::from(v), stock);
+            }
+        });
+    });
+}
+
 #[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -182,11 +417,15 @@ pub fn show(
     if let Some(fan) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new(SELECT_FAN_ID))) {
         ui_state.select_fan(&fan, control);
     }
-    if fan_caps.is_none() {
-        ui_state.tab = Tab::Power;
+    let cpu_caps = control.cpu_caps();
+    match ui_state.tab {
+        Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
+        Tab::Cpu if cpu_caps.is_none() => ui_state.tab = Tab::Power,
+        _ => {}
     }
     let active = control.active();
     let saved_headers = saved_fan_headers(active);
+    let saved_cpu = saved_cpu_limits(active);
     // A draft belongs to one profile; switching profiles (or the save
     // landing, which makes the draft equal what's stored) ends it.
     if let Some(draft) = &ui_state.draft {
@@ -196,7 +435,28 @@ pub fn show(
             ui_state.draft = None;
         }
     }
-    let dirty = ui_state.draft.is_some();
+    if let Some(draft) = &ui_state.cpu_draft {
+        let other_profile = Some(draft.profile_id.as_str()) != control.active_profile.as_deref();
+        if other_profile || draft.limits == saved_cpu {
+            ui_state.cpu_draft = None;
+        }
+    }
+    // A try just started or ended: the limits in force changed, so re-read
+    // them ("In force now"). Ended without Keep: drop the CPU draft so the
+    // sliders show what is in force again, not the values that were undone.
+    if ui_state.track_preview(control.preview.is_some(), control.preview_reverted) {
+        let _ = cmd_tx.try_send(ControlCmd::Refresh);
+    }
+    let dirty = ui_state.draft.is_some() || ui_state.cpu_draft.is_some();
+    // The countdown needs a repaint every second without user input.
+    let preview_left = control
+        .preview
+        .as_ref()
+        .map(|p| p.reverts_at.saturating_duration_since(Instant::now()));
+    let busy = ui_state.busy(control);
+    if preview_left.is_some() || busy {
+        ctx.request_repaint_after(Duration::from_millis(250));
+    }
 
     // ── Hero ─────────────────────────────────────────────────────────────
     egui::TopBottomPanel::top("control_hero")
@@ -267,28 +527,69 @@ pub fn show(
                     ui_state.notice = None;
                     main_ctx.request_repaint_of(egui::ViewportId::ROOT);
                 }
-                if dirty {
+                if busy {
+                    ui.disable();
+                }
+                if let Some(left) = preview_left {
                     ui.add_space(6.0);
-                    if theme::dialog_btn_primary(ui, "Save & apply").clicked() {
-                        if let (Some(profile), Some(draft)) = (active, &ui_state.draft) {
-                            let mut profile = profile.clone();
-                            profile.part.fan = Some(FanPart {
-                                headers: Some(draft.headers.clone()),
-                            });
-                            let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                                profile: Box::new(profile),
-                                apply: true,
-                            });
+                    if theme::dialog_btn_primary(ui, "Keep").clicked() {
+                        let _ = cmd_tx.try_send(ControlCmd::ConfirmPreview { keep: true });
+                        ui_state.await_reply(control);
+                    }
+                    ui.add_space(6.0);
+                    if theme::dialog_btn_secondary(ui, "Undo", dc).clicked() {
+                        let _ = cmd_tx.try_send(ControlCmd::ConfirmPreview { keep: false });
+                        ui_state.await_reply(control);
+                    }
+                    ui.add_space(10.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Keep the new limits? Reverting in {} s",
+                            left.as_secs_f32().ceil()
+                        ))
+                        .size(11.0)
+                        .color(dc.text),
+                    );
+                } else if dirty {
+                    ui.add_space(6.0);
+                    // CPU limits are tried first (auto-revert); fan-only
+                    // edits are saved directly, as before.
+                    let label = if ui_state.cpu_draft.is_some() {
+                        "Try new limits"
+                    } else {
+                        "Save & apply"
+                    };
+                    if theme::dialog_btn_primary(ui, label).clicked() {
+                        if let Some(profile) = active {
+                            let profile = with_drafts(profile, ui_state);
+                            let cmd = if ui_state.cpu_draft.is_some() {
+                                ControlCmd::Preview(Box::new(profile))
+                            } else {
+                                ControlCmd::SaveProfile {
+                                    profile: Box::new(profile),
+                                    apply: true,
+                                }
+                            };
+                            let _ = cmd_tx.try_send(cmd);
+                            ui_state.await_reply(control);
                         }
                     }
                     ui.add_space(6.0);
                     if theme::dialog_btn_secondary(ui, "Revert", dc).clicked() {
                         ui_state.draft = None;
+                        ui_state.cpu_draft = None;
                         ui_state.dragging = None;
                     }
                     ui.add_space(10.0);
                     ui.label(
-                        egui::RichText::new("Unsaved fan changes")
+                        egui::RichText::new("Unsaved changes")
+                            .size(11.0)
+                            .color(dc.muted),
+                    );
+                } else if control.preview_reverted {
+                    ui.add_space(10.0);
+                    ui.label(
+                        egui::RichText::new("The new limits were not kept and have been reverted.")
                             .size(11.0)
                             .color(dc.muted),
                     );
@@ -340,16 +641,26 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
         .show(ctx, |ui| {
-            if fan_caps.is_some() {
+            if fan_caps.is_some() || cpu_caps.is_some() {
                 ui.horizontal(|ui| {
                     if tab_btn(ui, dc, "Power", ui_state.tab == Tab::Power, 90.0) {
                         ui_state.tab = Tab::Power;
                     }
-                    if tab_btn(ui, dc, "Fans", ui_state.tab == Tab::Fans, 90.0) {
+                    if fan_caps.is_some()
+                        && tab_btn(ui, dc, "Fans", ui_state.tab == Tab::Fans, 90.0)
+                    {
                         ui_state.tab = Tab::Fans;
+                    }
+                    if cpu_caps.is_some() && tab_btn(ui, dc, "CPU", ui_state.tab == Tab::Cpu, 90.0)
+                    {
+                        ui_state.tab = Tab::Cpu;
                     }
                 });
                 ui.add_space(10.0);
+            }
+            if let (Tab::Cpu, Some(caps)) = (ui_state.tab, &cpu_caps) {
+                cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
+                return;
             }
             match (ui_state.tab, &fan_caps) {
                 (Tab::Fans, Some(caps)) => {
@@ -1243,5 +1554,112 @@ mod tests {
         ui.edit("gaming", &saved).remove("h");
         assert!(ui.edit("gaming", &saved).is_empty()); // the draft persists, not re-copied
         assert_eq!(ui.draft.as_ref().unwrap().profile_id, "gaming");
+    }
+    const STOCK: AmdLimitValues = AmdLimitValues {
+        ppt_w: 162.0,
+        tdc_a: 120.0,
+        edc_a: 180.0,
+    };
+
+    #[test]
+    fn a_limit_at_or_above_the_bios_value_is_stored_as_none() {
+        assert_eq!(below_stock(88.4, 162.0), Some(88.0));
+        assert_eq!(below_stock(162.0, 162.0), None);
+        assert_eq!(below_stock(161.7, 162.0), None); // rounds to the BIOS value
+    }
+
+    #[test]
+    fn presets_never_raise_a_limit_above_the_bios_value() {
+        let eco = preset_limits(CPU_PRESETS[1].1, &STOCK);
+        assert_eq!(eco.ppt_w, Some(88.0));
+        assert_eq!(eco.edc_a, Some(150.0));
+
+        // A 65 W CPU: "105 W Eco" is above its BIOS values entirely.
+        let small = AmdLimitValues {
+            ppt_w: 88.0,
+            tdc_a: 75.0,
+            edc_a: 150.0,
+        };
+        assert!(preset_limits(CPU_PRESETS[0].1, &small).is_stock());
+    }
+
+    #[test]
+    fn with_drafts_folds_cpu_limits_into_the_profile_and_keeps_intel() {
+        let profile = Profile {
+            id: "gaming".into(),
+            name: "Gaming".into(),
+            icon: None,
+            builtin: true,
+            part: rigstats_backend::control::ProfilePart {
+                cpu_limit: Some(CpuLimitPart {
+                    amd: None,
+                    intel: Some(serde_json::json!({ "pl1_w": 125 })),
+                }),
+                ..Default::default()
+            },
+        };
+        let mut ui = ControlUi {
+            cpu_draft: Some(CpuDraft {
+                profile_id: "gaming".into(),
+                limits: AmdCpuLimit {
+                    ppt_w: Some(88.0),
+                    ..Default::default()
+                },
+            }),
+            ..Default::default()
+        };
+        let merged = with_drafts(&profile, &ui).part.cpu_limit.unwrap();
+        assert_eq!(merged.amd.unwrap().ppt_w, Some(88.0));
+        assert!(merged.intel.is_some());
+
+        // Back to BIOS values: an empty amd part, not a stored set of maxima.
+        ui.cpu_draft.as_mut().unwrap().limits = AmdCpuLimit::default();
+        assert_eq!(with_drafts(&profile, &ui).part.cpu_limit.unwrap().amd, None);
+    }
+    #[test]
+    fn a_reverted_try_drops_the_cpu_draft_but_a_kept_one_does_not() {
+        let draft = || CpuDraft {
+            profile_id: "gaming".into(),
+            limits: AmdCpuLimit {
+                ppt_w: Some(88.0),
+                ..Default::default()
+            },
+        };
+        let mut ui = ControlUi {
+            cpu_draft: Some(draft()),
+            ..Default::default()
+        };
+
+        assert!(ui.track_preview(true, false)); // started → refresh
+        assert!(!ui.track_preview(true, false)); // still running → nothing
+        assert!(ui.track_preview(false, true)); // reverted → refresh
+        assert!(ui.cpu_draft.is_none());
+
+        ui.cpu_draft = Some(draft());
+        ui.track_preview(true, false);
+        ui.track_preview(false, false); // kept: the save makes the draft equal, show() drops it
+        assert!(ui.cpu_draft.is_some());
+    }
+    #[test]
+    fn a_click_stays_busy_until_the_service_answers() {
+        let mut ui = ControlUi::default();
+        let mut control = ControlState::default();
+        assert!(!ui.busy(&control));
+
+        // Keep: answered by the preview ending, not by an apply result.
+        ui.track_preview(true, false);
+        ui.await_reply(&control);
+        assert!(ui.busy(&control));
+        ui.track_preview(false, false);
+        assert!(!ui.busy(&control));
+
+        // Save & apply / a failed Try: answered by a new apply result.
+        ui.await_reply(&control);
+        control.last_apply_result = Some(ApplyResult {
+            ok: false,
+            message: Some("nope".into()),
+            profile_id: None,
+        });
+        assert!(!ui.busy(&control));
     }
 }

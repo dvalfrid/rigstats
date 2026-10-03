@@ -53,6 +53,27 @@ builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<FanP
 builder.Services.AddSingleton<FanCurveLoop>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanCurveLoop>());
 
+// Control Center phase 2 (#189): CPU package limits through the SMU. The
+// boot-crash guard reads (and consumes) the previous run's marker when it is
+// constructed — before ActiveProfileApplier decides what to re-apply.
+var programData = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+    "se.codeby.rigstats");
+builder.Services.AddSingleton(_ => new BootCrashGuard(
+    Path.Combine(programData, "pending-apply"),
+    BootCrashGuard.DefaultStableAfter));
+builder.Services.AddSingleton<IControlProvider>(sp =>
+{
+    var smu = RyzenSmu.TryOpen(out var reason);
+    return new CpuLimitProvider(
+        smu,
+        reason,
+        sp.GetRequiredService<BootCrashGuard>(),
+        dryRun,
+        Path.Combine(programData, "cpu-limit-baseline.json"),
+        CpuLimitProvider.CurrentBootTime());
+});
+
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();

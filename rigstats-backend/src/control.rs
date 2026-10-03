@@ -82,7 +82,7 @@ pub struct ProfilePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fan: Option<FanPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cpu_limit: Option<serde_json::Value>,
+    pub cpu_limit: Option<CpuLimitPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub curve_opt: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,6 +97,53 @@ pub struct ProfilePart {
 pub struct FanPart {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub headers: Option<BTreeMap<String, FanHeaderConfig>>,
+}
+
+/// A profile's CPU package limits (#189). An empty part (or a `None`
+/// value) means the BIOS value for this boot.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CpuLimitPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub amd: Option<AmdCpuLimit>,
+    /// Intel PL1/PL2 — not implemented by the service yet; passed through.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub intel: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct AmdCpuLimit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ppt_w: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tdc_a: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edc_a: Option<f64>,
+}
+
+impl AmdCpuLimit {
+    pub fn is_stock(&self) -> bool {
+        self.ppt_w.is_none() && self.tdc_a.is_none() && self.edc_a.is_none()
+    }
+}
+
+/// The "cpu_limit" capability's `details`, typed. Limits only go down:
+/// `stock` (the BIOS values this boot) is the ceiling, `min` the floor.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct CpuLimitCaps {
+    #[serde(default)]
+    pub vendor: String,
+    #[serde(default)]
+    pub generation: String,
+    pub stock: AmdLimitValues,
+    pub min: AmdLimitValues,
+    pub current: AmdLimitValues,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+pub struct AmdLimitValues {
+    pub ppt_w: f64,
+    pub tdc_a: f64,
+    pub edc_a: f64,
 }
 
 /// One header's curve, keyed by LHM control identifier in [`FanPart`].
@@ -206,6 +253,18 @@ pub struct ControlState {
     /// Per header id: the RPM sensors its last identify made speed up
     /// (`fan_identified`). Channel and RPM sensor numbers don't always match.
     pub fan_identified: BTreeMap<String, Vec<FanResponder>>,
+    /// Set when the boot-crash guard kept CPU limits at BIOS values this boot.
+    pub crash_guard_notice: Option<String>,
+    /// A running `preview`: which profile, and when the service reverts it.
+    pub preview: Option<PreviewState>,
+    /// Shown once a preview ended without "Keep" (timed out or undone).
+    pub preview_reverted: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreviewState {
+    pub profile_id: String,
+    pub reverts_at: std::time::Instant,
 }
 
 impl ControlState {
@@ -245,6 +304,24 @@ impl ControlState {
                     })
                     .map(|h| h.id)
             })
+    }
+
+    /// The CPU limit capability, when the service can set limits here.
+    pub fn cpu_caps(&self) -> Option<CpuLimitCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "cpu_limit" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    /// The PPT limit the active profile lowers to, for the CPU panel —
+    /// `None` at BIOS values, or when the crash guard skipped limits.
+    pub fn active_ppt_limit(&self) -> Option<f64> {
+        if self.crash_guard_notice.is_some() {
+            return None;
+        }
+        self.active()?.part.cpu_limit.as_ref()?.amd?.ppt_w
     }
 
     pub fn active(&self) -> Option<&Profile> {
@@ -295,6 +372,24 @@ impl ControlState {
             ControlEvent::FanIdentified { header, responders } => {
                 self.fan_identified.insert(header, responders);
             }
+            ControlEvent::CrashGuardNotice(n) => self.crash_guard_notice = n,
+            ControlEvent::PreviewStarted {
+                profile_id,
+                revert_in,
+            } => {
+                self.preview_reverted = false;
+                self.preview = Some(PreviewState {
+                    profile_id,
+                    reverts_at: std::time::Instant::now() + revert_in,
+                });
+            }
+            ControlEvent::PreviewEnded { kept } => {
+                // Only a preview that was running can have been reverted.
+                // (`take()` first: inside `!kept && …` it would be skipped
+                // for a kept preview, leaving it running in the UI.)
+                let was_running = self.preview.take().is_some();
+                self.preview_reverted = !kept && was_running;
+            }
         }
         true
     }
@@ -326,6 +421,15 @@ pub enum ControlEvent {
         header: String,
         responders: Vec<FanResponder>,
     },
+    CrashGuardNotice(Option<String>),
+    PreviewStarted {
+        profile_id: String,
+        revert_in: Duration,
+    },
+    /// Kept (`confirm`), or reverted — by the user or by the service's timer.
+    PreviewEnded {
+        kept: bool,
+    },
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -346,6 +450,12 @@ pub enum ControlCmd {
     },
     /// Spin one fan header to full speed for a few seconds.
     IdentifyFan(String),
+    /// Apply an edited, unsaved profile for a while; the service reverts it
+    /// unless [`ControlCmd::ConfirmPreview`] keeps it (which also saves it).
+    Preview(Box<Profile>),
+    ConfirmPreview {
+        keep: bool,
+    },
 }
 
 // ── The task ────────────────────────────────────────────────────────────
@@ -597,6 +707,11 @@ async fn fetch_and_publish(
         if let Some(dry_run) = state.get("dry_run").and_then(serde_json::Value::as_bool) {
             let _ = event_tx.send(ControlEvent::DryRun(dry_run));
         }
+        let notice = state
+            .get("crash_guard_notice")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let _ = event_tx.send(ControlEvent::CrashGuardNotice(notice));
     }
 }
 
@@ -634,6 +749,10 @@ async fn handle_cmd(
                         let _ = event_tx.send(ControlEvent::ActiveProfile(Some(
                             r.profile_id.clone().unwrap_or(id),
                         )));
+                        // The service acknowledged the crash-guard notice and
+                        // reverted any pending preview before this apply.
+                        let _ = event_tx.send(ControlEvent::CrashGuardNotice(None));
+                        let _ = event_tx.send(ControlEvent::PreviewEnded { kept: false });
                     }
                     let _ = event_tx.send(ControlEvent::ApplyResult(r));
                 }
@@ -714,6 +833,59 @@ async fn handle_cmd(
             .await?;
             Ok(())
         }
+        ControlCmd::Preview(profile) => {
+            let params = serde_json::json!({ "profile": profile.as_ref() });
+            if let Some(value) = request(
+                writer,
+                reader,
+                next_id,
+                "preview",
+                Some(params),
+                event_tx,
+                dir,
+            )
+            .await?
+            {
+                if let Ok(r) = serde_json::from_value::<ApplyResult>(value.clone()) {
+                    let revert_in = value
+                        .get("revert_in_s")
+                        .and_then(serde_json::Value::as_u64)
+                        .map(Duration::from_secs);
+                    if let (true, Some(revert_in)) = (r.ok, revert_in) {
+                        let _ = event_tx.send(ControlEvent::PreviewStarted {
+                            profile_id: profile.id.clone(),
+                            revert_in,
+                        });
+                    }
+                    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+                }
+            }
+            Ok(())
+        }
+        ControlCmd::ConfirmPreview { keep } => {
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "confirm",
+                Some(serde_json::json!({ "keep": keep })),
+                event_tx,
+                dir,
+            )
+            .await?;
+            // Kept: the service saved it and made it active. Either way the
+            // limits in force changed — refresh profiles, active and caps
+            // *before* ending the preview, so the UI never sees "preview over"
+            // with the old profile list (its CPU draft would look unsaved and
+            // the footer would offer "Try" again for a moment).
+            fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
+            // An error response (already forwarded as ControlEvent::Error)
+            // means the service had reverted it already.
+            let _ = event_tx.send(ControlEvent::PreviewEnded {
+                kept: keep && result.is_some(),
+            });
+            Ok(())
+        }
     }
 }
 
@@ -792,6 +964,9 @@ fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
                     responders: id.responders,
                 });
             }
+        }
+        "preview_reverted" => {
+            let _ = event_tx.send(ControlEvent::PreviewEnded { kept: false });
         }
         _ => {}
     }
@@ -1028,6 +1203,114 @@ mod tests {
             }],
         );
         assert_eq!(state.header_for_fan("Fan #7").as_deref(), Some("c4"));
+    }
+
+    #[test]
+    fn cpu_limit_part_matches_the_service_shape() {
+        let json = r#"{"amd":{"ppt_w":88.0,"edc_a":150.0}}"#;
+        let part: CpuLimitPart = serde_json::from_str(json).unwrap();
+        let amd = part.amd.unwrap();
+        assert_eq!(amd.ppt_w, Some(88.0));
+        assert_eq!(amd.tdc_a, None);
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+
+        // The built-ins' "BIOS values" part.
+        let stock: CpuLimitPart = serde_json::from_str("{}").unwrap();
+        assert_eq!(stock, CpuLimitPart::default());
+        assert!(AmdCpuLimit::default().is_stock());
+    }
+
+    #[test]
+    fn cpu_caps_parse_the_capability_details() {
+        let details = serde_json::json!({
+            "vendor": "amd", "generation": "Granite Ridge", "pm_table": "0x620105",
+            "stock": {"ppt_w": 162.0, "tdc_a": 120.0, "edc_a": 180.0},
+            "min": {"ppt_w": 45.0, "tdc_a": 30.0, "edc_a": 45.0},
+            "current": {"ppt_w": 88.0, "tdc_a": 120.0, "edc_a": 180.0},
+        });
+        let state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "cpu_limit".into(),
+                supported: true,
+                reason: None,
+                details: Some(details),
+            }],
+            ..ControlState::default()
+        };
+        let caps = state.cpu_caps().unwrap();
+        assert_eq!(caps.generation, "Granite Ridge");
+        assert!((caps.stock.edc_a - 180.0).abs() < f64::EPSILON);
+        assert!((caps.current.ppt_w - 88.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn active_ppt_limit_is_hidden_at_bios_values_and_after_a_crash_guard_skip() {
+        let profile = |cpu_limit| Profile {
+            id: "p".into(),
+            name: "P".into(),
+            icon: None,
+            builtin: false,
+            part: ProfilePart {
+                cpu_limit,
+                ..Default::default()
+            },
+        };
+        let mut state = ControlState {
+            profiles: vec![profile(Some(CpuLimitPart {
+                amd: Some(AmdCpuLimit {
+                    ppt_w: Some(88.0),
+                    ..Default::default()
+                }),
+                intel: None,
+            }))],
+            active_profile: Some("p".into()),
+            ..ControlState::default()
+        };
+        assert_eq!(state.active_ppt_limit(), Some(88.0));
+
+        state.crash_guard_notice = Some("skipped".into());
+        assert_eq!(state.active_ppt_limit(), None);
+
+        state.crash_guard_notice = None;
+        state.profiles = vec![profile(Some(CpuLimitPart::default()))];
+        assert_eq!(state.active_ppt_limit(), None);
+    }
+
+    #[test]
+    fn preview_ends_as_reverted_only_if_one_was_running() {
+        let mut state = ControlState::default();
+        state.apply(ControlEvent::PreviewEnded { kept: false });
+        assert!(!state.preview_reverted);
+
+        state.apply(ControlEvent::PreviewStarted {
+            profile_id: "p".into(),
+            revert_in: Duration::from_secs(15),
+        });
+        assert!(state.preview.is_some());
+        state.apply(ControlEvent::PreviewEnded { kept: false });
+        assert!(state.preview.is_none());
+        assert!(state.preview_reverted);
+
+        state.apply(ControlEvent::PreviewStarted {
+            profile_id: "p".into(),
+            revert_in: Duration::from_secs(15),
+        });
+        assert!(!state.preview_reverted);
+        state.apply(ControlEvent::PreviewEnded { kept: true });
+        assert!(state.preview.is_none()); // kept also ends it
+        assert!(!state.preview_reverted);
+    }
+
+    #[test]
+    fn preview_reverted_event_ends_the_preview() {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ev: EventIn =
+            serde_json::from_str(r#"{"event":"preview_reverted","data":{"id":"p"}}"#).unwrap();
+        handle_event(ev, &tx);
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(ControlEvent::PreviewEnded { kept: false })
+        ));
     }
 
     #[test]

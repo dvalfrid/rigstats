@@ -25,27 +25,29 @@ public sealed class ProfileStore
             "se.codeby.rigstats",
             "profiles.json");
 
-    // Built-ins carry an explicit, empty fan part ("every header on BIOS
-    // control") rather than none: a missing part leaves the domain untouched,
-    // so switching from a profile with curves to one without would otherwise
-    // keep the old curves running while the Fans tab shows none.
+    // Built-ins carry explicit, empty fan and CPU-limit parts ("BIOS control")
+    // rather than none: a missing part leaves the domain untouched, so
+    // switching from a profile with curves or limits to one without would
+    // otherwise keep them running while the Control Center shows none.
     private static List<Profile> BuiltinProfiles() =>
     [
-        new Profile { Id = "silent", Name = "Silent", Icon = "moon", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans() } },
-        new Profile { Id = "balanced", Name = "Balanced", Icon = "scale", Builtin = true, Part = new ProfilePart { PowerPlan = "balanced", Fan = BiosFans() } },
-        new Profile { Id = "gaming", Name = "Gaming", Icon = "bolt", Builtin = true, Part = new ProfilePart { PowerPlan = "high_performance", Fan = BiosFans() } },
-        new Profile { Id = "eco", Name = "Eco", Icon = "leaf", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans() } },
+        new Profile { Id = "silent", Name = "Silent", Icon = "moon", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans(), CpuLimit = BiosCpuLimits() } },
+        new Profile { Id = "balanced", Name = "Balanced", Icon = "scale", Builtin = true, Part = new ProfilePart { PowerPlan = "balanced", Fan = BiosFans(), CpuLimit = BiosCpuLimits() } },
+        new Profile { Id = "gaming", Name = "Gaming", Icon = "bolt", Builtin = true, Part = new ProfilePart { PowerPlan = "high_performance", Fan = BiosFans(), CpuLimit = BiosCpuLimits() } },
+        new Profile { Id = "eco", Name = "Eco", Icon = "leaf", Builtin = true, Part = new ProfilePart { PowerPlan = "power_saver", Fan = BiosFans(), CpuLimit = BiosCpuLimits() } },
     ];
 
     private static FanPart BiosFans() => new() { Headers = [] };
 
-    /// Built-ins saved before fan support existed (#187) have no fan part —
-    /// give them the empty one `BuiltinProfiles` now seeds.
-    private static ProfileFile WithBiosFansOnBuiltins(ProfileFile file) => new()
+    private static CpuLimitPart BiosCpuLimits() => new();
+
+    /// Built-ins saved before fan (#188) or CPU-limit (#189) support existed
+    /// lack those parts — give them the empty ones `BuiltinProfiles` now seeds.
+    private static ProfileFile WithBiosPartsOnBuiltins(ProfileFile file) => new()
     {
         Active = file.Active,
         Profiles = file.Profiles
-            .Select(p => p.Builtin && p.Part.Fan is null
+            .Select(p => p.Builtin && (p.Part.Fan is null || p.Part.CpuLimit is null)
                 ? new Profile
                 {
                     Id = p.Id,
@@ -55,8 +57,8 @@ public sealed class ProfileStore
                     Part = new ProfilePart
                     {
                         PowerPlan = p.Part.PowerPlan,
-                        Fan = BiosFans(),
-                        CpuLimit = p.Part.CpuLimit,
+                        Fan = p.Part.Fan ?? BiosFans(),
+                        CpuLimit = p.Part.CpuLimit ?? BiosCpuLimits(),
                         CurveOpt = p.Part.CurveOpt,
                         Gpu = p.Part.Gpu,
                         Aura = p.Part.Aura,
@@ -96,7 +98,7 @@ public sealed class ProfileStore
             loaded = await JsonSerializer.DeserializeAsync<ProfileFile>(stream, ControlJson.Options, ct);
         _cached = loaded is null
             ? new ProfileFile { Active = "balanced", Profiles = BuiltinProfiles() }
-            : WithBiosFansOnBuiltins(loaded);
+            : WithBiosPartsOnBuiltins(loaded);
         return _cached;
     }
 

@@ -165,7 +165,7 @@
         <li class="feature-card">
           <div class="feature-dot"></div>
           <h3>Control Center &amp; fan curves<span class="badge-soon">Coming in v1.42.0</span></h3>
-          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed.</p>
+          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000, profiles can also lower the CPU power limits.</p>
         </li>
       </ul>
     </div>
@@ -290,12 +290,15 @@
     <div class="container">
       <header class="section-head">
         <h2>Control Center &amp; Fan Curves<span class="badge-soon">Coming in v1.42.0</span></h2>
-        <p>Profiles bundle your power plan and fan curves, and switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
+        <p>Profiles bundle your power plan and fan curves — and on supported AMD Ryzen CPUs, power limits —, and switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
       </header>
       <div class="floating-showcase">
         <div class="dual-shots">
           <div class="screen-wrap screen-wrap--wide">
             <img src="images/control-center-fans.png" alt="Control Center, Fans tab: a fan curve editor with draggable points, the channel's measured fans (Fan #2 and Fan #5), live duty, and several fans sharing one curve" class="hero-img">
+          </div>
+          <div class="screen-wrap screen-wrap--wide">
+            <img src="images/control-center-cpu.png" alt="Control Center, CPU tab: PPT, TDC and EDC sliders lowered to 88 W, 75 A and 150 A with BIOS, 105 W Eco and 65 W Eco presets, and the limits currently in force" class="hero-img">
           </div>
           <div class="screen-wrap">
             <img src="images/tray-menue-profile.png" alt="Tray menu with the Profile submenu open, listing Silent, Gaming, Eco and Balanced with a check on the active profile" class="hero-img">
@@ -310,6 +313,9 @@
           <li>Safety in the service: CPU above 95 °C or GPU above 90 °C sends every controlled fan to 100 %, and a lost temperature sensor does the same for its fan</li>
           <li>Stopping the service hands every fan back to the BIOS</li>
           <li>Shown only when your motherboard exposes writable fan control</li>
+          <li><strong>CPU power limits</strong> (AMD Ryzen 9000): lower PPT, TDC and EDC per profile, with 105 W and 65 W Eco presets — never above what the BIOS set</li>
+          <li>New limits are tried for 15 seconds and revert by themselves unless you click <strong>Keep</strong>; if the PC goes down right after a change, the limits aren't re-applied at the next start</li>
+          <li>The CPU panel shows the active limit, e.g. <strong>PPT 88 W</strong></li>
         </ul>
       </div>
     </div>

@@ -3038,6 +3038,7 @@ impl RigStatsApp {
                                     self.runtime.thresholds.cpu.1,
                                     &app_theme,
                                     scale,
+                                    self.runtime.control.active_ppt_limit(),
                                 ),
                                 "gpu" => {
                                     let r = panels::gpu::draw(

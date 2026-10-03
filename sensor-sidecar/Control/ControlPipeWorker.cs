@@ -20,10 +20,15 @@ public sealed class ControlPipeWorker(
     IEnumerable<IControlProvider> providers,
     IPipeClientVerifier verifier,
     FanProvider fanProvider,
-    FanCurveLoop fanLoop) : BackgroundService
+    FanCurveLoop fanLoop,
+    BootCrashGuard crashGuard) : BackgroundService
 {
     private const string AppVersion = "3.0.0"; // TODO: pull from the assembly/installer version once wired up.
     private const int ProtocolVersion = 1;
+
+    /// How long a `preview` lasts without `confirm` when the client doesn't say.
+    internal static readonly TimeSpan DefaultPreviewDuration = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan MaxPreviewDuration = TimeSpan.FromSeconds(60);
 
     private static PipeSecurity BuildPipeSecurity()
     {
@@ -179,7 +184,14 @@ public sealed class ControlPipeWorker(
                     connection.Events.Writer.TryWrite(ToEventMessage(e));
             }
 
+            void OnPreviewReverted(string id)
+            {
+                if (connection.Subscribed)
+                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "preview_reverted", Data = new { id } });
+            }
+
             fanLoop.EventRaised += OnFanEvent;
+            broker.PreviewReverted += OnPreviewReverted;
             var pump = PumpEventsAsync(connection, ct);
             try
             {
@@ -195,6 +207,7 @@ public sealed class ControlPipeWorker(
             {
                 // Stop the pump before the writer it uses is disposed.
                 fanLoop.EventRaised -= OnFanEvent;
+                broker.PreviewReverted -= OnPreviewReverted;
                 connectionCts.Cancel();
                 await pump;
             }
@@ -256,8 +269,8 @@ public sealed class ControlPipeWorker(
                 "save_profile" => await HandleSaveProfileAsync(request, ct),
                 "delete_profile" => await HandleDeleteProfileAsync(request, ct),
                 "apply_profile" => await HandleApplyProfileAsync(request, ct),
-                "preview" => await HandleApplyProfileAsync(request, ct), // TODO(#187 follow-up): auto-revert timer; applies directly for now.
-                "confirm" => ControlResponse.Ok(request.Id, new { ok = true }),
+                "preview" => await HandlePreviewAsync(request, ct),
+                "confirm" => await HandleConfirmAsync(request, ct),
                 "release_to_firmware" => HandleReleaseToFirmware(request),
                 "identify_fan" => HandleIdentifyFan(request, connection),
                 "subscribe" => HandleSubscribe(request, connection),
@@ -273,7 +286,12 @@ public sealed class ControlPipeWorker(
     private async Task<ControlResponse> HandleGetStateAsync(ControlRequest request, CancellationToken ct)
     {
         var activeId = await profiles.GetActiveIdAsync(ct);
-        return ControlResponse.Ok(request.Id, new { active_profile = activeId, dry_run = safetyGuard.DryRun });
+        return ControlResponse.Ok(request.Id, new
+        {
+            active_profile = activeId,
+            dry_run = safetyGuard.DryRun,
+            crash_guard_notice = crashGuard.Notice,
+        });
     }
 
     private async Task<ControlResponse> HandleSaveProfileAsync(ControlRequest request, CancellationToken ct)
@@ -304,8 +322,48 @@ public sealed class ControlPipeWorker(
 
         var result = await broker.ApplyProfileAsync(profile, ct);
         if (result.Ok)
+        {
             await profiles.SetActiveAsync(id, ct);
+            crashGuard.AcknowledgeNotice();
+        }
         return ControlResponse.Ok(request.Id, result);
+    }
+
+    /// `{"profile": {...}, "seconds": 15}` — applies an unsaved (edited)
+    /// profile; `confirm` stores it and makes it active, otherwise the broker
+    /// reverts it when the time is up.
+    private async Task<ControlResponse> HandlePreviewAsync(ControlRequest request, CancellationToken ct)
+    {
+        var profile = request.Params?.GetProperty("profile").Deserialize<Profile>(ControlJson.Options)
+            ?? throw new JsonException("missing profile.");
+        var duration = DefaultPreviewDuration;
+        if (request.Params?.TryGetProperty("seconds", out var seconds) == true && seconds.TryGetInt32(out var s) && s > 0)
+            duration = TimeSpan.FromSeconds(Math.Min(s, MaxPreviewDuration.TotalSeconds));
+
+        var result = await broker.PreviewAsync(profile, duration, ct);
+        return ControlResponse.Ok(request.Id, new
+        {
+            ok = result.Ok,
+            message = result.Message,
+            profile_id = result.ProfileId,
+            revert_in_s = result.Ok ? (int?)duration.TotalSeconds : null,
+        });
+    }
+
+    /// `{"keep": true}` (default) or `{"keep": false}` to revert now.
+    private async Task<ControlResponse> HandleConfirmAsync(ControlRequest request, CancellationToken ct)
+    {
+        var keep = request.Params?.TryGetProperty("keep", out var k) != true || k.GetBoolean();
+        var profile = await broker.EndPreviewAsync(keep, ct);
+        if (profile is null)
+            return ControlResponse.Fail(request.Id, "no_preview", "The preview already ended and was reverted.");
+        if (keep)
+        {
+            await profiles.SaveProfileAsync(profile, ct);
+            await profiles.SetActiveAsync(profile.Id, ct);
+            crashGuard.AcknowledgeNotice();
+        }
+        return ControlResponse.Ok(request.Id, new { ok = true, kept = keep, profile_id = profile.Id });
     }
 
     private ControlResponse HandleReleaseToFirmware(ControlRequest request)

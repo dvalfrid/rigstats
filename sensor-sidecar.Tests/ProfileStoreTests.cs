@@ -149,4 +149,19 @@ public sealed class ProfileStoreTests : IDisposable
         Assert.Empty(gaming.Part.Fan!.Headers!);
         Assert.Null(profiles.Single(p => p.Id == "mine").Part.Fan); // user profiles are left as saved
     }
+
+    [Fact]
+    public async Task Builtins_saved_before_cpu_limits_gain_bios_limits_and_keep_their_fans()
+    {
+        await File.WriteAllTextAsync(_path, """
+            {"active":"silent","profiles":[
+              {"id":"silent","name":"Silent","builtin":true,"part":{"fan":{"headers":{"lpc/x/control/1":{"source":"cpu_package","curve":[[40,30],[80,100]]}}}}}]}
+            """);
+
+        var silent = (await new ProfileStore(_path).ListAsync(CancellationToken.None)).Single();
+
+        Assert.NotNull(silent.Part.CpuLimit);
+        Assert.Null(silent.Part.CpuLimit.Amd); // = BIOS values
+        Assert.Single(silent.Part.Fan!.Headers!);
+    }
 }

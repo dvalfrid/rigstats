@@ -113,12 +113,30 @@ public sealed class FanPart
     public Dictionary<string, FanHeaderConfig>? Headers { get; init; }
 }
 
+/// AMD package limits (#189). A null value means "the BIOS value" — so an
+/// empty object puts every limit back to what the firmware set at boot.
+public sealed class AmdCpuLimit
+{
+    public double? PptW { get; init; }
+    public double? TdcA { get; init; }
+    public double? EdcA { get; init; }
+}
+
+public sealed class CpuLimitPart
+{
+    public AmdCpuLimit? Amd { get; init; }
+
+    /// Intel PL1/PL2 — not implemented yet (needs a newer signed IntelMSR
+    /// module); kept as passthrough so stored values survive a round trip.
+    public JsonNode? Intel { get; init; }
+}
+
 /// One profile's per-domain settings. Every property is optional — a missing
-/// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187)
-/// and `Fan` (#188) have typed shapes; the remaining domains are raw JSON
-/// passthrough so `ProfileStore` round-trips them untouched even before
-/// their providers (CPU limits #189, GPU #190, Curve Optimizer #191, Aura
-/// #192) exist — each phase replaces its own placeholder with a typed shape.
+/// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187),
+/// `Fan` (#188) and `CpuLimit` (#189) have typed shapes; the remaining
+/// domains are raw JSON passthrough so `ProfileStore` round-trips them
+/// untouched even before their providers (GPU #190, Curve Optimizer #191,
+/// Aura #192) exist — each phase replaces its own placeholder with a typed shape.
 public sealed class ProfilePart
 {
     /// Symbolic scheme name: `"power_saver"`, `"balanced"`, `"high_performance"`,
@@ -127,7 +145,7 @@ public sealed class ProfilePart
     public string? PowerPlan { get; init; }
 
     public FanPart? Fan { get; init; }
-    public JsonNode? CpuLimit { get; init; }
+    public CpuLimitPart? CpuLimit { get; init; }
     public JsonNode? CurveOpt { get; init; }
     public JsonNode? Gpu { get; init; }
     public JsonNode? Aura { get; init; }

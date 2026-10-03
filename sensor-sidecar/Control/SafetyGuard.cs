@@ -4,7 +4,7 @@ namespace SensorSidecar.Control;
 
 /// The cross-provider part of `docs/control-architecture.md`'s safety table.
 /// The fan critical-temp and sensor-loss overrides live in `FanCurveLoop`
-/// (#188); the boot-crash guard arrives with `CpuLimitProvider` (#189).
+/// (#188); the boot-crash guard is `BootCrashGuard` (#189).
 /// What this provides:
 ///
 /// - Release-on-stop: every provider hands control back to firmware when the

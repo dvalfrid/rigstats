@@ -24,6 +24,8 @@ pub fn draw(
     crit: u8,
     th: &theme::AppTheme,
     sc: f32,
+    // The active profile's CPU power limit (#189), shown under POWER.
+    ppt_limit: Option<f64>,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         ui.set_min_height(theme::PANEL_DATA_H * sc);
@@ -101,6 +103,16 @@ pub fn draw(
                                 .color(theme::C_TEXT),
                         );
                         ui.end_row();
+                        if let Some(limit) = ppt_limit {
+                            ui.label("");
+                            ui.label("");
+                            ui.label(
+                                RichText::new(format!("PPT {limit:.0} W"))
+                                    .size(10.0 * sc)
+                                    .color(th.text_muted),
+                            );
+                            ui.end_row();
+                        }
                     });
             });
         });

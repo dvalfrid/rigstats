@@ -6,9 +6,10 @@ namespace SensorSidecar.Control;
 /// start-up, so profiles work before anyone logs in." Without this, fan
 /// curves would be gone after every reboot or service restart until someone
 /// re-applied the profile from the UI. Runs once, through the same broker
-/// transaction as a UI apply. When risky domains arrive (CPU limits #189,
-/// Curve Optimizer #191) the boot-crash guard must gate them here.
-public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker broker) : IHostedService
+/// transaction as a UI apply. When the boot-crash guard tripped, the risky
+/// parts (CPU limits; Curve Optimizer #191 later) are left at their BIOS
+/// values for this boot.
+public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker broker, BootCrashGuard crashGuard) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -17,6 +18,8 @@ public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker br
             var id = await profiles.GetActiveIdAsync(cancellationToken);
             if (id is null || await profiles.GetAsync(id, cancellationToken) is not { } profile)
                 return;
+            if (crashGuard.TrippedAtStart)
+                profile = WithoutRiskyParts(profile);
             var result = await broker.ApplyProfileAsync(profile, cancellationToken);
             SidecarLog.Log(result.Ok
                 ? $"[rigstats-control] Re-applied active profile '{id}' at start-up."
@@ -28,6 +31,25 @@ public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker br
             SidecarLog.Log($"[rigstats-control] Start-up profile apply failed: {e}");
         }
     }
+
+    /// A missing part leaves the domain untouched — and after a reboot an
+    /// untouched SMU limit is the BIOS value.
+    internal static Profile WithoutRiskyParts(Profile profile) => new()
+    {
+        Id = profile.Id,
+        Name = profile.Name,
+        Icon = profile.Icon,
+        Builtin = profile.Builtin,
+        Part = new ProfilePart
+        {
+            PowerPlan = profile.Part.PowerPlan,
+            Fan = profile.Part.Fan,
+            CpuLimit = null,
+            CurveOpt = null,
+            Gpu = profile.Part.Gpu,
+            Aura = profile.Part.Aura,
+        },
+    };
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

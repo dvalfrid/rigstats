@@ -80,7 +80,7 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
             └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
                     └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
     └─► Control Center (same service, same LHM Computer + hardware lock):
-            ControlBroker + providers (power plan, fans), FanCurveLoop (~1 Hz)
+            ControlBroker + providers (power plan, fans, CPU limits), FanCurveLoop (~1 Hz)
             └─► named pipe \\.\pipe\rigstats-control  (duplex, request/response + events)
                     └─► control.rs (rigstats-backend): control_task → ControlState
 
@@ -198,7 +198,7 @@ rig-dashboard/
 | `hardware.rs` | Hardware detection via WMI (PowerShell only as a fallback when WMI fails) |
 | `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
 | `lhm_process.rs` | `track_lhm_connection_state` — sidecar pipe connect/disconnect logging, 30 s "still offline" throttle |
-| `control.rs` | Control Center pipe client (`control_task`) → `ControlState` (capabilities, profiles, active profile, live `fan_duty`, `fan_identified` channel→fan mapping, safety trips); `ControlCmd` (apply/save profile, identify fan, release to firmware); typed `FanPart`/`FanHeaderConfig`/`FanCaps`. Design: `docs/control-architecture.md` |
+| `control.rs` | Control Center pipe client (`control_task`) → `ControlState` (capabilities, profiles, active profile, live `fan_duty`, `fan_identified` channel→fan mapping, safety trips, running preview, crash-guard notice); `ControlCmd` (apply/save profile, preview/confirm, identify fan, release to firmware); typed `FanPart`/`FanHeaderConfig`/`FanCaps`, `CpuLimitPart`/`AmdCpuLimit`/`CpuLimitCaps`; `active_ppt_limit()` feeds the CPU panel's `PPT … W` line. Design: `docs/control-architecture.md` |
 | `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
 | `autostart.rs` | Windows startup registry management (HKCU run key) |
 | `logging.rs` | Session-based CSV stats logging — `start_session`/`end_session`/`append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`/`prune_old_sessions`, `reconcile_sessions_on_startup`; `sessions.json` index guarded by `SessionsLock` (cross-process file lock) and a `.bak` for corruption recovery |
@@ -234,7 +234,7 @@ rig-dashboard/
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `gpu_processes`, `power`, `battery`, `clock`, `header` |
-| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`, `control.rs` (Control Center: profiles, Power tab, Fans tab with curve editor, identify, shared curves). Opened from the tray, the header's profile chip, or a fan name in the Motherboard panel — which opens the curve of the channel that drives that fan, as measured by identify (never matched by name) |
+| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`, `control.rs` (Control Center: profiles, Power tab, Fans tab with curve editor, identify, shared curves, CPU tab with PPT/TDC/EDC sliders, Eco presets and Try → Keep/Undo). Opened from the tray, the header's profile chip, or a fan name in the Motherboard panel — which opens the curve of the channel that drives that fan, as measured by identify (never matched by name) |
 
 ### Module details
 
@@ -583,7 +583,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `rigstats-settings.json` read from disk | All persisted user settings |
 | `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, per-client connect/disconnect, and Control Center outcomes (#207): every profile apply/rollback with its reason, failed fan verifies (header, commanded vs. read-back duty), fan identify results (`control/1 -> Fan #2 (...), Fan #5 (...)`), safety overrides. No parsed sensor values. |
-| `control-capabilities.json` | `ControlState.capabilities` (UI snapshot) | What the board supports: writable fan channels with min/max and their measured `drives` (channel→fan mapping, persisted in `fan-channels.json`), available curve sources, power schemes |
+| `control-capabilities.json` | `ControlState.capabilities` (UI snapshot) | What the board supports: writable fan channels with min/max and their measured `drives` (channel→fan mapping, persisted in `fan-channels.json`), available curve sources, power schemes, CPU limit support (generation, PM table version, BIOS/min/current limits — or why unsupported) |
 | `profiles.json` | `%PROGRAMDATA%\se.codeby.rigstats\profiles.json` | The service-owned profile store (fan curves, power plan) |
 | `sensor-tree.txt` | `%PROGRAMDATA%\se.codeby.rigstats\sensor-tree.txt` | Full LHM hardware/sensor tree written by the sidecar at service start — the raw input for `/sensor-fixture` |
 | `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |

@@ -88,7 +88,7 @@ public class ControlBrokerTests
             ProfileWith(new ProfilePart
             {
                 PowerPlan = "balanced",
-                CpuLimit = System.Text.Json.Nodes.JsonValue.Create("x"),
+                CpuLimit = new CpuLimitPart(),
                 CurveOpt = System.Text.Json.Nodes.JsonValue.Create("y"),
             }),
             CancellationToken.None);
@@ -139,5 +139,111 @@ public class ControlBrokerTests
             .Select(_ => broker.ApplyProfileAsync(profile, CancellationToken.None)));
 
         Assert.Equal(1, maxConcurrent);
+    }
+
+    [Fact]
+    public async Task Preview_reverts_by_itself_when_not_confirmed()
+    {
+        var cpuLimit = FakeProvider("cpu_limit");
+        var broker = new ControlBroker([cpuLimit]);
+        var reverted = new TaskCompletionSource<string>();
+        broker.PreviewReverted += id => reverted.TrySetResult(id);
+
+        var result = await broker.PreviewAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            TimeSpan.FromMilliseconds(50),
+            CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Equal("test", await reverted.Task.WaitAsync(TimeSpan.FromSeconds(5)));
+        cpuLimit.Received(1).Restore(Arg.Any<Snapshot>());
+        Assert.Null(await broker.EndPreviewAsync(keep: true, CancellationToken.None)); // too late.
+    }
+
+    [Fact]
+    public async Task Confirmed_preview_is_kept()
+    {
+        var cpuLimit = FakeProvider("cpu_limit");
+        var broker = new ControlBroker([cpuLimit]);
+        var reverted = false;
+        broker.PreviewReverted += _ => reverted = true;
+
+        await broker.PreviewAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            TimeSpan.FromMilliseconds(100),
+            CancellationToken.None);
+        var kept = await broker.EndPreviewAsync(keep: true, CancellationToken.None);
+        await Task.Delay(300);
+
+        Assert.Equal("test", kept?.Id);
+        Assert.False(reverted);
+        cpuLimit.DidNotReceive().Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task Preview_can_be_undone_at_once()
+    {
+        var cpuLimit = FakeProvider("cpu_limit");
+        var broker = new ControlBroker([cpuLimit]);
+
+        await broker.PreviewAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+        await broker.EndPreviewAsync(keep: false, CancellationToken.None);
+
+        cpuLimit.Received(1).Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task Applying_a_profile_reverts_a_pending_preview_first()
+    {
+        var order = new List<string>();
+        var cpuLimit = FakeProvider("cpu_limit");
+        cpuLimit.When(p => p.Restore(Arg.Any<Snapshot>())).Do(_ => order.Add("restore"));
+        cpuLimit.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ => order.Add("apply"));
+        var broker = new ControlBroker([cpuLimit]);
+
+        await broker.PreviewAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+        await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            CancellationToken.None);
+
+        Assert.Equal(["apply", "restore", "apply"], order);
+    }
+
+    [Fact]
+    public async Task A_failed_preview_leaves_nothing_pending()
+    {
+        var cpuLimit = FakeProvider("cpu_limit", verifyOk: false);
+        var broker = new ControlBroker([cpuLimit]);
+
+        var result = await broker.PreviewAsync(
+            ProfileWith(new ProfilePart { CpuLimit = new CpuLimitPart() }),
+            TimeSpan.FromMinutes(1),
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Null(await broker.EndPreviewAsync(keep: true, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_capture_that_throws_fails_the_profile_without_touching_anything()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        var cpuLimit = FakeProvider("cpu_limit");
+        cpuLimit.Capture().Returns(_ => throw new InvalidOperationException("SMU busy"));
+        var broker = new ControlBroker([powerPlan, cpuLimit]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced", CpuLimit = new CpuLimitPart() }),
+            CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Contains("SMU busy", result.Message);
+        powerPlan.DidNotReceive().Apply(Arg.Any<ProfilePart>());
     }
 }

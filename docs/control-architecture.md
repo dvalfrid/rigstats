@@ -1,6 +1,7 @@
 # Control Center — Hardware Control Architecture
 
-> Status: phases 0 (foundation, #187) and 1 (fan control, #188) are implemented;
+> Status: phases 0 (foundation, #187), 1 (fan control, #188) and 2 (CPU power
+> limits, AMD part, #189) are implemented;
 > the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
@@ -21,6 +22,7 @@
 - [Licensing](#licensing)
 - [Delivery phases](#delivery-phases)
 - [Phase 1 — fan control as built](#phase-1--fan-control-as-built)
+- [Phase 2 — CPU power limits as built](#phase-2--cpu-power-limits-as-built)
 - [Open questions](#open-questions)
 
 ---
@@ -177,14 +179,14 @@ Transactions are serialised — there is never more than one in flight.
 | --- | --- |
 | `hello` | Protocol version handshake. On mismatch the UI disables control and says why. |
 | `capabilities` | Per-domain capability sets (headers, ranges, locked flags). |
-| `get_state` | Active profile, per-domain applied state, last result. |
+| `get_state` | Active profile, dry-run flag, `crash_guard_notice` (set when the boot-crash guard skipped risky parts this boot). |
 | `list_profiles` / `save_profile` / `delete_profile` | Profile CRUD (the store is service-owned). |
 | `apply_profile` | Transactional apply (see ControlBroker). |
-| `preview` | Apply temporarily; auto-revert after N seconds unless `confirm` arrives (display-mode-change pattern). |
-| `confirm` | Keep a previewed change. |
+| `preview` | `{"profile": {...}, "seconds": 15}` — apply an edited, unsaved profile; the service reverts it after N seconds (default 15, max 60) unless `confirm` arrives (display-mode-change pattern). A new `apply_profile`/`preview` reverts a pending one first. |
+| `confirm` | `{"keep": true}` stores the previewed profile and makes it active; `{"keep": false}` reverts now. |
 | `release_to_firmware` | Panic button: every provider → `ReleaseToFirmware()`. |
 | `identify_fan` | Spin one header to 100 % for 5 s so the user can see/hear which fan it is; the service measures which RPM sensors respond and reports them (`fan_identified`). |
-| `subscribe` | Start event stream: `profile_changed`, `apply_result`, `safety_tripped`, `fan_duty`, `fan_identified`. |
+| `subscribe` | Start event stream: `profile_changed`, `apply_result`, `safety_tripped`, `fan_duty`, `fan_identified`, `preview_reverted`. |
 
 ---
 
@@ -235,7 +237,7 @@ through the pipe.
 | Critical temperature override | CPU or GPU above a hard threshold → all controlled fans to 100 % regardless of profile, event `safety_tripped`. |
 | Sensor loss | If a curve's source sensor disappears or goes stale, that header goes to 100 %. |
 | Release on stop | `StopAsync` and a top-level `finally` call `ReleaseToFirmware()` on all providers. |
-| Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied and the UI shows *"Last undervolt caused a crash — reverted."* |
+| Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied (they stay at BIOS values) and the Control Center explains why until a profile is applied again. A service stop inside the window keeps the marker. |
 | Hard limits | The service always clamps against probed limits; UI values are never trusted. |
 | Preview | Risky changes default to `preview` with auto-revert. |
 | Armoury Crate / ASUS services | Detected at start-up. Conflicting domains are disabled until the user chooses to stop them (guided, reversible). |
@@ -282,8 +284,8 @@ The Control Center must read as part of RIGStats, not an add-on.
 | --- | --- | --- |
 | `PowerPlanProvider` | `PowerGetActiveScheme` / `PowerSetActiveScheme` (powrprof) | Trivial, no driver. Phase 0 reference provider. |
 | `FanProvider` | LHM `ISensor.Control.SetSoftware()` / `SetDefault()` on the shared `Computer` | Depends on Super I/O support per board; some firmware overrides writes — detect via `Verify`. |
-| `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. |
-| `CpuLimitProvider` (AMD) | SMU mailbox (PPT/TDC/EDC) via PawnIO AMD SMU module | Command IDs are per CPU generation; unsupported generations are simply not advertised. |
+| `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
+| `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | SMU mailbox (per-core / all-core offset) | Highest risk. Boot-crash guard + preview mandatory. |
 | `GpuProvider` | NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver). AMD: ADLX tuning services. | Official SDKs only in v1 — no undocumented clock offsets. |
 | `AuraProvider` | USB HID to the ASUS Aura controller on ROG boards | Implemented in-service; must detect and yield to Armoury Crate / LightingService. |
@@ -338,7 +340,8 @@ phase 0.
 | --- | --- | --- | --- | --- |
 | 0 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | Control foundation: pipe, security, broker, capabilities, profile store, tray/hotkey/chip, Control Center shell, `PowerPlanProvider` | Very low | `control-foundation` |
 | 1 | [#188](https://github.com/dvalfrid/rigstats/issues/188) | Fan control | Low–medium | `control-fans` |
-| 2 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | CPU power limits (Intel + AMD) | Medium | `control-cpu-limits` |
+| 2 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | CPU power limits (AMD PPT/TDC/EDC) | Medium | `control-cpu-limits` |
+| 2b | [#209](https://github.com/dvalfrid/rigstats/issues/209) | CPU power limits (Intel PL1/PL2) | Medium | `control-cpu-limits-intel` |
 | 3 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | GPU power profiles | Low–medium | `control-gpu` |
 | 4 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | AMD Curve Optimizer | High | `control-curve-optimizer` |
 | 5 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | ASUS Aura RGB | Medium | `control-aura` |
@@ -380,10 +383,57 @@ design above:
   `control-capabilities.json` and `sensor-tree.txt` they are in every
   diagnostics ZIP. Every sensor-tree fixture also runs `FanProvider.Probe()`.
 
+## Phase 2 — CPU power limits as built
+
+What phase 2 (#189) shipped — AMD only; Intel is #209:
+
+- **Module.** No new driver code or binary: `PawnIoModule` opens
+  `\\.\PawnIO` directly and loads LHM's own signed `RyzenSMU.bin`, which
+  exports `ioctl_send_smu_command` (RSMU mailbox) and the PM table reads.
+  Every SMU access holds the `Global\Access_PCI` mutex, shared with LHM.
+  LHM's bundled `IntelMSR.bin` only exports `ioctl_read_msr`, hence the
+  Intel split.
+- **Two keys must both be known** (`AmdSmuMap`): the CPU generation
+  (CPUID family/model/package) for the command ids — Zen 2/3 use
+  `0x53/0x54/0x55`, Zen 4/5 `0x56/0x57/0x58`, and Zen 4's SetPPT id is Zen
+  2's SetTctlMax — and the PM table version for where the limits read back.
+  Layouts move between versions (LHM has TDC at index 3 on Vermeer, 48 on
+  Raphael), so only hardware-verified versions are listed: today
+  `0x620105` (Ryzen 7 9800X3D, SMU 98.78.0): PPT limit [2], TDC limit [8],
+  EDC limit [63]. Desktop Ryzen only; mobile, Threadripper and server parts
+  are not offered.
+- **Limits only go down.** The ceiling is the BIOS value at boot (SMU
+  limits reset every reboot), read before the first write and persisted in
+  `%ProgramData%\se.codeby.rigstats\cpu-limit-baseline.json` keyed by boot
+  time, so a service restart in the same boot doesn't take an applied limit
+  for the BIOS one. Floor: 45 W / 30 A / 45 A. A `null` value — and the
+  built-ins' empty `cpu_limit: {}` — means the BIOS value. Raising limits
+  above the BIOS (PBO territory) is out of scope.
+- **Verify** re-reads the PM table (±1 W/A). On the 9800X3D,
+  TransferTableToDram is sometimes rejected with 0xFD (prerequisite) after
+  LHM opens its own module instance; `RyzenSmu` resolves the table again and
+  retries.
+- **Unsupported is not an error.** On a CPU without a verified layout the
+  capability is unsupported (CPU tab hidden) and a stored `cpu_limit` is
+  skipped with a log line, so a BIOS update that changes the table version
+  never blocks the rest of a profile. Release-to-firmware only writes if this
+  service changed a limit.
+- **Preview.** The CPU tab always goes through `preview` (15 s); `confirm`
+  saves and activates the profile. The broker keeps the transaction's
+  snapshots and restores them on timeout, on `confirm {keep:false}`, or
+  before any other apply.
+- **Boot-crash guard** (`BootCrashGuard`): armed by `CpuLimitProvider` only
+  when it writes a non-BIOS value; the marker is consumed at start and
+  `ActiveProfileApplier` then drops `cpu_limit` (and later `curve_opt`).
+
 ## Open questions
 
-- Which PawnIO modules (IntelMSR, AMD SMU generations) are available and signed
-  for our target CPUs? Needs verification before phase 2/4.
+- PM table layouts for Ryzen generations other than Granite Ridge `0x620105`
+  (Matisse, Vermeer, Raphael have command ids but no verified layout).
+  Unverified CPUs log their table version and head to `rigstats-sensor.log` —
+  collect diagnostics exports and add them to `AmdSmuMap.Layout`.
+- Curve Optimizer (phase 4) uses the same `RyzenSMU` module's
+  `send_smu_command`; its command ids need the same per-generation care.
 - Which ROG boards expose writable fan control through LHM, and which firmware
   overrides it? Diagnostics exports now record it (verify failures and the
   measured channel→fan mapping, #207) — collect and turn them into fixtures.

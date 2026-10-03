@@ -157,6 +157,7 @@ impl DashboardView<'_> {
                     self.thresholds.cpu.1,
                     self.app_theme,
                     sc,
+                    self.control.active_ppt_limit(),
                 );
             }
             "gpu" => {
