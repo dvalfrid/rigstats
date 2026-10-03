@@ -360,13 +360,14 @@ public class LightingProviderTests
         public long Now { get; set; }
         public int Discoveries { get; private set; }
         public int Scanned { get; private set; }
+        public Func<LightingScan>? Retry { get; set; }
 
         public LightingProvider Provider() => new(
             () => Paths.Select(p => new HidDeviceInfo(p, 0x0B05, 0x19AF, 0xFF72, 1, 65, 65)).ToList(),
             _ =>
             {
                 Discoveries++;
-                return new LightingScan(Found(), "No lighting controller found.");
+                return new LightingScan(Found(), "No lighting controller found.", Retry);
             },
             () => null,
             dryRun: false,
@@ -433,6 +434,38 @@ public class LightingProviderTests
         machine.Now = 6000;
         provider.Rescan(); // same collections: no probing
         Assert.Equal(2, machine.Discoveries);
+    }
+
+    [Fact]
+    public void A_headset_switched_on_behind_its_dongle_is_found_by_the_retry_alone()
+    {
+        var board = new FakeDevice();
+        var headset = new FakeDevice("asus-headset-1afa-1");
+        var headsetOn = false;
+        var asked = 0;
+        Func<LightingScan>? retry = null;
+        retry = () =>
+        {
+            asked++;
+            return headsetOn ? new LightingScan([headset], "") : new LightingScan([], "", retry);
+        };
+        var machine = new Machine { Found = () => [board] };
+        machine.Retry = retry;
+        var provider = machine.Provider();
+        provider.Apply(Lights("static", "#0000ff"));
+
+        machine.Now = 3000;
+        provider.Probe(); // still off
+        headsetOn = true;
+        machine.Now = 6000;
+        provider.Probe();
+        machine.Now = 9000;
+        provider.Probe(); // found: nothing left to ask
+
+        Assert.Equal(1, machine.Discoveries); // the others were not probed again
+        Assert.Equal(2, asked);
+        Assert.Equal(new ILightingDevice[] { board, headset }, provider.Devices);
+        Assert.Equal((AuraEffect.Static, (byte)0, (byte)0, (byte)255), Assert.Single(headset.Applied));
     }
 
     [Fact]
@@ -758,6 +791,14 @@ public class AsusHeadsetTests
     {
         // Captured reply to get deviceInfo (key 0).
         Assert.Equal("headset 0.9.4.0, dongle 0.9.4.0", AsusHeadsetDevice.FirmwareText(Hex("CC12000000000904000009040000000000")));
+    }
+
+    [Fact]
+    public void A_dongle_answering_without_its_headset_is_not_a_headset()
+    {
+        Assert.True(AsusHeadsetDevice.HeadsetConnected(Hex("CC12000000000904000009040000000000")));
+        // The headset off: the dongle still answers, the headset version zero.
+        Assert.False(AsusHeadsetDevice.HeadsetConnected(Hex("CC12000000000000000009040000000000")));
     }
 
     [Fact]

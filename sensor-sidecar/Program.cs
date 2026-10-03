@@ -109,11 +109,13 @@ builder.Services.AddSingleton(_ => new LightingProvider(
         devices.AddRange(AsusMonitorDevice.Discover(hid));
         // ASUS TUF-protocol keyboards — the ROG Azoth X via the Omni receiver or cable (#213).
         devices.AddRange(AsusKeyboardDevice.Discover(hid));
-        // ASUS headsets on the GearLink protocol — the ROG Delta II via its dongle.
-        devices.AddRange(AsusHeadsetDevice.Discover(hid));
+        // ASUS headsets on the GearLink protocol — the ROG Delta II via its
+        // dongle. A headset switched off is asked again on later rescans.
+        var silent = new List<HidDeviceInfo>();
+        devices.AddRange(AsusHeadsetDevice.Discover(hid, silent));
         // Any HID LampArray device (Windows Dynamic Lighting standard), any brand.
         devices.AddRange(LampArrayDevice.Discover(hid, LampArrayDevice.WindowsDynamicLightingOn));
-        return new LightingScan(devices, devices.Count > 0 ? "" : reason);
+        return new LightingScan(devices, devices.Count > 0 ? "" : reason, RetryHeadsets(silent));
     },
     LightingProvider.DetectConflict,
     dryRun,
@@ -144,3 +146,11 @@ finally
 {
     safetyGuard.ReleaseAllToFirmware();
 }
+
+// Asks the silent headset dongles again, until every headset has answered.
+static Func<LightingScan>? RetryHeadsets(List<HidDeviceInfo> silent) => silent.Count == 0 ? null : () =>
+{
+    var stillSilent = new List<HidDeviceInfo>();
+    var found = AsusHeadsetDevice.Discover(silent, stillSilent);
+    return new LightingScan(found, "", RetryHeadsets(stillSilent));
+};

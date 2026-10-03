@@ -609,9 +609,12 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   only when the set of HID collections changed (e.g. a keyboard switched
   from its receiver to the cable). Devices still there keep their instance;
   new ones get the current lighting at once; gone ones are closed. Only the
-  first discovery is logged in full, later ones log just "+ X, - Y". Known
-  gap: a headset switched on behind an already-plugged dongle changes no
-  HID collection, so it is found at the next service start.
+  first discovery is logged in full, later ones log just "+ X, - Y". A
+  headset switched on behind an already-plugged dongle changes no HID
+  collection, so the scan carries a `Retry` that asks only the dongles whose
+  headset isn't connected, on each rescan, until it is. The dongle answers
+  by itself, so "not connected" is a deviceInfo reply whose headset version
+  is all zeros.
 - **Diagnostics.** After every discovery the service writes `lighting-devices.json`
   (in every diagnostics ZIP): each device's raw data (Aura firmware + config
   table, monitor config reply, LampArray kind/lamps/update interval/report

@@ -53,7 +53,9 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
         _ => null,
     };
 
-    public static IReadOnlyList<AsusHeadsetDevice> Discover(IReadOnlyList<HidDeviceInfo> hid)
+    /// Every headset that answers. A dongle whose headset is off or out of
+    /// range goes to `silent`, to be asked again later.
+    public static IReadOnlyList<AsusHeadsetDevice> Discover(IReadOnlyList<HidDeviceInfo> hid, List<HidDeviceInfo>? silent = null)
     {
         var found = new List<AsusHeadsetDevice>();
         foreach (var info in hid.Where(d => d.VendorId == AuraUsb.AsusVendorId && Model(d.ProductId) is not null
@@ -66,10 +68,12 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
             {
                 device = Hid.Open(info);
                 var reply = Request(device, info, reportId, Get, DeviceInfoKey, []);
-                if (reply is null)
+                if (reply is null || !HeadsetConnected(reply))
                 {
-                    LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} did not answer (off or out of range?).");
+                    LightingLog.Discovery($"[rigstats-control] Lighting: {model} 0x{info.ProductId:X4} " +
+                        (reply is null ? "did not answer." : "dongle answered without a headset (off or out of range)."));
                     device.Dispose();
+                    silent?.Add(info);
                     continue;
                 }
                 var firmware = FirmwareText(reply);
@@ -86,6 +90,12 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
         }
         return found;
     }
+
+    /// The dongle answers deviceInfo by itself too; with the headset off or
+    /// out of range the headset's version is all zeros (verified on the
+    /// Delta II).
+    public static bool HeadsetConnected(byte[] reply) =>
+        reply.Length >= 9 && reply.AsSpan(5, 4).IndexOfAnyExcept((byte)0) >= 0;
 
     /// "headset 0.9.4, dongle 0.9.4" from the deviceInfo reply (two 4-byte
     /// versions after the header).

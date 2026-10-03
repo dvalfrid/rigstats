@@ -4,6 +4,10 @@ using System.Text.Json.Nodes;
 
 namespace SensorSidecar.Control.Lighting;
 
+/// What one discovery found. `Retry` asks again only the devices that
+/// didn't answer (a headset off behind its dongle), or is null.
+public sealed record LightingScan(IReadOnlyList<ILightingDevice> Devices, string UnavailableReason, Func<LightingScan>? Retry = null);
+
 /// `IControlProvider` for lighting (#192, Control Center phase 5). Aura
 /// Sync: a profile's one effect goes to every `ILightingDevice` found — the
 /// motherboard's ASUS Aura USB controller today, monitors and peripherals
@@ -21,9 +25,9 @@ namespace SensorSidecar.Control.Lighting;
 /// Center asks for capabilities and before a profile applies — at most every
 /// two seconds, never per live-preview step, and the devices are only probed
 /// again when the set of HID collections changed. A device still there is
-/// kept as it is; a new one gets the current lighting at once.
-public sealed record LightingScan(IReadOnlyList<ILightingDevice> Devices, string UnavailableReason);
-
+/// kept as it is; a new one gets the current lighting at once. A device that
+/// can sit silent behind a plugged-in dongle (a headset switched off) is
+/// asked again on each rescan through the scan's `Retry`, alone.
 public sealed class LightingProvider : IControlProvider
 {
     private static readonly string[] Effects = ["off", "static", "breathing", "spectrum_cycle"];
@@ -42,6 +46,7 @@ public sealed class LightingProvider : IControlProvider
     private volatile IReadOnlyList<ILightingDevice> _devices = [];
     private volatile string _unavailableReason = "";
     private string? _fingerprint;
+    private Func<LightingScan>? _retry;
     private long _lastScan;
 
     /// `enumerate` lists the HID collections, `discover` turns them into
@@ -96,24 +101,30 @@ public sealed class LightingProvider : IControlProvider
             }
             var fingerprint = string.Join("\n", hid.Select(h => h.Path).Order(StringComparer.OrdinalIgnoreCase));
             var first = _fingerprint is null;
-            if (!first && fingerprint == _fingerprint)
+            var retryOnly = !first && fingerprint == _fingerprint;
+            if (retryOnly && _retry is null)
                 return;
             _fingerprint = fingerprint;
 
             LightingScan scan;
             using (first ? null : LightingLog.Quiet())
-                scan = _discover(hid);
+                scan = retryOnly ? _retry!() : _discover(hid);
+            _retry = scan.Retry;
+            if (retryOnly && scan.Devices.Count == 0)
+                return;
 
             // Keep the instance already driving a device (its handle, its
-            // running effect); the fresh duplicate is closed.
+            // running effect); the fresh duplicate is closed. A retry only
+            // adds: the devices it didn't ask stay.
             var old = _devices;
-            var merged = new List<ILightingDevice>();
+            var merged = retryOnly ? old.ToList() : new List<ILightingDevice>();
             var added = new List<ILightingDevice>();
             foreach (var device in scan.Devices)
             {
                 if (old.FirstOrDefault(o => o.Id == device.Id) is { } kept)
                 {
-                    merged.Add(kept);
+                    if (!retryOnly)
+                        merged.Add(kept);
                     if (!ReferenceEquals(kept, device))
                         (device as IDisposable)?.Dispose();
                 }
@@ -125,7 +136,8 @@ public sealed class LightingProvider : IControlProvider
             }
             var gone = old.Where(o => !merged.Contains(o)).ToList();
             _devices = merged;
-            _unavailableReason = scan.UnavailableReason;
+            if (!retryOnly || merged.Count > 0)
+                _unavailableReason = merged.Count > 0 ? "" : scan.UnavailableReason;
 
             foreach (var device in gone)
                 (device as IDisposable)?.Dispose();
@@ -134,7 +146,7 @@ public sealed class LightingProvider : IControlProvider
                 SidecarLog.Log("[rigstats-control] Lighting devices changed: " + string.Join(", ",
                     added.Select(d => $"+ {d.Name}").Concat(gone.Select(d => $"- {d.Name}"))) + ".");
             }
-            _scanned?.Invoke(hid, merged, scan.UnavailableReason);
+            _scanned?.Invoke(hid, merged, _unavailableReason);
             if (!first)
                 ApplyCurrent(added);
         }
