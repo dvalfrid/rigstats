@@ -584,7 +584,7 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   not saved to the keyboard (no `0x50 0x55`). Per model: brightness scale
   (0–4 per OpenRGB; **0–100 on the Azoth X**, measured — 4 looked off),
   speed scale, and K1/K5 without the per-key marker. Verified: ROG Azoth X
-  through the Omni receiver. Not covered: ROG Claymore (other layout,
+  through the Omni receiver and by cable (`1C24`). Not covered: ROG Claymore (other layout,
   2018), Strix Scope TKL family (direct per-key only).
 - **ASUS headsets, GearLink protocol** (`AsusHeadsetDevice`) — not in
   OpenRGB; the protocol is GearLink's own declarative command schema (read
@@ -643,7 +643,6 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   particular the onboard-LED zone (`0x1B` > 0) and the addressable family
   are untested. Each user's diagnostics export carries the firmware and
   config table; turn them into `fixtures/aura/` files.
-- More lighting devices (#212, umbrella) — still open: the Azoth X by
   cable (its wired USB id isn't known yet, #213), the light bar's desk lamp
   (#214 — GearLink may hold its schema too), more ASUS headsets on the
   GearLink protocol (only the Delta II is listed), the TUF keyboard models

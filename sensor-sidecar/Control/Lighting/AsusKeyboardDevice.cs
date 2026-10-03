@@ -75,6 +75,8 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     {
         // Verified on hardware: the Azoth X behind the receiver uses 0–100.
         0x1ACE => new KeyboardModel("Keyboard via ROG Omni receiver", PerKey: true, BrightnessMax: 100, Speed: 30, Receiver: true),
+        // The Azoth X by cable (verified): same keyboard, same 0–100 scale.
+        0x1C24 => new KeyboardModel("ROG Azoth X", PerKey: true, BrightnessMax: 100, Speed: 30),
         0x1A83 => Azoth("ROG Azoth"),
         0x1A85 => Azoth("ROG Azoth (2.4 GHz)"),
         0x193C => Azoth("ROG Falchion"),
