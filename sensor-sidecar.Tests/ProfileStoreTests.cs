@@ -164,6 +164,8 @@ public sealed class ProfileStoreTests : IDisposable
         Assert.Null(silent.Part.CpuLimit.Amd); // = BIOS values
         Assert.NotNull(silent.Part.Gpu);
         Assert.Null(silent.Part.Gpu.Adapters); // = driver / original values
+        Assert.NotNull(silent.Part.CurveOpt);
+        Assert.Null(silent.Part.CurveOpt.AllCore); // = BIOS values
         Assert.Single(silent.Part.Fan!.Headers!);
     }
 }

@@ -131,6 +131,16 @@ public sealed class CpuLimitPart
     public JsonNode? Intel { get; init; }
 }
 
+/// Curve Optimizer offsets (#191), in CO counts (negative = less voltage).
+/// A core's value is `PerCore[index]`, else `AllCore`, else the BIOS value.
+public sealed class CurveOptPart
+{
+    public int? AllCore { get; init; }
+
+    /// Keyed by core index as a string ("0", "1", ...) in CCD/core order.
+    public Dictionary<string, int>? PerCore { get; init; }
+}
+
 /// One GPU's power limit (#190), keyed by adapter id in <see cref="GpuPart.Adapters"/>.
 public sealed class GpuAdapterConfig
 {
@@ -148,10 +158,9 @@ public sealed class GpuPart
 
 /// One profile's per-domain settings. Every property is optional — a missing
 /// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187),
-/// `Fan` (#188), `CpuLimit` (#189) and `Gpu` (#190) have typed shapes; the
-/// remaining domains are raw JSON passthrough so `ProfileStore` round-trips
-/// them untouched even before their providers (Curve Optimizer #191, Aura
-/// #192) exist — each phase replaces its own placeholder with a typed shape.
+/// `Fan` (#188), `CpuLimit` (#189), `Gpu` (#190) and `CurveOpt` (#191) have
+/// typed shapes; `Aura` is raw JSON passthrough so `ProfileStore` round-trips
+/// it untouched until its provider (#192) exists — each phase replaces its own placeholder with a typed shape.
 public sealed class ProfilePart
 {
     /// Symbolic scheme name: `"power_saver"`, `"balanced"`, `"high_performance"`,
@@ -161,7 +170,7 @@ public sealed class ProfilePart
 
     public FanPart? Fan { get; init; }
     public CpuLimitPart? CpuLimit { get; init; }
-    public JsonNode? CurveOpt { get; init; }
+    public CurveOptPart? CurveOpt { get; init; }
     public GpuPart? Gpu { get; init; }
     public JsonNode? Aura { get; init; }
 }

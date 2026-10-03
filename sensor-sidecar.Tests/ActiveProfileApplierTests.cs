@@ -63,7 +63,7 @@ public sealed class ActiveProfileApplierTests : IDisposable
     }
 
     [Fact]
-    public async Task After_a_tripped_crash_guard_cpu_limits_are_not_re_applied_but_the_rest_is()
+    public async Task After_a_tripped_crash_guard_cpu_limits_go_back_to_bios_and_the_rest_is_applied()
     {
         var limited = new Profile
         {
@@ -82,7 +82,9 @@ public sealed class ActiveProfileApplierTests : IDisposable
         await applier.StartAsync(CancellationToken.None);
 
         powerPlan.Received(1).Apply(Arg.Any<ProfilePart>());
-        cpuLimit.DidNotReceive().Apply(Arg.Any<ProfilePart>());
+        // Put back to BIOS values (an empty part), never the stored 88 W.
+        cpuLimit.Received(1).Apply(Arg.Is<ProfilePart>(p => p.CpuLimit != null && p.CpuLimit.Amd == null));
+        cpuLimit.DidNotReceive().Apply(Arg.Is<ProfilePart>(p => p.CpuLimit != null && p.CpuLimit.Amd != null));
     }
 
     [Fact]

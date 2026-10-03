@@ -147,7 +147,7 @@ $features = @(
   @{ id="control-cpu-limits-intel"; kind="planned"; pin=209; milestone="v3.0"; title="Control Center phase 2b: Intel CPU power limits (PL1/PL2)" }
   @{ id="control-gpu"; kind="done"; pin=190; milestone="v3.0"; title="Control Center phase 3: GPU power profiles (AMD, ADLX)" }
   @{ id="control-gpu-nvidia"; kind="planned"; pin=210; milestone="v3.0"; title="Control Center phase 3b: NVIDIA GPU power limit (NVML)" }
-  @{ id="control-curve-optimizer"; kind="planned"; pin=191; milestone="v3.0"; title="Control Center phase 4: AMD Curve Optimizer" }
+  @{ id="control-curve-optimizer"; kind="done"; pin=191; milestone="v3.0"; title="Control Center phase 4: AMD Curve Optimizer" }
   @{ id="control-aura"; kind="planned"; pin=192; milestone="v3.0"; title="Control Center phase 5: ASUS Aura RGB" }
   @{ id="control-armoury-crate"; kind="planned"; pin=193; milestone="v3.0"; title="Control Center phase 6: Armoury Crate replacement" }
 )

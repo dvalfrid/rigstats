@@ -62,17 +62,30 @@ var programData = Path.Combine(
 builder.Services.AddSingleton(_ => new BootCrashGuard(
     Path.Combine(programData, "pending-apply"),
     BootCrashGuard.DefaultStableAfter));
-builder.Services.AddSingleton<IControlProvider>(sp =>
+// One SMU handle for CPU limits and Curve Optimizer (#191).
+var smu = new Lazy<(RyzenSmu? Smu, string Reason)>(() =>
 {
-    var smu = RyzenSmu.TryOpen(out var reason);
-    return new CpuLimitProvider(
-        smu,
-        reason,
-        sp.GetRequiredService<BootCrashGuard>(),
-        dryRun,
-        Path.Combine(programData, "cpu-limit-baseline.json"),
-        CpuLimitProvider.CurrentBootTime());
+    var opened = RyzenSmu.TryOpen(out var reason);
+    return (opened, reason);
 });
+builder.Services.AddSingleton<IControlProvider>(sp => new CpuLimitProvider(
+    smu.Value.Smu,
+    smu.Value.Reason,
+    sp.GetRequiredService<BootCrashGuard>(),
+    dryRun,
+    Path.Combine(programData, "cpu-limit-baseline.json"),
+    CpuLimitProvider.CurrentBootTime()));
+
+// Control Center phase 4 (#191): Curve Optimizer through the same SMU, only
+// on generations whose CO commands are verified.
+builder.Services.AddSingleton<IControlProvider>(sp => new CurveOptimizerProvider(
+    smu.Value.Smu?.CurveOptimizer,
+    CurveOptimizerProvider.WindowsPhysicalCores(),
+    smu.Value.Smu is null ? smu.Value.Reason : "Curve Optimizer is not supported on this CPU yet.",
+    sp.GetRequiredService<BootCrashGuard>(),
+    dryRun,
+    Path.Combine(programData, "curve-opt-baseline.json"),
+    CpuLimitProvider.CurrentBootTime()));
 
 // Control Center phase 3 (#190): GPU power limit — AMD via ADLX (the
 // Adrenalin driver's own SDK); NVIDIA (NVML) is #210.

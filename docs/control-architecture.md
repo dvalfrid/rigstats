@@ -1,8 +1,8 @@
 # Control Center — Hardware Control Architecture
 
 > Status: phases 0 (foundation, #187), 1 (fan control, #188), 2 (CPU power
-> limits, AMD part, #189) and 3 (GPU power limit, AMD part, #190) are
-> implemented;
+> limits, AMD part, #189), 3 (GPU power limit, AMD part, #190) and 4 (Curve
+> Optimizer, #191) are implemented;
 > the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
@@ -25,6 +25,7 @@
 - [Phase 1 — fan control as built](#phase-1--fan-control-as-built)
 - [Phase 2 — CPU power limits as built](#phase-2--cpu-power-limits-as-built)
 - [Phase 3 — GPU power limit as built](#phase-3--gpu-power-limit-as-built)
+- [Phase 4 — Curve Optimizer as built](#phase-4--curve-optimizer-as-built)
 - [Open questions](#open-questions)
 
 ---
@@ -239,7 +240,7 @@ through the pipe.
 | Critical temperature override | CPU or GPU above a hard threshold → all controlled fans to 100 % regardless of profile, event `safety_tripped`. |
 | Sensor loss | If a curve's source sensor disappears or goes stale, that header goes to 100 %. |
 | Release on stop | `StopAsync` and a top-level `finally` call `ReleaseToFirmware()` on all providers. |
-| Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied (they stay at BIOS values) and the Control Center explains why until a profile is applied again. A service stop inside the window keeps the marker. |
+| Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied: they are applied as BIOS values (a no-op after a reboot; when only the service went down, it puts the SMU back) and the Control Center shows a red "Reverted after a restart" notice until a profile is applied again. A service stop inside the window keeps the marker. |
 | Hard limits | The service always clamps against probed limits; UI values are never trusted. |
 | Preview | Risky changes default to `preview` with auto-revert. |
 | Armoury Crate / ASUS services | Detected at start-up. Conflicting domains are disabled until the user chooses to stop them (guided, reversible). |
@@ -288,7 +289,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `FanProvider` | LHM `ISensor.Control.SetSoftware()` / `SetDefault()` on the shared `Computer` | Depends on Super I/O support per board; some firmware overrides writes — detect via `Verify`. |
 | `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
-| `CurveOptimizerProvider` | SMU mailbox (per-core / all-core offset) | Highest risk. Boot-crash guard + preview mandatory. |
+| `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
 | `AuraProvider` | USB HID to the ASUS Aura controller on ROG boards | Implemented in-service; must detect and yield to Armoury Crate / LightingService. |
 
@@ -346,7 +347,7 @@ phase 0.
 | 2b | [#209](https://github.com/dvalfrid/rigstats/issues/209) | CPU power limits (Intel PL1/PL2) | Medium | `control-cpu-limits-intel` |
 | 3 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | GPU power limit (AMD, ADLX) | Low–medium | `control-gpu` |
 | 3b | [#210](https://github.com/dvalfrid/rigstats/issues/210) | GPU power limit (NVIDIA, NVML) | Low–medium | `control-gpu-nvidia` |
-| 4 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | AMD Curve Optimizer | High | `control-curve-optimizer` |
+| 4 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | AMD Curve Optimizer (Granite Ridge) | High | `control-curve-optimizer` |
 | 5 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | ASUS Aura RGB | Medium | `control-aura` |
 | 6 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | Armoury Crate replacement (coexistence, guided removal, validated boards) | Low | `control-armoury-crate` |
 
@@ -466,14 +467,49 @@ What phase 3 (#190) shipped — AMD only; NVIDIA (NVML) is #210:
   name. Not a boot-crash-guarded domain: the value is inside the driver's
   own range.
 
+## Phase 4 — Curve Optimizer as built
+
+What phase 4 (#191) shipped:
+
+- **Commands** (Zen 4/5 RSMU, ZenStates-Core as protocol documentation
+  only): SetDldoPsmMargin `0x6` (per core), SetAllDldoPsmMargin `0x7`,
+  GetDldoPsmMargin `0xD5` (readback). Argument: core mask in bits 31:20
+  (`ccd << 28 | core << 20`) with the offset as 16-bit two's complement in
+  the low bits. Offered only where verified: Granite Ridge (9800X3D),
+  through the same `RyzenSmu` handle as CPU limits.
+- **Which cores exist** is asked from the SMU itself: GetDldoPsmMargin for
+  every possible core (2 CCDs × 8); absent cores and CCDs are rejected
+  (on the 9800X3D CCD 0 cores 0–7 answer, CCD 1 doesn't). Per-core values
+  are offered only when that count equals Windows' physical core count
+  (`GetLogicalProcessorInformation`), so "core 3" means the same core to
+  user and SMU; otherwise only all-core.
+- **Bounds:** −30 … 0 — the classic PBO2 range, undervolt only. A core's
+  value is its own, else the all-core value, else the BIOS value; the BIOS
+  values (read once per boot, `curve-opt-baseline.json`) are kept as they
+  are even outside the bounds. All-equal targets are one SetAll, otherwise
+  only the cores that differ are written; verify re-reads every core.
+- **Safety:** any write that leaves the BIOS values arms the boot-crash
+  guard; the UI always goes through preview; release and service stop put
+  the BIOS values back if anything was changed. Acceptance was checked by
+  killing the dev service within 3 minutes of a kept −10 on core 3: the
+  next start logged the trip, applied CO as BIOS values (the SMU still held
+  −10, since nothing rebooted) and showed the red notice; the profile keeps
+  its −10 for when the user applies it again.
+
 ## Open questions
 
 - PM table layouts for Ryzen generations other than Granite Ridge `0x620105`
   (Matisse, Vermeer, Raphael have command ids but no verified layout).
   Unverified CPUs log their table version and head to `rigstats-sensor.log` —
   collect diagnostics exports and add them to `AmdSmuMap.Layout`.
-- Curve Optimizer (phase 4) uses the same `RyzenSMU` module's
-  `send_smu_command`; its command ids need the same per-generation care.
+- Curve Optimizer on other generations: Raphael (Zen 4) documents the same
+  ids as Granite Ridge but is untested; Zen 3's are marked "not sure" even
+  in ZenStates-Core. Per-core on CPUs with fused-off cores needs the
+  firmware's core map (ZenStates reads it from the APOB) — until then they
+  get all-core only.
+- Does runtime CO need PBO enabled in the BIOS to take effect? The SMU
+  accepts and reads back the offsets either way (verified with PBO state
+  unknown); whether the voltage actually follows is not measured yet.
 - ADLX power tuning is verified on one card (RX 9070 XT, ADLX 1.5). Which
   other Radeon generations, Pro drivers and AMD laptops report it, and do
   any misbehave? A native crash inside ADLX would take the service down —

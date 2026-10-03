@@ -5,6 +5,12 @@ namespace SensorSidecar.Control.Providers;
 /// AMD package limits: PPT (W), TDC (A), EDC (A).
 public readonly record struct AmdLimits(double PptW, double TdcA, double EdcA);
 
+/// Curve Optimizer mailbox ids (RSMU) for one generation.
+public sealed record CurveOptimizerCommands(uint SetPerCore, uint SetAll, uint Get);
+
+/// One physical core: CCD index and core index within it.
+public readonly record struct PhysicalCore(int Ccd, int Core);
+
 /// RSMU mailbox message ids for one CPU generation. The argument is the
 /// limit in mW / mA.
 public sealed record SmuLimitCommands(uint SetPpt, uint SetTdc, uint SetEdc);
@@ -53,6 +59,26 @@ public static class AmdSmuMap
     public static bool IsAuthenticAmd((int Eax, int Ebx, int Ecx, int Edx) leaf0) =>
         leaf0 is { Ebx: 0x68747541, Edx: 0x69746E65, Ecx: 0x444D4163 };
 
+    /// Curve Optimizer (#191) RSMU ids, only for generations where they were
+    /// checked on hardware: Zen 4/5 SetDldoPsmMargin 0x6 (per core),
+    /// SetAllDldoPsmMargin 0x7, GetDldoPsmMargin 0xD5 — verified on a
+    /// Ryzen 7 9800X3D. (ZenStates-Core marks the Zen 3 ids "not sure".)
+    public static CurveOptimizerCommands? CurveOptimizer(string generation) => generation switch
+    {
+        "Granite Ridge" => new CurveOptimizerCommands(SetPerCore: 0x6, SetAll: 0x7, Get: 0xD5),
+        _ => null,
+    };
+
+    /// Zen 3+ core mask: [31:28] CCD, [23:20] physical core within the CCD.
+    public static uint CoreMask(int ccd, int core) => ((uint)ccd << 28) | ((uint)(core % 8) << 20);
+
+    /// Core mask in the top 12 bits, the offset as 16-bit two's complement.
+    public static uint CurveOptimizerArg(uint coreMask, int offset) =>
+        (coreMask & 0xFFF00000) | ((uint)offset & 0xFFFF);
+
+    /// GetDldoPsmMargin's answer: the offset in the low 16 bits, signed.
+    public static int CurveOptimizerValue(uint raw) => (short)(raw & 0xFFFF);
+
     /// SMU limit argument: W or A to mW or mA.
     public static uint ToSmuArg(double value) => (uint)Math.Round(value * 1000.0);
 
@@ -79,11 +105,28 @@ public interface IRyzenSmu
     void SetLimits(AmdLimits limits);
 }
 
+/// Curve Optimizer through the same SMU — a seam for tests.
+public interface ICurveOptimizerSmu
+{
+    /// The cores the SMU answers for, in CCD/core order.
+    IReadOnlyList<PhysicalCore> Cores();
+
+    int GetOffset(PhysicalCore core);
+
+    void SetOffset(PhysicalCore core, int offset);
+
+    void SetAllOffsets(int offset);
+}
+
 /// RSMU mailbox + PM table through LHM's signed `RyzenSMU` PawnIO module —
 /// the "AMD SMU module" of the design doc. SMU limits are not persistent:
 /// they reset to the BIOS values at every reboot.
-public sealed class RyzenSmu : IRyzenSmu, IDisposable
+public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
 {
+    // Desktop Ryzen has at most two CCDs of eight cores.
+    private const int MaxCcds = 2;
+    private const int CoresPerCcd = 8;
+
     // Shared with LHM (and other tools) for every SMU/PCI access — LHM reads
     // the same PM table for telemetry from its own module instance.
     private const string PciMutexName = @"Global\Access_PCI";
@@ -230,6 +273,54 @@ public sealed class RyzenSmu : IRyzenSmu, IDisposable
 
     private void Send(uint message, double value) =>
         _module.Execute("ioctl_send_smu_command", [message, AmdSmuMap.ToSmuArg(value), 0, 0, 0, 0, 0], 6);
+
+    // ── Curve Optimizer (#191) ──────────────────────────────────────────
+
+    /// Null when this generation's CO ids aren't verified.
+    public ICurveOptimizerSmu? CurveOptimizer => AmdSmuMap.CurveOptimizer(Generation) is null ? null : this;
+
+    private IReadOnlyList<PhysicalCore>? _cores;
+
+    /// Asks GetDldoPsmMargin for every possible core; the SMU rejects
+    /// cores (and CCDs) that don't exist — checked on a 9800X3D, where
+    /// CCD 0 cores 0–7 answer and CCD 1 is rejected. Cached: cores don't
+    /// change at runtime.
+    public IReadOnlyList<PhysicalCore> Cores() => _cores ??= WithPciLock(() =>
+    {
+        var cores = new List<PhysicalCore>();
+        for (var ccd = 0; ccd < MaxCcds; ccd++)
+        {
+            for (var core = 0; core < CoresPerCcd; core++)
+            {
+                try
+                {
+                    SendCo(Co.Get, AmdSmuMap.CoreMask(ccd, core));
+                    cores.Add(new PhysicalCore(ccd, core));
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                    // Not present.
+                }
+            }
+        }
+        return (IReadOnlyList<PhysicalCore>)cores;
+    });
+
+    public int GetOffset(PhysicalCore core) => WithPciLock(() =>
+        AmdSmuMap.CurveOptimizerValue(SendCo(Co.Get, AmdSmuMap.CoreMask(core.Ccd, core.Core))));
+
+    public void SetOffset(PhysicalCore core, int offset) => WithPciLock(() =>
+        SendCo(Co.SetPerCore, AmdSmuMap.CurveOptimizerArg(AmdSmuMap.CoreMask(core.Ccd, core.Core), offset)));
+
+    public void SetAllOffsets(int offset) => WithPciLock(() =>
+        SendCo(Co.SetAll, AmdSmuMap.CurveOptimizerArg(0, offset)));
+
+    private CurveOptimizerCommands Co => AmdSmuMap.CurveOptimizer(Generation)
+        ?? throw new InvalidOperationException($"Curve Optimizer is not verified for {Generation}.");
+
+    /// One RSMU command with a raw argument; returns the first result word.
+    private uint SendCo(uint message, uint arg) =>
+        (uint)_module.Execute("ioctl_send_smu_command", [message, arg, 0, 0, 0, 0, 0], 6)[0];
 
     private static bool Acquire(Mutex mutex)
     {

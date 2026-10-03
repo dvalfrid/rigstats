@@ -25,7 +25,7 @@ public sealed class BootCrashGuard : IDisposable
         if (TrippedAtStart)
         {
             SidecarLog.Log("[rigstats-control] Boot-crash guard: the last risky change did not survive "
-                + $"{stableAfter.TotalMinutes:F0} min — not re-applying CPU limits this boot.");
+                + $"{stableAfter.TotalMinutes:F0} min — not re-applying CPU limits or Curve Optimizer this boot.");
             TryDelete();
         }
     }
@@ -34,7 +34,7 @@ public sealed class BootCrashGuard : IDisposable
 
     /// Shown in the Control Center until a profile is applied again.
     public string? Notice => TrippedAtStart && !_noticeShown
-        ? "The PC restarted shortly after CPU limits were changed, so they were not re-applied at start-up. Apply a profile to use them again."
+        ? "The PC restarted shortly after CPU limits or Curve Optimizer were changed (possibly a crash), so they were reverted to BIOS values and not re-applied. Apply a profile to use them again."
         : null;
 
     public void AcknowledgeNotice() => _noticeShown = true;

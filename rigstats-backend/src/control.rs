@@ -84,7 +84,7 @@ pub struct ProfilePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cpu_limit: Option<CpuLimitPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub curve_opt: Option<serde_json::Value>,
+    pub curve_opt: Option<CurveOptPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu: Option<GpuPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -124,6 +124,38 @@ impl AmdCpuLimit {
     pub fn is_stock(&self) -> bool {
         self.ppt_w.is_none() && self.tdc_a.is_none() && self.edc_a.is_none()
     }
+}
+
+/// A profile's Curve Optimizer offsets (#191), in CO counts. A core's
+/// value is `per_core[index]`, else `all_core`, else the BIOS value.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct CurveOptPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_core: Option<i32>,
+    /// Keyed by core index as a string ("0", "1", ...).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub per_core: Option<BTreeMap<String, i32>>,
+}
+
+impl CurveOptPart {
+    pub fn is_bios(&self) -> bool {
+        self.all_core.is_none() && self.per_core.as_ref().map_or(true, BTreeMap::is_empty)
+    }
+}
+
+/// The "curve_opt" capability's `details`, typed.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct CurveOptCaps {
+    pub min: i32,
+    pub max: i32,
+    pub cores: usize,
+    /// Whether per-core values are offered (unambiguous core numbering).
+    #[serde(default)]
+    pub per_core: bool,
+    #[serde(default)]
+    pub bios: Vec<i32>,
+    #[serde(default)]
+    pub current: Vec<i32>,
 }
 
 /// A profile's GPU power limits (#190). Adapters missing from `adapters`
@@ -367,6 +399,15 @@ impl ControlState {
             return None;
         }
         self.active()?.part.cpu_limit.as_ref()?.amd?.ppt_w
+    }
+
+    /// The Curve Optimizer capability, when this CPU supports it.
+    pub fn curve_opt_caps(&self) -> Option<CurveOptCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "curve_opt" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value(d).ok())
     }
 
     /// The GPU capability, when the service can set a power limit here.
@@ -1463,6 +1504,46 @@ mod tests {
             gpu_state(Some(5), 5).active_gpu_limit("AMD Radeon RX 9070 XT"),
             None
         );
+    }
+
+    #[test]
+    fn curve_opt_part_matches_the_service_shape() {
+        let json = r#"{"all_core":-15,"per_core":{"2":-20}}"#;
+        let part: CurveOptPart = serde_json::from_str(json).unwrap();
+        assert_eq!(part.all_core, Some(-15));
+        assert_eq!(part.per_core.as_ref().unwrap()["2"], -20);
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+        assert!(!part.is_bios());
+
+        assert!(serde_json::from_str::<CurveOptPart>("{}")
+            .unwrap()
+            .is_bios());
+        let empty_map = CurveOptPart {
+            all_core: None,
+            per_core: Some(BTreeMap::new()),
+        };
+        assert!(empty_map.is_bios());
+    }
+
+    #[test]
+    fn curve_opt_caps_parse_the_capability_details() {
+        let details = serde_json::json!({
+            "min": -30, "max": 0, "cores": 8, "per_core": true,
+            "bios": [0, 0, 0, 0, 0, 0, 0, 0], "current": [-15, -15, -15, -15, -15, -15, -15, -15],
+        });
+        let state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "curve_opt".into(),
+                supported: true,
+                reason: None,
+                details: Some(details),
+            }],
+            ..ControlState::default()
+        };
+        let caps = state.curve_opt_caps().unwrap();
+        assert_eq!((caps.min, caps.max, caps.cores), (-30, 0, 8));
+        assert!(caps.per_core);
+        assert_eq!(caps.current[0], -15);
     }
 
     #[test]

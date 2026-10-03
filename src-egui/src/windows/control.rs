@@ -14,8 +14,8 @@ use crate::theme::{self, DialogColors};
 use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, ControlCmd, ControlState, CpuLimitCaps, CpuLimitPart,
-    FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig,
-    GpuCaps, GpuPart, Profile,
+    CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder,
+    GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -96,6 +96,13 @@ struct CpuDraft {
     limits: AmdCpuLimit,
 }
 
+/// Unsaved Curve Optimizer offsets for one profile.
+#[derive(Debug, Clone, PartialEq)]
+struct CoDraft {
+    profile_id: String,
+    part: CurveOptPart,
+}
+
 /// Unsaved GPU power limits per adapter id; a missing adapter = its original value.
 #[derive(Debug, Clone, PartialEq)]
 struct GpuDraft {
@@ -111,6 +118,9 @@ pub struct ControlUi {
     draft: Option<FanDraft>,
     cpu_draft: Option<CpuDraft>,
     gpu_draft: Option<GpuDraft>,
+    co_draft: Option<CoDraft>,
+    /// Curve Optimizer per-core sliders shown (UI only).
+    co_per_core: bool,
     dragging: Option<usize>,
     identifying: Option<(String, Instant)>,
     /// Shown atop the Fans tab, e.g. when a clicked fan isn't mapped yet.
@@ -161,13 +171,14 @@ impl ControlUi {
         if !running && reverted {
             self.cpu_draft = None;
             self.gpu_draft = None;
+            self.co_draft = None;
         }
         true
     }
 
     /// CPU and GPU limit edits are tried first (preview, auto-revert).
     fn has_limit_draft(&self) -> bool {
-        self.cpu_draft.is_some() || self.gpu_draft.is_some()
+        self.cpu_draft.is_some() || self.gpu_draft.is_some() || self.co_draft.is_some()
     }
 
     fn await_reply(&mut self, control: &ControlState) {
@@ -258,6 +269,9 @@ fn with_drafts(profile: &Profile, ui_state: &ControlUi) -> Profile {
             intel,
         });
     }
+    if let Some(draft) = &ui_state.co_draft {
+        profile.part.curve_opt = Some(draft.part.clone());
+    }
     if let Some(draft) = &ui_state.gpu_draft {
         let adapters: BTreeMap<String, GpuAdapterConfig> = draft
             .limits
@@ -326,14 +340,6 @@ fn cpu_tab(
             .size(11.0)
             .color(dc.muted),
         );
-        if let Some(notice) = &control.crash_guard_notice {
-            ui.add_space(6.0);
-            ui.label(
-                egui::RichText::new(notice)
-                    .size(11.0)
-                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-            );
-        }
         ui.add_space(10.0);
 
         // No edits while a try is running: Keep/Undo in the footer first.
@@ -395,6 +401,226 @@ fn cpu_tab(
     if limits != before {
         ui_state.cpu_draft = Some(CpuDraft { profile_id, limits });
     }
+}
+
+/// The boot-crash guard's notice, on its own above the CPU tab's cards — so
+/// it shows whichever of CPU limits / Curve Optimizer this CPU supports, and
+/// can't be mistaken for the Curve Optimizer's standing risk warning.
+fn crash_guard_banner(ui: &mut egui::Ui, control: &ControlState) {
+    let Some(notice) = &control.crash_guard_notice else {
+        return;
+    };
+    let red = egui::Color32::from_rgb(0xff, 0x77, 0x77);
+    egui::Frame::new()
+        .fill(red.gamma_multiply(0.12))
+        .stroke(egui::Stroke::new(1.0_f32, red))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(
+                egui::RichText::new("Reverted after a restart")
+                    .size(12.0)
+                    .strong()
+                    .color(red),
+            );
+            ui.add_space(2.0);
+            ui.label(egui::RichText::new(notice).size(11.0).color(red));
+        });
+    ui.add_space(10.0);
+}
+
+/// An empty per-core map means the same as none.
+fn normalized_co(part: &CurveOptPart) -> CurveOptPart {
+    CurveOptPart {
+        all_core: part.all_core,
+        per_core: part.per_core.clone().filter(|m| !m.is_empty()),
+    }
+}
+
+fn saved_curve_opt(profile: Option<&Profile>) -> CurveOptPart {
+    profile
+        .and_then(|p| p.part.curve_opt.as_ref())
+        .map(normalized_co)
+        .unwrap_or_default()
+}
+
+/// "−15", "0".
+fn co_text(value: i32) -> String {
+    if value == 0 {
+        "0".to_owned()
+    } else {
+        format!("{value:+}")
+    }
+}
+
+/// Per-core rows are shown when the user ticked "Per core", or when the
+/// profile already has per-core values (they must never be hidden).
+fn per_core_shown(ticked: bool, part: &CurveOptPart) -> bool {
+    ticked || part.per_core.as_ref().is_some_and(|m| !m.is_empty())
+}
+
+/// The offsets in force, compactly: one value when all cores agree.
+fn co_summary(values: &[i32]) -> String {
+    match values.split_first() {
+        None => "—".to_owned(),
+        Some((first, rest)) if rest.iter().all(|v| v == first) => {
+            format!("all cores {}", co_text(*first))
+        }
+        Some(_) => values
+            .iter()
+            .map(|v| co_text(*v))
+            .collect::<Vec<_>>()
+            .join(" · "),
+    }
+}
+
+/// Curve Optimizer (#191) in the CPU tab: all-core, optionally per core.
+fn curve_opt_card(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    caps: &CurveOptCaps,
+    saved: &CurveOptPart,
+    ui_state: &mut ControlUi,
+) {
+    let Some(profile_id) = control.active_profile.clone() else {
+        return;
+    };
+    let mut part = ui_state
+        .co_draft
+        .as_ref()
+        .map_or_else(|| saved.clone(), |d| d.part.clone());
+    let before = part.clone();
+    let bios = |i: usize| caps.bios.get(i).copied().unwrap_or(0);
+
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Curve Optimizer (undervolt)");
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new(
+                "Negative offsets lower the CPU voltage: cooler, and often faster under \
+                 load. Too far and the PC becomes unstable or crashes, so start small \
+                 (−5 … −15) and test under load. A change runs for 15 s unless you keep \
+                 it; if the PC restarts within 3 minutes of a change, it is not applied \
+                 again at start-up.",
+            )
+            .size(11.0)
+            .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+        );
+        ui.add_space(10.0);
+        ui.add_enabled_ui(control.preview.is_none(), |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("All cores").size(12.0).color(dc.muted));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let text = match part.all_core {
+                        Some(v) => co_text(v),
+                        None => "BIOS".to_owned(),
+                    };
+                    ui.add_sized(
+                        [86.0, 18.0],
+                        egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+                    );
+                    let mut v = part.all_core.unwrap_or(0);
+                    let slider = egui::Slider::new(&mut v, caps.min..=caps.max)
+                        .show_value(false)
+                        .trailing_fill(true);
+                    if ui.add(slider).changed() {
+                        part.all_core = Some(v);
+                    }
+                    if theme::dialog_btn_secondary_compact(ui, "BIOS", dc, egui::vec2(60.0, 20.0))
+                        .clicked()
+                    {
+                        part = CurveOptPart::default();
+                    }
+                });
+            });
+            if caps.per_core {
+                ui.add_space(4.0);
+                // Per-core values in the profile always show their rows;
+                // unticking removes them (a draft, tried like any change).
+                let mut shown = per_core_shown(ui_state.co_per_core, &part);
+                if ui
+                    .checkbox(
+                        &mut shown,
+                        egui::RichText::new("Per core").size(12.0).color(dc.muted),
+                    )
+                    .changed()
+                {
+                    ui_state.co_per_core = shown;
+                    if !shown {
+                        part.per_core = None;
+                    }
+                }
+                if shown {
+                    for core in 0..caps.cores {
+                        co_core_row(ui, dc, core, &mut part, bios(core), caps.min..=caps.max);
+                    }
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.label(
+            egui::RichText::new(format!("In force now: {}", co_summary(&caps.current)))
+                .size(11.0)
+                .color(dc.muted),
+        );
+        dry_run_note(ui, dc, control);
+    });
+
+    let part = normalized_co(&part);
+    if part != normalized_co(&before) {
+        ui_state.co_draft = Some(CoDraft { profile_id, part });
+    }
+}
+
+/// One core: its own offset, or "(all)" when it follows the all-core value.
+fn co_core_row(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    core: usize,
+    part: &mut CurveOptPart,
+    bios: i32,
+    range: std::ops::RangeInclusive<i32>,
+) {
+    let key = core.to_string();
+    let own = part.per_core.as_ref().and_then(|m| m.get(&key).copied());
+    let inherited = part.all_core.unwrap_or(bios);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(format!("Core {core}"))
+                .size(12.0)
+                .color(dc.muted),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let text = match own {
+                Some(v) => co_text(v),
+                None => format!("{} (all)", co_text(inherited)),
+            };
+            ui.add_sized(
+                [86.0, 18.0],
+                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+            );
+            let mut v = own.unwrap_or(inherited);
+            let slider = egui::Slider::new(&mut v, range)
+                .show_value(false)
+                .trailing_fill(true);
+            if ui.add(slider).changed() {
+                part.per_core
+                    .get_or_insert_with(BTreeMap::new)
+                    .insert(key.clone(), v);
+            }
+            if own.is_some()
+                && theme::dialog_btn_secondary_compact(ui, "All", dc, egui::vec2(44.0, 20.0))
+                    .clicked()
+            {
+                if let Some(map) = part.per_core.as_mut() {
+                    map.remove(&key);
+                }
+            }
+        });
+    });
 }
 
 /// The active profile's GPU limits that are set (a missing adapter = original).
@@ -578,10 +804,11 @@ pub fn show(
         ui_state.select_fan(&fan, control);
     }
     let cpu_caps = control.cpu_caps();
+    let co_caps = control.curve_opt_caps();
     let gpu_caps = control.gpu_caps();
     match ui_state.tab {
         Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
-        Tab::Cpu if cpu_caps.is_none() => ui_state.tab = Tab::Power,
+        Tab::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Tab::Power,
         Tab::Gpu if gpu_caps.is_none() => ui_state.tab = Tab::Power,
         _ => {}
     }
@@ -589,6 +816,7 @@ pub fn show(
     let saved_headers = saved_fan_headers(active);
     let saved_cpu = saved_cpu_limits(active);
     let saved_gpu = saved_gpu_limits(active);
+    let saved_co = saved_curve_opt(active);
     // A draft belongs to one profile; switching profiles (or the save
     // landing, which makes the draft equal what's stored) ends it.
     if let Some(draft) = &ui_state.draft {
@@ -608,6 +836,12 @@ pub fn show(
         let other_profile = Some(draft.profile_id.as_str()) != control.active_profile.as_deref();
         if other_profile || draft.limits == saved_gpu {
             ui_state.gpu_draft = None;
+        }
+    }
+    if let Some(draft) = &ui_state.co_draft {
+        let other_profile = Some(draft.profile_id.as_str()) != control.active_profile.as_deref();
+        if other_profile || normalized_co(&draft.part) == saved_co {
+            ui_state.co_draft = None;
         }
     }
     // A try just started or ended: the limits in force changed, so re-read
@@ -748,6 +982,7 @@ pub fn show(
                         ui_state.draft = None;
                         ui_state.cpu_draft = None;
                         ui_state.gpu_draft = None;
+                        ui_state.co_draft = None;
                         ui_state.dragging = None;
                     }
                     ui.add_space(10.0);
@@ -811,7 +1046,8 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
         .show(ctx, |ui| {
-            if fan_caps.is_some() || cpu_caps.is_some() || gpu_caps.is_some() {
+            let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
+            if fan_caps.is_some() || cpu_tab_shown || gpu_caps.is_some() {
                 ui.horizontal(|ui| {
                     if tab_btn(ui, dc, "Power", ui_state.tab == Tab::Power, 90.0) {
                         ui_state.tab = Tab::Power;
@@ -821,8 +1057,7 @@ pub fn show(
                     {
                         ui_state.tab = Tab::Fans;
                     }
-                    if cpu_caps.is_some() && tab_btn(ui, dc, "CPU", ui_state.tab == Tab::Cpu, 90.0)
-                    {
+                    if cpu_tab_shown && tab_btn(ui, dc, "CPU", ui_state.tab == Tab::Cpu, 90.0) {
                         ui_state.tab = Tab::Cpu;
                     }
                     if gpu_caps.is_some() && tab_btn(ui, dc, "GPU", ui_state.tab == Tab::Gpu, 90.0)
@@ -832,8 +1067,18 @@ pub fn show(
                 });
                 ui.add_space(10.0);
             }
-            if let (Tab::Cpu, Some(caps)) = (ui_state.tab, &cpu_caps) {
-                cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
+            if ui_state.tab == Tab::Cpu && cpu_tab_shown {
+                // Eight per-core rows don't fit the window: scroll.
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    crash_guard_banner(ui, control);
+                    if let Some(caps) = &cpu_caps {
+                        cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
+                        ui.add_space(10.0);
+                    }
+                    if let Some(caps) = &co_caps {
+                        curve_opt_card(ui, dc, control, caps, &saved_co, ui_state);
+                    }
+                });
                 return;
             }
             if let (Tab::Gpu, Some(caps)) = (ui_state.tab, &gpu_caps) {
@@ -1909,5 +2154,61 @@ mod tests {
         ui.track_preview(true, false);
         ui.track_preview(false, true);
         assert!(!ui.has_limit_draft());
+    }
+    #[test]
+    fn curve_optimizer_summary_collapses_equal_cores() {
+        assert_eq!(co_summary(&[-15; 8]), "all cores -15");
+        assert_eq!(co_summary(&[0; 8]), "all cores 0");
+        assert_eq!(co_summary(&[-10, -15]), "-10 · -15");
+        assert_eq!(co_summary(&[]), "—");
+    }
+
+    #[test]
+    fn an_empty_per_core_map_is_the_same_as_none() {
+        let with_empty = CurveOptPart {
+            all_core: Some(-10),
+            per_core: Some(BTreeMap::new()),
+        };
+        assert_eq!(
+            normalized_co(&with_empty),
+            CurveOptPart {
+                all_core: Some(-10),
+                per_core: None
+            }
+        );
+    }
+
+    #[test]
+    fn with_drafts_folds_curve_optimizer_into_the_profile() {
+        let profile = Profile {
+            id: "gaming".into(),
+            name: "Gaming".into(),
+            icon: None,
+            builtin: true,
+            part: Default::default(),
+        };
+        let ui = ControlUi {
+            co_draft: Some(CoDraft {
+                profile_id: "gaming".into(),
+                part: CurveOptPart {
+                    all_core: Some(-15),
+                    per_core: Some(BTreeMap::from([("3".to_owned(), -20)])),
+                },
+            }),
+            ..Default::default()
+        };
+        let merged = with_drafts(&profile, &ui);
+        assert_eq!(saved_curve_opt(Some(&merged)).all_core, Some(-15));
+        assert!(ui.has_limit_draft()); // CO goes through preview too
+    }
+    #[test]
+    fn per_core_values_are_never_hidden() {
+        let per_core = CurveOptPart {
+            all_core: None,
+            per_core: Some(BTreeMap::from([("3".to_owned(), -10)])),
+        };
+        assert!(per_core_shown(false, &per_core));
+        assert!(!per_core_shown(false, &CurveOptPart::default()));
+        assert!(per_core_shown(true, &CurveOptPart::default()));
     }
 }

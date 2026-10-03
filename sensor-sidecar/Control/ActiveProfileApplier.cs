@@ -7,8 +7,8 @@ namespace SensorSidecar.Control;
 /// curves would be gone after every reboot or service restart until someone
 /// re-applied the profile from the UI. Runs once, through the same broker
 /// transaction as a UI apply. When the boot-crash guard tripped, the risky
-/// parts (CPU limits; Curve Optimizer #191 later) are left at their BIOS
-/// values for this boot.
+/// parts (CPU limits, Curve Optimizer) are put back to their BIOS values for
+/// this boot.
 public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker broker, BootCrashGuard crashGuard) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -32,8 +32,10 @@ public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker br
         }
     }
 
-    /// A missing part leaves the domain untouched — and after a reboot an
-    /// untouched SMU limit is the BIOS value.
+    /// The risky parts are applied as BIOS values rather than left out:
+    /// after a reboot that is a no-op (the SMU has reset), but when only the
+    /// service went down, the SMU still holds the risky values — this puts
+    /// them back. Both writes are at BIOS values, so neither re-arms the guard.
     internal static Profile WithoutRiskyParts(Profile profile) => new()
     {
         Id = profile.Id,
@@ -44,8 +46,8 @@ public sealed class ActiveProfileApplier(ProfileStore profiles, ControlBroker br
         {
             PowerPlan = profile.Part.PowerPlan,
             Fan = profile.Part.Fan,
-            CpuLimit = null,
-            CurveOpt = null,
+            CpuLimit = new CpuLimitPart(),
+            CurveOpt = new CurveOptPart(),
             Gpu = profile.Part.Gpu,
             Aura = profile.Part.Aura,
         },

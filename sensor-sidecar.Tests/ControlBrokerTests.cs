@@ -89,7 +89,7 @@ public class ControlBrokerTests
             {
                 PowerPlan = "balanced",
                 CpuLimit = new CpuLimitPart(),
-                CurveOpt = System.Text.Json.Nodes.JsonValue.Create("y"),
+                CurveOpt = new CurveOptPart(),
             }),
             CancellationToken.None);
 
