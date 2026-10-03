@@ -88,7 +88,7 @@ pub struct ProfilePart {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu: Option<GpuPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub aura: Option<serde_json::Value>,
+    pub aura: Option<AuraPart>,
 }
 
 /// A profile's fan part (#188). Headers missing from `headers` are on BIOS
@@ -124,6 +124,54 @@ impl AmdCpuLimit {
     pub fn is_stock(&self) -> bool {
         self.ppt_w.is_none() && self.tdc_a.is_none() && self.edc_a.is_none()
     }
+}
+
+/// A profile's lighting (#192): one effect for every zone. No part = the
+/// lights are left as they are.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AuraPart {
+    /// "off", "static", "breathing", "spectrum_cycle".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<String>,
+    /// "#rrggbb".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// 0–1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brightness: Option<f64>,
+}
+
+/// The "aura" capability's `details`, typed. Aura Sync: the profile's one
+/// effect goes to every device listed.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct AuraCaps {
+    #[serde(default)]
+    pub effects: Vec<String>,
+    #[serde(default)]
+    pub devices: Vec<AuraDeviceCap>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct AuraDeviceCap {
+    pub id: String,
+    pub name: String,
+    /// "motherboard", later "monitor", "keyboard", ...
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub firmware: String,
+    #[serde(default)]
+    pub zones: Vec<AuraZoneCap>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct AuraZoneCap {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub addressable: bool,
+    #[serde(default)]
+    pub leds: u32,
 }
 
 /// One Windows power scheme from the "power_plan" capability: `id` is the
@@ -409,6 +457,32 @@ impl ControlState {
         self.active()?.part.cpu_limit.as_ref()?.amd?.ppt_w
     }
 
+    /// The lighting capability, when a controller is usable here.
+    pub fn aura_caps(&self) -> Option<AuraCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "aura" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    /// Why lighting is blocked by another app (Armoury Crate) — the one
+    /// unsupported case the Lighting tab shows instead of hiding. `None`
+    /// when it works or there is simply no controller.
+    pub fn aura_unavailable(&self) -> Option<String> {
+        self.capabilities
+            .iter()
+            .find(|c| {
+                c.domain == "aura"
+                    && !c.supported
+                    && c.details
+                        .as_ref()
+                        .and_then(|d| d.get("conflict")?.as_bool())
+                        == Some(true)
+            })
+            .and_then(|c| c.reason.clone())
+    }
+
     /// The power schemes a profile can choose from.
     pub fn power_schemes(&self) -> Vec<PowerScheme> {
         self.capabilities
@@ -585,6 +659,9 @@ pub enum ControlCmd {
     IdentifyFan(String),
     /// Apply an edited, unsaved profile for a while; the service reverts it
     /// unless [`ControlCmd::ConfirmPreview`] keeps it (which also saves it).
+    /// Set the lights at once without saving — the Lighting tab's live
+    /// preview while an effect or colour is being picked.
+    AuraPreview(AuraPart),
     /// Delete a custom profile; the service applies whichever profile becomes
     /// active if it was the active one.
     DeleteProfile(String),
@@ -965,6 +1042,19 @@ async fn handle_cmd(
                 next_id,
                 "identify_fan",
                 Some(serde_json::json!({ "header": header })),
+                event_tx,
+                dir,
+            )
+            .await?;
+            Ok(())
+        }
+        ControlCmd::AuraPreview(aura) => {
+            request(
+                writer,
+                reader,
+                next_id,
+                "aura_preview",
+                Some(serde_json::json!({ "aura": aura })),
                 event_tx,
                 dir,
             )
@@ -1619,6 +1709,69 @@ mod tests {
         assert_eq!(schemes.len(), 2);
         assert_eq!(schemes[1].name, "Ultimate");
         assert!(ControlState::default().power_schemes().is_empty());
+    }
+
+    #[test]
+    fn aura_part_matches_the_service_shape() {
+        let json = r##"{"effect":"static","color":"#ff0033","brightness":0.8}"##;
+        let part: AuraPart = serde_json::from_str(json).unwrap();
+        assert_eq!(part.effect.as_deref(), Some("static"));
+        assert_eq!(serde_json::to_string(&part).unwrap(), json);
+    }
+
+    #[test]
+    fn lighting_is_shown_when_supported_or_blocked_by_armoury_crate_only() {
+        let cap =
+            |supported: bool, reason: Option<&str>, details: serde_json::Value| CapabilitySet {
+                domain: "aura".into(),
+                supported,
+                reason: reason.map(str::to_owned),
+                details: Some(details),
+            };
+        let supported = ControlState {
+            capabilities: vec![cap(
+                true,
+                None,
+                serde_json::json!({
+                    "effects": ["off", "static"],
+                    "devices": [{
+                        "id": "aura-usb-19af", "name": "ASUS Aura motherboard controller", "kind": "motherboard",
+                        "firmware": "AULA3-AR32-0304",
+                        "zones": [{"id": "argb1", "name": "ARGB header 1", "addressable": true, "leds": 1}],
+                    }],
+                }),
+            )],
+            ..ControlState::default()
+        };
+        let caps = supported.aura_caps().unwrap();
+        assert_eq!(caps.devices[0].kind, "motherboard");
+        assert_eq!(caps.devices[0].zones[0].id, "argb1");
+        assert_eq!(supported.aura_unavailable(), None);
+
+        let blocked = ControlState {
+            capabilities: vec![cap(
+                false,
+                Some("Armoury Crate controls the lighting."),
+                serde_json::json!({"conflict": true}),
+            )],
+            ..ControlState::default()
+        };
+        assert!(blocked.aura_caps().is_none());
+        assert!(blocked
+            .aura_unavailable()
+            .unwrap()
+            .contains("Armoury Crate"));
+
+        // No controller at all: hidden, not explained.
+        let absent = ControlState {
+            capabilities: vec![cap(
+                false,
+                Some("No ASUS Aura USB controller found."),
+                serde_json::Value::Null,
+            )],
+            ..ControlState::default()
+        };
+        assert_eq!(absent.aura_unavailable(), None);
     }
 
     #[test]

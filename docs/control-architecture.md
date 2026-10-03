@@ -1,8 +1,8 @@
 # Control Center — Hardware Control Architecture
 
 > Status: phases 0 (foundation, #187), 1 (fan control, #188), 2 (CPU power
-> limits, AMD part, #189), 3 (GPU power limit, AMD part, #190) and 4 (Curve
-> Optimizer, #191) are implemented;
+> limits, AMD part, #189), 3 (GPU power limit, AMD part, #190), 4 (Curve
+> Optimizer, #191) and 5 (ASUS Aura lighting, #192) are implemented;
 > the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
@@ -26,6 +26,7 @@
 - [Phase 2 — CPU power limits as built](#phase-2--cpu-power-limits-as-built)
 - [Phase 3 — GPU power limit as built](#phase-3--gpu-power-limit-as-built)
 - [Phase 4 — Curve Optimizer as built](#phase-4--curve-optimizer-as-built)
+- [Phase 5 — ASUS Aura lighting as built](#phase-5--asus-aura-lighting-as-built)
 - [Open questions](#open-questions)
 
 ---
@@ -185,6 +186,7 @@ Transactions are serialised — there is never more than one in flight.
 | `get_state` | Active profile, dry-run flag, `crash_guard_notice` (set when the boot-crash guard skipped risky parts this boot). |
 | `list_profiles` / `save_profile` / `delete_profile` | Profile CRUD (the store is service-owned). Saving keeps a profile's place in the list; deleting the active profile makes Balanced (else the first) active and applies it. |
 | `reset_profile` | A built-in profile back to its defaults; re-applied when it is the active profile. |
+| `aura_preview` | `{"aura": {...}}` — sets the lights at once without saving (the Lighting tab's live preview). Harmless, so outside the broker transaction. |
 | `apply_profile` | Transactional apply (see ControlBroker). |
 | `preview` | `{"profile": {...}, "seconds": 15}` — apply an edited, unsaved profile; the service reverts it after N seconds (default 15, max 60) unless `confirm` arrives (display-mode-change pattern). A new `apply_profile`/`preview` reverts a pending one first. |
 | `confirm` | `{"keep": true}` stores the previewed profile and makes it active; `{"keep": false}` reverts now. |
@@ -292,7 +294,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
-| `AuraProvider` | USB HID to the ASUS Aura controller on ROG boards | Implemented in-service; must detect and yield to Armoury Crate / LightingService. |
+| `LightingProvider` | Aura Sync over `ILightingDevice`s — today the ASUS Aura USB motherboard controller (`AuraController`, Windows HID APIs) | Implemented in-service; yields to Armoury Crate / LightingService. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
 
 ---
 
@@ -349,7 +351,7 @@ phase 0.
 | 3 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | GPU power limit (AMD, ADLX) | Low–medium | `control-gpu` |
 | 3b | [#210](https://github.com/dvalfrid/rigstats/issues/210) | GPU power limit (NVIDIA, NVML) | Low–medium | `control-gpu-nvidia` |
 | 4 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | AMD Curve Optimizer (Granite Ridge) | High | `control-curve-optimizer` |
-| 5 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | ASUS Aura RGB | Medium | `control-aura` |
+| 5 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | ASUS Aura RGB (USB motherboard controllers) | Medium | `control-aura` |
 | 6 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | Armoury Crate replacement (coexistence, guided removal, validated boards) | Low | `control-armoury-crate` |
 
 ---
@@ -497,6 +499,58 @@ What phase 4 (#191) shipped:
   −10, since nothing rebooted) and showed the red notice; the profile keeps
   its −10 for when the user applies it again.
 
+## Phase 5 — ASUS Aura lighting as built
+
+What phase 5 (#192) shipped — built for every ASUS board with a USB Aura
+controller, not one board:
+
+- **Aura Sync over a device list.** `LightingProvider` drives a list of
+  `ILightingDevice`s; a profile's one effect goes to every device, each
+  translating it into its own protocol. The motherboard controller is the
+  first device; monitors, peripherals and other vendors are added as more
+  `ILightingDevice`s (#212) without touching profiles, the pipe or the UI.
+  One device failing (unplugged) doesn't keep the others dark; only all of
+  them failing fails the profile.
+- **Native protocols only, current devices.** Decided for #192: RIGStats
+  implements the protocols itself (OpenRGB, GPL, is documentation only — no
+  code, no OpenRGB process or SDK server), aiming over time at what OpenRGB
+  covers for *current* hardware; legacy devices (e.g. SMBus Aura on boards
+  before ~2019) are out of scope.
+- **The controller describes itself.** `AuraController` finds the first
+  known Aura USB controller by its USB ids (OpenRGB's list, as protocol
+  documentation only): the motherboard family `18F3`, `1939`, `19AF`,
+  `1AA6`, `1BED` and the older addressable family `1867`, `1872`, `18A3`,
+  `18A5`. It picks the HID collection on vendor usage page `0xFF72` and
+  asks for the firmware string (`0xEC 0x82`) and the 60-byte config table
+  (`0xEC 0xB0`). Zones come from that table: the onboard LEDs (count at
+  `0x1B`) as one zone, then one zone per ARGB header (count at `0x02`) —
+  so each board gets its own zones without being listed anywhere.
+- **Broad on purpose.** Lighting can only get colours wrong, unlike CPU
+  limits or Curve Optimizer, so every known controller is offered rather
+  than only verified ones. The firmware and config table are logged at
+  start (`Aura: 0x19AF Motherboard firmware '…', config …, zones …`), so a
+  user's diagnostics export becomes a fixture in
+  `sensor-sidecar.Tests/fixtures/aura/` without the hardware.
+- **HID without hidapi:** `HidDevice.cs` uses SetupAPI + `hid.dll` and
+  overlapped reads with a timeout; works from the service as SYSTEM.
+- **Effects v1:** off, static, breathing, spectrum cycle, applied to every
+  zone; brightness scales the colour (Aura effects have no brightness of
+  their own). Motherboard family: an effect report (`0x35`) and a colour
+  report with an LED bit mask (`0x36`) per zone; addressable family: one
+  `0x3B` report with the colour. Nothing is committed to the controller's
+  flash (no wear) — the service re-applies the active profile at start.
+- **A profile without a lighting part leaves the lights alone**, so the
+  built-ins change nobody's lighting. The controller can't report its
+  effect: `Verify` trusts a successful write, `Capture` returns what the
+  service last set, release leaves the lights as they are.
+- **Armoury Crate:** if LightingService or Armoury Crate is running, the
+  domain is unsupported with `conflict: true` — the Lighting tab shows the
+  explanation instead of disappearing (a machine with no controller gets no
+  tab at all). Writes are skipped while the conflict lasts.
+- **UI:** effect, colour and brightness with a live preview (`aura_preview`,
+  throttled to ~10 Hz); Save & apply stores it in the profile; Revert or
+  closing the window puts the saved lighting back.
+
 ## Open questions
 
 - PM table layouts for Ryzen generations other than Granite Ridge `0x620105`
@@ -521,6 +575,18 @@ What phase 4 (#191) shipped:
 - Which ROG boards expose writable fan control through LHM, and which firmware
   overrides it? Diagnostics exports now record it (verify failures and the
   measured channel→fan mapping, #207) — collect and turn them into fixtures.
-- Aura controller USB IDs and protocol variants across ROG board generations.
+- Aura on other boards: every known USB controller id is offered, but only
+  the PRIME B650M-A (`19AF`, ARGB headers only) is checked on hardware — in
+  particular the onboard-LED zone (`0x1B` > 0) and the addressable family
+  are untested. Each user's diagnostics export carries the firmware and
+  config table; turn them into `fixtures/aura/` files.
+- More lighting devices (#212, umbrella): ASUS Aura monitors and the
+  monitor light bar first (documented in OpenRGB, testable on the dev rig),
+  then the ROG Omni receiver's peripherals (Azoth X, Harpe Ace — not in
+  OpenRGB, needs protocol research), other ASUS peripherals, then other
+  vendors' current devices.
+- The colour picker only updates the lights when the pointer stops (the
+  egui colour picker reports the change late); check with the egui
+  upgrade (#200).
 - Service rename (`rigstats-sensor` → `rigstats-service`): worth the installer
   migration, or keep the name?

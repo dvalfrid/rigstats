@@ -13,9 +13,9 @@
 use crate::theme::{self, DialogColors};
 use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
-    AmdCpuLimit, AmdLimitValues, ApplyResult, ControlCmd, ControlState, CpuLimitCaps, CpuLimitPart,
-    CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig, FanPart, FanResponder,
-    GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, PowerScheme, Profile,
+    AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
+    CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
+    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, PowerScheme, Profile,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -80,6 +80,7 @@ enum Tab {
     Fans,
     Cpu,
     Gpu,
+    Lighting,
 }
 
 /// Unsaved edits to one profile's fan headers.
@@ -101,6 +102,13 @@ struct CpuDraft {
 enum ProfileEdit {
     Renaming { id: String, name: String },
     ConfirmDelete { id: String },
+}
+
+/// Unsaved lighting for one profile (`None` = leave the lights as they are).
+#[derive(Debug, Clone, PartialEq)]
+struct AuraDraft {
+    profile_id: String,
+    part: Option<AuraPart>,
 }
 
 /// Unsaved Curve Optimizer offsets for one profile.
@@ -126,6 +134,11 @@ pub struct ControlUi {
     cpu_draft: Option<CpuDraft>,
     gpu_draft: Option<GpuDraft>,
     co_draft: Option<CoDraft>,
+    aura_draft: Option<AuraDraft>,
+    /// Live lighting preview: the latest unsent state and when the last
+    /// one went out (a colour drag is throttled to ~10 Hz).
+    aura_pending: Option<AuraPart>,
+    aura_sent: Option<Instant>,
     /// Curve Optimizer per-core sliders shown (UI only).
     co_per_core: bool,
     /// An inline rename or delete confirmation in the profile list.
@@ -183,6 +196,39 @@ impl ControlUi {
             self.co_draft = None;
         }
         true
+    }
+
+    /// Drops an unsaved lighting draft and puts the saved lighting back on
+    /// the controller (the draft was shown live).
+    fn discard_aura(
+        &mut self,
+        saved: Option<&AuraPart>,
+        cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ) {
+        self.aura_pending = None;
+        if self.aura_draft.take().is_some() {
+            if let Some(saved) = saved {
+                let _ = cmd_tx.try_send(ControlCmd::AuraPreview(saved.clone()));
+            }
+        }
+    }
+
+    /// Sends the pending live preview, at most every 100 ms. Returns
+    /// whether one is still waiting (the caller keeps repainting).
+    fn flush_aura_preview(&mut self, cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>) -> bool {
+        let Some(part) = self.aura_pending.clone() else {
+            return false;
+        };
+        if self
+            .aura_sent
+            .is_some_and(|t| t.elapsed() < Duration::from_millis(100))
+        {
+            return true;
+        }
+        let _ = cmd_tx.try_send(ControlCmd::AuraPreview(part));
+        self.aura_pending = None;
+        self.aura_sent = Some(Instant::now());
+        false
     }
 
     /// CPU and GPU limit edits are tried first (preview, auto-revert).
@@ -280,6 +326,9 @@ fn with_drafts(profile: &Profile, ui_state: &ControlUi) -> Profile {
     }
     if let Some(draft) = &ui_state.co_draft {
         profile.part.curve_opt = Some(draft.part.clone());
+    }
+    if let Some(draft) = &ui_state.aura_draft {
+        profile.part.aura = draft.part.clone();
     }
     if let Some(draft) = &ui_state.gpu_draft {
         let adapters: BTreeMap<String, GpuAdapterConfig> = draft
@@ -626,6 +675,167 @@ fn co_core_row(
     });
 }
 
+/// Lighting effects in the order the Lighting tab offers them.
+const AURA_EFFECTS: [(&str, &str); 4] = [
+    ("off", "Off"),
+    ("static", "Static"),
+    ("breathing", "Breathing"),
+    ("spectrum_cycle", "Spectrum cycle"),
+];
+
+fn effect_name(effect: Option<&str>) -> &'static str {
+    match effect {
+        None => "Leave as is",
+        Some(e) => AURA_EFFECTS
+            .iter()
+            .find(|(id, _)| *id == e)
+            .map_or("Static", |(_, name)| name),
+    }
+}
+
+/// "#ff0033" ↔ [255, 0, 51]; white when missing or malformed.
+fn parse_hex_color(hex: Option<&str>) -> [u8; 3] {
+    let parse = |h: &str| -> Option<[u8; 3]> {
+        let h = h.strip_prefix('#')?;
+        if h.len() != 6 {
+            return None;
+        }
+        Some([
+            u8::from_str_radix(&h[0..2], 16).ok()?,
+            u8::from_str_radix(&h[2..4], 16).ok()?,
+            u8::from_str_radix(&h[4..6], 16).ok()?,
+        ])
+    };
+    hex.and_then(parse).unwrap_or([255, 255, 255])
+}
+
+fn hex_color([r, g, b]: [u8; 3]) -> String {
+    format!("#{r:02x}{g:02x}{b:02x}")
+}
+
+/// Lighting (#192): one effect for every zone of the board's Aura
+/// controller. Changes show on the lights at once (live preview); Save &
+/// apply keeps them in the profile.
+fn lighting_tab(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    caps: Option<&AuraCaps>,
+    blocked: Option<&str>,
+    saved: Option<&AuraPart>,
+    ui_state: &mut ControlUi,
+) {
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Lighting");
+        ui.add_space(4.0);
+        let Some(caps) = caps else {
+            // Present but taken by another app — explained, not hidden.
+            ui.label(
+                egui::RichText::new(blocked.unwrap_or("Lighting is unavailable."))
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+            );
+            return;
+        };
+        let Some(profile_id) = control.active_profile.clone() else {
+            return;
+        };
+        ui.label(
+            egui::RichText::new(
+                "Aura Sync: the effect goes to every device below. Changes show on the \
+                 lights at once; Save & apply keeps them in this profile.",
+            )
+            .size(11.0)
+            .color(dc.muted),
+        );
+        ui.add_space(6.0);
+        for device in &caps.devices {
+            let zones = device
+                .zones
+                .iter()
+                .map(|z| z.name.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            ui.label(
+                egui::RichText::new(format!("{} — {zones}", device.name))
+                    .size(12.0)
+                    .color(dc.text),
+            )
+            .on_hover_text(format!("Firmware {}", device.firmware));
+        }
+        ui.add_space(10.0);
+
+        let mut part = ui_state
+            .aura_draft
+            .as_ref()
+            .map_or_else(|| saved.cloned(), |d| d.part.clone());
+        let before = part.clone();
+
+        ui.horizontal(|ui| {
+            ui.spacing_mut().interact_size.y = 26.0;
+            ui.add_sized(
+                [80.0, 26.0],
+                egui::Label::new(egui::RichText::new("Effect").size(12.0).color(dc.muted)),
+            );
+            let mut effect = part.as_ref().and_then(|p| p.effect.clone());
+            egui::ComboBox::from_id_salt("control_aura_effect")
+                .width(220.0)
+                .selected_text(effect_name(effect.as_deref()))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut effect, None, "Leave as is");
+                    for (id, name) in AURA_EFFECTS {
+                        ui.selectable_value(&mut effect, Some(id.to_owned()), name);
+                    }
+                });
+            if effect != part.as_ref().and_then(|p| p.effect.clone()) {
+                part = effect.map(|e| AuraPart {
+                    effect: Some(e),
+                    ..part.clone().unwrap_or_default()
+                });
+            }
+        });
+
+        let effect = part.as_ref().and_then(|p| p.effect.clone());
+        let takes_color = matches!(effect.as_deref(), Some("static" | "breathing"));
+        if let (true, Some(p)) = (takes_color, part.as_mut()) {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [80.0, 22.0],
+                    egui::Label::new(egui::RichText::new("Colour").size(12.0).color(dc.muted)),
+                );
+                let mut rgb = parse_hex_color(p.color.as_deref());
+                if egui::color_picker::color_edit_button_srgb(ui, &mut rgb).changed() {
+                    p.color = Some(hex_color(rgb));
+                }
+            });
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [80.0, 22.0],
+                    egui::Label::new(egui::RichText::new("Brightness").size(12.0).color(dc.muted)),
+                );
+                let mut pct = (p.brightness.unwrap_or(1.0) * 100.0).round() as i32;
+                let slider = egui::Slider::new(&mut pct, 0..=100)
+                    .suffix(" %")
+                    .trailing_fill(true);
+                if ui.add(slider).changed() {
+                    p.brightness = Some(f64::from(pct) / 100.0);
+                }
+            });
+        }
+        dry_run_note(ui, dc, control);
+
+        if part != before {
+            if let Some(p) = &part {
+                ui_state.aura_pending = Some(p.clone());
+            }
+            ui_state.aura_draft = Some(AuraDraft { profile_id, part });
+        }
+    });
+}
+
 /// The active profile's GPU limits that are set (a missing adapter = original).
 fn saved_gpu_limits(profile: Option<&Profile>) -> BTreeMap<String, i32> {
     profile
@@ -806,11 +1016,15 @@ pub fn show(
     }
     let cpu_caps = control.cpu_caps();
     let co_caps = control.curve_opt_caps();
+    let aura_caps = control.aura_caps();
+    let aura_blocked = control.aura_unavailable();
+    let lighting_shown = aura_caps.is_some() || aura_blocked.is_some();
     let gpu_caps = control.gpu_caps();
     match ui_state.tab {
         Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
         Tab::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Tab::Power,
         Tab::Gpu if gpu_caps.is_none() => ui_state.tab = Tab::Power,
+        Tab::Lighting if !lighting_shown => ui_state.tab = Tab::Power,
         _ => {}
     }
     let active = control.active();
@@ -818,6 +1032,7 @@ pub fn show(
     let saved_cpu = saved_cpu_limits(active);
     let saved_gpu = saved_gpu_limits(active);
     let saved_co = saved_curve_opt(active);
+    let saved_aura = active.and_then(|p| p.part.aura.clone());
     // A draft belongs to one profile; switching profiles (or the save
     // landing, which makes the draft equal what's stored) ends it.
     if let Some(draft) = &ui_state.draft {
@@ -851,7 +1066,17 @@ pub fn show(
     if ui_state.track_preview(control.preview.is_some(), control.preview_reverted) {
         let _ = cmd_tx.try_send(ControlCmd::Refresh);
     }
-    let dirty = ui_state.draft.is_some() || ui_state.has_limit_draft();
+    if let Some(draft) = &ui_state.aura_draft {
+        let other_profile = Some(draft.profile_id.as_str()) != control.active_profile.as_deref();
+        if other_profile || draft.part == saved_aura {
+            ui_state.aura_draft = None;
+        }
+    }
+    if ui_state.flush_aura_preview(cmd_tx) {
+        ctx.request_repaint_after(Duration::from_millis(100));
+    }
+    let dirty =
+        ui_state.draft.is_some() || ui_state.has_limit_draft() || ui_state.aura_draft.is_some();
     // The countdown needs a repaint every second without user input.
     let preview_left = control
         .preview
@@ -927,6 +1152,7 @@ pub fn show(
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
+                    ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
                     open.store(false, Ordering::Relaxed);
                     ui_state.notice = None;
                     main_ctx.request_repaint_of(egui::ViewportId::ROOT);
@@ -984,6 +1210,7 @@ pub fn show(
                         ui_state.cpu_draft = None;
                         ui_state.gpu_draft = None;
                         ui_state.co_draft = None;
+                        ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
                         ui_state.dragging = None;
                     }
                     ui.add_space(10.0);
@@ -1054,7 +1281,7 @@ pub fn show(
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
         .show(ctx, |ui| {
             let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
-            if fan_caps.is_some() || cpu_tab_shown || gpu_caps.is_some() {
+            if fan_caps.is_some() || cpu_tab_shown || gpu_caps.is_some() || lighting_shown {
                 ui.horizontal(|ui| {
                     if tab_btn(ui, dc, "Power", ui_state.tab == Tab::Power, 90.0) {
                         ui_state.tab = Tab::Power;
@@ -1071,6 +1298,11 @@ pub fn show(
                     {
                         ui_state.tab = Tab::Gpu;
                     }
+                    if lighting_shown
+                        && tab_btn(ui, dc, "Lighting", ui_state.tab == Tab::Lighting, 90.0)
+                    {
+                        ui_state.tab = Tab::Lighting;
+                    }
                 });
                 ui.add_space(10.0);
             }
@@ -1086,6 +1318,18 @@ pub fn show(
                         curve_opt_card(ui, dc, control, caps, &saved_co, ui_state);
                     }
                 });
+                return;
+            }
+            if ui_state.tab == Tab::Lighting && lighting_shown {
+                lighting_tab(
+                    ui,
+                    dc,
+                    control,
+                    aura_caps.as_ref(),
+                    aura_blocked.as_deref(),
+                    saved_aura.as_ref(),
+                    ui_state,
+                );
                 return;
             }
             if let (Tab::Gpu, Some(caps)) = (ui_state.tab, &gpu_caps) {
@@ -1110,6 +1354,7 @@ pub fn show(
         });
 
     if ctx.input(|i| i.viewport().close_requested()) {
+        ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
         open.store(false, Ordering::Relaxed);
         ui_state.notice = None;
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
@@ -2509,5 +2754,60 @@ mod tests {
         }];
         assert_eq!(scheme_name("balanced", &schemes), "Balanserad"); // localized Windows name
         assert_eq!(scheme_name("power_saver", &schemes), "Power saver");
+    }
+    #[test]
+    fn lighting_colours_round_trip_and_default_to_white() {
+        assert_eq!(parse_hex_color(Some("#ff0033")), [255, 0, 51]);
+        assert_eq!(hex_color([255, 0, 51]), "#ff0033");
+        assert_eq!(parse_hex_color(Some("red")), [255, 255, 255]);
+        assert_eq!(parse_hex_color(None), [255, 255, 255]);
+    }
+
+    #[test]
+    fn lighting_effect_names() {
+        assert_eq!(effect_name(None), "Leave as is");
+        assert_eq!(effect_name(Some("spectrum_cycle")), "Spectrum cycle");
+    }
+
+    #[test]
+    fn discarding_a_lighting_draft_puts_the_saved_lights_back() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        let saved = AuraPart {
+            effect: Some("static".into()),
+            color: Some("#00ff00".into()),
+            brightness: None,
+        };
+        let mut ui = ControlUi {
+            aura_draft: Some(AuraDraft {
+                profile_id: "p".into(),
+                part: Some(AuraPart {
+                    effect: Some("off".into()),
+                    ..Default::default()
+                }),
+            }),
+            ..Default::default()
+        };
+
+        ui.discard_aura(Some(&saved), &tx);
+
+        assert!(ui.aura_draft.is_none());
+        assert!(matches!(rx.try_recv(), Ok(ControlCmd::AuraPreview(p)) if p == saved));
+        ui.discard_aura(Some(&saved), &tx); // no draft: nothing sent
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn live_preview_is_throttled() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        let mut ui = ControlUi {
+            aura_pending: Some(AuraPart::default()),
+            ..Default::default()
+        };
+        assert!(!ui.flush_aura_preview(&tx)); // first goes out at once
+        assert!(rx.try_recv().is_ok());
+
+        ui.aura_pending = Some(AuraPart::default());
+        assert!(ui.flush_aura_preview(&tx)); // within 100 ms: held back
+        assert!(rx.try_recv().is_err());
     }
 }

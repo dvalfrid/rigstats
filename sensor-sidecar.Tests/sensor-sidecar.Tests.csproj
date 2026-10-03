@@ -47,6 +47,10 @@
     <Compile Include="..\sensor-sidecar\Control\Providers\AdlxGpuPower.cs" Link="Control\Providers\AdlxGpuPower.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\GpuPowerProvider.cs" Link="Control\Providers\GpuPowerProvider.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\CurveOptimizerProvider.cs" Link="Control\Providers\CurveOptimizerProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\HidDevice.cs" Link="Control\Lighting\HidDevice.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\AuraUsb.cs" Link="Control\Lighting\AuraUsb.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\AuraController.cs" Link="Control\Lighting\AuraController.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\LightingProvider.cs" Link="Control\Lighting\LightingProvider.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

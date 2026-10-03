@@ -131,6 +131,19 @@ public sealed class CpuLimitPart
     public JsonNode? Intel { get; init; }
 }
 
+/// Lighting (#192): one effect for every zone of the lighting controller.
+public sealed class AuraPart
+{
+    /// "off", "static", "breathing", "spectrum_cycle".
+    public string? Effect { get; init; }
+
+    /// "#rrggbb" — ignored by "off" and "spectrum_cycle".
+    public string? Color { get; init; }
+
+    /// 0–1, scales the colour.
+    public double? Brightness { get; init; }
+}
+
 /// Curve Optimizer offsets (#191), in CO counts (negative = less voltage).
 /// A core's value is `PerCore[index]`, else `AllCore`, else the BIOS value.
 public sealed class CurveOptPart
@@ -158,9 +171,8 @@ public sealed class GpuPart
 
 /// One profile's per-domain settings. Every property is optional — a missing
 /// part leaves that domain untouched by `ControlBroker`. `PowerPlan` (#187),
-/// `Fan` (#188), `CpuLimit` (#189), `Gpu` (#190) and `CurveOpt` (#191) have
-/// typed shapes; `Aura` is raw JSON passthrough so `ProfileStore` round-trips
-/// it untouched until its provider (#192) exists — each phase replaces its own placeholder with a typed shape.
+/// `Fan` (#188), `CpuLimit` (#189), `Gpu` (#190), `CurveOpt` (#191) and
+/// `Aura` (#192) all have typed shapes.
 public sealed class ProfilePart
 {
     /// Symbolic scheme name: `"power_saver"`, `"balanced"`, `"high_performance"`,
@@ -172,7 +184,7 @@ public sealed class ProfilePart
     public CpuLimitPart? CpuLimit { get; init; }
     public CurveOptPart? CurveOpt { get; init; }
     public GpuPart? Gpu { get; init; }
-    public JsonNode? Aura { get; init; }
+    public AuraPart? Aura { get; init; }
 }
 
 public sealed class Profile

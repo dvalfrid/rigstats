@@ -21,7 +21,8 @@ public sealed class ControlPipeWorker(
     IPipeClientVerifier verifier,
     FanProvider fanProvider,
     FanCurveLoop fanLoop,
-    BootCrashGuard crashGuard) : BackgroundService
+    BootCrashGuard crashGuard,
+    Lighting.LightingProvider lighting) : BackgroundService
 {
     private const string AppVersion = "3.0.0"; // TODO: pull from the assembly/installer version once wired up.
     private const int ProtocolVersion = 1;
@@ -269,6 +270,7 @@ public sealed class ControlPipeWorker(
                 "save_profile" => await HandleSaveProfileAsync(request, ct),
                 "delete_profile" => await HandleDeleteProfileAsync(request, ct),
                 "reset_profile" => await HandleResetProfileAsync(request, ct),
+                "aura_preview" => HandleAuraPreview(request),
                 "apply_profile" => await HandleApplyProfileAsync(request, ct),
                 "preview" => await HandlePreviewAsync(request, ct),
                 "confirm" => await HandleConfirmAsync(request, ct),
@@ -391,6 +393,17 @@ public sealed class ControlPipeWorker(
             crashGuard.AcknowledgeNotice();
         }
         return ControlResponse.Ok(request.Id, new { ok = true, kept = keep, profile_id = profile.Id });
+    }
+
+    /// `{"aura": {...}}` — sets the lights at once without saving anything:
+    /// the Lighting tab's live preview while a colour is being picked.
+    /// Harmless, so it skips the broker transaction.
+    private ControlResponse HandleAuraPreview(ControlRequest request)
+    {
+        var aura = request.Params?.GetProperty("aura").Deserialize<AuraPart>(ControlJson.Options)
+            ?? throw new JsonException("missing aura.");
+        lighting.Preview(aura);
+        return ControlResponse.Ok(request.Id, new { ok = true });
     }
 
     private ControlResponse HandleReleaseToFirmware(ControlRequest request)

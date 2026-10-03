@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190) and Curve Optimizer (#191) done; phases #187–#193, #209, #210 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), Curve Optimizer (#191) and ASUS Aura lighting (#192) done; phases #187–#193, #209, #210 |
 
 ---
 
@@ -106,6 +106,7 @@ script to refresh it.
 | [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC) | v3.0 | ✅ Done |
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | v3.0 | ✅ Done |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | ✅ Done |
+| [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
@@ -114,10 +115,10 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
-| [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | 🔲 Planned |
 | [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | v3.0 | 🔲 Planned |
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🔲 Planned |
+| [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1655,3 +1656,17 @@ values at the next start — with a red "Reverted after a restart" notice in
 the CPU tab until a profile is applied again. Supported for now: Ryzen 9000
 (Granite Ridge), checked on a 9800X3D; per-core only when the SMU's cores
 match Windows' physical cores (otherwise all-core).
+
+### Phase 5 — ASUS Aura lighting ✅
+
+Aura Sync: a Lighting tab sets the lighting per profile, sent to every
+supported device — today the motherboard; monitors, peripherals and other
+vendors follow (#212). It sets the motherboard lighting per profile — off, static,
+breathing or spectrum cycle, with colour and brightness and a live preview
+while you pick. Works on ASUS boards with a USB Aura controller: the
+controller lists its own zones (onboard LEDs, ARGB headers), so each board
+gets the right ones without being listed in RIGStats. A profile without a
+lighting setting leaves the lights alone. If Armoury Crate (LightingService)
+is running, the tab says so instead of fighting it over the lights. Checked
+on a PRIME B650M-A; other boards' diagnostics exports become test fixtures.
+Native protocols only (no OpenRGB process), current hardware only.

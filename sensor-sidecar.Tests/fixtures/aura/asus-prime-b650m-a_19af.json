@@ -1,0 +1,12 @@
+{
+  "board": "ASUS PRIME B650M-A",
+  "product_id": "19AF",
+  "firmware": "AULA3-AR32-0304",
+  "config_table": "1E9F03010000783C00010000783C00010000783C0000000000000000030101F400000000000000000000000000000000000000000000000000000000",
+  "expected_zones": [
+    { "id": "argb1", "addressable": true, "effect_channel": 0, "leds": 1 },
+    { "id": "argb2", "addressable": true, "effect_channel": 1, "leds": 1 },
+    { "id": "argb3", "addressable": true, "effect_channel": 2, "leds": 1 }
+  ],
+  "note": "Captured 2026-10-03 with a read-only probe (firmware + config table requests). 3 ARGB headers, no onboard RGB (0x1B = 0)."
+}

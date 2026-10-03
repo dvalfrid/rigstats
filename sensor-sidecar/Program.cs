@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using SensorSidecar;
 using SensorSidecar.Control;
+using SensorSidecar.Control.Lighting;
 using SensorSidecar.Control.Providers;
 
 var dryRun = args.Contains("--dry-run");
@@ -93,6 +94,18 @@ builder.Services.AddSingleton<IControlProvider>(_ => new GpuPowerProvider(
     AdlxGpuPower.TryLoad(),
     dryRun,
     Path.Combine(programData, "gpu-power-original.json")));
+
+// Control Center phase 5 (#192): lighting — ASUS Aura USB controllers. Also
+// registered as itself for the control pipe's live preview, like FanProvider.
+builder.Services.AddSingleton(_ =>
+{
+    // Every lighting device found; monitors and peripherals join this list later.
+    var devices = new List<ILightingDevice>();
+    if (AuraController.TryOpen(out var reason) is { } motherboard)
+        devices.Add(motherboard);
+    return new LightingProvider(devices, reason, LightingProvider.DetectConflict, dryRun);
+});
+builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
