@@ -52,6 +52,42 @@ jobs:
       - name: Build release binary + sidecar
         run: cargo xtask build
 
+      # The binaries must be signed BEFORE makensis packs them: the sensor
+      # service only accepts control-pipe clients signed by its own signer
+      # (PipeClientVerifier), so an unsigned rigstats.exe / rigstats-sensor.exe
+      # in the installer leaves the Control Center dead for every user. One
+      # step = one Trusted Signing session = the same signing certificate.
+      - name: Sign binaries
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: https://neu.codesigning.azure.net/
+          trusted-signing-account-name: rigstats-codesign
+          certificate-profile-name: RIGStats
+          files: |
+            ${{ github.workspace }}\target\release\rigstats.exe
+            ${{ github.workspace }}\target\release\rigstats-wallpaper.exe
+            ${{ github.workspace }}\sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Check binary signatures (what the service will verify)
+        shell: pwsh
+        run: |
+          $app = Get-AuthenticodeSignature 'target\release\rigstats.exe'
+          $wallpaper = Get-AuthenticodeSignature 'target\release\rigstats-wallpaper.exe'
+          $service = Get-AuthenticodeSignature 'sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\rigstats-sensor.exe'
+          foreach ($s in $app, $wallpaper, $service) {
+            "$($s.Path): $($s.Status) $($s.SignerCertificate.Thumbprint)"
+            if ($s.Status -ne 'Valid') { throw "Not validly signed: $($s.Path) ($($s.Status))" }
+          }
+          if ($app.SignerCertificate.Thumbprint -ne $service.SignerCertificate.Thumbprint) {
+            throw 'rigstats.exe and rigstats-sensor.exe have different signers - the service would refuse the app.'
+          }
+
       - name: Install NSIS
         shell: pwsh
         run: |
@@ -64,6 +100,7 @@ jobs:
         run: |
           $version = ($env:RELEASE_TAG -replace '^v', '')
           & makensis /DVERSION=$version build\installer.nsi
+          "INSTALLER_PATH=$env:GITHUB_WORKSPACE\target\release\RIGStats_${version}_x64-setup.exe" >> $env:GITHUB_ENV
 
       - name: Sign installer
         uses: azure/trusted-signing-action@v0
@@ -74,8 +111,7 @@ jobs:
           endpoint: https://neu.codesigning.azure.net/
           trusted-signing-account-name: rigstats-codesign
           certificate-profile-name: RIGStats
-          files-folder: target\release
-          files-folder-filter: exe
+          files: ${{ env.INSTALLER_PATH }}
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256

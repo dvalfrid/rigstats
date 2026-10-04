@@ -62,7 +62,7 @@ What it does:
 - Reads Conventional Commits on `main`
 - Opens/updates a release PR
 - Updates `CHANGELOG.md`
-- Bumps versions in `src-egui/Cargo.toml` (marked with `# x-release-please-version`)
+- Bumps versions in `src-egui/Cargo.toml` and `sensor-sidecar/sensor-sidecar.csproj` (marked with `x-release-please-version`) — the sensor service reports the same version as the app (`service_version` in the control pipe's `hello`)
 - When the release PR is merged, creates tag + GitHub Release and triggers `release.yml`
 
 ## PAD File (Software Directory Listings)
@@ -129,6 +129,7 @@ It runs when a GitHub Release is published (or manually via `workflow_dispatch` 
 
 - runs `cargo xtask verify`
 - runs `cargo xtask build`
+- **signs `rigstats.exe`, `rigstats-wallpaper.exe` and `rigstats-sensor.exe`** with Azure Trusted Signing in one step, **before** packaging, and checks that the app and the service share one signer. This is not just for SmartScreen: the service accepts Control Center connections only from the installed `rigstats.exe` signed by its own signer (`PipeClientVerifier`), so unsigned binaries in the installer would leave the Control Center dead for every user
 - builds the NSIS installer
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
 - **signs `latest.json` with a legacy Tauri minisign key** via `npx --yes @tauri-apps/cli@^2 signer sign` — the one intentional Node.js dependency left in the pipeline (see the "Remove Node.js / npm infrastructure" entry in [ROADMAP.md](../ROADMAP.md)); it lets clients still on a pre-1.26 Tauri build verify and install an update instead of crashing
@@ -212,6 +213,16 @@ src-egui/Cargo.toml`) before merging the release PR:
 - **Fresh install vs. upgrade** — if `settings.rs` migration logic changed
   this cycle, test loading an old-format `rigstats-settings.json` in addition
   to a clean install.
+- **Website "Coming in vX" badges** — remove the `badge-soon` spans for
+  features this release ships (`website/index.html`), in the last commit
+  before merging the release PR, so the site and the release go out together.
+- **Control Center on the signed installer** — debug builds and the Build
+  workflow's installer artifact are unsigned, so the service refuses their
+  Control Center connection by design (`PipeClientVerifier`); only the signed
+  release installer can be checked. Right after the release: install it, open
+  the Control Center, confirm it connects and a profile applies. If it says it
+  can't connect, check `%ProgramData%\se.codeby.rigstats\rigstats-sensor.log`
+  for `Client rejected: …` and fix forward before announcing.
 - **PawnIO on a machine without it** (#205 — required once before the first
   release that bundles `PawnIO_setup.exe`, then whenever the pinned PawnIO
   version changes). Run on real hardware; a VM can't show CPU temp.
