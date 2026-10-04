@@ -646,7 +646,9 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   layout. Effect: `0x51 0x2C mode 0 speed brightness …` with the keyboard's
   own static / breathing / colour cycle — nothing animated over the radio;
   not saved to the keyboard (no `0x50 0x55`). Per model: brightness scale
-  (0–4 per OpenRGB; **0–100 on the Azoth X**, measured — 4 looked off),
+  (0–4 per OpenRGB; **0–100 measured on the Azoth X, the original Azoth and
+  the Falchion Ace HFX** — at 4 they look off or very dim, so OpenRGB's 0–4
+  may be outdated for current firmware of the whole family),
   speed scale, and K1/K5 without the per-key marker. Verified: ROG Azoth X
   through the Omni receiver and by cable (`1C24`), and the **ROG Falchion
   Ace HFX** (`1B7E`, not in OpenRGB): same layout reply as the Azoth X,

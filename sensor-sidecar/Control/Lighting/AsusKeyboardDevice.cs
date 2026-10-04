@@ -90,8 +90,11 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
         // Verified on hardware: same layout reply as the Azoth X, 0–100 scale.
         // It also exposes a LampArray collection, left alone (see DirectProductId).
         [0x1B7E] = new("ROG Falchion Ace HFX", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
-        [0x1A83] = Azoth("ROG Azoth"),
-        [0x1A85] = Azoth("ROG Azoth (2.4 GHz)"),
+        // Verified on hardware: 0–100, not OpenRGB's 0–4 (at 4 it was very dim).
+        [0x1A83] = new("ROG Azoth", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
+        // The same keyboard over its dongle — the Azoth X keeps one scale on
+        // cable and dongle, so this one is assumed 0–100 too (not verified).
+        [0x1A85] = new("ROG Azoth (2.4 GHz)", PerKey: true, BrightnessMax: 100, Speed: 30),
         [0x193C] = Azoth("ROG Falchion"),
         [0x193E] = Azoth("ROG Falchion (wireless)"),
         [0x19FE] = Azoth("ROG Strix Flare II"),

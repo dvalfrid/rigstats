@@ -835,7 +835,7 @@ public class AsusKeyboardTests
     [Theory]
     [InlineData((ushort)0x1ACE, "Keyboard via ROG Omni receiver", 100, (byte)30, true)]
     [InlineData((ushort)0x1C24, "ROG Azoth X", 100, (byte)30, true)]
-    [InlineData((ushort)0x1A83, "ROG Azoth", 4, (byte)30, true)]
+    [InlineData((ushort)0x1A83, "ROG Azoth", 100, (byte)30, true)] // measured: OpenRGB's 0–4 was very dim
     [InlineData((ushort)0x1AB3, "ROG Strix Scope II", 4, (byte)30, true)]
     [InlineData((ushort)0x194B, "TUF Gaming K3", 4, (byte)8, true)]
     [InlineData((ushort)0x1899, "TUF Gaming K5", 4, (byte)30, false)]

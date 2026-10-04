@@ -17,9 +17,9 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | ROG Swift PG32UCDP | Monitor | 1BCA | From OpenRGB, not yet verified | Effects drawn by RIGStats |
 | ROG Aura Monitor Light Bar | Light bar | 1AC8 | Verified on hardware | Runs its own effects; Desk lamp: on/off, brightness, colour temperature |
 | Keyboards paired to the ROG Omni receiver (e.g. ROG Azoth X) | Keyboard | 1ACE | Verified on hardware | Found on whichever receiver channel the keyboard answers |
+| ROG Azoth | Keyboard | 1A83 | Verified on hardware | Runs its own effects |
 | ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Runs its own effects |
 | ROG Falchion Ace HFX | Keyboard | 1B7E | Verified on hardware | Runs its own effects |
-| ROG Azoth | Keyboard | 1A83 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion | Keyboard | 193C | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion (wireless) | Keyboard | 193E | From OpenRGB, not yet verified | Runs its own effects |
