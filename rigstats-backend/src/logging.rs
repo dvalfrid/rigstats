@@ -28,8 +28,10 @@ struct SessionsLock {
 }
 
 impl SessionsLock {
-    /// Retries for up to ~50ms, which is far longer than a normal
-    /// load-mutate-save cycle takes. A lock file older than a few seconds is
+    /// Retries for up to ~250ms, far longer than a normal load-mutate-save
+    /// cycle takes — 50ms proved too short on a busy machine (a CI runner
+    /// stalled a thread past it), and a missed lock means a lost update. Only
+    /// contended calls ever wait. A lock file older than a few seconds is
     /// assumed to be left behind by a process that crashed while holding it,
     /// and is cleared rather than waited on. If the deadline is still reached
     /// (e.g. another process is doing unusually large I/O, like startup
@@ -38,7 +40,7 @@ impl SessionsLock {
     /// the UI thread.
     fn acquire(dir: &Path) -> Self {
         let path = dir.join("rigstats-sessions.lock");
-        let deadline = Instant::now() + Duration::from_millis(50);
+        let deadline = Instant::now() + Duration::from_millis(250);
         loop {
             match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(_) => return Self { path, held: true },
@@ -1016,15 +1018,13 @@ mod tests {
             .unwrap();
         drop(file);
 
-        let started = Instant::now();
+        // Nothing else removes the file, so waiting could never succeed:
+        // `held` alone proves it was reclaimed (no timing assertion — those
+        // flake on a busy CI runner).
         let lock = SessionsLock::acquire(dir.path());
         assert!(
             lock.held,
             "a stale lock must be reclaimed, not just waited out"
-        );
-        assert!(
-            started.elapsed() < Duration::from_millis(50),
-            "reclaiming a stale lock must be fast"
         );
     }
 
