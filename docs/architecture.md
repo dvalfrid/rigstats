@@ -496,8 +496,13 @@ separate `windows.rs` module:
 
 `update_check.rs` is plain blocking I/O: `check()` fetches `latest.json` and
 compares versions, `download()` streams the installer with a progress
-callback, `installer_temp_path()` / `launch_installer()` run it, and
-`BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The background check is a tokio task
+callback and returns a `VerifiedInstaller`, `launch_installer()` runs it, and
+`BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The installer is launched elevated,
+so nothing unverified gets that far: the manifest's link must be a file in
+this repo's GitHub releases, the download must match the manifest's SHA-256,
+it must carry a valid Authenticode signature (`authenticode.rs`) from the same
+publisher as the running app, and the file is kept open without write or
+delete sharing from the check until the launch so it can't be swapped. The background check is a tokio task
 spawned in `main.rs` (first check after 10 s, then every 6 h) that runs these
 via `spawn_blocking`, downloads an available update, and drives
 `windows/updater.rs`'s `UpdaterState`/`UpdateStatus` (shown by the Update

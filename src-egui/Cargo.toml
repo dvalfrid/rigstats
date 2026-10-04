@@ -33,9 +33,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rfd = "0.15"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Already in the tree through ureq's TLS; hashes the downloaded update.
+ring = "0.17"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef"] }
+winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef", "wintrust", "softpub", "wincrypt"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

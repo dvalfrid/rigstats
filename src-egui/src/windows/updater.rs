@@ -1,7 +1,6 @@
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
-use crate::update_check::{self, UpdateInfo, BUNDLED_CHANGELOG};
-use std::path::PathBuf;
+use crate::update_check::{self, UpdateInfo, VerifiedInstaller, BUNDLED_CHANGELOG};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -21,7 +20,7 @@ pub enum UpdateStatus {
     /// A newer version was found and is ready to install.
     Ready {
         info: UpdateInfo,
-        installer_path: PathBuf,
+        installer: Arc<VerifiedInstaller>,
     },
     /// Already on the latest version.
     UpToDate,
@@ -487,7 +486,7 @@ pub fn show(
     // Collect action flags — avoids holding the MutexGuard across UI closures.
     let mut action_close = false;
     let mut action_check = false;
-    let mut action_install: Option<PathBuf> = None;
+    let mut action_install: Option<Arc<VerifiedInstaller>> = None;
 
     let mut st = state.lock_safe();
 
@@ -583,10 +582,9 @@ pub fn show(
             ui.with_layout(
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| match &st.status {
-                    UpdateStatus::Ready { installer_path, .. } => {
-                        let path = installer_path.clone();
+                    UpdateStatus::Ready { installer, .. } => {
                         if theme::dialog_btn_primary(ui, "Install Now").clicked() {
-                            action_install = Some(path);
+                            action_install = Some(installer.clone());
                         }
                         ui.add_space(6.0);
                         if theme::dialog_btn_secondary(ui, "Later", dc).clicked() {
@@ -680,8 +678,8 @@ pub fn show(
     if action_check {
         state.lock_safe().status = UpdateStatus::Checking;
     }
-    if let Some(path) = action_install {
-        if let Err(e) = update_check::launch_installer(&path) {
+    if let Some(installer) = action_install {
+        if let Err(e) = update_check::launch_installer(&installer) {
             state.lock_safe().status = UpdateStatus::Error(e);
         }
     }

@@ -5,6 +5,8 @@
 //! panel rendering core lives in exactly one place. See `docs/architecture.md`.
 
 pub mod alerts;
+#[cfg(windows)]
+pub mod authenticode;
 pub mod brand;
 pub mod dashboard;
 pub mod dcomp_burst;

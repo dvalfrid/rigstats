@@ -132,8 +132,7 @@ It runs when a GitHub Release is published (or manually via `workflow_dispatch` 
 - **signs `rigstats.exe`, `rigstats-wallpaper.exe` and `rigstats-sensor.exe`** with Azure Trusted Signing in one step, **before** packaging, and checks that the app and the service share one signer. This is not just for SmartScreen: the service accepts Control Center connections only from the installed `rigstats.exe` signed by its own signer (`PipeClientVerifier`), so unsigned binaries in the installer would leave the Control Center dead for every user
 - builds the NSIS installer
 - **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
-- **signs `latest.json` with a legacy Tauri minisign key** via `npx --yes @tauri-apps/cli@^2 signer sign` — the one intentional Node.js dependency left in the pipeline (see the "Remove Node.js / npm infrastructure" entry in [ROADMAP.md](../ROADMAP.md)); it lets clients still on a pre-1.26 Tauri build verify and install an update instead of crashing
-- **generates `latest.json`** — version, installer URL, SHA256 checksum, the minisign `signature`, and the current version's changelog section embedded in the `notes` field
+- **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
 - uploads the `.exe` and `latest.json` to the GitHub Release
 
 A separate `.github/workflows/winget-submit.yml` runs after a release and

@@ -2205,9 +2205,6 @@ impl eframe::App for RigStatsApp {
                             let result = update_check::check();
                             match result {
                                 Ok(update_check::CheckResult::UpdateAvailable(info)) => {
-                                    let version = info.version.clone();
-                                    let url = info.url.clone();
-                                    let dest = update_check::installer_temp_path(&version);
                                     {
                                         let mut s = win.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Downloading {
@@ -2219,7 +2216,7 @@ impl eframe::App for RigStatsApp {
                                     let win2 = win.clone();
                                     let ctx2 = ctx.clone();
                                     let dl_result =
-                                        update_check::download(&url, &dest, |downloaded, total| {
+                                        update_check::download(&info, |downloaded, total| {
                                             let mut s = win2.lock_safe();
                                             s.status =
                                                 windows::updater::UpdateStatus::Downloading {
@@ -2230,9 +2227,9 @@ impl eframe::App for RigStatsApp {
                                         });
                                     let mut s = win.lock_safe();
                                     s.status = match dl_result {
-                                        Ok(()) => windows::updater::UpdateStatus::Ready {
+                                        Ok(installer) => windows::updater::UpdateStatus::Ready {
                                             info,
-                                            installer_path: dest,
+                                            installer: Arc::new(installer),
                                         },
                                         Err(e) => windows::updater::UpdateStatus::Error(e),
                                     };
@@ -3847,9 +3844,6 @@ fn main() {
                             .unwrap_or_else(|_| Err("task panic".to_string()));
                         match result {
                             Ok(update_check::CheckResult::UpdateAvailable(info)) => {
-                                let version = info.version.clone();
-                                let url = info.url.clone();
-                                let dest = update_check::installer_temp_path(&version);
                                 {
                                     let mut s = win.lock_safe();
                                     s.status = windows::updater::UpdateStatus::Downloading {
@@ -3860,9 +3854,9 @@ fn main() {
                                 ctx.request_repaint();
                                 let win2 = win.clone();
                                 let ctx2 = ctx.clone();
-                                let dest2 = dest.clone();
+                                let info2 = info.clone();
                                 let dl_result = tokio::task::spawn_blocking(move || {
-                                    update_check::download(&url, &dest2, |downloaded, total| {
+                                    update_check::download(&info2, |downloaded, total| {
                                         let mut s = win2.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Downloading {
                                             downloaded,
@@ -3874,11 +3868,11 @@ fn main() {
                                 .await
                                 .unwrap_or_else(|_| Err("download task panic".to_string()));
                                 match dl_result {
-                                    Ok(()) => {
+                                    Ok(installer) => {
                                         let mut s = win.lock_safe();
                                         s.status = windows::updater::UpdateStatus::Ready {
                                             info,
-                                            installer_path: dest,
+                                            installer: Arc::new(installer),
                                         };
                                         drop(s);
                                         open.store(true, Ordering::Relaxed);
