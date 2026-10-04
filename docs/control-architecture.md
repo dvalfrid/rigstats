@@ -648,9 +648,14 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   (static 1, breathing 2, colour cycle 4). The only lighting device with
   readback, so every write is **verified by reading it back**. Verified:
   ROG Delta II through its 2.4 GHz dongle (`1AFA`).
-- **Software effects.** Monitors, the light bar and LampArray devices have
-  no built-in effects, so breathing and spectrum cycle are drawn by the
-  service (`SoftwareEffect` / `SoftwareEffectLoop`, 25 frames a second).
+- **Software effects.** LampArray devices have no built-in effects, so
+  breathing and spectrum cycle are drawn by the service (`SoftwareEffect` /
+  `SoftwareEffectLoop`, 25 frames a second). So are Aura monitors not yet
+  seen running their own: the light bar and the XG27AQDMG use theirs (the
+  `0xEC 0x35` effect command with mode 1 static, 2 breathing, 4 colour cycle,
+  from DisplayWidget Center's DLL, verified on hardware) — one write per
+  change, and the effect keeps running when the service stops.
+  `AsusMonitorDevice.HasBuiltInEffects` lists the verified models.
 - **Finding protocols without OpenRGB.** The ASUS ones above came from:
   read-only "get" probes (`0x12 0x00` version, `0x12 0x12` layout) whose
   replies identify channels; one reversible write at a time with the user

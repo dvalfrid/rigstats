@@ -4,10 +4,14 @@ namespace SensorSidecar.Control.Lighting;
 
 /// ASUS Aura monitors and the ROG Aura Monitor Light Bar (#212) — the
 /// current family (OpenRGB's `AsusMonitorController`, used as protocol
-/// documentation only). Same 0xEC framing as the motherboard controller but
-/// direct mode only: no built-in effects, so breathing and spectrum cycle
-/// are drawn by the service (<see cref="SoftwareEffectLoop"/>). Older Aura
-/// monitors (feature-report protocol: XG27AQ, XG279Q, ...) are out of scope.
+/// documentation only). Same 0xEC framing as the motherboard controller.
+/// OpenRGB drives them in direct mode only, so breathing and spectrum cycle
+/// are drawn by the service (<see cref="SoftwareEffectLoop"/>). Models seen
+/// running their own effects — the effect command with mode 1 static, 2
+/// breathing, 4 colour cycle, as ASUS DisplayWidget Center sends them — use
+/// those instead: one write per change instead of 25 a second, and the
+/// effect keeps running when the service stops. Older Aura monitors
+/// (feature-report protocol: XG27AQ, XG279Q, ...) are out of scope.
 ///
 /// The light bar also has a white desk lamp (#214): channel 1 of the same
 /// effect command, static with two values — the 6500 K and the 2700 K
@@ -23,7 +27,9 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
     private const byte GetEffect = 0x31;
     private const byte ReadFlag = 0x80;
     private const byte LampChannel = 0x01;
-    private const byte Static = 0x01;
+    private const byte ModeStatic = 0x01;
+    private const byte ModeBreathing = 0x02;
+    private const byte ModeCycle = 0x04;
     private const byte Direct = 0x40;
     private const byte DirectApplyChannel = 0x84; // apply (0x80) | direct channel 4
     private const byte DirectMode = 0xFF;
@@ -69,6 +75,11 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
         _ => null,
     };
 
+    /// Models verified running their own effects (static, breathing, colour
+    /// cycle); the others are drawn in direct mode by the service until
+    /// someone confirms theirs.
+    public static bool HasBuiltInEffects(ushort productId) => productId is 0x1BA3 or 0x1AC8;
+
     /// Every connected device of this family. Two identical monitors are two
     /// devices ("…", "… (2)"), in HID path order.
     public static IReadOnlyList<AsusMonitorDevice> Discover(IReadOnlyList<HidDeviceInfo> hid)
@@ -113,10 +124,27 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
 
     public void Apply(AuraEffect effect, byte red, byte green, byte blue)
     {
+        if (HasBuiltInEffects(_info.ProductId))
+        {
+            _loop.Stop();
+            lock (_lock)
+                Send([EffectReport(effect, red, green, blue)]);
+            return;
+        }
         lock (_lock)
             Send([Report(Effect, 0x00, 0x00, 0x00, DirectMode, 0x00, 0x00, 0x01)]);
         _loop.Start(effect, red, green, blue);
     }
+
+    /// The device's own effect: `[0xEC, 0x35, channel 0, 0, 0, mode, 0, 0,
+    /// 1, R, G, B]`. Off is static black.
+    public static byte[] EffectReport(AuraEffect effect, byte red, byte green, byte blue) => effect switch
+    {
+        AuraEffect.Off => Report(Effect, 0x00, 0x00, 0x00, ModeStatic, 0x00, 0x00, 0x01, 0, 0, 0),
+        AuraEffect.Breathing => Report(Effect, 0x00, 0x00, 0x00, ModeBreathing, 0x00, 0x00, 0x01, red, green, blue),
+        AuraEffect.SpectrumCycle => Report(Effect, 0x00, 0x00, 0x00, ModeCycle, 0x00, 0x00, 0x01),
+        _ => Report(Effect, 0x00, 0x00, 0x00, ModeStatic, 0x00, 0x00, 0x01, red, green, blue),
+    };
 
     public JsonObject Diagnostics() => new()
     {
@@ -125,6 +153,7 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
         ["interface"] = _info.Interface,
         ["product"] = _info.Product,
         ["leds"] = Zones[0].Leds,
+        ["built_in_effects"] = HasBuiltInEffects(_info.ProductId),
         ["config_reply"] = _config,
     };
 
@@ -195,7 +224,7 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
 
     /// `[0xEC, 0x35, channel 1, 0, 0, static, 0, 0, 1, 6500K, 2700K]`.
     public static byte[] LampReport(byte cool, byte warm) =>
-        Report(Effect, LampChannel, 0x00, 0x00, Static, 0x00, 0x00, 0x01, cool, warm);
+        Report(Effect, LampChannel, 0x00, 0x00, ModeStatic, 0x00, 0x00, 0x01, cool, warm);
 
     /// The lamp's two values from a get-effect reply on channel 1 (they
     /// sit one byte later than in the set command), or null for another reply.

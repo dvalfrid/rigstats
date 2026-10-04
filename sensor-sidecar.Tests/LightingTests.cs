@@ -582,6 +582,28 @@ public class AsusMonitorTests
         Assert.Null(AsusMonitorDevice.Model(0x19AF)); // the motherboard controller
     }
 
+    [Theory]
+    [InlineData(AuraEffect.Static, "EC3500000001000001FF0033")]
+    [InlineData(AuraEffect.Breathing, "EC3500000002000001FF0033")] // verified: breathes on its own
+    [InlineData(AuraEffect.SpectrumCycle, "EC3500000004000001000000")] // verified: cycles on its own
+    [InlineData(AuraEffect.Off, "EC3500000001000001000000")]
+    public void Built_in_effects_are_one_effect_report(AuraEffect effect, string start)
+    {
+        var report = AsusMonitorDevice.EffectReport(effect, 0xFF, 0x00, 0x33);
+
+        Assert.Equal(65, report.Length);
+        Assert.Equal(Hex(start), report[..12]);
+        Assert.All(report[12..], b => Assert.Equal(0, b));
+    }
+
+    [Fact]
+    public void Only_verified_models_use_their_own_effects()
+    {
+        Assert.True(AsusMonitorDevice.HasBuiltInEffects(0x1BA3)); // XG27AQDMG
+        Assert.True(AsusMonitorDevice.HasBuiltInEffects(0x1AC8)); // light bar
+        Assert.False(AsusMonitorDevice.HasBuiltInEffects(0x1B2B)); // PG32UCDM: drawn by the service
+    }
+
     [Fact]
     public void The_lamp_report_is_the_static_effect_on_channel_1()
     {
