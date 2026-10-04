@@ -6,7 +6,9 @@ namespace SensorSidecar.Control.Lighting;
 /// `PerKey` keyboards carry a 0x02 marker before the colour; TUF K1/K5 don't.
 /// `BrightnessMax` is the keyboard's own scale; `Speed` the effect speed
 /// that matches the other devices' pace (each model has its own scale).
-public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, byte Speed, bool Receiver = false);
+/// `Verified`: seen working on real hardware (the rest come from OpenRGB).
+public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, byte Speed, bool Receiver = false,
+    bool Verified = false);
 
 /// ASUS keyboards of the Aura "TUF keyboard" protocol family (#213) — the
 /// family of the original ROG Azoth in OpenRGB (protocol documentation
@@ -77,42 +79,44 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     private static KeyboardModel Azoth(string name) => new(name, PerKey: true, BrightnessMax: 4, Speed: 30);
     private static KeyboardModel Flare(string name) => new(name, PerKey: true, BrightnessMax: 4, Speed: 8);
 
-    /// Known models by USB product id.
-    public static KeyboardModel? Model(ushort productId) => productId switch
+    /// Known models by USB product id. Also the source of the
+    /// supported-devices list (<see cref="LightingCatalog"/>).
+    public static readonly IReadOnlyDictionary<ushort, KeyboardModel> Models = new Dictionary<ushort, KeyboardModel>
     {
         // Verified on hardware: the Azoth X behind the receiver uses 0–100.
-        0x1ACE => new KeyboardModel("Keyboard via ROG Omni receiver", PerKey: true, BrightnessMax: 100, Speed: 30, Receiver: true),
+        [0x1ACE] = new("Keyboard via ROG Omni receiver", PerKey: true, BrightnessMax: 100, Speed: 30, Receiver: true, Verified: true),
         // The Azoth X by cable (verified): same keyboard, same 0–100 scale.
-        0x1C24 => new KeyboardModel("ROG Azoth X", PerKey: true, BrightnessMax: 100, Speed: 30),
+        [0x1C24] = new("ROG Azoth X", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
         // Verified on hardware: same layout reply as the Azoth X, 0–100 scale.
-        // It also exposes a LampArray collection, left alone (see ProductId).
-        0x1B7E => new KeyboardModel("ROG Falchion Ace HFX", PerKey: true, BrightnessMax: 100, Speed: 30),
-        0x1A83 => Azoth("ROG Azoth"),
-        0x1A85 => Azoth("ROG Azoth (2.4 GHz)"),
-        0x193C => Azoth("ROG Falchion"),
-        0x193E => Azoth("ROG Falchion (wireless)"),
-        0x19FE => Azoth("ROG Strix Flare II"),
-        0x19FC => Azoth("ROG Strix Flare II Animate"),
-        0x18F8 => Azoth("ROG Strix Scope"),
-        0x1951 => Azoth("ROG Strix Scope RX"),
-        0x1B12 => Azoth("ROG Strix Scope RX EVA-02 Edition"),
-        0x19F6 => Azoth("ROG Strix Scope NX Wireless Deluxe"),
-        0x19F8 => Azoth("ROG Strix Scope NX Wireless Deluxe (2.4 GHz)"),
-        0x1AB3 => Azoth("ROG Strix Scope II"),
-        0x1AB5 => Azoth("ROG Strix Scope II RX"),
-        0x1AAE => Azoth("ROG Strix Scope II 96 Wireless"),
-        0x1B78 => Azoth("ROG Strix Scope II 96 RX Wireless"),
-        0x1875 => Flare("ROG Strix Flare"),
-        0x18CF => Flare("ROG Strix Flare PNK LTD"),
-        0x18AF => Flare("ROG Strix Flare CoD Black Ops 4 Edition"),
-        0x194B => Flare("TUF Gaming K3"),
-        0x1B30 => Flare("TUF Gaming K3 Gen II"),
-        0x1C5E => Flare("TUF Gaming K3 Gen II Miku Edition"),
-        0x18AA => Flare("TUF Gaming K7"),
-        0x1899 => new KeyboardModel("TUF Gaming K5", PerKey: false, BrightnessMax: 4, Speed: 30),
-        0x1945 => new KeyboardModel("TUF Gaming K1", PerKey: false, BrightnessMax: 4, Speed: 1),
-        _ => null,
+        // It also exposes a LampArray collection, left alone (see DirectProductId).
+        [0x1B7E] = new("ROG Falchion Ace HFX", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
+        [0x1A83] = Azoth("ROG Azoth"),
+        [0x1A85] = Azoth("ROG Azoth (2.4 GHz)"),
+        [0x193C] = Azoth("ROG Falchion"),
+        [0x193E] = Azoth("ROG Falchion (wireless)"),
+        [0x19FE] = Azoth("ROG Strix Flare II"),
+        [0x19FC] = Azoth("ROG Strix Flare II Animate"),
+        [0x18F8] = Azoth("ROG Strix Scope"),
+        [0x1951] = Azoth("ROG Strix Scope RX"),
+        [0x1B12] = Azoth("ROG Strix Scope RX EVA-02 Edition"),
+        [0x19F6] = Azoth("ROG Strix Scope NX Wireless Deluxe"),
+        [0x19F8] = Azoth("ROG Strix Scope NX Wireless Deluxe (2.4 GHz)"),
+        [0x1AB3] = Azoth("ROG Strix Scope II"),
+        [0x1AB5] = Azoth("ROG Strix Scope II RX"),
+        [0x1AAE] = Azoth("ROG Strix Scope II 96 Wireless"),
+        [0x1B78] = Azoth("ROG Strix Scope II 96 RX Wireless"),
+        [0x1875] = Flare("ROG Strix Flare"),
+        [0x18CF] = Flare("ROG Strix Flare PNK LTD"),
+        [0x18AF] = Flare("ROG Strix Flare CoD Black Ops 4 Edition"),
+        [0x194B] = Flare("TUF Gaming K3"),
+        [0x1B30] = Flare("TUF Gaming K3 Gen II"),
+        [0x1C5E] = Flare("TUF Gaming K3 Gen II Miku Edition"),
+        [0x18AA] = Flare("TUF Gaming K7"),
+        [0x1899] = new("TUF Gaming K5", PerKey: false, BrightnessMax: 4, Speed: 30),
+        [0x1945] = new("TUF Gaming K1", PerKey: false, BrightnessMax: 4, Speed: 1),
     };
+
+    public static KeyboardModel? Model(ushort productId) => Models.GetValueOrDefault(productId);
 
     /// Every keyboard found: directly connected models on their vendor
     /// collection, and keyboards paired to a receiver on their channel.

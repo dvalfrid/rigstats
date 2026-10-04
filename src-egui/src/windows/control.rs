@@ -841,6 +841,17 @@ fn lighting_tab(
                 );
             }
         }
+        ui.add_space(4.0);
+        ui.scope(|ui| {
+            ui.style_mut().visuals.hyperlink_color = dc.link;
+            ui.hyperlink_to(
+                egui::RichText::new("Supported devices ↗").size(11.0),
+                "https://rigstats.app/#supported-devices",
+            )
+            .on_hover_text(
+                "Every lighting device RIGStats drives, and which are verified on hardware",
+            );
+        });
         ui.add_space(10.0);
 
         let mut part = ui_state

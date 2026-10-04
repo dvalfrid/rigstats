@@ -18,6 +18,10 @@ namespace SensorSidecar.Control.Lighting;
 /// channel — instead of R, G, B; "get" 0x31 on channel 1 reads them back.
 /// From ASUS DisplayWidget Center's `ScreenLightBarHid.dll` (read as
 /// documentation, no code copied), verified on hardware.
+/// One Aura monitor-family model: name, kind ("monitor", "light_bar"),
+/// whether it was seen working and running its own effects.
+public sealed record MonitorModel(string Name, string Kind, bool Verified = false, bool BuiltInEffects = false);
+
 public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromSeconds(1);
@@ -62,23 +66,26 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
         _loop = new SoftwareEffectLoop(name, Draw);
     }
 
-    /// Known current-family devices by product id.
-    public static (string Name, string Kind)? Model(ushort productId) => productId switch
+    /// Known current-family devices by product id (OpenRGB's list plus what
+    /// was checked here). `Verified`: seen working on real hardware.
+    /// `BuiltInEffects`: seen running its own effects (static, breathing,
+    /// colour cycle) — the others are drawn in direct mode by the service
+    /// until someone confirms theirs. Also the source of the supported-devices
+    /// list (<see cref="LightingCatalog"/>).
+    public static readonly IReadOnlyDictionary<ushort, MonitorModel> Models = new Dictionary<ushort, MonitorModel>
     {
-        0x1BA3 => ("ROG Strix XG27AQDMG", "monitor"),
-        0x1BC9 => ("ROG Strix XG27ACDNG", "monitor"),
-        0x1BB4 => ("ROG Strix XG27UCG", "monitor"),
-        0x1B2B => ("ROG Swift PG32UCDM", "monitor"),
-        0x1C9B => ("ROG Swift PG32UCDMR", "monitor"),
-        0x1BCA => ("ROG Swift PG32UCDP", "monitor"),
-        0x1AC8 => ("ROG Aura Monitor Light Bar", "light_bar"),
-        _ => null,
+        [0x1BA3] = new("ROG Strix XG27AQDMG", "monitor", Verified: true, BuiltInEffects: true),
+        [0x1BC9] = new("ROG Strix XG27ACDNG", "monitor"),
+        [0x1BB4] = new("ROG Strix XG27UCG", "monitor"),
+        [0x1B2B] = new("ROG Swift PG32UCDM", "monitor"),
+        [0x1C9B] = new("ROG Swift PG32UCDMR", "monitor"),
+        [0x1BCA] = new("ROG Swift PG32UCDP", "monitor"),
+        [0x1AC8] = new("ROG Aura Monitor Light Bar", "light_bar", Verified: true, BuiltInEffects: true),
     };
 
-    /// Models verified running their own effects (static, breathing, colour
-    /// cycle); the others are drawn in direct mode by the service until
-    /// someone confirms theirs.
-    public static bool HasBuiltInEffects(ushort productId) => productId is 0x1BA3 or 0x1AC8;
+    public static MonitorModel? Model(ushort productId) => Models.GetValueOrDefault(productId);
+
+    public static bool HasBuiltInEffects(ushort productId) => Model(productId)?.BuiltInEffects == true;
 
     /// Every connected device of this family. Two identical monitors are two
     /// devices ("…", "… (2)"), in HID path order.
@@ -91,7 +98,7 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
             .ThenBy(d => d.Path, StringComparer.OrdinalIgnoreCase);
         foreach (var info in candidates)
         {
-            var (model, kind) = Model(info.ProductId)!.Value;
+            var (model, kind) = (Model(info.ProductId)!.Name, Model(info.ProductId)!.Kind);
             var nth = found.Count(f => f._info.ProductId == info.ProductId) + 1;
             IHidDevice? device = null;
             try

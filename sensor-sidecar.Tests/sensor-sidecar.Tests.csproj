@@ -58,6 +58,7 @@
     <Compile Include="..\sensor-sidecar\Control\Lighting\AsusKeyboardDevice.cs" Link="Control\Lighting\AsusKeyboardDevice.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\AsusHeadsetDevice.cs" Link="Control\Lighting\AsusHeadsetDevice.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\LightingLog.cs" Link="Control\Lighting\LightingLog.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\LightingCatalog.cs" Link="Control\Lighting\LightingCatalog.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

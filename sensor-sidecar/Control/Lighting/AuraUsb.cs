@@ -49,13 +49,26 @@ public static class AuraUsb
     private const byte MotherboardEffectColor = 0x36;
     private const byte AddressableEffect = 0x3B;
 
-    /// Known controller product ids (OpenRGB's detector list).
-    public static AuraFamily? Family(ushort productId) => productId switch
+    /// Known controller product ids (OpenRGB's detector list). Also the
+    /// source of the supported-devices list (<see cref="LightingCatalog"/>).
+    public static readonly IReadOnlyDictionary<ushort, AuraFamily> Families = new Dictionary<ushort, AuraFamily>
     {
-        0x18F3 or 0x1939 or 0x19AF or 0x1AA6 or 0x1BED => AuraFamily.Motherboard,
-        0x1867 or 0x1872 or 0x18A3 or 0x18A5 => AuraFamily.Addressable,
-        _ => null,
+        [0x18F3] = AuraFamily.Motherboard,
+        [0x1939] = AuraFamily.Motherboard,
+        [0x19AF] = AuraFamily.Motherboard,
+        [0x1AA6] = AuraFamily.Motherboard,
+        [0x1BED] = AuraFamily.Motherboard,
+        [0x1867] = AuraFamily.Addressable,
+        [0x1872] = AuraFamily.Addressable,
+        [0x18A3] = AuraFamily.Addressable,
+        [0x18A5] = AuraFamily.Addressable,
     };
+
+    /// Controllers seen working on real hardware (a PRIME B650M-A's).
+    public static readonly IReadOnlySet<ushort> Verified = new HashSet<ushort> { 0x19AF };
+
+    public static AuraFamily? Family(ushort productId) =>
+        Families.TryGetValue(productId, out var family) ? family : null;
 
     public static byte[] FirmwareRequest() => Report(RequestFirmware);
 

@@ -46,12 +46,15 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
         Firmware = firmware;
     }
 
-    /// Known headsets by USB product id.
-    public static string? Model(ushort productId) => productId switch
+    /// Known headsets by USB product id — each verified on hardware (the
+    /// protocol comes from GearLink, not OpenRGB). Also the source of the
+    /// supported-devices list (<see cref="LightingCatalog"/>).
+    public static readonly IReadOnlyDictionary<ushort, string> Models = new Dictionary<ushort, string>
     {
-        0x1AFA => "ROG Delta II",
-        _ => null,
+        [0x1AFA] = "ROG Delta II",
     };
+
+    public static string? Model(ushort productId) => Models.GetValueOrDefault(productId);
 
     /// Every headset that answers. A dongle whose headset is off or out of
     /// range goes to `silent`, to be asked again later.

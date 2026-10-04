@@ -107,7 +107,7 @@ cargo test --manifest-path rigstats-backend/Cargo.toml classify_system_brand
 
 The sensor sidecar (`rigstats-sensor.exe`, .NET 10, LocalSystem Windows Service) embeds LibreHardwareMonitor and streams one JSON line per second over `\\.\pipe\rigstats-sensors`. The Rust backend reads that pipe alongside sysinfo (CPU/RAM/disk/network) and WMI (static hardware metadata at startup), then sends a `StatsPayload` to the egui UI thread each tick. The egui binary renders all panels and dialog windows natively — no WebView, no JavaScript at runtime.
 
-See [docs/architecture.md](docs/architecture.md) for module-level detail and [docs/setup.md](docs/setup.md) for the full local development setup.
+See [docs/architecture.md](docs/architecture.md) for module-level detail and [docs/setup.md](docs/setup.md) for the full local development setup. The lighting devices the Control Center drives are listed in [docs/supported-devices.md](docs/supported-devices.md).
 
 ## Display & Placement
 

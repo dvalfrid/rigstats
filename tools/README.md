@@ -63,8 +63,10 @@ pwsh -NoProfile -File tools/openrgb-asus-watch.ps1 -UpdateBaseline  # after revi
 ```
 
 A new entry in a supported family becomes an issue and a pull request that
-adds it as **unverified** — like the other monitors' built-in effects, it is
-marked verified only once someone has seen it work on the hardware.
+adds it as **unverified** (`Verified` stays false in its model table) — it
+is marked verified only once someone has seen it work on the hardware. The
+supported-devices list (`docs/supported-devices.md`, the website) is
+generated from those tables, so it follows; see `LightingCatalog`.
 
 ## `clean-tray-ghosts.ps1`
 

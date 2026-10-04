@@ -576,7 +576,8 @@ public class AsusMonitorTests
     [InlineData((ushort)0x1AC8, "ROG Aura Monitor Light Bar", "light_bar")]
     public void Current_family_models_are_known(ushort pid, string name, string kind)
     {
-        Assert.Equal((name, kind), AsusMonitorDevice.Model(pid));
+        var model = AsusMonitorDevice.Model(pid)!;
+        Assert.Equal((name, kind), (model.Name, model.Kind));
     }
 
     [Fact]
