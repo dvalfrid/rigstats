@@ -996,3 +996,29 @@ public class AsusHeadsetTests
         Assert.Null(AsusHeadsetDevice.Model(0x1ACE));
     }
 }
+
+/// <summary>A failing discovery can't take the service down (#219).</summary>
+public class LightingDiscoveryFailureTests
+{
+    [Fact]
+    public void A_discovery_that_throws_leaves_no_devices_and_the_next_rescan_tries_again()
+    {
+        var fail = true;
+        var calls = 0;
+        var provider = new LightingProvider(
+            () => [],
+            _ =>
+            {
+                calls++;
+                return fail ? throw new NullReferenceException("driver bug") : new LightingScan([], "none");
+            },
+            () => null,
+            dryRun: true);
+        Assert.Empty(provider.Devices);
+        Assert.False(provider.Probe().Supported);
+
+        fail = false;
+        provider.Rescan(force: true); // same (empty) HID set, but the failed scan is redone
+        Assert.Equal(2, calls);
+    }
+}

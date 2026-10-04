@@ -294,8 +294,10 @@ public sealed class ControlPipeWorker(
         }
         catch (Exception e)
         {
-            // In the service log too, so a diagnostics export shows it.
-            SidecarLog.Log($"[rigstats-control] '{request.Method}' failed: {e.Message}");
+            // In the service log too, so a diagnostics export shows it — with the
+            // stack when it isn't one of our own explained failures.
+            var detail = e is InvalidOperationException or JsonException or Lighting.HueUnreachableException ? e.Message : e.ToString();
+            SidecarLog.Log($"[rigstats-control] '{request.Method}' failed: {detail}");
             return ControlResponse.Fail(request.Id, "internal_error", e.Message);
         }
     }

@@ -464,6 +464,9 @@ pub struct ControlState {
     pub dry_run: bool,
     pub last_apply_result: Option<ApplyResult>,
     pub last_error: Option<String>,
+    /// Number of `Error` events this session, so the UI can tell a new
+    /// error from one already dismissed (the text alone may repeat).
+    pub errors: u32,
     /// Live commanded duty % per controlled header (`fan_duty` events).
     pub fan_duty: BTreeMap<String, f64>,
     /// Reason of the last critical-temperature override (`safety_tripped`).
@@ -678,6 +681,7 @@ impl ControlState {
                 if self.hue_busy {
                     self.hue_message = Some(e.clone());
                 }
+                self.errors += 1;
                 self.last_error = Some(e);
             }
             ControlEvent::HueBusy(busy) => {
@@ -822,12 +826,15 @@ pub enum ControlCmd {
 /// events funnel through `event_tx` as [`ControlEvent`]s. Reconnects with a
 /// fixed backoff on any disconnect, except a protocol mismatch (doc: "the
 /// UI disables control and says why" — retrying can't fix a version skew).
+/// `cmd_rx` is shared so a restart after a panic (`debug::supervise`) can
+/// take the same channel up again.
 pub async fn control_task(
-    mut cmd_rx: AsyncReceiver<ControlCmd>,
+    cmd_rx: std::sync::Arc<tokio::sync::Mutex<AsyncReceiver<ControlCmd>>>,
     event_tx: SyncSender<ControlEvent>,
     dir: PathBuf,
     app_version: String,
 ) {
+    let mut cmd_rx = cmd_rx.lock().await;
     loop {
         let Some(client) = connect(&dir).await else {
             tokio::time::sleep(RECONNECT_BACKOFF).await;
@@ -1646,6 +1653,7 @@ mod tests {
         state.apply(ControlEvent::Error("Press the link button".into()));
         state.apply(ControlEvent::HueBusy(false));
         assert_eq!(state.hue_message.as_deref(), Some("Press the link button"));
+        assert_eq!(state.errors, 1);
         assert!(!state.hue_busy);
         // An error from anything else isn't the Hue card's.
         state.apply(ControlEvent::HueBusy(true));

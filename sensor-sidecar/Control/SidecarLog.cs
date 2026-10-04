@@ -19,7 +19,9 @@ public static class SidecarLog
 
     public static void Log(string message)
     {
-        var line = $"[{DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z] {message}";
+        // Local time with its UTC offset, like the app's log (#219) — the two
+        // line up in a diagnostics export without converting.
+        var line = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}] {message}";
         Console.Error.WriteLine(line);
         try
         {

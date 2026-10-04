@@ -114,8 +114,19 @@ public sealed class LightingProvider : IControlProvider
             _fingerprint = fingerprint;
 
             LightingScan scan;
-            using (first ? null : LightingLog.Quiet())
-                scan = retryOnly ? _retry!() : _discover(hid);
+            try
+            {
+                using (first ? null : LightingLog.Quiet())
+                    scan = retryOnly ? _retry!() : _discover(hid);
+            }
+            catch (Exception e)
+            {
+                // Each driver guards its own devices; this is the backstop, so
+                // a surprise here can't stop the service (it runs at start).
+                SidecarLog.Log($"[rigstats-control] Lighting: device discovery failed: {e}");
+                _stale = true; // look again in full next time
+                return;
+            }
             _retry = scan.Retry;
             if (retryOnly && scan.Devices.Count == 0)
                 return;

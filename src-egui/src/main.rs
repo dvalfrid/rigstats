@@ -3359,6 +3359,7 @@ fn main() {
 
     let dir = app_data_dir();
     debug::reset_debug_log(&dir);
+    debug::install_panic_logger(&dir);
     debug::append_debug_log(&dir, "rigstats starting");
     debug::append_debug_log(&dir, &format!("settings dir: {}", dir.display()));
 
@@ -3446,17 +3447,21 @@ fn main() {
     // changes (see the `drain_control` call site below).
     let active_profile_arc: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let active_profile_poll = active_profile_arc.clone();
-    runtime.spawn(async move {
-        poll_loop(
-            tx,
-            dir_clone,
-            pref_poll,
-            settings_poll,
-            poll_mode_loop,
-            active_profile_poll,
-        )
-        .await
-    });
+    // Restarted after a panic (#219) — the dashboard would freeze otherwise.
+    runtime.spawn(debug::supervise(
+        dir_clone.clone(),
+        "Poll loop",
+        move || {
+            poll_loop(
+                tx.clone(),
+                dir_clone.clone(),
+                pref_poll.clone(),
+                settings_poll.clone(),
+                poll_mode_loop.clone(),
+                active_profile_poll.clone(),
+            )
+        },
+    ));
 
     // Wallpaper mode at startup: the host owns the on-screen dashboard, so place
     // our own window off-screen from the start to avoid a one-frame flash.
@@ -3601,11 +3606,20 @@ fn main() {
             let (control_cmd_tx, control_cmd_rx) =
                 tokio::sync::mpsc::channel::<control::ControlCmd>(8);
             let (control_event_tx, control_rx) = mpsc::channel::<control::ControlEvent>();
-            runtime.spawn(control::control_task(
-                control_cmd_rx,
-                control_event_tx,
+            // Restarted after a panic (#219), on the same command channel.
+            let control_cmd_rx = Arc::new(tokio::sync::Mutex::new(control_cmd_rx));
+            let control_dir = dir.clone();
+            runtime.spawn(debug::supervise(
                 dir.clone(),
-                env!("CARGO_PKG_VERSION").to_string(),
+                "Control Center connection",
+                move || {
+                    control::control_task(
+                        control_cmd_rx.clone(),
+                        control_event_tx.clone(),
+                        control_dir.clone(),
+                        env!("CARGO_PKG_VERSION").to_string(),
+                    )
+                },
             ));
 
             // Spawn a thread that polls tray events at 50 ms intervals and wakes the

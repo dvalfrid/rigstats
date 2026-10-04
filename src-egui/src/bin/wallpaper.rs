@@ -254,6 +254,7 @@ impl eframe::App for WallpaperHost {
 
 fn main() {
     let dir = app_data_dir();
+    debug::install_panic_logger(&dir);
     debug::append_debug_log(&dir, "rigstats-wallpaper starting");
 
     let parent_pid: Option<u32> = std::env::var("RIGSTATS_PARENT_PID")
@@ -324,17 +325,17 @@ fn main() {
     // main-app concept — no dialogs/tray here), so this stays `None` forever;
     // the session-recording CSV column is simply empty for rows it logs.
     let no_active_profile: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    runtime.spawn(async move {
+    // Restarted after a panic (#219) — the wallpaper would freeze otherwise.
+    runtime.spawn(debug::supervise(dir_poll.clone(), "Poll loop", move || {
         poll_loop(
-            tx,
-            dir_poll,
-            pref_poll,
-            settings_poll,
-            full,
-            no_active_profile,
+            tx.clone(),
+            dir_poll.clone(),
+            pref_poll.clone(),
+            settings_poll.clone(),
+            full.clone(),
+            no_active_profile.clone(),
         )
-        .await
-    });
+    }));
 
     let viewport = egui::ViewportBuilder::default()
         .with_title(TITLE)

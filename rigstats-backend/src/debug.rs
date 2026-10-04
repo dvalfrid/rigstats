@@ -133,10 +133,117 @@ pub fn log_error(dir: &Path, message: &str) {
     append_debug_log_lvl(dir, LogLevel::Error, message);
 }
 
+/// Writes every panic — any thread — to the debug log with its thread,
+/// file:line, message and backtrace, then runs the default hook (#219). A
+/// GUI process has no console, so without this a panic leaves no trace but
+/// an "Application Error" event.
+pub fn install_panic_logger(dir: &Path) {
+    let dir = dir.to_path_buf();
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let thread = std::thread::current();
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_owned())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "(no message)".to_owned());
+        let location = info
+            .location()
+            .map_or_else(|| "unknown location".to_owned(), ToString::to_string);
+        let backtrace = std::backtrace::Backtrace::force_capture().to_string();
+        // Enough frames to find the cause, not the whole runtime stack.
+        let backtrace = backtrace.lines().take(60).collect::<Vec<_>>().join("\n");
+        log_error(
+            &dir,
+            &format!(
+                "PANIC in thread '{}' at {location}: {message}\n{backtrace}",
+                thread.name().unwrap_or("unnamed")
+            ),
+        );
+        previous(info);
+    }));
+}
+
+/// Runs the task `make` builds, and builds and runs it again after a panic
+/// (the panic itself is logged by [`install_panic_logger`]) — a long-lived
+/// task such as the poll loop or the control pipe that died would otherwise
+/// leave the dashboard frozen or the Control Center disconnected until a
+/// restart, with nothing saying why (#219). Waits 2 s before restarting,
+/// doubling up to 60 s while it keeps panicking. Ends when the task ends.
+pub async fn supervise<F, Fut>(dir: PathBuf, name: &'static str, make: F)
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    supervise_after(dir, name, make, std::time::Duration::from_secs(2)).await;
+}
+
+async fn supervise_after<F, Fut>(
+    dir: PathBuf,
+    name: &'static str,
+    mut make: F,
+    first_delay: std::time::Duration,
+) where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = ()> + Send + 'static,
+{
+    let mut delay = first_delay;
+    loop {
+        match tokio::spawn(make()).await {
+            Err(e) if e.is_panic() => {
+                log_error(
+                    &dir,
+                    &format!(
+                        "{name} stopped by a panic — restarting it in {:.1} s",
+                        delay.as_secs_f64()
+                    ),
+                );
+                tokio::time::sleep(delay).await;
+                delay = (delay * 2).min(std::time::Duration::from_secs(60));
+            }
+            _ => return,
+        }
+    }
+}
+
 pub fn read_debug_log_tail(dir: &Path, line_limit: usize) -> String {
     let path = debug_log_path(dir);
     let content = std::fs::read_to_string(path).unwrap_or_default();
     let lines = content.lines().collect::<Vec<_>>();
     let start = lines.len().saturating_sub(line_limit);
     lines[start..].join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+
+    #[tokio::test]
+    async fn supervise_restarts_a_task_that_panicked_and_logs_it() {
+        let dir = std::env::temp_dir().join(format!("rigstats-supervise-{}", std::process::id()));
+        let runs = Arc::new(AtomicU32::new(0));
+        let counted = runs.clone();
+        supervise_after(
+            dir.clone(),
+            "Test task",
+            move || {
+                let counted = counted.clone();
+                async move {
+                    // Panics the first time, ends normally the second.
+                    if counted.fetch_add(1, Ordering::SeqCst) == 0 {
+                        panic!("boom");
+                    }
+                }
+            },
+            std::time::Duration::from_millis(10),
+        )
+        .await;
+        assert_eq!(runs.load(Ordering::SeqCst), 2);
+        let log = read_debug_log_tail(&dir, 20);
+        assert!(log.contains("Test task stopped by a panic"), "{log}");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }

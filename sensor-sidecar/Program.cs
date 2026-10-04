@@ -5,6 +5,17 @@ using SensorSidecar.Control;
 using SensorSidecar.Control.Lighting;
 using SensorSidecar.Control.Providers;
 
+// A crash anywhere — a worker thread, a timer — is logged before the process
+// ends. The service manager restarts the service; without this the reason
+// would only be in the Windows event log (#219).
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+    SidecarLog.Log($"[rigstats-sensor] Fatal unhandled exception{(e.IsTerminating ? " — the service stops" : "")}: {e.ExceptionObject}");
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    SidecarLog.Log($"[rigstats-sensor] Unobserved task exception: {e.Exception}");
+    e.SetObserved();
+};
+
 var dryRun = args.Contains("--dry-run");
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -142,17 +153,35 @@ builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<Ligh
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();
 
-var host = builder.Build();
-
-// Doc: "Release on stop | StopAsync and a top-level finally call
-// ReleaseToFirmware() on all providers." StopAsync is covered by
-// SafetyGuard's own IHostedService registration above; this finally is the
-// backstop for an unhandled exception escaping host.Run() itself. Resolved
-// up front: Run() disposes the host's service provider on the way out.
-var safetyGuard = host.Services.GetRequiredService<SafetyGuard>();
+IHost host;
+SafetyGuard safetyGuard;
+try
+{
+    host = builder.Build();
+    // Doc: "Release on stop | StopAsync and a top-level finally call
+    // ReleaseToFirmware() on all providers." StopAsync is covered by
+    // SafetyGuard's own IHostedService registration above; the finally below
+    // is the backstop for an unhandled exception escaping host.Run() itself.
+    // Resolved up front: Run() disposes the host's service provider on the
+    // way out.
+    safetyGuard = host.Services.GetRequiredService<SafetyGuard>();
+}
+catch (Exception e)
+{
+    // A provider that can't even be constructed: say which, then fail the
+    // start (the service manager retries).
+    SidecarLog.Log($"[rigstats-sensor] Service failed to start: {e}");
+    throw;
+}
 try
 {
     host.Run();
+}
+catch (Exception e)
+{
+    // E.g. the hardware (LHM/PawnIO) not opening in a hosted service's start.
+    SidecarLog.Log($"[rigstats-sensor] Service stopped by an error: {e}");
+    throw;
 }
 finally
 {

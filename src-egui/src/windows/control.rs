@@ -159,6 +159,8 @@ pub struct ControlUi {
     awaiting: Option<Awaiting>,
     /// The Hue Bridge address typed in, for when the search finds nothing.
     hue_ip: String,
+    /// `ControlState::errors` when the footer's error was dismissed.
+    dismissed_errors: u32,
 }
 
 #[derive(Debug)]
@@ -1593,6 +1595,24 @@ pub fn show(
                     );
                     ui.add_space(6.0);
                 }
+            }
+            // A request the service turned down (save, delete, reset, ...) —
+            // shown until dismissed; the Hue card shows its own (#219).
+            if let Some(error) = control.last_error.as_ref().filter(|e| {
+                control.errors != ui_state.dismissed_errors
+                    && control.hue_message.as_ref() != Some(*e)
+            }) {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("The service reported an error: {error}"))
+                            .size(11.0)
+                            .color(egui::Color32::from_rgb(0xff, 0x77, 0x77)),
+                    );
+                    if ui.small_button("✕").on_hover_text("Dismiss").clicked() {
+                        ui_state.dismissed_errors = control.errors;
+                    }
+                });
+                ui.add_space(6.0);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
