@@ -120,6 +120,7 @@ script to refresh it.
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🔲 Planned |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
+| [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---

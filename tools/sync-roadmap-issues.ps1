@@ -151,6 +151,7 @@ $features = @(
   @{ id="control-aura"; kind="done"; pin=192; milestone="v3.0"; title="Control Center phase 5: ASUS Aura RGB" }
   @{ id="control-lighting-more"; kind="planned"; pin=212; milestone="v3.0"; title="Control Center: more lighting devices (ASUS monitors, peripherals, other vendors)" }
   @{ id="control-desk-lamp"; kind="done"; pin=214; milestone="v3.0"; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
+  @{ id="control-lighting-hue"; kind="planned"; pin=215; milestone="v3.0"; title="Lighting: Philips Hue via the Hue Bridge" }
   @{ id="control-armoury-crate"; kind="planned"; pin=193; milestone="v3.0"; title="Control Center phase 6: Armoury Crate replacement" }
 )
 
