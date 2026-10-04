@@ -46,6 +46,26 @@ firmware and starts the installed service again. The full workflow is in
 pwsh -File tools\dev-sidecar.ps1 -Live
 ```
 
+## `openrgb-asus-watch.ps1`
+
+Reports ASUS lighting devices **added to OpenRGB** since the last review, so
+RIGStats can follow. Reads OpenRGB's ASUS detector sources (product ids and
+names only — protocol documentation, no code copied) and compares them with
+`openrgb-asus-baseline.json`, the list already reviewed. Each new entry says
+which RIGStats driver handles its protocol family (keyboard table, monitor
+table, Aura USB) — then support is mostly a table entry plus a hardware check —
+or that none does yet (mice, AIO coolers, ...).
+
+```powershell
+pwsh -NoProfile -File tools/openrgb-asus-watch.ps1                  # report new entries
+pwsh -NoProfile -File tools/openrgb-asus-watch.ps1 -Json            # the same, as JSON
+pwsh -NoProfile -File tools/openrgb-asus-watch.ps1 -UpdateBaseline  # after review: mark all as seen
+```
+
+A new entry in a supported family becomes an issue and a pull request that
+adds it as **unverified** — like the other monitors' built-in effects, it is
+marked verified only once someone has seen it work on the hardware.
+
 ## `clean-tray-ghosts.ps1`
 
 Removes ghost/orphaned RIGStats entries from the Windows system-tray icon

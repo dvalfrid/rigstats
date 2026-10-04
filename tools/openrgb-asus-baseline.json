@@ -1,0 +1,577 @@
+[
+  {
+    "Pid": "1016",
+    "Name": "ASUS ROG Strix Claw",
+    "Detector": "DetectAsusStrixClaw"
+  },
+  {
+    "Pid": "181C",
+    "Name": "ASUS ROG Spatha Wired",
+    "Detector": "DetectAsusAuraUSBSpatha"
+  },
+  {
+    "Pid": "1824",
+    "Name": "ASUS ROG Spatha Wireless",
+    "Detector": "DetectAsusAuraUSBSpatha"
+  },
+  {
+    "Pid": "1835",
+    "Name": "ASUS Sagaris GK1100",
+    "Detector": "DetectAsusSagarisKeyboard"
+  },
+  {
+    "Pid": "1845",
+    "Name": "ASUS ROG Gladius II",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1846",
+    "Name": "ASUS ROG Pugio",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1847",
+    "Name": "ASUS ROG Strix Impact",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "184D",
+    "Name": "ASUS ROG Claymore",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1854",
+    "Name": "ASUS Aura Core",
+    "Detector": "DetectAsusAuraCoreControllers"
+  },
+  {
+    "Pid": "185B",
+    "Name": "ASUS ROG Strix Evolve",
+    "Detector": "DetectAsusAuraUSBStrixEvolve"
+  },
+  {
+    "Pid": "1866",
+    "Name": "ASUS Aura Core",
+    "Detector": "DetectAsusAuraCoreControllers"
+  },
+  {
+    "Pid": "1866",
+    "Name": "ASUS ROG Strix SCAR 17",
+    "Detector": "DetectAsusAuraCoreLaptopControllers"
+  },
+  {
+    "Pid": "1867",
+    "Name": "ASUS Aura Addressable",
+    "Detector": "DetectAsusAuraUSBAddressable"
+  },
+  {
+    "Pid": "1869",
+    "Name": "ASUS Aura Core",
+    "Detector": "DetectAsusAuraCoreControllers"
+  },
+  {
+    "Pid": "1872",
+    "Name": "ASUS Aura Addressable",
+    "Detector": "DetectAsusAuraUSBAddressable"
+  },
+  {
+    "Pid": "1875",
+    "Name": "ASUS ROG Strix Flare",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1877",
+    "Name": "ASUS ROG Gladius II Origin",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1887",
+    "Name": "ASUS ROG Ryuo AIO",
+    "Detector": "DetectAsusAuraUSBRyuoAIO"
+  },
+  {
+    "Pid": "1889",
+    "Name": "ASUS ROG AURA Terminal",
+    "Detector": "DetectAsusAuraUSBTerminal"
+  },
+  {
+    "Pid": "1890",
+    "Name": "ASUS ROG Balteus Qi",
+    "Detector": "DetectAsusAuraUSBMousemats"
+  },
+  {
+    "Pid": "1891",
+    "Name": "ASUS ROG Balteus",
+    "Detector": "DetectAsusAuraUSBMousemats"
+  },
+  {
+    "Pid": "1898",
+    "Name": "ASUS TUF Gaming M5",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1899",
+    "Name": "ASUS TUF Gaming K5",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "189E",
+    "Name": "ASUS ROG Gladius II Wireless",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "189E",
+    "Name": "ASUS ROG Strix Impact II Gundam",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18A0",
+    "Name": "ASUS ROG Gladius II Wireless",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18A3",
+    "Name": "ASUS Aura Addressable",
+    "Detector": "DetectAsusAuraUSBAddressable"
+  },
+  {
+    "Pid": "18A5",
+    "Name": "ASUS Aura Addressable",
+    "Detector": "DetectAsusAuraUSBAddressable"
+  },
+  {
+    "Pid": "18AA",
+    "Name": "ASUS TUF Gaming K7",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "18AE",
+    "Name": "ASUS ROG Ryujin AIO",
+    "Detector": "DetectAsusAuraUSBRyuoAIO"
+  },
+  {
+    "Pid": "18AF",
+    "Name": "ASUS ROG Strix Flare CoD Black Ops 4 Edition",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "18B1",
+    "Name": "ASUS ROG Gladius II Origin COD",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18C5",
+    "Name": "ASUS ROG Throne QI",
+    "Detector": "DetectAsusAuraUSBHeadsetStand"
+  },
+  {
+    "Pid": "18CD",
+    "Name": "ASUS ROG Gladius II Origin PNK LTD",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18CF",
+    "Name": "ASUS ROG Strix Flare PNK LTD",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "18D9",
+    "Name": "ASUS ROG Throne",
+    "Detector": "DetectAsusAuraUSBHeadsetStand"
+  },
+  {
+    "Pid": "18DD",
+    "Name": "ASUS ROG Gladius II Core",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18E1",
+    "Name": "ASUS ROG Strix Impact II",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18E3",
+    "Name": "Asus ROG Chakram (Wired)",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18E5",
+    "Name": "ASUS ROG Chakram (Wireless)",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "18F3",
+    "Name": "ASUS Aura Motherboard",
+    "Detector": "DetectAsusAuraUSBMotherboards"
+  },
+  {
+    "Pid": "18F8",
+    "Name": "ASUS ROG Strix Scope",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1906",
+    "Name": "ASUS ROG Pugio II (Wired)",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1908",
+    "Name": "ASUS ROG Pugio II (Wireless)",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "190C",
+    "Name": "ASUS ROG Strix Scope TKL",
+    "Detector": "DetectAsusAuraUSBKeyboards"
+  },
+  {
+    "Pid": "1910",
+    "Name": "ASUS TUF Gaming M3",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1919",
+    "Name": "ASUS ROG Strix XG279Q",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "1933",
+    "Name": "ASUS ROG Strix XG27W",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "1939",
+    "Name": "ASUS Aura Motherboard",
+    "Detector": "DetectAsusAuraUSBMotherboards"
+  },
+  {
+    "Pid": "193C",
+    "Name": "ASUS ROG Falchion (Wired)",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "193E",
+    "Name": "ASUS ROG Falchion (Wireless)",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1945",
+    "Name": "ASUS TUF Gaming K1",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1947",
+    "Name": "ASUS ROG Strix Impact II Wireless USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1949",
+    "Name": "ASUS ROG Strix Impact II Wireless 2.4 Ghz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "194B",
+    "Name": "ASUS TUF Gaming K3",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1951",
+    "Name": "ASUS ROG Strix Scope RX",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1954",
+    "Name": "ASUS ROG Strix Scope TKL PNK LTD",
+    "Detector": "DetectAsusAuraUSBKeyboards"
+  },
+  {
+    "Pid": "1956",
+    "Name": "ASUS ROG Strix Impact II Electro Punk",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1958",
+    "Name": "Asus ROG Chakram Core",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "195C",
+    "Name": "ASUS ROG Keris",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "195E",
+    "Name": "ASUS ROG Keris Wireless USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1960",
+    "Name": "ASUS ROG Keris Wireless 2.4Ghz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1962",
+    "Name": "ASUS ROG Keris Wireless Bluetooth",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1968",
+    "Name": "ASUS ROG Strix XG32VC",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "1977",
+    "Name": "Asus ROG Spatha X USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1979",
+    "Name": "Asus ROG Spatha X 2.4GHz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1979",
+    "Name": "Asus ROG Spatha X Dock",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "197B",
+    "Name": "ASUS ROG Gladius III",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "197D",
+    "Name": "ASUS ROG Gladius III Wireless USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "197F",
+    "Name": "ASUS ROG Gladius III Wireless 2.4Ghz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1981",
+    "Name": "ASUS ROG Gladius III Wireless Bluetooth",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "198C",
+    "Name": "ASUS ROG Strix XG27AQ",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "1994",
+    "Name": "ASUS ROG Throne QI GUNDAM",
+    "Detector": "DetectAsusAuraUSBHeadsetStand"
+  },
+  {
+    "Pid": "19AF",
+    "Name": "ASUS Aura Motherboard",
+    "Detector": "DetectAsusAuraUSBMotherboards"
+  },
+  {
+    "Pid": "19B6",
+    "Name": "ASUS ROG Strix SCAR 15",
+    "Detector": "DetectAsusAuraCoreLaptopControllers"
+  },
+  {
+    "Pid": "19B9",
+    "Name": "ASUS ROG PG32UQ",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "19BB",
+    "Name": "ASUS ROG Strix XG27AQM",
+    "Detector": "DetectAsusAuraUSBMonitor"
+  },
+  {
+    "Pid": "19D2",
+    "Name": "ASUS ROG Strix Impact II Moonlight White",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "19F6",
+    "Name": "ASUS ROG Strix Scope NX Wireless Deluxe USB",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "19F8",
+    "Name": "ASUS ROG Strix Scope NX Wireless Deluxe 2.4GHz",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "19FC",
+    "Name": "ASUS ROG Strix Flare II Animate",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "19FE",
+    "Name": "ASUS ROG Strix Flare II",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1A05",
+    "Name": "ASUS ROG Strix Scope RX TKL Wireless Deluxe",
+    "Detector": "DetectAsusAuraUSBKeyboards"
+  },
+  {
+    "Pid": "1A18",
+    "Name": "Asus ROG Chakram X USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A1A",
+    "Name": "Asus ROG Chakram X 2.4GHz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A66",
+    "Name": "ASUS ROG Keris Wireless AimPoint USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A68",
+    "Name": "ASUS ROG Keris Wireless AimPoint 2.4Ghz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A70",
+    "Name": "ASUS ROG Gladius III Wireless AimPoint USB",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A72",
+    "Name": "ASUS ROG Gladius III Wireless AimPoint 2.4Ghz",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A83",
+    "Name": "ASUS ROG Azoth USB",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1A85",
+    "Name": "ASUS ROG Azoth 2.4GHz",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1A88",
+    "Name": "ASUS ROG Strix Impact III",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1A9B",
+    "Name": "ASUS TUF Gaming M3 Gen II",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1AA6",
+    "Name": "ASUS Aura Motherboard",
+    "Detector": "DetectAsusAuraUSBMotherboards"
+  },
+  {
+    "Pid": "1AAE",
+    "Name": "ASUS ROG Strix Scope II 96 Wireless USB",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1AB3",
+    "Name": "ASUS ROG Strix Scope II",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1AB5",
+    "Name": "ASUS ROG Strix Scope II RX",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1ABE",
+    "Name": "ASUS ROG Ally",
+    "Detector": "DetectAsusROGAlly"
+  },
+  {
+    "Pid": "1AC8",
+    "Name": "Asus ROG Aura Monitor Light Bar",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1B12",
+    "Name": "ASUS ROG Strix Scope RX EVA-02 Edition",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1B29",
+    "Name": "ASUS ROG Strix LC III",
+    "Detector": "DetectAsusAuraUSBLiquidCoolers"
+  },
+  {
+    "Pid": "1B2B",
+    "Name": "Asus ROG SWIFT PG32UCDM",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1B30",
+    "Name": "ASUS TUF Gaming K3 GEN II",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1B4C",
+    "Name": "ASUS ROG Ally X",
+    "Detector": "DetectAsusROGAlly"
+  },
+  {
+    "Pid": "1B78",
+    "Name": "ASUS ROG Strix Scope II 96 RX Wireless USB",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1BA3",
+    "Name": "Asus ROG STRIX XG27AQDMG",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1BB4",
+    "Name": "Asus ROG STRIX XG27UCG",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1BC9",
+    "Name": "Asus ROG STRIX XG27ACDNG",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1BCA",
+    "Name": "Asus ROG SWIFT PG32UCDP",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "1BED",
+    "Name": "ASUS Aura Motherboard",
+    "Detector": "DetectAsusAuraUSBMotherboards"
+  },
+  {
+    "Pid": "1C5E",
+    "Name": "ASUS TUF Gaming K3 GEN II MIKU EDITION",
+    "Detector": "DetectAsusAuraTUFUSBKeyboard"
+  },
+  {
+    "Pid": "1C8D",
+    "Name": "ASUS ROG Gladius III Core",
+    "Detector": "DetectAsusAuraUSBMice"
+  },
+  {
+    "Pid": "1C9B",
+    "Name": "Asus ROG SWIFT PG32UCDMR",
+    "Detector": "DetectAsusMonitorControllers"
+  },
+  {
+    "Pid": "2047",
+    "Name": "ASUS Cerberus Mech",
+    "Detector": "DetectAsusCerberusMech"
+  },
+  {
+    "Pid": "879E",
+    "Name": "ASUS ROG Strix LC",
+    "Detector": "DetectAsusAuraUSBROGStrixLC"
+  }
+]
