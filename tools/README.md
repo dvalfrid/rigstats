@@ -32,6 +32,20 @@ To change an issue later: edit the matching entry in `$features` (and the mirror
 row in `ROADMAP.md`), then re-run. Requires the GitHub CLI authenticated
 (`gh auth status`); the script calls `gh` at its full install path.
 
+## `dev-sidecar.ps1`
+
+Runs the **debug sensor sidecar** in place of the installed `rigstats-sensor`
+service, so Control Center changes can be tested on real hardware. Needs an
+elevated PowerShell. Dry-run by default (UI works, nothing is written to the
+hardware); `-Live` for real writes. Ctrl+C hands everything back to the
+firmware and starts the installed service again. The full workflow is in
+"Live testing on real hardware" in
+[`docs/control-architecture.md`](../docs/control-architecture.md).
+
+```powershell
+pwsh -File tools\dev-sidecar.ps1 -Live
+```
+
 ## `clean-tray-ghosts.ps1`
 
 Removes ghost/orphaned RIGStats entries from the Windows system-tray icon

@@ -19,7 +19,8 @@
 - [UX integration](#ux-integration)
 - [Providers](#providers)
 - [Security](#security)
-- [Testing strategy](#testing-strategy)
+- [Testing strategy](#testing-strategy) — incl. live testing on real hardware
+  and finding a lighting protocol
 - [Licensing](#licensing)
 - [Delivery phases](#delivery-phases)
 - [Phase 1 — fan control as built](#phase-1--fan-control-as-built)
@@ -325,6 +326,58 @@ escalation vector:
   JSON fixtures.
 - **Dry-run**: the whole flow can be exercised on any machine without writes.
 - All existing gates (`cargo xtask verify`) stay mandatory.
+
+### Live testing on real hardware
+
+Control features are checked on real hardware before they ship. The loop:
+
+1. **Elevated window (the developer):** `pwsh -File tools\dev-sidecar.ps1 -Live`.
+   It stops the installed `rigstats-sensor` service, runs the debug sidecar in
+   its place (it logs every discovery and write to the console), and on
+   Ctrl+C hands everything back to the firmware and restarts the service.
+   Without `-Live` it is a dry run.
+2. **Rebuild the sidecar** only while the dev sidecar is stopped (Ctrl+C):
+   it holds `rigstats-sensor.exe`, so `dotnet build` fails with MSB3027
+   otherwise (the code still compiled — the copy of the exe failed).
+3. **Rebuild and restart the app** (`target\debug\rigstats.exe`, see
+   `CLAUDE.md`). Debug sidecar builds skip `PipeClientVerifier`, so the debug
+   app can connect; quit an installed RIGStats first (single-instance guard).
+4. Start the dev sidecar again, try the change, read its console output.
+
+Notes:
+
+- An agent's shell is usually not elevated: it builds, the developer runs
+  the script and pastes the console output back.
+- The control pipe is single-client while the app is open; live sensor
+  values (fan RPM, temperatures) can be read from the telemetry pipe
+  `\\.\pipe\rigstats-sensors`, which takes several clients.
+- Dialogs are found by enumerating window titles containing e.g.
+  "Control Center" (`FindWindow` with the em-dash title fails from
+  PowerShell) — for screenshots of a change.
+- Hardware writes during protocol work are done one at a time with the
+  developer watching the device, reversible first (off → back on), and every
+  value read back where the device allows.
+
+### Finding a lighting protocol
+
+Native protocols only — other software is read as documentation, never
+shipped or copied. What has worked, in order of cost:
+
+1. **OpenRGB's source** for devices it supports.
+2. **Read-only probes** of the HID collections (`get` commands, config
+   tables) — the diagnostics export's `lighting-devices.json` lists every
+   HID collection with VID/PID and usage page, so a user's export shows where
+   to look.
+3. **ASUS GearLink** (gearlink.asus.com, a WebHID app): each device page
+   `/view/<pid in decimal>` loads a bundle with the device's command schema,
+   and its console logs every report sent (the ROG Delta II).
+4. **The vendor's Windows app, unpacked, not installed** (the light bar's desk
+   lamp): extract the MSI with `msiexec /a <msi> /qn TARGETDIR=<dir>`;
+   decompile its .NET parts with `ilspycmd` (`dotnet tool install ilspycmd
+   --tool-path <dir>`) to find the native DLL calls and their meaning; read
+   the native DLL's exports and command bytes with a small disassembler (a
+   scratch console project using the `Iced` NuGet package). DisplayWidget
+   Center's `ScreenLightBarHid.dll` gave the lamp command this way.
 
 ---
 

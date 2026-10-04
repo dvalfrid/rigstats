@@ -46,6 +46,8 @@ cargo xtask setup
 
 > `cargo xtask verify` / `cargo xtask build` fail if the `rigstats-sensor` service is running (it holds the exe). Stop it first: `sc.exe stop rigstats-sensor` (elevated terminal).
 
+**Live-testing Control Center changes on real hardware:** the developer runs `pwsh -File tools\dev-sidecar.ps1 -Live` in an elevated window (debug sidecar in place of the service; Ctrl+C restores everything). Rebuild the sidecar only after Ctrl+C. Full loop and protocol-finding methods: "Live testing on real hardware" in `docs/control-architecture.md`.
+
 Single test: `cargo test --manifest-path rigstats-backend/Cargo.toml <test_name>`
 
 ## Linting and formatting
