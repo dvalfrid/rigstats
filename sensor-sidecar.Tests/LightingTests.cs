@@ -693,8 +693,16 @@ public class AsusMonitorTests
         Assert.Equal((1, 2, 3), Assert.Single(frames));
 
         loop.Start(AuraEffect.SpectrumCycle, 0, 0, 0);
-        Thread.Sleep(150);
-        loop.Stop();
+        // Wait for the animation to run (a slow CI machine may need a while).
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (frames)
+                if (frames.Count >= 3)
+                    break;
+            Thread.Sleep(20);
+        }
+        loop.Stop(); // waits for the thread: no frame can land after this
         int count;
         lock (frames)
             count = frames.Count;
@@ -702,6 +710,30 @@ public class AsusMonitorTests
         lock (frames)
             Assert.Equal(count, frames.Count); // nothing after Stop
         Assert.True(count >= 3);
+    }
+
+    [Fact]
+    public void A_new_effect_is_never_overwritten_by_a_late_frame_of_the_old_one()
+    {
+        // Breathing -> static, many times: the last frame must always be the
+        // static colour (Stop used to return before the old thread's last draw).
+        var last = (0, 0, 0);
+        var gate = new object();
+        using var loop = new SoftwareEffectLoop("test", (r, g, b) =>
+        {
+            Thread.Sleep(2); // a slow device write widens the race
+            lock (gate)
+                last = (r, g, b);
+        });
+        for (var i = 0; i < 20; i++)
+        {
+            loop.Start(AuraEffect.Breathing, 255, 0, 0);
+            Thread.Sleep(45);
+            loop.Start(AuraEffect.Static, 0, 0, 255);
+            Thread.Sleep(60);
+            lock (gate)
+                Assert.Equal((0, 0, 255), last);
+        }
     }
 }
 

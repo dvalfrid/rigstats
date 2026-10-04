@@ -60,9 +60,13 @@ public sealed class SoftwareEffectLoop : IDisposable
 {
     private static readonly TimeSpan FrameInterval = TimeSpan.FromMilliseconds(40);
 
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(1);
+
     private readonly Action<byte, byte, byte> _draw;
     private readonly string _name;
+    private readonly object _gate = new();
     private CancellationTokenSource? _running;
+    private Thread? _thread;
 
     public SoftwareEffectLoop(string name, Action<byte, byte, byte> draw)
     {
@@ -74,7 +78,14 @@ public sealed class SoftwareEffectLoop : IDisposable
     /// a failing device throws to the caller.
     public void Start(AuraEffect effect, byte red, byte green, byte blue)
     {
-        Stop();
+        lock (_gate)
+            StartLocked(effect, red, green, blue);
+    }
+
+    // Caller holds _gate, so a preview and a profile apply can't interleave.
+    private void StartLocked(AuraEffect effect, byte red, byte green, byte blue)
+    {
+        StopLocked();
         var (r, g, b) = SoftwareEffect.Frame(effect, red, green, blue, TimeSpan.Zero);
         _draw(r, g, b);
         if (!SoftwareEffect.IsAnimated(effect))
@@ -105,13 +116,37 @@ public sealed class SoftwareEffectLoop : IDisposable
             IsBackground = true,
             Name = $"lighting-{_name}",
         };
+        _thread = thread;
         thread.Start();
     }
 
+    /// Ends the animation and waits for its thread, so no frame of the old
+    /// effect lands after this returns (it would overwrite the next effect's
+    /// first frame — a monitor left mid-breath after switching to static).
     public void Stop()
     {
-        _running?.Cancel();
+        lock (_gate)
+            StopLocked();
+    }
+
+    private void StopLocked()
+    {
+        var cts = _running;
+        var thread = _thread;
         _running = null;
+        _thread = null;
+        if (cts is null)
+            return;
+        cts.Cancel();
+        // Never join itself: a draw that throws ends on the loop's own thread.
+        if (thread is null || thread == Thread.CurrentThread || thread.Join(StopTimeout))
+        {
+            cts.Dispose();
+            return;
+        }
+        // Still inside a slow draw: leave the token alive (disposing it under
+        // the thread would throw there and take the service down).
+        SidecarLog.Log($"[rigstats-control] Lighting animation on {_name} did not stop within {StopTimeout.TotalSeconds:0} s.");
     }
 
     public void Dispose() => Stop();
