@@ -648,9 +648,16 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   not saved to the keyboard (no `0x50 0x55`). Per model: brightness scale
   (0–4 per OpenRGB; **0–100 on the Azoth X**, measured — 4 looked off),
   speed scale, and K1/K5 without the per-key marker. Verified: ROG Azoth X
-  through the Omni receiver and by cable (`1C24`). Not covered: ROG
-  Claymore (other layout, 2018), Strix Scope TKL family (direct per-key
-  only).
+  through the Omni receiver and by cable (`1C24`), and the **ROG Falchion
+  Ace HFX** (`1B7E`, not in OpenRGB): same layout reply as the Azoth X,
+  0–100 brightness. Newer ASUS keyboards also expose a HID LampArray
+  collection; on that path their firmware takes its own lighting back at
+  once (a flash, no change), so a keyboard driven here has its LampArray
+  collection left out of discovery (`WithoutDirectKeyboards`) — one path
+  per keyboard. A new model: probe "get layout" read-only; an Azoth-style
+  reply (`12 12 00 00 02 0B`) means this protocol, then one static write and
+  a brightness-4 write settle the scale. Not covered: ROG Claymore (other
+  layout, 2018), Strix Scope TKL family (direct per-key only).
 - **ASUS headsets, GearLink protocol** (`AsusHeadsetDevice`) — not in
   OpenRGB; the protocol is GearLink's own declarative command schema (read
   as documentation): report `0xCC` on usage page `0xFF00`, frame

@@ -1675,7 +1675,8 @@ Since #212 Aura Sync also reaches ROG Aura monitors, the Aura Monitor Light Bar
 and any Windows Dynamic Lighting (HID LampArray) keyboard or mouse, any brand —
 the ROG Harpe Ace through the Omni receiver among them.
 ROG keyboards of the Azoth / Strix / TUF family — including the Azoth X through
-the Omni receiver — and the ROG Delta II headset follow too. Devices plugged in,
+the Omni receiver and the Falchion Ace HFX, which OpenRGB doesn't cover yet —
+and the ROG Delta II headset follow too. Devices plugged in,
 switched between cable and dongle, or a headset switched on are found while
 RIGStats runs — no service restart. The light bar's desk lamp (#214) has its own
 on/off, brightness and colour temperature per profile, and a "Toggle Desk Lamp"

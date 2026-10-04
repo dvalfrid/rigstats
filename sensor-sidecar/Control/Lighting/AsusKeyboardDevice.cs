@@ -12,7 +12,8 @@ public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, 
 /// family of the original ROG Azoth in OpenRGB (protocol documentation
 /// only): ROG Azoth, Falchion, Strix Flare / Flare II, Strix Scope / RX /
 /// NX / II / II 96 and TUF Gaming K1/K3/K5/K7, plus anything paired to the
-/// ROG Omni receiver — the ROG Azoth X there is verified on hardware. Each
+/// ROG Omni receiver — the ROG Azoth X there is verified on hardware — and
+/// newer models verified here beyond OpenRGB (ROG Falchion Ace HFX). Each
 /// model's vendor collection (usage page 0xFF00) takes the effect command;
 /// on the receiver every paired device has its own channel (0xFF00–0xFF02,
 /// own report id) and the keyboard's is the one that answers "get layout"
@@ -47,6 +48,12 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     public string Id { get; }
     public string Name { get; }
     public string Kind => "keyboard";
+
+    /// The keyboard's own USB product id when connected directly, or null
+    /// behind a receiver. A keyboard driven here may also expose a HID
+    /// LampArray collection (the Falchion Ace HFX does); that one is left
+    /// out of discovery, so two paths don't fight over the same keys.
+    public ushort? DirectProductId => _model.Receiver ? null : _info.ProductId;
     public string Firmware => "";
     public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; } = [new AuraZone("keys", "Keys", Addressable: true, 0, 1)];
@@ -77,6 +84,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
         0x1ACE => new KeyboardModel("Keyboard via ROG Omni receiver", PerKey: true, BrightnessMax: 100, Speed: 30, Receiver: true),
         // The Azoth X by cable (verified): same keyboard, same 0–100 scale.
         0x1C24 => new KeyboardModel("ROG Azoth X", PerKey: true, BrightnessMax: 100, Speed: 30),
+        // Verified on hardware: same layout reply as the Azoth X, 0–100 scale.
+        // It also exposes a LampArray collection, left alone (see ProductId).
+        0x1B7E => new KeyboardModel("ROG Falchion Ace HFX", PerKey: true, BrightnessMax: 100, Speed: 30),
         0x1A83 => Azoth("ROG Azoth"),
         0x1A85 => Azoth("ROG Azoth (2.4 GHz)"),
         0x193C => Azoth("ROG Falchion"),
@@ -153,6 +163,21 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
             }
         }
         return found;
+    }
+
+    /// `hid` without the collections of keyboards driven here directly —
+    /// for LampArray discovery, so a keyboard isn't driven twice. Receiver
+    /// collections stay: the receiver's LampArray is a paired mouse.
+    public static IReadOnlyList<HidDeviceInfo> WithoutDirectKeyboards(
+        IReadOnlyList<HidDeviceInfo> hid, IEnumerable<AsusKeyboardDevice> keyboards) =>
+        WithoutAsusProducts(hid, keyboards.Select(k => k.DirectProductId).OfType<ushort>());
+
+    /// `hid` without the ASUS collections of these product ids (pure, tested).
+    public static IReadOnlyList<HidDeviceInfo> WithoutAsusProducts(
+        IReadOnlyList<HidDeviceInfo> hid, IEnumerable<ushort> productIds)
+    {
+        var driven = productIds.ToHashSet();
+        return hid.Where(h => !(h.VendorId == AuraUsb.AsusVendorId && driven.Contains(h.ProductId))).ToList();
     }
 
     /// The device part of a HID path, without the collection suffix — so

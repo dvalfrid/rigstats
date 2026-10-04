@@ -847,6 +847,36 @@ public class AsusKeyboardTests
     }
 
     [Fact]
+    public void The_falchion_ace_hfx_speaks_the_azoth_x_protocol()
+    {
+        // Captured: get layout on interface 1 (report 0x00) — same layout as the Azoth X.
+        Assert.True(AsusKeyboardDevice.IsKeyboardLayoutReply(Hex("0012120000020B000000000000000000"), 0x00));
+
+        // The static green it took, at 0–100 brightness (4 made it very dim).
+        var model = AsusKeyboardDevice.Model(0x1B7E)!;
+        var report = AsusKeyboardDevice.EffectReport(model, 0x00, 65, AuraEffect.Static, 0x00, 0xFF, 0x00);
+        Assert.Equal("00512C00001E6400000200FF00", Convert.ToHexString(report[..13]));
+        Assert.Equal(("ROG Falchion Ace HFX", 100), (model.Name, model.BrightnessMax));
+    }
+
+    [Fact]
+    public void A_keyboard_driven_directly_is_left_out_of_lamparray_discovery()
+    {
+        static HidDeviceInfo Collection(ushort pid, ushort page, int iface) =>
+            new($"hid#vid_0b05&pid_{pid:x4}&mi_{iface:x2}", 0x0B05, pid, page, 1, 65, 65);
+        var hid = new[]
+        {
+            Collection(0x1B7E, 0xFF00, 1), // Falchion Ace HFX: driven by its own protocol
+            Collection(0x1B7E, 0x0059, 4), // ...and its LampArray: must not be driven too
+            Collection(0x1ACE, 0x0059, 3), // Omni receiver's LampArray: a paired mouse, kept
+        };
+
+        var left = AsusKeyboardDevice.WithoutAsusProducts(hid, [0x1B7E]);
+
+        Assert.Equal(new ushort[] { 0x1ACE }, left.Select(h => h.ProductId));
+    }
+
+    [Fact]
     public void Out_of_scope_keyboards_are_not_offered()
     {
         Assert.Null(AsusKeyboardDevice.Model(0x184D)); // ROG Claymore: other command layout
