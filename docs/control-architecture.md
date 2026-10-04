@@ -368,6 +368,17 @@ Notes:
 - Hardware writes during protocol work are done one at a time with the
   developer watching the device, reversible first (off → back on), and every
   value read back where the device allows.
+- **Never send a command number that isn't documented for that device —
+  not even under a "read"/"get" prefix, and never as a sweep.** A sweep of
+  ASUS keyboard "get" sub-commands `12 01`–`12 3F` (GearLink only uses
+  `00`–`08` and `12`–`16`) left a ROG Falchion Ace HFX triggering keys by
+  itself and with scrambled per-key lighting, persistently, on any PC — no
+  reset, GearLink, Armoury Crate Gear or firmware tool undid it; it went back
+  under warranty. Undocumented sub-commands can be factory, test or
+  calibration functions, and devices keep settings in flash. Only send
+  commands taken from documentation for that device family (OpenRGB, a
+  GearLink schema or bundle, a vendor DLL's disassembly), and ask the
+  developer before anything else.
 
 ### Finding a lighting protocol
 
