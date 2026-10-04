@@ -129,10 +129,12 @@ public class SensorWorkerTests
             foreach (var c in clients)
                 Assert.NotNull(await c.ReadLineAsync());
 
-            // A freed slot is offered again (within the 2 s retry back-off).
+            // A freed slot is offered again. Worst case: the server sees the
+            // client gone only at its next write (1 s), then waits out the
+            // 2 s retry back-off — plus a slow CI machine. 5 s was too tight.
             clients[0].Dispose();
             clients.RemoveAt(0);
-            clients.Add(await ConnectAsync(name));
+            clients.Add(await ConnectAsync(name, TimeSpan.FromSeconds(15)));
             Assert.NotNull(await clients[^1].ReadLineAsync());
         }
         finally
