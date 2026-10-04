@@ -10,6 +10,11 @@ public sealed record GpuPowerAdapter(string Id, string Name, int Min, int Max, i
 /// tests and for a future NVIDIA (NVML, #210) backend.
 public interface IGpuPowerApi
 {
+    /// Lets go of the driver session; the next call opens a new one. Called
+    /// when the service stops: a session left open stays behind in AMD's
+    /// ADLX server process and makes the next service start fail (#230).
+    void EndSession() { }
+
     /// Adapters that support power tuning; empty when none (or no driver).
     IReadOnlyList<GpuPowerAdapter> Adapters();
 
@@ -239,7 +244,25 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
             return _system;
         // Ask for exactly the runtime's version: the vtables used here exist
         // in every ADLX release that has manual power tuning.
-        Check(_initialize!(_version, out var system), "ADLXInitialize");
+        var result = _initialize!(_version, out var system);
+        if (result != AdlxOk)
+        {
+            // The session of an earlier service process can stay behind in
+            // AMD's ADLX server process (AMDADLXServ.exe); every new process
+            // is then refused (ALREADY_INITIALIZED / FAIL) for as long as
+            // that server lives (#230). Terminating from here does not
+            // clear it — only a fresh server does. The driver starts a new
+            // one on demand.
+            SidecarLog.Log($"[rigstats-control] GPU power: ADLXInitialize answered {AdlxResultName(result)} — restarting AMD's ADLX server and trying again.");
+            TerminateRuntime();
+            RestartAdlxServer();
+            result = _initialize(_version, out system);
+            if (result != AdlxOk)
+            {
+                TerminateRuntime();
+                Check(result, "ADLXInitialize");
+            }
+        }
         _system = system;
         return system;
     }
@@ -249,6 +272,31 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
         if (_system == IntPtr.Zero)
             return;
         _system = IntPtr.Zero;
+        TerminateRuntime();
+    }
+
+    private static void RestartAdlxServer()
+    {
+        foreach (var server in global::System.Diagnostics.Process.GetProcessesByName("AMDADLXServ"))
+        {
+            try
+            {
+                server.Kill();
+                server.WaitForExit(2000);
+            }
+            catch (Exception e)
+            {
+                SidecarLog.Log($"[rigstats-control] GPU power: AMD's ADLX server (pid {server.Id}) not stopped: {e.Message}");
+            }
+            finally
+            {
+                server.Dispose();
+            }
+        }
+    }
+
+    private void TerminateRuntime()
+    {
         try
         {
             _terminate!();
@@ -308,6 +356,12 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
         18 => "ADLX_RESET_NEEDED",
         _ => result.ToString(),
     };
+
+    public void EndSession()
+    {
+        lock (_lock)
+            TerminateLocked();
+    }
 
     public void Dispose()
     {

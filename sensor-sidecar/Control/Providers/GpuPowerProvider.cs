@@ -137,6 +137,18 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
     {
         if (api is null)
             return;
+        try
+        {
+            RestoreOriginals();
+        }
+        finally
+        {
+            api.EndSession();
+        }
+    }
+
+    private void RestoreOriginals()
+    {
         Dictionary<string, GpuOriginal> originals;
         lock (_lock)
             originals = new Dictionary<string, GpuOriginal>(_originals);
