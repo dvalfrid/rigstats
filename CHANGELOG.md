@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.42.1](https://github.com/dvalfrid/rigstats/compare/v1.42.0...v1.42.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* **control:** read the app's signature so the Control Center connects ([ae510af](https://github.com/dvalfrid/rigstats/commit/ae510aff234798d2e63809c808d74caff93ea7a7))
+
 ## [1.42.0](https://github.com/dvalfrid/rigstats/compare/v1.41.0...v1.42.0) (2026-10-04)
 
 
