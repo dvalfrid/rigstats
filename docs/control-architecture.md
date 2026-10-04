@@ -314,10 +314,24 @@ escalation vector:
 - Pipe ACL: SYSTEM full control; **interactive user** read/write only.
 - Client verification: `GetNamedPipeClientProcessId` → image path must be the
   installed `rigstats.exe`, Authenticode signature must match the service's
-  own signer (skipped in debug builds only).
+  own signer (skipped in debug builds only). The path is the real gate — only
+  an administrator can put a file there; the signer comparison catches a
+  mismatched install, it does not validate the signature.
+- Pipe names can't be taken over: the service creates each name with
+  `FirstPipeInstance` and always keeps one instance listening (the control
+  pipe creates the next before serving the connected client). If another
+  process got the name first, the service logs it and retries instead of
+  joining that pipe. The app, in turn, only accepts a pipe served from
+  session 0 (`pipe_server.rs`; release builds).
 - Strict method allowlist and schema validation; unknown fields rejected.
 - All numeric values clamped against probed limits in the service.
-- Profile store writable only by the service.
+- State writable only by the service: `DataDirectory.EnsureSecure` runs first
+  thing at start-up and gives `%ProgramData%\se.codeby.rigstats` protected
+  rules (SYSTEM and Administrators write, Users read — nothing inherited from
+  `%ProgramData%`, which would let any user create files there), replaces a
+  link put in the folder's place, and removes files an unprivileged account
+  left in it. If the folder can't be secured the service runs in dry-run and
+  writes no log file.
 
 ---
 

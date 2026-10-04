@@ -931,6 +931,13 @@ pub async fn control_task(
 
 async fn connect(dir: &Path) -> Option<NamedPipeClient> {
     match ClientOptions::new().open(PIPE_NAME) {
+        Ok(client) if !crate::pipe_server::is_service_pipe(&client) => {
+            log_pipe_trouble_throttled(
+                dir,
+                "control: rigstats-control is not served by the RIGStats service — ignoring it",
+            );
+            None
+        }
         Ok(client) => Some(client),
         Err(e) => {
             log_pipe_trouble_throttled(

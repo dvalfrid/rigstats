@@ -2225,6 +2225,13 @@ pub async fn fetch_lhm_pipe(
             return None;
         }
     };
+    if !crate::pipe_server::is_service_pipe(&client) {
+        log_pipe_trouble_throttled(
+            dir,
+            "pipe: rigstats-sensors is not served by the RIGStats service — ignoring it",
+        );
+        return None;
+    }
     append_debug_log(dir, "pipe: connected to rigstats-sensors");
     let mut reader = tokio::io::BufReader::new(client);
 

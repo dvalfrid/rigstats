@@ -17,6 +17,11 @@ namespace SensorSidecar.Control;
 /// 3. Both exes' Authenticode signer must match — works for dev (self-signed)
 ///    and release (real cert) builds without hardcoding a specific cert.
 ///
+/// Step 2 is what keeps other programs out: only an administrator can put a
+/// file at that path. Step 3 reads which certificate each file names as its
+/// signer; it does not check that the signature is valid for the file, so
+/// it guards against a mismatched install, not against a forged binary.
+///
 /// Skipped only in debug builds, per the doc.
 public interface IPipeClientVerifier
 {

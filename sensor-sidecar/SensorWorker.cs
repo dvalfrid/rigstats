@@ -82,7 +82,11 @@ public sealed class SensorWorker(IHardwareHost hardwareHost, string pipeName = "
                     PipeDirection.Out,
                     maxNumberOfServerInstances: MaxClients,
                     PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous,
+                    // With no client connected there is no instance of ours,
+                    // so this one must create the pipe name itself — and
+                    // fail if another process already holds it, rather than
+                    // join that process's pipe.
+                    _clients.IsEmpty ? PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance : PipeOptions.Asynchronous,
                     inBufferSize: 0,
                     outBufferSize: 0,
                     pipeSecurity: _pipeSecurity);

@@ -66,6 +66,20 @@ public sealed class ControlPipeWorker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         SidecarLog.Log("[rigstats-control] Listening on \\\\.\\pipe\\rigstats-control");
+        try
+        {
+            await AcceptLoopAsync(stoppingToken);
+        }
+        finally
+        {
+            if (_listening is { } listening)
+                await listening.DisposeAsync();
+            _listening = null;
+        }
+    }
+
+    private async Task AcceptLoopAsync(CancellationToken stoppingToken)
+    {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -97,26 +111,64 @@ public sealed class ControlPipeWorker(
         }
     }
 
-    private async Task AcceptOneAsync(CancellationToken stoppingToken)
-    {
-        var pipe = NamedPipeServerStreamAcl.Create(
+    // The instance waiting for the next client. One is open for as long as
+    // the worker runs — the next is created before the connected client is
+    // served — so the pipe name is never free for another process to take
+    // and pose as the service. Clients are still served one at a time; a
+    // second one waits on this instance until the first has left.
+    private NamedPipeServerStream? _listening;
+    private bool _nameTakenLogged;
+
+    /// `first`: no instance of ours exists, so creating one must also create
+    /// the pipe name — it fails when another process already holds the name.
+    private NamedPipeServerStream CreateInstance(bool first) =>
+        NamedPipeServerStreamAcl.Create(
             "rigstats-control",
             PipeDirection.InOut,
-            maxNumberOfServerInstances: 1,
+            maxNumberOfServerInstances: 2,
             PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
+            first ? PipeOptions.Asynchronous | PipeOptions.FirstPipeInstance : PipeOptions.Asynchronous,
             inBufferSize: 0,
             outBufferSize: 0,
             pipeSecurity: _pipeSecurity);
+
+    private async Task AcceptOneAsync(CancellationToken stoppingToken)
+    {
+        NamedPipeServerStream pipe;
+        try
+        {
+            pipe = _listening ?? CreateInstance(first: true);
+            _listening = null;
+            _nameTakenLogged = false;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Logged once per run of failures, not every retry.
+            if (!_nameTakenLogged)
+                SidecarLog.Log($"[rigstats-control] The pipe name is held by another process — the Control Center stays unavailable until it lets go: {e.Message}");
+            _nameTakenLogged = true;
+            await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+            return;
+        }
 
         try
         {
             await pipe.WaitForConnectionAsync(stoppingToken);
         }
-        catch (OperationCanceledException)
+        catch
         {
             await pipe.DisposeAsync();
             throw;
+        }
+
+        try
+        {
+            _listening = CreateInstance(first: false);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // The next round creates the name anew once this client has left.
+            SidecarLog.Log($"[rigstats-control] Next pipe instance not created: {e.Message}");
         }
 
         var verdict = verifier.Verify(pipe);
