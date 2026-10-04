@@ -8,6 +8,56 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.42.0](https://github.com/dvalfrid/rigstats/compare/v1.41.0...v1.42.0) (2026-10-04)
+
+
+### Features
+
+* **control:** add fan control with per-header curves ([b9da6e6](https://github.com/dvalfrid/rigstats/commit/b9da6e66ccfa840000d1b9583a34474c050d6bfc)), closes [#188](https://github.com/dvalfrid/rigstats/issues/188)
+* **control:** add the Control Center service-side foundation ([f2d7bd4](https://github.com/dvalfrid/rigstats/commit/f2d7bd44d9c9795bde884125bc2f96fd2ba66b0a))
+* **control:** add the Rust control pipe client ([55e1ba1](https://github.com/dvalfrid/rigstats/commit/55e1ba1c380b83395ce215b8489f4576f5d62aa0))
+* **control:** choose each profile's power plan and manage profiles ([4d8531e](https://github.com/dvalfrid/rigstats/commit/4d8531e6af7403e6ae9d72056bfd62b4ba0465e8)), closes [#211](https://github.com/dvalfrid/rigstats/issues/211)
+* **control:** control the light bar's desk lamp, also from the tray ([1fe74fa](https://github.com/dvalfrid/rigstats/commit/1fe74fa4ee4d9b3b2d8058f882edf299388dfcfa)), closes [#214](https://github.com/dvalfrid/rigstats/issues/214)
+* **control:** find a headset switched on after the service started ([ab3d239](https://github.com/dvalfrid/rigstats/commit/ab3d23999fa511edfb5ea39a17367556289231cd)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** find lighting devices plugged in or switched while running ([80d6977](https://github.com/dvalfrid/rigstats/commit/80d69776b062b2cffda2b53019ffb7bb9842be4b)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** light ASUS Aura monitors, the light bar and Dynamic Lighting devices ([83a0b43](https://github.com/dvalfrid/rigstats/commit/83a0b43f5f3e85c5353c2bbfdea52b87e5f8b13d)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** light ROG keyboards and the ROG Delta II with Aura Sync ([0d2033d](https://github.com/dvalfrid/rigstats/commit/0d2033d6b99ecc83db842a70278de650d4d91b72))
+* **control:** light the ROG Azoth X by cable too ([8622b24](https://github.com/dvalfrid/rigstats/commit/8622b2489969e8aeca5ff5d03070830b66514226)), closes [#213](https://github.com/dvalfrid/rigstats/issues/213)
+* **control:** light the ROG Falchion Ace HFX ([8288823](https://github.com/dvalfrid/rigstats/commit/8288823919a3ccc59d5e0d7edf829ed8493ef553)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** list the supported lighting devices on the website and in the docs ([2e9c9ca](https://github.com/dvalfrid/rigstats/commit/2e9c9caa7512360b858dc22696b1f0aea1d653b9)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** lower AMD CPU power limits per profile ([47da897](https://github.com/dvalfrid/rigstats/commit/47da8974f6766a32dc72787ed1b0b3ca694e18b6)), closes [#189](https://github.com/dvalfrid/rigstats/issues/189)
+* **control:** open a fan's curve from the Motherboard panel ([c0d5972](https://github.com/dvalfrid/rigstats/commit/c0d59721aa3367169176660e91b878e79fefde12)), closes [#188](https://github.com/dvalfrid/rigstats/issues/188)
+* **control:** quick-pick lighting colours ([865e50a](https://github.com/dvalfrid/rigstats/commit/865e50aa5ed8ae397ddaffc78440ab19e8a8e47c))
+* **control:** set ASUS Aura lighting per profile with Aura Sync ([89017e9](https://github.com/dvalfrid/rigstats/commit/89017e97a9e0c63b2f62d4f32cc8d370ed0cf55b)), closes [#192](https://github.com/dvalfrid/rigstats/issues/192)
+* **control:** set the AMD GPU power limit per profile ([b842108](https://github.com/dvalfrid/rigstats/commit/b842108e8cd1d22487b9fbbb1b7502065381cdb6)), closes [#190](https://github.com/dvalfrid/rigstats/issues/190)
+* **control:** undervolt with AMD Curve Optimizer per profile ([d108dae](https://github.com/dvalfrid/rigstats/commit/d108daefaab9c1b2099650bba8d34f181f688cca)), closes [#191](https://github.com/dvalfrid/rigstats/issues/191)
+* **control:** wire the Control Center into the egui UI ([0687935](https://github.com/dvalfrid/rigstats/commit/06879357ae06cb71c8554a11ea0bd865337acce8)), closes [#187](https://github.com/dvalfrid/rigstats/issues/187)
+* **diagnostics:** record fan/power control outcomes and fan channel mapping ([3b3a337](https://github.com/dvalfrid/rigstats/commit/3b3a3378eba8884307da733e551f7b3bb63a43d5)), closes [#207](https://github.com/dvalfrid/rigstats/issues/207)
+* **diagnostics:** record lighting devices and a HID scan in the export ([58d757d](https://github.com/dvalfrid/rigstats/commit/58d757deb4148c2af791b6a5cb26d70c8dccec13)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **tray:** open the Control Center from the tray menu ([aff277f](https://github.com/dvalfrid/rigstats/commit/aff277fc8462d58dd2592f334f73f7a66f0634b4)), closes [#188](https://github.com/dvalfrid/rigstats/issues/188)
+
+
+### Bug Fixes
+
+* **control:** keep a late animation frame from overwriting the next lighting effect ([3955358](https://github.com/dvalfrid/rigstats/commit/3955358269320b3bb67515ed122ccfcf17bd0cb5)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** light the ROG Azoth at full brightness ([a6334b9](https://github.com/dvalfrid/rigstats/commit/a6334b914daebaa935d33b2e8c1306127c4c2caf)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **control:** report the service's real version ([af3cc53](https://github.com/dvalfrid/rigstats/commit/af3cc539816434fb6854a72c5daae09a7ad971a5))
+* **control:** show the active profile's power plan, not its name ([a79790c](https://github.com/dvalfrid/rigstats/commit/a79790c5befc93927a11ca6dd22d601b81051f84))
+* **control:** stop a colour preview from switching off the desk lamp ([865e50a](https://github.com/dvalfrid/rigstats/commit/865e50aa5ed8ae397ddaffc78440ab19e8a8e47c)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+* **installer:** install PawnIO with its official setup ([ae5a9e7](https://github.com/dvalfrid/rigstats/commit/ae5a9e76c7e179d8d25762e206347252858da595)), closes [#205](https://github.com/dvalfrid/rigstats/issues/205)
+* **recording:** wait longer for the session index lock ([f5217f4](https://github.com/dvalfrid/rigstats/commit/f5217f4fa9aac4f5904533abbf363ae054128cc8))
+* **release:** sign the app and the service before packaging them ([8d9fb60](https://github.com/dvalfrid/rigstats/commit/8d9fb60dbda3be6eaae9fd0eb0d853db768cf987))
+* **sensor:** close the hardware only after telemetry clients are done ([56bf0bc](https://github.com/dvalfrid/rigstats/commit/56bf0bcf0d46ecbea6acea590b3ce387da0fb175)), closes [#204](https://github.com/dvalfrid/rigstats/issues/204)
+* **settings:** show which settings tab is selected ([f85499b](https://github.com/dvalfrid/rigstats/commit/f85499b899d70a3dd18c6689fc8b448e8d55d248))
+* **settings:** wrap the overlay description before its toggle ([3fbbc3c](https://github.com/dvalfrid/rigstats/commit/3fbbc3c694c7cfd31080dbc889a8c82472c17352))
+* **status:** give the debug log room again ([af92cc7](https://github.com/dvalfrid/rigstats/commit/af92cc7b6fa7477d6c570497e52b66046467221c))
+* **updater:** show changelog scopes as labels, not raw markdown ([2b69674](https://github.com/dvalfrid/rigstats/commit/2b696747b1f78af4cc1774a62e3828e2e872fb6b))
+
+
+### Performance Improvements
+
+* **control:** let the light bar and Aura monitors run their own effects ([016689e](https://github.com/dvalfrid/rigstats/commit/016689e24026f3c00f1377d65fad49ab8c74a592)), closes [#212](https://github.com/dvalfrid/rigstats/issues/212)
+
 ## [1.41.0](https://github.com/dvalfrid/rigstats/compare/v1.40.0...v1.41.0) (2026-09-29)
 
 
