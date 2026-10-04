@@ -15,7 +15,7 @@ use crate::windows::settings::tab_btn;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
-    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, LampPart,
+    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HueCaps, LampPart,
     PowerScheme, Profile,
 };
 use std::collections::BTreeMap;
@@ -157,6 +157,8 @@ pub struct ControlUi {
     /// footer buttons stay disabled, so a second click can't land on the
     /// button that replaces the first one (Keep → Try) or confirm twice.
     awaiting: Option<Awaiting>,
+    /// The Hue Bridge address typed in, for when the search finds nothing.
+    hue_ip: String,
 }
 
 #[derive(Debug)]
@@ -782,18 +784,27 @@ fn lighting_tab(
     dc: &DialogColors,
     control: &ControlState,
     caps: Option<&AuraCaps>,
-    blocked: Option<&str>,
     saved: Option<&AuraPart>,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     ui_state: &mut ControlUi,
 ) {
+    let blocked = control.aura_unavailable();
+    let hue = control.hue_caps();
     card_frame(dc).show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         section_label(ui, dc, "Lighting");
         ui.add_space(4.0);
         let Some(caps) = caps else {
             // Present but taken by another app — explained, not hidden.
+            let reason = match (blocked.as_deref(), &hue) {
+                (Some(blocked), _) => blocked,
+                (None, Some(_)) => {
+                    "No RGB device found here. Pair a Hue Bridge below to light the room."
+                }
+                (None, None) => "Lighting is unavailable.",
+            };
             ui.label(
-                egui::RichText::new(blocked.unwrap_or("Lighting is unavailable."))
+                egui::RichText::new(reason)
                     .size(11.0)
                     .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
             );
@@ -836,6 +847,13 @@ fn lighting_tab(
                 // Skipped by Aura Sync until the other controller lets go.
                 ui.label(
                     egui::RichText::new(blocked)
+                        .size(11.0)
+                        .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+                );
+            }
+            if let Some(problem) = &device.problem {
+                ui.label(
+                    egui::RichText::new(problem)
                         .size(11.0)
                         .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
                 );
@@ -935,6 +953,157 @@ fn lighting_tab(
                 ui_state.queue_aura_preview(before.as_ref(), p);
             }
             ui_state.aura_draft = Some(AuraDraft { profile_id, part });
+        }
+    });
+    if let Some(hue) = &hue {
+        ui.add_space(10.0);
+        hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+    }
+}
+
+/// Philips Hue (#215): find and pair a bridge, then choose which rooms and
+/// zones follow the rig. Applies at once — the pairing isn't part of a
+/// profile; the profile's lighting is what the chosen rooms then show.
+fn hue_card(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    hue: &HueCaps,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    typed_ip: &mut String,
+) {
+    let muted = |text: &str| egui::RichText::new(text).size(11.0).color(dc.muted);
+    card_frame(dc).show(ui, |ui| {
+        ui.set_min_width(ui.available_width());
+        section_label(ui, dc, "Philips Hue");
+        ui.add_space(4.0);
+        let busy = control.hue_busy;
+        match (&hue.bridge, hue.paired) {
+            (Some(bridge), true) => {
+                ui.horizontal(|ui| {
+                    let model = if bridge.model.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", bridge.model)
+                    };
+                    ui.label(
+                        egui::RichText::new(format!("{}{model} at {}", bridge.name, bridge.ip))
+                            .size(12.0)
+                            .color(dc.text),
+                    )
+                    .on_hover_text(format!(
+                        "Bridge {}, firmware {}",
+                        bridge.id, bridge.firmware
+                    ));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_enabled_ui(!busy, |ui| {
+                            if theme::dialog_btn_secondary(ui, "Unpair", dc).clicked() {
+                                let _ = cmd_tx.try_send(ControlCmd::HueUnpair);
+                            }
+                            if theme::dialog_btn_secondary(ui, "Refresh rooms", dc).clicked() {
+                                let _ = cmd_tx.try_send(ControlCmd::HueRefresh);
+                            }
+                        });
+                    });
+                });
+                ui.add_space(6.0);
+                ui.label(muted(
+                    "Rooms and zones that follow the rig's lighting. Other lights are never touched.",
+                ));
+                ui.add_space(4.0);
+                if hue.groups.is_empty() {
+                    ui.label(muted("The bridge has no rooms or zones yet — add them in the Hue app."));
+                }
+                let mut chosen: Vec<String> = hue
+                    .groups
+                    .iter()
+                    .filter(|g| g.chosen)
+                    .map(|g| g.id.clone())
+                    .collect();
+                let mut changed = false;
+                ui.add_enabled_ui(!busy, |ui| {
+                    for group in &hue.groups {
+                        let mut on = group.chosen;
+                        let label = format!("{} ({})", group.name, group.kind);
+                        if ui.checkbox(&mut on, label).changed() {
+                            chosen.retain(|id| id != &group.id);
+                            if on {
+                                chosen.push(group.id.clone());
+                            }
+                            changed = true;
+                        }
+                    }
+                });
+                if changed {
+                    let _ = cmd_tx.try_send(ControlCmd::HueChoose(chosen));
+                }
+                ui.add_space(4.0);
+                ui.label(muted(
+                    "Breathing and spectrum cycle run slowly on Hue: the bridge takes about one \
+                     command a second, so it fades between steps.",
+                ));
+            }
+            _ => {
+                ui.label(muted(
+                    "Room lights through a Hue Bridge on this network — no cloud account, no OpenRGB.",
+                ));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.add_enabled_ui(!busy, |ui| {
+                        if theme::dialog_btn_secondary(ui, "Find bridges", dc).clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::HueDiscover(None));
+                        }
+                        ui.add_space(12.0);
+                        ui.label(muted("or IP address"));
+                        ui.add(
+                            egui::TextEdit::singleline(typed_ip)
+                                .desired_width(120.0)
+                                .hint_text("192.168.1.20"),
+                        );
+                        let ip = typed_ip.trim();
+                        if !ip.is_empty() && theme::dialog_btn_secondary(ui, "Look up", dc).clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::HueDiscover(Some(ip.to_owned())));
+                        }
+                    });
+                });
+                if !control.hue_found.is_empty() {
+                    ui.add_space(6.0);
+                    ui.label(muted(
+                        "Press the round link button on the bridge, then Pair within 30 seconds.",
+                    ));
+                    for bridge in &control.hue_found {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "{} ({}) at {}",
+                                    bridge.name, bridge.model, bridge.ip
+                                ))
+                                .size(12.0)
+                                .color(dc.text),
+                            );
+                            ui.add_enabled_ui(!busy, |ui| {
+                                if theme::dialog_btn_primary(ui, "Pair").clicked() {
+                                    let _ = cmd_tx.try_send(ControlCmd::HuePair(bridge.ip.clone()));
+                                }
+                            });
+                        });
+                    }
+                }
+            }
+        }
+        if busy {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(muted("Talking to the Hue Bridge…"));
+            });
+        } else if let Some(message) = &control.hue_message {
+            ui.add_space(4.0);
+            ui.label(
+                egui::RichText::new(message)
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+            );
         }
     });
 }
@@ -1292,7 +1461,8 @@ pub fn show(
     let co_caps = control.curve_opt_caps();
     let aura_caps = control.aura_caps();
     let aura_blocked = control.aura_unavailable();
-    let lighting_shown = aura_caps.is_some() || aura_blocked.is_some();
+    let hue_caps = control.hue_caps();
+    let lighting_shown = aura_caps.is_some() || aura_blocked.is_some() || hue_caps.is_some();
     let gpu_caps = control.gpu_caps();
     match ui_state.tab {
         Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
@@ -1596,15 +1766,18 @@ pub fn show(
                 return;
             }
             if ui_state.tab == Tab::Lighting && lighting_shown {
-                lighting_tab(
-                    ui,
-                    dc,
-                    control,
-                    aura_caps.as_ref(),
-                    aura_blocked.as_deref(),
-                    saved_aura.as_ref(),
-                    ui_state,
-                );
+                // Many devices plus the Hue card don't fit the window: scroll.
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    lighting_tab(
+                        ui,
+                        dc,
+                        control,
+                        aura_caps.as_ref(),
+                        saved_aura.as_ref(),
+                        cmd_tx,
+                        ui_state,
+                    );
+                });
                 return;
             }
             if let (Tab::Gpu, Some(caps)) = (ui_state.tab, &gpu_caps) {

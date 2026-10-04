@@ -20,6 +20,11 @@ public interface ILightingDevice
     /// Dynamic Lighting), or null — a blocked device is skipped, not fought.
     string? Blocked { get; }
 
+    /// Why the device's last write failed, for the Lighting tab — only for
+    /// devices written in the background (a Hue room), whose failures can't
+    /// fail the profile apply. Null when fine.
+    string? Problem => null;
+
     /// One effect and colour on every zone. Throws when the device is gone.
     void Apply(AuraEffect effect, byte red, byte green, byte blue);
 

@@ -58,6 +58,14 @@ public static class LightingCatalog
             "—",
             Verified + " (ROG Harpe Ace on the Omni receiver)",
             "Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead"));
+
+        rows.Add(new SupportedDevice(
+            "Philips Hue lights, through a Hue Bridge (square, v2)",
+            "Room lights",
+            "— (network)",
+            Verified,
+            "Paired from the Control Center; only the rooms and zones you choose follow the rig. " +
+            "Breathing and spectrum cycle fade slowly (the bridge takes about one command a second)"));
         return rows;
     }
 

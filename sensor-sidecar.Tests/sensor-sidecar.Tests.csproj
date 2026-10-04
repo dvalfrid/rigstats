@@ -59,6 +59,10 @@
     <Compile Include="..\sensor-sidecar\Control\Lighting\AsusHeadsetDevice.cs" Link="Control\Lighting\AsusHeadsetDevice.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\LightingLog.cs" Link="Control\Lighting\LightingLog.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\LightingCatalog.cs" Link="Control\Lighting\LightingCatalog.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\HueColor.cs" Link="Control\Lighting\HueColor.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\HueBridge.cs" Link="Control\Lighting\HueBridge.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\HueRoomDevice.cs" Link="Control\Lighting\HueRoomDevice.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\HueLink.cs" Link="Control\Lighting\HueLink.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

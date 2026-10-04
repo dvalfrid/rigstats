@@ -27,6 +27,9 @@ const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
 /// Generous — `apply_profile` can involve validate→snapshot→apply→verify
 /// across several providers; `hello`/`capabilities`/etc. return far sooner.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+/// Hue requests talk to the bridge over the network: pairing is up to four
+/// HTTPS calls of up to 3 s each in the service.
+const HUE_REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 /// Mirrors `lhm.rs`'s `MAX_PIPE_LINE_BYTES` — a healthy service emits at
 /// most a few KB per line; anything past this means a buggy/runaway peer.
 const MAX_PIPE_LINE_BYTES: usize = 256 * 1024;
@@ -175,6 +178,53 @@ pub struct AuraCaps {
     pub devices: Vec<AuraDeviceCap>,
 }
 
+/// The paired Hue Bridge (#215), from the "aura" capability's `details.hue`
+/// — present even when no other lighting device is, so a bridge can be
+/// paired there. Its chosen rooms are also among the `devices`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct HueCaps {
+    #[serde(default)]
+    pub paired: bool,
+    #[serde(default)]
+    pub bridge: Option<HueBridgeCap>,
+    #[serde(default)]
+    pub groups: Vec<HueGroupCap>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct HueBridgeCap {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub firmware: String,
+    #[serde(default)]
+    pub ip: String,
+}
+
+/// A room or zone on the bridge; `chosen` ones follow the rig.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct HueGroupCap {
+    pub id: String,
+    pub name: String,
+    /// "room" or "zone".
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub chosen: bool,
+}
+
+/// A bridge found on the network (`hue_discover`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct HueBridgeFound {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub model: String,
+    pub ip: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct AuraDeviceCap {
     pub id: String,
@@ -187,6 +237,10 @@ pub struct AuraDeviceCap {
     /// Why another controller owns it (Windows Dynamic Lighting) — skipped.
     #[serde(default)]
     pub blocked: Option<String>,
+    /// Why its last write failed (a Hue room whose bridge doesn't answer) —
+    /// as of when the capabilities were asked for.
+    #[serde(default)]
+    pub problem: Option<String>,
     /// Has a white lamp beside its RGB (`AuraPart::lamp`).
     #[serde(default)]
     pub lamp: bool,
@@ -426,6 +480,12 @@ pub struct ControlState {
     pub preview: Option<PreviewState>,
     /// Shown once a preview ended without "Keep" (timed out or undone).
     pub preview_reverted: bool,
+    /// A Hue request (search, pair, ...) is waiting for the service.
+    pub hue_busy: bool,
+    /// The bridges the last search found.
+    pub hue_found: Vec<HueBridgeFound>,
+    /// Why the last Hue request failed ("press the link button", ...).
+    pub hue_message: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -498,6 +558,16 @@ impl ControlState {
             .find(|c| c.domain == "aura" && c.supported)
             .and_then(|c| c.details.clone())
             .and_then(|d| serde_json::from_value(d).ok())
+    }
+
+    /// The Hue Bridge pairing state — whether or not lighting is otherwise
+    /// supported (a PC with no RGB device can still pair a bridge).
+    pub fn hue_caps(&self) -> Option<HueCaps> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "aura")
+            .and_then(|c| c.details.as_ref()?.get("hue").cloned())
+            .and_then(|h| serde_json::from_value(h).ok())
     }
 
     /// A lighting device with a desk lamp is connected (the tray toggle).
@@ -603,7 +673,20 @@ impl ControlState {
             ControlEvent::ActiveProfile(p) => self.active_profile = p,
             ControlEvent::DryRun(d) => self.dry_run = d,
             ControlEvent::ApplyResult(r) => self.last_apply_result = Some(r),
-            ControlEvent::Error(e) => self.last_error = Some(e),
+            ControlEvent::Error(e) => {
+                // The Lighting tab shows why its Hue request failed.
+                if self.hue_busy {
+                    self.hue_message = Some(e.clone());
+                }
+                self.last_error = Some(e);
+            }
+            ControlEvent::HueBusy(busy) => {
+                if busy {
+                    self.hue_message = None;
+                }
+                self.hue_busy = busy;
+            }
+            ControlEvent::HueFound(found) => self.hue_found = found,
             ControlEvent::FanDuty(duty) => {
                 // Arrives every second while curves run — only a change is
                 // worth a repaint.
@@ -677,6 +760,10 @@ pub enum ControlEvent {
     PreviewEnded {
         kept: bool,
     },
+    /// A Hue request started (`true`) or was answered (`false`).
+    HueBusy(bool),
+    /// The bridges a search found.
+    HueFound(Vec<HueBridgeFound>),
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -714,6 +801,17 @@ pub enum ControlCmd {
     ConfirmPreview {
         keep: bool,
     },
+    /// Philips Hue (#215): look for bridges — every one on the network, or
+    /// only the one at this address.
+    HueDiscover(Option<String>),
+    /// Pair with the bridge at this address (after its link button).
+    HuePair(String),
+    /// Read the paired bridge's rooms and zones again.
+    HueRefresh,
+    /// The rooms and zones (ids) that follow the rig.
+    HueChoose(Vec<String>),
+    /// Forget the paired bridge.
+    HueUnpair,
 }
 
 // ── The task ────────────────────────────────────────────────────────────
@@ -866,7 +964,12 @@ async fn request(
         return Err(());
     }
 
-    let deadline = tokio::time::Instant::now() + REQUEST_TIMEOUT;
+    let timeout = if method.starts_with("hue_") {
+        HUE_REQUEST_TIMEOUT
+    } else {
+        REQUEST_TIMEOUT
+    };
+    let deadline = tokio::time::Instant::now() + timeout;
     loop {
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
@@ -1194,7 +1297,100 @@ async fn handle_cmd(
             });
             Ok(())
         }
+        ControlCmd::HueDiscover(ip) => {
+            let params = ip.map(|ip| serde_json::json!({ "ip": ip }));
+            let _ = event_tx.send(ControlEvent::HueBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "hue_discover",
+                params,
+                event_tx,
+                dir,
+            )
+            .await;
+            let found = result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("bridges").cloned())
+                .and_then(|b| serde_json::from_value::<Vec<HueBridgeFound>>(b).ok())
+                .unwrap_or_default();
+            if result.as_ref().is_ok_and(Option::is_some) && found.is_empty() {
+                let _ = event_tx.send(ControlEvent::Error(
+                    "No Hue Bridge answered. Check that it is on and on this network, or enter its IP address."
+                        .to_owned(),
+                ));
+            }
+            let _ = event_tx.send(ControlEvent::HueFound(found));
+            hue_done(result, event_tx)
+        }
+        ControlCmd::HuePair(ip) => {
+            hue_request(
+                "hue_pair",
+                Some(serde_json::json!({ "ip": ip })),
+                writer,
+                reader,
+                next_id,
+                event_tx,
+                dir,
+            )
+            .await
+        }
+        ControlCmd::HueRefresh => {
+            hue_request("hue_refresh", None, writer, reader, next_id, event_tx, dir).await
+        }
+        ControlCmd::HueChoose(groups) => {
+            hue_request(
+                "hue_choose",
+                Some(serde_json::json!({ "groups": groups })),
+                writer,
+                reader,
+                next_id,
+                event_tx,
+                dir,
+            )
+            .await
+        }
+        ControlCmd::HueUnpair => {
+            hue_request("hue_unpair", None, writer, reader, next_id, event_tx, dir).await
+        }
     }
+}
+
+/// A Hue request that changes the pairing or the chosen rooms, then the
+/// capabilities again — the Lighting tab shows the new state from there.
+async fn hue_request(
+    method: &str,
+    params: Option<serde_json::Value>,
+    writer: &mut (impl AsyncWrite + Unpin),
+    reader: &mut (impl AsyncBufRead + Unpin),
+    next_id: &mut u64,
+    event_tx: &SyncSender<ControlEvent>,
+    dir: &Path,
+) -> Result<(), ()> {
+    let _ = event_tx.send(ControlEvent::HueBusy(true));
+    let result = request(writer, reader, next_id, method, params, event_tx, dir).await;
+    if result.as_ref().is_ok_and(Option::is_some) {
+        let _ = event_tx.send(ControlEvent::HueFound(Vec::new()));
+        fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
+    }
+    hue_done(result, event_tx)
+}
+
+/// Ends a Hue request. One that got no answer at all (the connection is
+/// dropped and re-made) still says so on the Hue card.
+fn hue_done(
+    result: Result<Option<serde_json::Value>, ()>,
+    event_tx: &SyncSender<ControlEvent>,
+) -> Result<(), ()> {
+    if result.is_err() {
+        let _ = event_tx.send(ControlEvent::Error(
+            "The RIGStats service didn't answer in time. Try again in a moment.".to_owned(),
+        ));
+    }
+    let _ = event_tx.send(ControlEvent::HueBusy(false));
+    result.map(|_| ())
 }
 
 /// A line read outside of any pending `request()` call — i.e. genuinely
@@ -1416,6 +1612,46 @@ mod tests {
             serde_json::from_str(r#"{"source":"gpu","curve":[[50,40]]}"#).unwrap();
         assert!((header.hysteresis_c - 3.0).abs() < f64::EPSILON);
         assert_eq!(header.label, None);
+    }
+
+    #[test]
+    fn hue_caps_are_read_even_when_no_rgb_device_makes_lighting_supported() {
+        let state = ControlState {
+            capabilities: vec![CapabilitySet {
+                domain: "aura".into(),
+                supported: false,
+                reason: Some("No lighting controller found.".into()),
+                details: Some(serde_json::json!({
+                    "hue": {
+                        "paired": true,
+                        "bridge": {"id": "001788fffe000001", "name": "Hue Bridge", "model": "BSB002",
+                                   "firmware": "1967054020", "ip": "192.168.1.20"},
+                        "groups": [{"id": "r1", "name": "Office", "kind": "room", "chosen": true}],
+                    }
+                })),
+            }],
+            ..ControlState::default()
+        };
+        assert!(state.aura_caps().is_none());
+        let hue = state.hue_caps().unwrap();
+        assert!(hue.paired);
+        assert_eq!(hue.bridge.unwrap().ip, "192.168.1.20");
+        assert!(hue.groups[0].chosen);
+    }
+
+    #[test]
+    fn a_failed_hue_request_leaves_its_message_until_the_next_one() {
+        let mut state = ControlState::default();
+        state.apply(ControlEvent::HueBusy(true));
+        state.apply(ControlEvent::Error("Press the link button".into()));
+        state.apply(ControlEvent::HueBusy(false));
+        assert_eq!(state.hue_message.as_deref(), Some("Press the link button"));
+        assert!(!state.hue_busy);
+        // An error from anything else isn't the Hue card's.
+        state.apply(ControlEvent::HueBusy(true));
+        state.apply(ControlEvent::HueBusy(false));
+        state.apply(ControlEvent::Error("save failed".into()));
+        assert!(state.hue_message.is_none());
     }
 
     #[test]

@@ -188,6 +188,7 @@ Transactions are serialised — there is never more than one in flight.
 | `list_profiles` / `save_profile` / `delete_profile` | Profile CRUD (the store is service-owned). Saving keeps a profile's place in the list; deleting the active profile makes Balanced (else the first) active and applies it. |
 | `reset_profile` | A built-in profile back to its defaults; re-applied when it is the active profile. |
 | `aura_preview` | `{"aura": {...}}` — sets the lights at once without saving (the Lighting tab's live preview). Harmless, so outside the broker transaction. |
+| `hue_discover` / `hue_pair` / `hue_refresh` / `hue_choose` / `hue_unpair` | Philips Hue (#215): find bridges (mDNS, or `{"ip": ...}`), pair `{"ip": ...}` after the link button (`link_button` error until pressed), re-read rooms/zones, choose `{"groups": [...]}` which follow the rig, forget the bridge. Not part of any profile; each change rediscovers the lighting devices. |
 | `apply_profile` | Transactional apply (see ControlBroker). |
 | `preview` | `{"profile": {...}, "seconds": 15}` — apply an edited, unsaved profile; the service reverts it after N seconds (default 15, max 60) unless `confirm` arrives (display-mode-change pattern). A new `apply_profile`/`preview` reverts a pending one first. |
 | `confirm` | `{"keep": true}` stores the previewed profile and makes it active; `{"keep": false}` reverts now. |
@@ -300,7 +301,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
-| `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), ASUS TUF-protocol keyboards incl. via the ROG Omni receiver (`AsusKeyboardDevice`), ASUS GearLink-protocol headsets (`AsusHeadsetDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
+| `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), ASUS TUF-protocol keyboards incl. via the ROG Omni receiver (`AsusKeyboardDevice`), ASUS GearLink-protocol headsets (`AsusHeadsetDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`), chosen Philips Hue rooms and zones (`HueRoomDevice`, over the bridge's local API) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
 
 ---
 
@@ -744,6 +745,47 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the
   LampArray devices itself: they report `blocked` and Aura Sync skips them,
   the Lighting tab explains it per device, and the rest keep syncing.
+
+### Philips Hue (#215)
+
+Room lights through a Hue Bridge, on its official local API — no cloud
+account, no OpenRGB.
+
+- **Pairing** (`HueLink`, `HueBridge`): the Lighting tab's Philips Hue card
+  finds bridges with one legacy-unicast mDNS question for `_hue._tcp.local`
+  (asked from an ephemeral port, so bridges answer straight back — no
+  multicast group, nothing for the firewall to open), or takes an IP
+  address. Pairing is `POST /api` after the link button. The key, the
+  bridge and its rooms/zones live in `%ProgramData%se.codeby.rigstatshue.json`:
+  key DPAPI-encrypted (machine scope), file ACL SYSTEM + Administrators only.
+  Never on the pipe, in the capabilities or in diagnostics.
+- **TLS:** HTTPS only. The certificate must chain to Philips Hue's
+  `root-bridge` CA or Signify's `Hue Root CA 01` (embedded) and its CN must
+  be the bridge id — validation is never turned off. Bridges are reached by
+  IP, so the host name isn't checked.
+- **Devices:** one `HueRoomDevice` per chosen room or zone, driving its
+  `grouped_light` over CLIP v2 (`on`, `dimming`, `color.xy`, `dynamics`).
+  RGB → CIE xy (sRGB → XYZ), clamped to gamut C; brightness is the
+  brightest channel. Lights not chosen are never touched; a profile without
+  a lighting part leaves the room as it is (same rule as every device).
+- **Rate limit → slow animations:** the bridge takes about one group
+  command a second, so breathing and spectrum cycle are one command every
+  2 s telling the bridge to fade to the next point — smooth, but not in
+  step with the rig. (The Entertainment API would stream 25+ frames/s, but
+  needs DTLS, which .NET lacks, and an entertainment area set up in the
+  Hue app.) Commands are spaced 1 s apart per bridge and sent from each
+  room's own thread, newest wins — a slow bridge never holds up the pipe.
+- **Errors and reachability:** a failed send is logged once per failure
+  streak (and "works again" when it recovers) and shown under the room in
+  the Lighting tab (`problem` in the capability, as of when it was read) —
+  it can't fail the profile, since sends run in the background. A bridge
+  that stops answering is looked for by id again (at most once a minute) in
+  case DHCP moved it; "not found" is logged once until it works again. A
+  refused certificate says why (not signed by Hue / another bridge id),
+  not just "SSL failed". Every failed pipe request is logged in the service
+  log too, and the app gives `hue_*` requests 15 s instead of 5 s (pairing is
+  up to four HTTPS calls). `Rescan` doesn't see network devices, so
+  pairing and choosing rooms call `LightingProvider.Rediscover()`.
 
 ## Open questions
 

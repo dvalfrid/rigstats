@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), Curve Optimizer (#191) and ASUS Aura lighting (#192) done; phases #187–#193, #209, #210 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210 |
 
 ---
 
@@ -108,6 +108,7 @@ script to refresh it.
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | ✅ Done |
 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | ✅ Done |
 | [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | v3.0 | ✅ Done |
+| [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
@@ -120,7 +121,6 @@ script to refresh it.
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🔲 Planned |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
-| [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1682,3 +1682,11 @@ switched between cable and dongle, or a headset switched on are found while
 RIGStats runs — no service restart. The light bar's desk lamp (#214) has its own
 on/off, brightness and colour temperature per profile, and a "Toggle Desk Lamp"
 row in the tray when one is connected.
+Philips Hue room lights (#215) follow too, natively through the Hue Bridge's
+official local API — no OpenRGB, no Hue account: the Lighting tab finds and
+pairs the bridge (mDNS or an IP address, then its link button) and you choose
+which rooms and zones follow the rig; other lights are never touched. Static
+and off are one command; breathing and spectrum cycle are slow 2 s fades, since
+the bridge takes about one command a second. The key is stored encrypted for
+the service only, and only a bridge with a Philips Hue / Signify certificate is
+talked to. Verified on the dev rig's bridge.

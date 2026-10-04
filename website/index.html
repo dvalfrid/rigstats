@@ -165,7 +165,7 @@
         <li class="feature-card">
           <div class="feature-dot"></div>
           <h3>Control Center &amp; fan curves<span class="badge-soon">Coming in v1.42.0</span></h3>
-          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000 they can also lower the CPU power limits and undervolt with Curve Optimizer, on AMD Radeon set the GPU power limit, and on ASUS boards set the Aura lighting.</p>
+          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000 they can also lower the CPU power limits and undervolt with Curve Optimizer, on AMD Radeon set the GPU power limit, and set the lighting — ASUS Aura, ROG peripherals and Philips Hue room lights.</p>
         </li>
       </ul>
     </div>
@@ -327,7 +327,7 @@
           <li><strong>Curve Optimizer</strong> (Ryzen 9000): undervolt all cores or each core, −30 to 0 — and if the PC goes down right after a change, it is reverted at the next start</li>
           <li><strong>GPU power limit</strong> (AMD Radeon): the same setting as Adrenalin's Power Limit, over the driver's own range — and back to Adrenalin's Default when you return to the original</li>
           <li>The GPU panel shows the active limit, e.g. <strong>PL -15 %</strong></li>
-          <li><strong>Lighting with Aura Sync</strong>: off, static, breathing or spectrum cycle per profile, with colour (or one-click quick-pick colours) and brightness and a live preview — on ASUS Aura motherboards, ROG monitors and the Aura Monitor Light Bar, ROG keyboards and headsets, and any Windows Dynamic Lighting keyboard or mouse (<a href="#supported-devices">full list below</a>) — no Armoury Crate needed. Devices plugged in or switched between cable and dongle are picked up while RIGStats runs</li>
+          <li><strong>Lighting with Aura Sync</strong>: off, static, breathing or spectrum cycle per profile, with colour (or one-click quick-pick colours) and brightness and a live preview — on ASUS Aura motherboards, ROG monitors and the Aura Monitor Light Bar, ROG keyboards and headsets, and any Windows Dynamic Lighting keyboard or mouse (<a href="#supported-devices">full list below</a>) — no Armoury Crate needed. Philips Hue rooms and zones you choose follow along through the Hue Bridge on your local network — no OpenRGB, no Hue account. Devices plugged in or switched between cable and dongle are picked up while RIGStats runs</li>
           <li><strong>Desk lamp</strong>: the Aura Monitor Light Bar's white lamp gets its own on/off, brightness and colour temperature (2700–6500 K) per profile, independent of the RGB</li>
         </ul>
       </div>
@@ -380,6 +380,7 @@
                 <tr><td>TUF Gaming K7</td><td>Keyboard</td><td class="status-openrgb">From OpenRGB, not yet verified</td><td>Runs its own effects</td></tr>
                 <tr><td>ROG Delta II</td><td>Headset</td><td class="status-verified">Verified on hardware</td><td>Through its 2.4 GHz dongle; found when switched on</td></tr>
                 <tr><td>Any Windows Dynamic Lighting (HID LampArray) device, any brand</td><td>Keyboard, mouse, other</td><td class="status-verified">Verified on hardware (ROG Harpe Ace on the Omni receiver)</td><td>Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead</td></tr>
+                <tr><td>Philips Hue lights, through a Hue Bridge (square, v2)</td><td>Room lights</td><td class="status-verified">Verified on hardware</td><td>Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second)</td></tr>
 <!-- supported-devices:end -->
             </tbody>
           </table>

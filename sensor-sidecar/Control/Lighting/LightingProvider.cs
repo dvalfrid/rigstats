@@ -39,6 +39,7 @@ public sealed class LightingProvider : IControlProvider
     private readonly bool _dryRun;
     private readonly Action<IReadOnlyList<HidDeviceInfo>, IReadOnlyList<ILightingDevice>, string>? _scanned;
     private readonly Func<long> _clock;
+    private readonly HueLink? _hue;
 
     private readonly object _lock = new();
     private readonly object _scanLock = new();
@@ -48,17 +49,21 @@ public sealed class LightingProvider : IControlProvider
     private string? _fingerprint;
     private Func<LightingScan>? _retry;
     private long _lastScan;
+    private bool _stale;
 
     /// `enumerate` lists the HID collections, `discover` turns them into
     /// devices; `scanned` sees every completed discovery (the diagnostics
-    /// file). The first discovery runs here, logged in full.
+    /// file). `hue` is the paired Hue Bridge, for the capability (its
+    /// rooms are among the devices `discover` returns). The first discovery
+    /// runs here, logged in full.
     public LightingProvider(
         Func<IReadOnlyList<HidDeviceInfo>> enumerate,
         Func<IReadOnlyList<HidDeviceInfo>, LightingScan> discover,
         Func<string?> conflict,
         bool dryRun,
         Action<IReadOnlyList<HidDeviceInfo>, IReadOnlyList<ILightingDevice>, string>? scanned = null,
-        Func<long>? clock = null)
+        Func<long>? clock = null,
+        HueLink? hue = null)
     {
         _enumerate = enumerate;
         _discover = discover;
@@ -66,6 +71,7 @@ public sealed class LightingProvider : IControlProvider
         _dryRun = dryRun;
         _scanned = scanned;
         _clock = clock ?? (() => Environment.TickCount64);
+        _hue = hue;
         Rescan(force: true);
     }
 
@@ -101,7 +107,8 @@ public sealed class LightingProvider : IControlProvider
             }
             var fingerprint = string.Join("\n", hid.Select(h => h.Path).Order(StringComparer.OrdinalIgnoreCase));
             var first = _fingerprint is null;
-            var retryOnly = !first && fingerprint == _fingerprint;
+            var retryOnly = !first && !_stale && fingerprint == _fingerprint;
+            _stale = false;
             if (retryOnly && _retry is null)
                 return;
             _fingerprint = fingerprint;
@@ -152,6 +159,15 @@ public sealed class LightingProvider : IControlProvider
         }
     }
 
+    /// Discovers every device again now, though no HID collection changed —
+    /// after Hue rooms were chosen or the bridge paired or forgotten.
+    public void Rediscover()
+    {
+        lock (_scanLock)
+            _stale = true;
+        Rescan(force: true);
+    }
+
     /// Gives newly found devices the lighting the others already show.
     private void ApplyCurrent(IReadOnlyList<ILightingDevice> added)
     {
@@ -178,7 +194,17 @@ public sealed class LightingProvider : IControlProvider
         Rescan();
         var devices = _devices;
         if (devices.Count == 0)
-            return new CapabilitySet { Domain = Domain, Supported = false, Reason = _unavailableReason };
+        {
+            // The Hue details still go along: pairing a bridge is how a PC
+            // without RGB devices gets lighting at all.
+            return new CapabilitySet
+            {
+                Domain = Domain,
+                Supported = false,
+                Reason = _unavailableReason,
+                Details = _hue is null ? null : new JsonObject { ["hue"] = _hue.Details() },
+            };
+        }
         if (_conflict() is { } other)
         {
             // Flagged, so the UI explains it instead of hiding the tab.
@@ -204,6 +230,7 @@ public sealed class LightingProvider : IControlProvider
                     ["kind"] = d.Kind,
                     ["firmware"] = d.Firmware,
                     ["blocked"] = d.Blocked,
+                    ["problem"] = d.Problem,
                     ["lamp"] = d is ILampDevice { HasLamp: true },
                     // What the lamp shows now — the tray or its own button may
                     // have switched it since the profile set it.
@@ -216,6 +243,7 @@ public sealed class LightingProvider : IControlProvider
                         ["leds"] = z.Leds,
                     }).ToArray()),
                 }).ToArray()),
+                ["hue"] = _hue?.Details(),
             },
         };
     }

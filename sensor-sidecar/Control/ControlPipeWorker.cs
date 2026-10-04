@@ -23,7 +23,8 @@ public sealed class ControlPipeWorker(
     FanProvider fanProvider,
     FanCurveLoop fanLoop,
     BootCrashGuard crashGuard,
-    Lighting.LightingProvider lighting) : BackgroundService
+    Lighting.LightingProvider lighting,
+    Lighting.HueLink hue) : BackgroundService
 {
     /// The service's own version — the same as the app's (sensor-sidecar.csproj
     /// `<Version>`, bumped by release-please).
@@ -277,6 +278,11 @@ public sealed class ControlPipeWorker(
                 "reset_profile" => await HandleResetProfileAsync(request, ct),
                 "aura_preview" => HandleAuraPreview(request),
                 "lamp_toggle" => HandleLampToggle(request),
+                "hue_discover" => await HandleHueDiscoverAsync(request, ct),
+                "hue_pair" => await HandleHuePairAsync(request, ct),
+                "hue_refresh" => await HandleHueRefreshAsync(request, ct),
+                "hue_choose" => HandleHueChoose(request),
+                "hue_unpair" => HandleHueUnpair(request),
                 "apply_profile" => await HandleApplyProfileAsync(request, ct),
                 "preview" => await HandlePreviewAsync(request, ct),
                 "confirm" => await HandleConfirmAsync(request, ct),
@@ -288,6 +294,8 @@ public sealed class ControlPipeWorker(
         }
         catch (Exception e)
         {
+            // In the service log too, so a diagnostics export shows it.
+            SidecarLog.Log($"[rigstats-control] '{request.Method}' failed: {e.Message}");
             return ControlResponse.Fail(request.Id, "internal_error", e.Message);
         }
     }
@@ -418,6 +426,57 @@ public sealed class ControlPipeWorker(
         lighting.ToggleLamp() is { } on
             ? ControlResponse.Ok(request.Id, new { ok = true, on })
             : ControlResponse.Fail(request.Id, "no_lamp", "No lighting device with a lamp is connected.");
+
+    /// `{"ip": "192.168.1.20"}` (optional) — the Hue Bridges on the network
+    /// (mDNS), or only the one at `ip`.
+    private async Task<ControlResponse> HandleHueDiscoverAsync(ControlRequest request, CancellationToken ct)
+    {
+        string? ip = null;
+        if (request.Params?.TryGetProperty("ip", out var value) == true)
+            ip = value.GetString();
+        var bridges = await hue.DiscoverAsync(string.IsNullOrWhiteSpace(ip) ? null : ip.Trim(), ct);
+        SidecarLog.Log($"[rigstats-control] Hue: search{(string.IsNullOrWhiteSpace(ip) ? "" : $" at {ip.Trim()}")} found " +
+            (bridges.Count == 0 ? "no bridge." : string.Join(", ", bridges.Select(b => $"{b.Name} ({b.Model}, {b.Ip})")) + "."));
+        return ControlResponse.Ok(request.Id, new
+        {
+            bridges = bridges.Select(b => new { id = b.Id, name = b.Name, model = b.Model, ip = b.Ip }),
+        });
+    }
+
+    /// `{"ip": "..."}` — pairs once the bridge's link button was pressed.
+    private async Task<ControlResponse> HandleHuePairAsync(ControlRequest request, CancellationToken ct)
+    {
+        var ip = request.Params?.GetProperty("ip").GetString()
+            ?? throw new JsonException("missing ip.");
+        if (!await hue.PairAsync(ip, ct))
+            return ControlResponse.Fail(request.Id, "link_button", "Press the round link button on the Hue Bridge, then Pair again.");
+        lighting.Rediscover();
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
+
+    private async Task<ControlResponse> HandleHueRefreshAsync(ControlRequest request, CancellationToken ct)
+    {
+        await hue.RefreshGroupsAsync(ct);
+        lighting.Rediscover();
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
+
+    /// `{"groups": ["<room or zone id>", ...]}` — what follows the rig.
+    private ControlResponse HandleHueChoose(ControlRequest request)
+    {
+        var groups = request.Params?.GetProperty("groups").Deserialize<List<string>>(ControlJson.Options)
+            ?? throw new JsonException("missing groups.");
+        hue.Choose(groups);
+        lighting.Rediscover();
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
+
+    private ControlResponse HandleHueUnpair(ControlRequest request)
+    {
+        hue.Unpair();
+        lighting.Rediscover();
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
 
     private ControlResponse HandleReleaseToFirmware(ControlRequest request)
     {

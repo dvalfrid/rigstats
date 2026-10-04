@@ -95,9 +95,13 @@ builder.Services.AddSingleton<IControlProvider>(_ => new GpuPowerProvider(
     dryRun,
     Path.Combine(programData, "gpu-power-original.json")));
 
+// The paired Hue Bridge (#215): its chosen rooms and zones are lighting
+// devices like any other; the control pipe pairs it.
+builder.Services.AddSingleton(_ => new HueLink(Path.Combine(programData, "hue.json")));
+
 // Control Center phase 5 (#192): lighting — ASUS Aura USB controllers. Also
 // registered as itself for the control pipe's live preview, like FanProvider.
-builder.Services.AddSingleton(_ => new LightingProvider(
+builder.Services.AddSingleton(sp => new LightingProvider(
     Hid.Enumerate,
     hid =>
     {
@@ -119,6 +123,9 @@ builder.Services.AddSingleton(_ => new LightingProvider(
         // brand — except keyboards already driven by their own protocol above.
         devices.AddRange(LampArrayDevice.Discover(
             AsusKeyboardDevice.WithoutDirectKeyboards(hid, keyboards), LampArrayDevice.WindowsDynamicLightingOn));
+        // Philips Hue rooms and zones chosen to follow the rig — over the
+        // network, from the paired bridge.
+        devices.AddRange(sp.GetRequiredService<HueLink>().Devices());
         return new LightingScan(devices, devices.Count > 0 ? "" : reason, RetryHeadsets(silent));
     },
     LightingProvider.DetectConflict,
@@ -127,7 +134,8 @@ builder.Services.AddSingleton(_ => new LightingProvider(
     // seen, so unknown devices can be supported from a user's export.
     (hid, devices, reason) => LightingDiagnostics.Write(
         Path.Combine(programData, "lighting-devices.json"),
-        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn()))));
+        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn())),
+    hue: sp.GetRequiredService<HueLink>()));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
 // Last: every provider exists and the hardware is open by the time the
