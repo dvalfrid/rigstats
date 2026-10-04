@@ -205,6 +205,9 @@ public sealed class LightingProvider : IControlProvider
                     ["firmware"] = d.Firmware,
                     ["blocked"] = d.Blocked,
                     ["lamp"] = d is ILampDevice { HasLamp: true },
+                    // What the lamp shows now — the tray or its own button may
+                    // have switched it since the profile set it.
+                    ["lamp_on"] = d is ILampDevice { HasLamp: true } lamp ? LampOnOrNull(lamp) : null,
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,
@@ -338,6 +341,18 @@ public sealed class LightingProvider : IControlProvider
         foreach (var lamp in lamps)
             lamp.SwitchLamp(on);
         return on;
+    }
+
+    private static bool? LampOnOrNull(ILampDevice lamp)
+    {
+        try
+        {
+            return lamp.LampOn();
+        }
+        catch (Exception)
+        {
+            return null; // unplugged or busy: unknown, not an error for Probe
+        }
     }
 
     /// The RGB effect (unless the part only sets a lamp), then the lamp.

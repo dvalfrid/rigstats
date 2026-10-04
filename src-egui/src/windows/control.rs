@@ -210,10 +210,23 @@ impl ControlUi {
         cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     ) {
         self.aura_pending = None;
-        if self.aura_draft.take().is_some() {
-            if let Some(saved) = saved {
-                let _ = cmd_tx.try_send(ControlCmd::AuraPreview(saved.clone()));
+        if let Some(draft) = self.aura_draft.take() {
+            // Only what the draft changed goes back — a lamp switched from
+            // the tray stays as it is when only the colour was tried.
+            if let Some(back) = saved.and_then(|s| preview_delta(draft.part.as_ref(), s)) {
+                let _ = cmd_tx.try_send(ControlCmd::AuraPreview(back));
             }
+        }
+    }
+
+    /// Queues a live preview of what changed from `before` to `after`,
+    /// merged with one still waiting for the throttle.
+    fn queue_aura_preview(&mut self, before: Option<&AuraPart>, after: &AuraPart) {
+        if let Some(delta) = preview_delta(before, after) {
+            self.aura_pending = Some(match self.aura_pending.take() {
+                Some(waiting) => merge_preview(waiting, delta),
+                None => delta,
+            });
         }
     }
 
@@ -697,6 +710,50 @@ fn effect_name(effect: Option<&str>) -> &'static str {
     }
 }
 
+/// Quick-pick colours beside the colour picker: fixed values, so a pick is
+/// always the same colour. Saturated, with orange and yellow low on green
+/// and purple and pink tuned to look like their names on RGB LEDs.
+const AURA_SWATCHES: [(&str, [u8; 3]); 9] = [
+    ("Red", [255, 0, 0]),
+    ("Orange", [255, 64, 0]),
+    ("Yellow", [255, 176, 0]),
+    ("Green", [0, 255, 0]),
+    ("Cyan", [0, 255, 255]),
+    ("Blue", [0, 0, 255]),
+    ("Purple", [128, 0, 255]),
+    ("Pink", [255, 0, 128]),
+    ("White", [255, 255, 255]),
+];
+
+/// The quick-pick swatches; returns the one clicked. The current colour's
+/// swatch is outlined.
+fn color_swatches(ui: &mut egui::Ui, dc: &DialogColors, current: [u8; 3]) -> Option<[u8; 3]> {
+    let mut picked = None;
+    ui.spacing_mut().item_spacing.x = 4.0;
+    for (name, rgb) in AURA_SWATCHES {
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+        let fill = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        let stroke = if rgb == current {
+            egui::Stroke::new(2.0_f32, dc.text)
+        } else if response.hovered() {
+            egui::Stroke::new(1.0_f32, dc.text)
+        } else {
+            egui::Stroke::new(1.0_f32, dc.muted)
+        };
+        ui.painter().rect(
+            rect,
+            egui::CornerRadius::same(4),
+            fill,
+            stroke,
+            egui::StrokeKind::Inside,
+        );
+        if response.on_hover_text(name).clicked() {
+            picked = Some(rgb);
+        }
+    }
+    picked
+}
+
 /// "#ff0033" ↔ [255, 0, 51]; white when missing or malformed.
 fn parse_hex_color(hex: Option<&str>) -> [u8; 3] {
     let parse = |h: &str| -> Option<[u8; 3]> {
@@ -826,6 +883,10 @@ fn lighting_tab(
                 if egui::color_picker::color_edit_button_srgb(ui, &mut rgb).changed() {
                     p.color = Some(hex_color(rgb));
                 }
+                ui.add_space(8.0);
+                if let Some(picked) = color_swatches(ui, dc, rgb) {
+                    p.color = Some(hex_color(picked));
+                }
             });
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -845,16 +906,86 @@ fn lighting_tab(
         if caps.devices.iter().any(|d| d.lamp && d.blocked.is_none()) {
             ui.add_space(10.0);
             lamp_rows(ui, dc, &mut part);
+            let lamp_now = caps
+                .devices
+                .iter()
+                .filter(|d| d.lamp && d.blocked.is_none())
+                .filter_map(|d| d.lamp_on)
+                .reduce(|a, b| a || b);
+            if let Some(note) = lamp_state_note(lamp_now, saved, part.as_ref()) {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(note).size(11.0).color(dc.muted));
+            }
         }
         dry_run_note(ui, dc, control);
 
         if part != before {
             if let Some(p) = &part {
-                ui_state.aura_pending = Some(p.clone());
+                ui_state.queue_aura_preview(before.as_ref(), p);
             }
             ui_state.aura_draft = Some(AuraDraft { profile_id, part });
         }
     });
+}
+
+/// What a live preview sends when the lighting goes from `before` to
+/// `after`: only the part that changed — the RGB effect or the lamp — so a
+/// colour change leaves a lamp switched from the tray alone, and the other
+/// way round. `None` when nothing that can be shown changed.
+fn preview_delta(before: Option<&AuraPart>, after: &AuraPart) -> Option<AuraPart> {
+    let rgb_changed = before.map_or(true, |b| {
+        (&b.effect, &b.color, b.brightness) != (&after.effect, &after.color, after.brightness)
+    });
+    let lamp_changed = before.map_or(true, |b| b.lamp != after.lamp);
+    let rgb = rgb_changed && after.effect.is_some();
+    let lamp = lamp_changed && after.lamp.is_some();
+    match (rgb, lamp) {
+        (false, false) => None,
+        (true, true) => Some(after.clone()),
+        (true, false) => Some(AuraPart {
+            lamp: None,
+            ..after.clone()
+        }),
+        (false, true) => Some(AuraPart {
+            lamp: after.lamp.clone(),
+            ..Default::default()
+        }),
+    }
+}
+
+/// Explains a lamp that differs from what the profile says — switched from
+/// the tray or its own button. Only while the lamp row is unedited (an edit
+/// is already shown on the lamp); `now` is read when the window opened.
+fn lamp_state_note(
+    now: Option<bool>,
+    saved: Option<&AuraPart>,
+    shown: Option<&AuraPart>,
+) -> Option<&'static str> {
+    let shown_lamp = shown.and_then(|p| p.lamp.as_ref());
+    if shown_lamp != saved.and_then(|p| p.lamp.as_ref()) {
+        return None;
+    }
+    let (now, lamp) = (now?, shown_lamp?);
+    (now != lamp.on).then_some(if now {
+        "The lamp is on now (from the tray or its own button). Save & apply turns it off."
+    } else {
+        "The lamp is off now (from the tray or its own button). Save & apply turns it on."
+    })
+}
+
+/// Two previews in one: the newer one's RGB and lamp where it has them.
+fn merge_preview(older: AuraPart, newer: AuraPart) -> AuraPart {
+    let (effect, color, brightness) = if newer.effect.is_some() {
+        (newer.effect, newer.color, newer.brightness)
+    } else {
+        (older.effect, older.color, older.brightness)
+    };
+    AuraPart {
+        effect,
+        color,
+        brightness,
+        lamp: newer.lamp.or(older.lamp),
+    }
 }
 
 /// The lighting with a new effect (`None` = leave the RGB as is). A part
@@ -2928,6 +3059,81 @@ mod tests {
             None,
         );
         assert_eq!(effect_only.and_then(|p| p.effect).as_deref(), Some("off"));
+    }
+
+    fn lamp(on: bool) -> Option<LampPart> {
+        Some(LampPart {
+            on,
+            brightness: None,
+            temperature: None,
+        })
+    }
+
+    #[test]
+    fn a_colour_change_never_touches_a_lamp_switched_from_the_tray() {
+        // The profile says lamp off; the tray switched it on. Changing the
+        // colour must not send "lamp off" (the bug).
+        let saved = AuraPart {
+            effect: Some("static".into()),
+            color: Some("#ff0000".into()),
+            lamp: lamp(false),
+            ..Default::default()
+        };
+        let edited = AuraPart {
+            color: Some("#0000ff".into()),
+            ..saved.clone()
+        };
+        let sent = preview_delta(Some(&saved), &edited).unwrap();
+        assert_eq!(sent.lamp, None);
+        assert_eq!(sent.color.as_deref(), Some("#0000ff"));
+
+        // A lamp change sends only the lamp.
+        let lamp_on = AuraPart {
+            lamp: lamp(true),
+            ..saved.clone()
+        };
+        let sent = preview_delta(Some(&saved), &lamp_on).unwrap();
+        assert_eq!((sent.effect, sent.lamp), (None, lamp(true)));
+        assert_eq!(preview_delta(Some(&saved), &saved), None);
+    }
+
+    #[test]
+    fn previews_waiting_for_the_throttle_merge() {
+        let colour = AuraPart {
+            effect: Some("static".into()),
+            color: Some("#00ff00".into()),
+            ..Default::default()
+        };
+        let lamp_only = AuraPart {
+            lamp: lamp(true),
+            ..Default::default()
+        };
+        let merged = merge_preview(colour, lamp_only);
+        assert_eq!(merged.color.as_deref(), Some("#00ff00"));
+        assert_eq!(merged.lamp, lamp(true));
+    }
+
+    #[test]
+    fn a_lamp_differing_from_the_profile_is_explained_until_edited() {
+        let saved = AuraPart {
+            lamp: lamp(false),
+            ..Default::default()
+        };
+        let note = lamp_state_note(Some(true), Some(&saved), Some(&saved));
+        assert!(note.is_some_and(|n| n.starts_with("The lamp is on now")));
+        assert_eq!(
+            lamp_state_note(Some(false), Some(&saved), Some(&saved)),
+            None
+        );
+        // Edited: the lamp already shows the edit.
+        let edited = AuraPart {
+            lamp: lamp(true),
+            ..Default::default()
+        };
+        assert_eq!(
+            lamp_state_note(Some(true), Some(&saved), Some(&edited)),
+            None
+        );
     }
 
     #[test]

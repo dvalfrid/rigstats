@@ -190,6 +190,10 @@ pub struct AuraDeviceCap {
     /// Has a white lamp beside its RGB (`AuraPart::lamp`).
     #[serde(default)]
     pub lamp: bool,
+    /// Whether that lamp is lit now (read when the capabilities were asked
+    /// for) — the tray or its own button may differ from the profile.
+    #[serde(default)]
+    pub lamp_on: Option<bool>,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }

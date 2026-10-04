@@ -684,7 +684,10 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   part with only a lamp leaves the RGB alone). The tray's "Toggle Desk
   Lamp" (`lamp_toggle`, shown only while a lamp is connected) reads the
   lamp first — its own button switches it too — and turns it off, or back
-  on as it last was; not saved in a profile.
+  on as it last was; not saved in a profile. Probe reports each lamp's real
+  state (`lamp_on`), and the Lighting tab's live preview sends only the part
+  that changed (RGB or lamp), so trying a colour never resets a lamp
+  switched from the tray.
 - **Diagnostics.** After every discovery the service writes `lighting-devices.json`
   (in every diagnostics ZIP): each device's raw data (Aura firmware + config
   table, monitor config reply, LampArray kind/lamps/update interval/report

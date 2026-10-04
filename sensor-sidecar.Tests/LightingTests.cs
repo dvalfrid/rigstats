@@ -503,6 +503,10 @@ public class LightingProviderTests
         var devices = provider.Probe().Details!["devices"]!.AsArray();
         Assert.False(devices[0]!["lamp"]!.GetValue<bool>());
         Assert.True(devices[1]!["lamp"]!.GetValue<bool>());
+        Assert.Null(devices[0]!["lamp_on"]);
+        Assert.False(devices[1]!["lamp_on"]!.GetValue<bool>()); // read from the device
+        bar.Lit = true; // switched from the tray
+        Assert.True(provider.Probe().Details!["devices"]![1]!["lamp_on"]!.GetValue<bool>());
     }
 
     [Fact]
