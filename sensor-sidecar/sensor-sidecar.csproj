@@ -7,6 +7,9 @@
     <Company>Code By AB</Company>
     <Product>RIGStats</Product>
     <Description>RIGStats Hardware Sensor Service</Description>
+    <!-- Bumped by release-please with the app (release-please-config.json extra-files). -->
+    <Version>1.41.0</Version> <!-- x-release-please-version -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <SelfContained>true</SelfContained>

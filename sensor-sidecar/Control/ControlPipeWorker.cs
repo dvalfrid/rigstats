@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
@@ -24,7 +25,11 @@ public sealed class ControlPipeWorker(
     BootCrashGuard crashGuard,
     Lighting.LightingProvider lighting) : BackgroundService
 {
-    private const string AppVersion = "3.0.0"; // TODO: pull from the assembly/installer version once wired up.
+    /// The service's own version — the same as the app's (sensor-sidecar.csproj
+    /// `<Version>`, bumped by release-please).
+    private static readonly string AppVersion =
+        typeof(ControlPipeWorker).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? "0.0.0";
     private const int ProtocolVersion = 1;
 
     /// How long a `preview` lasts without `confirm` when the client doesn't say.

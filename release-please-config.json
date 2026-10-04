@@ -6,7 +6,8 @@
     ".": {
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
-        "src-egui/Cargo.toml"
+        "src-egui/Cargo.toml",
+        "sensor-sidecar/sensor-sidecar.csproj"
       ]
     }
   }
