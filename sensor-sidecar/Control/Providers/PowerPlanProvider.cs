@@ -122,7 +122,13 @@ public sealed class Win32PowerPlanApi : IPowerPlanApi
 /// symbolic scheme names (as stored in `ProfilePart.PowerPlan`) to Windows'
 /// well-known scheme GUIDs, falling back to whatever `EnumerateSchemes()`
 /// reports for anything not in the well-known set (e.g. a vendor-added
-/// scheme, or "Ultimate Performance" which isn't enabled on every machine).
+/// scheme, matched by GUID or friendly name).
+///
+/// Which plans exist is up to the PC, not us: Modern Standby laptops often
+/// ship with Balanced only. A stored plan is therefore an intent — when it is
+/// missing the closest existing plan is used (`Fallbacks`), and when not even
+/// Balanced exists the domain is left untouched. A missing plan never fails
+/// a profile, which would also block its fans, limits and lighting.
 public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
 {
     public string Domain => "power_plan";
@@ -138,15 +144,33 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
         ["ultimate_performance"] = new Guid("e9a42b02-d5df-448d-aa00-03f14749eb61"),
     };
 
-    private Guid? ResolveScheme(string name, IReadOnlyList<(Guid Guid, string Name)> available)
+    // Closest stand-ins, in order, for a plan this PC doesn't have. Anything
+    // not listed (power saver, a deleted custom plan) falls back to Balanced.
+    private static readonly IReadOnlyDictionary<string, string[]> Fallbacks = new Dictionary<string, string[]>
     {
-        if (WellKnown.TryGetValue(name, out var guid) && available.Any(s => s.Guid == guid))
-            return guid;
-        // Not a well-known name — allow matching by the scheme's own friendly
-        // name too, so a vendor/custom scheme can still be selected.
+        ["high_performance"] = ["ultimate_performance", "balanced"],
+        ["ultimate_performance"] = ["high_performance", "balanced"],
+    };
+
+    private static Guid? FindExact(string name, IReadOnlyList<(Guid Guid, string Name)> available)
+    {
+        if (WellKnown.TryGetValue(name, out var guid))
+            return available.Any(s => s.Guid == guid) ? guid : null;
+        // Not a well-known name — the Power tab stores a custom scheme by its
+        // GUID; also allow the scheme's own friendly name.
+        if (Guid.TryParse(name, out var custom) && available.Any(s => s.Guid == custom))
+            return custom;
         var byFriendlyName = available.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         return byFriendlyName.Guid != default ? byFriendlyName.Guid : null;
     }
+
+    /// The scheme `name` maps to on this PC — itself, else the closest
+    /// existing stand-in; null when none exists (leave the plan alone).
+    private static Guid? ResolveScheme(string name, IReadOnlyList<(Guid Guid, string Name)> available) =>
+        FindExact(name, available)
+        ?? (Fallbacks.TryGetValue(name, out var chain) ? chain : ["balanced"])
+            .Select(fallback => FindExact(fallback, available))
+            .FirstOrDefault(guid => guid is not null);
 
     public CapabilitySet Probe()
     {
@@ -167,11 +191,8 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
         if (part.PowerPlan is null)
             return ValidationResult.Success(); // domain untouched — not this provider's concern.
 
-        var available = api.EnumerateSchemes();
-        var resolved = ResolveScheme(part.PowerPlan, available);
-        return resolved is null
-            ? ValidationResult.Failure($"Unknown power plan '{part.PowerPlan}'.")
-            : ValidationResult.Success(JsonValue.Create(part.PowerPlan));
+        // Always fine: a missing plan resolves to a stand-in or is skipped.
+        return ValidationResult.Success(JsonValue.Create(part.PowerPlan));
     }
 
     public Snapshot Capture() =>
@@ -182,9 +203,18 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
         if (part.PowerPlan is null)
             return;
         var available = api.EnumerateSchemes();
-        var resolved = ResolveScheme(part.PowerPlan, available)
-            ?? throw new InvalidOperationException($"Unknown power plan '{part.PowerPlan}'.");
-        api.SetActiveScheme(resolved);
+        var resolved = ResolveScheme(part.PowerPlan, available);
+        if (resolved is null)
+        {
+            SidecarLog.Log($"[rigstats-control] Power plan '{part.PowerPlan}' not on this PC and no stand-in either; left unchanged.");
+            return;
+        }
+        if (FindExact(part.PowerPlan, available) is null)
+        {
+            var name = available.First(s => s.Guid == resolved).Name;
+            SidecarLog.Log($"[rigstats-control] Power plan '{part.PowerPlan}' not on this PC, using {name}.");
+        }
+        api.SetActiveScheme(resolved.Value);
     }
 
     public bool Verify(ProfilePart part)
@@ -193,7 +223,7 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
             return true;
         var available = api.EnumerateSchemes();
         var resolved = ResolveScheme(part.PowerPlan, available);
-        return resolved is not null && api.GetActiveScheme() == resolved;
+        return resolved is null || api.GetActiveScheme() == resolved;
     }
 
     public void Restore(Snapshot snapshot)

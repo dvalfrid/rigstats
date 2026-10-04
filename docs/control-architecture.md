@@ -225,6 +225,11 @@ through the pipe.
 ```
 
 - Every part is optional; a missing part leaves that domain untouched.
+- `power_plan` is an intent, not a requirement: which plans exist is up to the
+  PC (Modern Standby laptops often have Balanced only). A missing plan falls
+  back to the closest existing one (`high_performance` ↔ `ultimate_performance`,
+  then `balanced`; anything else → `balanced`), and is left untouched when not
+  even Balanced exists — it never fails a profile.
 - Built-in profiles: **Silent, Balanced, Gaming, Eco** — editable, resettable.
 - Fan headers are keyed by LHM control identifier. Users give them labels
   (LHM cannot tell which header is the CPU cooler — see *CPU fan speed* in

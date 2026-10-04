@@ -15,6 +15,7 @@ public class PowerPlanProviderTests
     private static readonly Guid PowerSaver = new("a1841308-3541-4fab-bc81-f71556f20b4a");
     private static readonly Guid Balanced = new("381b4222-f694-41f0-9685-ff5bb260df2e");
     private static readonly Guid HighPerformance = new("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
+    private static readonly Guid UltimatePerformance = new("e9a42b02-d5df-448d-aa00-03f14749eb61");
 
     private sealed class FakePowerPlanApi : IPowerPlanApi
     {
@@ -50,12 +51,77 @@ public class PowerPlanProviderTests
     }
 
     [Fact]
-    public void Validate_rejects_unknown_name()
+    public void Unknown_name_falls_back_to_balanced()
     {
-        var provider = new PowerPlanProvider(new FakePowerPlanApi());
-        var result = provider.Validate(new ProfilePart { PowerPlan = "turbo_nonsense" });
-        Assert.False(result.Ok);
-        Assert.NotNull(result.Reason);
+        var api = new FakePowerPlanApi { Active = PowerSaver };
+        var provider = new PowerPlanProvider(api);
+        var part = new ProfilePart { PowerPlan = "turbo_nonsense" };
+
+        Assert.True(provider.Validate(part).Ok);
+        provider.Apply(part);
+        Assert.Equal(Balanced, api.Active);
+        Assert.True(provider.Verify(part));
+    }
+
+    // Modern Standby laptops (ASUS G14) ship with Balanced only: Gaming's
+    // high_performance must not fail the whole profile.
+    [Theory]
+    [InlineData("high_performance")]
+    [InlineData("power_saver")]
+    public void Missing_plan_on_a_balanced_only_pc_uses_balanced(string plan)
+    {
+        var api = new FakePowerPlanApi();
+        api.Schemes.Clear();
+        api.Schemes.Add((Balanced, "Balanced"));
+        var provider = new PowerPlanProvider(api);
+        var part = new ProfilePart { PowerPlan = plan };
+
+        Assert.True(provider.Validate(part).Ok);
+        provider.Apply(part);
+        Assert.Equal(Balanced, api.Active);
+        Assert.True(provider.Verify(part));
+    }
+
+    [Fact]
+    public void Missing_high_performance_prefers_ultimate_performance()
+    {
+        var api = new FakePowerPlanApi();
+        api.Schemes.RemoveAll(s => s.Item1 == HighPerformance);
+        api.Schemes.Add((UltimatePerformance, "Ultimate Performance"));
+        var provider = new PowerPlanProvider(api);
+
+        provider.Apply(new ProfilePart { PowerPlan = "high_performance" });
+
+        Assert.Equal(UltimatePerformance, api.Active);
+    }
+
+    [Fact]
+    public void Custom_plan_resolves_by_its_guid()
+    {
+        var custom = Guid.NewGuid();
+        var api = new FakePowerPlanApi();
+        api.Schemes.Add((custom, "My plan"));
+        var provider = new PowerPlanProvider(api);
+        var part = new ProfilePart { PowerPlan = custom.ToString() };
+
+        provider.Apply(part);
+
+        Assert.Equal(custom, api.Active);
+        Assert.True(provider.Verify(part));
+    }
+
+    [Fact]
+    public void No_plans_at_all_leaves_the_active_plan_untouched()
+    {
+        var api = new FakePowerPlanApi { Active = PowerSaver };
+        api.Schemes.Clear();
+        var provider = new PowerPlanProvider(api);
+        var part = new ProfilePart { PowerPlan = "high_performance" };
+
+        Assert.True(provider.Validate(part).Ok);
+        provider.Apply(part);
+        Assert.Equal(PowerSaver, api.Active);
+        Assert.True(provider.Verify(part));
     }
 
     [Fact]

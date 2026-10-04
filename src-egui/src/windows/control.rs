@@ -1735,6 +1735,23 @@ fn power_tab(
                         open_power_options();
                     }
                 });
+                // Which plans exist is up to the PC (Modern Standby laptops
+                // often have Balanced only); the service then uses the closest one.
+                if let Some(id) = chosen
+                    .as_deref()
+                    .filter(|id| !schemes.iter().any(|s| s.id == *id))
+                {
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} isn't available on this PC — Windows' closest plan \
+                             (usually Balanced) is used instead.",
+                            power_plan_name(id)
+                        ))
+                        .size(11.0)
+                        .color(dc.muted),
+                    );
+                }
                 if chosen != current {
                     let mut profile = active.clone();
                     profile.part.power_plan = chosen;
