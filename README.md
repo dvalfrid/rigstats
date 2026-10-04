@@ -166,6 +166,31 @@ browse and chart past sessions.
   `rigstats-wallpaper` can both record) — a `.bak` copy and a short file lock
   around each read-modify-write guard against a bad write or a lost update.
 
+## Control Center
+
+Hardware control per profile — **Silent, Balanced, Gaming, Eco** and your own
+— switched from the tray, the header chip or **Ctrl+Alt+P**. Open it from the
+tray (**Control Center…**). Everything runs inside the `rigstats-sensor`
+service, so fan curves keep working with the app closed and after a reboot.
+Each tab appears only when this PC's hardware supports it.
+
+| Tab | What it controls | Where it works |
+| --- | --- | --- |
+| Power | The Windows power plan each profile switches to | Any PC |
+| Fans | Per-fan curves on CPU, GPU or a motherboard temperature; **Identify** measures which fans a channel drives | Motherboards with writable fan control (LibreHardwareMonitor) |
+| CPU | PPT/TDC/EDC power limits, and **Curve Optimizer** (−30…0, all-core or per core) | AMD Ryzen 9000, on hardware-verified SMU tables |
+| GPU | Power limit, the same setting as Adrenalin's | AMD Radeon (ADLX) |
+| Lighting | Aura Sync: one effect and colour for every device, live preview, the light bar's desk lamp | ASUS Aura motherboards, ROG monitors and light bar, ROG keyboards and headsets, any Windows Dynamic Lighting device — see [supported devices](docs/supported-devices.md) |
+
+Safety, all in the service:
+
+- CPU above 95 °C or GPU above 90 °C sends every controlled fan to 100 %; a lost temperature sensor does the same for its fan.
+- New CPU limit, Curve Optimizer and GPU settings are **tried for 15 seconds** and revert by themselves unless you keep them; if the PC goes down right after a change, it is not re-applied at the next start.
+- Never above what the BIOS or driver allows; stopping the service hands fans and limits back to the firmware.
+- Lighting yields to Armoury Crate or OpenRGB when they run, and to Windows Dynamic Lighting per device.
+
+Not yet: Intel CPU limits ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA GPU power limit ([#210](https://github.com/dvalfrid/rigstats/issues/210)). Design and protocol notes: [docs/control-architecture.md](docs/control-architecture.md).
+
 ## Sensor Coverage
 
 Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).
@@ -333,6 +358,9 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | `install.log` | NSIS installer/upgrade log | Diagnose install failures (service registration, driver install) |
 | `sidecar-log.txt` | Raw log written by the `rigstats-sensor` Windows Service | **Most important file for adding sensor support** — LibreHardwareMonitor startup and pipe-server activity |
 | `sensor-tree.txt` | Full LHM hardware and sensor tree at last sidecar start | Find the exact identifier for a sensor not being picked up |
+| `control-capabilities.json` | What the Control Center found: writable fan channels and their measured fans, power plans, CPU/GPU power-limit and Curve Optimizer support (or why not), lighting devices | Diagnose a Control Center tab that is missing or limited on this hardware |
+| `profiles.json` | The service's saved profiles (power plan, fan curves, CPU/GPU limits, Curve Optimizer, lighting) | Reproduce a profile that misbehaves |
+| `lighting-devices.json` | Lighting devices RIGStats drives (firmware, zones, raw config replies) plus a scan of every USB HID device (no paths or serials) | **Add support for a lighting device** that isn't listed — see [supported devices](docs/supported-devices.md) |
 | `hardware.json` | WMI/CIM snapshot: OS, CPU, GPU, motherboard, RAM | Hardware identification and brand detection |
 | `sidecar-service.txt` | Output of `sc query` + `sc qc` for `rigstats-sensor` | Diagnose sidecar autostart and service registration failures |
 | `environment.txt` | `USERNAME`, `APPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE`, etc. | Diagnose child/standard account issues where APPDATA may be redirected |
@@ -350,6 +378,8 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | [Architecture](docs/architecture.md) | Data flow, module reference, design decisions |
 | [Setup Guide](docs/setup.md) | Full local dev setup, display profiles, installer build |
 | [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
+| [Control Center](docs/control-architecture.md) | Hardware control design, protocols, live testing |
+| [Supported lighting devices](docs/supported-devices.md) | Every lighting device RIGStats drives, verified or from OpenRGB |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues, sensor diagnostics |
 | [Changelog](CHANGELOG.md) | Full version history |
 | [Roadmap](ROADMAP.md) | Planned features and status |

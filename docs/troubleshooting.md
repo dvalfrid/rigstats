@@ -128,11 +128,21 @@ The low-level targeting logic lives in `pick_window_rect_for_profile` /
 
 Yes. Open Settings and change Display Profile. Save to apply immediately and persist the choice.
 
+## Control Center
+
+- **A tab is missing** (Fans, CPU, GPU, Lighting): each tab appears only when this PC's hardware supports it — writable fan control, an AMD Ryzen 9000 on a verified SMU table, an AMD Radeon, a supported lighting device. The diagnostics ZIP's `control-capabilities.json` says what was found and why a feature is unavailable.
+- **"… controls the lighting"**: Armoury Crate (its LightingService) or OpenRGB is running and owns the lighting; close it, or turn its lighting off, then reopen the Control Center. A device marked as controlled by **Windows Dynamic Lighting** is skipped until you turn that off in Settings → Personalization → Dynamic Lighting.
+- **A lighting device isn't listed**: check [supported-devices.md](supported-devices.md). Devices plugged in or switched on later are found when the Control Center opens. If it still doesn't show, attach the diagnostics ZIP (`lighting-devices.json`) to an issue.
+- **"Not connected" / changes don't apply**: the `rigstats-sensor` service must be running (`sc query rigstats-sensor`). Only the installed, signed `rigstats.exe` may control hardware — a copied or self-built `rigstats.exe` is refused by design; `%ProgramData%\se.codeby.rigstats\rigstats-sensor.log` then shows `Client rejected: …`.
+- **A CPU limit or Curve Optimizer change was undone after a restart**: if Windows goes down shortly after such a change, it isn't re-applied at the next start, and the CPU tab says so — choose a milder value.
+
 ## Intel And NVIDIA Support
 
 CPU data comes from `sysinfo` regardless of vendor.
 
 For NVIDIA GPUs, the sidecar works as well. If labels differ on your machine, adjust the GPU sensor matching in `sensor-sidecar/SensorReader.cs`.
+
+Control Center: fan curves, power plans and lighting work regardless of CPU/GPU vendor; CPU power limits and Curve Optimizer are AMD Ryzen only for now (Intel: [#209](https://github.com/dvalfrid/rigstats/issues/209)), and the GPU power limit is AMD Radeon only (NVIDIA: [#210](https://github.com/dvalfrid/rigstats/issues/210)).
 
 ## How Do I Inspect Real WMI Strings?
 
