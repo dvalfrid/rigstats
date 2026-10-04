@@ -8,6 +8,23 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.43.0](https://github.com/dvalfrid/rigstats/compare/v1.42.1...v1.43.0) (2026-10-04)
+
+
+### Features
+
+* **lighting:** drive philips hue rooms through the hue bridge ([bd47f6a](https://github.com/dvalfrid/rigstats/commit/bd47f6a6a6691ebe314737a08851d2a4353f306d)), closes [#215](https://github.com/dvalfrid/rigstats/issues/215)
+
+
+### Bug Fixes
+
+* **control:** fall back to an available power plan when the profile's plan is missing ([81bda8a](https://github.com/dvalfrid/rigstats/commit/81bda8af6eac9d44c219536654550d52c02efcb2)), closes [#217](https://github.com/dvalfrid/rigstats/issues/217)
+* **control:** keep the service pipes between the app and the service ([cf99bbb](https://github.com/dvalfrid/rigstats/commit/cf99bbb03ecee10254dca86f2412ec54283ccefb)), closes [#229](https://github.com/dvalfrid/rigstats/issues/229)
+* **control:** restrict the service data folder to the service ([e0f914c](https://github.com/dvalfrid/rigstats/commit/e0f914c7c20a7dce636fa693f53312441f3f21bd)), closes [#228](https://github.com/dvalfrid/rigstats/issues/228)
+* **gpu:** end the ADLX session on stop and recover when the driver refuses a new one ([8f9b74e](https://github.com/dvalfrid/rigstats/commit/8f9b74eaaa54a6cf07e5be6f9d64b95372cc38f4)), closes [#230](https://github.com/dvalfrid/rigstats/issues/230)
+* **stability:** log every crash and restart tasks that panic ([9953778](https://github.com/dvalfrid/rigstats/commit/9953778acf7aa6c4caadd494c3b3db37f2e05c48)), closes [#219](https://github.com/dvalfrid/rigstats/issues/219)
+* **updater:** verify the downloaded installer before launching it ([b61b576](https://github.com/dvalfrid/rigstats/commit/b61b576397f9601bdc1cdf7a70b4f307aa4c9621)), closes [#227](https://github.com/dvalfrid/rigstats/issues/227)
+
 ## [1.42.1](https://github.com/dvalfrid/rigstats/compare/v1.42.0...v1.42.1) (2026-10-04)
 
 
