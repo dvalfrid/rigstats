@@ -329,7 +329,18 @@ escalation vector:
 
 ### Live testing on real hardware
 
-Control features are checked on real hardware before they ship. The loop:
+Control features are checked on real hardware before they ship.
+
+**On a new machine**, once: install a released RIGStats first — its installer
+brings the PawnIO driver the sidecar needs and registers the
+`rigstats-sensor` service the script swaps out — then clone, follow
+[setup.md](setup.md) (Rust, .NET 10 SDK, `cargo xtask setup`) and build
+the sidecar and the app. The first run of the dev sidecar writes
+`%ProgramData%\se.codeby.rigstats\lighting-devices.json`, whose HID scan
+shows every lighting-capable collection on the machine — the starting
+point for a new device.
+
+The loop:
 
 1. **Elevated window (the developer):** `pwsh -File tools\dev-sidecar.ps1 -Live`.
    It stops the installed `rigstats-sensor` service, runs the debug sidecar in
