@@ -25,7 +25,7 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.42.0</Program_Version>
+		<Program_Version>1.42.1</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
 		<Program_Release_Day>04</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>control: add fan control with per-header curves; control: add the Control Center service-side foundation; control: add the Rust control pipe client; control: choose each profile's power plan and manage profiles; control: control the light bar's desk lamp, also from the tray; control: find a headset switched on after the service started; control: find lighting devices plugged in or switched while running; control: light ASUS Aura monitors, the light bar and Dynamic Lighting devices; control: light ROG keyboards and the ROG Delta II with Aura Sync; control: light the ROG Azoth X by cable too; control: light the ROG Falchion Ace HFX; control: list the supported lighting devices on the website and in the docs; control: lower AMD CPU power limits per profile; control: open a fan's curve from the Motherboard panel; control: quick-pick lighting colours; control: set ASUS Aura lighting per profile with Aura Sync; control: set the AMD GPU power limit per profile; control: undervolt with AMD Curve Optimizer per profile; control: wire the Control Center into the egui UI; diagnostics: record fan/power control outcomes and fan channel mapping; diagnostics: record lighting devices and a HID scan in the export; tray: open the Control Center from the tray menu; control: keep a late animation frame from overwriting the next lighting effect; control: light the ROG Azoth at full brightness; control: report the service's real version; control: show the active profile's power plan, not its name; control: stop a colour preview from switching off the desk lamp; installer: install PawnIO with its official setup; recording: wait longer for the session index lock; release: sign the app and the service before packaging them; sensor: close the hardware only after telemetry clients are done; settings: show which settings tab is selected; settings: wrap the overlay description before its toggle; status: give the debug log room again; updater: show changelog scopes as labels, not raw markdown; control: let the light bar and Aura monitors run their own effects</Program_Change_Info>
+		<Program_Change_Info>control: read the app's signature so the Control Center connects</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.42.0/RIGStats_1.42.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.42.1/RIGStats_1.42.1_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
