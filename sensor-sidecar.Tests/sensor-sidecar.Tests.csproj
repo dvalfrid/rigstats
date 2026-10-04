@@ -33,6 +33,7 @@
     <Compile Include="..\sensor-sidecar\Control\ControlBroker.cs" Link="Control\ControlBroker.cs" />
     <Compile Include="..\sensor-sidecar\Control\SafetyGuard.cs" Link="Control\SafetyGuard.cs" />
     <Compile Include="..\sensor-sidecar\Control\ProfileStore.cs" Link="Control\ProfileStore.cs" />
+    <Compile Include="..\sensor-sidecar\Control\DataDirectory.cs" Link="Control\DataDirectory.cs" />
     <Compile Include="..\sensor-sidecar\Control\PipeClientVerifier.cs" Link="Control\PipeClientVerifier.cs" />
     <Compile Include="..\sensor-sidecar\Control\ControlPipeWorker.cs" Link="Control\ControlPipeWorker.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\PowerPlanProvider.cs" Link="Control\Providers\PowerPlanProvider.cs" />

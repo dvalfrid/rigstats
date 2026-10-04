@@ -18,6 +18,16 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
 
 var dryRun = args.Contains("--dry-run");
 
+// Before anything reads or writes the service's state: the data folder is
+// locked down to SYSTEM and Administrators. If that fails, what is in it
+// can't be trusted — nothing is written to hardware and nothing to the log.
+if (DataDirectory.EnsureSecure(DataDirectory.DefaultPath) is { } insecure)
+{
+    SidecarLog.FileEnabled = false;
+    dryRun = true;
+    SidecarLog.Log($"[rigstats-sensor] The data folder could not be secured ({insecure}) — running without hardware control.");
+}
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options =>
 {

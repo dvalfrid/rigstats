@@ -1,5 +1,3 @@
-using System.Security.AccessControl;
-using System.Security.Principal;
 using System.Text.Json;
 
 namespace SensorSidecar.Control;
@@ -7,7 +5,8 @@ namespace SensorSidecar.Control;
 /// Service-owned profile CRUD, `%ProgramData%\se.codeby.rigstats\profiles.json`
 /// — the UI only ever edits profiles through the control pipe (see
 /// `docs/control-architecture.md`, "Profile model"). Writable only by this
-/// service; `Users` get read access the same way the telemetry pipe does.
+/// service; `Users` get read access the same way the telemetry pipe does
+/// (the folder's rules are set by `DataDirectory`).
 public sealed class ProfileStore
 {
     private readonly string _path;
@@ -193,7 +192,6 @@ public sealed class ProfileStore
     private async Task SaveUnlockedAsync(ProfileFile file, CancellationToken ct)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-        ApplyAcl(Path.GetDirectoryName(_path)!);
 
         // Atomic write: serialize to a temp file, then rename over the real
         // one, so a crash mid-write never leaves a truncated/corrupt file.
@@ -204,41 +202,5 @@ public sealed class ProfileStore
         }
         File.Move(tempPath, _path, overwrite: true);
         _cached = file;
-    }
-
-    // SYSTEM + Administrators write, Users read — mirrors the PipeAccessRule
-    // construction in `SensorWorker.cs`'s pipe security, applied to the
-    // ProgramData directory instead of a pipe.
-    private static void ApplyAcl(string directory)
-    {
-        try
-        {
-            var info = new DirectoryInfo(directory);
-            var security = info.GetAccessControl();
-            security.AddAccessRule(new FileSystemAccessRule(
-                new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
-                FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow));
-            security.AddAccessRule(new FileSystemAccessRule(
-                new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
-                FileSystemRights.FullControl,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow));
-            security.AddAccessRule(new FileSystemAccessRule(
-                new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
-                FileSystemRights.ReadAndExecute,
-                InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
-                PropagationFlags.None,
-                AccessControlType.Allow));
-            info.SetAccessControl(security);
-        }
-        catch
-        {
-            // Best-effort — an ACL failure shouldn't block the service from
-            // running; it just means the directory keeps its inherited ACL.
-        }
     }
 }

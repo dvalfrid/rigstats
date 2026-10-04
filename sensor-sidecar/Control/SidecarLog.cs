@@ -17,12 +17,18 @@ public static class SidecarLog
     // swallowed exception silently dropped lines (#204).
     private static readonly object FileLock = new();
 
+    /// Off when the data folder could not be secured (`DataDirectory`): a
+    /// SYSTEM process must not append to a file someone else may redirect.
+    public static bool FileEnabled { get; set; } = true;
+
     public static void Log(string message)
     {
         // Local time with its UTC offset, like the app's log (#219) — the two
         // line up in a diagnostics export without converting.
         var line = $"[{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss zzz}] {message}";
         Console.Error.WriteLine(line);
+        if (!FileEnabled)
+            return;
         try
         {
             lock (FileLock)
