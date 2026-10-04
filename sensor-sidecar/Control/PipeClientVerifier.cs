@@ -1,5 +1,6 @@
 using System.IO.Pipes;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
 namespace SensorSidecar.Control;
@@ -87,16 +88,32 @@ public sealed class PipeClientVerifier : IPipeClientVerifier
         return VerifyResult.Allow();
     }
 
-    private static string? SignerThumbprint(string? imagePath)
+    /// The thumbprint of the certificate that Authenticode-signed this
+    /// executable, or null when it isn't signed (or can't be read). Built in
+    /// every configuration so the tests exercise the real reader — a reader
+    /// that couldn't read signed executables shipped in 1.42.0 and refused
+    /// every Control Center client.
+    internal static string? SignerThumbprint(string? imagePath)
     {
         if (imagePath is null)
             return null;
         try
         {
-            using var cert = X509CertificateLoader.LoadCertificateFromFile(imagePath);
-            return cert.Thumbprint;
+            // CreateFromSignedFile is the one .NET API that reads the signer
+            // embedded in a PE file. SYSLIB0057 obsoletes it in favour of
+            // X509CertificateLoader, but that only loads certificate files
+            // (.cer/.pem/.pfx) and throws on a signed .exe — so it is not a
+            // replacement here.
+#pragma warning disable SYSLIB0057
+            using var cert = X509Certificate.CreateFromSignedFile(imagePath);
+#pragma warning restore SYSLIB0057
+            return cert.GetCertHashString();
         }
-        catch
+        catch (CryptographicException)
+        {
+            return null; // not signed
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
             return null;
         }

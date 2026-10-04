@@ -8,10 +8,41 @@ namespace SensorSidecar.Tests;
 /// comparison logic behind steps 2–3 of client verification (image path +
 /// Authenticode signer match) — see that method's doc for why the
 /// P/Invoke-dependent parts (steps 1, and resolving the two thumbprints) are
-/// exercised by the manual pipe smoke test instead.
+/// exercised by the manual pipe smoke test instead. The signer reader itself
+/// (<see cref="PipeClientVerifier.SignerThumbprint"/>) runs against real
+/// files below — a reader that couldn't read signed executables shipped in
+/// 1.42.0 and refused every Control Center client.
 /// </summary>
 public class PipeClientVerifierTests
 {
+    [Fact]
+    public void Reads_the_signer_of_a_signed_executable()
+    {
+        // The process running the tests (testhost.exe / dotnet.exe) is
+        // Authenticode-signed by Microsoft, here and on CI.
+        var thumbprint = PipeClientVerifier.SignerThumbprint(Environment.ProcessPath);
+
+        Assert.False(string.IsNullOrEmpty(thumbprint), $"no signer read from {Environment.ProcessPath}");
+        Assert.Equal(40, thumbprint!.Length); // SHA-1 hex
+    }
+
+    [Fact]
+    public void An_unsigned_or_missing_file_has_no_signer()
+    {
+        var unsigned = Path.Combine(Path.GetTempPath(), $"rigstats-unsigned-{Guid.NewGuid():N}.exe");
+        File.WriteAllBytes(unsigned, [0x4D, 0x5A, 0, 0]);
+        try
+        {
+            Assert.Null(PipeClientVerifier.SignerThumbprint(unsigned));
+        }
+        finally
+        {
+            File.Delete(unsigned);
+        }
+        Assert.Null(PipeClientVerifier.SignerThumbprint(@"C:\does\not\exist.exe"));
+        Assert.Null(PipeClientVerifier.SignerThumbprint(null));
+    }
+
     private const string Expected = @"C:\Program Files\RIGStats\rigstats.exe";
 
     [Fact]
