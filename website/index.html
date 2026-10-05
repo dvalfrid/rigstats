@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RIGStats — Hardware Monitor &amp; Game Overlay for Windows</title>
-  <meta name="description" content="Free hardware monitor and click-through game overlay for Windows gaming PCs. CPU &amp; GPU temps, RAM, disk, and fan sensors — on a secondary display or as an in-game FPS overlay. No bloat, no telemetry.">
-  <meta name="keywords" content="hardware monitor, game overlay, fps overlay, gpu overlay, click-through overlay, cpu temperature, gpu temperature, system monitor, gaming pc, windows overlay">
+  <title>RIGStats — Hardware Monitor &amp; Control Center for Windows</title>
+  <meta name="description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
+  <meta name="keywords" content="hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, curve optimizer, undervolt, power profiles, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc">
   <link rel="canonical" href="https://rigstats.app/">
   <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 
@@ -13,16 +13,16 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://rigstats.app/">
   <meta property="og:site_name" content="RIGStats">
-  <meta property="og:title" content="RIGStats — Hardware Monitor &amp; Game Overlay for Windows">
-  <meta property="og:description" content="Free hardware monitor and click-through game overlay for Windows gaming PCs. CPU &amp; GPU temps, RAM, disk, and fan sensors — on a secondary display or as an in-game FPS overlay. No bloat, no telemetry.">
+  <meta property="og:title" content="RIGStats — Hardware Monitor &amp; Control Center for Windows">
+  <meta property="og:description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
   <meta property="og:image" content="https://rigstats.app/images/rigStats.png">
   <meta property="og:image:width" content="450">
   <meta property="og:image:height" content="800">
 
   <!-- Twitter / X card -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="RIGStats — Hardware Monitor &amp; Game Overlay for Windows">
-  <meta name="twitter:description" content="Free hardware monitor and click-through game overlay for Windows gaming PCs. CPU &amp; GPU temps, RAM, disk, and fan sensors — on a secondary display or as an in-game FPS overlay. No bloat, no telemetry.">
+  <meta name="twitter:title" content="RIGStats — Hardware Monitor &amp; Control Center for Windows">
+  <meta name="twitter:description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
   <meta name="twitter:image" content="https://rigstats.app/images/rigStats.png">
 
   <!-- Structured data -->
@@ -31,8 +31,8 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "RIGStats",
-    "description": "Free hardware monitor and click-through game overlay for Windows gaming PCs. CPU & GPU temps, RAM, disk, and fan sensors — on a secondary display or as an in-game FPS overlay. No bloat, no telemetry.",
-    "keywords": "hardware monitor, game overlay, fps overlay, gpu overlay, click-through overlay, cpu temperature, gpu temperature, system monitor, gaming pc, windows overlay",
+    "description": "Free hardware monitor and control center for Windows gaming PCs. Live CPU & GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.",
+    "keywords": "hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, curve optimizer, undervolt, power profiles, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc",
     "url": "https://rigstats.app/",
     "downloadUrl": "https://github.com/dvalfrid/rigstats/releases/latest",
     "applicationCategory": "UtilitiesApplication",
@@ -84,7 +84,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a dedicated secondary display — portrait or landscape — scatter individual panels freely in floating mode, or overlay a compact, click-through FPS-style strip directly on top of your game. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, live process monitor, and a built-in multi-GPU selector for stable tracking.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a dedicated secondary display — portrait or landscape — scatter individual panels freely in floating mode, or overlay a compact, click-through FPS-style strip directly on top of your game. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, live process monitor, and a built-in multi-GPU selector for stable tracking. The Control Center adds fan curves, power profiles, Ryzen and Radeon power tuning, and RGB lighting.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -164,7 +164,7 @@
         </li>
         <li class="feature-card">
           <div class="feature-dot"></div>
-          <h3>Control Center &amp; fan curves<span class="badge-soon">Coming in v1.42.0</span></h3>
+          <h3>Control Center &amp; fan curves</h3>
           <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000 they can also lower the CPU power limits and undervolt with Curve Optimizer, on AMD Radeon set the GPU power limit, and set the lighting — ASUS Aura, ROG peripherals and Philips Hue room lights.</p>
         </li>
       </ul>
@@ -290,7 +290,7 @@
   <section class="section" id="control-center">
     <div class="container">
       <header class="section-head">
-        <h2>Control Center &amp; Fan Curves<span class="badge-soon">Coming in v1.42.0</span></h2>
+        <h2>Control Center &amp; Fan Curves</h2>
         <p>Profiles bundle your power plan and fan curves — and on supported AMD hardware, CPU and GPU power limits —, and switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
       </header>
       <div class="floating-showcase">
