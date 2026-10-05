@@ -154,7 +154,7 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
             originals = new Dictionary<string, GpuOriginal>(_originals);
         if (originals.Count == 0)
             return;
-        var present = api.Adapters().Select(a => a.Id).ToHashSet();
+        var present = api!.Adapters().Select(a => a.Id).ToHashSet(); // only called after an `api is null` check
         foreach (var (id, original) in originals)
         {
             if (present.Contains(id))
