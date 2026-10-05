@@ -81,4 +81,38 @@ public class HardwareHostTests
             host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.False(touched);
     }
+
+    [Fact]
+    public async Task Many_concurrent_callers_share_one_sample_per_interval()
+    {
+        // #208: however many telemetry clients and service-side consumers ask,
+        // LHM is read at most once per SampleMaxAgeMs (900 ms).
+        var samples = 0;
+        var host = new HardwareHost(() =>
+        {
+            Interlocked.Increment(ref samples);
+            return new SensorPayload(null, null, [], [], null, [], [], [], null);
+        });
+        const int callers = 8;
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
+        var calls = 0;
+
+        await Task.WhenAll(Enumerable.Range(0, callers).Select(i => Task.Run(async () =>
+        {
+            while (DateTime.UtcNow < until)
+            {
+                if (i % 2 == 0)
+                    await host.GetTelemetryLineAsync(CancellationToken.None);
+                else
+                    await host.GetSampleAsync(CancellationToken.None);
+                Interlocked.Increment(ref calls);
+                await Task.Delay(50);
+            }
+        })));
+
+        // ~3 s / 900 ms → 4 samples (the first is immediate); far fewer than
+        // the hundreds of calls made.
+        Assert.InRange(samples, 3, 5);
+        Assert.True(calls > callers * 20, $"only {calls} calls");
+    }
 }

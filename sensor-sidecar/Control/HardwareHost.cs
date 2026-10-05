@@ -36,6 +36,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
 
     private readonly Computer _computer;
     private readonly UpdateVisitor _visitor = new();
+    private readonly Func<SensorPayload> _sample;
     private readonly System.Text.Json.JsonSerializerOptions _telemetryJsonOptions = new()
     {
         PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower,
@@ -60,8 +61,13 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // Program.cs release backstop) gets an exception, not a closed Computer.
     private bool _closed;
 
-    public HardwareHost()
+    public HardwareHost() : this(null) { }
+
+    // Seam for tests (#208): `sample` replaces the LHM read, so the sample
+    // rate can be pinned without hardware.
+    internal HardwareHost(Func<SensorPayload>? sample)
     {
+        _sample = sample ?? SampleLhm;
         _computer = new Computer
         {
             IsCpuEnabled = true,
@@ -171,10 +177,15 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         var now = Environment.TickCount64;
         if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
             return;
-        _computer.Accept(_visitor);
-        _latestPayload = SensorReader.Extract(_computer);
+        _latestPayload = _sample();
         _latestLine = System.Text.Json.JsonSerializer.Serialize(_latestPayload, _telemetryJsonOptions);
         _latestAtMs = now;
+    }
+
+    private SensorPayload SampleLhm()
+    {
+        _computer.Accept(_visitor);
+        return SensorReader.Extract(_computer);
     }
 
     public async Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct)
