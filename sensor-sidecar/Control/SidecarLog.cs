@@ -6,16 +6,11 @@ namespace SensorSidecar.Control;
 /// duplicating the path/rotation logic.
 public static class SidecarLog
 {
-    private static readonly string LogPath =
+    private static readonly LogFile Sink = new(
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
             "se.codeby.rigstats",
-            "rigstats-sensor.log");
-
-    // Telemetry clients log from concurrent tasks (e.g. all disconnecting at
-    // service stop); unserialized appends hit sharing violations and the
-    // swallowed exception silently dropped lines (#204).
-    private static readonly object FileLock = new();
+            "rigstats-sensor.log"));
 
     /// Off when the data folder could not be secured (`DataDirectory`): a
     /// SYSTEM process must not append to a file someone else may redirect.
@@ -31,30 +26,65 @@ public static class SidecarLog
             return;
         try
         {
-            lock (FileLock)
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
-                File.AppendAllText(LogPath, line + Environment.NewLine);
-            }
+            Sink.Append(line);
         }
         catch { }
     }
 
-    // Keep the log from growing indefinitely: when it exceeds 512 KB,
-    // truncate to the last 500 lines so recent context is always preserved.
+    /// At service start; `Log` also keeps the file bounded while it runs.
     public static void TruncateIfNeeded()
     {
         try
         {
-            lock (FileLock)
-            {
-                if (File.Exists(LogPath) && new FileInfo(LogPath).Length > 512 * 1024)
-                {
-                    var lines = File.ReadAllLines(LogPath);
-                    File.WriteAllLines(LogPath, lines.TakeLast(500));
-                }
-            }
+            Sink.TruncateIfNeeded();
         }
         catch { }
+    }
+}
+
+/// An append-only log file kept bounded while it is written (#223): every
+/// `checkEveryBytes` appended, a file over `maxBytes` is cut to its last
+/// `keepLines` lines, so recent context is always kept. Instance-based so
+/// tests get their own file and limits.
+internal sealed class LogFile(
+    string path,
+    long maxBytes = 512 * 1024,
+    int keepLines = 500,
+    long checkEveryBytes = 64 * 1024)
+{
+    // Telemetry clients log from concurrent tasks (e.g. all disconnecting at
+    // service stop); unserialized appends hit sharing violations and the
+    // swallowed exception silently dropped lines (#204).
+    private readonly object _lock = new();
+    private long _sinceCheck;
+
+    public void Append(string line)
+    {
+        lock (_lock)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.AppendAllText(path, line + Environment.NewLine);
+            _sinceCheck += line.Length + Environment.NewLine.Length;
+            if (_sinceCheck < checkEveryBytes)
+                return;
+            _sinceCheck = 0;
+            TruncateLocked();
+        }
+    }
+
+    public void TruncateIfNeeded()
+    {
+        lock (_lock)
+            TruncateLocked();
+    }
+
+    private void TruncateLocked()
+    {
+        if (!File.Exists(path) || new FileInfo(path).Length <= maxBytes)
+            return;
+        // Through a temp file, so a crash mid-truncate can't leave the log empty.
+        var temp = path + ".tmp";
+        File.WriteAllLines(temp, File.ReadAllLines(path).TakeLast(keepLines));
+        File.Move(temp, path, overwrite: true);
     }
 }
