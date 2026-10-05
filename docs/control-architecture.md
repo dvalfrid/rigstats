@@ -120,8 +120,10 @@ installer migration cost; "rigstats-service" is used here as the concept name.
   Super I/O read.
 - **Current telemetry model (since #196), which HardwareHost must absorb:**
   - There is no fixed telemetry tick. The telemetry pipe accepts several clients
-    at once (`MaxClients = 4`, one task per client). Each client asks
-    `SensorWorker.GetFreshLine()` once per second.
+    at once (`MaxClients = 8`, one task per client). Each client asks
+    `SensorWorker.GetFreshLine()` once per second. A client that hasn't read
+    a line within 10 s is dropped, so one that connects and never reads
+    can't hold an instance forever (#232).
   - That method re-samples LHM (`Computer.Accept` + `SensorReader.Extract`) only
     when the cached JSON line is older than 900 ms, so LHM is still read at
     most ~1 Hz no matter how many clients are connected. It is idle when no

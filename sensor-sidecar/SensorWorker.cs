@@ -8,12 +8,22 @@ using SensorSidecar.Control;
 
 namespace SensorSidecar;
 
-// `pipeName` is only overridden by tests, which must not collide with an
-// installed service's pipe.
-public sealed class SensorWorker(IHardwareHost hardwareHost, string pipeName = "rigstats-sensors") : BackgroundService
+// `pipeName` and `writeTimeout` are only overridden by tests: the pipe name
+// must not collide with an installed service's pipe, and the timeout keeps
+// them short.
+public sealed class SensorWorker(
+    IHardwareHost hardwareHost,
+    string pipeName = "rigstats-sensors",
+    TimeSpan? writeTimeout = null) : BackgroundService
 {
     private readonly IHardwareHost _hardwareHost = hardwareHost;
     private readonly string _pipeName = pipeName;
+
+    /// A client that hasn't read a line within this is dropped (#232): the
+    /// pipe is unbuffered, so its write would block, holding the instance
+    /// forever. RIGStats reads every tick (~1 s) and closes the pipe when
+    /// it pauses, so it never comes near this.
+    private readonly TimeSpan _writeTimeout = writeTimeout ?? TimeSpan.FromSeconds(10);
 
     // Per-client tasks, awaited in StopAsync — base.StopAsync only awaits
     // ExecuteAsync, and a client still inside GetTelemetryLineAsync must be
@@ -65,8 +75,10 @@ public sealed class SensorWorker(IHardwareHost hardwareHost, string pipeName = "
     // the expensive part, so all clients share one cached sample via
     // `IHardwareHost.GetTelemetryLineAsync` (see `Control/HardwareHost.cs`):
     // whichever client finds it stale re-samples under the lock, the others
-    // reuse it.
-    private const int MaxClients = 4;
+    // reuse it. RIGStats uses up to two; the rest leaves room for other
+    // readers (a diagnostics script, a second user session) without leaving
+    // the dashboard without data (#232).
+    internal const int MaxClients = 8;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -141,7 +153,19 @@ public sealed class SensorWorker(IHardwareHost hardwareHost, string pipeName = "
                 // Cancellable: a client that stopped reading blocks the write
                 // (unbuffered pipe) and must not hold up service shutdown.
                 var line = await _hardwareHost.GetTelemetryLineAsync(stoppingToken);
-                await writer.WriteLineAsync(line.AsMemory(), stoppingToken);
+                using (var write = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
+                {
+                    write.CancelAfter(_writeTimeout);
+                    try
+                    {
+                        await writer.WriteLineAsync(line.AsMemory(), write.Token);
+                    }
+                    catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                    {
+                        SidecarLog.Log($"[rigstats-sensor] Client has not read for {_writeTimeout.TotalSeconds:0} s — dropping it.");
+                        break;
+                    }
+                }
                 await Task.Delay(1000, stoppingToken);
             }
         }

@@ -94,9 +94,9 @@ public class SensorWorkerTests
         return new Client(pipe);
     }
 
-    private static async Task<SensorWorker> StartAsync(FakeTelemetryHost host, string pipeName)
+    private static async Task<SensorWorker> StartAsync(FakeTelemetryHost host, string pipeName, TimeSpan? writeTimeout = null)
     {
-        var worker = new SensorWorker(host, pipeName);
+        var worker = new SensorWorker(host, pipeName, writeTimeout);
         await worker.StartAsync(CancellationToken.None);
         return worker;
     }
@@ -116,7 +116,7 @@ public class SensorWorkerTests
         var clients = new List<Client>();
         try
         {
-            for (var i = 0; i < 4; i++)
+            for (var i = 0; i < SensorWorker.MaxClients; i++)
             {
                 clients.Add(await ConnectAsync(name));
                 Assert.NotNull(await clients[i].ReadLineAsync());
@@ -204,6 +204,66 @@ public class SensorWorkerTests
         var stop = Task.Run(() => StopAsync(worker));
         Assert.Same(stop, await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(5))));
         await stop;
+    }
+
+    [Fact]
+    public async Task A_client_that_never_reads_is_dropped_and_its_instance_offered_again()
+    {
+        var host = new FakeTelemetryHost();
+        var name = NewPipeName();
+        var worker = await StartAsync(host, name, writeTimeout: TimeSpan.FromSeconds(1));
+        var clients = new List<Client>();
+        try
+        {
+            // Every instance taken, one of them by a client that never reads.
+            using var hung = await ConnectAsync(name);
+            for (var i = 1; i < SensorWorker.MaxClients; i++)
+                clients.Add(await ConnectAsync(name));
+
+            // Its write times out, its instance is freed, and the next
+            // client gets one — while every reading client stays connected.
+            var next = Task.Run(() => ConnectAsync(name, TimeSpan.FromSeconds(15)));
+            while (!next.IsCompleted)
+            {
+                foreach (var c in clients)
+                    Assert.NotNull(await c.ReadLineAsync());
+            }
+            using var late = await next;
+            Assert.NotNull(await late.ReadLineAsync());
+            Assert.True(await hung.SeesEofAsync());
+            foreach (var c in clients)
+                Assert.NotNull(await c.ReadLineAsync());
+        }
+        finally
+        {
+            foreach (var c in clients)
+                c.Dispose();
+            await StopAsync(worker);
+        }
+    }
+
+    [Fact]
+    public async Task A_reading_client_is_never_dropped()
+    {
+        var host = new FakeTelemetryHost();
+        var name = NewPipeName();
+        var worker = await StartAsync(host, name, writeTimeout: TimeSpan.FromSeconds(1));
+        try
+        {
+            using var client = await ConnectAsync(name);
+            // Reading slower than lines are written (one per ~1 s), so each
+            // write waits ~0.5 s for the read — slow, but within the timeout.
+            for (var i = 0; i < 4; i++)
+            {
+                Assert.NotNull(await client.ReadLineAsync());
+                await Task.Delay(1500);
+            }
+            Assert.NotNull(await client.ReadLineAsync());
+        }
+        finally
+        {
+            await StopAsync(worker);
+        }
     }
 
     [Fact]
