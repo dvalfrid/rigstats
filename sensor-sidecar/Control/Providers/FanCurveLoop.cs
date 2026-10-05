@@ -35,6 +35,13 @@ public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : 
     /// (the pipe just queues the event for its own writer).
     public event Action<FanEvent>? EventRaised;
 
+    private long _lastTickMs = Environment.TickCount64;
+
+    /// When the last tick completed (`Environment.TickCount64`) — also when
+    /// no header was active. `FanWatchdog` restarts the service when this
+    /// stops moving (#222). Starts at construction, so start-up isn't a stall.
+    internal long LastTickMs => Volatile.Read(ref _lastTickMs);
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TickInterval);
@@ -43,6 +50,7 @@ public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : 
             try
             {
                 await TickAsync(stoppingToken);
+                Volatile.Write(ref _lastTickMs, Environment.TickCount64);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

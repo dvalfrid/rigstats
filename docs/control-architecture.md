@@ -92,7 +92,8 @@ stable.** Not a bundle of tools glued together.
 │ rigstats-service.exe (LocalSystem, .NET 10)                        │
 │  HardwareHost   — single LHM Computer + single hardware lock      │
 │  ControlBroker  — validate → snapshot → apply → verify → commit   │
-│  SafetyGuard    — critical temp, watchdog, boot-crash guard        │
+│  SafetyGuard    — critical temp, boot-crash guard                  │
+│  FanWatchdog    — restarts the service if the fan loop hangs       │
 │  ProfileStore   — %ProgramData%\se.codeby.rigstats\profiles.json  │
 │  Providers (IControlProvider):                                    │
 │    PowerPlanProvider   FanProvider         CpuLimitProvider       │
@@ -259,6 +260,7 @@ built-ins — saved right away, logged, and announced by `get_state`'s
 | Critical temperature override | CPU or GPU above a hard threshold → all controlled fans to 100 % regardless of profile, event `safety_tripped`. |
 | Sensor loss | If a curve's source sensor disappears or goes stale, that header goes to 100 %. |
 | Release on stop | `StopAsync` and a top-level `finally` call `ReleaseToFirmware()` on all providers. |
+| Service hung or killed | `FanWatchdog`, on its own thread: while a curve is active and the fan loop hasn't completed a tick for 10 s (a hung LHM/PawnIO call, a deadlock, a starved thread pool), it hands the fans back to firmware (given 3 s — the release may hang on the same lock) and fails fast. The service manager restarts the service (the installer sets 5 s, 10 s and 30 s for the first three failures within a minute) and the active profile is re-applied. A gap in the watchdog's own checks (the PC slept) restarts its 10 s window instead. A service that dies hard is restarted the same way. Known limit: if the service can't start again, the fans keep their last duty until a reboot hands them to the BIOS. Off in dry-run. |
 | Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied: they are applied as BIOS values (a no-op after a reboot; when only the service went down, it puts the SMU back) and the Control Center shows a red "Reverted after a restart" notice until a profile is applied again. A service stop inside the window keeps the marker. |
 | Hard limits | The service always clamps against probed limits; UI values are never trusted. |
 | Preview | Risky changes default to `preview` with auto-revert. |

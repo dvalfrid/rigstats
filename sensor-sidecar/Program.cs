@@ -74,6 +74,10 @@ builder.Services.AddSingleton(sp => new FanProvider(
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<FanProvider>());
 builder.Services.AddSingleton<FanCurveLoop>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanCurveLoop>());
+// Restarts the service if the loop above stops ticking (#222). After it, so
+// it stops first; not in dry-run, where nothing is written to the fans.
+if (!dryRun)
+    builder.Services.AddHostedService<FanWatchdog>();
 
 // Control Center phase 2 (#189): CPU package limits through the SMU. The
 // boot-crash guard reads (and consumes) the previous run's marker when it is
