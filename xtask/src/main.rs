@@ -195,6 +195,7 @@ const OS_DLL_ALLOWLIST: &[&str] = &[
     "winmm.dll",
     "ntdll.dll",
     "crypt32.dll",
+    "wintrust.dll",
     "bcrypt.dll",
     "bcryptprimitives.dll",
     "dwmapi.dll",
