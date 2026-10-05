@@ -24,7 +24,10 @@ public sealed class ControlPipeWorker(
     FanCurveLoop fanLoop,
     BootCrashGuard crashGuard,
     Lighting.LightingProvider lighting,
-    Lighting.HueLink hue) : BackgroundService
+    Lighting.HueLink hue,
+    // Only overridden by tests, which must not collide with an installed
+    // service's pipe (same seam as SensorWorker).
+    string pipeName = "rigstats-control") : BackgroundService
 {
     /// The service's own version — the same as the app's (sensor-sidecar.csproj
     /// `<Version>`, bumped by release-please).
@@ -65,7 +68,7 @@ public sealed class ControlPipeWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        SidecarLog.Log("[rigstats-control] Listening on \\\\.\\pipe\\rigstats-control");
+        SidecarLog.Log($"[rigstats-control] Listening on \\\\.\\pipe\\{pipeName}");
         try
         {
             await AcceptLoopAsync(stoppingToken);
@@ -124,7 +127,7 @@ public sealed class ControlPipeWorker(
     /// the pipe name — it fails when another process already holds the name.
     private NamedPipeServerStream CreateInstance(bool first) =>
         NamedPipeServerStreamAcl.Create(
-            "rigstats-control",
+            pipeName,
             PipeDirection.InOut,
             maxNumberOfServerInstances: 2,
             PipeTransmissionMode.Byte,

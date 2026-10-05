@@ -855,11 +855,22 @@ pub async fn control_task(
     dir: PathBuf,
     app_version: String,
 ) {
+    control_task_on(PIPE_NAME, cmd_rx, event_tx, dir, app_version).await;
+}
+
+/// [`control_task`] on any pipe — tests serve their own (#226).
+async fn control_task_on(
+    pipe_name: &str,
+    cmd_rx: std::sync::Arc<tokio::sync::Mutex<AsyncReceiver<ControlCmd>>>,
+    event_tx: SyncSender<ControlEvent>,
+    dir: PathBuf,
+    app_version: String,
+) {
     let mut cmd_rx = cmd_rx.lock().await;
     // Connections the service closed before answering `hello` in a row.
     let mut refusals: u32 = 0;
     loop {
-        let Some(client) = connect(&dir).await else {
+        let Some(client) = connect(pipe_name, &dir).await else {
             tokio::time::sleep(RECONNECT_BACKOFF).await;
             continue;
         };
@@ -975,8 +986,8 @@ fn refused_backoff(refusals: u32) -> Duration {
     (RECONNECT_BACKOFF * 2u32.pow(doublings)).min(REFUSED_BACKOFF_MAX)
 }
 
-async fn connect(dir: &Path) -> Option<NamedPipeClient> {
-    match ClientOptions::new().open(PIPE_NAME) {
+async fn connect(pipe_name: &str, dir: &Path) -> Option<NamedPipeClient> {
+    match ClientOptions::new().open(pipe_name) {
         Ok(client) if !crate::pipe_server::is_service_pipe(&client) => {
             log_pipe_trouble_throttled(
                 dir,
@@ -1595,6 +1606,120 @@ mod tests {
         assert!(state.connected);
         assert!(state.protocol_mismatch.is_none());
         assert!(state.last_error.is_none());
+    }
+
+    /// One session of a canned control service: answers the handshake and
+    /// initial fetch, pushes a `fan_duty` event after `subscribe`, then hangs up.
+    async fn serve_canned_session(server: tokio::net::windows::named_pipe::NamedPipeServer) {
+        server.connect().await.expect("client connects");
+        let (read_half, mut writer) = tokio::io::split(server);
+        let mut lines = BufReader::new(read_half).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let request: serde_json::Value = serde_json::from_str(&line).expect("request is JSON");
+            let method = request["method"].as_str().unwrap_or_default().to_owned();
+            let result = match method.as_str() {
+                "hello" => {
+                    serde_json::json!({ "protocol": PROTOCOL_VERSION, "service_version": "test" })
+                }
+                "capabilities" => serde_json::json!([{ "domain": "fan", "supported": true }]),
+                "list_profiles" => serde_json::json!([
+                    { "id": "balanced", "name": "Balanced", "builtin": true, "part": {} }
+                ]),
+                "get_state" => {
+                    serde_json::json!({ "active_profile": "balanced", "dry_run": false })
+                }
+                _ => serde_json::json!({ "ok": true }),
+            };
+            let response = serde_json::json!({ "id": request["id"], "result": result });
+            writer
+                .write_all(format!("{response}\n").as_bytes())
+                .await
+                .unwrap();
+            if method == "subscribe" {
+                let event = r#"{"event":"fan_duty","data":{"duty":{"h0":42.0}}}"#;
+                writer
+                    .write_all(format!("{event}\n").as_bytes())
+                    .await
+                    .unwrap();
+                break;
+            }
+        }
+    }
+
+    /// Waits for the first event `pick` accepts, yielding to the runtime.
+    async fn next_matching<T>(
+        rx: &std::sync::mpsc::Receiver<ControlEvent>,
+        mut pick: impl FnMut(ControlEvent) -> Option<T>,
+    ) -> T {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+        loop {
+            while let Ok(event) = rx.try_recv() {
+                if let Some(found) = pick(event) {
+                    return found;
+                }
+            }
+            assert!(
+                tokio::time::Instant::now() < deadline,
+                "event not seen in time"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn control_task_fetches_state_forwards_events_and_reconnects() {
+        use tokio::net::windows::named_pipe::ServerOptions;
+
+        let name: &'static str = Box::leak(
+            format!(r"\\.\pipe\rigstats-control-test-{}", std::process::id()).into_boxed_str(),
+        );
+        let first = ServerOptions::new()
+            .first_pipe_instance(true)
+            .create(name)
+            .unwrap();
+        // The next instance exists before the first hangs up, so the name is
+        // never free and the reconnect finds it.
+        let second = ServerOptions::new().create(name).unwrap();
+
+        let (event_tx, event_rx) = std::sync::mpsc::channel();
+        let (_cmd_tx, cmd_rx) = tokio::sync::mpsc::channel(8);
+        let task = tokio::spawn(control_task_on(
+            name,
+            std::sync::Arc::new(tokio::sync::Mutex::new(cmd_rx)),
+            event_tx,
+            std::env::temp_dir(),
+            "test".to_owned(),
+        ));
+
+        let server = tokio::spawn(async move {
+            serve_canned_session(first).await;
+            serve_canned_session(second).await;
+        });
+
+        let mut state = ControlState::default();
+        next_matching(&event_rx, |e| {
+            let duty = matches!(e, ControlEvent::FanDuty(_));
+            state.apply(e);
+            duty.then_some(())
+        })
+        .await;
+        assert_eq!(state.capabilities.len(), 1);
+        assert_eq!(state.profiles.len(), 1);
+        assert_eq!(state.active_profile.as_deref(), Some("balanced"));
+        assert_eq!(state.fan_duty.get("h0"), Some(&42.0));
+
+        // The service hangs up: the task says so and connects again.
+        next_matching(&event_rx, |e| {
+            matches!(e, ControlEvent::Disconnected).then_some(())
+        })
+        .await;
+        next_matching(&event_rx, |e| {
+            matches!(e, ControlEvent::Connected).then_some(())
+        })
+        .await;
+
+        task.abort();
+        server.abort();
     }
 
     #[test]
