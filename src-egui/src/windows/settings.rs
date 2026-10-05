@@ -1624,33 +1624,21 @@ fn draw_overlay(
         section_label(ui, dc, "Layout");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new("Arrangement")
-                    .size(12.0)
-                    .color(dc.muted),
-            );
+            ui.label(egui::RichText::new("Columns").size(12.0).color(dc.muted));
             ui.add_space(8.0);
-            let label = match draft.overlay_layout.as_str() {
-                "vertical" => "Vertical",
-                "grid" => "Grid",
-                _ => "Horizontal",
+            let label = |n: u8| match n {
+                0 => "One row".to_string(),
+                1 => "1 (vertical list)".to_string(),
+                n => n.to_string(),
             };
             let w = ui.available_width();
-            egui::ComboBox::from_id_salt("overlay_layout")
-                .selected_text(label)
+            egui::ComboBox::from_id_salt("overlay_columns")
+                .selected_text(label(draft.overlay_columns.min(6)))
                 .width(w)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(
-                        &mut draft.overlay_layout,
-                        "horizontal".to_string(),
-                        "Horizontal",
-                    );
-                    ui.selectable_value(
-                        &mut draft.overlay_layout,
-                        "vertical".to_string(),
-                        "Vertical",
-                    );
-                    ui.selectable_value(&mut draft.overlay_layout, "grid".to_string(), "Grid");
+                    for n in 0..=6u8 {
+                        ui.selectable_value(&mut draft.overlay_columns, n, label(n));
+                    }
                 });
         });
         ui.add_space(6.0);

@@ -215,9 +215,10 @@ pub struct Settings {
     /// Ordered list of metric keys shown in Overlay mode (see `overlay.rs`).
     #[serde(default = "default_overlay_metrics")]
     pub overlay_metrics: Vec<String>,
-    /// Overlay strip layout: `"horizontal"` | `"vertical"` | `"grid"`.
-    #[serde(default = "default_overlay_layout")]
-    pub overlay_layout: String,
+    /// Overlay column count: `0` = every metric on one row, otherwise 1..=6
+    /// columns filled row by row (1 = a vertical list).
+    #[serde(default)]
+    pub overlay_columns: u8,
     /// Overlay screen anchor: `"top-left"` | `"top-right"` | `"bottom-left"` |
     /// `"bottom-right"` | `"free"` (user-dragged, see `overlay_position`).
     #[serde(default = "default_overlay_anchor")]
@@ -274,6 +275,11 @@ pub struct Settings {
     warning_disk_temp: Option<u8>,
     #[serde(default, skip_serializing)]
     critical_disk_temp: Option<u8>,
+
+    // Pre-`overlay_columns` layout (`"horizontal"` | `"vertical"` | `"grid"`),
+    // read once by `migrate_overlay_layout` and never written back.
+    #[serde(default, skip_serializing)]
+    overlay_layout: Option<String>,
 }
 
 fn default_alert_cooldown_secs() -> u64 {
@@ -312,10 +318,6 @@ fn default_overlay_metrics() -> Vec<String> {
         "gpu_temp".to_string(),
         "ram_pct".to_string(),
     ]
-}
-
-fn default_overlay_layout() -> String {
-    "horizontal".to_string()
 }
 
 fn default_overlay_anchor() -> String {
@@ -388,7 +390,7 @@ impl Default for Settings {
             wallpaper_position: None,
             psu_watts: None,
             overlay_metrics: default_overlay_metrics(),
-            overlay_layout: default_overlay_layout(),
+            overlay_columns: 0,
             overlay_anchor: default_overlay_anchor(),
             overlay_margin: default_overlay_margin(),
             overlay_position: None,
@@ -405,7 +407,25 @@ impl Default for Settings {
             critical_ram_temp: None,
             warning_disk_temp: None,
             critical_disk_temp: None,
+            overlay_layout: None,
         }
+    }
+}
+
+/// Maps the old `overlayLayout` onto `overlay_columns`: vertical → 1 column,
+/// horizontal → one row (0), grid → the column count it used to compute
+/// (⌈√metrics⌉). Idempotent: the old field is never written back, so the
+/// next persist drops it.
+fn migrate_overlay_layout(s: &mut Settings) {
+    if let Some(layout) = s.overlay_layout.take() {
+        s.overlay_columns = match layout.as_str() {
+            "vertical" => 1,
+            "grid" => (s.overlay_metrics.len() as f64)
+                .sqrt()
+                .ceil()
+                .clamp(1.0, 6.0) as u8,
+            _ => 0,
+        };
     }
 }
 
@@ -444,6 +464,8 @@ pub fn load_settings(dir: &Path) -> Settings {
     }
     // Keep always_on_top in sync so main.rs startup reads the right value.
     settings.always_on_top = settings.window_layer == "on_top";
+
+    migrate_overlay_layout(&mut settings);
 
     // One-time migration from schema version 0 (flat threshold fields) to
     // version 1 (thresholds map). Runs once, then persists the new format.
@@ -680,7 +702,10 @@ mod tests {
 
         let s = super::load_settings(dir.path());
         assert_eq!(s.overlay_metrics, super::default_overlay_metrics());
-        assert_eq!(s.overlay_layout, "horizontal");
+        assert_eq!(
+            s.overlay_columns, 0,
+            "one row, like the old horizontal default"
+        );
         assert_eq!(s.overlay_anchor, "top-right");
         assert_eq!(s.overlay_margin, 16);
         assert_eq!(s.overlay_position, None);
@@ -704,5 +729,29 @@ mod tests {
 
         let loaded = super::load_settings(dir.path());
         assert_eq!(loaded.overlay_metrics, s.overlay_metrics);
+    }
+
+    #[test]
+    fn load_settings_migrates_old_overlay_layout_to_columns() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        let metrics = r#""overlayMetrics":["cpu_load","cpu_temp","gpu_load","gpu_temp","ram_pct"]"#;
+        for (layout, want) in [("horizontal", 0), ("vertical", 1), ("grid", 3)] {
+            std::fs::write(
+                &path,
+                format!(r#"{{"settingsVersion":1,{metrics},"overlayLayout":"{layout}"}}"#),
+            )
+            .unwrap();
+            let s = super::load_settings(dir.path());
+            assert_eq!(s.overlay_columns, want, "{layout}");
+
+            super::persist_settings(dir.path(), &s).unwrap();
+            let raw = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                !raw.contains("overlayLayout"),
+                "old field must not be written back"
+            );
+            assert_eq!(super::load_settings(dir.path()).overlay_columns, want);
+        }
     }
 }

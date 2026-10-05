@@ -26,6 +26,9 @@ const FRAME_MARGIN_Y: f32 = 6.0;
 /// character or two, while staying completely independent of live values.
 const WIDTH_PROBE_VALUE: f64 = 9999.9;
 
+/// Horizontal space a grid column divider takes (line centred in it), at scale 1.
+const GRID_DIVIDER_W: f32 = 17.0;
+
 /// One selectable overlay metric: how to label it, extract its value from a
 /// [`PollStats`] snapshot, and (optionally) how to colour it from the
 /// current thresholds. `color` takes the full snapshot (not just the
@@ -262,35 +265,101 @@ fn find_metric(key: &str) -> Option<&'static OverlayMetric> {
     ALL_OVERLAY_METRICS.iter().find(|m| m.key == key)
 }
 
-/// Formats a chip's label/value/unit text — shared by `draw_chip` (the real
-/// value) and `estimate_window_size` (a fixed probe value), so the two can
-/// never disagree about what text is actually being sized/rendered.
-fn chip_text(m: &OverlayMetric, value: Option<f64>) -> String {
+/// Formats a chip's label/value/unit text — `draw_chip_row` draws the label
+/// and value parts, `estimate_window_size` measures the joined `chip_text`
+/// (a fixed probe value), so the two can never disagree about what text is
+/// actually being sized/rendered.
+fn chip_label(m: &OverlayMetric) -> String {
+    format!("{}:", m.label)
+}
+
+fn chip_value(m: &OverlayMetric, value: Option<f64>) -> String {
     match value {
-        Some(v) => format!("{}: {v:.1}{}", m.label, m.unit),
-        None => format!("{}: --", m.label),
+        Some(v) => format!("{v:.1}{}", m.unit),
+        None => "--".to_string(),
     }
 }
 
-fn draw_chip(
+fn chip_text(m: &OverlayMetric, value: Option<f64>) -> String {
+    format!("{} {}", chip_label(m), chip_value(m, value))
+}
+
+/// Text width of each metric's chip at [`WIDTH_PROBE_VALUE`], plus the
+/// tallest line height — the stable, value-independent sizes both the window
+/// estimate and the drawn column widths are derived from.
+fn probe_widths(
+    ctx: &egui::Context,
+    selected: &[&OverlayMetric],
+    font_id: &egui::FontId,
+) -> (Vec<f32>, f32) {
+    let mut line_h = 0.0_f32;
+    let widths = ctx.fonts_mut(|f| {
+        selected
+            .iter()
+            .map(|m| {
+                let text = chip_text(m, Some(WIDTH_PROBE_VALUE));
+                let galley = f.layout_no_wrap(text, font_id.clone(), Color32::WHITE);
+                line_h = line_h.max(galley.size().y);
+                galley.size().x
+            })
+            .collect()
+    });
+    (widths, line_h)
+}
+
+/// Fixed width of each column: the widest probe width among the metrics that
+/// land in it (row-major fill, `cols` per row; `0` = all on one row).
+fn grid_column_widths(widths: &[f32], cols: usize) -> Vec<f32> {
+    let cols = if cols == 0 { widths.len() } else { cols };
+    let cols = cols.clamp(1, widths.len().max(1));
+    let mut col_w = vec![0.0_f32; cols];
+    for (i, w) in widths.iter().enumerate() {
+        col_w[i % cols] = col_w[i % cols].max(*w);
+    }
+    col_w
+}
+
+fn metric_color(
+    th: &theme::AppTheme,
+    latest: &PollStats,
+    thresholds: &PanelThresholds,
+    m: &OverlayMetric,
+) -> Color32 {
+    match m.color {
+        Some(f) => f(latest, thresholds),
+        None => th.stat_label,
+    }
+}
+
+/// One cell: label flush left, value flush right within a fixed `width`, so
+/// each column's left and right edges stay straight.
+#[allow(clippy::too_many_arguments)] // per-metric render inputs plus the cell size
+fn draw_chip_row(
     ui: &mut egui::Ui,
     th: &theme::AppTheme,
     latest: &PollStats,
     thresholds: &PanelThresholds,
     m: &OverlayMetric,
     sc: f32,
+    width: f32,
+    row_h: f32,
 ) {
-    let value = (m.extract)(latest);
-    let color = match m.color {
-        Some(f) => f(latest, thresholds),
-        None => th.stat_label,
-    };
-    let text = chip_text(m, value);
-    ui.label(
-        RichText::new(text)
+    let color = metric_color(th, latest, thresholds, m);
+    let text = |s: String| {
+        RichText::new(s)
             .size(CHIP_FONT_SIZE * sc)
             .strong()
-            .color(color),
+            .color(color)
+    };
+    ui.allocate_ui_with_layout(
+        egui::vec2(width, row_h),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.label(text(chip_label(m)));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(text(chip_value(m, (m.extract)(latest))));
+            });
+        },
     );
 }
 
@@ -327,7 +396,7 @@ pub fn content_inset(scale: f32, background: bool) -> egui::Vec2 {
 pub fn estimate_window_size(
     ctx: &egui::Context,
     metrics: &[String],
-    layout: &str,
+    columns: usize,
     scale: f32,
     background: bool,
 ) -> egui::Vec2 {
@@ -337,43 +406,14 @@ pub fn estimate_window_size(
         egui::vec2(60.0 * sc, CHIP_FONT_SIZE * sc * 1.3)
     } else {
         let font_id = egui::FontId::proportional(CHIP_FONT_SIZE * sc);
-        let spacing = ctx.global_style().spacing.item_spacing;
-        let (gap_x, gap_y) = (spacing.x, spacing.y);
-        let mut line_h = 0.0_f32;
-        let widths: Vec<f32> = ctx.fonts_mut(|f| {
-            selected
-                .iter()
-                .map(|m| {
-                    let text = chip_text(m, Some(WIDTH_PROBE_VALUE));
-                    let galley = f.layout_no_wrap(text, font_id.clone(), Color32::WHITE);
-                    line_h = line_h.max(galley.size().y);
-                    galley.size().x
-                })
-                .collect()
-        });
-        match layout {
-            "vertical" => {
-                let w = widths.iter().cloned().fold(0.0_f32, f32::max);
-                let h = line_h * widths.len() as f32 + gap_y * (widths.len() as f32 - 1.0).max(0.0);
-                egui::vec2(w, h)
-            }
-            "grid" => {
-                let cols = (widths.len() as f32).sqrt().ceil().max(1.0) as usize;
-                let mut max_row_w = 0.0_f32;
-                let mut rows = 0.0_f32;
-                for row in widths.chunks(cols) {
-                    rows += 1.0;
-                    let row_w = row.iter().sum::<f32>() + gap_x * (row.len() as f32 - 1.0).max(0.0);
-                    max_row_w = max_row_w.max(row_w);
-                }
-                let h = line_h * rows + gap_y * (rows - 1.0).max(0.0);
-                egui::vec2(max_row_w, h)
-            }
-            _ => {
-                let w = widths.iter().sum::<f32>() + gap_x * (widths.len() as f32 - 1.0).max(0.0);
-                egui::vec2(w, line_h)
-            }
-        }
+        let gap_y = ctx.global_style().spacing.item_spacing.y;
+        let (widths, line_h) = probe_widths(ctx, &selected, &font_id);
+        let col_w = grid_column_widths(&widths, columns);
+        let rows = widths.len().div_ceil(col_w.len()) as f32;
+        let w =
+            col_w.iter().sum::<f32>() + (GRID_DIVIDER_W * sc).round() * (col_w.len() as f32 - 1.0);
+        let h = line_h * rows + gap_y * (rows - 1.0);
+        egui::vec2(w, h)
     };
     let inset = content_inset(scale, background);
     content + 2.0 * inset
@@ -406,7 +446,7 @@ pub fn draw_overlay(
     latest: &PollStats,
     thresholds: &PanelThresholds,
     metrics: &[String],
-    layout: &str,
+    columns: usize,
     anchor: &str,
     scale: f32,
     opacity: f32,
@@ -481,32 +521,42 @@ pub fn draw_overlay(
     // that's what keeps the visible box's size and corner fixed regardless of
     // how wide any individual value renders this tick.
     let inner = frame.show(ui, |ui| {
-        ui.allocate_ui_with_layout(content_size, content_layout, |ui| match layout {
-            "vertical" => {
-                ui.vertical(|ui| {
-                    for m in &selected {
-                        draw_chip(ui, th, latest, thresholds, m, sc);
-                    }
-                });
-            }
-            "grid" => {
-                let cols = (selected.len() as f32).sqrt().ceil().max(1.0) as usize;
-                ui.vertical(|ui| {
-                    for row in selected.chunks(cols) {
-                        ui.horizontal(|ui| {
-                            for m in row {
-                                draw_chip(ui, th, latest, thresholds, m, sc);
+        ui.allocate_ui_with_layout(content_size, content_layout, |ui| {
+            // Each column gets a fixed width from the probe value (the same
+            // widths the window was sized from), so values right-align against
+            // a straight edge that doesn't move as they change. A thin divider
+            // line separates columns.
+            let font_id = egui::FontId::proportional(CHIP_FONT_SIZE * sc);
+            let (widths, line_h) = probe_widths(ui.ctx(), &selected, &font_id);
+            let col_w = grid_column_widths(&widths, columns);
+            let div_w = (GRID_DIVIDER_W * sc).round();
+            let grid = ui.vertical(|ui| {
+                // `ui.horizontal` makes every row at least `interact_size.y`
+                // tall, which is taller than one text line — the window is
+                // sized from `line_h` per row, so the last row got clipped.
+                ui.spacing_mut().interact_size.y = line_h;
+                for row in selected.chunks(col_w.len()) {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        for (c, m) in row.iter().enumerate() {
+                            if c > 0 {
+                                ui.allocate_exact_size(
+                                    egui::vec2(div_w, line_h),
+                                    egui::Sense::hover(),
+                                );
                             }
-                        });
-                    }
-                });
-            }
-            _ => {
-                ui.horizontal(|ui| {
-                    for m in &selected {
-                        draw_chip(ui, th, latest, thresholds, m, sc);
-                    }
-                });
+                            draw_chip_row(ui, th, latest, thresholds, m, sc, col_w[c], line_h);
+                        }
+                    });
+                }
+            });
+            let r = grid.response.rect;
+            let stroke = Stroke::new(1.0_f32, th.stat_label.gamma_multiply(0.4));
+            let mut x = r.left();
+            for w in &col_w[..col_w.len() - 1] {
+                x += w + div_w;
+                let line_x = (x - div_w / 2.0).round() + 0.5;
+                ui.painter().vline(line_x, r.y_range(), stroke);
             }
         });
     });
@@ -580,6 +630,24 @@ mod tests {
         assert_eq!(gpu_vram_pct(&stats), None, "total still missing");
         stats.gpu_vram_total_mb = Some(4096.0);
         assert_eq!(gpu_vram_pct(&stats), Some(25.0));
+    }
+
+    #[test]
+    fn chip_text_is_label_and_value_joined_by_a_space() {
+        // The vertical layout draws label and value separately, but its column
+        // width is measured from chip_text — they must stay in sync.
+        let m = find_metric("cpu_load").unwrap();
+        for v in [Some(4.0), None] {
+            assert_eq!(
+                chip_text(m, v),
+                format!("{} {}", chip_label(m), chip_value(m, v))
+            );
+        }
+        assert_eq!(
+            chip_text(m, Some(4.0)),
+            format!("{}: 4.0{}", m.label, m.unit)
+        );
+        assert_eq!(chip_text(m, None), format!("{}: --", m.label));
     }
 
     #[test]
@@ -662,7 +730,7 @@ mod tests {
         // A user can save an empty metric list — the overlay must still be a
         // recoverable, visible (if empty) window, not a 0x0 one.
         let ctx = egui::Context::default();
-        let size = estimate_window_size(&ctx, &[], "horizontal", 1.0, true);
+        let size = estimate_window_size(&ctx, &[], 0, 1.0, true);
         assert!(size.x > 0.0 && size.y > 0.0);
     }
 
@@ -676,9 +744,9 @@ mod tests {
     }
 
     #[test]
-    fn estimate_window_size_horizontal_widens_with_more_metrics() {
+    fn estimate_window_size_one_row_widens_with_more_metrics() {
         let ctx = ctx_with_fonts();
-        let one = estimate_window_size(&ctx, &["cpu_load".to_string()], "horizontal", 1.0, true);
+        let one = estimate_window_size(&ctx, &["cpu_load".to_string()], 0, 1.0, true);
         let four = estimate_window_size(
             &ctx,
             &[
@@ -687,21 +755,48 @@ mod tests {
                 "gpu_load".to_string(),
                 "gpu_temp".to_string(),
             ],
-            "horizontal",
+            0,
             1.0,
             true,
         );
-        assert_eq!(one.y, four.y, "horizontal layout keeps a single row height");
-        assert!(four.x > one.x, "more metrics must widen a horizontal strip");
+        assert_eq!(one.y, four.y, "one-row layout keeps a single row height");
+        assert!(four.x > one.x, "more metrics must widen a one-row strip");
     }
 
     #[test]
     fn estimate_window_size_background_adds_margin() {
         let ctx = ctx_with_fonts();
         let metrics = vec!["cpu_load".to_string()];
-        let with_bg = estimate_window_size(&ctx, &metrics, "horizontal", 1.0, true);
-        let without_bg = estimate_window_size(&ctx, &metrics, "horizontal", 1.0, false);
+        let with_bg = estimate_window_size(&ctx, &metrics, 0, 1.0, true);
+        let without_bg = estimate_window_size(&ctx, &metrics, 0, 1.0, false);
         assert!(with_bg.x > without_bg.x);
         assert!(with_bg.y > without_bg.y);
+    }
+
+    #[test]
+    fn grid_column_widths_take_the_widest_cell_per_column() {
+        // Row-major: [a b] / [c d] / [e]
+        let w = [10.0, 30.0, 25.0, 5.0, 12.0];
+        assert_eq!(grid_column_widths(&w, 2), vec![25.0, 30.0]);
+        assert_eq!(grid_column_widths(&w, 1), vec![30.0]);
+        assert_eq!(grid_column_widths(&w, 0), w.to_vec(), "0 = one row");
+        assert_eq!(
+            grid_column_widths(&w[..2], 4),
+            vec![10.0, 30.0],
+            "never more columns than metrics"
+        );
+    }
+
+    #[test]
+    fn estimate_window_size_grid_column_count_trades_width_for_height() {
+        let ctx = ctx_with_fonts();
+        let metrics: Vec<String> = ["cpu_load", "cpu_temp", "gpu_load", "gpu_temp"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let two = estimate_window_size(&ctx, &metrics, 2, 1.0, true);
+        let four = estimate_window_size(&ctx, &metrics, 4, 1.0, true);
+        assert!(four.x > two.x);
+        assert!(four.y < two.y);
     }
 }

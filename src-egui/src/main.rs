@@ -940,11 +940,11 @@ impl RigStatsApp {
             return;
         }
 
-        let (metrics, layout, anchor, margin, scale, opacity, background) = {
+        let (metrics, columns, anchor, margin, scale, opacity, background) = {
             let s = self.current_settings.lock_safe();
             (
                 s.overlay_metrics.clone(),
-                s.overlay_layout.clone(),
+                s.overlay_columns.min(6) as usize,
                 s.overlay_anchor.clone(),
                 s.overlay_margin as f32,
                 s.overlay_scale.clamp(0.5, 2.0) as f32,
@@ -952,7 +952,7 @@ impl RigStatsApp {
                 s.overlay_background,
             )
         };
-        let measured = estimate_window_size(ctx, &metrics, &layout, scale, background);
+        let measured = estimate_window_size(ctx, &metrics, columns, scale, background);
         let size = [measured.x, measured.y];
         if self.overlay_last_size != Some(size) {
             // Only the very first size (right after activation,
@@ -1139,7 +1139,7 @@ impl RigStatsApp {
                 }
 
                 let resp = draw_overlay(
-                    child_ui, &th, latest, thresholds, &metrics, &layout, &anchor, scale, opacity,
+                    child_ui, &th, latest, thresholds, &metrics, columns, &anchor, scale, opacity,
                     background,
                 );
 

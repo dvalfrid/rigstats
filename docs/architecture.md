@@ -107,6 +107,12 @@ viewport (`RigStatsApp::render_overlay_viewport` in `main.rs`) showing a
 compact, optionally click-through strip of user-selected metrics
 (`overlay.rs`), corner-anchored or free-dragged, and coexists with whatever
 the main window (portrait/landscape/floating/wallpaper) is doing underneath.
+Metrics are laid out in `Settings.overlay_columns` columns (`0` = one row,
+1 = vertical list, up to 6), filled row by row; each cell has the label flush
+left and the value flush right, every column has a fixed width measured from
+a probe value (so nothing shifts as values change), and a thin divider
+separates columns. Older settings files' `overlayLayout` is migrated to a
+column count on load (`migrate_overlay_layout`).
 Click-through uses `egui::ViewportCommand::MousePassthrough` — no raw Win32
 FFI is needed for it, unlike Always-Behind (`win32_behind.rs`). Per-pixel
 transparency (where DComp is available) required a hide → reapply-burst →
@@ -219,7 +225,7 @@ rig-dashboard/
 | `dialog_reveal.rs` | `DialogReveal` — each dialog window is created hidden and revealed after it has rendered, and hidden for one frame before it's torn down (no white flash on open/close); see the dialog lifecycle under `windows/` below |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
 | `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process |
-| `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract` fn/`color` fn) and `draw_overlay` — the compact chip renderer for the overlay add-on |
+| `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract` fn/`color` fn) and `draw_overlay` — the compact column renderer (label left, value right, dividers) for the overlay add-on |
 | `hotkey.rs` | Global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on a dedicated thread) — fixed `Ctrl+Alt+O`, shows/hides the overlay |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h`. `GpuMenu`: the "GPU ▸" submenu (Automatic + one check row per adapter), filled in once background adapter detection reports back; rows use deterministic ids decoded by `gpu_choice_from_menu_id`. "Toggle Desk Lamp" (`TrayCmd::ToggleLamp` → `ControlCmd::ToggleLamp`) is inserted into the menu only while a lighting device with a lamp is connected (`set_lamp_available`, from `ControlState::has_lamp`) |
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
