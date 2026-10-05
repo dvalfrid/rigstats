@@ -48,7 +48,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210, #234 |
 
 ---
 
@@ -121,6 +121,7 @@ script to refresh it.
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🔲 Planned |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
+| [#234](https://github.com/dvalfrid/rigstats/issues/234) | `control-asus-laptop` | Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits) | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -1603,6 +1604,7 @@ Full design: [docs/control-architecture.md](docs/control-architecture.md).
 | 4 — AMD Curve Optimizer | [#191](https://github.com/dvalfrid/rigstats/issues/191) |
 | 5 — ASUS Aura RGB | [#192](https://github.com/dvalfrid/rigstats/issues/192) |
 | 6 — Armoury Crate replacement | [#193](https://github.com/dvalfrid/rigstats/issues/193) |
+| 7 — ASUS laptops (ATKACPI) | [#234](https://github.com/dvalfrid/rigstats/issues/234) |
 
 ### Phase 1 — Fan control ✅
 

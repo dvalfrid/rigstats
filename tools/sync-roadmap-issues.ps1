@@ -153,6 +153,7 @@ $features = @(
   @{ id="control-desk-lamp"; kind="done"; pin=214; milestone="v3.0"; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
   @{ id="control-lighting-hue"; kind="done"; pin=215; milestone="v3.0"; title="Lighting: Philips Hue via the Hue Bridge" }
   @{ id="control-armoury-crate"; kind="planned"; pin=193; milestone="v3.0"; title="Control Center phase 6: Armoury Crate replacement" }
+  @{ id="control-asus-laptop"; kind="planned"; pin=234; milestone="v3.0"; title="Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits)" }
 )
 
 # 3. Fetch all issues once; index by marker and by title.
