@@ -317,6 +317,10 @@ escalation vector:
   own signer (skipped in debug builds only). The path is the real gate — only
   an administrator can put a file there; the signer comparison catches a
   mismatched install, it does not validate the signature.
+  A refused client is just closed. The service logs a refusal when its reason
+  changes or every 10 minutes, with the count in between (`RefusalLog`); the
+  app treats a close before `hello` is answered as a refusal, backs off
+  2 s → 60 s, and the Control Center says "Refused by the service" (#231).
 - Pipe names can't be taken over: the service creates each name with
   `FirstPipeInstance` and always keeps one instance listening (the control
   pipe creates the next before serving the connected client). If another

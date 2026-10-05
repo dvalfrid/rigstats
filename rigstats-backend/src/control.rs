@@ -24,6 +24,12 @@ use tokio::sync::mpsc::Receiver as AsyncReceiver;
 const PIPE_NAME: &str = r"\\.\pipe\rigstats-control";
 const PROTOCOL_VERSION: u32 = 1;
 const RECONNECT_BACKOFF: Duration = Duration::from_secs(2);
+/// Upper bound of the retry delay while the service keeps refusing this app
+/// (#231) — it doubles from `RECONNECT_BACKOFF` up to this.
+const REFUSED_BACKOFF_MAX: Duration = Duration::from_secs(60);
+/// Consecutive refusals before the UI says "refused" rather than
+/// "connecting" — a single close can also be the service restarting.
+const REFUSALS_SHOWN_AFTER: u32 = 2;
 /// Generous — `apply_profile` can involve validate→snapshot→apply→verify
 /// across several providers; `hello`/`capabilities`/etc. return far sooner.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -458,6 +464,9 @@ pub struct ControlState {
     /// version this app doesn't understand — the UI should disable control
     /// and show why, per the design doc, rather than keep retrying.
     pub protocol_mismatch: Option<ProtocolMismatch>,
+    /// The service keeps closing the connection before answering `hello` —
+    /// it refuses this app (e.g. not the installed, signed `rigstats.exe`).
+    pub refused: bool,
     pub capabilities: Vec<CapabilitySet>,
     pub profiles: Vec<Profile>,
     pub active_profile: Option<String>,
@@ -663,10 +672,15 @@ impl ControlState {
         match event {
             ControlEvent::Connected => {
                 self.connected = true;
+                self.refused = false;
                 self.protocol_mismatch = None;
                 self.last_error = None;
             }
             ControlEvent::Disconnected => self.connected = false,
+            ControlEvent::Refused => {
+                self.connected = false;
+                self.refused = true;
+            }
             ControlEvent::ProtocolMismatch { expected, got } => {
                 self.connected = false;
                 self.protocol_mismatch = Some(ProtocolMismatch { expected, got });
@@ -736,6 +750,8 @@ impl ControlState {
 pub enum ControlEvent {
     Connected,
     Disconnected,
+    /// The service refused this app (see [`ControlState::refused`]).
+    Refused,
     ProtocolMismatch {
         expected: u32,
         got: u32,
@@ -835,6 +851,8 @@ pub async fn control_task(
     app_version: String,
 ) {
     let mut cmd_rx = cmd_rx.lock().await;
+    // Connections the service closed before answering `hello` in a row.
+    let mut refusals: u32 = 0;
     loop {
         let Some(client) = connect(&dir).await else {
             tokio::time::sleep(RECONNECT_BACKOFF).await;
@@ -874,14 +892,30 @@ pub async fn control_task(
                     return; // Not retryable — a reconnect won't change the service's protocol version.
                 }
             }
+            Err(RequestError::Closed) => {
+                // The service verifies the client before reading anything and
+                // just closes on a refusal, so retrying fast only fills its
+                // log (#231). "Pipe not there" stays on the fast retry above.
+                refusals += 1;
+                log_pipe_trouble_throttled(
+                    &dir,
+                    "control: the service closed the connection before answering hello — refused?",
+                );
+                if refusals == REFUSALS_SHOWN_AFTER {
+                    let _ = event_tx.send(ControlEvent::Refused);
+                }
+                tokio::time::sleep(refused_backoff(refusals)).await;
+                continue;
+            }
             _ => {
-                // Connect failure or an error response to hello — treat like
-                // any other failed connection attempt.
+                // An error response or no answer to hello — treat like any
+                // other failed connection attempt.
                 tokio::time::sleep(RECONNECT_BACKOFF).await;
                 continue;
             }
         }
 
+        refusals = 0;
         append_debug_log(&dir, "control: connected to rigstats-control");
         let _ = event_tx.send(ControlEvent::Connected);
         fetch_and_publish(&mut writer, &mut reader, &mut next_id, &event_tx, &dir).await;
@@ -929,6 +963,13 @@ pub async fn control_task(
     }
 }
 
+/// Retry delay after the `refusals`-th refusal in a row: `RECONNECT_BACKOFF`,
+/// doubling, capped at `REFUSED_BACKOFF_MAX`.
+fn refused_backoff(refusals: u32) -> Duration {
+    let doublings = refusals.saturating_sub(1).min(16);
+    (RECONNECT_BACKOFF * 2u32.pow(doublings)).min(REFUSED_BACKOFF_MAX)
+}
+
 async fn connect(dir: &Path) -> Option<NamedPipeClient> {
     match ClientOptions::new().open(PIPE_NAME) {
         Ok(client) if !crate::pipe_server::is_service_pipe(&client) => {
@@ -960,6 +1001,15 @@ async fn read_line(reader: &mut (impl AsyncBufRead + Unpin)) -> std::io::Result<
 /// buffered — see the module doc's note on why this connection doesn't need
 /// a general pending-request map: the UI only ever has one command
 /// in flight at a time).
+/// Why a [`request`] got no response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RequestError {
+    /// The service closed the pipe (EOF, broken pipe).
+    Closed,
+    /// Timed out, an oversized frame, or the request couldn't be encoded.
+    Failed,
+}
+
 async fn request(
     writer: &mut (impl AsyncWrite + Unpin),
     reader: &mut (impl AsyncBufRead + Unpin),
@@ -968,14 +1018,15 @@ async fn request(
     params: Option<serde_json::Value>,
     event_tx: &SyncSender<ControlEvent>,
     dir: &Path,
-) -> Result<Option<serde_json::Value>, ()> {
+) -> Result<Option<serde_json::Value>, RequestError> {
     let id = *next_id;
     *next_id += 1;
 
-    let mut line = serde_json::to_string(&RequestOut { id, method, params }).map_err(|_| ())?;
+    let mut line = serde_json::to_string(&RequestOut { id, method, params })
+        .map_err(|_| RequestError::Failed)?;
     line.push('\n');
     if writer.write_all(line.as_bytes()).await.is_err() {
-        return Err(());
+        return Err(RequestError::Closed);
     }
 
     let timeout = if method.starts_with("hue_") {
@@ -991,13 +1042,13 @@ async fn request(
                 dir,
                 &format!("control: '{method}' timed out waiting for a response"),
             );
-            return Err(());
+            return Err(RequestError::Failed);
         }
 
         let mut buf = String::new();
         let read = tokio::time::timeout(remaining, reader.read_line(&mut buf)).await;
         match read {
-            Ok(Ok(0)) => return Err(()), // EOF.
+            Ok(Ok(0)) => return Err(RequestError::Closed), // EOF.
             Ok(Ok(_)) => {
                 if buf.len() > MAX_PIPE_LINE_BYTES {
                     log_warn(
@@ -1007,7 +1058,7 @@ async fn request(
                             buf.len()
                         ),
                     );
-                    return Err(());
+                    return Err(RequestError::Failed);
                 }
                 match serde_json::from_str::<IncomingLine>(buf.trim()) {
                     Ok(IncomingLine::Response(resp)) if resp.id == id => {
@@ -1037,7 +1088,8 @@ async fn request(
                     }
                 }
             }
-            Ok(Err(_)) | Err(_) => return Err(()),
+            Ok(Err(_)) => return Err(RequestError::Closed),
+            Err(_) => return Err(RequestError::Failed),
         }
     }
 }
@@ -1097,7 +1149,7 @@ async fn handle_cmd(
     next_id: &mut u64,
     event_tx: &SyncSender<ControlEvent>,
     dir: &Path,
-) -> Result<(), ()> {
+) -> Result<(), RequestError> {
     match cmd {
         ControlCmd::ApplyProfile(id) => {
             let params = serde_json::json!({ "id": id.clone() });
@@ -1153,7 +1205,7 @@ async fn handle_cmd(
         }
         ControlCmd::SaveProfile { profile, apply } => {
             let id = profile.id.clone();
-            let params = serde_json::to_value(&profile).map_err(|_| ())?;
+            let params = serde_json::to_value(&profile).map_err(|_| RequestError::Failed)?;
             let saved = request(
                 writer,
                 reader,
@@ -1382,7 +1434,7 @@ async fn hue_request(
     next_id: &mut u64,
     event_tx: &SyncSender<ControlEvent>,
     dir: &Path,
-) -> Result<(), ()> {
+) -> Result<(), RequestError> {
     let _ = event_tx.send(ControlEvent::HueBusy(true));
     let result = request(writer, reader, next_id, method, params, event_tx, dir).await;
     if result.as_ref().is_ok_and(Option::is_some) {
@@ -1395,9 +1447,9 @@ async fn hue_request(
 /// Ends a Hue request. One that got no answer at all (the connection is
 /// dropped and re-made) still says so on the Hue card.
 fn hue_done(
-    result: Result<Option<serde_json::Value>, ()>,
+    result: Result<Option<serde_json::Value>, RequestError>,
     event_tx: &SyncSender<ControlEvent>,
-) -> Result<(), ()> {
+) -> Result<(), RequestError> {
     if result.is_err() {
         let _ = event_tx.send(ControlEvent::Error(
             "The RIGStats service didn't answer in time. Try again in a moment.".to_owned(),
@@ -1528,6 +1580,48 @@ mod tests {
         assert!(state.connected);
         assert!(state.protocol_mismatch.is_none());
         assert!(state.last_error.is_none());
+    }
+
+    #[test]
+    fn control_state_refused_until_connected() {
+        let mut state = ControlState::default();
+
+        state.apply(ControlEvent::Refused);
+        assert!(state.refused);
+        assert!(!state.connected);
+
+        state.apply(ControlEvent::Connected);
+        assert!(!state.refused);
+        assert!(state.connected);
+    }
+
+    #[test]
+    fn refused_backoff_doubles_up_to_the_cap() {
+        let delays: Vec<u64> = (1..=8).map(|n| refused_backoff(n).as_secs()).collect();
+        assert_eq!(delays, [2, 4, 8, 16, 32, 60, 60, 60]);
+        // Never overflows, however long the service keeps refusing.
+        assert_eq!(refused_backoff(u32::MAX), REFUSED_BACKOFF_MAX);
+    }
+
+    #[tokio::test]
+    async fn request_reports_a_closed_pipe_as_closed() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let dir = std::env::temp_dir();
+        let mut next_id = 1;
+
+        // The service closes before answering (a refusal): EOF.
+        let mut reader = BufReader::new(&b""[..]);
+        let result = request(
+            &mut tokio::io::sink(),
+            &mut reader,
+            &mut next_id,
+            "hello",
+            None,
+            &tx,
+            &dir,
+        )
+        .await;
+        assert_eq!(result, Err(RequestError::Closed));
     }
 
     #[test]

@@ -1561,6 +1561,11 @@ pub fn show(
                             egui::Color32::from_rgb(0x39, 0xff, 0x88),
                             "Connected".to_string(),
                         )
+                    } else if control.refused {
+                        (
+                            egui::Color32::from_rgb(0xff, 0x55, 0x55),
+                            "Refused by the service".to_string(),
+                        )
                     } else {
                         (dc.muted, "Connecting…".to_string())
                     };
@@ -1842,11 +1847,12 @@ fn power_tab(
         .find(|c| c.domain == "power_plan");
     match power {
         None if !control.connected => {
-            ui.label(
-                egui::RichText::new("Waiting for the RIGStats service…")
-                    .size(12.0)
-                    .color(dc.muted),
-            );
+            let text = if control.refused {
+                "The sensor service refused this app (see the service log)."
+            } else {
+                "Waiting for the RIGStats service…"
+            };
+            ui.label(egui::RichText::new(text).size(12.0).color(dc.muted));
         }
         None => {
             ui.label(

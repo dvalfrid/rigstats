@@ -36,6 +36,7 @@
     <Compile Include="..\sensor-sidecar\Control\DataDirectory.cs" Link="Control\DataDirectory.cs" />
     <Compile Include="..\sensor-sidecar\Control\PipeClientVerifier.cs" Link="Control\PipeClientVerifier.cs" />
     <Compile Include="..\sensor-sidecar\Control\ControlPipeWorker.cs" Link="Control\ControlPipeWorker.cs" />
+    <Compile Include="..\sensor-sidecar\Control\RefusalLog.cs" Link="Control\RefusalLog.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\PowerPlanProvider.cs" Link="Control\Providers\PowerPlanProvider.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\FanProvider.cs" Link="Control\Providers\FanProvider.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\FanCurveEvaluator.cs" Link="Control\Providers\FanCurveEvaluator.cs" />

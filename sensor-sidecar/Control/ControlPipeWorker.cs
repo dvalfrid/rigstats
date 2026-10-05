@@ -118,6 +118,7 @@ public sealed class ControlPipeWorker(
     // second one waits on this instance until the first has left.
     private NamedPipeServerStream? _listening;
     private bool _nameTakenLogged;
+    private readonly RefusalLog _refusals = new();
 
     /// `first`: no instance of ours exists, so creating one must also create
     /// the pipe name — it fails when another process already holds the name.
@@ -177,12 +178,16 @@ public sealed class ControlPipeWorker(
             // Reject silently over the wire (no protocol response to an
             // unverified caller) but still log it — otherwise a legitimate
             // rigstats.exe being rejected (e.g. after a signer mismatch)
-            // would be undiagnosable in the field.
-            SidecarLog.Log($"[rigstats-control] Client rejected: {verdict.Reason}");
+            // would be undiagnosable in the field. Throttled: a refused app
+            // keeps retrying (#231).
+            var line = _refusals.Refused(verdict.Reason ?? "", DateTimeOffset.Now);
+            if (line is not null)
+                SidecarLog.Log($"[rigstats-control] {line}");
             await pipe.DisposeAsync();
             return;
         }
 
+        _refusals.Accepted();
         SidecarLog.Log("[rigstats-control] Client connected.");
         // Control is deliberately single-client (doc: "one client at a
         // time") — serve fully before accepting the next connection, unlike
