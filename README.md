@@ -13,7 +13,14 @@
 
 </div>
 
-RIGStats is a Windows hardware-monitor dashboard built with egui — a native Rust UI targeting a vertical secondary display. For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
+RIGStats is a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView, no telemetry.
+
+- **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
+- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
+- **Control Center** — per-profile fan curves, Windows power plans, AMD Ryzen and Radeon power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Session history** — record a session and chart it afterwards.
+
+For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
 
 <img src="assets/rigStats.png" width="260" alt="Main Dashboard">
 
@@ -112,8 +119,8 @@ See [docs/architecture.md](docs/architecture.md) for module-level detail and [do
 ## Display & Placement
 
 The dashboard renders on a secondary monitor and is configured entirely from
-**Settings** (a 560×600 dialog with five tabs: Display, Panels, Alerts,
-Appearance, General).
+**Settings** (a 560×600 dialog with six tabs: Display, Panels, Alerts,
+Appearance, General, Overlay).
 
 - **Display profiles** — pick a portrait or landscape profile that matches the
   target screen (e.g. `portrait-xl` = 450×1920, `landscape-xl` = 1920×450). The
@@ -146,6 +153,23 @@ from the normal layers and are **expected**:
 
 See [docs/troubleshooting.md](docs/troubleshooting.md#desktop-wallpaper-mode) for
 details.
+
+## Game Overlay
+
+A compact strip of chosen metrics drawn on top of games, independent of
+whatever the main dashboard is doing. Show/hide it from the tray or with
+**Ctrl+Alt+O**; configure it under **Settings → Overlay**.
+
+- **Metrics** — pick and reorder from CPU/GPU load, temperature, clock and
+  power, VRAM, RAM, network, ping, battery and more; values are coloured by
+  the same warn/crit thresholds as the dashboard.
+- **Columns** — one row, a vertical list, or 2–6 columns. Labels sit flush
+  left and values flush right in fixed-width columns with thin dividers, so
+  nothing shifts as values change.
+- **Placement** — anchored to a screen corner with a margin, or dragged
+  anywhere; scale, opacity, and an optional background card.
+- **Click-through** — lock it (tray or Settings) so mouse clicks pass through
+  to the game.
 
 ## Session History
 
