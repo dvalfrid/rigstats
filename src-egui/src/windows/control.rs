@@ -508,6 +508,32 @@ fn crash_guard_banner(ui: &mut egui::Ui, control: &ControlState) {
     ui.add_space(10.0);
 }
 
+/// The service couldn't read profiles.json and recovered it (#221) — above
+/// every tab, until profiles are saved again.
+fn profiles_notice_banner(ui: &mut egui::Ui, control: &ControlState) {
+    let Some(notice) = &control.profiles_notice else {
+        return;
+    };
+    let amber = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
+    egui::Frame::new()
+        .fill(amber.gamma_multiply(0.12))
+        .stroke(egui::Stroke::new(1.0_f32, amber))
+        .corner_radius(egui::CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(
+                egui::RichText::new("Profiles recovered")
+                    .size(12.0)
+                    .strong()
+                    .color(amber),
+            );
+            ui.add_space(2.0);
+            ui.label(egui::RichText::new(notice).size(11.0).color(amber));
+        });
+    ui.add_space(10.0);
+}
+
 /// An empty per-core map means the same as none.
 fn normalized_co(part: &CurveOptPart) -> CurveOptPart {
     CurveOptPart {
@@ -1750,6 +1776,7 @@ pub fn show(
     egui::CentralPanel::default()
         .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
         .show(ctx, |ui| {
+            profiles_notice_banner(ui, control);
             let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
             if fan_caps.is_some() || cpu_tab_shown || gpu_caps.is_some() || lighting_shown {
                 ui.horizontal(|ui| {

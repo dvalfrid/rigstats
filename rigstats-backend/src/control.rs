@@ -488,6 +488,9 @@ pub struct ControlState {
     pub fan_identified: BTreeMap<String, Vec<FanResponder>>,
     /// Set when the boot-crash guard kept CPU limits at BIOS values this boot.
     pub crash_guard_notice: Option<String>,
+    /// `profiles.json` could not be read and was restored from its backup or
+    /// reset to the built-ins (#221) — until profiles are saved again.
+    pub profiles_notice: Option<String>,
     /// A running `preview`: which profile, and when the service reverts it.
     pub preview: Option<PreviewState>,
     /// Shown once a preview ended without "Keep" (timed out or undone).
@@ -721,6 +724,7 @@ impl ControlState {
                 self.fan_identified.insert(header, responders);
             }
             ControlEvent::CrashGuardNotice(n) => self.crash_guard_notice = n,
+            ControlEvent::ProfilesNotice(n) => self.profiles_notice = n,
             ControlEvent::PreviewStarted {
                 profile_id,
                 revert_in,
@@ -772,6 +776,7 @@ pub enum ControlEvent {
         responders: Vec<FanResponder>,
     },
     CrashGuardNotice(Option<String>),
+    ProfilesNotice(Option<String>),
     PreviewStarted {
         profile_id: String,
         revert_in: Duration,
@@ -1139,6 +1144,11 @@ async fn fetch_and_publish(
             .and_then(|v| v.as_str())
             .map(str::to_owned);
         let _ = event_tx.send(ControlEvent::CrashGuardNotice(notice));
+        let notice = state
+            .get("profiles_notice")
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let _ = event_tx.send(ControlEvent::ProfilesNotice(notice));
     }
 }
 
@@ -1179,6 +1189,9 @@ async fn handle_cmd(
                         // The service acknowledged the crash-guard notice and
                         // reverted any pending preview before this apply.
                         let _ = event_tx.send(ControlEvent::CrashGuardNotice(None));
+                        // Applying saved the active profile, which ends the
+                        // profiles notice the same way.
+                        let _ = event_tx.send(ControlEvent::ProfilesNotice(None));
                         let _ = event_tx.send(ControlEvent::PreviewEnded { kept: false });
                     }
                     let _ = event_tx.send(ControlEvent::ApplyResult(r));
@@ -1219,6 +1232,8 @@ async fn handle_cmd(
             // `request` already forwarded an error response as
             // ControlEvent::Error; don't apply a profile that wasn't stored.
             if saved.is_some() {
+                // The service cleared it with this save.
+                let _ = event_tx.send(ControlEvent::ProfilesNotice(None));
                 if let Some(Ok(list)) = request(
                     writer,
                     reader,
@@ -1580,6 +1595,17 @@ mod tests {
         assert!(state.connected);
         assert!(state.protocol_mismatch.is_none());
         assert!(state.last_error.is_none());
+    }
+
+    #[test]
+    fn control_state_profiles_notice_set_and_cleared() {
+        let mut state = ControlState::default();
+
+        state.apply(ControlEvent::ProfilesNotice(Some("restored".into())));
+        assert_eq!(state.profiles_notice.as_deref(), Some("restored"));
+
+        state.apply(ControlEvent::ProfilesNotice(None));
+        assert_eq!(state.profiles_notice, None);
     }
 
     #[test]

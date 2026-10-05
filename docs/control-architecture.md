@@ -204,6 +204,13 @@ Stored by the service in `%ProgramData%\se.codeby.rigstats\profiles.json`
 (ACL: SYSTEM + Administrators write, Users read). The UI edits profiles only
 through the pipe.
 
+Each save first copies the file it replaces to `profiles.json.bak`. A file
+that can't be read (a downgrade, a disk error, a manual edit) is moved to
+`profiles.json.corrupt`, and the profiles come from the `.bak`, else the
+built-ins — saved right away, logged, and announced by `get_state`'s
+`profiles_notice` as a banner in the Control Center until the next save
+(#221).
+
 ```json
 {
   "active": "gaming",

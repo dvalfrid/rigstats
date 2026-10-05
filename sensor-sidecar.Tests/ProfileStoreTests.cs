@@ -210,4 +210,73 @@ public sealed class ProfileStoreTests : IDisposable
         var after = (await new ProfileStore(_path).ListAsync(CancellationToken.None)).Select(p => p.Id).ToList();
         Assert.Equal(before.Append("mine"), after);
     }
+
+    // ── #221: an unreadable profiles.json never locks the Control Center ──
+
+    private async Task<string> SaveTwoGenerationsAsync()
+    {
+        // Two saves: the second backs up the first, which holds "mine".
+        await _store.SaveProfileAsync(new Profile { Id = "mine", Name = "Mine", Part = new ProfilePart() }, CancellationToken.None);
+        await _store.SetActiveAsync("mine", CancellationToken.None);
+        return File.ReadAllText(_path + ".bak");
+    }
+
+    [Fact]
+    public async Task Garbage_with_a_good_backup_restores_the_backup_and_keeps_the_evidence()
+    {
+        await SaveTwoGenerationsAsync();
+        File.WriteAllText(_path, "{ not json");
+
+        var store = new ProfileStore(_path);
+        var profiles = await store.ListAsync(CancellationToken.None);
+
+        Assert.Contains(profiles, p => p.Id == "mine");
+        Assert.Equal("{ not json", File.ReadAllText(_path + ".corrupt"));
+        Assert.Contains("backup", store.Notice);
+        // Persisted: the next start reads the restored profiles, not built-ins.
+        Assert.Contains(await new ProfileStore(_path).ListAsync(CancellationToken.None), p => p.Id == "mine");
+    }
+
+    [Fact]
+    public async Task Garbage_in_both_falls_back_to_the_builtins_without_throwing()
+    {
+        File.WriteAllText(_path, "{ not json");
+        File.WriteAllText(_path + ".bak", "also not json");
+
+        var store = new ProfileStore(_path);
+
+        Assert.Equal(4, (await store.ListAsync(CancellationToken.None)).Count);
+        Assert.Equal("balanced", await store.GetActiveIdAsync(CancellationToken.None));
+        Assert.Contains("built-in", store.Notice);
+        Assert.Equal("also not json", File.ReadAllText(_path + ".bak"));
+    }
+
+    [Fact]
+    public async Task A_save_after_recovery_writes_a_valid_file_and_backup_and_clears_the_notice()
+    {
+        File.WriteAllText(_path, "{ not json");
+        var store = new ProfileStore(_path);
+        await store.ListAsync(CancellationToken.None);
+
+        await store.SaveProfileAsync(new Profile { Id = "mine", Name = "Mine", Part = new ProfilePart() }, CancellationToken.None);
+
+        Assert.Null(store.Notice);
+        Assert.Contains(await new ProfileStore(_path).ListAsync(CancellationToken.None), p => p.Id == "mine");
+        Assert.Equal(4, (await new ProfileStore(_path + ".bak").ListAsync(CancellationToken.None)).Count);
+    }
+
+    [Fact]
+    public async Task A_value_this_version_cannot_read_follows_the_same_path()
+    {
+        // As after a downgrade: a newer version stored a shape this one can't read.
+        var good = await SaveTwoGenerationsAsync();
+        File.WriteAllText(_path,
+            """{"active":"x","profiles":[{"id":"x","name":"X","part":{"cpu_limit":{"amd":{"ppt_w":"auto"}}}}]}""");
+
+        var store = new ProfileStore(_path);
+
+        Assert.Contains(await store.ListAsync(CancellationToken.None), p => p.Id == "mine");
+        Assert.True(File.Exists(_path + ".corrupt"));
+        Assert.Equal(good, File.ReadAllText(_path + ".bak"));
+    }
 }

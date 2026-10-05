@@ -13,6 +13,13 @@ public sealed class ProfileStore
     private readonly SemaphoreSlim _fileLock = new(1, 1);
     private ProfileFile? _cached;
 
+    /// Set when profiles.json could not be read and was recovered (#221);
+    /// shown in the Control Center until profiles are saved again.
+    public string? Notice { get; private set; }
+
+    private string BackupPath => _path + ".bak";
+    private string CorruptPath => _path + ".corrupt";
+
     public ProfileStore() : this(DefaultPath()) { }
 
     // Seam for tests: a fresh temp path per test, never the real ProgramData one.
@@ -98,13 +105,63 @@ public sealed class ProfileStore
             return _cached;
         }
 
-        ProfileFile? loaded;
-        await using (var stream = File.OpenRead(_path))
-            loaded = await JsonSerializer.DeserializeAsync<ProfileFile>(stream, ControlJson.Options, ct);
-        _cached = loaded is null
+        string error;
+        try
+        {
+            _cached = await ReadAsync(_path, ct);
+            return _cached;
+        }
+        catch (Exception e) when (e is JsonException or IOException or NotSupportedException)
+        {
+            error = e.Message;
+        }
+
+        // Saved right away: profiles.json is moved aside, so the next start
+        // would otherwise begin again from the built-ins.
+        // No backup of what it replaces: if moving it aside failed, that is
+        // the unreadable file, and it must not overwrite a good backup.
+        var (recovered, notice) = await RecoverAsync(error, ct);
+        await SaveUnlockedAsync(recovered, ct, backup: false);
+        Notice = notice;
+        return recovered;
+    }
+
+    /// An unreadable profiles.json (#221) — a downgrade that doesn't know a
+    /// newer value, a disk error, a manual edit — must never lock the Control
+    /// Center: it is kept as `profiles.json.corrupt` (not deleted), and the
+    /// profiles come from `profiles.json.bak`, else the built-ins.
+    private async Task<(ProfileFile File, string Notice)> RecoverAsync(string error, CancellationToken ct)
+    {
+        try
+        {
+            File.Move(_path, CorruptPath, overwrite: true);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            SidecarLog.Log($"[rigstats-control] Could not keep the unreadable profiles.json as {Path.GetFileName(CorruptPath)}: {e.Message}");
+        }
+
+        try
+        {
+            var restored = await ReadAsync(BackupPath, ct);
+            SidecarLog.Log($"[rigstats-control] profiles.json could not be read ({error}) — restored from {Path.GetFileName(BackupPath)}.");
+            return (restored, "Profiles could not be read and were restored from a backup.");
+        }
+        catch (Exception e) when (e is JsonException or IOException or NotSupportedException)
+        {
+            SidecarLog.Log($"[rigstats-control] profiles.json could not be read ({error}), nor its backup ({e.Message}) — reset to the built-in profiles.");
+            return (new ProfileFile { Active = "balanced", Profiles = BuiltinProfiles() },
+                "Profiles could not be read and were reset to the built-in profiles.");
+        }
+    }
+
+    private static async Task<ProfileFile> ReadAsync(string path, CancellationToken ct)
+    {
+        await using var stream = File.OpenRead(path);
+        var loaded = await JsonSerializer.DeserializeAsync<ProfileFile>(stream, ControlJson.Options, ct);
+        return loaded is null
             ? new ProfileFile { Active = "balanced", Profiles = BuiltinProfiles() }
             : WithBiosPartsOnBuiltins(loaded);
-        return _cached;
     }
 
     public async Task<IReadOnlyList<Profile>> ListAsync(CancellationToken ct) => (await LoadAsync(ct)).Profiles;
@@ -189,7 +246,7 @@ public sealed class ProfileStore
         }
     }
 
-    private async Task SaveUnlockedAsync(ProfileFile file, CancellationToken ct)
+    private async Task SaveUnlockedAsync(ProfileFile file, CancellationToken ct, bool backup = true)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
 
@@ -200,7 +257,12 @@ public sealed class ProfileStore
         {
             await JsonSerializer.SerializeAsync(stream, file, ControlJson.Options, ct);
         }
+        // The file being replaced was read or written by this store, so it is
+        // a good backup.
+        if (backup && File.Exists(_path))
+            File.Copy(_path, BackupPath, overwrite: true);
         File.Move(tempPath, _path, overwrite: true);
         _cached = file;
+        Notice = null;
     }
 }

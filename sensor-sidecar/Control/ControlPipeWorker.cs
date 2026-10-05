@@ -367,6 +367,7 @@ public sealed class ControlPipeWorker(
             active_profile = activeId,
             dry_run = safetyGuard.DryRun,
             crash_guard_notice = crashGuard.Notice,
+            profiles_notice = profiles.Notice,
         });
     }
 
