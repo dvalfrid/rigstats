@@ -51,6 +51,16 @@ public interface IControlProvider
     void ReleaseToFirmware();
 }
 
+/// Optional for an `IControlProvider`: whether applying `part` could change
+/// anything in its domain. False skips the domain for that apply entirely —
+/// no hardware read — so a backend that is unavailable (a GPU driver that
+/// won't initialize) can't block a profile that asks nothing of it.
+/// Providers without it are always applied.
+public interface IAffectsPart
+{
+    bool Affects(ProfilePart part);
+}
+
 /// What a provider can do on this machine, reported once from `Probe()`.
 public sealed class CapabilitySet
 {

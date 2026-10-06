@@ -134,6 +134,21 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task A_provider_whose_probe_throws_is_unavailable_and_the_others_still_listed()
+    {
+        _powerPlan.Probe().Returns(_ => throw new InvalidOperationException("driver gone"));
+        using var client = await ConnectAsync();
+        await client.RequestAsync("hello", new { protocol = 1 });
+
+        var response = await client.RequestAsync("capabilities");
+
+        var caps = response.GetProperty("result").EnumerateArray().ToList();
+        var power = caps.Single(c => c.GetProperty("domain").GetString() == "power_plan");
+        Assert.False(power.GetProperty("supported").GetBoolean());
+        Assert.Contains(caps, c => c.GetProperty("domain").GetString() == "fan");
+    }
+
     private static Profile PreviewProfile() =>
         new() { Id = "balanced", Name = "Balanced", Part = new ProfilePart { PowerPlan = "high_performance" } };
 

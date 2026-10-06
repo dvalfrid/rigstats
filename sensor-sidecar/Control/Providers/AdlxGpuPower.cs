@@ -108,6 +108,12 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
     private readonly TerminateFn? _terminate;
     private readonly ulong _version;
     private IntPtr _system;
+    private bool _serverRestarted;
+    private long _retryAfterTick;
+
+    /// How long a failed ADLXInitialize is not tried again — every
+    /// capabilities request and profile apply would otherwise re-run it.
+    private static readonly TimeSpan InitRetryDelay = TimeSpan.FromMinutes(1);
 
     private AdlxGpuPower(IntPtr library)
     {
@@ -242,27 +248,36 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
     {
         if (_system != IntPtr.Zero)
             return _system;
+        if (Environment.TickCount64 < _retryAfterTick)
+            throw new InvalidOperationException("ADLX unavailable (initialization failed recently; retried shortly).");
         // Ask for exactly the runtime's version: the vtables used here exist
         // in every ADLX release that has manual power tuning.
         var result = _initialize!(_version, out var system);
-        if (result != AdlxOk)
+        if (result != AdlxOk && !_serverRestarted)
         {
             // The session of an earlier service process can stay behind in
             // AMD's ADLX server process (AMDADLXServ.exe); every new process
             // is then refused (ALREADY_INITIALIZED / FAIL) for as long as
             // that server lives (#230). Terminating from here does not
             // clear it — only a fresh server does. The driver starts a new
-            // one on demand.
+            // one on demand. Once per service process: a later failure is
+            // something else (driver not ready, no AMD GPU in use), and
+            // killing AMD's server again would only disturb its software.
+            _serverRestarted = true;
             SidecarLog.Log($"[rigstats-control] GPU power: ADLXInitialize answered {AdlxResultName(result)} — restarting AMD's ADLX server and trying again.");
             TerminateRuntime();
             RestartAdlxServer();
             result = _initialize(_version, out system);
-            if (result != AdlxOk)
-            {
-                TerminateRuntime();
-                Check(result, "ADLXInitialize");
-            }
         }
+        if (result != AdlxOk)
+        {
+            TerminateRuntime();
+            _retryAfterTick = Environment.TickCount64 + (long)InitRetryDelay.TotalMilliseconds;
+            SidecarLog.Log($"[rigstats-control] GPU power: ADLXInitialize answered {AdlxResultName(result)} — " +
+                $"GPU power limits unavailable, not tried again for {InitRetryDelay.TotalSeconds:0} s.");
+            Check(result, "ADLXInitialize");
+        }
+        _retryAfterTick = 0;
         _system = system;
         return system;
     }

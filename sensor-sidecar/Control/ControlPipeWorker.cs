@@ -330,7 +330,7 @@ public sealed class ControlPipeWorker(
             return request.Method switch
             {
                 "hello" => ControlResponse.Ok(request.Id, new { protocol = ProtocolVersion, service_version = AppVersion }),
-                "capabilities" => ControlResponse.Ok(request.Id, providers.Select(p => p.Probe()).ToList()),
+                "capabilities" => ControlResponse.Ok(request.Id, providers.Select(SafeProbe).ToList()),
                 "get_state" => await HandleGetStateAsync(request, ct),
                 "list_profiles" => ControlResponse.Ok(request.Id, await profiles.ListAsync(ct)),
                 "save_profile" => await HandleSaveProfileAsync(request, ct),
@@ -360,6 +360,27 @@ public sealed class ControlPipeWorker(
             var detail = e is InvalidOperationException or JsonException or Lighting.HueUnreachableException ? e.Message : e.ToString();
             SidecarLog.Log($"[rigstats-control] '{request.Method}' failed: {detail}");
             return ControlResponse.Fail(request.Id, "internal_error", e.Message);
+        }
+    }
+
+    /// One domain's capability; a provider that throws is reported as
+    /// unavailable instead of failing the whole list (and with it every tab
+    /// of the Control Center).
+    private static CapabilitySet SafeProbe(IControlProvider provider)
+    {
+        try
+        {
+            return provider.Probe();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] {provider.Domain}: capability probe failed: {e}");
+            return new CapabilitySet
+            {
+                Domain = provider.Domain,
+                Supported = false,
+                Reason = $"Unavailable: the {provider.Domain} hardware did not answer.",
+            };
         }
     }
 

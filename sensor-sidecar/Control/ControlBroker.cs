@@ -143,7 +143,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         var affected = DomainOrder
             .Where(HasPart(profile.Part))
             .Select(domain => _byDomain.TryGetValue(domain, out var p) ? p : null)
-            .Where(p => p is not null)
+            .Where(p => p is not null && (p is not IAffectsPart a || a.Affects(profile.Part)))
             .Select(p => p!)
             .ToList();
 

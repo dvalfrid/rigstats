@@ -16,7 +16,7 @@ namespace SensorSidecar.Control.Providers;
 /// "Custom"; when the GPU was at factory settings before RIGStats, going
 /// back to the original value is a factory reset, so Adrenalin shows
 /// "Default" again instead of "Custom" with default values.
-public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? originalsPath) : IControlProvider
+public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? originalsPath) : IControlProvider, IAffectsPart
 {
     private readonly object _lock = new();
     /// The value in force before RIGStats first changed an adapter, and
@@ -30,49 +30,65 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
 
     public CapabilitySet Probe()
     {
-        IReadOnlyList<GpuPowerAdapter> adapters;
+        var unsupported = new CapabilitySet
+        {
+            Domain = Domain,
+            Supported = false,
+            Reason = "No GPU with power limit control found (AMD Radeon with the Adrenalin driver).",
+        };
+        if (api is null)
+            return unsupported;
         try
         {
-            adapters = api?.Adapters() ?? [];
+            var adapters = api.Adapters();
+            if (adapters.Count == 0)
+                return unsupported;
+            // Built in full before returning: any driver call that fails
+            // (the session dropped between calls) lands in the catch below.
+            var list = new JsonArray(adapters.Select(a => (JsonNode)new JsonObject
+            {
+                ["id"] = a.Id,
+                ["name"] = a.Name,
+                ["min"] = a.Min,
+                ["max"] = a.Max,
+                ["step"] = a.Step,
+                ["default"] = a.Default,
+                ["original"] = Original(a),
+                ["current"] = api.GetPowerLimit(a.Id),
+            }).ToArray());
+            return new CapabilitySet { Domain = Domain, Supported = true, Details = new JsonObject { ["adapters"] = list } };
         }
         catch (Exception e)
         {
             SidecarLog.Log($"[rigstats-control] GPU power: probe failed: {e.Message}");
-            adapters = [];
-        }
-        if (adapters.Count == 0)
-        {
             return new CapabilitySet
             {
                 Domain = Domain,
                 Supported = false,
-                Reason = "No GPU with power limit control found (AMD Radeon with the Adrenalin driver).",
+                Reason = "GPU power limits are unavailable: the GPU driver did not answer.",
             };
         }
-        return new CapabilitySet
-        {
-            Domain = Domain,
-            Supported = true,
-            Details = new JsonObject
-            {
-                ["adapters"] = new JsonArray(adapters.Select(a => (JsonNode)new JsonObject
-                {
-                    ["id"] = a.Id,
-                    ["name"] = a.Name,
-                    ["min"] = a.Min,
-                    ["max"] = a.Max,
-                    ["step"] = a.Step,
-                    ["default"] = a.Default,
-                    ["original"] = Original(a),
-                    ["current"] = api!.GetPowerLimit(a.Id),
-                }).ToArray()),
-            },
-        };
     }
 
     // Adapter ids that aren't present (a swapped GPU) are skipped, not
     // rejected: a stale entry must not block the rest of a profile.
     public ValidationResult Validate(ProfilePart part) => ValidationResult.Success();
+
+    /// A part with no power-limit value means "the original": nothing to do
+    /// unless RIGStats changed an adapter (originals are persisted, so this
+    /// holds across service restarts). The built-in profiles carry an empty
+    /// GPU part, so without this every profile switch would open the driver
+    /// — and fail outright when it won't initialize (a laptop whose AMD iGPU
+    /// installs ADLX but has no power tuning).
+    public bool Affects(ProfilePart part)
+    {
+        if (part.Gpu is null || api is null)
+            return false;
+        if (part.Gpu.Adapters?.Values.Any(a => a?.PowerLimitPct is not null) == true)
+            return true;
+        lock (_lock)
+            return _originals.Count > 0;
+    }
 
     public Snapshot Capture()
     {

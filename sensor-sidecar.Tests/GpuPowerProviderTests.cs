@@ -81,6 +81,84 @@ public sealed class GpuPowerProviderTests : IDisposable
         Assert.Equal(5, GpuPowerProvider.Resolve(null, 5, Rx9070Xt));
     }
 
+    /// A driver that won't initialize (an AMD iGPU's ADLX on a laptop).
+    private sealed class BrokenGpu : IGpuPowerApi
+    {
+        public IReadOnlyList<GpuPowerAdapter> Adapters() =>
+            throw new InvalidOperationException("ADLX ADLXInitialize failed (ADLX_FAIL).");
+        public int GetPowerLimit(string adapterId) => throw new InvalidOperationException("ADLX_FAIL");
+        public void SetPowerLimit(string adapterId, int percent) => throw new InvalidOperationException("ADLX_FAIL");
+        public bool IsAtFactory(string adapterId) => throw new InvalidOperationException("ADLX_FAIL");
+        public void ResetToFactory(string adapterId) => throw new InvalidOperationException("ADLX_FAIL");
+    }
+
+    [Fact]
+    public void An_empty_gpu_part_affects_nothing_until_rigstats_changed_an_adapter()
+    {
+        var gpu = new FakeGpu(Rx9070Xt);
+        var provider = Provider(gpu);
+        var empty = new ProfilePart { Gpu = new GpuPart() };
+
+        Assert.False(provider.Affects(empty));
+        Assert.False(provider.Affects(Limit(null)));
+        Assert.True(provider.Affects(Limit(-15)));
+
+        provider.Apply(Limit(-15)); // records the original
+        Assert.True(provider.Affects(empty), "going back to the original is work to do");
+    }
+
+    [Fact]
+    public void A_driver_that_wont_initialize_is_unsupported_not_an_error()
+    {
+        var caps = Provider(new BrokenGpu()).Probe();
+
+        Assert.False(caps.Supported);
+        Assert.Contains("did not answer", caps.Reason);
+    }
+
+    [Fact]
+    public async Task A_broken_driver_doesnt_block_a_profile_that_asks_nothing_of_the_gpu()
+    {
+        var gpu = Provider(new BrokenGpu());
+        var other = new RecordingProvider("power_plan");
+        var broker = new ControlBroker([gpu, other]);
+        var profile = new Profile
+        {
+            Id = "balanced",
+            Name = "Balanced",
+            Part = new ProfilePart { PowerPlan = "balanced", Gpu = new GpuPart() },
+        };
+
+        var result = await broker.ApplyProfileAsync(profile, CancellationToken.None);
+
+        Assert.True(result.Ok, result.Message);
+        Assert.Equal(1, other.Applies);
+    }
+
+    [Fact]
+    public async Task A_broken_driver_still_fails_a_profile_that_asks_for_a_gpu_value()
+    {
+        var broker = new ControlBroker([Provider(new BrokenGpu())]);
+        var profile = new Profile { Id = "gaming", Name = "Gaming", Part = Limit(-15) };
+
+        var result = await broker.ApplyProfileAsync(profile, CancellationToken.None);
+
+        Assert.False(result.Ok);
+    }
+
+    private sealed class RecordingProvider(string domain) : IControlProvider
+    {
+        public int Applies { get; private set; }
+        public string Domain => domain;
+        public CapabilitySet Probe() => new() { Domain = domain, Supported = true };
+        public ValidationResult Validate(ProfilePart part) => ValidationResult.Success();
+        public Snapshot Capture() => new() { Domain = domain };
+        public void Apply(ProfilePart part) => Applies++;
+        public bool Verify(ProfilePart part) => true;
+        public void Restore(Snapshot snapshot) { }
+        public void ReleaseToFirmware() { }
+    }
+
     [Fact]
     public void Apply_writes_and_verify_reads_back()
     {

@@ -579,6 +579,21 @@ What phase 3 (#190) shipped — AMD only; NVIDIA (NVML) is #210:
   profile's limit under POWER (`PL -15 %`), matched to the displayed GPU by
   name. Not a boot-crash-guarded domain: the value is inside the driver's
   own range.
+- **When ADLX won't answer** (#241). An AMD iGPU installs ADLX without
+  having power tuning (a Ryzen laptop with an NVIDIA dGPU), and ADLX can fail
+  to initialize (driver not ready, a stale session). None of that may cost
+  more than the GPU domain itself:
+  - `GpuPowerProvider` implements `IAffectsPart`: a GPU part with no
+    power-limit value only counts when RIGStats changed an adapter (the
+    persisted originals), so the built-in profiles' empty GPU part never
+    opens the driver — the broker skips the domain, no capture, no apply.
+    A profile asking for an explicit value on a broken driver still fails,
+    as a requested setting that can't be applied should.
+  - AMD's ADLX server is restarted (#230) at most once per service process;
+    after a failed `ADLXInitialize` it is not tried again for a minute.
+  - `Probe` reports any driver failure as "unavailable", and the pipe's
+    `capabilities` reports a provider that throws as unavailable instead of
+    failing the whole list (every tab of the Control Center).
 
 ## Phase 4 — Curve Optimizer as built
 
