@@ -240,7 +240,9 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IDisposable
         return diagnostics;
     }
 
-    public bool HasWdl => _omni?.WdlVerified == true;
+    public bool HasWdl => _omni?.HasWdl == true;
+
+    public bool KnownModel => _omni?.Name is not null;
 
     public bool? WdlOn() => _omni?.WdlOn();
 

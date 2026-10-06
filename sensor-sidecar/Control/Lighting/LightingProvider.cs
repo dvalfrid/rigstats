@@ -248,6 +248,8 @@ public sealed class LightingProvider : IControlProvider
                     ["lamp_on"] = d is ILampDevice { HasLamp: true } lamp ? LampOnOrNull(lamp) : null,
                     // Off: the device ignores every lighting write until switched (#236).
                     ["wdl_on"] = d is IWdlDevice { HasWdl: true } wdl ? wdl.WdlOn() : null,
+                    // false: a known model without that setting — no hint about it.
+                    ["wdl_toggle"] = d is IWdlDevice { KnownModel: true } known ? known.HasWdl : null,
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,

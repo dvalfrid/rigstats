@@ -910,6 +910,7 @@ fn lighting_tab(
                 }
             } else if device.blocked.is_none()
                 && device.wdl_on.is_none()
+                && device.wdl_toggle != Some(false)
                 && device.id.starts_with("lamparray-0b05-")
                 && device.kind != "keyboard"
             {

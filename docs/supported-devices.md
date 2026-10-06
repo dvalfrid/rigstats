@@ -3,7 +3,7 @@
 <!-- Generated from the sensor sidecar's model tables by LightingCatalog — do not edit by hand.
      Regenerate: $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices -->
 
-RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; [open an issue](https://github.com/dvalfrid/rigstats/issues) with your diagnostics ZIP if it doesn't, or to confirm it does.
+RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; **From Gear Link, not yet verified**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; [open an issue](https://github.com/dvalfrid/rigstats/issues) with your diagnostics ZIP if it doesn't, or to confirm it does.
 
 | Device | Type | USB id | Status | Notes |
 |---|---|---|---|---|
@@ -45,6 +45,11 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | TUF Gaming K7 | Keyboard | 18AA | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Delta II | Headset | 1AFA | Verified on hardware | Through its 2.4 GHz dongle; found when switched on |
 | Any Windows Dynamic Lighting (HID LampArray) device, any brand | Keyboard, mouse, other | — | Verified on hardware (ROG Harpe Ace on the Omni receiver) | Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead. ASUS devices: set the device's Cross-device Lighting Toggle to "Aura Sync & Windows Dynamic Lighting" in Gear Link or Armoury Crate, otherwise it ignores every lighting change |
+| ROG Harpe Ace Aim Lab Edition | Mouse | 1A94 | Verified on hardware | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
+| ROG Harpe Ace Extreme | Mouse | 1B69 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
+| ROG Harpe Ace Mini | Mouse | 1B65 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
+| ROG Keris II Ace | Mouse | 1B18 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
+| Other ROG mice on the ROG Omni receiver (ProArt Mouse MD301, ROG Gladius IV Ace, ROG Gladius IV Ace Max, ROG Harpe II Ace, ROG Harpe II Ace (PBZ), ROG Harpe II Ace Mini, ROG Harpe II Ace Mini Demon1 Edition, ROG Harpe II Extreme Edition 20, ROG Keris II Origin, ROG Keris II Origin (KJP), ROG Spatha X 65K) | Mouse | 1C0E, 1C6B, 1CD3, 1D4E, 1D7C, 1DBF, 1DE0, 1E32, 1E4B, 1E4F, 1E52 | From Gear Link, not yet verified | Named in the Lighting tab; lit through the receiver's Dynamic Lighting (no toggle needed) |
 | Philips Hue lights, through a Hue Bridge (square, v2) | Room lights | — (network) | Verified on hardware | Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second) |
 
 Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong write can damage the hardware). A device that isn't listed: the diagnostics export's `lighting-devices.json` lists every HID device on the machine — attach it to an issue.

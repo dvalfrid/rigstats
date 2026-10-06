@@ -15,8 +15,12 @@ namespace SensorSidecar.Control.Lighting;
 /// state, `51 42 00 00 0x` → set it. Every reply echoes the command.
 public interface IWdlDevice
 {
-    /// Whether this device offers the WDL switch (a verified model).
+    /// Whether this device offers the WDL switch.
     bool HasWdl { get; }
+
+    /// Whether the model is known, so a false `HasWdl` means "has no such
+    /// setting" rather than "unknown".
+    bool KnownModel { get; }
 
     /// On, off, or null when the device doesn't answer.
     bool? WdlOn();
@@ -35,13 +39,32 @@ public sealed class OmniMouse
     private const byte ReceiverReportId = 1;
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(500);
 
-    /// Mice by the product id the receiver reports. `Verified`: the WDL
-    /// commands were checked on this mouse; only those offer the switch.
-    public static readonly IReadOnlyDictionary<ushort, (string Name, bool Verified)> Models =
-        new Dictionary<ushort, (string, bool)>
-        {
-            [0x1A94] = ("ROG Harpe Ace Aim Lab Edition", true),
-        };
+    /// Mice by the product id the receiver reports (the mouse's 2.4 GHz
+    /// id). From Gear Link's device manifests and its Companion's model
+    /// configs, which agree: `Wdl` = the mouse has the Cross-device Lighting
+    /// Toggle (Companion `WDL=1`, Gear Link's WDL switch) — newer mice follow
+    /// LampArray's own autonomous mode and have none. `Verified`: the switch
+    /// was checked on this mouse.
+    public static readonly IReadOnlyDictionary<ushort, MouseModel> Models = new Dictionary<ushort, MouseModel>
+    {
+        [0x1A94] = new("ROG Harpe Ace Aim Lab Edition", Wdl: true, Verified: true),
+        [0x1B18] = new("ROG Keris II Ace", Wdl: true),
+        [0x1B65] = new("ROG Harpe Ace Mini", Wdl: true),
+        [0x1B69] = new("ROG Harpe Ace Extreme", Wdl: true),
+        [0x1C0E] = new("ROG Keris II Origin"),
+        [0x1C6B] = new("ROG Harpe II Ace"),
+        [0x1CD3] = new("ProArt Mouse MD301"),
+        [0x1D4E] = new("ROG Keris II Origin (KJP)"),
+        [0x1D7C] = new("ROG Harpe II Extreme Edition 20"),
+        [0x1DBF] = new("ROG Gladius IV Ace"),
+        [0x1DE0] = new("ROG Spatha X 65K"),
+        [0x1E32] = new("ROG Harpe II Ace Mini"),
+        [0x1E4B] = new("ROG Harpe II Ace (PBZ)"),
+        [0x1E4F] = new("ROG Gladius IV Ace Max"),
+        [0x1E52] = new("ROG Harpe II Ace Mini Demon1 Edition"),
+    };
+
+    public sealed record MouseModel(string Name, bool Wdl = false, bool Verified = false);
 
     private readonly object _lock = new();
     private readonly HidDeviceInfo _channel;
@@ -52,8 +75,8 @@ public sealed class OmniMouse
     /// The model name, or null for a mouse not in <see cref="Models"/>.
     public string? Name => Models.TryGetValue(ProductId, out var m) ? m.Name : null;
 
-    /// Whether the WDL switch is offered for this mouse.
-    public bool WdlVerified => Models.TryGetValue(ProductId, out var m) && m.Verified;
+    /// Whether this mouse has the WDL switch, so it is read and offered.
+    public bool HasWdl => Models.TryGetValue(ProductId, out var m) && m.Wdl;
 
     private OmniMouse(HidDeviceInfo channel, byte reportId, ushort productId)
     {
@@ -111,11 +134,14 @@ public sealed class OmniMouse
             if (p.ReportId == ReceiverReportId || channels.FirstOrDefault(c => c.OutputReportId == p.ReportId) is not { } channel)
                 continue;
             var mouse = new OmniMouse(channel, p.ReportId, p.ProductId);
-            // A keyboard on the receiver doesn't answer the WDL query.
-            if (mouse.WdlOn() is { } wdl)
+            // A known mouse is taken as it is; an unknown device counts as the
+            // mouse only if it answers the WDL query (a keyboard doesn't).
+            var wdl = mouse.HasWdl || mouse.Name is null ? mouse.WdlOn() : null;
+            if (mouse.Name is not null || wdl is not null)
             {
                 LightingLog.Discovery($"[rigstats-control] Lighting: Omni receiver mouse 0x{p.ProductId:X4} " +
-                    $"({mouse.Name ?? "unknown model"}) on report 0x{p.ReportId:X2}, WDL {(wdl ? "on" : "off")}.");
+                    $"({mouse.Name ?? "unknown model"}) on report 0x{p.ReportId:X2}" +
+                    (wdl is { } on ? $", WDL {(on ? "on" : "off")}." : "."));
                 return mouse;
             }
         }
@@ -155,6 +181,8 @@ public sealed class OmniMouse
         ["paired_product_id"] = $"{ProductId:X4}",
         ["model"] = Name,
         ["report_id"] = $"{_reportId:X2}",
+        // Read for any mouse here: an unknown one answering it is how a new
+        // WDL model shows up in a diagnostics report.
         ["wdl_on"] = WdlOn(),
     };
 

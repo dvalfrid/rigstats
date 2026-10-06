@@ -210,6 +210,7 @@ public class LightingProviderTests
         public void Release() { }
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
         public bool HasWdl => verified;
+        public bool KnownModel => true;
         public bool? WdlOn() => On;
         public void EnableWdl() => On = true;
     }
@@ -220,7 +221,9 @@ public class LightingProviderTests
         var devices = Provider(new FakeWdlMouse(), new FakeDevice()).Probe().Details!["devices"]!.AsArray();
 
         Assert.False(devices[0]!["wdl_on"]!.GetValue<bool>());
+        Assert.True(devices[0]!["wdl_toggle"]!.GetValue<bool>());
         Assert.Null(devices[1]!["wdl_on"]);
+        Assert.Null(devices[1]!["wdl_toggle"]);
     }
 
     [Fact]
@@ -845,6 +848,15 @@ public class OmniMouseTests
 
         Assert.Equal(new OmniMouse.Paired(0x1A94, 3), Assert.Single(paired));
         Assert.Equal("ROG Harpe Ace Aim Lab Edition", OmniMouse.Models[0x1A94].Name);
+    }
+
+    [Fact]
+    public void Only_the_ace_generation_has_the_wdl_switch_and_only_the_tested_mouse_is_verified()
+    {
+        // Gear Link's WDL switch and Companion's WDL=1 agree on these four.
+        Assert.Equal(new ushort[] { 0x1A94, 0x1B18, 0x1B65, 0x1B69 },
+            OmniMouse.Models.Where(m => m.Value.Wdl).Select(m => m.Key).Order());
+        Assert.Equal(0x1A94, Assert.Single(OmniMouse.Models, m => m.Value.Verified).Key);
     }
 
     [Fact]

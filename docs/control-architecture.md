@@ -706,7 +706,19 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   receiver"); the WDL state goes out as `wdl_on` in the capabilities, and
   `aura_enable_wdl` switches it on — only from the Lighting tab's button,
   only for verified models, confirmed by the echo, then the current
-  lighting is applied. The channel is opened per question: Windows queues
+  lighting is applied. Which mice have the toggle: Gear Link's per-device
+  manifests (`gearlink.asus.com/view/<pid>/manifest.json`, then the
+  device's `main-<version>-<bundleId>.js`, which shows the WDL switch as
+  `WDL:toggle`) and its Companion's model configs (`WDL=1`) agree on four —
+  Harpe Ace Aim Lab Edition, Keris II Ace, Harpe Ace Mini, Harpe Ace
+  Extreme. Newer mice (Harpe II, Gladius IV, Keris II Origin, Spatha X 65K)
+  have no toggle and follow LampArray's autonomous mode; they are only
+  named. Gear Link covered 99 ASUS product ids when scanned (0x1800–0x1F40,
+  36 mouse ids, 45 keyboard, 8 headset, 5 receiver); its device modules
+  name every command (`setWDLState` → `sendCommandWithResponse(0x51,
+  0x42, 0, …)`), so they are the source for further ASUS devices — read as
+  documentation, like OpenRGB, and marked "From Gear Link, not yet
+  verified" until tested. The channel is opened per question: Windows queues
   every input report for every open handle, so a long-lived handle first
   read replies to Gear Link's own questions (a stale WDL state).
 - **ASUS keyboards, TUF protocol family** (`AsusKeyboardDevice`, #213) —

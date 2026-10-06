@@ -14,6 +14,7 @@ public static class LightingCatalog
 {
     public const string Verified = "Verified on hardware";
     public const string FromOpenRgb = "From OpenRGB, not yet verified";
+    public const string FromGearLink = "From Gear Link, not yet verified";
 
     public static IReadOnlyList<SupportedDevice> All()
     {
@@ -61,6 +62,22 @@ public static class LightingCatalog
             "ASUS devices: set the device's Cross-device Lighting Toggle to \"Aura Sync & Windows Dynamic Lighting\" " +
             "in Gear Link or Armoury Crate, otherwise it ignores every lighting change"));
 
+        // Mice on the ROG Omni receiver: lit through the receiver's LampArray
+        // (the row above); these are named, and the WDL ones switchable.
+        rows.AddRange(OmniMouse.Models
+            .Where(m => m.Value.Wdl)
+            .OrderByDescending(m => m.Value.Verified).ThenBy(m => m.Value.Name)
+            .Select(m => new SupportedDevice(m.Value.Name, "Mouse", Hex(m.Key),
+                m.Value.Verified ? Verified : FromGearLink,
+                "Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab")));
+        rows.Add(new SupportedDevice(
+            "Other ROG mice on the ROG Omni receiver (" +
+            string.Join(", ", OmniMouse.Models.Where(m => !m.Value.Wdl).Select(m => m.Value.Name).Order()) + ")",
+            "Mouse",
+            string.Join(", ", OmniMouse.Models.Where(m => !m.Value.Wdl).Select(m => Hex(m.Key)).Order()),
+            FromGearLink,
+            "Named in the Lighting tab; lit through the receiver's Dynamic Lighting (no toggle needed)"));
+
         rows.Add(new SupportedDevice(
             "Philips Hue lights, through a Hue Bridge (square, v2)",
             "Room lights",
@@ -81,6 +98,7 @@ public static class LightingCatalog
         md.Append("RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. ");
         md.Append($"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
         md.Append("listed from OpenRGB's device list (read as documentation) — it should work; ");
+        md.Append($"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
         md.Append("[open an issue](https://github.com/dvalfrid/rigstats/issues) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())

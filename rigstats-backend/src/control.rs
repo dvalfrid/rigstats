@@ -259,6 +259,10 @@ pub struct AuraDeviceCap {
     /// ignored until [`ControlCmd::EnableWdl`]; `None` = not offered or no answer.
     #[serde(default)]
     pub wdl_on: Option<bool>,
+    /// `Some(false)`: a known model without that setting (newer ASUS mice
+    /// follow Dynamic Lighting directly) — `None` when the model is unknown.
+    #[serde(default)]
+    pub wdl_toggle: Option<bool>,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }
@@ -2315,7 +2319,7 @@ mod tests {
                         "zones": [{"id": "argb1", "name": "ARGB header 1", "addressable": true, "leds": 1}],
                     }, {
                         "id": "lamparray-0b05-1ace-2", "name": "ROG Harpe Ace Aim Lab Edition", "kind": "mouse",
-                        "wdl_on": false, "zones": [],
+                        "wdl_on": false, "wdl_toggle": true, "zones": [],
                     }],
                 }),
             )],
@@ -2327,6 +2331,8 @@ mod tests {
         // Absent = not offered; false = the device ignores lighting (#236).
         assert_eq!(caps.devices[0].wdl_on, None);
         assert_eq!(caps.devices[1].wdl_on, Some(false));
+        assert_eq!(caps.devices[1].wdl_toggle, Some(true));
+        assert_eq!(caps.devices[0].wdl_toggle, None);
         assert_eq!(supported.aura_unavailable(), None);
 
         let blocked = ControlState {
