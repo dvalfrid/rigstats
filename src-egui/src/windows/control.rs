@@ -886,6 +886,23 @@ fn lighting_tab(
                         .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
                 );
             }
+            // An ASUS Dynamic Lighting device in "Device Lighting" mode takes
+            // every write and ignores it, and can't report its colour — so
+            // the service can't detect it; say where the switch is. Not on
+            // laptop keyboards: Gear Link doesn't manage those.
+            if device.blocked.is_none()
+                && device.id.starts_with("lamparray-0b05-")
+                && device.kind != "keyboard"
+            {
+                ui.label(
+                    egui::RichText::new(
+                        "No change on the device? Set its Cross-device Lighting Toggle to \
+                         \"Aura Sync & Windows Dynamic Lighting\" in Gear Link or Armoury Crate.",
+                    )
+                    .size(11.0)
+                    .color(dc.muted),
+                );
+            }
         }
         ui.add_space(4.0);
         ui.scope(|ui| {

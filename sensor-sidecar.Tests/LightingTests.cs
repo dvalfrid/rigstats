@@ -749,6 +749,21 @@ public class LampArrayTests
     {
         Assert.Equal(name, LampArrayDevice.KindName(kind));
     }
+
+    [Theory]
+    // The receiver names itself, not the mouse behind it.
+    [InlineData(0x0B05, 0x1ACE, "ROG OMNI RECEIVER", "mouse", "Mouse via ROG Omni receiver")]
+    [InlineData(0x0B05, 0x1ACE, "ROG OMNI RECEIVER", "game_controller", "Game controller via ROG Omni receiver")]
+    // Laptop keyboards report their controller chip.
+    [InlineData(0x0B05, 0x19B6, "ITE Device(8910)", "keyboard", "Laptop keyboard")]
+    [InlineData(0x0B05, 0x19B6, "ITE Device(8910)", "peripheral", "ITE Device(8910)")]
+    [InlineData(0x046D, 0xC33F, "G815 Keyboard", "keyboard", "G815 Keyboard")]
+    [InlineData(0x046D, 0xC33F, null, "keyboard", "LampArray 046D:C33F")]
+    public void Lamp_array_display_names_say_what_the_device_is(int vendor, int product, string? productString,
+        string kind, string expected)
+    {
+        Assert.Equal(expected, LampArrayDevice.DisplayName((ushort)vendor, (ushort)product, productString, kind));
+    }
 }
 
 /// <summary>

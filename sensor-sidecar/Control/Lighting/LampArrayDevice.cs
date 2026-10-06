@@ -46,6 +46,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     private readonly Func<bool> _dynamicLightingOn;
     private bool _hostControlled;
     private readonly JsonObject _diagnostics;
+    private readonly string _baseName;
 
     public string Id { get; }
     public string Name { get; }
@@ -66,10 +67,11 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         Feature = 2,
     }
 
-    private LampArrayDevice(SafeFileHandle handle, IntPtr preparsed, HidpCaps caps, string id, string name,
-        string kind, int lamps, ReportField rangeUpdate, ReportField control, Func<bool> dynamicLightingOn,
-        JsonObject diagnostics)
+    private LampArrayDevice(SafeFileHandle handle, IntPtr preparsed, HidpCaps caps, string id, string baseName,
+        string name, string kind, int lamps, ReportField rangeUpdate, ReportField control,
+        Func<bool> dynamicLightingOn, JsonObject diagnostics)
     {
+        _baseName = baseName;
         _diagnostics = diagnostics;
         _handle = handle;
         _preparsed = preparsed;
@@ -102,6 +104,18 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         _ => "peripheral",
     };
 
+    /// The name shown in the Lighting tab. A receiver's product string names
+    /// the dongle, not the device behind it, and laptop keyboards report the
+    /// controller chip — both say what the user actually sees instead.
+    public static string DisplayName(ushort vendorId, ushort productId, string? product, string kind)
+    {
+        if (vendorId == AuraUsb.AsusVendorId && productId == 0x1ACE)
+            return $"{char.ToUpperInvariant(kind[0])}{kind[1..].Replace('_', ' ')} via ROG Omni receiver";
+        if (kind == "keyboard" && product?.StartsWith("ITE Device", StringComparison.OrdinalIgnoreCase) == true)
+            return "Laptop keyboard";
+        return string.IsNullOrWhiteSpace(product) ? $"LampArray {vendorId:X4}:{productId:X4}" : product;
+    }
+
     /// Every LampArray collection that can be opened and described.
     public static IReadOnlyList<LampArrayDevice> Discover(IReadOnlyList<HidDeviceInfo> hid, Func<bool> dynamicLightingOn)
     {
@@ -110,7 +124,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         {
             try
             {
-                if (Open(info, found.Count + 1, dynamicLightingOn) is { } device)
+                if (Open(info, found.Count + 1, found.Select(f => f._baseName).ToList(), dynamicLightingOn) is { } device)
                     found.Add(device);
             }
             catch (Exception e)
@@ -121,7 +135,10 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         return found;
     }
 
-    private static LampArrayDevice? Open(HidDeviceInfo info, int nth, Func<bool> dynamicLightingOn)
+    /// `nth` keeps the device id stable across rescans (LightingProvider
+    /// matches on it); the shown name is numbered only among equal names.
+    private static LampArrayDevice? Open(HidDeviceInfo info, int nth, IReadOnlyList<string> namesSoFar,
+        Func<bool> dynamicLightingOn)
     {
         var handle = CreateFile(info.Path, GenericRead | GenericWrite, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
         if (handle.IsInvalid)
@@ -149,7 +166,9 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
             var kind = KindName(Value(preparsed, HidReportType.Feature, LampArrayKindUsage, report));
             var interval = Value(preparsed, HidReportType.Feature, MinUpdateInterval, report);
             var product = Product(handle) ?? $"LampArray {info.VendorId:X4}:{info.ProductId:X4}";
-            var name = nth == 1 ? product : $"{product} ({nth})";
+            var baseName = DisplayName(info.VendorId, info.ProductId, product, kind);
+            var same = namesSoFar.Count(n => n == baseName);
+            var name = same == 0 ? baseName : $"{baseName} ({same + 1})";
             LightingLog.Discovery($"[rigstats-control] Lighting: LampArray '{product}' 0x{info.VendorId:X4}:0x{info.ProductId:X4}, " +
                 $"{kind}, {lamps} lamp(s), min update {interval} µs.");
             ok = true;
@@ -171,7 +190,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
                     new KeyValuePair<string, JsonNode?>($"0x{f.Key:X2}", $"{f.Value.Type} 0x{f.Value.ReportId:X2}"))),
             };
             return new LampArrayDevice(handle, preparsed, caps, $"lamparray-{info.VendorId:x4}-{info.ProductId:x4}-{nth}",
-                name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn, diagnostics);
+                baseName, name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn, diagnostics);
         }
         finally
         {

@@ -682,6 +682,26 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   device's own descriptor (`HidP_*`); colours go out as a range update over
   all lamps; control is taken by clearing AutonomousMode and handed back on
   release / service stop.
+  **ASUS "WDL state".** ASUS mice keep a setting in the device — Gear Link's
+  *Cross-device Lighting Toggle* — that decides whether the LampArray is
+  obeyed. In "Device Lighting" mode every LampArray report is accepted and
+  ignored (no error, no colour change; the device can't report its colour,
+  so the service can't detect it). Found on the ROG Harpe Ace Aim Lab
+  Edition (`1A94` via dongle) behind the Omni receiver; captured from Gear
+  Link's own HID log (it logs every report in the browser console). On the
+  receiver's mouse channel (third vendor collection, `0xFF02`, report id 3,
+  64-byte output):
+  `51 42 00 00 01` → WDL on ("Aura Sync & Windows Dynamic Lighting"),
+  `51 42 00 00 00` → off ("Device Lighting"); the reply echoes `51 42 00 00`.
+  Read-only, verified against the device (replies after the echo):
+  `12 00 09 00` → WDL state (`01` on, `00` off); `12 00 02 00` → paired
+  mouse present (`01`); `12 00 00 00` → device info / versions
+  (`04 00 07 00 05 07 00 03 FF FF 10 00 08`). On the receiver's own channel
+  (`0xFF00`, report id 1): `a0 00` → paired devices
+  (`01 00 94 1A 03 05`: one device, product id `0x1A94` little-endian, on
+  report id 3 — so the mouse channel is found, not assumed), `a1 01` →
+  receiver firmware (`04 00 07 00`, format unconfirmed). Not used by the
+  service yet (#236).
 - **ASUS keyboards, TUF protocol family** (`AsusKeyboardDevice`, #213) —
   OpenRGB's `AsusAuraTUFKeyboardController` models (ROG Azoth, Falchion,
   Strix Flare / Flare II, Strix Scope / RX / NX / II / II 96, TUF K1/K3/

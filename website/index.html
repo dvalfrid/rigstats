@@ -379,7 +379,7 @@
                 <tr><td>TUF Gaming K5</td><td>Keyboard</td><td class="status-openrgb">From OpenRGB, not yet verified</td><td>Runs its own effects</td></tr>
                 <tr><td>TUF Gaming K7</td><td>Keyboard</td><td class="status-openrgb">From OpenRGB, not yet verified</td><td>Runs its own effects</td></tr>
                 <tr><td>ROG Delta II</td><td>Headset</td><td class="status-verified">Verified on hardware</td><td>Through its 2.4 GHz dongle; found when switched on</td></tr>
-                <tr><td>Any Windows Dynamic Lighting (HID LampArray) device, any brand</td><td>Keyboard, mouse, other</td><td class="status-verified">Verified on hardware (ROG Harpe Ace on the Omni receiver)</td><td>Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead</td></tr>
+                <tr><td>Any Windows Dynamic Lighting (HID LampArray) device, any brand</td><td>Keyboard, mouse, other</td><td class="status-verified">Verified on hardware (ROG Harpe Ace on the Omni receiver)</td><td>Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead. ASUS devices: set the device&#39;s Cross-device Lighting Toggle to &quot;Aura Sync &amp; Windows Dynamic Lighting&quot; in Gear Link or Armoury Crate, otherwise it ignores every lighting change</td></tr>
                 <tr><td>Philips Hue lights, through a Hue Bridge (square, v2)</td><td>Room lights</td><td class="status-verified">Verified on hardware</td><td>Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second)</td></tr>
 <!-- supported-devices:end -->
             </tbody>
@@ -875,6 +875,19 @@
           </div>
         </div>
 
+      </div>
+
+      <div class="support-box faq" id="faq">
+        <h3>Common questions</h3>
+        <details>
+          <summary>My ASUS / ROG mouse or keyboard is listed in the Control Center, but doesn't change colour</summary>
+          <p>The device has its own lighting mode, saved in the device, that decides whether it follows lighting commands from outside. Open <a href="https://gearlink.asus.com" target="_blank" rel="noopener">Gear Link</a> (older firmware needs its Gear Link Companion app) or Armoury Crate and set the device's <strong>Cross-device Lighting Toggle</strong> to <strong>Aura Sync &amp; Windows Dynamic Lighting</strong>. In "Device Lighting" mode it ignores every change — RIGStats can't detect that, because the device doesn't report its colour back.</p>
+          <p>The setting stays in the device, so Gear Link or Armoury Crate can be closed or uninstalled afterwards. Keep Windows' own <em>Use Dynamic Lighting on my devices</em> turned off, otherwise RIGStats leaves the device to Windows.</p>
+        </details>
+        <details>
+          <summary>The Control Center says "Not connected" or changes don't apply</summary>
+          <p>The <code>rigstats-sensor</code> service must be running. Only the installed, signed RIGStats may control hardware — a copied or self-built <code>rigstats.exe</code> is refused by design.</p>
+        </details>
       </div>
     </div>
   </section>

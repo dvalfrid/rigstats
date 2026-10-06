@@ -57,7 +57,9 @@ public static class LightingCatalog
             "Keyboard, mouse, other",
             "—",
             Verified + " (ROG Harpe Ace on the Omni receiver)",
-            "Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead"));
+            "Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead. " +
+            "ASUS devices: set the device's Cross-device Lighting Toggle to \"Aura Sync & Windows Dynamic Lighting\" " +
+            "in Gear Link or Armoury Crate, otherwise it ignores every lighting change"));
 
         rows.Add(new SupportedDevice(
             "Philips Hue lights, through a Hue Bridge (square, v2)",
