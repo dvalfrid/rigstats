@@ -4,9 +4,10 @@ using System.Text.Json.Nodes;
 namespace SensorSidecar.Control.Providers;
 
 /// `IControlProvider` for GPU power limits (#190, Control Center phase 3).
-/// AMD through ADLX for now (`AdlxGpuPower`); NVIDIA (NVML) is #210. The
-/// limit is a percentage offset from the driver default, within the
-/// driver's own range — the same knob as Adrenalin's Power Limit.
+/// AMD through ADLX (`AdlxGpuPower`), NVIDIA desktop GPUs through NVML
+/// (`NvmlGpuPower`, #210), combined by `GpuPowerApis`. The limit is a
+/// percentage offset from the driver default, within the driver's own range
+/// — the same knob as Adrenalin's and Afterburner's Power Limit.
 ///
 /// "Original" is the value in force before RIGStats first changed an
 /// adapter (the user's own Adrenalin setting, usually 0). It is recorded at
@@ -34,7 +35,7 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
         {
             Domain = Domain,
             Supported = false,
-            Reason = "No GPU with power limit control found (AMD Radeon with the Adrenalin driver).",
+            Reason = "No GPU with power limit control found (AMD Radeon with the Adrenalin driver, or a desktop NVIDIA GeForce). Laptop GPUs follow the laptop's own performance modes.",
         };
         if (api is null)
             return unsupported;

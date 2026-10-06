@@ -1,7 +1,8 @@
 # Control Center — Hardware Control Architecture
 
 > Status: phases 0 (foundation, #187), 1 (fan control, #188), 2 (CPU power
-> limits, AMD part, #189), 3 (GPU power limit, AMD part, #190), 4 (Curve
+> limits, AMD part, #189), 3 (GPU power limit, AMD #190, NVIDIA desktop
+> #210), 4 (Curve
 > Optimizer, #191) and 5 (ASUS Aura lighting, #192) are implemented;
 > the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
@@ -311,7 +312,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
-| `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA: NVML `nvmlDeviceSetPowerManagementLimit` (ships with driver) — not built yet (#210). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
+| `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA desktop GPUs: NVML `nvmlDeviceSetPowerManagementLimit` (ships with the driver, #210); laptop GPUs are firmware-owned (#234). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
 | `LightingProvider` | Aura Sync over `ILightingDevice`s: ASUS Aura USB motherboard controllers (`AuraController`), ASUS Aura monitors + light bar (`AsusMonitorDevice`), ASUS TUF-protocol keyboards incl. via the ROG Omni receiver (`AsusKeyboardDevice`), ASUS GearLink-protocol headsets (`AsusHeadsetDevice`), any HID LampArray / Dynamic Lighting device (`LampArrayDevice`), chosen Philips Hue rooms and zones (`HueRoomDevice`, over the bridge's local API) — Windows HID APIs | Implemented in-service; yields to Armoury Crate, OpenRGB and (per device) Windows Dynamic Lighting. See [Phase 5](#phase-5--asus-aura-lighting-as-built). |
 
 ---
@@ -545,7 +546,7 @@ What phase 2 (#189) shipped — AMD only; Intel is #209:
 
 ## Phase 3 — GPU power limit as built
 
-What phase 3 (#190) shipped — AMD only; NVIDIA (NVML) is #210:
+What phase 3 (#190) shipped for AMD, and #210 for NVIDIA desktop GPUs:
 
 - **ADLX from C#, no wrapper.** `AdlxGpuPower` loads `amdadlx64.dll` (part
   of the Adrenalin driver) and calls the SDK's C interface — plain vtables —
@@ -594,6 +595,36 @@ What phase 3 (#190) shipped — AMD only; NVIDIA (NVML) is #210:
   - `Probe` reports any driver failure as "unavailable", and the pipe's
     `capabilities` reports a provider that throws as unavailable instead of
     failing the whole list (every tab of the Control Center).
+- **NVIDIA through NVML** (#210). `NvmlGpuPower` loads `nvml.dll` (System32
+  on current drivers, `NVSMI\` on old ones) and P/Invokes the documented C
+  API: `nvmlDeviceGetPowerManagementLimitConstraints` / `…DefaultLimit` /
+  `…Limit` to read, `nvmlDeviceSetPowerManagementLimit` to write (needs
+  admin — the service is SYSTEM). NVML speaks milliwatts; the GPU tab's knob
+  stays a % offset from the driver default: the range is the whole percents
+  inside the driver's min/max, limit = default × (1 + pct/100), clamped.
+  "At factory" is the limit equal to the default, and a factory reset writes
+  the default, so the original/Default handling above is shared. Adapters
+  are keyed by NVML UUID.
+  - **Laptop GPUs are left out** ("… Laptop GPU", "… Max-Q"). Their budget
+    belongs to the firmware: on the G14's RTX 5070 Ti Laptop GPU NVML reads
+    5–120 W, default 80 W and an enforced limit of 118 W set by Dynamic
+    Boost / the ASUS performance mode, but answers `NOT_SUPPORTED` for the
+    power-management limit itself. A GPU is only offered when that limit
+    reads, whatever its name. On ASUS
+    laptops that budget is controlled through ATKACPI (#234). A desktop
+    board that answers a write with `NOT_SUPPORTED` / `NO_PERMISSION` is
+    not offered again for the rest of the service run.
+  - `GpuPowerApis` combines the drivers: each adapter goes to the driver
+    that listed it, and a failing driver hides only its own adapters — an
+    AMD iGPU whose ADLX won't initialize (#241) doesn't hide an NVIDIA card.
+  - A failed `nvmlInit` is not retried for a minute, like ADLX.
+  - **Diagnostics:** at start the service writes `gpu-power.json` (in the
+    diagnostics ZIP): per NVIDIA GPU the raw NVML readings in mW — min, max,
+    default, limit, enforced limit, or NVML's error for each — whether it is
+    a laptop GPU, refused a write, and is offered. Read-only, no UUIDs. ADLX
+    isn't opened for it (#241); AMD adapters are in
+    `control-capabilities.json`. A user's export answers whether NVML works
+    from the service on their card without them testing anything.
 
 ## Phase 4 — Curve Optimizer as built
 
@@ -913,6 +944,10 @@ account, no OpenRGB.
   other Radeon generations, Pro drivers and AMD laptops report it, and do
   any misbehave? A native crash inside ADLX would take the service down —
   if that ever shows up in the field, move ADLX into a small helper process.
+- NVML power limits are built from NVIDIA's documentation and unit-tested
+  but not yet checked on a desktop GeForce: that it works from session 0 as
+  SYSTEM, the readback after a write, and whether the limit survives a
+  driver reset (the original is persisted either way).
 - Does an ADLX power limit persist across a reboot (Adrenalin re-applying
   "Custom")? Harmless either way — the original is persisted and the active
   profile is re-applied at start — but worth knowing.

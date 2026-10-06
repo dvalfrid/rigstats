@@ -203,7 +203,7 @@ Each tab appears only when this PC's hardware supports it.
 | Power | The Windows power plan each profile switches to | Any PC |
 | Fans | Per-fan curves on CPU, GPU or a motherboard temperature; **Identify** measures which fans a channel drives | Motherboards with writable fan control (LibreHardwareMonitor) |
 | CPU | PPT/TDC/EDC power limits, and **Curve Optimizer** (−30…0, all-core or per core) | AMD Ryzen 9000, on hardware-verified SMU tables |
-| GPU | Power limit, the same setting as Adrenalin's | AMD Radeon (ADLX) |
+| GPU | Power limit, the same setting as Adrenalin's or Afterburner's | AMD Radeon (ADLX), desktop NVIDIA GeForce (NVML) |
 | Lighting | Aura Sync: one effect and colour for every device, live preview, the light bar's desk lamp | ASUS Aura motherboards, ROG monitors and light bar, ROG keyboards and headsets, any Windows Dynamic Lighting device, Philips Hue rooms and zones via the Hue Bridge — see [supported devices](docs/supported-devices.md) |
 
 Safety, all in the service:
@@ -214,7 +214,7 @@ Safety, all in the service:
 - Lighting yields to Armoury Crate or OpenRGB when they run, and to Windows Dynamic Lighting per device.
 - Philips Hue: only the rooms and zones you choose follow the rig. The bridge is reached on the local network only (no Hue account, no cloud); its key is stored encrypted and readable by the service only, and RIGStats only talks to a bridge whose certificate is signed by Philips Hue / Signify.
 
-Not yet: Intel CPU limits ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA GPU power limit ([#210](https://github.com/dvalfrid/rigstats/issues/210)). Design and protocol notes: [docs/control-architecture.md](docs/control-architecture.md).
+Not yet: Intel CPU limits ([#209](https://github.com/dvalfrid/rigstats/issues/209)), laptop GPU power — it follows the laptop's own performance modes (ASUS: [#234](https://github.com/dvalfrid/rigstats/issues/234)). Design and protocol notes: [docs/control-architecture.md](docs/control-architecture.md).
 
 ## Sensor Coverage
 

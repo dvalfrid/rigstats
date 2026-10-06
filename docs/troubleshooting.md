@@ -143,7 +143,7 @@ CPU data comes from `sysinfo` regardless of vendor.
 
 For NVIDIA GPUs, the sidecar works as well. If labels differ on your machine, adjust the GPU sensor matching in `sensor-sidecar/SensorReader.cs`.
 
-Control Center: fan curves, power plans and lighting work regardless of CPU/GPU vendor; CPU power limits and Curve Optimizer are AMD Ryzen only for now (Intel: [#209](https://github.com/dvalfrid/rigstats/issues/209)), and the GPU power limit is AMD Radeon only (NVIDIA: [#210](https://github.com/dvalfrid/rigstats/issues/210)).
+Control Center: fan curves, power plans and lighting work regardless of CPU/GPU vendor; CPU power limits and Curve Optimizer are AMD Ryzen only for now (Intel: [#209](https://github.com/dvalfrid/rigstats/issues/209)), and the GPU power limit covers AMD Radeon and desktop NVIDIA GeForce cards. Laptop GPUs don't get a GPU tab: their power budget follows the laptop's own performance modes (ASUS laptops: [#234](https://github.com/dvalfrid/rigstats/issues/234)).
 
 ## How Do I Inspect Real WMI Strings?
 

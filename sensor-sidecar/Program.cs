@@ -113,12 +113,22 @@ builder.Services.AddSingleton<IControlProvider>(sp => new CurveOptimizerProvider
     Path.Combine(programData, "curve-opt-baseline.json"),
     CpuLimitProvider.CurrentBootTime()));
 
-// Control Center phase 3 (#190): GPU power limit — AMD via ADLX (the
-// Adrenalin driver's own SDK); NVIDIA (NVML) is #210.
-builder.Services.AddSingleton<IControlProvider>(_ => new GpuPowerProvider(
-    AdlxGpuPower.TryLoad(),
-    dryRun,
-    Path.Combine(programData, "gpu-power-original.json")));
+// Control Center phase 3 (#190, #210): GPU power limit — AMD via ADLX (the
+// Adrenalin driver's own SDK), NVIDIA desktop GPUs via NVML.
+builder.Services.AddSingleton<IControlProvider>(_ =>
+{
+    var adlx = AdlxGpuPower.TryLoad();
+    var nvml = NvmlGpuPower.TryLoad();
+    // For the diagnostics export: what NVML reports from the service. ADLX
+    // isn't opened for it (#241); its adapters are in the capabilities.
+    LightingDiagnostics.Write(Path.Combine(programData, "gpu-power.json"), new System.Text.Json.Nodes.JsonObject
+    {
+        ["written_utc"] = DateTimeOffset.UtcNow.ToString("O"),
+        ["adlx_installed"] = adlx is not null,
+        ["nvml"] = nvml?.Diagnostics(),
+    });
+    return new GpuPowerProvider(GpuPowerApis.Of(adlx, nvml), dryRun, Path.Combine(programData, "gpu-power-original.json"));
+});
 
 // The paired Hue Bridge (#215): its chosen rooms and zones are lighting
 // devices like any other; the control pipe pairs it.

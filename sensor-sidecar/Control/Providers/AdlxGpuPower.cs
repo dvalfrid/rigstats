@@ -7,7 +7,7 @@ namespace SensorSidecar.Control.Providers;
 public sealed record GpuPowerAdapter(string Id, string Name, int Min, int Max, int Step, int Default);
 
 /// The GPU power-limit operations `GpuPowerProvider` needs — a seam for
-/// tests and for a future NVIDIA (NVML, #210) backend.
+/// tests and for each driver: `AdlxGpuPower` (AMD), `NvmlGpuPower` (NVIDIA).
 public interface IGpuPowerApi
 {
     /// Lets go of the driver session; the next call opens a new one. Called

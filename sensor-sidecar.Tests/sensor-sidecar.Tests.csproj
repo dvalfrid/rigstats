@@ -49,6 +49,8 @@
     <Compile Include="..\sensor-sidecar\Control\Providers\CpuLimitProvider.cs" Link="Control\Providers\CpuLimitProvider.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\AdlxGpuPower.cs" Link="Control\Providers\AdlxGpuPower.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\GpuPowerProvider.cs" Link="Control\Providers\GpuPowerProvider.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\NvmlGpuPower.cs" Link="Control\Providers\NvmlGpuPower.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Providers\GpuPowerApis.cs" Link="Control\Providers\GpuPowerApis.cs" />
     <Compile Include="..\sensor-sidecar\Control\Providers\CurveOptimizerProvider.cs" Link="Control\Providers\CurveOptimizerProvider.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\HidDevice.cs" Link="Control\Lighting\HidDevice.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\AuraUsb.cs" Link="Control\Lighting\AuraUsb.cs" />

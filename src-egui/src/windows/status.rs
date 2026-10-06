@@ -560,6 +560,15 @@ fn collect_and_open_diagnostics_impl(
     )
     .unwrap_or_else(|_| b"(lighting-devices.json not found)".to_vec());
 
+    // Written by the service at start (#210): what NVML reports for each
+    // NVIDIA GPU — raw power limits and whether it is offered.
+    let gpu_power = std::fs::read(
+        PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
+            .join("se.codeby.rigstats")
+            .join("gpu-power.json"),
+    )
+    .unwrap_or_else(|_| b"(gpu-power.json not found)".to_vec());
+
     let install_log = std::fs::read(
         PathBuf::from(std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()))
             .join("se.codeby.rigstats")
@@ -724,6 +733,7 @@ fn collect_and_open_diagnostics_impl(
         ("profiles.json", &profiles_json),
         ("control-capabilities.json", capabilities_json.as_bytes()),
         ("lighting-devices.json", &lighting_devices),
+        ("gpu-power.json", &gpu_power),
         ("hardware.json", hardware_json.as_bytes()),
         ("environment.txt", env_txt.as_bytes()),
         ("sysinfo.json", sysinfo_json.as_bytes()),

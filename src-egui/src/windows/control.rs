@@ -1386,8 +1386,8 @@ fn gpu_tab(
         ui.add_space(4.0);
         ui.label(
             egui::RichText::new(
-                "The same setting as the Power Limit in AMD Adrenalin, relative to the \
-                 driver default. Lower runs cooler and quieter; higher allows more boost. \
+                "The same setting as the Power Limit in AMD Adrenalin or MSI Afterburner, \
+                 relative to the driver default. Lower runs cooler and quieter; higher allows more boost. \
                  New limits are tried first and revert by themselves unless you keep them.",
             )
             .size(11.0)
