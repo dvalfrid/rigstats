@@ -186,6 +186,86 @@ public sealed class OmniMouse
         ["wdl_on"] = WdlOn(),
     };
 
+    /// ASUS 2.4 GHz receivers in Gear Link's device data (type "receiver"):
+    /// ROG Omni, ROG SpeedNova 8K, "Asus Dongle". Only the Omni is verified;
+    /// the others are only asked the read-only questions in <see cref="Probe"/>.
+    public static readonly IReadOnlyList<ushort> ReceiverProductIds = [ReceiverProductId, 0x1AD0, 0x1D54];
+
+    /// Read-only questions to every ASUS receiver and the devices paired to
+    /// it, raw and decoded — for the diagnostics export, so a user's report
+    /// is enough to add a mouse (its product id, versions, whether it has
+    /// the WDL toggle). Only commands Gear Link itself sends while idle;
+    /// serial numbers are not asked.
+    public static JsonArray Probe(IReadOnlyList<HidDeviceInfo> hid, Func<HidDeviceInfo, IHidDevice>? open = null)
+    {
+        var result = new JsonArray();
+        foreach (var pid in ReceiverProductIds)
+        {
+            var channels = hid
+                .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == pid
+                    && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
+                .ToList();
+            var receiver = channels.Where(h => h.OutputReportId == ReceiverReportId).ToList();
+            if (receiver.Count != 1)
+            {
+                if (channels.Count > 0)
+                    result.Add(new JsonObject { ["receiver_pid"] = $"{pid:X4}", ["skipped"] = $"{receiver.Count} receiver channels" });
+                continue;
+            }
+            var entry = new JsonObject
+            {
+                ["receiver_pid"] = $"{pid:X4}",
+                ["channels"] = new JsonArray(channels.Select(c => (JsonNode)$"{c.UsagePage:X4} report {c.OutputReportId:X2}").ToArray()),
+            };
+            byte[]? pairedReply = null;
+            try
+            {
+                using var device = (open ?? Hid.Open)(receiver[0]);
+                entry["firmware"] = Hex(Ask(device, [ReceiverReportId, 0xA1, 0x01]));
+                pairedReply = Ask(device, [ReceiverReportId, 0xA0, 0x00]);
+                entry["paired_reply"] = Hex(pairedReply);
+            }
+            catch (Exception e)
+            {
+                entry["error"] = e.Message;
+            }
+            var paired = new JsonArray();
+            foreach (var p in pairedReply is null ? [] : ParsePaired(pairedReply))
+            {
+                var device = new JsonObject
+                {
+                    ["product_id"] = $"{p.ProductId:X4}",
+                    ["report_id"] = $"{p.ReportId:X2}",
+                    ["model"] = Models.TryGetValue(p.ProductId, out var m) ? m.Name : null,
+                };
+                if (p.ReportId != ReceiverReportId && channels.FirstOrDefault(c => c.OutputReportId == p.ReportId) is { } channel)
+                {
+                    try
+                    {
+                        using var channelDevice = (open ?? Hid.Open)(channel);
+                        device["device_info"] = Hex(Ask(channelDevice, [p.ReportId, 0x12, 0x00, 0x00, 0x00]));
+                        device["present"] = Hex(Ask(channelDevice, [p.ReportId, 0x12, 0x00, 0x02, 0x00]));
+                        var wdl = Ask(channelDevice, [p.ReportId, 0x12, 0x00, 0x09, 0x00]);
+                        device["wdl_reply"] = Hex(wdl);
+                        device["wdl_on"] = wdl is null ? null : ParseWdl(wdl, p.ReportId);
+                    }
+                    catch (Exception e)
+                    {
+                        device["error"] = e.Message;
+                    }
+                }
+                paired.Add(device);
+            }
+            entry["paired"] = paired;
+            result.Add(entry);
+        }
+        return result;
+    }
+
+    /// The first 24 bytes of a reply in hex (the rest is padding), or null.
+    private static string? Hex(byte[]? reply) =>
+        reply is null ? null : Convert.ToHexString(reply.AsSpan(0, Math.Min(24, reply.Length)));
+
     /// Writes `request` and returns the reply that echoes it (report id and
     /// up to three command bytes — `12 00 02` and `12 00 09` differ only in
     /// the third), skipping other input reports; null on timeout.

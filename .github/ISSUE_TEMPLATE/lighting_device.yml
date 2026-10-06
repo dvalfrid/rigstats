@@ -1,0 +1,72 @@
+name: Lighting device — confirm or request support
+description: A lighting device works (or doesn't) in the Control Center, or isn't listed at all
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Many devices in the [supported devices list](https://github.com/dvalfrid/rigstats/blob/main/docs/supported-devices.md)
+        are marked **From OpenRGB** or **From Gear Link, not yet verified**: they use the same commands as a
+        tested device, but nobody has tried them yet. A report from you, working or not, moves a device to
+        **Verified** or gets it fixed.
+
+        The diagnostics ZIP (tray → **Status** → **Collect Diagnostics…**) contains `lighting-devices.json`:
+        every lighting device RIGStats found, read-only replies from ASUS receivers and the mice paired to
+        them, and a list of all USB HID devices (no paths or serial numbers). That is usually all that's
+        needed to add or fix a device without having it here.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you reporting?
+      options:
+        - A listed device works (please mark it verified)
+        - A listed device is found but doesn't change colour
+        - A device isn't listed in the Control Center at all
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Brand and exact model, and how it is connected (cable, 2.4 GHz dongle / receiver, Bluetooth).
+      placeholder: ROG Keris II Ace via the ROG Omni receiver
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you try, and what happened?
+      description: Effect and colour you picked, what the device showed. For ASUS mice, also say whether the Lighting tab offered "Let RIGStats control it" and what happened when you used it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: gearlink
+    attributes:
+      label: Gear Link console log (optional, ASUS devices)
+      description: |
+        For an ASUS device that RIGStats doesn't drive yet: open https://gearlink.asus.com in Chrome or Edge,
+        press F12 → Console, type `HID` in the filter box, connect the device and change its lighting once.
+        Paste the `HID OUT` / `HID IN` lines here.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics ZIP
+      description: Drag and drop the ZIP file here.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: RIGStats version
+      description: Shown in the About window (tray → About).
+    validations:
+      required: true

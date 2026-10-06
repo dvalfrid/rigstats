@@ -159,7 +159,8 @@ builder.Services.AddSingleton(sp => new LightingProvider(
     // seen, so unknown devices can be supported from a user's export.
     (hid, devices, reason) => LightingDiagnostics.Write(
         Path.Combine(programData, "lighting-devices.json"),
-        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn())),
+        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn(),
+            ProbeAsus(hid))),
     hue: sp.GetRequiredService<HueLink>()));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
@@ -200,6 +201,21 @@ catch (Exception e)
 finally
 {
     safetyGuard.ReleaseAllToFirmware();
+}
+
+// The ASUS receivers' read-only replies for the diagnostics file; never
+// fails the discovery it is written after.
+static System.Text.Json.Nodes.JsonArray? ProbeAsus(IReadOnlyList<HidDeviceInfo> hid)
+{
+    try
+    {
+        return OmniMouse.Probe(hid);
+    }
+    catch (Exception e)
+    {
+        SidecarLog.Log($"[rigstats-control] Lighting: ASUS receiver probe failed: {e.Message}");
+        return null;
+    }
 }
 
 // Asks the silent headset dongles again, until every headset has answered.

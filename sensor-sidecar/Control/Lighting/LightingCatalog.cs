@@ -99,13 +99,14 @@ public static class LightingCatalog
         md.Append($"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
         md.Append("listed from OpenRGB's device list (read as documentation) — it should work; ");
         md.Append($"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
-        md.Append("[open an issue](https://github.com/dvalfrid/rigstats/issues) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
+        md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())
             md.Append($"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
         md.Append("\nNot supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong ");
         md.Append("write can damage the hardware). A device that isn't listed: the diagnostics export's ");
-        md.Append("`lighting-devices.json` lists every HID device on the machine — attach it to an issue.\n");
+        md.Append("`lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers ");
+        md.Append("and the mice paired to them — attach it to a [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml).\n");
         return md.ToString();
     }
 

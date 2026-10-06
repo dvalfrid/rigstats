@@ -16,8 +16,12 @@ public static class LightingDiagnostics
         IReadOnlyList<ILightingDevice> devices,
         string unavailableReason,
         string? conflict,
-        bool dynamicLightingOn) => new()
+        bool dynamicLightingOn,
+        JsonArray? asusProbes = null) => new()
         {
+            // Read-only replies from ASUS receivers and their paired devices
+            // (OmniMouse.Probe): what adding a new mouse needs.
+            ["asus_probes"] = asusProbes,
             ["written_utc"] = DateTimeOffset.UtcNow.ToString("O"),
             ["conflict"] = conflict,
             ["windows_dynamic_lighting_on"] = dynamicLightingOn,

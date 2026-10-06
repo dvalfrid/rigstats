@@ -898,6 +898,56 @@ public class OmniMouseTests
         Assert.Null(OmniMouse.Ask(new QueuedHid(), [0x03, 0x51, 0x42, 0x00, 0x00, 0x01]));
     }
 
+    /// Answers each written request once, from recorded replies.
+    private sealed class RecordedHid(Func<byte[], byte[]?> answer) : IHidDevice
+    {
+        private byte[]? _pending;
+        // Padded to the report length, as WindowsHidDevice does.
+        public void Write(byte[] report) => _pending = answer([.. report, .. new byte[64 - report.Length]]);
+        public byte[]? Read(TimeSpan timeout)
+        {
+            var reply = _pending;
+            _pending = null;
+            return reply;
+        }
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void Probe_reports_the_receiver_and_its_paired_mouse_for_the_diagnostics()
+    {
+        HidDeviceInfo Channel(ushort page, byte reportId) =>
+            new($@"\\?\hid#vid_0b05&pid_1ace&mi_02&col0{reportId}", 0x0B05, 0x1ACE, page, 0x0001, 64, 64, OutputReportId: reportId);
+        var hid = new[] { Channel(0xFF00, 1), Channel(0xFF01, 2), Channel(0xFF02, 3) };
+        // Replies recorded from the Harpe Ace Aim Lab Edition on the Omni receiver.
+        var device = new RecordedHid(request => Convert.ToHexString(request.AsSpan(0, 4)) switch
+        {
+            "01A10100" => Reply(0x01, 0xA1, 0x01, 0x00, 0x00, 0x04, 0x00, 0x07),
+            "01A00000" => Reply(0x01, 0xA0, 0x00, 0x01, 0x00, 0x94, 0x1A, 0x03, 0x05),
+            "03120000" => Reply(0x03, 0x12, 0x00, 0x00, 0x00, 0x04, 0x00, 0x07, 0x00, 0x05, 0x07),
+            "03120002" => Reply(0x03, 0x12, 0x00, 0x02, 0x00, 0x01),
+            "03120009" => Reply(0x03, 0x12, 0x00, 0x09, 0x00, 0x00),
+            _ => null,
+        });
+
+        var receiver = Assert.Single(OmniMouse.Probe(hid, _ => device))!.AsObject();
+
+        Assert.Equal("1ACE", receiver["receiver_pid"]!.GetValue<string>());
+        Assert.StartsWith("01A1010000040007", receiver["firmware"]!.GetValue<string>());
+        var mouse = Assert.Single(receiver["paired"]!.AsArray())!.AsObject();
+        Assert.Equal("1A94", mouse["product_id"]!.GetValue<string>());
+        Assert.Equal("ROG Harpe Ace Aim Lab Edition", mouse["model"]!.GetValue<string>());
+        Assert.False(mouse["wdl_on"]!.GetValue<bool>());
+        Assert.StartsWith("0312000200", mouse["present"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void Probe_skips_machines_without_an_asus_receiver()
+    {
+        var keyboard = new HidDeviceInfo(@"\\?\hid#vid_046d&pid_c33f", 0x046D, 0xC33F, 0xFF00, 0x0001, 64, 64, OutputReportId: 1);
+        Assert.Empty(OmniMouse.Probe([keyboard], _ => throw new InvalidOperationException("must not open")));
+    }
+
     [Fact]
     public void Wdl_reply_reads_on_and_off()
     {
