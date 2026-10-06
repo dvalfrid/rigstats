@@ -792,6 +792,33 @@ public class AsusMonitorTests
     }
 }
 
+/// <summary>Models taken from ASUS Gear Link's device data (#240).</summary>
+public class GearLinkModelTests
+{
+    [Fact]
+    public void Gear_link_keyboards_use_the_azoth_x_protocol_and_scale()
+    {
+        var gearLink = AsusKeyboardDevice.Models.Values.Where(m => m.GearLink).ToList();
+        Assert.True(gearLink.Count >= 40);
+        Assert.All(gearLink, m =>
+        {
+            Assert.True(m.PerKey);
+            Assert.Equal(100, m.BrightnessMax);
+            Assert.False(m.Verified);
+        });
+        // Gear Link's slider is 0–100 for these, not OpenRGB's 0–4.
+        Assert.Equal(100, AsusKeyboardDevice.Model(0x1AAE)!.BrightnessMax);
+        Assert.Equal(100, AsusKeyboardDevice.Model(0x1AB5)!.BrightnessMax);
+    }
+
+    [Fact]
+    public void Only_the_delta_ii_headset_is_verified()
+    {
+        Assert.Equal("ROG Pelta", AsusHeadsetDevice.Model(0x1B82));
+        Assert.Equal(0x1AFA, Assert.Single(AsusHeadsetDevice.VerifiedModels));
+    }
+}
+
 /// <summary>HID LampArray (Windows Dynamic Lighting standard) helpers.</summary>
 public class LampArrayTests
 {

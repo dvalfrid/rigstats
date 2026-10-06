@@ -39,19 +39,24 @@ public static class LightingCatalog
                     m.Value.Kind == "light_bar" ? "Desk lamp: on/off, brightness, colour temperature" : null,
                 }.OfType<string>()))));
 
+        // One row per model and status: a model's cable, dongle and Bluetooth
+        // ids share it.
         rows.AddRange(AsusKeyboardDevice.Models
-            .OrderByDescending(m => m.Value.Verified).ThenBy(m => m.Value.Name)
-            .Select(m => new SupportedDevice(
-                m.Value.Receiver ? "Keyboards paired to the ROG Omni receiver (e.g. ROG Azoth X)" : m.Value.Name,
+            .GroupBy(m => (m.Value.Name, m.Value.Receiver,
+                Status: m.Value.Verified ? Verified : m.Value.GearLink ? FromGearLink : FromOpenRgb))
+            .OrderBy(g => g.Key.Status == Verified ? 0 : g.Key.Status == FromGearLink ? 1 : 2).ThenBy(g => g.Key.Name)
+            .Select(g => new SupportedDevice(
+                g.Key.Receiver ? "Keyboards paired to the ROG Omni receiver (e.g. ROG Azoth X)" : g.Key.Name,
                 "Keyboard",
-                Hex(m.Key),
-                m.Value.Verified ? Verified : FromOpenRgb,
-                m.Value.Receiver ? "Found on whichever receiver channel the keyboard answers" : "Runs its own effects")));
+                string.Join(", ", g.Select(m => Hex(m.Key)).Order()),
+                g.Key.Status,
+                g.Key.Receiver ? "Found on whichever receiver channel the keyboard answers" : "Runs its own effects")));
 
         rows.AddRange(AsusHeadsetDevice.Models
-            .OrderBy(m => m.Value)
-            .Select(m => new SupportedDevice(m.Value, "Headset", Hex(m.Key), Verified,
-                "Through its 2.4 GHz dongle; found when switched on")));
+            .GroupBy(m => (Name: m.Value, Status: AsusHeadsetDevice.VerifiedModels.Contains(m.Key) ? Verified : FromGearLink))
+            .OrderBy(g => g.Key.Status == Verified ? 0 : 1).ThenBy(g => g.Key.Name)
+            .Select(g => new SupportedDevice(g.Key.Name, "Headset", string.Join(", ", g.Select(m => Hex(m.Key)).Order()),
+                g.Key.Status, "Through its 2.4 GHz dongle; found when switched on; every write read back")));
 
         rows.Add(new SupportedDevice(
             "Any Windows Dynamic Lighting (HID LampArray) device, any brand",

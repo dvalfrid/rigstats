@@ -6,9 +6,10 @@ namespace SensorSidecar.Control.Lighting;
 /// `PerKey` keyboards carry a 0x02 marker before the colour; TUF K1/K5 don't.
 /// `BrightnessMax` is the keyboard's own scale; `Speed` the effect speed
 /// that matches the other devices' pace (each model has its own scale).
-/// `Verified`: seen working on real hardware (the rest come from OpenRGB).
+/// `Verified`: seen working on real hardware; otherwise from OpenRGB, or
+/// from ASUS Gear Link's device modules when `GearLink` (#240).
 public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, byte Speed, bool Receiver = false,
-    bool Verified = false);
+    bool Verified = false, bool GearLink = false);
 
 /// ASUS keyboards of the Aura "TUF keyboard" protocol family (#213) — the
 /// family of the original ROG Azoth in OpenRGB (protocol documentation
@@ -79,6 +80,14 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     private static KeyboardModel Azoth(string name) => new(name, PerKey: true, BrightnessMax: 4, Speed: 30);
     private static KeyboardModel Flare(string name) => new(name, PerKey: true, BrightnessMax: 4, Speed: 8);
 
+    // From ASUS Gear Link's device modules: every keyboard it supports
+    // builds its effect as 0x51 0x2C <effect> with speed, brightness 0–100
+    // (default 50), flags and colours — the Azoth X's protocol and scale.
+    // Some ids of one model are its 2.4 GHz dongle or Bluetooth; which is
+    // which isn't known, so they share a name.
+    private static KeyboardModel GearLink(string name) =>
+        new(name, PerKey: true, BrightnessMax: 100, Speed: 30, GearLink: true);
+
     /// Known models by USB product id. Also the source of the
     /// supported-devices list (<see cref="LightingCatalog"/>).
     public static readonly IReadOnlyDictionary<ushort, KeyboardModel> Models = new Dictionary<ushort, KeyboardModel>
@@ -105,9 +114,50 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
         [0x19F6] = Azoth("ROG Strix Scope NX Wireless Deluxe"),
         [0x19F8] = Azoth("ROG Strix Scope NX Wireless Deluxe (2.4 GHz)"),
         [0x1AB3] = Azoth("ROG Strix Scope II"),
-        [0x1AB5] = Azoth("ROG Strix Scope II RX"),
-        [0x1AAE] = Azoth("ROG Strix Scope II 96 Wireless"),
+        // In Gear Link with a 0–100 slider, not OpenRGB's 0–4 (the Azoth's
+        // OpenRGB 0–4 also turned out to be 0–100 on hardware).
+        [0x1AB5] = GearLink("ROG Strix Scope II RX"),
+        [0x1AB6] = GearLink("ROG Strix Scope II RX"),
+        [0x1AAE] = GearLink("ROG Strix Scope II 96 Wireless"),
+        [0x1AAF] = GearLink("ROG Strix Scope II 96 Wireless"),
+        [0x1AB0] = GearLink("ROG Strix Scope II 96 Wireless"),
         [0x1B78] = Azoth("ROG Strix Scope II 96 RX Wireless"),
+        [0x1C25] = GearLink("ROG Azoth X"),
+        [0x1B7F] = GearLink("ROG Falchion Ace HFX"),
+        [0x1D1D] = GearLink("ROG Falchion Ace HFX ZywOo Edition"),
+        [0x1C7D] = GearLink("ROG Falchion Ace 75 HE"),
+        [0x1B3F] = GearLink("ROG Azoth Extreme"),
+        [0x1B40] = GearLink("ROG Azoth Extreme"),
+        [0x1B42] = GearLink("ROG Azoth Extreme"),
+        [0x1CEF] = GearLink("ROG Azoth Extreme Special Edition"),
+        [0x1CF0] = GearLink("ROG Azoth Extreme Special Edition"),
+        [0x1CF1] = GearLink("ROG Azoth Extreme Special Edition"),
+        [0x1DA2] = GearLink("ROG Azoth Extreme Edition 20"),
+        [0x1DA3] = GearLink("ROG Azoth Extreme Edition 20"),
+        [0x1DA4] = GearLink("ROG Azoth Extreme Edition 20"),
+        [0x1C10] = GearLink("ROG Azoth 96 HE / Lite"),
+        [0x1C11] = GearLink("ROG Azoth 96 HE / Lite"),
+        [0x1C12] = GearLink("ROG Azoth 96 HE / Lite"),
+        [0x1C2F] = GearLink("ROG Falcata"),
+        [0x1C31] = GearLink("ROG Falcata"),
+        [0x1CE8] = GearLink("ROG Strix Morph 96 Wireless"),
+        [0x1CE9] = GearLink("ROG Strix Morph 96 Wireless"),
+        [0x1CEA] = GearLink("ROG Strix Morph 96 Wireless"),
+        [0x1E0A] = GearLink("ROG Strix Morph 96 X Wireless"),
+        [0x1E0B] = GearLink("ROG Strix Morph 96 X Wireless"),
+        [0x1E0C] = GearLink("ROG Strix Morph 96 X Wireless"),
+        [0x1E5B] = GearLink("ROG Strix Morph 96 Wireless (PBZ)"),
+        [0x1E5C] = GearLink("ROG Strix Morph 96 Wireless (PBZ)"),
+        [0x1E5D] = GearLink("ROG Strix Morph 96 Wireless (PBZ)"),
+        [0x1D45] = GearLink("ProArt Keyboard KD300"),
+        [0x1D46] = GearLink("ProArt Keyboard KD300"),
+        [0x1D47] = GearLink("ProArt Keyboard KD300"),
+        [0x1D68] = GearLink("ASUS TX75 Analog Gaming Keyboard"),
+        [0x1D6A] = GearLink("ASUS TX75 Analog Gaming Keyboard"),
+        [0x1DF3] = GearLink("ASUS TX75 Core Gaming Keyboard"),
+        [0x1DF4] = GearLink("ASUS TX75 Core Gaming Keyboard"),
+        [0x1DF5] = GearLink("TUF Gaming K4 Magnetic"),
+        [0x1DF6] = GearLink("TUF Gaming K4 Magnetic"),
         [0x1875] = Flare("ROG Strix Flare"),
         [0x18CF] = Flare("ROG Strix Flare PNK LTD"),
         [0x18AF] = Flare("ROG Strix Flare CoD Black Ops 4 Edition"),

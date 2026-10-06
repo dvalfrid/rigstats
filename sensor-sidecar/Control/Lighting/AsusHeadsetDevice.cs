@@ -46,13 +46,22 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
         Firmware = firmware;
     }
 
-    /// Known headsets by USB product id — each verified on hardware (the
-    /// protocol comes from GearLink, not OpenRGB). Also the source of the
+    /// Known headsets by USB product id (the protocol comes from GearLink,
+    /// not OpenRGB). The others carry the Delta II's `lightingConfig` (get
+    /// key 3 / set key 40, effectId + brightness + colour) in their Gear
+    /// Link schema, so they speak the same lighting (#240); only those in
+    /// <see cref="VerifiedModels"/> were seen working. Also the source of the
     /// supported-devices list (<see cref="LightingCatalog"/>).
     public static readonly IReadOnlyDictionary<ushort, string> Models = new Dictionary<ushort, string>
     {
         [0x1AFA] = "ROG Delta II",
+        [0x1D41] = "ROG Delta II (KJP)",
+        [0x1E6B] = "ROG Delta II (PBZ)",
+        [0x1B82] = "ROG Pelta",
+        [0x1B84] = "ROG Pelta",
     };
+
+    public static readonly IReadOnlySet<ushort> VerifiedModels = new HashSet<ushort> { 0x1AFA };
 
     public static string? Model(ushort productId) => Models.GetValueOrDefault(productId);
 

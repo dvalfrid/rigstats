@@ -20,6 +20,24 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | ROG Azoth | Keyboard | 1A83 | Verified on hardware | Runs its own effects |
 | ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Runs its own effects |
 | ROG Falchion Ace HFX | Keyboard | 1B7E | Verified on hardware | Runs its own effects |
+| ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Runs its own effects |
+| ASUS TX75 Core Gaming Keyboard | Keyboard | 1DF3, 1DF4 | From Gear Link, not yet verified | Runs its own effects |
+| ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Azoth 96 HE / Lite | Keyboard | 1C10, 1C11, 1C12 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Azoth Extreme | Keyboard | 1B3F, 1B40, 1B42 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Azoth Extreme Edition 20 | Keyboard | 1DA2, 1DA3, 1DA4 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Azoth Extreme Special Edition | Keyboard | 1CEF, 1CF0, 1CF1 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Azoth X | Keyboard | 1C25 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Falcata | Keyboard | 1C2F, 1C31 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Falchion Ace 75 HE | Keyboard | 1C7D | From Gear Link, not yet verified | Runs its own effects |
+| ROG Falchion Ace HFX | Keyboard | 1B7F | From Gear Link, not yet verified | Runs its own effects |
+| ROG Falchion Ace HFX ZywOo Edition | Keyboard | 1D1D | From Gear Link, not yet verified | Runs its own effects |
+| ROG Strix Morph 96 Wireless | Keyboard | 1CE8, 1CE9, 1CEA | From Gear Link, not yet verified | Runs its own effects |
+| ROG Strix Morph 96 Wireless (PBZ) | Keyboard | 1E5B, 1E5C, 1E5D | From Gear Link, not yet verified | Runs its own effects |
+| ROG Strix Morph 96 X Wireless | Keyboard | 1E0A, 1E0B, 1E0C | From Gear Link, not yet verified | Runs its own effects |
+| ROG Strix Scope II 96 Wireless | Keyboard | 1AAE, 1AAF, 1AB0 | From Gear Link, not yet verified | Runs its own effects |
+| ROG Strix Scope II RX | Keyboard | 1AB5, 1AB6 | From Gear Link, not yet verified | Runs its own effects |
+| TUF Gaming K4 Magnetic | Keyboard | 1DF5, 1DF6 | From Gear Link, not yet verified | Runs its own effects |
 | ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion | Keyboard | 193C | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion (wireless) | Keyboard | 193E | From OpenRGB, not yet verified | Runs its own effects |
@@ -31,8 +49,6 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | ROG Strix Scope | Keyboard | 18F8 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Scope II | Keyboard | 1AB3 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Scope II 96 RX Wireless | Keyboard | 1B78 | From OpenRGB, not yet verified | Runs its own effects |
-| ROG Strix Scope II 96 Wireless | Keyboard | 1AAE | From OpenRGB, not yet verified | Runs its own effects |
-| ROG Strix Scope II RX | Keyboard | 1AB5 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Scope NX Wireless Deluxe | Keyboard | 19F6 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Scope NX Wireless Deluxe (2.4 GHz) | Keyboard | 19F8 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Scope RX | Keyboard | 1951 | From OpenRGB, not yet verified | Runs its own effects |
@@ -43,7 +59,10 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | TUF Gaming K3 Gen II Miku Edition | Keyboard | 1C5E | From OpenRGB, not yet verified | Runs its own effects |
 | TUF Gaming K5 | Keyboard | 1899 | From OpenRGB, not yet verified | Runs its own effects |
 | TUF Gaming K7 | Keyboard | 18AA | From OpenRGB, not yet verified | Runs its own effects |
-| ROG Delta II | Headset | 1AFA | Verified on hardware | Through its 2.4 GHz dongle; found when switched on |
+| ROG Delta II | Headset | 1AFA | Verified on hardware | Through its 2.4 GHz dongle; found when switched on; every write read back |
+| ROG Delta II (KJP) | Headset | 1D41 | From Gear Link, not yet verified | Through its 2.4 GHz dongle; found when switched on; every write read back |
+| ROG Delta II (PBZ) | Headset | 1E6B | From Gear Link, not yet verified | Through its 2.4 GHz dongle; found when switched on; every write read back |
+| ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Through its 2.4 GHz dongle; found when switched on; every write read back |
 | Any Windows Dynamic Lighting (HID LampArray) device, any brand | Keyboard, mouse, other | — | Verified on hardware (ROG Harpe Ace on the Omni receiver) | Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead. ASUS devices: set the device's Cross-device Lighting Toggle to "Aura Sync & Windows Dynamic Lighting" in Gear Link or Armoury Crate, otherwise it ignores every lighting change |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A94 | Verified on hardware | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
 | ROG Harpe Ace Extreme | Mouse | 1B69 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |

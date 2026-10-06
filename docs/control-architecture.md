@@ -747,6 +747,16 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   reply (`12 12 00 00 02 0B`) means this protocol, then one static write and
   a brightness-4 write settle the scale. Not covered: ROG Claymore (other
   layout, 2018), Strix Scope TKL family (direct per-key only).
+  **From Gear Link (#240):** every keyboard in Gear Link's device data (18
+  models, 45 ids — Azoth / Azoth Extreme / Azoth 96 HE, Falchion Ace /
+  Ace 75 HE, Falcata, Strix Scope II 96 / II RX, Strix Morph 96 / 96 X,
+  ProArt KD300, TX75 Analog / Core, TUF K4 Magnetic) builds its effect the
+  same way (`0x51 0x2C <effect>` with `speed, brightness, flags, FF, FF,
+  colours`) and shows a 0–100 brightness slider (default 50) — so they are
+  in the model table at the Azoth X's settings, "From Gear Link, not yet
+  verified"; a model's dongle and Bluetooth ids share its name. The Strix
+  Scope II 96 Wireless / II RX moved from OpenRGB's 0–4 to Gear Link's 0–100.
+  Driving one natively drops its LampArray collection, as above.
 - **ASUS headsets, GearLink protocol** (`AsusHeadsetDevice`) — not in
   OpenRGB; the protocol is GearLink's own declarative command schema (read
   as documentation): report `0xCC` on usage page `0xFF00`, frame
@@ -754,7 +764,12 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   lighting set key 40 / get key 3 = `effectId, brightness 0–100, R, G, B`
   (static 1, breathing 2, colour cycle 4). The only lighting device with
   readback, so every write is **verified by reading it back**. Verified:
-  ROG Delta II through its 2.4 GHz dongle (`1AFA`).
+  ROG Delta II through its 2.4 GHz dongle (`1AFA`). The schema lives in
+  each headset's Gear Link module (`bundle-*.js` beside `main-*.js`, as
+  `lightingConfig:{get:{key:3,…},set:{key:40,…}}`): ROG Pelta, Delta II
+  (KJP) and Delta II (PBZ) carry the identical entry and are in the model
+  table "From Gear Link, not yet verified" (#240); Pelta Core, Cetra Open
+  Wireless and Gjallar have no lighting entry.
 - **Software effects.** LampArray devices have no built-in effects, so
   breathing and spectrum cycle are drawn by the service (`SoftwareEffect` /
   `SoftwareEffectLoop`, 25 frames a second). So are Aura monitors not yet
