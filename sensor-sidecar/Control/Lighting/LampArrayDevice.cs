@@ -17,7 +17,7 @@ namespace SensorSidecar.Control.Lighting;
 /// on release, so the device returns to its own effect. While Windows'
 /// Dynamic Lighting is on, Windows drives these devices itself — the device
 /// then reports itself blocked instead of fighting it.
-public sealed class LampArrayDevice : ILightingDevice, IDisposable
+public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IDisposable
 {
     public const ushort LightingPage = 0x59;
     private const ushort LampArrayUsage = 0x01;
@@ -47,6 +47,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     private bool _hostControlled;
     private readonly JsonObject _diagnostics;
     private readonly string _baseName;
+    private readonly OmniMouse? _omni;
 
     public string Id { get; }
     public string Name { get; }
@@ -69,8 +70,9 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
 
     private LampArrayDevice(SafeFileHandle handle, IntPtr preparsed, HidpCaps caps, string id, string baseName,
         string name, string kind, int lamps, ReportField rangeUpdate, ReportField control,
-        Func<bool> dynamicLightingOn, JsonObject diagnostics)
+        Func<bool> dynamicLightingOn, JsonObject diagnostics, OmniMouse? omni)
     {
+        _omni = omni;
         _baseName = baseName;
         _diagnostics = diagnostics;
         _handle = handle;
@@ -107,10 +109,12 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     /// The name shown in the Lighting tab. A receiver's product string names
     /// the dongle, not the device behind it, and laptop keyboards report the
     /// controller chip — both say what the user actually sees instead.
-    public static string DisplayName(ushort vendorId, ushort productId, string? product, string kind)
+    /// `pairedModel`: the mouse the receiver reports, when known (#236).
+    public static string DisplayName(ushort vendorId, ushort productId, string? product, string kind,
+        string? pairedModel = null)
     {
-        if (vendorId == AuraUsb.AsusVendorId && productId == 0x1ACE)
-            return $"{char.ToUpperInvariant(kind[0])}{kind[1..].Replace('_', ' ')} via ROG Omni receiver";
+        if (vendorId == AuraUsb.AsusVendorId && productId == OmniMouse.ReceiverProductId)
+            return pairedModel ?? $"{char.ToUpperInvariant(kind[0])}{kind[1..].Replace('_', ' ')} via ROG Omni receiver";
         if (kind == "keyboard" && product?.StartsWith("ITE Device", StringComparison.OrdinalIgnoreCase) == true)
             return "Laptop keyboard";
         return string.IsNullOrWhiteSpace(product) ? $"LampArray {vendorId:X4}:{productId:X4}" : product;
@@ -120,11 +124,27 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     public static IReadOnlyList<LampArrayDevice> Discover(IReadOnlyList<HidDeviceInfo> hid, Func<bool> dynamicLightingOn)
     {
         var found = new List<LampArrayDevice>();
-        foreach (var info in hid.Where(d => d.UsagePage == LightingPage && d.Usage == LampArrayUsage))
+        var lampArrays = hid.Where(d => d.UsagePage == LightingPage && d.Usage == LampArrayUsage).ToList();
+        // The receiver's LampArray is its paired mouse; the receiver says which.
+        OmniMouse? omni = null;
+        if (lampArrays.Count(d => d.VendorId == AuraUsb.AsusVendorId && d.ProductId == OmniMouse.ReceiverProductId) == 1)
         {
             try
             {
-                if (Open(info, found.Count + 1, found.Select(f => f._baseName).ToList(), dynamicLightingOn) is { } device)
+                omni = OmniMouse.Find(hid);
+            }
+            catch (Exception e)
+            {
+                LightingLog.Discovery($"[rigstats-control] Lighting: Omni receiver mouse not read: {e.Message}");
+            }
+        }
+        foreach (var info in lampArrays)
+        {
+            var receiver = info.VendorId == AuraUsb.AsusVendorId && info.ProductId == OmniMouse.ReceiverProductId;
+            try
+            {
+                if (Open(info, found.Count + 1, found.Select(f => f._baseName).ToList(), dynamicLightingOn,
+                        receiver ? omni : null) is { } device)
                     found.Add(device);
             }
             catch (Exception e)
@@ -138,7 +158,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
     /// `nth` keeps the device id stable across rescans (LightingProvider
     /// matches on it); the shown name is numbered only among equal names.
     private static LampArrayDevice? Open(HidDeviceInfo info, int nth, IReadOnlyList<string> namesSoFar,
-        Func<bool> dynamicLightingOn)
+        Func<bool> dynamicLightingOn, OmniMouse? omni)
     {
         var handle = CreateFile(info.Path, GenericRead | GenericWrite, FileShareReadWrite, IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
         if (handle.IsInvalid)
@@ -166,7 +186,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
             var kind = KindName(Value(preparsed, HidReportType.Feature, LampArrayKindUsage, report));
             var interval = Value(preparsed, HidReportType.Feature, MinUpdateInterval, report);
             var product = Product(handle) ?? $"LampArray {info.VendorId:X4}:{info.ProductId:X4}";
-            var baseName = DisplayName(info.VendorId, info.ProductId, product, kind);
+            var baseName = DisplayName(info.VendorId, info.ProductId, product, kind, omni?.Name);
             var same = namesSoFar.Count(n => n == baseName);
             var name = same == 0 ? baseName : $"{baseName} ({same + 1})";
             LightingLog.Discovery($"[rigstats-control] Lighting: LampArray '{product}' 0x{info.VendorId:X4}:0x{info.ProductId:X4}, " +
@@ -190,7 +210,7 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
                     new KeyValuePair<string, JsonNode?>($"0x{f.Key:X2}", $"{f.Value.Type} 0x{f.Value.ReportId:X2}"))),
             };
             return new LampArrayDevice(handle, preparsed, caps, $"lamparray-{info.VendorId:x4}-{info.ProductId:x4}-{nth}",
-                baseName, name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn, diagnostics);
+                baseName, name, kind, Math.Max(1, lamps), rangeUpdate, control, dynamicLightingOn, diagnostics, omni);
         }
         finally
         {
@@ -212,7 +232,20 @@ public sealed class LampArrayDevice : ILightingDevice, IDisposable
         _loop.Start(effect, red, green, blue);
     }
 
-    public JsonObject Diagnostics() => _diagnostics.DeepClone().AsObject();
+    public JsonObject Diagnostics()
+    {
+        var diagnostics = _diagnostics.DeepClone().AsObject();
+        if (_omni is not null)
+            diagnostics["omni_mouse"] = _omni.Diagnostics();
+        return diagnostics;
+    }
+
+    public bool HasWdl => _omni?.WdlVerified == true;
+
+    public bool? WdlOn() => _omni?.WdlOn();
+
+    public void EnableWdl() =>
+        (_omni ?? throw new InvalidOperationException($"{Name} has no lighting mode to switch.")).SetWdl(true);
 
     /// Back to the device's own effect.
     public void Release()

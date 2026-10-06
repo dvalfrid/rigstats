@@ -700,8 +700,15 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   (`0xFF00`, report id 1): `a0 00` → paired devices
   (`01 00 94 1A 03 05`: one device, product id `0x1A94` little-endian, on
   report id 3 — so the mouse channel is found, not assumed), `a1 01` →
-  receiver firmware (`04 00 07 00`, format unconfirmed). Not used by the
-  service yet (#236).
+  receiver firmware (`04 00 07 00`, format unconfirmed).
+  The service uses this (`OmniMouse`, #236): the receiver's paired product id
+  names the mouse's LampArray (model table, else "Mouse via ROG Omni
+  receiver"); the WDL state goes out as `wdl_on` in the capabilities, and
+  `aura_enable_wdl` switches it on — only from the Lighting tab's button,
+  only for verified models, confirmed by the echo, then the current
+  lighting is applied. The channel is opened per question: Windows queues
+  every input report for every open handle, so a long-lived handle first
+  read replies to Gear Link's own questions (a stale WDL state).
 - **ASUS keyboards, TUF protocol family** (`AsusKeyboardDevice`, #213) —
   OpenRGB's `AsusAuraTUFKeyboardController` models (ROG Azoth, Falchion,
   Strix Flare / Flare II, Strix Scope / RX / NX / II / II 96, TUF K1/K3/

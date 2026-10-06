@@ -887,10 +887,29 @@ fn lighting_tab(
                 );
             }
             // An ASUS Dynamic Lighting device in "Device Lighting" mode takes
-            // every write and ignores it, and can't report its colour — so
-            // the service can't detect it; say where the switch is. Not on
-            // laptop keyboards: Gear Link doesn't manage those.
-            if device.blocked.is_none()
+            // every write and ignores it. Where the service can read that mode
+            // (#236) it offers the switch; elsewhere say where the switch is.
+            // Not on laptop keyboards: Gear Link doesn't manage those.
+            if device.blocked.is_none() && device.wdl_on == Some(false) {
+                ui.label(
+                    egui::RichText::new(
+                        "Ignores lighting changes: its Cross-device Lighting Toggle is set to \
+                         \"Device Lighting\".",
+                    )
+                    .size(11.0)
+                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
+                );
+                if theme::dialog_btn_secondary(ui, "Let RIGStats control it", dc)
+                    .on_hover_text(
+                        "Switches the device to \"Aura Sync & Windows Dynamic Lighting\" — \
+                         the same setting as in Gear Link or Armoury Crate, saved in the device.",
+                    )
+                    .clicked()
+                {
+                    let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
+                }
+            } else if device.blocked.is_none()
+                && device.wdl_on.is_none()
                 && device.id.starts_with("lamparray-0b05-")
                 && device.kind != "keyboard"
             {

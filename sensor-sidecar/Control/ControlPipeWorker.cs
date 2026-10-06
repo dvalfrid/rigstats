@@ -338,6 +338,7 @@ public sealed class ControlPipeWorker(
                 "reset_profile" => await HandleResetProfileAsync(request, ct),
                 "aura_preview" => HandleAuraPreview(request),
                 "lamp_toggle" => HandleLampToggle(request),
+                "aura_enable_wdl" => HandleAuraEnableWdl(request),
                 "hue_discover" => await HandleHueDiscoverAsync(request, ct),
                 "hue_pair" => await HandleHuePairAsync(request, ct),
                 "hue_refresh" => await HandleHueRefreshAsync(request, ct),
@@ -489,6 +490,17 @@ public sealed class ControlPipeWorker(
         lighting.ToggleLamp() is { } on
             ? ControlResponse.Ok(request.Id, new { ok = true, on })
             : ControlResponse.Fail(request.Id, "no_lamp", "No lighting device with a lamp is connected.");
+
+    /// `{"id": "lamparray-0b05-1ace-2"}` — lets the device follow lighting
+    /// writes (#236). Changes a setting saved in the device, so only on the
+    /// user's request from the Lighting tab.
+    private ControlResponse HandleAuraEnableWdl(ControlRequest request)
+    {
+        var id = request.Params?.GetProperty("id").GetString()
+            ?? throw new JsonException("missing id.");
+        lighting.EnableWdl(id);
+        return ControlResponse.Ok(request.Id, new { ok = true });
+    }
 
     /// `{"ip": "192.168.1.20"}` (optional) — the Hue Bridges on the network
     /// (mDNS), or only the one at `ip`.

@@ -196,6 +196,58 @@ public class LightingProviderTests
         }
     }
 
+    private sealed class FakeWdlMouse(bool verified = true) : ILightingDevice, IWdlDevice
+    {
+        public bool On { get; private set; }
+        public string Id => "lamparray-0b05-1ace-2";
+        public string Name => "ROG Harpe Ace Aim Lab Edition";
+        public string Kind => "mouse";
+        public string Firmware => "";
+        public string? Blocked => null;
+        public IReadOnlyList<AuraZone> Zones { get; } = [new("lamps", "1 lamp", true, 0, 1)];
+        public List<(AuraEffect Effect, byte R, byte G, byte B)> Applied { get; } = [];
+        public void Apply(AuraEffect effect, byte red, byte green, byte blue) => Applied.Add((effect, red, green, blue));
+        public void Release() { }
+        public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
+        public bool HasWdl => verified;
+        public bool? WdlOn() => On;
+        public void EnableWdl() => On = true;
+    }
+
+    [Fact]
+    public void Probe_reports_the_wdl_state_only_for_devices_that_offer_the_switch()
+    {
+        var devices = Provider(new FakeWdlMouse(), new FakeDevice()).Probe().Details!["devices"]!.AsArray();
+
+        Assert.False(devices[0]!["wdl_on"]!.GetValue<bool>());
+        Assert.Null(devices[1]!["wdl_on"]);
+    }
+
+    [Fact]
+    public void Enabling_wdl_switches_the_device_and_gives_it_the_current_lighting()
+    {
+        var mouse = new FakeWdlMouse();
+        var provider = Provider(mouse);
+        provider.Apply(Lights("static", "#00ff00"));
+        mouse.Applied.Clear();
+
+        provider.EnableWdl(mouse.Id);
+
+        Assert.True(mouse.On);
+        Assert.Equal((AuraEffect.Static, (byte)0, (byte)255, (byte)0), Assert.Single(mouse.Applied));
+    }
+
+    [Fact]
+    public void Enabling_wdl_on_an_unverified_or_unknown_device_is_refused()
+    {
+        var unverified = new FakeWdlMouse(verified: false);
+        var provider = Provider(unverified);
+
+        Assert.Throws<InvalidOperationException>(() => provider.EnableWdl(unverified.Id));
+        Assert.Throws<InvalidOperationException>(() => provider.EnableWdl("nope"));
+        Assert.False(unverified.On);
+    }
+
     private static LightingProvider Provider(params ILightingDevice[] devices) =>
         new(devices, "No lighting controller found.", () => null, dryRun: false);
 
@@ -763,6 +815,84 @@ public class LampArrayTests
         string kind, string expected)
     {
         Assert.Equal(expected, LampArrayDevice.DisplayName((ushort)vendor, (ushort)product, productString, kind));
+    }
+
+    [Fact]
+    public void The_receivers_paired_mouse_names_its_lamp_array()
+    {
+        Assert.Equal("ROG Harpe Ace Aim Lab Edition",
+            LampArrayDevice.DisplayName(0x0B05, 0x1ACE, "ROG OMNI RECEIVER", "mouse", "ROG Harpe Ace Aim Lab Edition"));
+    }
+}
+
+/// <summary>
+/// The ROG Omni receiver's paired-device list and the mouse's WDL state
+/// (#236) — replies recorded from a ROG Harpe Ace Aim Lab Edition.
+/// </summary>
+public class OmniMouseTests
+{
+    private static byte[] Reply(params byte[] bytes)
+    {
+        var report = new byte[64];
+        bytes.CopyTo(report, 0);
+        return report;
+    }
+
+    [Fact]
+    public void Paired_list_gives_the_mouse_product_id_and_its_channel()
+    {
+        var paired = OmniMouse.ParsePaired(Reply(0x01, 0xA0, 0x00, 0x01, 0x00, 0x94, 0x1A, 0x03, 0x05));
+
+        Assert.Equal(new OmniMouse.Paired(0x1A94, 3), Assert.Single(paired));
+        Assert.Equal("ROG Harpe Ace Aim Lab Edition", OmniMouse.Models[0x1A94].Name);
+    }
+
+    [Fact]
+    public void Paired_list_ignores_other_replies_and_empty_slots()
+    {
+        Assert.Empty(OmniMouse.ParsePaired(Reply(0x01, 0xA1, 0x01, 0x00, 0x00, 0x04)));
+        Assert.Empty(OmniMouse.ParsePaired(Reply(0x01, 0xA0, 0x00, 0x00)));
+        Assert.Empty(OmniMouse.ParsePaired(Reply(0x01, 0xA0, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, 0x05)));
+    }
+
+    /// Replies queued in order; records what was written.
+    private sealed class QueuedHid(params byte[][] replies) : IHidDevice
+    {
+        private readonly Queue<byte[]> _replies = new(replies);
+        public List<byte[]> Written { get; } = [];
+        public void Write(byte[] report) => Written.Add(report);
+        public byte[]? Read(TimeSpan timeout) => _replies.Count > 0 ? _replies.Dequeue() : null;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void Ask_skips_replies_to_other_questions()
+    {
+        // Gear Link's getMouseExistInfo reply (12 00 02) shares three bytes
+        // with the WDL reply (12 00 09); only the full echo counts.
+        var hid = new QueuedHid(
+            Reply(0x03, 0x12, 0x07, 0x00, 0x63),
+            Reply(0x03, 0x12, 0x00, 0x02, 0x00, 0x01),
+            Reply(0x03, 0x12, 0x00, 0x09, 0x00, 0x00));
+
+        var reply = OmniMouse.Ask(hid, [0x03, 0x12, 0x00, 0x09, 0x00]);
+
+        Assert.False(OmniMouse.ParseWdl(reply!, 3));
+    }
+
+    [Fact]
+    public void Ask_gives_null_when_the_mouse_doesnt_answer()
+    {
+        Assert.Null(OmniMouse.Ask(new QueuedHid(), [0x03, 0x51, 0x42, 0x00, 0x00, 0x01]));
+    }
+
+    [Fact]
+    public void Wdl_reply_reads_on_and_off()
+    {
+        Assert.True(OmniMouse.ParseWdl(Reply(0x03, 0x12, 0x00, 0x09, 0x00, 0x01), 3));
+        Assert.False(OmniMouse.ParseWdl(Reply(0x03, 0x12, 0x00, 0x09, 0x00, 0x00), 3));
+        Assert.Null(OmniMouse.ParseWdl(Reply(0x03, 0x12, 0x00, 0x02, 0x00, 0x01), 3));
+        Assert.Null(OmniMouse.ParseWdl(Reply(0x02, 0x12, 0x00, 0x09, 0x00, 0x01), 3));
     }
 }
 

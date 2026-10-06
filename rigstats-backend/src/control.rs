@@ -254,6 +254,11 @@ pub struct AuraDeviceCap {
     /// for) — the tray or its own button may differ from the profile.
     #[serde(default)]
     pub lamp_on: Option<bool>,
+    /// The device's own lighting mode, for devices that offer switching it
+    /// (#236): `Some(false)` = "Device Lighting", every lighting write is
+    /// ignored until [`ControlCmd::EnableWdl`]; `None` = not offered or no answer.
+    #[serde(default)]
+    pub wdl_on: Option<bool>,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }
@@ -817,6 +822,9 @@ pub enum ControlCmd {
     /// Switch the desk lamp(s) off, or back on as they last were (the tray).
     /// Not saved in any profile.
     ToggleLamp,
+    /// Let this lighting device (id) follow lighting writes — switches a
+    /// setting saved in the device, so only on the user's request.
+    EnableWdl(String),
     /// Delete a custom profile; the service applies whichever profile becomes
     /// active if it was the active one.
     DeleteProfile(String),
@@ -1301,6 +1309,21 @@ async fn handle_cmd(
         }
         ControlCmd::ToggleLamp => {
             request(writer, reader, next_id, "lamp_toggle", None, event_tx, dir).await?;
+            Ok(())
+        }
+        ControlCmd::EnableWdl(id) => {
+            request(
+                writer,
+                reader,
+                next_id,
+                "aura_enable_wdl",
+                Some(serde_json::json!({ "id": id })),
+                event_tx,
+                dir,
+            )
+            .await?;
+            // The Lighting tab shows the new mode from the capabilities.
+            fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
             Ok(())
         }
         ControlCmd::DeleteProfile(id) => {
@@ -2290,6 +2313,9 @@ mod tests {
                         "id": "aura-usb-19af", "name": "ASUS Aura motherboard controller", "kind": "motherboard",
                         "firmware": "AULA3-AR32-0304",
                         "zones": [{"id": "argb1", "name": "ARGB header 1", "addressable": true, "leds": 1}],
+                    }, {
+                        "id": "lamparray-0b05-1ace-2", "name": "ROG Harpe Ace Aim Lab Edition", "kind": "mouse",
+                        "wdl_on": false, "zones": [],
                     }],
                 }),
             )],
@@ -2298,6 +2324,9 @@ mod tests {
         let caps = supported.aura_caps().unwrap();
         assert_eq!(caps.devices[0].kind, "motherboard");
         assert_eq!(caps.devices[0].zones[0].id, "argb1");
+        // Absent = not offered; false = the device ignores lighting (#236).
+        assert_eq!(caps.devices[0].wdl_on, None);
+        assert_eq!(caps.devices[1].wdl_on, Some(false));
         assert_eq!(supported.aura_unavailable(), None);
 
         let blocked = ControlState {

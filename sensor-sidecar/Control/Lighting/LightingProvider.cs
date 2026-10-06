@@ -246,6 +246,8 @@ public sealed class LightingProvider : IControlProvider
                     // What the lamp shows now — the tray or its own button may
                     // have switched it since the profile set it.
                     ["lamp_on"] = d is ILampDevice { HasLamp: true } lamp ? LampOnOrNull(lamp) : null,
+                    // Off: the device ignores every lighting write until switched (#236).
+                    ["wdl_on"] = d is IWdlDevice { HasWdl: true } wdl ? wdl.WdlOn() : null,
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,
@@ -380,6 +382,24 @@ public sealed class LightingProvider : IControlProvider
         foreach (var lamp in lamps)
             lamp.SwitchLamp(on);
         return on;
+    }
+
+    /// Switches a device's own lighting mode so it follows lighting writes
+    /// ("Aura Sync & Windows Dynamic Lighting"), then gives it the current
+    /// lighting. Saved in the device; asked for from the Lighting tab.
+    public void EnableWdl(string deviceId)
+    {
+        if (_devices.FirstOrDefault(d => d.Id == deviceId) is not IWdlDevice { HasWdl: true } device)
+            throw new InvalidOperationException($"No device '{deviceId}' with a lighting mode to switch.");
+        var name = ((ILightingDevice)device).Name;
+        if (_dryRun)
+        {
+            SidecarLog.Log($"[rigstats-control] dry-run: {name} lighting mode -> Aura Sync & Windows Dynamic Lighting");
+            return;
+        }
+        device.EnableWdl();
+        SidecarLog.Log($"[rigstats-control] Lighting: {name} switched to Aura Sync & Windows Dynamic Lighting.");
+        ApplyCurrent([(ILightingDevice)device]);
     }
 
     private static bool? LampOnOrNull(ILampDevice lamp)
