@@ -690,9 +690,23 @@ fn collect_and_open_diagnostics_impl(
         .unwrap_or_default()
     };
 
-    // Recent Application Event Log entries for rigstats (crashes, errors).
+    // Recent Application Event Log entries for rigstats: first its crashes
+    // (#242) — ".NET Runtime" 1026 carries the managed stack of a native
+    // fault that ended the process before any of our handlers ran,
+    // "Application Error" 1000 / WER 1001 the faulting module — then other
+    // errors.
     let event_log_txt = run_ps_capture(
         "try { \
+          $crashes = Get-WinEvent -FilterHashtable @{LogName='Application'; \
+            ProviderName='.NET Runtime','Application Error','Windows Error Reporting'; \
+            Id=1026,1000,1001;StartTime=(Get-Date).AddDays(-30)} -EA Stop | \
+            Where-Object { $_.Message -match 'rigstats' } | Select-Object -First 30 \
+            TimeCreated,Id,ProviderName,Message; \
+          if ($crashes) { '== RIGStats crashes, last 30 days'; $crashes | Format-List | Out-String -Width 400 } \
+          else { 'No RIGStats crashes in the last 30 days.' } \
+        } catch { 'No RIGStats crashes in the last 30 days.' }; \
+        '== Other RIGStats errors'; \
+        try { \
           $evts = Get-WinEvent -FilterHashtable @{LogName='Application';ProviderName='rigstats*';Level=1,2} \
             -MaxEvents 50 -EA Stop | \
             Select-Object TimeCreated,Id,LevelDisplayName,Message; \

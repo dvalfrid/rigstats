@@ -389,7 +389,7 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | `hardware.json` | WMI/CIM snapshot: OS, CPU, GPU, motherboard, RAM | Hardware identification and brand detection |
 | `sidecar-service.txt` | Output of `sc query` + `sc qc` for `rigstats-sensor` | Diagnose sidecar autostart and service registration failures |
 | `environment.txt` | `USERNAME`, `APPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE`, etc. | Diagnose child/standard account issues where APPDATA may be redirected |
-| `event-log.txt` | Recent Windows Application Event Log entries matching RIGStats | OS-level crash records not visible in the in-app debug log |
+| `event-log.txt` | RIGStats crashes of the last 30 days and other recent errors from the Windows Application Event Log | Crashes a log can't record itself (e.g. inside a driver), with the stack |
 | `sysinfo.json` | sysinfo snapshot: CPU, memory, disks, network, ping target | Verify what sysinfo sees on the machine |
 | `displays.json` | Connected monitors (position, resolution) and which one was auto-selected for the current dashboard profile | Diagnose window placement and wrong-monitor issues |
 | `gpu-engine.txt` | Raw Windows `\GPU Engine(*)` performance-counter instances (per-process, per physical GPU) plus the DXGI adapter list | Diagnose the GPU Apps panel — which app is attributed to which engine/GPU. Doubles as a ready-made regression fixture (`src-egui/fixtures/gpu-engine/`) |

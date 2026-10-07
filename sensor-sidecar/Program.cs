@@ -28,6 +28,11 @@ if (DataDirectory.EnsureSecure(DataDirectory.DefaultPath) is { } insecure)
     SidecarLog.Log($"[rigstats-sensor] The data folder could not be secured ({insecure}) — running without hardware control.");
 }
 
+// Earlier crashes Windows recorded but this log couldn't (a native fault ends
+// the process before any handler runs, #242) — copied in once.
+if (SidecarLog.FileEnabled)
+    LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"));
+
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options =>
 {
@@ -211,6 +216,44 @@ catch (Exception e)
 finally
 {
     safetyGuard.ReleaseAllToFirmware();
+}
+
+// Reads ".NET Runtime" 1026 / "Application Error" 1000 entries since the last
+// one logged and writes this service's into its log; never fails the start.
+static void LogEarlierCrashes(string markPath)
+{
+    try
+    {
+        var now = DateTimeOffset.Now;
+        var since = CrashReport.ReadMark(markPath) ?? now - CrashReport.FirstLookBack;
+        var window = (long)Math.Clamp((now - since).TotalMilliseconds, 0, TimeSpan.FromDays(30).TotalMilliseconds);
+        var query = new System.Diagnostics.Eventing.Reader.EventLogQuery("Application",
+            System.Diagnostics.Eventing.Reader.PathType.LogName,
+            "*[System[Provider[@Name='.NET Runtime' or @Name='Application Error']"
+            + $" and (EventID={CrashReport.DotNetRuntimeId} or EventID={CrashReport.ApplicationErrorId})"
+            + $" and TimeCreated[timediff(@SystemTime) <= {window}]]]");
+        var events = new List<CrashEvent>();
+        using (var reader = new System.Diagnostics.Eventing.Reader.EventLogReader(query))
+        {
+            while (reader.ReadEvent() is { } record)
+            {
+                using (record)
+                {
+                    if (record.TimeCreated is { } time && record.FormatDescription() is { } message)
+                        events.Add(new CrashEvent(new DateTimeOffset(time), record.Id, message));
+                }
+            }
+        }
+        var lines = CrashReport.Lines(events, since);
+        foreach (var line in lines)
+            SidecarLog.Log(line);
+        if (lines.Count > 0)
+            CrashReport.WriteMark(markPath, events.Where(e => e.Time > since).Max(e => e.Time));
+    }
+    catch (Exception e)
+    {
+        SidecarLog.Log($"[rigstats-sensor] Earlier crashes not read from the event log: {e.Message}");
+    }
 }
 
 // The ASUS receivers' read-only replies for the diagnostics file; never

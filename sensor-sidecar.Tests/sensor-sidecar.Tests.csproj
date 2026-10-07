@@ -29,6 +29,7 @@
     <Compile Include="..\sensor-sidecar\SensorWorker.cs" Link="SensorWorker.cs" />
     <Compile Include="..\sensor-sidecar\Control\ControlProtocol.cs" Link="Control\ControlProtocol.cs" />
     <Compile Include="..\sensor-sidecar\Control\SidecarLog.cs" Link="Control\SidecarLog.cs" />
+    <Compile Include="..\sensor-sidecar\Control\CrashReport.cs" Link="Control\CrashReport.cs" />
     <Compile Include="..\sensor-sidecar\Control\HardwareHost.cs" Link="Control\HardwareHost.cs" />
     <Compile Include="..\sensor-sidecar\Control\ControlBroker.cs" Link="Control\ControlBroker.cs" />
     <Compile Include="..\sensor-sidecar\Control\SafetyGuard.cs" Link="Control\SafetyGuard.cs" />
