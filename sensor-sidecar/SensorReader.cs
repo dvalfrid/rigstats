@@ -36,6 +36,9 @@ public sealed record MbVoltage(string Label, float Volts);
 
 public static class SensorReader
 {
+
+    private const float BytesPerMb = 1024f * 1024f;
+
     private static readonly string[] CpuTempNames =
         ["Core (Tctl/Tdie)", "CPU Package", "Core Average"];
 
@@ -141,14 +144,10 @@ public static class SensorReader
                     if (s.Name.Contains("GPU Fan"))
                         fan = fan.HasValue ? (fan + s.Value) / 2f : s.Value;
                     break;
-                case SensorType.SmallData:
-                    if (s.Name == "GPU Memory Used") vramUsed = s.Value;
-                    else if (s.Name == "GPU Memory Total") vramTotal = s.Value;
-                    break;
                 case SensorType.Data:
-                    // Some drivers report VRAM in GB (Data) instead of MB (SmallData)
-                    if (s.Name == "GPU Memory Used") vramUsed = s.Value * 1024f;
-                    else if (s.Name == "GPU Memory Total") vramTotal = s.Value * 1024f;
+                    // Bytes since LHM 0.9.7 (before: SmallData in MB, Data in GB).
+                    if (s.Name == "GPU Memory Used") vramUsed = s.Value / BytesPerMb;
+                    else if (s.Name == "GPU Memory Total") vramTotal = s.Value / BytesPerMb;
                     break;
             }
         }
