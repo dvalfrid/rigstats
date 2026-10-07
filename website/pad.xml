@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.43.0</Program_Version>
+		<Program_Version>1.44.0</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
-		<Program_Release_Day>04</Program_Release_Day>
+		<Program_Release_Day>07</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>lighting: drive philips hue rooms through the hue bridge; control: fall back to an available power plan when the profile's plan is missing; control: keep the service pipes between the app and the service; control: restrict the service data folder to the service; gpu: end the ADLX session on stop and recover when the driver refuses a new one; stability: log every crash and restart tasks that panic; updater: verify the downloaded installer before launching it</Program_Change_Info>
+		<Program_Change_Info>control: NVIDIA desktop GPU power limit through NVML; gpu: show VRAM temperature in the GPU panel and the overlay; lighting: add ASUS keyboards and headsets from Gear Link's device data; lighting: name every ROG mouse on the Omni receiver and offer the WDL switch; lighting: name the Omni receiver's mouse and switch its lighting mode; lighting: probe ASUS receivers in diagnostics and add a device report form; overlay: align values in columns with dividers and configurable column count; control: keep an unavailable GPU driver from blocking profiles; control: log a refused Control Center client once, not on every retry; control: recover from an unreadable profiles.json instead of locking the Control Center; control: restart the service when the fan curve loop hangs; lighting: name LampArray devices clearly and explain the ASUS lighting toggle; sensor: drop telemetry clients that stop reading and allow more of them; sensor: keep rigstats-sensor.log bounded while the service runs; sidecar: log earlier crashes the service could not record itself</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.43.0/RIGStats_1.43.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.44.0/RIGStats_1.44.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
