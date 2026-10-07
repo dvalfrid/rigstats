@@ -8,6 +8,31 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.44.0](https://github.com/dvalfrid/rigstats/compare/v1.43.0...v1.44.0) (2026-10-07)
+
+
+### Features
+
+* **control:** NVIDIA desktop GPU power limit through NVML ([eb9ce05](https://github.com/dvalfrid/rigstats/commit/eb9ce05794ce3d00c13db28ae4b5d70a63c0e26f)), closes [#210](https://github.com/dvalfrid/rigstats/issues/210)
+* **gpu:** show VRAM temperature in the GPU panel and the overlay ([732b890](https://github.com/dvalfrid/rigstats/commit/732b89016723670ff851cc70b62cf678f83385d7))
+* **lighting:** add ASUS keyboards and headsets from Gear Link's device data ([2034866](https://github.com/dvalfrid/rigstats/commit/20348667a0a9a675e1115fc8fb119e6d0bf6941d)), closes [#240](https://github.com/dvalfrid/rigstats/issues/240)
+* **lighting:** name every ROG mouse on the Omni receiver and offer the WDL switch ([8654a92](https://github.com/dvalfrid/rigstats/commit/8654a92710e9bbc09e1bb8ec78c5bcab0ac79a9b)), closes [#238](https://github.com/dvalfrid/rigstats/issues/238)
+* **lighting:** name the Omni receiver's mouse and switch its lighting mode ([66dcdae](https://github.com/dvalfrid/rigstats/commit/66dcdae145a0e46c7d698b90cd6cce7b4553d3cb)), closes [#236](https://github.com/dvalfrid/rigstats/issues/236)
+* **lighting:** probe ASUS receivers in diagnostics and add a device report form ([430b476](https://github.com/dvalfrid/rigstats/commit/430b476b3e6e75e87a9e9d7e93cad4065399ff15)), closes [#239](https://github.com/dvalfrid/rigstats/issues/239)
+* **overlay:** align values in columns with dividers and configurable column count ([3329b0a](https://github.com/dvalfrid/rigstats/commit/3329b0a55ae084bdf861df3d728f509c213829c0)), closes [#235](https://github.com/dvalfrid/rigstats/issues/235)
+
+
+### Bug Fixes
+
+* **control:** keep an unavailable GPU driver from blocking profiles ([cbc4ac8](https://github.com/dvalfrid/rigstats/commit/cbc4ac8b80982ab5b2be00afa18c05039075d179)), closes [#241](https://github.com/dvalfrid/rigstats/issues/241)
+* **control:** log a refused Control Center client once, not on every retry ([ea99ea0](https://github.com/dvalfrid/rigstats/commit/ea99ea05e6ebd7fffbea49b21ddcfdf9a45bfd3c)), closes [#231](https://github.com/dvalfrid/rigstats/issues/231)
+* **control:** recover from an unreadable profiles.json instead of locking the Control Center ([1ecd7dc](https://github.com/dvalfrid/rigstats/commit/1ecd7dcf2a4a3f669763977fccf9717b7be896bd)), closes [#221](https://github.com/dvalfrid/rigstats/issues/221)
+* **control:** restart the service when the fan curve loop hangs ([0209d5b](https://github.com/dvalfrid/rigstats/commit/0209d5b0079acba652da9aabfaf691939add9cfb)), closes [#222](https://github.com/dvalfrid/rigstats/issues/222)
+* **lighting:** name LampArray devices clearly and explain the ASUS lighting toggle ([95aabc2](https://github.com/dvalfrid/rigstats/commit/95aabc26399b6eb91cb1b24a01cbe7d0fb39ea7a)), closes [#237](https://github.com/dvalfrid/rigstats/issues/237)
+* **sensor:** drop telemetry clients that stop reading and allow more of them ([bb9f58f](https://github.com/dvalfrid/rigstats/commit/bb9f58f4f90c5309600dfc5fcf8634f5af4681ff)), closes [#232](https://github.com/dvalfrid/rigstats/issues/232)
+* **sensor:** keep rigstats-sensor.log bounded while the service runs ([2ab6794](https://github.com/dvalfrid/rigstats/commit/2ab6794d2d387dcc441ff9d73dadc4b2825163bf)), closes [#223](https://github.com/dvalfrid/rigstats/issues/223)
+* **sidecar:** log earlier crashes the service could not record itself ([059292f](https://github.com/dvalfrid/rigstats/commit/059292f41a0014b6a34214d5fd5b6ab764a794ac)), closes [#242](https://github.com/dvalfrid/rigstats/issues/242)
+
 ## [1.43.0](https://github.com/dvalfrid/rigstats/compare/v1.42.1...v1.43.0) (2026-10-04)
 
 
