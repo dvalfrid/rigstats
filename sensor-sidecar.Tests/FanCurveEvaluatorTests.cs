@@ -75,8 +75,8 @@ public class FanCurveEvaluatorTests
         {
             GpuDevices =
             [
-                new GpuDevice("iGPU", "test", null, 40, null, null, null, null, null, null, null, null, null),
-                new GpuDevice("dGPU", "test", null, 72, null, null, null, null, null, null, null, null, null),
+                new GpuDevice("iGPU", "test", null, 40, null, null, null, null, null, null, null, null, null, null),
+                new GpuDevice("dGPU", "test", null, 72, null, null, null, null, null, null, null, null, null, null),
             ],
         };
 

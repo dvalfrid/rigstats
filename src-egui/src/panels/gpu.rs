@@ -36,8 +36,9 @@ pub fn draw(
     th: &theme::AppTheme,
     warn: u8,
     crit: u8,
-    hotspot_warn: u8,
-    hotspot_crit: u8,
+    // (warn, crit) for the hotspot and VRAM temperatures.
+    hotspot: (u8, u8),
+    mem: (u8, u8),
     sc: f32,
     // The active profile's power limit for this GPU (#190), shown under POWER.
     power_limit_pct: Option<i32>,
@@ -139,17 +140,20 @@ pub fn draw(
                 .gpu_hotspot
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
             let hotspot_c = stats.gpu_hotspot.map_or(theme::C_UNAVAILABLE, |_| {
-                temp_color(stats.gpu_hotspot, hotspot_warn, hotspot_crit)
+                temp_color(stats.gpu_hotspot, hotspot.0, hotspot.1)
             });
+            // VRAM temperature: its own column only on GPUs that report it,
+            // so the grid stays as it was everywhere else.
+            let mem_t = stats.gpu_mem_temp;
             let freq_s = fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2);
             let pwr_s = fmt_opt(stats.gpu_power, " W", 0);
             let freq_c = theme::avail_color(&stats.gpu_freq_mhz, theme::C_TEXT);
             let pwr_c = theme::avail_color(&stats.gpu_power, theme::C_TEXT);
 
-            // 4-column grid: TEMP | HOT | FREQ | POWER
+            // TEMP | HOT | [MEM] | FREQ | POWER
             ui.vertical(|ui| {
                 egui::Grid::new("gpu_meta")
-                    .num_columns(4)
+                    .num_columns(if mem_t.is_some() { 5 } else { 4 })
                     .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
                         ui.label(
@@ -162,6 +166,9 @@ pub fn draw(
                                 .size(11.0 * sc)
                                 .color(theme::avail_color(&stats.gpu_hotspot, th.stat_label)),
                         );
+                        if mem_t.is_some() {
+                            ui.label(RichText::new("MEM").size(11.0 * sc).color(th.stat_label));
+                        }
                         ui.label(
                             RichText::new("FREQ")
                                 .size(11.0 * sc)
@@ -175,11 +182,18 @@ pub fn draw(
                         ui.end_row();
                         ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
                         ui.label(RichText::new(&hotspot_s).size(14.0 * sc).color(hotspot_c));
+                        if let Some(t) = mem_t {
+                            ui.label(
+                                RichText::new(format!("{t:.0}°C"))
+                                    .size(14.0 * sc)
+                                    .color(temp_color(mem_t, mem.0, mem.1)),
+                            );
+                        }
                         ui.label(RichText::new(&freq_s).size(14.0 * sc).color(freq_c));
                         ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(pwr_c));
                         ui.end_row();
                         if let Some(pct) = power_limit_pct {
-                            for _ in 0..3 {
+                            for _ in 0..if mem_t.is_some() { 4 } else { 3 } {
                                 ui.label("");
                             }
                             ui.label(

@@ -30,6 +30,7 @@ public class SerializationTests
                 Load: 33.0f,
                 Temp: 60.0f,
                 HotspotTemp: 72.0f,
+                MemTemp: 78.0f,
                 CoreClock: 2400.0f,
                 MemClock: 11000.0f,
                 Power: 180.0f,
@@ -73,6 +74,7 @@ public class SerializationTests
     [InlineData("load")]
     [InlineData("temp")]
     [InlineData("hotspot_temp")]
+    [InlineData("mem_temp")]
     [InlineData("core_clock")]
     [InlineData("mem_clock")]
     [InlineData("power")]

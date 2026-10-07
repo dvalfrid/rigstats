@@ -3054,8 +3054,8 @@ impl RigStatsApp {
                                         &app_theme,
                                         self.runtime.thresholds.gpu.0,
                                         self.runtime.thresholds.gpu.1,
-                                        self.runtime.thresholds.gpu_hotspot.0,
-                                        self.runtime.thresholds.gpu_hotspot.1,
+                                        self.runtime.thresholds.gpu_hotspot,
+                                        self.runtime.thresholds.gpu_mem,
                                         scale,
                                         self.runtime.control.active_gpu_limit(&stats.gpu_name),
                                     );

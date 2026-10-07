@@ -29,6 +29,8 @@ pub struct PanelThresholds {
     pub ram_load: (u8, u8),
     pub disk_usage: (u8, u8),
     pub gpu_hotspot: (u8, u8),
+    /// VRAM temperature; GDDR6X/GDDR7 throttle around 105-110 °C.
+    pub gpu_mem: (u8, u8),
     pub ram: (u8, u8),
     pub disk: (u8, u8),
     pub mb: (u8, u8),
@@ -46,6 +48,7 @@ impl Default for PanelThresholds {
             ram_load: (80, 95),
             disk_usage: (75, 90),
             gpu_hotspot: (90, 105),
+            gpu_mem: (90, 100),
             ram: (60, 70),
             disk: (50, 60),
             mb: (70, 90),
@@ -71,6 +74,7 @@ impl PanelThresholds {
             ram_load: get("ram_load", def.ram_load),
             disk_usage: get("disk_usage", def.disk_usage),
             gpu_hotspot: def.gpu_hotspot, // not user-configurable
+            gpu_mem: def.gpu_mem,         // not user-configurable
             ram: get("ram", def.ram),
             disk: get("disk", def.disk),
             mb: def.mb, // not user-configurable
@@ -170,8 +174,8 @@ impl DashboardView<'_> {
                     self.app_theme,
                     self.thresholds.gpu.0,
                     self.thresholds.gpu.1,
-                    self.thresholds.gpu_hotspot.0,
-                    self.thresholds.gpu_hotspot.1,
+                    self.thresholds.gpu_hotspot,
+                    self.thresholds.gpu_mem,
                     sc,
                     self.control.active_gpu_limit(&self.latest.gpu_name),
                 )

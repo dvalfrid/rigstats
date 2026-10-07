@@ -86,7 +86,7 @@ public static class FanSamples
             CpuPower: null,
             GpuDevices: gpu is null
                 ? []
-                : [new GpuDevice("GPU", "test", null, gpu, null, null, null, null, null, null, null, null, null)],
+                : [new GpuDevice("GPU", "test", null, gpu, null, null, null, null, null, null, null, null, null, null)],
             DiskTemps: [],
             RamTemp: null,
             MbFans: [],

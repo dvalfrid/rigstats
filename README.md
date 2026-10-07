@@ -241,6 +241,7 @@ Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (se
 | Core load (%) | LHM — `GPU Core` load |
 | Core temperature (°C) | LHM — `GPU Core` temperature |
 | Hot spot temperature (°C) | LHM — `GPU Hot Spot` temperature |
+| VRAM temperature (°C) | LHM — `GPU Memory Junction` (NVIDIA) / `GPU Memory` (AMD) temperature — its MEM column appears only on GPUs that report it |
 | Core clock (GHz) | LHM — `GPU Core` clock |
 | Memory clock (MHz) | LHM — `GPU Memory` clock — collected but not yet shown in the panel |
 | Package power (W) | LHM — `GPU Package` power |

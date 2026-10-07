@@ -20,6 +20,7 @@ public sealed record GpuDevice(
     float? Load,
     float? Temp,
     float? HotspotTemp,
+    float? MemTemp,
     float? CoreClock,
     float? MemClock,
     float? Power,
@@ -98,7 +99,7 @@ public static class SensorReader
 
     private static GpuDevice ExtractGpu(IHardware hw)
     {
-        float? load = null, temp = null, hotspot = null, coreClock = null,
+        float? load = null, temp = null, hotspot = null, memTemp = null, coreClock = null,
                memClock = null, power = null, fan = null,
                vramUsed = null, vramTotal = null, d3d3d = null, d3dVdec = null,
                gpuCorePower = null, gpuSocPower = null;
@@ -121,6 +122,10 @@ public static class SensorReader
                 case SensorType.Temperature:
                     if (s.Name == "GPU Core") temp = s.Value;
                     else if (s.Name is "GPU Hot Spot" or "GPU Hot Spot Temperature") hotspot = s.Value;
+                    // VRAM: NVIDIA's memory junction, AMD's "GPU Memory". Not the
+                    // per-module "GPU Memory #n" (LHM 0.9.7).
+                    else if (s.Name == "GPU Memory Junction") memTemp = s.Value;
+                    else if (memTemp is null && s.Name == "GPU Memory") memTemp = s.Value;
                     else if (temp is null && s.Name == "GPU VR SoC") temp = s.Value;
                     break;
                 case SensorType.Clock:
@@ -157,7 +162,7 @@ public static class SensorReader
         if (power is null && (gpuCorePower.HasValue || gpuSocPower.HasValue))
             power = (gpuCorePower ?? 0f) + (gpuSocPower ?? 0f);
 
-        return new GpuDevice(hw.Name, family, load, temp, hotspot, coreClock, memClock,
+        return new GpuDevice(hw.Name, family, load, temp, hotspot, memTemp, coreClock, memClock,
                              power, fan, vramUsed, vramTotal, d3d3d, d3dVdec);
     }
 

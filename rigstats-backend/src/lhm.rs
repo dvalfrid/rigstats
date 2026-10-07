@@ -26,6 +26,8 @@ pub struct LhmData {
     pub gpu_load: Option<f64>,
     pub gpu_temp: Option<f64>,
     pub gpu_hotspot: Option<f64>,
+    /// VRAM temperature: NVIDIA's memory junction, AMD's "GPU Memory".
+    pub gpu_mem_temp: Option<f64>,
     pub gpu_freq: Option<f64>,
     pub gpu_mem_freq: Option<f64>,
     pub gpu_power: Option<f64>,
@@ -515,6 +517,7 @@ fn parse_lhm(data: &Value, preferred_gpu: Option<&str>) -> LhmData {
         gpu_load: gpu.load,
         gpu_temp: gpu.temp,
         gpu_hotspot: gpu.hotspot,
+        gpu_mem_temp: None,
         gpu_freq: gpu.freq,
         gpu_mem_freq: gpu.mem_freq,
         gpu_power: gpu.power,
@@ -1513,6 +1516,7 @@ mod tests {
             load: Some(load),
             temp: None,
             hotspot_temp: None,
+            mem_temp: None,
             core_clock: None,
             mem_clock: None,
             power: None,
@@ -1650,7 +1654,7 @@ mod tests {
       "cpu_power": 95.0,
       "gpu_devices": [{
         "name": "NVIDIA GeForce RTX 4090",
-        "load": 60.0, "temp": 72.0, "hotspot_temp": 80.0,
+        "load": 60.0, "temp": 72.0, "hotspot_temp": 80.0, "mem_temp": 88.0,
         "core_clock": 2520.0, "mem_clock": 10501.0,
         "power": 150.0, "fan": 1200.0,
         "vram_used_mb": 4096.0, "vram_total_mb": 24576.0,
@@ -1675,6 +1679,7 @@ mod tests {
         assert!((data.gpu_load.unwrap() - 60.0).abs() < 0.01);
         assert!((data.gpu_temp.unwrap() - 72.0).abs() < 0.01);
         assert!((data.gpu_hotspot.unwrap() - 80.0).abs() < 0.01);
+        assert!((data.gpu_mem_temp.unwrap() - 88.0).abs() < 0.01);
         assert!((data.gpu_freq.unwrap() - 2520.0).abs() < 0.01);
         assert!((data.gpu_mem_freq.unwrap() - 10501.0).abs() < 0.01);
         assert!((data.gpu_power.unwrap() - 150.0).abs() < 0.01);
@@ -1960,6 +1965,8 @@ struct SidecarGpuDevice {
     load: Option<f32>,
     temp: Option<f32>,
     hotspot_temp: Option<f32>,
+    // Absent from sidecars before it was added: serde reads it as None.
+    mem_temp: Option<f32>,
     core_clock: Option<f32>,
     mem_clock: Option<f32>,
     power: Option<f32>,
@@ -2073,6 +2080,7 @@ impl SidecarPayload {
             gpu_load: gpu.and_then(|g| g.load).map(|v| v as f64),
             gpu_temp: gpu.and_then(|g| g.temp).map(|v| v as f64),
             gpu_hotspot: gpu.and_then(|g| g.hotspot_temp).map(|v| v as f64),
+            gpu_mem_temp: gpu.and_then(|g| g.mem_temp).map(|v| v as f64),
             gpu_freq: gpu.and_then(|g| g.core_clock).map(|v| v as f64),
             gpu_mem_freq: gpu.and_then(|g| g.mem_clock).map(|v| v as f64),
             gpu_power: gpu.and_then(|g| g.power).map(|v| v as f64),

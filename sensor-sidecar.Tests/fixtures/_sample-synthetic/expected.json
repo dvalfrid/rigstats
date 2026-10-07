@@ -8,6 +8,7 @@
       "load": 3,
       "temp": 41,
       "hotspot_temp": 53,
+      "mem_temp": null,
       "core_clock": 210,
       "mem_clock": 405,
       "power": 28,

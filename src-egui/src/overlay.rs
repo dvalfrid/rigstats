@@ -86,6 +86,10 @@ fn gpu_hotspot_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
     temp_color(s.gpu_hotspot, t.gpu_hotspot.0, t.gpu_hotspot.1)
 }
 
+fn gpu_mem_temp_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
+    temp_color(s.gpu_mem_temp, t.gpu_mem.0, t.gpu_mem.1)
+}
+
 fn ram_pct_color(s: &PollStats, t: &PanelThresholds) -> Color32 {
     // `t.ram` is RAM *temperature* (°C) — a usage percentage needs its own
     // threshold, same reasoning as cpu_load/gpu_load above. Reusing `t.ram`
@@ -160,6 +164,13 @@ pub const ALL_OVERLAY_METRICS: &[OverlayMetric] = &[
         unit: "°C",
         extract: |s| s.gpu_hotspot,
         color: Some(gpu_hotspot_color),
+    },
+    OverlayMetric {
+        key: "gpu_mem_temp",
+        label: "VRAM",
+        unit: "°C",
+        extract: |s| s.gpu_mem_temp,
+        color: Some(gpu_mem_temp_color),
     },
     OverlayMetric {
         key: "gpu_core_clock",
