@@ -1,0 +1,17 @@
+<!--
+  Shared by sensor-sidecar and sensor-sidecar.Tests (MSBuild picks this file
+  up from every project below it).
+
+  NuGet audit (#224): restore checks every package, transitive ones too,
+  against the GitHub advisory database, and a known vulnerability of moderate
+  severity or worse fails the build — locally, in `cargo xtask verify` and in
+  CI (plus weekly, .github/workflows/audit.yml).
+-->
+<Project>
+  <PropertyGroup>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <WarningsAsErrors>$(WarningsAsErrors);NU1902;NU1903;NU1904</WarningsAsErrors>
+  </PropertyGroup>
+</Project>

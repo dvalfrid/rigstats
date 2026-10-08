@@ -23,7 +23,9 @@ fn main() {
             eprintln!("  fmt        — format Rust code (modifies files)");
             eprintln!("  fmt-check  — check Rust formatting without modifying");
             eprintln!("  setup      — install lefthook git hooks (run once after cloning)");
-            eprintln!("  verify     — full pipeline (sidecar + tests + clippy + fmt-check)");
+            eprintln!(
+                "  verify     — full pipeline (sidecar + tests + clippy + fmt-check + audit)"
+            );
             exit(1);
         }
     };
@@ -174,8 +176,30 @@ fn task_verify() -> Result<(), String> {
     println!("── winget dependencies ─────────────────────────────────────────");
     check_winget_dependencies()?;
 
+    println!("── audit: Rust dependencies ────────────────────────────────────");
+    check_rust_advisories()?;
+
     println!("── all checks passed ───────────────────────────────────────────");
     Ok(())
+}
+
+/// `cargo deny check advisories` against RustSec (#224; config in
+/// `deny.toml`). NuGet packages are audited by the restore itself
+/// (`NuGetAudit` in the csproj files). Required in CI; skipped with a hint
+/// locally when cargo-deny isn't installed, so verify still runs.
+fn check_rust_advisories() -> Result<(), String> {
+    let installed = Command::new("cargo")
+        .args(["deny", "--version"])
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if !installed {
+        if env::var_os("CI").is_some() {
+            return Err("cargo-deny is not installed (required in CI)".to_string());
+        }
+        println!("cargo-deny not installed — skipped. Install: cargo install cargo-deny --locked");
+        return Ok(());
+    }
+    run(Command::new("cargo").args(["deny", "check", "advisories"]))
 }
 
 /// DLLs that ship with Windows 10+ itself (or are Windows API Sets) and never

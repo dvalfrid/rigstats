@@ -1,0 +1,13 @@
+# cargo-deny (#224): only the security advisories check is used for now —
+# `cargo deny check advisories`, run by `cargo xtask verify` and weekly by
+# .github/workflows/audit.yml. Licences, bans and sources stay off.
+
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+
+[advisories]
+version = 2
+db-urls = ["https://github.com/rustsec/advisory-db"]
+yanked = "warn"
+# Each entry needs the advisory id and why it doesn't apply / can't be fixed yet.
+ignore = []

@@ -11,6 +11,7 @@ It runs on Windows for every push and pull request and executes `cargo xtask ver
 - `cargo test` on `rigstats-backend` and `src-egui`
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
+- `cargo deny check advisories` (RustSec; see [Supply chain](#supply-chain))
 
 To require it before merge:
 
@@ -23,14 +24,41 @@ To require it before merge:
 ### Pinned Rust toolchain
 
 `build.yml`, `verify.yml`, and `release.yml` all install Rust via
-`dtolnay/rust-toolchain@1.98.0` — a specific version, not `@stable`. `@stable`
+`dtolnay/rust-toolchain` pinned by commit SHA with `toolchain: 1.98.0` — a
+specific version, not `@stable`. `@stable`
 floated to whatever Rust shipped that day, which twice broke CI on an
 unrelated push (a new clippy lint, then a new rustc future-incompat lint)
 with no code change to blame. `rust-toolchain.toml` at the repo root pins the
 same version for local development, so `rustup` auto-installs it the first
 time `cargo` runs in the repo — no drift between a contributor's machine and
-CI. Bumping the pin (both the workflow `@version` refs and
+CI. Bumping the pin (the workflows' `toolchain:` inputs — and the action SHA,
+whose `# 1.98.0` comment names the branch it came from — plus
 `rust-toolchain.toml`) is a deliberate, standalone commit.
+
+### Supply chain
+
+`release.yml` holds the signing credentials, so what CI runs is pinned (#224):
+
+- **Actions** are pinned to full commit SHAs with the version as a comment
+  (`uses: owner/repo@<sha> # v4.4.0`). A tag can be moved by its owner; a SHA
+  can't. **Dependabot** (`.github/dependabot.yml`) opens a grouped PR weekly
+  per ecosystem — GitHub Actions, Cargo, NuGet — so the pins stay current.
+  `LibreHardwareMonitorLib` is excluded: it is pinned to an exact build on
+  purpose and moved by hand after a hardware test.
+- **NSIS** (`build.yml`, `release.yml`): `choco install nsis --version=3.13.0`,
+  then `makensis /VERSION` is checked. Bump the version and the check together.
+- **wingetcreate** (`winget-submit.yml`): a fixed GitHub release, checked
+  against its SHA-256 (`WINGETCREATE_TAG` / `WINGETCREATE_SHA256`; the hash is
+  on the release page next to `wingetcreate.exe`).
+- **Dependency audit:** `cargo xtask verify` runs `cargo deny check advisories`
+  (config: `deny.toml`; an exception goes in its `ignore` list with the
+  advisory id and a reason). NuGet is audited by the restore itself:
+  `Directory.Build.props` turns on `NuGetAudit` for both .NET projects,
+  transitive packages included, and a moderate-or-worse vulnerability fails
+  the build. `.github/workflows/audit.yml` runs both checks every Monday, so
+  a new advisory shows up without a push.
+- Locally, verify skips the Rust audit with a hint when cargo-deny is missing:
+  `cargo install cargo-deny --locked`. In CI it is required.
 
 ## Build Workflow
 

@@ -20,20 +20,21 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.98.0
+        uses: dtolnay/rust-toolchain@4dfd137a5aecc12897f37a01818006f58cf58347 # 1.98.0
         with:
+          toolchain: 1.98.0
           components: rustfmt, clippy
 
       - name: Cache Rust build output
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-egui
 
       - name: Cache NuGet packages
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
@@ -47,9 +48,12 @@ jobs:
       - name: Install NSIS
         shell: pwsh
         run: |
-          choco install nsis --no-progress -y
-          $nsis = (Get-ChildItem "C:\Program Files*\NSIS\makensis.exe" | Select-Object -First 1).DirectoryName
-          echo "$nsis" >> $env:GITHUB_PATH
+          # Pinned: the installer is built by it (#224). Bump both lines together.
+          choco install nsis --version=3.13.0 --allow-downgrade --no-progress -y
+          $makensis = Get-ChildItem "C:\Program Files*\NSIS\makensis.exe" | Select-Object -First 1
+          $nsisVersion = & $makensis.FullName /VERSION
+          if ($nsisVersion -notmatch '^v3\.13(\.0)?$') { throw "Expected NSIS v3.13, got '$nsisVersion'." }
+          echo "$($makensis.DirectoryName)" >> $env:GITHUB_PATH
 
       - name: Build NSIS installer
         shell: pwsh
@@ -58,7 +62,7 @@ jobs:
           & makensis /DVERSION=$version build\installer.nsi
 
       - name: Upload NSIS installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: rigstats-nsis
           path: target\release\RIGStats_*_x64-setup.exe
