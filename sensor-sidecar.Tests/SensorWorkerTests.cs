@@ -222,14 +222,23 @@ public class SensorWorkerTests
 
             // Its write times out, its instance is freed, and the next
             // client gets one — while every reading client stays connected.
-            var next = Task.Run(() => ConnectAsync(name, TimeSpan.FromSeconds(15)));
+            // The late client reads as soon as it is connected: the server
+            // writes to it straight away, and a client that hasn't read
+            // within the 1 s write timeout is dropped as hung — which the
+            // loop over the other clients could otherwise outlast.
+            var next = Task.Run(async () =>
+            {
+                var client = await ConnectAsync(name, TimeSpan.FromSeconds(15));
+                return (Client: client, FirstLine: await client.ReadLineAsync());
+            });
             while (!next.IsCompleted)
             {
                 foreach (var c in clients)
                     Assert.NotNull(await c.ReadLineAsync());
             }
-            using var late = await next;
-            Assert.NotNull(await late.ReadLineAsync());
+            var (lateClient, firstLine) = await next;
+            using var late = lateClient;
+            Assert.NotNull(firstLine);
             Assert.True(await hung.SeesEofAsync());
             foreach (var c in clients)
                 Assert.NotNull(await c.ReadLineAsync());
