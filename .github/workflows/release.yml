@@ -34,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_TAG }}
 
@@ -49,7 +49,7 @@ jobs:
           workspaces: src-egui
 
       - name: Cache NuGet packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
@@ -71,7 +71,7 @@ jobs:
       # in the installer leaves the Control Center dead for every user. One
       # step = one Trusted Signing session = the same signing certificate.
       - name: Sign binaries
-        uses: azure/trusted-signing-action@1d365fec12862c4aa68fcac418143d73f0cea293 # v0.5.11
+        uses: azure/trusted-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -119,7 +119,7 @@ jobs:
           "INSTALLER_PATH=$env:GITHUB_WORKSPACE\target\release\RIGStats_${version}_x64-setup.exe" >> $env:GITHUB_ENV
 
       - name: Sign installer
-        uses: azure/trusted-signing-action@1d365fec12862c4aa68fcac418143d73f0cea293 # v0.5.11
+        uses: azure/trusted-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -166,7 +166,7 @@ jobs:
           Write-Host "Generated latest.json for v$version"
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           fail_on_unmatched_files: true
@@ -180,7 +180,7 @@ jobs:
       # release PR carried `winget: hold` (winget_submit = false).
       - name: Dispatch winget submission
         if: ${{ github.event.inputs.winget_submit != 'false' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
