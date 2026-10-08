@@ -10,9 +10,15 @@ on:
         description: Existing release tag to build and attach installers to (for example v1.0.0)
         required: true
         type: string
+      winget_submit:
+        description: Submit this release to winget when it is published
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
+  actions: write # starts winget-submit.yml
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.event.release.tag_name }}
@@ -157,3 +163,32 @@ jobs:
           files: |
             target\release\RIGStats_*_x64-setup.exe
             latest.json
+
+      # Dispatched, not chained with `workflow_run`: this run was started with
+      # GITHUB_TOKEN, and GitHub starts no workflow from a GITHUB_TOKEN-caused
+      # event except a dispatch (#246). Not for pre-releases, nor when the
+      # release PR carried `winget: hold` (winget_submit = false).
+      - name: Dispatch winget submission
+        if: ${{ github.event.inputs.winget_submit != 'false' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const { data: release } = await github.rest.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag,
+            });
+            if (release.prerelease) {
+              core.info(`Winget: ${tag} is a pre-release, not submitted`);
+              return;
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'winget-submit.yml',
+              ref: 'main',
+              inputs: { tag },
+            });
+            core.info(`Winget: submission of ${tag} started`);

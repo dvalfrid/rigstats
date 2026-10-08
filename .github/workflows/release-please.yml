@@ -162,17 +162,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # The release PR's `winget: hold` label (set before merging) keeps this
+      # release off winget, e.g. to let testers try it first; submit it later
+      # from Actions → Submit to Winget (#246).
       - name: Dispatch release workflow
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: context.sha,
+            });
+            const hold = prs.some(pr => pr.labels.some(l => l.name === 'winget: hold'));
+            core.info(prs.length === 0
+              ? 'Winget: no release PR found for this commit, will be submitted'
+              : hold ? 'Winget: held by the release PR\'s "winget: hold" label' : 'Winget: will be submitted');
             await github.rest.actions.createWorkflowDispatch({
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'release.yml',
               ref: 'main',
               inputs: {
-                tag: '${{ needs.release-please.outputs.tag_name }}'
+                tag: '${{ needs.release-please.outputs.tag_name }}',
+                winget_submit: hold ? 'false' : 'true',
               }
             })

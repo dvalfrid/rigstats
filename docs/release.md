@@ -135,9 +135,20 @@ It runs when a GitHub Release is published (or manually via `workflow_dispatch` 
 - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
 - uploads the `.exe` and `latest.json` to the GitHub Release
 
-A separate `.github/workflows/winget-submit.yml` runs after a release and
-opens/updates the `Codeby.RIGStats` manifest PR in `microsoft/winget-pkgs`,
-skipping submission if an update PR for that release is already open.
+### Winget
+
+After publishing, `release.yml` starts `.github/workflows/winget-submit.yml`
+with the tag, which opens/updates the `Codeby.RIGStats` manifest PR in
+`microsoft/winget-pkgs` (skipped if an update PR is already open). It is a
+dispatch rather than a `workflow_run` chain: the Release run is started with
+`GITHUB_TOKEN`, and GitHub starts no workflow from a `GITHUB_TOKEN`-caused
+event except a dispatch (#246). Pre-releases are never submitted.
+
+**Holding a release back** (e.g. to let testers try it first): add the label
+**`winget: hold`** to the release-please PR before merging it. The release is
+published as usual — installer, `latest.json`, in-app updates — but not
+submitted to winget; the Release Please run logs the decision. When it's
+ready: Actions → Submit to Winget → Run workflow → the tag (e.g. `v1.45.0`).
 
 ### Signing
 
@@ -152,17 +163,10 @@ If the release build fails or needs to be re-run for an existing tag:
 1. Open GitHub → Actions → Release
 2. Click `Run workflow`
 3. Enter the existing tag (e.g. `v1.27.0`)
-4. Run
+4. Untick "Submit this release to winget" if winget already has it or should wait
+5. Run
 
-**Important:** leave the "Use workflow from" branch/tag dropdown on `main`.
-`winget-submit.yml` is chained via `workflow_run`, which GitHub only fires
-for runs that completed on the default branch — if this dropdown is set to
-the tag instead, the Release build itself still succeeds, but the Winget
-submission silently never queues (no error, no skipped run — it just never
-starts). If that already happened, `winget-submit.yml` also has a manual
-`workflow_dispatch` trigger as a fallback: Actions → Submit to Winget → Run
-workflow. It always submits whatever the latest GitHub Release is, so no
-input is needed.
+Leave the "Use workflow from" dropdown on `main`.
 
 ## Day-To-Day Process
 
