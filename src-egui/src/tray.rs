@@ -144,34 +144,41 @@ pub fn profile_choice_from_menu_id(id: &MenuId) -> Option<String> {
 /// profile, ticked to match the active one. Unlike [`GpuMenu`] (filled once
 /// by background hardware detection), profiles arrive over the control pipe
 /// and already flow through the UI thread each frame via
-/// `DashboardRuntime::drain_control` — so [`ProfileMenu::sync`] just fills
-/// the rows in the first time a non-empty list shows up (profile
-/// editing/deleting has no UI yet in phase 0, so the list is static for
-/// practical purposes during a session) and re-ticks the active row on every
-/// call.
+/// `DashboardRuntime::drain_control` — so [`ProfileMenu::sync`] rebuilds the
+/// rows whenever a profile was added, renamed or deleted (#257) and re-ticks
+/// the active row on every call.
 pub struct ProfileMenu {
     submenu: Submenu,
-    /// `(profile id, row)` in menu order.
-    items: Vec<(String, CheckMenuItem)>,
+    /// `(profile id, profile name)` per row, in menu order — what the rows
+    /// were built from, to tell when the list changed.
+    rows: Vec<(String, String)>,
+    items: Vec<CheckMenuItem>,
+}
+
+/// `(id, name)` per profile — the part of the list the submenu shows.
+fn profile_rows(profiles: &[Profile]) -> Vec<(String, String)> {
+    profiles
+        .iter()
+        .map(|p| (p.id.clone(), p.name.clone()))
+        .collect()
 }
 
 impl ProfileMenu {
     pub fn sync(&mut self, profiles: &[Profile], active_id: Option<&str>) {
-        if self.items.is_empty() && !profiles.is_empty() {
-            for profile in profiles {
-                let item = CheckMenuItem::with_id(
-                    profile_menu_id(&profile.id),
-                    &profile.name,
-                    true,
-                    false,
-                    None,
-                );
-                let _ = self.submenu.append(&item);
-                self.items.push((profile.id.clone(), item));
+        let rows = profile_rows(profiles);
+        if rows != self.rows {
+            for item in self.items.drain(..) {
+                let _ = self.submenu.remove(&item);
             }
-            self.submenu.set_enabled(true);
+            for (id, name) in &rows {
+                let item = CheckMenuItem::with_id(profile_menu_id(id), name, true, false, None);
+                let _ = self.submenu.append(&item);
+                self.items.push(item);
+            }
+            self.submenu.set_enabled(!rows.is_empty());
+            self.rows = rows;
         }
-        for (id, item) in &self.items {
+        for ((id, _), item) in self.rows.iter().zip(&self.items) {
             item.set_checked(Some(id.as_str()) == active_id);
         }
     }
@@ -302,6 +309,7 @@ pub fn build_tray(
     // fills it in once the control pipe reports the profile list.
     let profile_menu = ProfileMenu {
         submenu: Submenu::new("Profile", false),
+        rows: Vec::new(),
         items: Vec::new(),
     };
 
