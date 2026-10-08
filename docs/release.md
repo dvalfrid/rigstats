@@ -13,13 +13,12 @@ It runs on Windows for every push and pull request and executes `cargo xtask ver
 - `cargo fmt --check`
 - `cargo deny check advisories` (RustSec; see [Supply chain](#supply-chain))
 
-To require it before merge:
-
-1. Open GitHub repository Settings → Branches
-2. Add a branch protection rule for `main`
-3. Enable pull requests before merging
-4. Enable required status checks
-5. Select `Verify (Windows)`
+**`main` is protected:** a pull request — Dependabot's, release-please's or
+anyone's — can only be merged once `Verify (Windows)` has passed (required
+status check, bound to GitHub Actions). Force pushes and deleting `main` are
+blocked. Admins aren't held to it (`enforce_admins: false`): the maintainer
+can still push directly to `main`, and GitHub records it as a bypass.
+Settings → Branches → `main` to change it.
 
 ### Pinned Rust toolchain
 
