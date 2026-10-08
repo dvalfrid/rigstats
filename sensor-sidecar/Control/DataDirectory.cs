@@ -23,8 +23,38 @@ public static class DataDirectory
     private static readonly SecurityIdentifier Administrators = new(WellKnownSidType.BuiltinAdministratorsSid, null);
     private static readonly SecurityIdentifier Users = new(WellKnownSidType.BuiltinUsersSid, null);
 
+    /// Where Windows Error Reporting writes the service's crash dumps (#220;
+    /// the installer points WER's `LocalDumps` key for rigstats-sensor.exe here).
+    public static string DumpPath { get; } = Path.Combine(DefaultPath, "dumps");
+
     /// Null when the folder is now safe to use, otherwise why it is not.
     public static string? EnsureSecure(string directory) => EnsureSecure(directory, Administrators);
+
+    /// The dump folder, created before Windows needs it: a minidump holds
+    /// the service's stack memory, which can include secrets it keeps
+    /// decrypted (the Hue key), so unlike the rest of the data folder Users
+    /// can't read it — SYSTEM and Administrators only. Windows would
+    /// otherwise create it with the parent's rules, readable by everyone.
+    /// Call after `EnsureSecure` on the parent: only administrators can
+    /// create anything in it then. Null when safe, otherwise why not.
+    public static string? EnsureDumpFolder(string directory) => EnsureDumpFolder(directory, Administrators);
+
+    internal static string? EnsureDumpFolder(string directory, SecurityIdentifier owner)
+    {
+        try
+        {
+            if (IsLink(directory))
+                Directory.Delete(directory);
+            if (!Directory.Exists(directory))
+                new DirectoryInfo(directory).Create(Rules(owner, usersRead: false));
+            TakeOver(directory, owner, usersRead: false);
+            return IsLink(directory) ? "the dump folder was replaced by a link." : null;
+        }
+        catch (Exception e)
+        {
+            return e.Message;
+        }
+    }
 
     /// `owner` is who ends up owning the folder and whose files are kept —
     /// Administrators, which is also what SYSTEM and elevated processes
@@ -65,8 +95,9 @@ public static class DataDirectory
 
     /// Protected (nothing inherited from `%ProgramData%`): SYSTEM and
     /// Administrators full control, Users read — the app reads the log and
-    /// the sensor tree for its diagnostics export.
-    private static DirectorySecurity Rules(SecurityIdentifier owner)
+    /// the sensor tree for its diagnostics export. `usersRead: false` for
+    /// the crash dumps.
+    private static DirectorySecurity Rules(SecurityIdentifier owner, bool usersRead = true)
     {
         const InheritanceFlags inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
         var security = new DirectorySecurity();
@@ -76,14 +107,17 @@ public static class DataDirectory
             security.AddAccessRule(new FileSystemAccessRule(
                 sid, FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
         }
-        security.AddAccessRule(new FileSystemAccessRule(
-            Users, FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
+        if (usersRead)
+        {
+            security.AddAccessRule(new FileSystemAccessRule(
+                Users, FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
+        }
         return security;
     }
 
     /// Owner first, rules second: once the folder is ours, its rules are
     /// ours to change whatever they said before.
-    private static void TakeOver(string directory, SecurityIdentifier owner)
+    private static void TakeOver(string directory, SecurityIdentifier owner, bool usersRead = true)
     {
         var info = new DirectoryInfo(directory);
         if (!Equals(info.GetAccessControl(AccessControlSections.Owner).GetOwner(typeof(SecurityIdentifier)), owner))
@@ -92,7 +126,7 @@ public static class DataDirectory
             ownership.SetOwner(owner);
             info.SetAccessControl(ownership);
         }
-        info.SetAccessControl(Rules(owner));
+        info.SetAccessControl(Rules(owner, usersRead));
     }
 
     /// Anything not created by SYSTEM, Administrators or `owner` was put

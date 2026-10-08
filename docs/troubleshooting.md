@@ -236,6 +236,15 @@ connection at all. If the service never logs "Client connected", the Rust
 backend isn't reaching the pipe — check `sidecar-service.txt` for the service
 state first.
 
+**Crashes.** A crash inside a driver call (a native access violation) ends
+the service before it can log anything itself. At its next start it copies
+what Windows recorded into the log: `An earlier run crashed at …` with the
+stack, and `Crash dump written at …: C:\ProgramData\se.codeby.rigstats\dumps\rigstats-sensor.exe.<pid>.dmp (… MB, administrators only)`.
+The dump (a minidump; Windows keeps the newest 3) is **not** in the ZIP: it
+holds the service's stack memory, so the folder is readable by
+administrators only. If we ask for it, open the folder in Explorer, confirm
+the administrator prompt, and attach the `.dmp` file named in the log.
+
 When a specific sensor always shows `--` in the dashboard (the sidecar itself
 is clearly running and connected), the mismatch is in
 `sensor-sidecar/SensorReader.cs` (the C# extraction logic) or

@@ -151,6 +151,21 @@ Section "RIGStats" SecMain
   DetailPrint "PawnIO service query: exit $R2"
   SetOutPath "$INSTDIR"
 
+  ; ── Crash dumps for the sensor service (#220) ──────────────────────────────
+  ; A native crash (inside a driver call) can't be caught in .NET; Windows
+  ; Error Reporting keeps a minidump of it, the newest 3, in a folder the
+  ; service locks to administrators (DataDirectory.EnsureDumpFolder) before
+  ; Windows writes into it. 64-bit view: WER doesn't read WOW6432Node for a
+  ; 64-bit process.
+  SetRegView 64
+  WriteRegExpandStr HKLM "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\rigstats-sensor.exe" \
+    "DumpFolder" "%ProgramData%\se.codeby.rigstats\dumps"
+  WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\rigstats-sensor.exe" \
+    "DumpType" 1
+  WriteRegDWORD HKLM "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\rigstats-sensor.exe" \
+    "DumpCount" 3
+  SetRegView default
+
   ; ── Remove old service entry, re-create with fresh binary path ────────────
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
   Sleep 1000
@@ -249,6 +264,13 @@ Section "Uninstall"
 
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats"
   DeleteRegKey HKLM "Software\RIGStats"
+
+  ; Crash dumps (#220): the WER setting and the dumps themselves.
+  SetRegView 64
+  DeleteRegKey HKLM "SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps\rigstats-sensor.exe"
+  SetRegView default
+  ReadEnvStr $8 PROGRAMDATA
+  RMDir /r "$8\se.codeby.rigstats\dumps"
 
   ; Remove old LHM tasks if still present.
   nsExec::ExecToLog 'cmd /C schtasks /Delete /TN "RigStats\LibreHardwareMonitor" /F >NUL 2>&1'

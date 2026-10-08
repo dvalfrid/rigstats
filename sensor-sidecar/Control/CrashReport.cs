@@ -7,6 +7,9 @@ namespace SensorSidecar.Control;
 /// module and exception code).
 public sealed record CrashEvent(DateTimeOffset Time, int Id, string Message);
 
+/// A crash dump Windows Error Reporting wrote for the service (#220).
+public sealed record CrashDump(string Name, DateTimeOffset Time, long Bytes);
+
 /// Earlier crashes of the service, from the Windows event log into
 /// `rigstats-sensor.log` at the next start (#242). A native fault — an access
 /// violation inside a driver call — ends the process before any .NET handler
@@ -51,6 +54,18 @@ public static class CrashReport
         }
         return lines;
     }
+
+    /// Log lines for the crash dumps written after `after`, oldest first.
+    /// The dump itself stays in the administrators-only folder (#220): the
+    /// log only says that it exists, so a diagnostics export shows it and
+    /// it can be asked for.
+    public static List<string> DumpLines(IEnumerable<CrashDump> dumps, DateTimeOffset after, string folder) =>
+        dumps.Where(d => d.Time > after)
+            .OrderBy(d => d.Time)
+            .Select(d => $"[rigstats-sensor] Crash dump written at "
+                + $"{d.Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)}: "
+                + $"{Path.Combine(folder, d.Name)} ({(d.Bytes / 1048576.0).ToString("0.0", CultureInfo.InvariantCulture)} MB, administrators only)")
+            .ToList();
 
     /// The crash is this service's — the release build or a dev build.
     private static bool IsService(CrashEvent e)
