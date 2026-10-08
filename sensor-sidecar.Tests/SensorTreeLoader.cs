@@ -30,9 +30,14 @@ public static class SensorTreeLoader
         List<ISensor>? currentHwSensors = null;
         List<IHardware>? currentHwSub = null;
         List<ISensor>? currentSubSensors = null;
+        // Dumps from before LHM 0.9.7 have SmallData (MB) and Data (GB);
+        // newer ones say so and have Data in bytes.
+        var dataInBytes = false;
 
         foreach (var raw in lines)
         {
+            if (raw.Trim() == "# data-unit: bytes")
+                dataInBytes = true;
             if (string.IsNullOrWhiteSpace(raw) || raw.TrimStart().StartsWith('#'))
                 continue;
 
@@ -61,9 +66,15 @@ public static class SensorTreeLoader
             else if (trimmed.StartsWith("S ", StringComparison.Ordinal))
             {
                 var (type, id, name, val) = ParseFields(trimmed, "S");
+                var value = ParseValue(val);
+                if (!dataInBytes && type is "SmallData" or "Data")
+                {
+                    value *= type == "SmallData" ? 1024f * 1024f : 1024f * 1024f * 1024f;
+                    type = "Data";
+                }
                 if (!Enum.TryParse<SensorType>(type, out var st))
                     continue;
-                var sensor = BuildSensor(st, name, id, ParseValue(val));
+                var sensor = BuildSensor(st, name, id, value);
                 // 4+ leading spaces → belongs to the current SUB; otherwise to the HW.
                 if (indent >= 4 && currentSubSensors is not null)
                     currentSubSensors.Add(sensor);

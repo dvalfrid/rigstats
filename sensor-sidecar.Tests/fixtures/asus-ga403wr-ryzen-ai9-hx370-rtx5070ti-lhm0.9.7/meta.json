@@ -1,0 +1,16 @@
+{
+  "slug": "asus-ga403wr-ryzen-ai9-hx370-rtx5070ti-lhm0.9.7",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1791351286,
+  "rigstats_version": "1.43.0",
+  "os": "Microsoft Windows 11 Home (build 26300)",
+  "notes": "ASUS ROG Zephyrus G14 GA403WR, iGPU (Radeon 890M) and dGPU (RTX 5070 Ti Laptop) both active, idle. First tree from LibreHardwareMonitor 0.9.7-pre749: Data sensors in bytes (no SmallData), '# data-unit: bytes' header.",
+  "anonymized": true,
+
+  "confirmed_by": 1,
+  "gpu_driver": "617.42",
+  "gpu_state": "all-active",
+  "variant_of": "asus-ga403wr-ryzen-ai9-hx370-rtx5070ti-dgpu-active",
+  "differs": "LHM 0.9.7: Data in bytes instead of SmallData MB / Data GB; NVIDIA 'GPU Hot Spot' now present (plus Hot Spot #1-6, GPU Memory #1-6); D3D Security_1 load added"
+}

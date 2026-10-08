@@ -170,25 +170,53 @@ public class SensorReaderTests
     }
 
     [Fact]
-    public void ExtractGpu_reads_vram_from_smalldata_mb_and_data_gb()
+    public void ExtractGpu_reads_vram_from_data_in_bytes()
     {
-        var mbGpu = Hw(HardwareType.GpuNvidia, "A", "/gpu-nvidia/0",
+        const float mb = 1024f * 1024f;
+        var gpu = Hw(HardwareType.GpuNvidia, "A", "/gpu-nvidia/0",
         [
-            Sensor(SensorType.SmallData, "GPU Memory Used", 4096.0f),
-            Sensor(SensorType.SmallData, "GPU Memory Total", 16384.0f),
-        ]);
-        var gbGpu = Hw(HardwareType.GpuIntel, "B", "/gpu-intel/0",
-        [
-            Sensor(SensorType.Data, "GPU Memory Used", 2.0f),
-            Sensor(SensorType.Data, "GPU Memory Total", 8.0f),
+            Sensor(SensorType.Data, "GPU Memory Used", 4096.0f * mb),
+            Sensor(SensorType.Data, "GPU Memory Total", 16384.0f * mb),
         ]);
 
-        var devices = SensorReader.Extract(Computer(mbGpu, gbGpu)).GpuDevices;
+        var device = SensorReader.Extract(Computer(gpu)).GpuDevices[0];
+
+        Assert.Equal(4096.0f, device.VramUsedMb);
+        Assert.Equal(16384.0f, device.VramTotalMb);
+    }
+
+    [Fact]
+    public void A_dump_from_before_lhm_0_9_7_loads_smalldata_mb_and_data_gb_as_bytes()
+    {
+        string[] dump =
+        [
+            "HW  GpuNvidia            id=/gpu-nvidia/0 name=A",
+            "  S  SmallData       id=/gpu-nvidia/0/smalldata/1 name=GPU Memory Used val=4096",
+            "  S  SmallData       id=/gpu-nvidia/0/smalldata/2 name=GPU Memory Total val=16384",
+            "HW  GpuIntel             id=/gpu-intel/0 name=B",
+            "  S  Data            id=/gpu-intel/0/data/1 name=GPU Memory Used val=2",
+            "  S  Data            id=/gpu-intel/0/data/2 name=GPU Memory Total val=8",
+        ];
+
+        var devices = SensorReader.Extract(SensorTreeLoader.Load(dump)).GpuDevices;
 
         Assert.Equal(4096.0f, devices[0].VramUsedMb);
         Assert.Equal(16384.0f, devices[0].VramTotalMb);
         Assert.Equal(2048.0f, devices[1].VramUsedMb);
         Assert.Equal(8192.0f, devices[1].VramTotalMb);
+    }
+
+    [Fact]
+    public void A_dump_marked_bytes_is_loaded_as_is()
+    {
+        string[] dump =
+        [
+            "# data-unit: bytes",
+            "HW  GpuNvidia            id=/gpu-nvidia/0 name=A",
+            "  S  Data            id=/gpu-nvidia/0/data/1 name=GPU Memory Used val=4294967296",
+        ];
+
+        Assert.Equal(4096.0f, SensorReader.Extract(SensorTreeLoader.Load(dump)).GpuDevices[0].VramUsedMb);
     }
 
     // ---- Disk ---------------------------------------------------------------

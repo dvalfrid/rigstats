@@ -123,6 +123,9 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
             _computer.Accept(_visitor);
             var lines = new System.Text.StringBuilder();
             lines.AppendLine($"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
+            // Data sensors are in bytes since LHM 0.9.7; older dumps (MB/GB,
+            // with SmallData) have no such line — SensorTreeLoader converts them.
+            lines.AppendLine("# data-unit: bytes");
             foreach (var hw in _computer.Hardware)
             {
                 lines.AppendLine($"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
