@@ -1,0 +1,5 @@
+# Every pull request asks the maintainer for a review — Dependabot's,
+# release-please's and contributors'. (Dependabot's own `reviewers` option is
+# deprecated in favour of this file.) Not enforced: main requires a green
+# Verify, not an approval (docs/release.md).
+* @dvalfrid
