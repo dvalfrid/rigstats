@@ -21,6 +21,7 @@ use rigstats_egui::tray::{
     build_tray, gpu_choice_from_menu_id, load_app_icon, panel_initial_h, panel_label,
     profile_choice_from_menu_id, Tray, TrayCmd,
 };
+use rigstats_egui::wallpaper_supervisor::{self, ChildHost, WallpaperSupervisor};
 use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
@@ -198,23 +199,10 @@ struct RigStatsApp {
     /// the `rigstats-wallpaper` host is the dashboard's poller (see
     /// `update_wallpaper_mode`).
     poll_mode: PollModeHandle,
-    /// Handle to the spawned `rigstats-wallpaper` host process, if running.
-    wallpaper_child: Option<std::process::Child>,
-    /// True while wallpaper mode is active; used to detect enter/leave transitions.
-    wallpaper_active: bool,
-    /// When the current host was last spawned. Used to tell a fast-failing host
-    /// (dies within seconds → back off) from a long-lived one that died for an
-    /// external reason (e.g. an Explorer restart → respawn promptly).
-    wallpaper_last_spawn: Option<Instant>,
-    /// Consecutive fast spawn failures. Drives exponential respawn backoff so a
-    /// host that cannot start (e.g. transient GPU/DLL-init failure) never storms
-    /// the supervisor into respawning every frame. Reset on entering the mode.
-    wallpaper_spawn_fails: u32,
-    /// Set when leaving wallpaper mode while the host is still alive: the host
-    /// self-exits cleanly from disk state (so wgpu tears down properly instead of
-    /// being TerminateProcess-d), and this deadline triggers a `kill()` fallback
-    /// if it has not exited in time.
-    wallpaper_teardown_at: Option<Instant>,
+    /// Enter/leave decisions and the host's respawn/teardown policy.
+    wallpaper: WallpaperSupervisor,
+    /// The spawned `rigstats-wallpaper` host process, if any.
+    wallpaper_host: ChildHost,
     // ── Overlay (issue #183) ────────────────────────────────────────────────
     // An independent add-on window — not a `window_layer` value — that can be
     // shown/hidden regardless of what the main window (Normal/Floating/
@@ -480,11 +468,8 @@ impl RigStatsApp {
             last_fitted_height: None,
             startup_fit_frames: 12,
             poll_mode,
-            wallpaper_child: None,
-            wallpaper_active: false,
-            wallpaper_last_spawn: None,
-            wallpaper_spawn_fails: 0,
-            wallpaper_teardown_at: None,
+            wallpaper: WallpaperSupervisor::default(),
+            wallpaper_host: ChildHost::default(),
             overlay_active: false,
             overlay_enabled: init_settings.overlay_enabled,
             overlay_click_through: init_settings.overlay_click_through,
@@ -512,30 +497,6 @@ impl RigStatsApp {
             gpu_retry_count,
             alert_cooldowns: HashMap::new(),
         }
-    }
-
-    /// Absolute path to the sibling `rigstats-wallpaper.exe`, or `None` if the
-    /// running exe's own path can't be resolved.
-    #[cfg(windows)]
-    fn wallpaper_host_path() -> Option<std::path::PathBuf> {
-        std::env::current_exe()
-            .ok()
-            .map(|exe| exe.with_file_name("rigstats-wallpaper.exe"))
-    }
-
-    /// Spawn the `rigstats-wallpaper` host process (sibling exe), passing this
-    /// process's PID so the host exits if the main app goes away.
-    #[cfg(windows)]
-    fn spawn_wallpaper_host() -> std::io::Result<std::process::Child> {
-        let host = Self::wallpaper_host_path().ok_or_else(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "could not resolve current exe path",
-            )
-        })?;
-        std::process::Command::new(host)
-            .env("RIGSTATS_PARENT_PID", std::process::id().to_string())
-            .spawn()
     }
 
     /// Restore the main dashboard window on-screen after wallpaper mode (either
@@ -611,14 +572,6 @@ impl RigStatsApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
 
-    /// Drive the wallpaper-host lifecycle each frame.
-    ///
-    /// Wallpaper mode is active when `window_layer == "wallpaper"` and floating
-    /// mode is off (floating wins if both are set). On entering: park our own
-    /// window off-screen and pause polling so the host owns the dashboard and the
-    /// sensor pipe. While active: (re)spawn the host if it has exited (e.g. an
-    /// Explorer restart destroyed its WorkerW-child window). On leaving: kill the
-    /// host, resume polling, and restore our window.
     #[cfg(windows)]
     /// Checks the just-arrived `self.runtime.latest` sample against
     /// `Settings.thresholds` and fires a Windows balloon-tip notification for
@@ -678,218 +631,75 @@ impl RigStatsApp {
         }
     }
 
+    /// Drive wallpaper mode each frame — the decisions are in
+    /// `wallpaper_supervisor`; this carries out the window side. Wallpaper
+    /// mode is on when `window_layer == "wallpaper"` and floating mode is off
+    /// (floating wins if both are set).
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
         let want = self.window_layer == "wallpaper" && !self.floating_mode;
-        if want && !self.wallpaper_active {
-            // Guard: the host is a sibling exe (`rigstats-wallpaper.exe`). If it is
-            // missing (a packaging regression — e.g. the installer not bundling it),
-            // do NOT enter wallpaper mode: parking the main window off-screen while
-            // no host appears would hide the dashboard entirely. Revert to the
-            // normal layer, restore the window on-screen (startup may have already
-            // parked it), and log clearly so a diagnostic shows the cause.
-            let host_missing = Self::wallpaper_host_path()
-                .map(|p| !p.exists())
-                .unwrap_or(true);
-            if host_missing {
-                debug::log_error(
-                    &self.dir,
-                    "wallpaper: rigstats-wallpaper.exe not found next to the app — \
-                     staying in normal mode (reinstall/update to restore wallpaper mode)",
-                );
-                self.window_layer = "normal".to_string();
-                {
-                    let mut s = self.current_settings.lock_safe();
-                    s.window_layer = "normal".to_string();
-                    self.persist_settings_logged(&s);
-                }
-                self.restore_main_window(ctx);
-                return;
-            }
-            self.wallpaper_active = true;
-            // Reset the respawn throttle for a fresh session, and force-reap any
-            // host still draining from a just-left session so we never end up with
-            // two hosts when the user toggles back in quickly.
-            self.wallpaper_spawn_fails = 0;
-            self.wallpaper_last_spawn = None;
-            self.wallpaper_teardown_at = None;
-            if let Some(mut child) = self.wallpaper_child.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            // Capture where the user left the window in the previous (on-screen)
-            // layer and hand it to the host, so the workflow is: position the
-            // window where you want it in Normal mode, then switch to wallpaper.
-            // Persisted before the host is spawned below so it reads the value.
-            //
-            // Guarded: `last_fixed_pos` is only updated while `!wallpaper_active`
-            // (see the fixed-mode render branch), but on the very frame a prior
-            // mode transition's `OuterPosition` command was issued, the OS may
-            // not have applied it yet — `ctx.input().outer_rect` can still
-            // report the *previous* position for a frame or two. If wallpaper
-            // mode is toggled off and back on again quickly, that stale read
-            // can be the off-screen parked coordinate itself, which would
-            // otherwise get saved as `wallpaper_position` and send the host to
-            // the wrong monitor (or off every monitor) next time. Only trust a
-            // `last_fixed_pos` that's actually on a connected monitor; if it
-            // isn't, keep whatever `wallpaper_position` was already saved.
-            if let Some([x, y]) = self.last_fixed_pos {
-                if is_position_on_screen([x, y]) {
-                    let mut s = self.current_settings.lock_safe();
-                    s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
-                    self.persist_settings_logged(&s);
-                }
-            }
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
-                -32000.0, -32000.0,
-            )));
-            debug::log_debug(&self.dir, "wallpaper: entering — parking main window");
-        } else if !want && self.wallpaper_active {
-            self.wallpaper_active = false;
-            // Graceful teardown: the floating/layer flag was already persisted to
-            // disk by the caller, so the host self-exits cleanly within ~1 s (its
-            // wgpu device tears down properly). We DO NOT TerminateProcess it here
-            // — repeatedly killing the GPU host leaked graphics/desktop-heap
-            // resources until a later spawn failed at DLL-init (0xc0000142) and the
-            // supervisor respawned it every frame. Hand the child to the drain
-            // block below, which reaps it and only kill()s as a timed fallback.
-            if self.wallpaper_child.is_some() {
-                self.wallpaper_teardown_at = Some(Instant::now());
-            }
-            self.restore_main_window(ctx);
-            debug::log_debug(&self.dir, "wallpaper: leaving — restoring main window");
-        }
+        let now = Instant::now();
+        let effects = self.wallpaper.transition(
+            want,
+            || wallpaper_supervisor::host_path().map_or(true, |p| !p.exists()),
+            &mut self.wallpaper_host,
+            now,
+        );
+        // Before `supervise`: on entering, this saves the position the host
+        // reads when it starts.
+        self.apply_wallpaper_effects(ctx, effects);
+        // Set every frame so an overlay toggle takes effect immediately.
+        self.poll_mode
+            .set(self.wallpaper.poll_mode(self.overlay_enabled));
+        let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
+        self.apply_wallpaper_effects(ctx, effects);
+    }
 
-        // In wallpaper mode the host owns the dashboard; this app only polls
-        // (lightly) to feed the game overlay. Set every frame so an overlay
-        // toggle takes effect immediately.
-        self.poll_mode.set(if !self.wallpaper_active {
-            PollMode::Full
-        } else if self.overlay_enabled {
-            PollMode::Light
-        } else {
-            PollMode::Paused
-        });
-
-        // Drain a host that is shutting down after leaving wallpaper mode: reap it
-        // once it has self-exited; kill() only as a fallback if it overruns the
-        // grace period. Runs while not active so a re-entered mode starts clean.
-        if !self.wallpaper_active {
-            if let Some(deadline) = self.wallpaper_teardown_at {
-                let exited = match self.wallpaper_child.as_mut() {
-                    Some(child) => matches!(child.try_wait(), Ok(Some(_)) | Err(_)),
-                    None => true,
-                };
-                if exited {
-                    self.wallpaper_child = None;
-                    self.wallpaper_teardown_at = None;
-                    self.wallpaper_last_spawn = None;
-                    debug::log_debug(&self.dir, "wallpaper: host exited cleanly");
-                } else if deadline.elapsed() >= Duration::from_secs(3) {
-                    if let Some(mut child) = self.wallpaper_child.take() {
-                        let _ = child.kill();
-                        let _ = child.wait();
+    fn apply_wallpaper_effects(
+        &mut self,
+        ctx: &egui::Context,
+        effects: Vec<wallpaper_supervisor::Effect>,
+    ) {
+        use wallpaper_supervisor::{Effect, LogLevel};
+        for effect in effects {
+            match effect {
+                Effect::AbortHostMissing => {
+                    // Startup may already have parked the window.
+                    self.window_layer = "normal".to_string();
+                    {
+                        let mut s = self.current_settings.lock_safe();
+                        s.window_layer = "normal".to_string();
+                        self.persist_settings_logged(&s);
                     }
-                    self.wallpaper_teardown_at = None;
-                    self.wallpaper_last_spawn = None;
-                    debug::log_warn(&self.dir, "wallpaper: host did not exit in time, killed");
+                    self.restore_main_window(ctx);
                 }
-            }
-        }
-
-        if self.wallpaper_active {
-            // Detect whether the host needs (re)spawning, and whether the previous
-            // instance died quickly (a failure to back off from) or after running
-            // for a while (a legitimate loss, e.g. an Explorer restart). Capture the
-            // exit code too: a loader failure such as 0xC0000142
-            // (STATUS_DLL_INIT_FAILED) kills the host before its main() runs, so the
-            // host can never log the cause itself — the supervisor's record of the
-            // exit code is the only diagnostic trace that reaches a submitted log.
-            let (exited, exit_code): (bool, Option<i32>) = match self.wallpaper_child.as_mut() {
-                None => (true, None),
-                Some(child) => match child.try_wait() {
-                    Ok(Some(status)) => (true, status.code()),
-                    Ok(None) => (false, None),
-                    Err(_) => (true, None),
-                },
-            };
-            if exited {
-                if self.wallpaper_child.take().is_some() {
-                    // The host was running and has now exited. If it died within a
-                    // few seconds of spawning, treat it as a fast failure and back
-                    // off; if it lived longer, reset the failure counter.
-                    let fast_fail = self
-                        .wallpaper_last_spawn
-                        .map(|t| t.elapsed() < Duration::from_secs(4))
-                        .unwrap_or(true);
-                    let code_desc = match exit_code {
-                        Some(c) => format!("exit code {c} (0x{:08X})", c as u32),
-                        None => "no exit code".to_string(),
-                    };
-                    if fast_fail {
-                        self.wallpaper_spawn_fails = self.wallpaper_spawn_fails.saturating_add(1);
-                        debug::log_warn(
-                            &self.dir,
-                            &format!(
-                                "wallpaper: host exited within 4s of spawn ({code_desc}); \
-                                 consecutive fast failures: {}",
-                                self.wallpaper_spawn_fails
-                            ),
-                        );
-                    } else {
-                        self.wallpaper_spawn_fails = 0;
-                        debug::log_debug(
-                            &self.dir,
-                            &format!(
-                                "wallpaper: host exited after running ({code_desc}); respawning"
-                            ),
-                        );
-                    }
-                }
-                // Exponential backoff after a fast failure: 0 s, 2 s, 4 s, 8 s …
-                // capped at 30 s. Stop entirely after 5 consecutive failures so a
-                // host that simply cannot start does not spawn error dialogs
-                // forever; re-toggling the mode resets the counter.
-                const MAX_FAILS: u32 = 5;
-                if self.wallpaper_spawn_fails >= MAX_FAILS {
-                    if self.wallpaper_spawn_fails == MAX_FAILS {
-                        self.wallpaper_spawn_fails += 1; // log the giving-up once
-                        debug::log_error(
-                            &self.dir,
-                            "wallpaper: host failed to start repeatedly — giving up \
-                             (toggle wallpaper mode off and on to retry)",
-                        );
-                    }
-                } else {
-                    let backoff = if self.wallpaper_spawn_fails == 0 {
-                        Duration::ZERO
-                    } else {
-                        Duration::from_secs(
-                            (2u64.saturating_pow(self.wallpaper_spawn_fails)).min(30),
-                        )
-                    };
-                    let ready = self
-                        .wallpaper_last_spawn
-                        .map(|t| t.elapsed() >= backoff)
-                        .unwrap_or(true);
-                    if ready {
-                        match Self::spawn_wallpaper_host() {
-                            Ok(child) => {
-                                debug::log_debug(&self.dir, "wallpaper: spawned host process");
-                                self.wallpaper_child = Some(child);
-                                self.wallpaper_last_spawn = Some(Instant::now());
-                            }
-                            Err(e) => {
-                                self.wallpaper_spawn_fails =
-                                    self.wallpaper_spawn_fails.saturating_add(1);
-                                self.wallpaper_last_spawn = Some(Instant::now());
-                                debug::log_error(
-                                    &self.dir,
-                                    &format!("wallpaper: spawn host failed — {e}"),
-                                );
-                            }
+                Effect::Enter => {
+                    // Hand where the user left the window in the previous
+                    // (on-screen) layer to the host: position it in Normal
+                    // mode, then switch to wallpaper.
+                    //
+                    // Guarded: on the very frame a prior mode transition's
+                    // `OuterPosition` was issued, `ctx.input().outer_rect` can
+                    // still report the previous position — after a quick
+                    // off/on toggle that can be the off-screen parked
+                    // coordinate, which would send the host to the wrong
+                    // monitor (or off every monitor). Only trust a
+                    // `last_fixed_pos` on a connected monitor; otherwise keep
+                    // the saved `wallpaper_position`.
+                    if let Some([x, y]) = self.last_fixed_pos {
+                        if is_position_on_screen([x, y]) {
+                            let mut s = self.current_settings.lock_safe();
+                            s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
+                            self.persist_settings_logged(&s);
                         }
                     }
+                    ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
+                        -32000.0, -32000.0,
+                    )));
                 }
+                Effect::Leave => self.restore_main_window(ctx),
+                Effect::Log(LogLevel::Debug, m) => debug::log_debug(&self.dir, &m),
+                Effect::Log(LogLevel::Warn, m) => debug::log_warn(&self.dir, &m),
+                Effect::Log(LogLevel::Error, m) => debug::log_error(&self.dir, &m),
             }
         }
     }
@@ -1439,7 +1249,7 @@ impl RigStatsApp {
             self.status_refreshing.clone(),
             self.dir.as_ref().clone(),
             self.runtime.latest.lhm_connected,
-            self.wallpaper_active,
+            self.wallpaper.is_active(),
             ctx.clone(),
         );
     }
@@ -1763,7 +1573,7 @@ impl eframe::App for RigStatsApp {
             // In wallpaper mode our window is parked off-screen and the host owns the
             // visible dashboard — repositioning here would yank the (frozen, polling-
             // paused) main window back on-screen over the wallpaper, so skip it.
-            if !self.floating_mode && !self.wallpaper_active {
+            if !self.floating_mode && !self.wallpaper.is_active() {
                 let new_size = [w, h];
                 if self.last_applied_window_size != Some(new_size) {
                     self.last_applied_window_size = Some(new_size);
@@ -2063,7 +1873,7 @@ impl eframe::App for RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.runtime.latest.lhm_connected;
-            let wallpaper_active = self.wallpaper_active;
+            let wallpaper_active = self.wallpaper.is_active();
             let control_state = self.runtime.control.clone();
             let visible = self.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
@@ -2293,7 +2103,7 @@ impl eframe::App for RigStatsApp {
             // carry the window over to its current spot. Skip while the window is
             // parked off-screen for wallpaper mode, which would otherwise overwrite
             // the real position with the parking coordinates.
-            if !self.wallpaper_active {
+            if !self.wallpaper.is_active() {
                 if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
                     self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
                 }
