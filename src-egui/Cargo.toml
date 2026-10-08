@@ -18,21 +18,21 @@ path = "src/bin/wallpaper.rs"
 
 [dependencies]
 rigstats-backend = { path = "../rigstats-backend" }
-eframe = "0.34"
-egui = "0.34"
+eframe = "0.35"
+egui = "0.35"
 # egui_plot's own version numbering trails egui's by one minor — 0.35 is the
 # release that depends on egui ^0.34, matching the eframe/egui pin above.
-egui_plot = "0.35"
+egui_plot = "0.36"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
-sysinfo = "0.30"
+sysinfo = "0.39"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-tray-icon = "0.23"
+tray-icon = "0.26"
 image = { version = "0.25", default-features = false, features = ["png"] }
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rfd = "0.15"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+rfd = "0.17"
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # Already in the tree through ureq's TLS; hashes the downloaded update.
 ring = "0.17"
 
@@ -46,9 +46,9 @@ winres = "0.1"
 # Pinned to match the versions eframe/egui-wgpu already resolve to (see Cargo.lock),
 # so the DComp spike probe (examples/dcomp_probe.rs, issue #131) doesn't perturb
 # the workspace's dependency resolution.
-wgpu = "=29.0.3"
+wgpu = "=30.0.0"
 winit = "=0.30.13"
-pollster = "=0.4.0"
+pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 
 [lints.rust]
