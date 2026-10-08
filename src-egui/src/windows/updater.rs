@@ -38,6 +38,9 @@ pub struct UpdaterState {
     /// rate). The key is derived from the current status so the cache is
     /// rebuilt only when the displayed notes actually change.
     notes_cache: Option<(u64, Vec<ReleaseEntry>)>,
+    /// A check/download is running (`update_flow`) — the button's and the
+    /// background loop's never overlap.
+    pub busy: bool,
 }
 
 impl Default for UpdaterState {
@@ -45,6 +48,7 @@ impl Default for UpdaterState {
         Self {
             status: UpdateStatus::Idle,
             notes_cache: None,
+            busy: false,
         }
     }
 }

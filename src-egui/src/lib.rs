@@ -29,6 +29,7 @@ pub mod tempcolor;
 pub mod theme;
 pub mod tray;
 pub mod update_check;
+pub mod update_flow;
 #[cfg(windows)]
 pub mod win32_behind;
 #[cfg(windows)]
