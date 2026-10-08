@@ -22,7 +22,7 @@ use rigstats_egui::tray::{
     profile_choice_from_menu_id, Tray, TrayCmd,
 };
 use rigstats_egui::wallpaper_supervisor::{self, ChildHost, WallpaperSupervisor};
-use rigstats_egui::{alerts, panels, theme, update_check, windows, PollStats};
+use rigstats_egui::{alerts, panels, theme, update_flow, windows, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_behind, win32_dark_mode, win_opacity};
 use std::cell::RefCell;
@@ -85,8 +85,6 @@ struct RigStatsApp {
     status_refreshing: Arc<AtomicBool>,
     status_collecting: Arc<AtomicBool>,
     updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
-    // true while a manual check/download is in flight (prevents double-trigger)
-    updater_busy: Arc<AtomicBool>,
     history_win: Arc<Mutex<windows::history::HistoryState>>,
     history_refreshing: Arc<AtomicBool>,
     history_loading_rows: Arc<AtomicBool>,
@@ -406,7 +404,6 @@ impl RigStatsApp {
             status_refreshing: Arc::new(AtomicBool::new(false)),
             status_collecting: Arc::new(AtomicBool::new(false)),
             updater_win,
-            updater_busy: Arc::new(AtomicBool::new(false)),
             history_win: Arc::new(Mutex::new(windows::history::HistoryState::placeholder())),
             history_refreshing: Arc::new(AtomicBool::new(false)),
             history_loading_rows: Arc::new(AtomicBool::new(false)),
@@ -1998,71 +1995,18 @@ impl eframe::App for RigStatsApp {
             );
 
             // When the window sets status to Checking (manual button click),
-            // kick off check+download on a plain OS thread — update_check is
-            // synchronous and tokio::spawn is not safe to call from the egui
-            // UI thread (which is not inside a tokio async context).
-            let is_checking = matches!(
-                self.updater_win.lock_safe().status,
-                windows::updater::UpdateStatus::Checking
-            );
-            if is_checking && !self.updater_busy.swap(true, Ordering::Relaxed) {
+            // run check+download on a plain OS thread — it blocks, and
+            // tokio::spawn is not safe to call from the egui UI thread
+            // (which is not inside a tokio async context).
+            let start_check = {
+                let s = self.updater_win.lock_safe();
+                matches!(s.status, windows::updater::UpdateStatus::Checking) && !s.busy
+            };
+            if start_check {
                 let win = self.updater_win.clone();
-                let busy = self.updater_busy.clone();
                 let ctx = ui.ctx().clone();
                 std::thread::spawn(move || {
-                    let thread_result =
-                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            let result = update_check::check();
-                            match result {
-                                Ok(update_check::CheckResult::UpdateAvailable(info)) => {
-                                    {
-                                        let mut s = win.lock_safe();
-                                        s.status = windows::updater::UpdateStatus::Downloading {
-                                            downloaded: 0,
-                                            total: 0,
-                                        };
-                                    }
-                                    ctx.request_repaint();
-                                    let win2 = win.clone();
-                                    let ctx2 = ctx.clone();
-                                    let dl_result =
-                                        update_check::download(&info, |downloaded, total| {
-                                            let mut s = win2.lock_safe();
-                                            s.status =
-                                                windows::updater::UpdateStatus::Downloading {
-                                                    downloaded,
-                                                    total,
-                                                };
-                                            ctx2.request_repaint();
-                                        });
-                                    let mut s = win.lock_safe();
-                                    s.status = match dl_result {
-                                        Ok(installer) => windows::updater::UpdateStatus::Ready {
-                                            info,
-                                            installer: Arc::new(installer),
-                                        },
-                                        Err(e) => windows::updater::UpdateStatus::Error(e),
-                                    };
-                                }
-                                Ok(update_check::CheckResult::UpToDate) => {
-                                    win.lock_safe().status =
-                                        windows::updater::UpdateStatus::UpToDate;
-                                }
-                                Err(e) => {
-                                    win.lock_safe().status =
-                                        windows::updater::UpdateStatus::Error(e);
-                                }
-                            }
-                        }));
-                    if let Err(_panic) = thread_result {
-                        if let Ok(mut s) = win.lock() {
-                            s.status = windows::updater::UpdateStatus::Error(
-                                "Update check failed unexpectedly".to_string(),
-                            );
-                        }
-                    }
-                    ctx.request_repaint();
-                    busy.store(false, Ordering::Relaxed);
+                    update_flow::run_check_and_download(&win, &ctx, update_flow::Trigger::Manual);
                 });
             }
         }
@@ -3649,59 +3593,29 @@ fn main() {
                 runtime.spawn(async move {
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     loop {
-                        let result = tokio::task::spawn_blocking(update_check::check)
-                            .await
-                            .unwrap_or_else(|_| Err("task panic".to_string()));
-                        match result {
-                            Ok(update_check::CheckResult::UpdateAvailable(info)) => {
-                                {
-                                    let mut s = win.lock_safe();
-                                    s.status = windows::updater::UpdateStatus::Downloading {
-                                        downloaded: 0,
-                                        total: 0,
-                                    };
-                                }
+                        let (win2, ctx2) = (win.clone(), ctx.clone());
+                        let outcome = tokio::task::spawn_blocking(move || {
+                            update_flow::run_check_and_download(
+                                &win2,
+                                &ctx2,
+                                update_flow::Trigger::Background,
+                            )
+                        })
+                        .await
+                        .unwrap_or_else(|e| update_flow::Outcome::Failed(e.to_string()));
+                        match outcome {
+                            update_flow::Outcome::Ready => {
+                                open.store(true, Ordering::Relaxed);
+                                focus.store(true, Ordering::Relaxed);
                                 ctx.request_repaint();
-                                let win2 = win.clone();
-                                let ctx2 = ctx.clone();
-                                let info2 = info.clone();
-                                let dl_result = tokio::task::spawn_blocking(move || {
-                                    update_check::download(&info2, |downloaded, total| {
-                                        let mut s = win2.lock_safe();
-                                        s.status = windows::updater::UpdateStatus::Downloading {
-                                            downloaded,
-                                            total,
-                                        };
-                                        ctx2.request_repaint();
-                                    })
-                                })
-                                .await
-                                .unwrap_or_else(|_| Err("download task panic".to_string()));
-                                match dl_result {
-                                    Ok(installer) => {
-                                        let mut s = win.lock_safe();
-                                        s.status = windows::updater::UpdateStatus::Ready {
-                                            info,
-                                            installer: Arc::new(installer),
-                                        };
-                                        drop(s);
-                                        open.store(true, Ordering::Relaxed);
-                                        focus.store(true, Ordering::Relaxed);
-                                        ctx.request_repaint();
-                                    }
-                                    Err(e) => {
-                                        win.lock_safe().status =
-                                            windows::updater::UpdateStatus::Error(e);
-                                    }
-                                }
                             }
-                            Ok(update_check::CheckResult::UpToDate) => {}
-                            Err(e) => {
+                            update_flow::Outcome::Failed(e) => {
                                 debug::log_warn(
                                     &dir_upd,
                                     &format!("update-check: background check failed — {e}"),
                                 );
                             }
+                            update_flow::Outcome::UpToDate | update_flow::Outcome::Busy => {}
                         }
                         tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
                     }
