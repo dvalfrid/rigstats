@@ -57,6 +57,36 @@ public sealed class DataDirectoryTests : IDisposable
     }
 
     [Fact]
+    public void The_dump_folder_is_not_readable_by_users()
+    {
+        Assert.Null(DataDirectory.EnsureSecure(_dir, Me));
+        var dumps = Path.Combine(_dir, "dumps");
+
+        Assert.Null(DataDirectory.EnsureDumpFolder(dumps, Me));
+
+        Assert.True(new DirectoryInfo(dumps).GetAccessControl().AreAccessRulesProtected);
+        Assert.Empty(RulesOf(dumps, inherited: true));
+        Assert.DoesNotContain(RulesOf(dumps, inherited: false), r => r.IdentityReference.Equals(Users));
+    }
+
+    [Fact]
+    public void A_dump_folder_windows_created_with_the_parents_rules_is_locked_down()
+    {
+        Assert.Null(DataDirectory.EnsureSecure(_dir, Me));
+        var dumps = Path.Combine(_dir, "dumps");
+        Directory.CreateDirectory(dumps); // inherits "Users read" from the data folder
+        File.WriteAllText(Path.Combine(dumps, "rigstats-sensor.exe.1234.dmp"), "dump");
+        Assert.Contains(RulesOf(dumps, inherited: true), r => r.IdentityReference.Equals(Users));
+
+        Assert.Null(DataDirectory.EnsureDumpFolder(dumps, Me));
+
+        Assert.DoesNotContain(RulesOf(dumps, inherited: true), r => r.IdentityReference.Equals(Users));
+        var fileRules = new FileInfo(Path.Combine(dumps, "rigstats-sensor.exe.1234.dmp")).GetAccessControl()
+            .GetAccessRules(true, true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>();
+        Assert.DoesNotContain(fileRules, r => r.IdentityReference.Equals(Users));
+    }
+
+    [Fact]
     public void AnExistingOpenFolderIsLockedDown()
     {
         // As under %ProgramData%: rules inherited from the parent.

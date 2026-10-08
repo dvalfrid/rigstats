@@ -11,26 +11,53 @@ It runs on Windows for every push and pull request and executes `cargo xtask ver
 - `cargo test` on `rigstats-backend` and `src-egui`
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
+- `cargo deny check advisories` (RustSec; see [Supply chain](#supply-chain))
 
-To require it before merge:
-
-1. Open GitHub repository Settings → Branches
-2. Add a branch protection rule for `main`
-3. Enable pull requests before merging
-4. Enable required status checks
-5. Select `Verify (Windows)`
+**`main` is protected:** a pull request — Dependabot's, release-please's or
+anyone's — can only be merged once `Verify (Windows)` has passed (required
+status check, bound to GitHub Actions). Force pushes and deleting `main` are
+blocked. Admins aren't held to it (`enforce_admins: false`): the maintainer
+can still push directly to `main`, and GitHub records it as a bypass.
+Settings → Branches → `main` to change it.
 
 ### Pinned Rust toolchain
 
 `build.yml`, `verify.yml`, and `release.yml` all install Rust via
-`dtolnay/rust-toolchain@1.98.0` — a specific version, not `@stable`. `@stable`
+`dtolnay/rust-toolchain` pinned by commit SHA with `toolchain: 1.98.0` — a
+specific version, not `@stable`. `@stable`
 floated to whatever Rust shipped that day, which twice broke CI on an
 unrelated push (a new clippy lint, then a new rustc future-incompat lint)
 with no code change to blame. `rust-toolchain.toml` at the repo root pins the
 same version for local development, so `rustup` auto-installs it the first
 time `cargo` runs in the repo — no drift between a contributor's machine and
-CI. Bumping the pin (both the workflow `@version` refs and
+CI. Bumping the pin (the workflows' `toolchain:` inputs — and the action SHA,
+whose `# 1.98.0` comment names the branch it came from — plus
 `rust-toolchain.toml`) is a deliberate, standalone commit.
+
+### Supply chain
+
+`release.yml` holds the signing credentials, so what CI runs is pinned (#224):
+
+- **Actions** are pinned to full commit SHAs with the version as a comment
+  (`uses: owner/repo@<sha> # v4.4.0`). A tag can be moved by its owner; a SHA
+  can't. **Dependabot** (`.github/dependabot.yml`) opens a grouped PR weekly
+  per ecosystem — GitHub Actions, Cargo, NuGet — so the pins stay current.
+  `LibreHardwareMonitorLib` is excluded: it is pinned to an exact build on
+  purpose and moved by hand after a hardware test.
+- **NSIS** (`build.yml`, `release.yml`): `choco install nsis --version=3.13.0`,
+  then `makensis /VERSION` is checked. Bump the version and the check together.
+- **wingetcreate** (`winget-submit.yml`): a fixed GitHub release, checked
+  against its SHA-256 (`WINGETCREATE_TAG` / `WINGETCREATE_SHA256`; the hash is
+  on the release page next to `wingetcreate.exe`).
+- **Dependency audit:** `cargo xtask verify` runs `cargo deny check advisories`
+  (config: `deny.toml`; an exception goes in its `ignore` list with the
+  advisory id and a reason). NuGet is audited by the restore itself:
+  `Directory.Build.props` turns on `NuGetAudit` for both .NET projects,
+  transitive packages included, and a moderate-or-worse vulnerability fails
+  the build. `.github/workflows/audit.yml` runs both checks every Monday, so
+  a new advisory shows up without a push.
+- Locally, verify skips the Rust audit with a hint when cargo-deny is missing:
+  `cargo install cargo-deny --locked`. In CI it is required.
 
 ## Build Workflow
 
@@ -135,9 +162,20 @@ It runs when a GitHub Release is published (or manually via `workflow_dispatch` 
 - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
 - uploads the `.exe` and `latest.json` to the GitHub Release
 
-A separate `.github/workflows/winget-submit.yml` runs after a release and
-opens/updates the `Codeby.RIGStats` manifest PR in `microsoft/winget-pkgs`,
-skipping submission if an update PR for that release is already open.
+### Winget
+
+After publishing, `release.yml` starts `.github/workflows/winget-submit.yml`
+with the tag, which opens/updates the `Codeby.RIGStats` manifest PR in
+`microsoft/winget-pkgs` (skipped if an update PR is already open). It is a
+dispatch rather than a `workflow_run` chain: the Release run is started with
+`GITHUB_TOKEN`, and GitHub starts no workflow from a `GITHUB_TOKEN`-caused
+event except a dispatch (#246). Pre-releases are never submitted.
+
+**Holding a release back** (e.g. to let testers try it first): add the label
+**`winget: hold`** to the release-please PR before merging it. The release is
+published as usual — installer, `latest.json`, in-app updates — but not
+submitted to winget; the Release Please run logs the decision. When it's
+ready: Actions → Submit to Winget → Run workflow → the tag (e.g. `v1.45.0`).
 
 ### Signing
 
@@ -152,17 +190,10 @@ If the release build fails or needs to be re-run for an existing tag:
 1. Open GitHub → Actions → Release
 2. Click `Run workflow`
 3. Enter the existing tag (e.g. `v1.27.0`)
-4. Run
+4. Untick "Submit this release to winget" if winget already has it or should wait
+5. Run
 
-**Important:** leave the "Use workflow from" branch/tag dropdown on `main`.
-`winget-submit.yml` is chained via `workflow_run`, which GitHub only fires
-for runs that completed on the default branch — if this dropdown is set to
-the tag instead, the Release build itself still succeeds, but the Winget
-submission silently never queues (no error, no skipped run — it just never
-starts). If that already happened, `winget-submit.yml` also has a manual
-`workflow_dispatch` trigger as a fallback: Actions → Submit to Winget → Run
-workflow. It always submits whatever the latest GitHub Release is, so no
-input is needed.
+Leave the "Use workflow from" dropdown on `main`.
 
 ## Day-To-Day Process
 

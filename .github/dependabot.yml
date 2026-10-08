@@ -1,0 +1,60 @@
+# Keeps the SHA-pinned actions and the dependencies current (#224), weekly,
+# one grouped PR per ecosystem. Commit subjects follow the repo format
+# (`build(deps): …`), which release-please leaves out of the changelog.
+#
+# Only updates that should be safe to merge on a green CI: no major versions
+# anywhere, and for Cargo only patches — most crates are 0.x, where a minor
+# bump (egui 0.34 → 0.35) is a breaking one. Bigger updates are done on
+# purpose, as their own issue. Release-only actions (signing, publishing)
+# aren't exercised by Verify, which is one more reason to keep majors out.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    assignees: ["dvalfrid"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    assignees: ["dvalfrid"]
+    commit-message:
+      prefix: build
+      include: scope
+
+  - package-ecosystem: nuget
+    directories:
+      - /sensor-sidecar
+      - /sensor-sidecar.Tests
+    schedule:
+      interval: weekly
+    groups:
+      nuget:
+        patterns: ["*"]
+    ignore:
+      # Pinned on purpose to an exact pre-release with the NVML crash fix
+      # (#242); moved by hand after a hardware test.
+      - dependency-name: LibreHardwareMonitorLib
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    assignees: ["dvalfrid"]
+    commit-message:
+      prefix: build
+      include: scope

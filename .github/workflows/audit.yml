@@ -1,0 +1,36 @@
+name: Audit
+
+# Weekly dependency audit (#224), so a new advisory against an unchanged
+# Cargo.lock / NuGet graph shows up without a push. The same checks run on
+# every push in `cargo xtask verify`.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit dependencies
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@f7e5d7c961414b23f5b25b2da9294395d08513ad # v2.87.26
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: Rust advisories
+        run: cargo deny check advisories
+
+      # NuGetAudit (Directory.Build.props) fails the restore on a known
+      # vulnerability of moderate severity or worse.
+      - name: NuGet advisories
+        run: |
+          dotnet restore sensor-sidecar/sensor-sidecar.csproj
+          dotnet restore sensor-sidecar.Tests/sensor-sidecar.Tests.csproj

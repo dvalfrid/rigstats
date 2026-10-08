@@ -1,6 +1,6 @@
 [package]
 name = "rigstats-egui"
-version = "1.43.0" # x-release-please-version
+version = "1.44.0" # x-release-please-version
 edition = "2021"
 rust-version = "1.77"
 
@@ -46,7 +46,7 @@ winres = "0.1"
 # Pinned to match the versions eframe/egui-wgpu already resolve to (see Cargo.lock),
 # so the DComp spike probe (examples/dcomp_probe.rs, issue #131) doesn't perturb
 # the workspace's dependency resolution.
-wgpu = "=29.0.3"
+wgpu = "=29.0.4"
 winit = "=0.30.13"
 pollster = "=0.4.0"
 raw-window-handle = "=0.6.2"

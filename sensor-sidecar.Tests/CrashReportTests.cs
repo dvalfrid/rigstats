@@ -113,6 +113,24 @@ public sealed class CrashReportTests
     }
 
     [Fact]
+    public void New_crash_dumps_are_listed_with_path_and_size_oldest_first()
+    {
+        var folder = @"C:\ProgramData\se.codeby.rigstats\dumps";
+        var dumps = new[]
+        {
+            new CrashDump("rigstats-sensor.exe.7712.dmp", CrashTime.AddSeconds(2), 3_250_000),
+            new CrashDump("rigstats-sensor.exe.4100.dmp", CrashTime.AddDays(-3), 2_000_000), // before the mark
+            new CrashDump("rigstats-sensor.exe.6012.dmp", CrashTime.AddHours(-1), 1_048_576),
+        };
+
+        var lines = CrashReport.DumpLines(dumps, CrashTime.AddDays(-1), folder);
+
+        Assert.Equal(2, lines.Count);
+        Assert.Contains(@"dumps\rigstats-sensor.exe.6012.dmp (1.0 MB, administrators only)", lines[0]);
+        Assert.Contains(@"dumps\rigstats-sensor.exe.7712.dmp (3.1 MB, administrators only)", lines[1]);
+    }
+
+    [Fact]
     public void The_mark_round_trips_and_a_missing_or_broken_one_is_null()
     {
         var path = Path.Combine(Path.GetTempPath(), $"rigstats-crash-mark-{Guid.NewGuid():N}.txt");

@@ -29,9 +29,15 @@ if (DataDirectory.EnsureSecure(DataDirectory.DefaultPath) is { } insecure)
 }
 
 // Earlier crashes Windows recorded but this log couldn't (a native fault ends
-// the process before any handler runs, #242) — copied in once.
+// the process before any handler runs, #242) — copied in once, with the
+// crash dumps written for them (#220). The dump folder is locked to
+// administrators before Windows ever writes into it.
 if (SidecarLog.FileEnabled)
-    LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"));
+{
+    if (DataDirectory.EnsureDumpFolder(DataDirectory.DumpPath) is { } dumpFolderProblem)
+        SidecarLog.Log($"[rigstats-sensor] The crash dump folder could not be secured ({dumpFolderProblem}).");
+    LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath);
+}
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options =>
@@ -220,7 +226,7 @@ finally
 
 // Reads ".NET Runtime" 1026 / "Application Error" 1000 entries since the last
 // one logged and writes this service's into its log; never fails the start.
-static void LogEarlierCrashes(string markPath)
+static void LogEarlierCrashes(string markPath, string dumpFolder)
 {
     try
     {
@@ -244,11 +250,21 @@ static void LogEarlierCrashes(string markPath)
                 }
             }
         }
-        var lines = CrashReport.Lines(events, since);
+        var dumps = Directory.Exists(dumpFolder)
+            ? new DirectoryInfo(dumpFolder).EnumerateFiles("*.dmp")
+                .Select(f => new CrashDump(f.Name, new DateTimeOffset(f.LastWriteTime), f.Length))
+                .ToList()
+            : [];
+        var lines = CrashReport.Lines(events, since).Concat(CrashReport.DumpLines(dumps, since, dumpFolder)).ToList();
         foreach (var line in lines)
             SidecarLog.Log(line);
+        // Past every entry and dump just logged: a dump is written moments
+        // after its event, and must not be logged again at the next start.
         if (lines.Count > 0)
-            CrashReport.WriteMark(markPath, events.Where(e => e.Time > since).Max(e => e.Time));
+        {
+            CrashReport.WriteMark(markPath, events.Select(e => e.Time).Concat(dumps.Select(d => d.Time))
+                .Where(t => t > since).Max());
+        }
     }
     catch (Exception e)
     {
