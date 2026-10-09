@@ -30,14 +30,14 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Stats logging / data export | ✅ Done |
 | GPU driver version + stale-driver warning (Status dialog) | ✅ Done (v1.31) |
 | Fullscreen (fill-screen) mode for dedicated monitors | ✅ Done |
-| Floating panel groups | 🔲 Planned (3.0) |
+| Floating panel groups | ⏭ Not planned — polish for floating mode nobody has asked for (#103) |
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | ✅ Done |
 | Desktop wallpaper mode — per-pixel opacity (DirectComposition) | ✅ Done |
 | Desktop background — WE Application wallpaper | 🔲 Planned (3.0) |
 | Desktop background — independently positioned panels (floating + WorkerW) | 🔲 Planned (3.0), see #170 |
 | Total system power consumption | ✅ Done (v1.34) |
-| Stream Deck integration | 🔲 Planned (3.0) |
+| Stream Deck integration | ⏭ Not planned — no Stream Deck to build and test against (#106) |
 | Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
@@ -61,8 +61,8 @@ The whole roadmap is mirrored to
 [GitHub Issues](https://github.com/dvalfrid/rigstats/issues) across two
 milestones — **[v2.0](https://github.com/dvalfrid/rigstats/milestone/1)** for the
 current scope and **[v3.0](https://github.com/dvalfrid/rigstats/milestone/2)** for
-post-2.0 features (currently Floating panel groups, Stream Deck integration, and
-the cross-platform OS abstraction / Linux port) —
+post-2.0 features (e.g. the Control Center phases, peripherals, and the
+cross-platform OS abstraction / Linux port) —
 with shipped features as closed issues, planned work as open issues, and
 investigated-and-dropped items closed as *not planned*.
 
@@ -115,9 +115,9 @@ script to refresh it.
 | [#290](https://github.com/dvalfrid/rigstats/issues/290) | `peripheral-battery` | Peripherals: battery status of ROG wireless devices (panel, tray card, alerts) | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
+| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | ⏭ Not planned |
 | [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
-| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | 🔲 Planned |
-| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | 🔲 Planned |
+| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | ⏭ Not planned |
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
@@ -586,7 +586,9 @@ dashboard regardless of how many panels are enabled.
 
 ---
 
-## Floating panel groups 🔲 (Milestone 3.0)
+## Floating panel groups ⏭ (not planned, 2026-10-09)
+
+Dropped in the 2026-10-09 backlog review: polish for floating mode that nobody has asked for. The design below is kept for reference.
 
 **Panel:** Floating panel layout (requires the above feature)
 **Data source:** No new data required
@@ -923,7 +925,9 @@ modes are mutually exclusive (both target the same desktop layer). Target: **v3.
 
 ---
 
-## Stream Deck integration 🔲 (Milestone 3.0)
+## Stream Deck integration ⏭ (not planned, 2026-10-09)
+
+Dropped in the 2026-10-09 backlog review: there is no Stream Deck to build and test against. The design below is kept for reference.
 
 **Crate:** [`elgato-streamdeck`](https://crates.io/crates/elgato-streamdeck) — talks directly to the Stream Deck hardware over USB HID
 
