@@ -2,4 +2,5 @@
 
 pub(crate) mod background;
 pub(crate) mod startup;
+pub(crate) mod state;
 mod tray_actions;
