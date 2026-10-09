@@ -85,6 +85,13 @@ public class KeyboardDedupTests
     }
 
     [Fact]
+    public void Same_names_are_numbered_after_the_receiver_duplicate_is_gone()
+    {
+        Assert.Equal(["ROG Azoth X", "ROG Azoth X (2)", "ROG Delta II"],
+            AsusKeyboardDevice.Numbered(["ROG Azoth X", "ROG Azoth X", "ROG Delta II"]));
+    }
+
+    [Fact]
     public void A_receiver_keyboard_alone_stays()
     {
         Assert.Equal(new HashSet<int> { 0 }, AsusKeyboardDevice.KeepIndices([(true, "ROG Azoth X")]));
