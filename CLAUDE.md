@@ -115,7 +115,11 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 ### egui binary (`src-egui/src/`)
 
 - **`lib.rs`** — library root; re-exports all modules so both binaries share the same panel renderer
-- **`main.rs`** — `RigStatsApp`/`eframe::App`: frame loop, settings reload, secondary viewports, panel rendering, wallpaper-mode supervisor (`update_wallpaper_mode`)
+- **`main.rs`** — `RigStatsApp` (struct, `new`) and `eframe::App`: `ui()` is the frame loop as a list of calls into `app/`; plus `main()`, alerts, profile cycling, `update_wallpaper_mode` (window side of `wallpaper_supervisor`)
+- **`app/`** (binary-only) — parts of `RigStatsApp` split out of `main.rs` (#225): `state.rs` (field groups: `OverlayState`, `DialogStates`, `FloatingState`, `WindowFit`, `RecordingIndicator`, `FontAtlasRefresh`, `GpuRecovery`), `main_window.rs` (fixed dashboard / floating per frame), `floating.rs`, `overlay_window.rs`, `dialogs.rs` (`render_dialogs`, `finish_dialog_frame`), `settings_reload.rs`, `tray_actions.rs`, `startup.rs` (logging, initial window, wgpu/DComp options), `background.rs` (GPU detection, control task, tray thread, heartbeat, updater; tested tray-id mapping)
+- **`update_flow.rs`** — `run_check_and_download`: the one check → download → verify path for the Updates button and the background check (`Trigger`), unit-tested
+- **`wallpaper_supervisor.rs`** — `WallpaperSupervisor`: wallpaper-mode enter/leave and host spawn/backoff/teardown decisions behind a `Host` trait, unit-tested
+- Start-up smoke test for every window mode: `pwsh -File tools\smoke-app.ps1` (see `tools/README.md`) — run it after changes to start-up, window modes or `RigStatsApp`'s structure
 - **`dashboard.rs`** — `DashboardRuntime`: owned telemetry→renderer glue (sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView<'a>`: borrowed per-frame render state; `PanelThresholds` (warn/crit pairs)
 - **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
@@ -140,7 +144,7 @@ Settings are read from `%APPDATA%\se.codeby.rigstats\`. The sidecar pipe accepts
 - **`win32_behind.rs`** — `apply_behind`/`prepare_for_drag`/`keep_behind`: Always-Behind window layer support
 - **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup; `apply_titlebar_theme` for dialog title bars
 - **`win_opacity.rs`** — raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores minimized first), `force_repaint`, `find_hwnd`
-- **`update_check.rs`** — `check()` fetches `latest.json`, `download`/`launch_installer`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The 10 s-then-6 h background check loop is spawned in `main.rs`. An installer is only launched as a `VerifiedInstaller`: link inside this repo's releases, SHA-256 from the manifest, valid Authenticode signature from the app's own publisher, and the file held open without write/delete sharing until launch
+- **`update_check.rs`** — `check()` fetches `latest.json`, `download`/`launch_installer`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The 10 s-then-6 h background check loop is spawned in `app/background.rs` (`start_updater`) and runs `update_flow`. An installer is only launched as a `VerifiedInstaller`: link inside this repo's releases, SHA-256 from the manifest, valid Authenticode signature from the app's own publisher, and the file held open without write/delete sharing until launch
 - **`authenticode.rs`** — `verified_signer_subject`: `WinVerifyTrust` + the signer's subject, for the updater. FFI, `#![allow(unsafe_code)]`
 
 ### Data flow
