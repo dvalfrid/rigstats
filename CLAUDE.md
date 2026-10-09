@@ -210,17 +210,3 @@ Settings: `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`. Debug log: `rig
 Rust tests are `#[cfg(test)]` modules at the bottom of their files (e.g. `src-egui/src/geometry.rs`). Run with `cargo xtask test`.
 
 .NET sidecar tests: `sensor-sidecar.Tests/` (xUnit, NSubstitute); runs as part of `cargo xtask verify`.
-
-## Kontexthantering
-
-Efter varje svar, uppskatta hur mycket av kontextfönstret som används.
-När du bedömer att ~70% är förbrukat, lägg till en varning i slutet av svaret:
-
-⚠️ **KONTEXT ~70%** — Överväg att köra /compact eller starta ny session snart.
-
-När du bedömer att ~90% är förbrukat:
-
-🔴 **KONTEXT KRITISK** — Kör följande innan vi fortsätter:
-
-1. Spara en sammanfattning till CLAUDE.md
-2. Starta ny session med sammanfattningen som kickstart
