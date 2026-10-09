@@ -893,6 +893,27 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   LampArray devices itself: they report `blocked` and Aura Sync skips them,
   the Lighting tab explains it per device, and the rest keep syncing.
 
+### Battery status of wireless devices (#290)
+
+Read-only, from the lighting devices already open. `IBatteryDevice`
+(`Lighting/Battery.cs`) beside `ILightingDevice`: `AsusHeadsetDevice` asks
+`12 07` + `12 08` (every headset in its table), `AsusKeyboardDevice` `12 01`
+(only ids in `BatteryModels` — `hasPowerInfo` in the model's Gear Link
+manifest; behind the Omni receiver, the paired keyboard's id decides), the
+Omni receiver's mouse `12 07` on its channel (`OmniMouse.ReadBattery`, via its
+`LampArrayDevice`; every mouse in `OmniMouse.Models` has power info). The
+reply layouts are in `BatteryReplies`; a standby answer (0 %, not charging) and
+an `FF AA` error read as no answer. `PeripheralBatteryMonitor` asks once a
+minute (first after 10 s), keeps a silent device's last reading while it stays
+connected, logs the first reading and charging changes (`Battery: ROG Azoth X
+82 %.`), and `HardwareHost` adds the list to every telemetry line as
+`peripherals: [{id, name, kind, battery, charging}]` — omitted until the first
+round, so the golden fixtures don't carry it. The field's shape is pinned by
+`sensor-sidecar.Tests/contract/telemetry-peripherals.json`, which the Rust
+reader checks too. Not covered yet: ROG mice on their own 2.4 GHz dongle or
+cable (driven as LampArray, no ASUS protocol path), devices while another
+program owns the lighting, Bluetooth (#291).
+
 ### Philips Hue (#215)
 
 Room lights through a Hue Bridge, on its official local API — no cloud

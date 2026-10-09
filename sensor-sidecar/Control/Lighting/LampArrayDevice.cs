@@ -17,7 +17,7 @@ namespace SensorSidecar.Control.Lighting;
 /// on release, so the device returns to its own effect. While Windows'
 /// Dynamic Lighting is on, Windows drives these devices itself — the device
 /// then reports itself blocked instead of fighting it.
-public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IDisposable
+public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevice, IDisposable
 {
     public const ushort LightingPage = 0x59;
     private const ushort LampArrayUsage = 0x01;
@@ -245,6 +245,12 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IDisposable
     public bool KnownModel => _omni?.Name is not null;
 
     public bool? WdlOn() => _omni?.WdlOn();
+
+    /// The battery of the mouse behind the Omni receiver; other LampArray
+    /// devices have none here.
+    public bool HasBattery => _omni?.HasBattery == true;
+
+    public BatteryStatus? ReadBattery() => _omni?.ReadBattery();
 
     public void EnableWdl() =>
         (_omni ?? throw new InvalidOperationException($"{Name} has no lighting mode to switch.")).SetWdl(true);

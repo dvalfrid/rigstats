@@ -167,6 +167,30 @@ public sealed class OmniMouse
         }
     }
 
+    /// Every mouse in <see cref="Models"/> has `hasPowerInfo` in its Gear Link
+    /// manifest (read 2026-10-09); an unknown one is never asked.
+    public bool HasBattery => Name is not null;
+
+    /// `12 07` on the mouse's channel (Gear Link's mouse power class and
+    /// G-Helper agree), or null when it doesn't answer (asleep, gone).
+    public BatteryStatus? ReadBattery()
+    {
+        if (!HasBattery)
+            return null;
+        try
+        {
+            lock (_lock)
+            {
+                using var device = Hid.Open(_channel);
+                return Ask(device, [_reportId, 0x12, 0x07]) is { } reply ? BatteryReplies.Mouse(reply) : null;
+            }
+        }
+        catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
     /// The mouse's WDL state, or null when it doesn't answer (asleep, gone).
     public bool? WdlOn()
     {

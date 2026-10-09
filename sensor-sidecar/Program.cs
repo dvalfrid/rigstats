@@ -49,7 +49,8 @@ builder.Services.AddWindowsService(options =>
 // as IHardwareHost by SensorWorker/providers, and separately started/stopped
 // via its own IHostedService registration (must run before SensorWorker, so
 // register it first: hosted services start in registration order).
-builder.Services.AddSingleton<HardwareHost>();
+builder.Services.AddSingleton<PeripheralStatusStore>();
+builder.Services.AddSingleton(sp => new HardwareHost(sp.GetRequiredService<PeripheralStatusStore>()));
 builder.Services.AddSingleton<IHardwareHost>(sp => sp.GetRequiredService<HardwareHost>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HardwareHost>());
 
@@ -188,6 +189,8 @@ builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<Ligh
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();
+// Batteries of the wireless lighting devices, about once a minute (#290).
+builder.Services.AddHostedService<PeripheralBatteryMonitor>();
 
 IHost host;
 SafetyGuard safetyGuard;

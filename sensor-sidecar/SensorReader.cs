@@ -12,7 +12,11 @@ public sealed record SensorPayload(
     List<MbFan> MbFans,
     List<MbTemp> MbTemps,
     List<MbVoltage> MbVoltages,
-    string? MbChip);
+    string? MbChip,
+    // Wireless devices' batteries (#290), filled in by HardwareHost from
+    // PeripheralBatteryMonitor — not part of Extract, so left out when null.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    List<SensorSidecar.Control.PeripheralStatus>? Peripherals = null);
 
 public sealed record GpuDevice(
     string Name,

@@ -136,6 +136,8 @@ Do not run `dotnet format` yet: `.editorconfig` has no `[*.cs]` section, so it w
 ### C# tests
 
 - Hardware sits behind an interface (`IPawnIoModule`, `ILightingDevice`, `FakeFanHeader`) so providers are tested without it. Never call real hardware from a test.
+- The test project compiles the sidecar's sources from an explicit list (the sidecar is a single-file exe a test project can't reference): **a new `.cs` file in `sensor-sidecar/` must be added to `sensor-sidecar.Tests.csproj`'s `<Compile Include=…>` list**, or the tests fail with "type not found" while the sidecar itself builds.
+- Data shared with the Rust side goes in `sensor-sidecar.Tests/contract/`, checked by a test on each side.
 - Real-hardware captures go in `sensor-sidecar.Tests/fixtures/` (auto-discovered by `FixtureTests`; see `/sensor-fixture`). Lighting models' `Verified` flags generate `docs/supported-devices.md`; `SupportedDevicesTests` fails on drift — regenerate with `RIGSTATS_UPDATE_SUPPORTED_DEVICES=1`.
 
 ---
