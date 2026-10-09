@@ -741,6 +741,7 @@ impl eframe::App for RigStatsApp {
         let new_stats = self.runtime.drain(&self.receiver);
         if new_stats {
             self.check_alerts();
+            self.tray.set_peripherals(&self.runtime.latest.peripherals);
         }
 
         // Control Center (#187): fold any control-pipe events (connect/

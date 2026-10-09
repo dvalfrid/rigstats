@@ -328,7 +328,7 @@ Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor 
 | Battery level (%) per wireless device | Sensor service, read once a minute from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
 | Charging state | Same |
 
-Colours follow the Battery panel's charge thresholds. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. Bluetooth devices come later (#291).
+Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while discharging, one per device). The tray icon's tooltip lists each device's battery. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. Bluetooth devices come later (#291).
 
 ### Battery (opt-in)
 

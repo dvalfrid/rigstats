@@ -145,6 +145,21 @@ pub fn pending_alerts(stats: &PollStats, settings: &Settings) -> Vec<PendingAler
         }
     }
 
+    // Wireless devices' batteries (#290): the Battery panel's charge
+    // thresholds, only while discharging; each device has its own cooldown
+    // key so one low mouse doesn't silence a low headset.
+    for device in stats.peripherals.iter().filter(|d| !d.charging) {
+        if let Some(mut alert) = check_below(
+            settings,
+            "battery",
+            format!("{} battery", device.name),
+            Some(f64::from(device.battery)),
+        ) {
+            alert.component = format!("peripheral_{}", device.id);
+            out.push(alert);
+        }
+    }
+
     out
 }
 
@@ -168,6 +183,46 @@ mod tests {
         }
         s.thresholds = map;
         s
+    }
+
+    fn peripheral(id: &str, battery: u8, charging: bool) -> rigstats_backend::lhm::Peripheral {
+        rigstats_backend::lhm::Peripheral {
+            id: id.into(),
+            name: format!("Device {id}"),
+            kind: "mouse".into(),
+            battery,
+            charging,
+        }
+    }
+
+    #[test]
+    fn low_peripheral_battery_fires_with_its_own_cooldown_key() {
+        let s = settings_with(&[("battery", Some(20), Some(10))]);
+        let stats = PollStats {
+            peripherals: vec![
+                peripheral("mouse", 8, false),
+                peripheral("headset", 18, false),
+                peripheral("keyboard", 80, false),
+            ],
+            ..Default::default()
+        };
+        let alerts = pending_alerts(&stats, &s);
+        assert_eq!(alerts.len(), 2);
+        assert_eq!(alerts[0].component, "peripheral_mouse");
+        assert_eq!(alerts[0].level, AlertLevel::Crit);
+        assert_eq!(alerts[0].label, "Device mouse battery");
+        assert_eq!(alerts[1].component, "peripheral_headset");
+        assert_eq!(alerts[1].level, AlertLevel::Warn);
+    }
+
+    #[test]
+    fn charging_peripheral_does_not_alert() {
+        let s = settings_with(&[("battery", Some(20), Some(10))]);
+        let stats = PollStats {
+            peripherals: vec![peripheral("mouse", 5, true)],
+            ..Default::default()
+        };
+        assert!(pending_alerts(&stats, &s).is_empty());
     }
 
     fn stats_with_cpu_temp(v: f64) -> PollStats {
