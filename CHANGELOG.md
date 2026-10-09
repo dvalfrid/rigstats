@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.45.1](https://github.com/dvalfrid/rigstats/compare/v1.45.0...v1.45.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **wallpaper:** tray hover card and alerts keep updating in desktop wallpaper mode ([#300](https://github.com/dvalfrid/rigstats/issues/300)) ([f104ba6](https://github.com/dvalfrid/rigstats/commit/f104ba62b4f63aa2a6385bc568b2cf711e1ee1b8))
+
 ## [1.45.0](https://github.com/dvalfrid/rigstats/compare/v1.44.0...v1.45.0) (2026-10-09)
 
 
