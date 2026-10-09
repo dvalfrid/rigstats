@@ -13,6 +13,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `/verifier-gui` | Visually verifying a GUI change |
 | `/add-control-provider` | Adding a hardware-control domain (IControlProvider) to the Control Center service |
 | `/add-lighting-device` | Supporting a new lighting device or model, incl. regenerating the supported-devices list |
+| `/live-test` | Building and handing over a sidecar change for a live test on the owner's hardware (dev sidecar + debug app), recording the result |
+| `/diagnostics-triage` | Finding why a device/sensor/feature doesn't work from the service log, `lighting-devices.json` or a user's diagnostics ZIP (read-only) |
 
 ## Commands
 
