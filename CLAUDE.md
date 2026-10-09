@@ -11,6 +11,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | `/gpu-engine-fixture` | Adding a GPU Engine (GPU Apps panel) fixture |
 | `/run-rigstats` | Building and launching the app |
 | `/verifier-gui` | Visually verifying a GUI change |
+| `/add-control-provider` | Adding a hardware-control domain (IControlProvider) to the Control Center service |
+| `/add-lighting-device` | Supporting a new lighting device or model, incl. regenerating the supported-devices list |
 
 ## Commands
 
