@@ -63,7 +63,11 @@ jobs:
       - name: Build NSIS installer
         shell: pwsh
         run: |
-          $version = (Get-Content "src-egui/Cargo.toml" | Select-String 'version = "').ToString().Trim() -replace '.*version = "([^"]+)".*', '$1'
+          # Only the package's own `version = "…"` line — dependency tables like
+          # `tokio = { version = "1", … }` match too, and several matches made an
+          # array that PowerShell turned into "System.Object[]".
+          $version = (Select-String -Path "src-egui/Cargo.toml" -Pattern '^version = "([^"]+)"' | Select-Object -First 1).Matches[0].Groups[1].Value
+          if (-not $version) { throw "No package version in src-egui/Cargo.toml." }
           & makensis /DVERSION=$version build\installer.nsi
 
       - name: Upload NSIS installer
