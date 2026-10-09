@@ -2,6 +2,86 @@
 
 use rigstats_backend::settings::Settings;
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
+use rigstats_egui::dialog_reveal::DialogReveal;
+use rigstats_egui::windows;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+
+/// The dialog windows — Settings, About, Status, Updates, Session History
+/// and the Control Center: whether each is open, the one-shot flag that
+/// focuses it, and its state.
+pub(crate) struct DialogStates {
+    pub(crate) settings_open: Arc<AtomicBool>,
+    pub(crate) about_open: Arc<AtomicBool>,
+    pub(crate) status_open: Arc<AtomicBool>,
+    pub(crate) updater_open: Arc<AtomicBool>,
+    pub(crate) history_open: Arc<AtomicBool>,
+    /// Control Center window (#187) — opened via the header panel's
+    /// active-profile chip (`"open_control_center"` temp flag, consumed in
+    /// `draw_one_panel`) or the tray.
+    pub(crate) control_open: Arc<AtomicBool>,
+    // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
+    pub(crate) settings_focus: Arc<AtomicBool>,
+    pub(crate) about_focus: Arc<AtomicBool>,
+    pub(crate) status_focus: Arc<AtomicBool>,
+    pub(crate) updater_focus: Arc<AtomicBool>,
+    pub(crate) history_focus: Arc<AtomicBool>,
+    pub(crate) control_focus: Arc<AtomicBool>,
+    pub(crate) settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
+    pub(crate) status_win: Arc<Mutex<windows::status::StatusState>>,
+    pub(crate) status_refreshing: Arc<AtomicBool>,
+    pub(crate) status_collecting: Arc<AtomicBool>,
+    pub(crate) updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
+    pub(crate) history_win: Arc<Mutex<windows::history::HistoryState>>,
+    pub(crate) history_refreshing: Arc<AtomicBool>,
+    pub(crate) history_loading_rows: Arc<AtomicBool>,
+    /// Control Center tab/selection and unsaved fan-curve draft (#188).
+    pub(crate) control_ui: windows::control::ControlUi,
+    /// Keeps each freshly opened dialog hidden until it has rendered (no
+    /// white flash) — see `dialog_reveal`.
+    pub(crate) dialog_reveal: DialogReveal,
+    /// Whether any dialog was open last frame; used to restore dark visuals when the
+    /// last dialog closes (avoids calling set_visuals every frame).
+    pub(crate) any_dialog_open_prev: bool,
+}
+
+impl DialogStates {
+    /// All closed. The updater's state and flags come from `main()`, which
+    /// opens it at start-up after an update and runs the background check.
+    pub(crate) fn new(
+        settings_win: windows::settings::SettingsWindow,
+        updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
+        updater_open: Arc<AtomicBool>,
+        updater_focus: Arc<AtomicBool>,
+    ) -> Self {
+        let flag = || Arc::new(AtomicBool::new(false));
+        Self {
+            settings_open: flag(),
+            about_open: flag(),
+            status_open: flag(),
+            updater_open,
+            history_open: flag(),
+            control_open: flag(),
+            settings_focus: flag(),
+            about_focus: flag(),
+            status_focus: flag(),
+            updater_focus,
+            history_focus: flag(),
+            control_focus: flag(),
+            settings_win: Arc::new(Mutex::new(settings_win)),
+            status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
+            status_refreshing: flag(),
+            status_collecting: flag(),
+            updater_win,
+            history_win: Arc::new(Mutex::new(windows::history::HistoryState::placeholder())),
+            history_refreshing: flag(),
+            history_loading_rows: flag(),
+            control_ui: windows::control::ControlUi::default(),
+            dialog_reveal: DialogReveal::default(),
+            any_dialog_open_prev: false,
+        }
+    }
+}
 
 /// The game overlay (issue #183): an independent add-on window — not a
 /// `window_layer` value — that can be shown/hidden regardless of what the

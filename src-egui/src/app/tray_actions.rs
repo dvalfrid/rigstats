@@ -22,8 +22,8 @@ impl RigStatsApp {
                 TrayCmd::OpenStatus => self.tray_open_status(ctx),
                 TrayCmd::OpenHistory => self.tray_open_history(ctx),
                 TrayCmd::OpenControlCenter => {
-                    self.control_open.store(true, Ordering::Relaxed);
-                    self.control_focus.store(true, Ordering::Relaxed);
+                    self.dialogs.control_open.store(true, Ordering::Relaxed);
+                    self.dialogs.control_focus.store(true, Ordering::Relaxed);
                 }
                 TrayCmd::OpenUpdater => self.tray_open_updater(),
                 TrayCmd::OpenDocs => self.tray_open_docs(ctx),
@@ -45,26 +45,26 @@ impl RigStatsApp {
     fn tray_open_settings(&mut self) {
         // Re-initialise draft from current settings each time the window opens.
         let s = self.current_settings.lock_safe().clone();
-        *self.settings_win.lock_safe() = windows::settings::SettingsWindow::from_settings(
+        *self.dialogs.settings_win.lock_safe() = windows::settings::SettingsWindow::from_settings(
             &s,
             self.tray.gpu_menu.names(),
             self.battery_present.clone(),
         );
-        self.settings_open.store(true, Ordering::Relaxed);
-        self.settings_focus.store(true, Ordering::Relaxed);
+        self.dialogs.settings_open.store(true, Ordering::Relaxed);
+        self.dialogs.settings_focus.store(true, Ordering::Relaxed);
     }
 
     fn tray_open_about(&mut self) {
-        self.about_open.store(true, Ordering::Relaxed);
-        self.about_focus.store(true, Ordering::Relaxed);
+        self.dialogs.about_open.store(true, Ordering::Relaxed);
+        self.dialogs.about_focus.store(true, Ordering::Relaxed);
     }
 
     fn tray_open_status(&mut self, ctx: &egui::Context) {
-        self.status_open.store(true, Ordering::Relaxed);
-        self.status_focus.store(true, Ordering::Relaxed);
+        self.dialogs.status_open.store(true, Ordering::Relaxed);
+        self.dialogs.status_focus.store(true, Ordering::Relaxed);
         windows::status::spawn_load(
-            self.status_win.clone(),
-            self.status_refreshing.clone(),
+            self.dialogs.status_win.clone(),
+            self.dialogs.status_refreshing.clone(),
             self.dir.as_ref().clone(),
             self.runtime.latest.lhm_connected,
             self.wallpaper.is_active(),
@@ -73,19 +73,19 @@ impl RigStatsApp {
     }
 
     fn tray_open_history(&mut self, ctx: &egui::Context) {
-        self.history_open.store(true, Ordering::Relaxed);
-        self.history_focus.store(true, Ordering::Relaxed);
+        self.dialogs.history_open.store(true, Ordering::Relaxed);
+        self.dialogs.history_focus.store(true, Ordering::Relaxed);
         windows::history::spawn_load_sessions(
-            self.history_win.clone(),
-            self.history_refreshing.clone(),
+            self.dialogs.history_win.clone(),
+            self.dialogs.history_refreshing.clone(),
             self.dir.as_ref().clone(),
             ctx.clone(),
         );
     }
 
     fn tray_open_updater(&mut self) {
-        self.updater_open.store(true, Ordering::Relaxed);
-        self.updater_focus.store(true, Ordering::Relaxed);
+        self.dialogs.updater_open.store(true, Ordering::Relaxed);
+        self.dialogs.updater_focus.store(true, Ordering::Relaxed);
     }
 
     fn tray_open_docs(&mut self, ctx: &egui::Context) {
@@ -172,10 +172,10 @@ impl RigStatsApp {
         // the session list — without this it keeps showing the session
         // that was just started/stopped as still recording until the
         // user manually hits Refresh.
-        if self.history_open.load(Ordering::Relaxed) {
+        if self.dialogs.history_open.load(Ordering::Relaxed) {
             windows::history::spawn_load_sessions(
-                self.history_win.clone(),
-                self.history_refreshing.clone(),
+                self.dialogs.history_win.clone(),
+                self.dialogs.history_refreshing.clone(),
                 self.dir.as_ref().clone(),
                 ctx.clone(),
             );

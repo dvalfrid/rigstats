@@ -1,13 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::OverlayState;
+use app::state::{DialogStates, OverlayState};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
-use rigstats_egui::dialog_reveal::DialogReveal;
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -58,35 +57,10 @@ struct RigStatsApp {
     /// Cached from settings — "on_top", "behind", or "normal".
     window_layer: String,
     tray: Tray,
-    // Secondary windows
-    settings_open: Arc<AtomicBool>,
-    about_open: Arc<AtomicBool>,
-    status_open: Arc<AtomicBool>,
-    updater_open: Arc<AtomicBool>,
-    history_open: Arc<AtomicBool>,
-    /// Control Center window (#187) — opened via the header panel's
-    /// active-profile chip (`"open_control_center"` temp flag, consumed in
-    /// `draw_one_panel`) or the tray.
-    control_open: Arc<AtomicBool>,
-    /// Control Center tab/selection and unsaved fan-curve draft (#188).
-    control_ui: windows::control::ControlUi,
+    /// The dialog windows' open/focus flags and state.
+    dialogs: DialogStates,
     /// `runtime.control.safety_trips` already notified about.
     seen_safety_trips: u32,
-    // Set to true when a dialog is opened; cleared on first callback frame to send Focus.
-    settings_focus: Arc<AtomicBool>,
-    about_focus: Arc<AtomicBool>,
-    status_focus: Arc<AtomicBool>,
-    updater_focus: Arc<AtomicBool>,
-    history_focus: Arc<AtomicBool>,
-    control_focus: Arc<AtomicBool>,
-    settings_win: Arc<Mutex<windows::settings::SettingsWindow>>,
-    status_win: Arc<Mutex<windows::status::StatusState>>,
-    status_refreshing: Arc<AtomicBool>,
-    status_collecting: Arc<AtomicBool>,
-    updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
-    history_win: Arc<Mutex<windows::history::HistoryState>>,
-    history_refreshing: Arc<AtomicBool>,
-    history_loading_rows: Arc<AtomicBool>,
     // Shared settings (updated on save, applied each frame)
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
@@ -170,9 +144,6 @@ struct RigStatsApp {
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
     os_dark_mode: bool,
-    /// Whether any dialog was open last frame; used to restore dark visuals when the
-    /// last dialog closes (avoids calling set_visuals every frame).
-    any_dialog_open_prev: bool,
     /// When > 0, re-applies WindowLevel + opacity for this many more frames.
     /// Used after floating→non-floating transitions where winit may reset the
     /// window level when the window is moved back on-screen.
@@ -230,9 +201,6 @@ struct RigStatsApp {
     font_atlas_toggle: bool,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
-    /// Keeps each freshly opened dialog hidden until it has rendered (no
-    /// white flash) — see `dialog_reveal`.
-    dialog_reveal: DialogReveal,
     // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error. Checked once per frame in `update()`.
@@ -325,34 +293,17 @@ impl RigStatsApp {
             opacity,
             window_layer: init_settings.window_layer.clone(),
             tray,
-            settings_open: Arc::new(AtomicBool::new(false)),
-            about_open: Arc::new(AtomicBool::new(false)),
-            status_open: Arc::new(AtomicBool::new(false)),
-            updater_open,
-            history_open: Arc::new(AtomicBool::new(false)),
-            control_open: Arc::new(AtomicBool::new(false)),
-            control_ui: windows::control::ControlUi::default(),
-            seen_safety_trips: 0,
-            settings_focus: Arc::new(AtomicBool::new(false)),
-            about_focus: Arc::new(AtomicBool::new(false)),
-            status_focus: Arc::new(AtomicBool::new(false)),
-            updater_focus,
-            history_focus: Arc::new(AtomicBool::new(false)),
-            control_focus: Arc::new(AtomicBool::new(false)),
-            settings_win: Arc::new(Mutex::new(
+            dialogs: DialogStates::new(
                 windows::settings::SettingsWindow::from_settings(
                     &init_settings,
                     gpu_names,
                     battery_present.clone(),
                 ),
-            )),
-            status_win: Arc::new(Mutex::new(windows::status::StatusState::placeholder())),
-            status_refreshing: Arc::new(AtomicBool::new(false)),
-            status_collecting: Arc::new(AtomicBool::new(false)),
-            updater_win,
-            history_win: Arc::new(Mutex::new(windows::history::HistoryState::placeholder())),
-            history_refreshing: Arc::new(AtomicBool::new(false)),
-            history_loading_rows: Arc::new(AtomicBool::new(false)),
+                updater_win,
+                updater_open,
+                updater_focus,
+            ),
+            seen_safety_trips: 0,
             current_settings,
             settings_reload,
             preferred_gpu,
@@ -401,7 +352,6 @@ impl RigStatsApp {
                     theme::DialogColors::dark()
                 }
             },
-            any_dialog_open_prev: false,
             // Apply WindowLevel + opacity for the first few frames at startup when in
             // non-floating mode: the viewport builder only handles "on_top", so "behind"
             // must be sent via viewport command, and opacity needs a valid HWND which
@@ -421,7 +371,6 @@ impl RigStatsApp {
             font_atlas_rebuilt_at: Instant::now(),
             font_atlas_toggle: false,
             battery_present,
-            dialog_reveal: DialogReveal::default(),
             recording_blink_at: Instant::now(),
             gpu_lost,
             gpu_relaunch_triggered: false,
@@ -1109,7 +1058,7 @@ impl RigStatsApp {
         focus: &Arc<AtomicBool>,
         visible: bool,
     ) {
-        self.dialog_reveal.rendered(id);
+        self.dialogs.dialog_reveal.rendered(id);
         #[cfg(windows)]
         {
             win32_dark_mode::apply_titlebar_theme(found_hwnd, self.os_dark_mode);
@@ -1146,7 +1095,7 @@ impl RigStatsApp {
         self.apply_preferred_gpu(pref);
         // Keep an open Settings dialog's draft in sync, otherwise its next
         // live-preview push (or Cancel) would revert this change.
-        let mut win = self.settings_win.lock_safe();
+        let mut win = self.dialogs.settings_win.lock_safe();
         win.draft.preferred_gpu = self.preferred_gpu.lock_safe().clone();
         win.original.preferred_gpu = win.draft.preferred_gpu.clone();
     }
@@ -1427,7 +1376,7 @@ impl eframe::App for RigStatsApp {
         // background adapter detection reports back.
         let pref = self.preferred_gpu.lock_safe().clone();
         if let Some(names) = self.tray.gpu_menu.poll(pref.as_deref()) {
-            self.settings_win.lock_safe().set_gpu_names(names);
+            self.dialogs.settings_win.lock_safe().set_gpu_names(names);
         }
 
         self.handle_tray_commands(ui.ctx());
@@ -1449,30 +1398,32 @@ impl eframe::App for RigStatsApp {
         // When the last dialog closes, restore the main-window dark visuals.
         // We only call set_visuals on the transition frame (not every frame) to
         // avoid the repaint loop that causes jerky window dragging in light mode.
-        let any_dialog_open = self.settings_open.load(Ordering::Relaxed)
-            || self.about_open.load(Ordering::Relaxed)
-            || self.status_open.load(Ordering::Relaxed)
-            || self.updater_open.load(Ordering::Relaxed)
-            || self.history_open.load(Ordering::Relaxed)
-            || self.control_open.load(Ordering::Relaxed);
-        if !any_dialog_open && self.any_dialog_open_prev {
+        let any_dialog_open = self.dialogs.settings_open.load(Ordering::Relaxed)
+            || self.dialogs.about_open.load(Ordering::Relaxed)
+            || self.dialogs.status_open.load(Ordering::Relaxed)
+            || self.dialogs.updater_open.load(Ordering::Relaxed)
+            || self.dialogs.history_open.load(Ordering::Relaxed)
+            || self.dialogs.control_open.load(Ordering::Relaxed);
+        if !any_dialog_open && self.dialogs.any_dialog_open_prev {
             let mut vis = egui::Visuals::dark();
             vis.panel_fill = egui::Color32::TRANSPARENT;
             vis.window_fill = egui::Color32::from_gray(28);
             vis.override_text_color = Some(theme::C_TEXT);
             ui.ctx().set_visuals(vis);
         }
-        self.any_dialog_open_prev = any_dialog_open;
+        self.dialogs.any_dialog_open_prev = any_dialog_open;
 
         for (id, open) in [
-            ("settings", &self.settings_open),
-            ("about", &self.about_open),
-            ("status", &self.status_open),
-            ("history", &self.history_open),
-            ("updater", &self.updater_open),
-            ("control", &self.control_open),
+            ("settings", &self.dialogs.settings_open),
+            ("about", &self.dialogs.about_open),
+            ("status", &self.dialogs.status_open),
+            ("history", &self.dialogs.history_open),
+            ("updater", &self.dialogs.updater_open),
+            ("control", &self.dialogs.control_open),
         ] {
-            self.dialog_reveal.track(id, open.load(Ordering::Relaxed));
+            self.dialogs
+                .dialog_reveal
+                .track(id, open.load(Ordering::Relaxed));
         }
         // A dialog that closed this frame gets one last, content-less frame
         // that only hides its window, so eframe drops its GPU surface from an
@@ -1480,7 +1431,7 @@ impl eframe::App for RigStatsApp {
         // `DialogReveal::take_closing`). Only `visible` is set on the
         // builder: egui only applies fields that are set, so size/position
         // are left untouched.
-        let closing = self.dialog_reveal.take_closing();
+        let closing = self.dialogs.dialog_reveal.take_closing();
         if !closing.is_empty() {
             for id in closing {
                 ui.ctx().show_viewport_immediate(
@@ -1495,10 +1446,10 @@ impl eframe::App for RigStatsApp {
             win_opacity::force_repaint(self.hwnd);
         }
 
-        if self.settings_open.load(Ordering::Relaxed) {
-            let open = self.settings_open.clone();
-            let focus = self.settings_focus.clone();
-            let state = self.settings_win.clone();
+        if self.dialogs.settings_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.settings_open.clone();
+            let focus = self.dialogs.settings_focus.clone();
+            let state = self.dialogs.settings_win.clone();
             let dir = self.dir.clone();
             let saved = self.current_settings.clone();
             let reload = self.settings_reload.clone();
@@ -1507,7 +1458,7 @@ impl eframe::App for RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let dcomp_available = self.dcomp_available;
-            let visible = self.dialog_reveal.visible("settings");
+            let visible = self.dialogs.dialog_reveal.visible("settings");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
@@ -1549,15 +1500,15 @@ impl eframe::App for RigStatsApp {
             );
         }
 
-        if self.about_open.load(Ordering::Relaxed) {
-            let open = self.about_open.clone();
-            let focus = self.about_focus.clone();
+        if self.dialogs.about_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.about_open.clone();
+            let focus = self.dialogs.about_focus.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(360.0, 280.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
-            let visible = self.dialog_reveal.visible("about");
+            let visible = self.dialogs.dialog_reveal.visible("about");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
@@ -1580,17 +1531,17 @@ impl eframe::App for RigStatsApp {
             self.finish_dialog_frame(ui.ctx(), "about", found_hwnd, wants_focus, &focus, visible);
         }
 
-        if self.control_open.load(Ordering::Relaxed) {
-            let open = self.control_open.clone();
-            let focus = self.control_focus.clone();
+        if self.dialogs.control_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.control_open.clone();
+            let focus = self.dialogs.control_focus.clone();
             let mctx = main_ctx.clone();
             let cmd_tx = self.control_cmd_tx.clone();
             let [px, py] = dialog_center(780.0, 640.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
-            let visible = self.dialog_reveal.visible("control");
+            let visible = self.dialogs.dialog_reveal.visible("control");
             let control_state = self.runtime.control.clone();
-            let control_ui = &mut self.control_ui;
+            let control_ui = &mut self.dialogs.control_ui;
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),
                 egui::ViewportBuilder::default()
@@ -1629,12 +1580,12 @@ impl eframe::App for RigStatsApp {
             );
         }
 
-        if self.status_open.load(Ordering::Relaxed) {
-            let open = self.status_open.clone();
-            let focus = self.status_focus.clone();
-            let state = self.status_win.clone();
-            let refreshing = self.status_refreshing.clone();
-            let collecting = self.status_collecting.clone();
+        if self.dialogs.status_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.status_open.clone();
+            let focus = self.dialogs.status_focus.clone();
+            let state = self.dialogs.status_win.clone();
+            let refreshing = self.dialogs.status_refreshing.clone();
+            let collecting = self.dialogs.status_collecting.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(680.0, 820.0);
@@ -1643,7 +1594,7 @@ impl eframe::App for RigStatsApp {
             let lhm_connected = self.runtime.latest.lhm_connected;
             let wallpaper_active = self.wallpaper.is_active();
             let control_state = self.runtime.control.clone();
-            let visible = self.dialog_reveal.visible("status");
+            let visible = self.dialogs.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
@@ -1678,18 +1629,18 @@ impl eframe::App for RigStatsApp {
             self.finish_dialog_frame(ui.ctx(), "status", found_hwnd, wants_focus, &focus, visible);
         }
 
-        if self.history_open.load(Ordering::Relaxed) {
-            let open = self.history_open.clone();
-            let focus = self.history_focus.clone();
-            let state = self.history_win.clone();
-            let refreshing = self.history_refreshing.clone();
-            let loading_rows = self.history_loading_rows.clone();
+        if self.dialogs.history_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.history_open.clone();
+            let focus = self.dialogs.history_focus.clone();
+            let state = self.dialogs.history_win.clone();
+            let refreshing = self.dialogs.history_refreshing.clone();
+            let loading_rows = self.dialogs.history_loading_rows.clone();
             let dir = self.dir.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(820.0, 720.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
-            let visible = self.dialog_reveal.visible("history");
+            let visible = self.dialogs.dialog_reveal.visible("history");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("history"),
                 egui::ViewportBuilder::default()
@@ -1728,15 +1679,15 @@ impl eframe::App for RigStatsApp {
             );
         }
 
-        if self.updater_open.load(Ordering::Relaxed) {
-            let open = self.updater_open.clone();
-            let focus = self.updater_focus.clone();
-            let state = self.updater_win.clone();
+        if self.dialogs.updater_open.load(Ordering::Relaxed) {
+            let open = self.dialogs.updater_open.clone();
+            let focus = self.dialogs.updater_focus.clone();
+            let state = self.dialogs.updater_win.clone();
             let mctx = main_ctx.clone();
             let [px, py] = dialog_center(490.0, 560.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
-            let visible = self.dialog_reveal.visible("updater");
+            let visible = self.dialogs.dialog_reveal.visible("updater");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
@@ -1770,11 +1721,11 @@ impl eframe::App for RigStatsApp {
             // tokio::spawn is not safe to call from the egui UI thread
             // (which is not inside a tokio async context).
             let start_check = {
-                let s = self.updater_win.lock_safe();
+                let s = self.dialogs.updater_win.lock_safe();
                 matches!(s.status, windows::updater::UpdateStatus::Checking) && !s.busy
             };
             if start_check {
-                let win = self.updater_win.clone();
+                let win = self.dialogs.updater_win.clone();
                 let ctx = ui.ctx().clone();
                 std::thread::spawn(move || {
                     update_flow::run_check_and_download(&win, &ctx, update_flow::Trigger::Manual);
@@ -1924,7 +1875,7 @@ impl eframe::App for RigStatsApp {
             // Extract update version once per frame (cheap lock read).
             let update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
-                let st = self.updater_win.lock_safe();
+                let st = self.dialogs.updater_win.lock_safe();
                 if let UpdateStatus::Ready { info, .. } = &st.status {
                     Some(info.version.clone())
                 } else {
@@ -2190,7 +2141,7 @@ impl RigStatsApp {
                 .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
                 .unwrap_or(false)
         {
-            self.updater_open.store(true, Ordering::Relaxed);
+            self.dialogs.updater_open.store(true, Ordering::Relaxed);
         }
         if panel == "header"
             && ui
@@ -2198,12 +2149,12 @@ impl RigStatsApp {
                 .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_control_center")))
                 .unwrap_or(false)
         {
-            self.control_open.store(true, Ordering::Relaxed);
-            self.control_focus.store(true, Ordering::Relaxed);
+            self.dialogs.control_open.store(true, Ordering::Relaxed);
+            self.dialogs.control_focus.store(true, Ordering::Relaxed);
         }
         if panel == "motherboard" && take_fan_curve_request(ui.ctx()) {
-            self.control_open.store(true, Ordering::Relaxed);
-            self.control_focus.store(true, Ordering::Relaxed);
+            self.dialogs.control_open.store(true, Ordering::Relaxed);
+            self.dialogs.control_focus.store(true, Ordering::Relaxed);
         }
         new_pref
     }
@@ -2404,16 +2355,16 @@ impl RigStatsApp {
             let control = &self.runtime.control;
             let float_update_ver: Option<String> = {
                 use windows::updater::UpdateStatus;
-                let st = self.updater_win.lock_safe();
+                let st = self.dialogs.updater_win.lock_safe();
                 if let UpdateStatus::Ready { info, .. } = &st.status {
                     Some(info.version.clone())
                 } else {
                     None
                 }
             };
-            let updater_open_arc = &self.updater_open;
-            let control_open_arc = &self.control_open;
-            let control_focus_arc = &self.control_focus;
+            let updater_open_arc = &self.dialogs.updater_open;
+            let control_open_arc = &self.dialogs.control_open;
+            let control_focus_arc = &self.dialogs.control_focus;
             // On the very first frame a viewport is shown, `outer_rect` reports the
             // egui-default position (before the OS has honoured `with_position`).
             // Saving that would overwrite the loaded position, so we skip tracking
