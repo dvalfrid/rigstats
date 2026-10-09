@@ -2,6 +2,7 @@
 
 pub(crate) mod background;
 mod floating;
+mod overlay_window;
 pub(crate) mod startup;
 pub(crate) mod state;
 mod tray_actions;
