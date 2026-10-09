@@ -29,6 +29,7 @@
 - [Phase 3 — GPU power limit as built](#phase-3--gpu-power-limit-as-built)
 - [Phase 4 — Curve Optimizer as built](#phase-4--curve-optimizer-as-built)
 - [Phase 5 — ASUS Aura lighting as built](#phase-5--asus-aura-lighting-as-built)
+- [Peripherals: battery and settings (research, #290–#292)](#peripherals-battery-and-settings-research-290292)
 - [Open questions](#open-questions)
 
 ---
@@ -430,6 +431,10 @@ Native protocols only — other software is read as documentation, never
 shipped or copied. What has worked, in order of cost:
 
 1. **OpenRGB's source** for devices it supports.
+   For ASUS mice, keyboards and headsets also **G-Helper**
+   (`app/Peripherals/`, GPL — read only): per-model product ids, report ids,
+   battery and settings commands; a second source to check GearLink against
+   (see "Peripherals: battery and settings").
 2. **Read-only probes** of the HID collections (`get` commands, config
    tables) — the diagnostics export's `lighting-devices.json` lists every
    HID collection with VID/PID and usage page, so a user's export shows where
@@ -954,6 +959,116 @@ account, no OpenRGB.
   log too, and the app gives `hue_*` requests 15 s instead of 5 s (pairing is
   up to four HTTPS calls). `Rescan` doesn't see network devices, so
   pairing and choosing rooms call `LightingProvider.Rediscover()`.
+
+## Peripherals: battery and settings (research, #290–#292)
+
+Research for battery status (#290) and later device configuration (#292),
+2026-10-09. Nothing here is implemented yet; commands are documented, cross-
+checked between **two independent sources** where noted, and none were sent
+to a device to find them out.
+
+### Sources and how to read them
+
+- **ASUS GearLink** (gearlink.asus.com, ASUS's WebHID app). Per device:
+  `https://gearlink.asus.com/view/<pid in decimal>/manifest.json` gives
+  `version` and `bundleId`; the module is
+  `/view/<pid>/main-<version>-<bundleId>.js`, and its imports
+  (`./bundle-*.js` or `./chunk-<version>-<bundleId>-*.js`) sit in the same
+  folder. Headsets (`hidPattern` 2) carry a **declarative schema**
+  (`{reportId, usagePage, command:{get,set,notify,index}, <name>:{get:{key,
+  response:[…]}, set:{command?, key, data:[…]}}}`); mice and keyboards
+  (`hidPattern` 1) have device classes calling
+  `sendCommandWithResponse(cmd, key, index, …)`, whose replies are indexed
+  **without** the report id (GearLink `t[4]` = byte 5 of the HID report).
+  Download into a scratch folder outside the repo and read as text; never run
+  it. The Delta II's schema is in `bundle-IDU94j3-.js` (v1.00.35); the Azoth X
+  (`7205`, v1.00.33) ships its device classes in shared chunks, one per family.
+- **G-Helper** (github.com/seerge/g-helper, GPL-3.0, actively maintained) —
+  `app/Peripherals/{Headset,Mouse,Keyboard}/` with a base class per type
+  (`AsusHeadset.cs`, `AsusMouse.cs`, `AsusKeyboard.cs`) and one file per model
+  family with product ids, endpoint (`mi_00`, `mi_02&col03` …) and report id.
+  Read as documentation only — no code copied (GPL).
+- OpenRGB (lighting only, no battery).
+
+### Transport facts both sources agree on
+
+- Frame: `[reportId, command, key, index0, index1, data…]`; a reply repeats
+  `command key`. Get `0x12`, set `0x51`; headsets also use set families
+  `0x41`, `0x61` and `0x50` (reset).
+- **Unsolicited reports arrive between replies.** G-Helper drains the input
+  before each question and reads up to three more reports until
+  `command key` match, logging the others as `EVT`. Our drivers match replies
+  the same way (#281, #283).
+- **`FF AA` is an error reply**: at bytes 1–2 (instead of the echo) or at
+  bytes 5–6 after the echo. The Delta II answered `CC 51 28 00 00 FF AA` to a
+  lighting set while it was off or out of range — that was a refusal, not a
+  late acknowledgement. (`AsusHeadsetDevice` skips it and the read-back then
+  fails; reporting it as "the headset refused" would be clearer.)
+- Report ids: headsets `0xCC` (usage page `0xFF00`); mice and keyboards
+  `0x00` by cable / own dongle; on the **ROG Omni receiver** (`1ACE`) the
+  keyboard is on report `0x02` (`mi_02&col02`) and the mouse on `0x03`
+  (`mi_02&col03`) — G-Helper hard-codes these, RIGStats takes them from the
+  receiver's paired list. Keyboards send their events on report `0x70`
+  (G-Helper `EventReportId`).
+
+### Battery
+
+| Device type | Question | Reply (byte positions incl. report id) | Sources |
+| --- | --- | --- | --- |
+| Headset (GearLink pattern 2: Delta II, Pelta, …) | `12 07` | 5 sleep timer, **6 battery %**, 7 low-battery warning %, 8 low-battery voice prompt | GearLink `powerSaving`/`batteryLevel` (get key 7) + G-Helper `AsusHeadset.ParseBattery` ✓ |
+| Headset charging | `12 08` | 5 = 1 charging | GearLink `chargingStatus` (key 8) + G-Helper ✓ |
+| Mouse (Harpe Ace, Keris, Gladius …) | `12 07` | **5 battery %**, 6 auto power-off, 7 low-battery warning, 8–9 battery voltage (GearLink), 10 charging (> 0), 11 battery type, 12 full-charge effect | GearLink mouse power class (`18, 7`) + G-Helper `AsusMouse` ✓ |
+| Keyboard (Azoth, Azoth X, Falchion Ace …) | `12 01` | **6 battery %**, 7 idle/sleep timeout, 8 power saving, 9 charging (== 1), 10 low-power level | GearLink keyboard power class (`18, 1`) + G-Helper `AsusKeyboard` ✓ |
+
+- **Same command number, different meaning per type** — `12 07` is battery on
+  mice and headsets but not on keyboards (`12 01`). Send each type only its own
+  question; `12 01`–`12 3F` swept on a keyboard is what broke the Falchion Ace
+  HFX (see "Live testing on real hardware").
+- A mouse that went to standby answers battery 0 and not charging (G-Helper
+  treats that as "not ready").
+- The Delta II also sends an undocumented event `CC 12 09 00 00 <n>` with `n`
+  falling slowly (1E → 18 over an hour, 2026-10-09). Neither source names key
+  9; it may be a battery notification — don't rely on it, ask `12 07`.
+- GearLink has more families with their own power commands (a gamepad class
+  `18, 4`; a keyboard family reading `getDeviceInfo(CurrentPower)` with battery
+  at its `n[5]`; a JSON `class_id:"10020000"` protocol). Check a device's own
+  module before assuming one of the three above.
+
+### Settings (for #292 — documented, not used)
+
+**Headset (Delta II schema, confirmed by G-Helper):** lighting status get
+`12 13` / set `51 10 00 00 <on>`; lighting get `12 03` / set `51 28 00 00
+<effect brightness R G B>`; equalizer status get `12 21` (status + 10 bands)
+/ set `41 03`; all gains `41 04 <10 bytes>`; one band `41 06 <index gain>`;
+sidetone status get `12 24` / set `41 11`; sidetone level get `12 19` / set
+`61 11 <0–20>`; noise reduction (ECNR) get `41 20` / set `41 02`, level `41
+10`; voice prompt get `12 28` / set `41 0A`; power settings set `51 37 00 00
+<sleep lowBattery% prompt>` (sleep values 2, 3, 5, 10, 15 min, 0 = never);
+latency key 82 (`0x52`); aura sync key 51 (`0x33`); reset to defaults `50 40`;
+reset device `50 60`. G-Helper also uses `41 08`, `41 0C`/`41 0D`, `41 05`
+on other headset models (not in the Delta II schema).
+
+**Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
+config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04
+02` on models with separate X/Y DPI (else `12 04 00`), DPI colours `12 04 03`, acceleration `12 04
+01`, motion sync `12 04 04`; set `51 31 <sub> 00 <value…>` with sub `00`–`03`
+DPI per stage, `04` polling rate, `05` debounce, `06` angle snapping, `07`
+acceleration, `08` deceleration, `09`/`0A` DPI stage / stage count, `0B` angle
+tuning, `12` motion sync; lift-off get `12 06` / set `51 35 FF 00 FF <dist>`;
+energy `51 37 00 00 <powerOff> 00 <lowBattery%>`; lighting get `12 03 <zone>` /
+set `51 28 <zone> …`; save profile `50 03`. Per-model limits (DPI range,
+polling rates, which settings exist) are in each model file.
+
+**Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
+<%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen
+commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
+
+Model coverage when read: G-Helper 31 mouse model files (several classes each), 7 keyboard families (Azoth
+incl. Extreme / X / Omni, Claymore II, Falchion, Strix Flare II, Strix Scope II
+/ RX, TUF K3), 6 headset families (Delta II, Pelta, Cetra RGB / SpeedNova,
+Clavis, Strix Go 2.4); GearLink 99 ids (see "More lighting devices").
+
+---
 
 ## Open questions
 

@@ -1228,6 +1228,9 @@ task, no HTTP, no external process lifecycle to manage.
   tests covering preference matching, VRAM tiebreak, load tiebreak, and fallback.
 - Old HTTP parsing code (`flatten_lhm`, `parse_lhm`, `FlatNode`, etc.) is
   retained under `#[cfg(test)]` to keep the existing 104-test suite green.
+  *(Removed 2026-10: production never ran it; the filtering rules live in the
+  sidecar's `SensorReader`, covered by `FixtureTests`, and the pipe payload is
+  checked against the sidecar's golden files in `lhm.rs`.)*
 
 **Also completed (same release):**
 
