@@ -32,6 +32,10 @@ SetCompressor /SOLID lzma
 
 Name "RIGStats ${VERSION}"
 OutFile "target\release\RIGStats_${VERSION}_x64-setup.exe"
+; No directory page: the LocalSystem service runs from here, so it stays
+; under Program Files, which only administrators can write to. A folder of
+; the user's choosing could leave the service replaceable by any user.
+; Earlier installs elsewhere keep their folder via the key below.
 InstallDir "$PROGRAMFILES64\RIGStats"
 InstallDirRegKey HKLM "Software\RIGStats" "InstallDir"
 RequestExecutionLevel admin
@@ -53,8 +57,6 @@ Var /GLOBAL AutoUpdate
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE ComponentsPre
 !insertmacro MUI_PAGE_COMPONENTS
-!define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPre
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE FinishPre
 !insertmacro MUI_PAGE_FINISH
@@ -93,12 +95,6 @@ FunctionEnd
 
 ; ── Page skip functions (used when /autoupdate is passed) ──────────────────────
 Function ComponentsPre
-  ${If} $AutoUpdate == 1
-    Abort
-  ${EndIf}
-FunctionEnd
-
-Function DirectoryPre
   ${If} $AutoUpdate == 1
     Abort
   ${EndIf}
@@ -169,7 +165,9 @@ Section "RIGStats" SecMain
   ; ── Remove old service entry, re-create with fresh binary path ────────────
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
   Sleep 1000
-  nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "$INSTDIR\rigstats-sensor.exe" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
+  ; The path is stored quoted (\" inside the argument): unquoted, a path with
+  ; spaces lets Windows try e.g. C:\Program.exe first.
+  nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "\"$INSTDIR\rigstats-sensor.exe\"" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
   Pop $4
   Pop $5
   DetailPrint "Service create: exit $4"
