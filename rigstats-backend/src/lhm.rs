@@ -554,6 +554,39 @@ mod tests {
     };
     use serde_json::json;
 
+    /// The sensor pipe contract, checked against the sidecar's own golden
+    /// files: each `sensor-sidecar.Tests/fixtures/*/expected.json` is the
+    /// payload `HardwareHost` sends (same snake_case options, only indented).
+    /// With unknown fields denied in tests, a field the sidecar adds or
+    /// renames fails here instead of silently reading as `None`.
+    #[test]
+    fn sidecar_golden_fixtures_match_the_pipe_payload() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/fixtures");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).expect("sidecar fixtures folder") {
+            let path = entry.expect("fixture entry").path().join("expected.json");
+            if !path.exists() {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("read expected.json");
+            let payload = serde_json::from_str::<SidecarPayload>(&text)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            let data = payload.into_lhm_data(None);
+            assert!(
+                data.gpu_devices.iter().all(|(name, _)| !name.is_empty()),
+                "{}: GPU without a name",
+                path.display()
+            );
+            checked += 1;
+        }
+        assert!(
+            checked >= 5,
+            "only {checked} golden fixtures found in {}",
+            dir.display()
+        );
+    }
+
     // parse_val
 
     #[test]
@@ -1513,6 +1546,7 @@ mod tests {
     fn make_gpu(name: &str, vram_mb: f32, load: f32) -> SidecarGpuDevice {
         SidecarGpuDevice {
             name: name.to_string(),
+            _sensor_family: None,
             load: Some(load),
             temp: None,
             hotspot_temp: None,
@@ -1946,7 +1980,12 @@ mod tests {
 // --- Named pipe transport (replaces LHM HTTP client) -----------------------
 
 /// Deserialization structs matching the JSON emitted by `rigstats-sensor.exe`.
+///
+/// Tests reject unknown fields (`deny_unknown_fields` under `cfg(test)`) so
+/// `sidecar_golden_fixtures_match_the_pipe_payload` catches a field the
+/// sidecar adds or renames; release builds stay tolerant of a newer sidecar.
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
 struct SidecarPayload {
     cpu_temp: Option<f32>,
     cpu_power: Option<f32>,
@@ -1960,8 +1999,12 @@ struct SidecarPayload {
 }
 
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
 struct SidecarGpuDevice {
     name: String,
+    // Sent by the sidecar (which sensor names it matched), not used by the app.
+    #[serde(default, rename = "sensor_family")]
+    _sensor_family: Option<serde::de::IgnoredAny>,
     load: Option<f32>,
     temp: Option<f32>,
     hotspot_temp: Option<f32>,
@@ -1978,16 +2021,19 @@ struct SidecarGpuDevice {
 }
 
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
 struct SidecarMbFan {
     label: String,
     rpm: f32,
 }
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
 struct SidecarMbTemp {
     label: String,
     celsius: f32,
 }
 #[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
 struct SidecarMbVoltage {
     label: String,
     volts: f32,
