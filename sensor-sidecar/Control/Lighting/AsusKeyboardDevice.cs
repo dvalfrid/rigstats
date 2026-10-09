@@ -185,6 +185,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
             .ThenBy(d => d.UsagePage)
             .ToList();
         var directSeen = new HashSet<string>();
+        var paired = candidates.Any(c => Model(c.ProductId)!.Receiver) ? OmniMouse.PairedDevices(hid) : [];
         foreach (var info in candidates)
         {
             var model = Model(info.ProductId)!;
@@ -199,9 +200,14 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
             {
                 device = Hid.Open(info);
                 var layout = Ask(device, info, reportId, GetLayout);
-                if (model.Receiver && (layout is null || !IsKeyboardLayoutReply(layout, reportId)))
+                if (model.Receiver && (layout is null || !IsKeyboardLayoutReply(layout, reportId))
+                    && !IsPairedKeyboard(paired, reportId))
                 {
-                    device.Dispose(); // the mouse's or the receiver's own channel
+                    // The mouse's or the receiver's own channel — or a keyboard
+                    // that answers differently; the reply shows which.
+                    LightingLog.Discovery($"[rigstats-control] Lighting: receiver channel 0x{info.ProductId:X4} report 0x{reportId:X2} " +
+                        $"is not a keyboard (layout reply {Hex(layout, 8)}).");
+                    device.Dispose();
                     continue;
                 }
                 var version = Ask(device, info, reportId, GetVersion);
@@ -255,14 +261,35 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
         reply.Length >= 8 && reply[0] == reportId && reply[1] == Get && reply[2] == GetLayout
         && reply.AsSpan(3, 5).IndexOfAnyExcept((byte)0) >= 0;
 
-    private static byte[]? Ask(IHidDevice device, HidDeviceInfo info, byte reportId, byte what)
+    /// A paired keyboard on this receiver channel, by the receiver's own
+    /// paired list — a known keyboard product id on `reportId`. Doesn't
+    /// depend on how the keyboard answers "get layout", which a firmware
+    /// update can change.
+    public static bool IsPairedKeyboard(IReadOnlyList<OmniMouse.Paired> paired, byte reportId) =>
+        paired.Any(p => p.ReportId == reportId && Model(p.ProductId) is { Receiver: false });
+
+    private static byte[]? Ask(IHidDevice device, HidDeviceInfo info, byte reportId, byte what) =>
+        Ask(device, info.OutputReportLength, reportId, what, ReplyTimeout);
+
+    /// Asks `12 <what>` and returns the reply that echoes it, skipping other
+    /// input reports a woken keyboard may send first (as `OmniMouse.Ask`
+    /// does); null when none came in time.
+    public static byte[]? Ask(IHidDevice device, int length, byte reportId, byte what, TimeSpan timeout)
     {
-        var request = new byte[info.OutputReportLength];
+        var request = new byte[length];
         request[0] = reportId;
         request[1] = Get;
         request[2] = what;
         device.Write(request);
-        return device.Read(ReplyTimeout);
+        var deadline = DateTime.UtcNow + timeout;
+        for (var left = timeout; left > TimeSpan.Zero; left = deadline - DateTime.UtcNow)
+        {
+            if (device.Read(left) is not { } reply)
+                return null;
+            if (reply.Length >= 3 && reply[0] == reportId && reply[1] == Get && reply[2] == what)
+                return reply;
+        }
+        return null;
     }
 
     public void Apply(AuraEffect effect, byte red, byte green, byte blue)
