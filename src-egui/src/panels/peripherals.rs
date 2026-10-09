@@ -74,17 +74,47 @@ fn paint_link_icon(painter: &egui::Painter, c: Pos2, size: f32, link: Link, colo
             }
         }
         Link::Usb => {
-            // A plug: the head with its two contacts, the cable below.
-            let head = Rect::from_center_size(pos2(c.x, c.y - s * 0.35), vec2(s * 1.2, s * 0.9));
-            painter.rect_stroke(head, 0.0, stroke, egui::StrokeKind::Middle);
-            for dx in [-0.25, 0.25] {
-                let x = c.x + s * dx;
-                painter.line_segment(
-                    [pos2(x, head.top() - s * 0.35), pos2(x, head.top())],
-                    stroke,
-                );
-            }
-            painter.line_segment([pos2(c.x, head.bottom()), pos2(c.x, c.y + s)], stroke);
+            // The USB trident (the standard port symbol): a stem with an
+            // arrowhead, a branch ending in a circle, one ending in a
+            // square, and a dot at the base.
+            let (top, bottom) = (c.y - s, c.y + s);
+            painter.line_segment(
+                [pos2(c.x, bottom - s * 0.3), pos2(c.x, top + s * 0.3)],
+                stroke,
+            );
+            painter.add(Shape::convex_polygon(
+                vec![
+                    pos2(c.x, top),
+                    pos2(c.x + s * 0.32, top + s * 0.42),
+                    pos2(c.x - s * 0.32, top + s * 0.42),
+                ],
+                color,
+                Stroke::NONE,
+            ));
+            painter.circle_filled(pos2(c.x, bottom - s * 0.2), s * 0.24, color);
+            let (lx, rx) = (c.x - s * 0.6, c.x + s * 0.6);
+            painter.add(Shape::line(
+                vec![
+                    pos2(c.x, c.y + s * 0.4),
+                    pos2(lx, c.y),
+                    pos2(lx, c.y - s * 0.25),
+                ],
+                stroke,
+            ));
+            painter.circle_filled(pos2(lx, c.y - s * 0.38), s * 0.17, color);
+            painter.add(Shape::line(
+                vec![
+                    pos2(c.x, c.y + s * 0.15),
+                    pos2(rx, c.y - s * 0.25),
+                    pos2(rx, c.y - s * 0.45),
+                ],
+                stroke,
+            ));
+            painter.rect_filled(
+                Rect::from_center_size(pos2(rx, c.y - s * 0.6), vec2(s * 0.32, s * 0.32)),
+                0.0,
+                color,
+            );
         }
     }
 }
