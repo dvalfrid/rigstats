@@ -339,7 +339,15 @@ escalation vector:
   process got the name first, the service logs it and retries instead of
   joining that pipe. The app, in turn, only accepts a pipe served from
   session 0 (`pipe_server.rs`; release builds).
-- Strict method allowlist and schema validation; unknown fields rejected.
+- Known limit: the gate is in practice "the logged-in user", not "only
+  RIGStats" — a process running as that user can inject code into a running
+  `rigstats.exe` and drive the pipe through it. What it can then do is bounded
+  by the service-side clamps (CPU limits only lower, Curve Optimizer within its
+  range behind the boot-crash guard, fan curves with the critical-temperature
+  override intact); no request takes a file path.
+- Strict method allowlist; requests are deserialized into typed parts.
+  Unknown JSON fields are **ignored**, not rejected (System.Text.Json's
+  default in `ControlJson.Options`) — the app and service ship together.
 - All numeric values clamped against probed limits in the service.
 - State writable only by the service: `DataDirectory.EnsureSecure` runs first
   thing at start-up and gives `%ProgramData%\se.codeby.rigstats` protected
