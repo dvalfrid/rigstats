@@ -14,7 +14,11 @@ process.stdin.on('end', () => {
   } catch {
     process.exit(0);
   }
-  if (!/dotnet\s+(build|test|publish)[^\n]*sensor-sidecar|xtask\s+(verify|build)/.test(command)) process.exit(0);
+  // Only Debug builds write to the locked bin/Debug; `-c Release` and
+  // `cargo xtask verify/build` (Release) don't, so they run meanwhile.
+  const debugBuild = /dotnet\s+(build|test|run)[^\n]*sensor-sidecar/.test(command) &&
+    !/(-c|--configuration)\s+Release/i.test(command);
+  if (!debugBuild) process.exit(0);
 
   let devSidecar = false;
   try {

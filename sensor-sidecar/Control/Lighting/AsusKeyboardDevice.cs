@@ -211,12 +211,16 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
                     continue;
                 }
                 var version = Ask(device, info, reportId, GetVersion);
+                // The id stays per model ("asus-keyboard-1ace-1"); behind a
+                // receiver the name is the paired keyboard's own, like the mouse's.
                 var nth = found.Count(f => f._model.Name == model.Name) + 1;
-                LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}, " +
-                    $"layout {Hex(layout, 8)}, version {Hex(version, 16)}.");
+                var name = model.Receiver ? PairedKeyboardName(paired, reportId) ?? model.Name : model.Name;
+                var nthName = found.Count(f => f.Name == name || f.Name.StartsWith(name + " (", StringComparison.Ordinal)) + 1;
+                LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}" +
+                    (name != model.Name ? $" ({name})" : "") + $", layout {Hex(layout, 8)}, version {Hex(version, 16)}.");
                 found.Add(new AsusKeyboardDevice(info, device, model, reportId,
                     $"asus-keyboard-{info.ProductId:x4}-{nth}",
-                    nth == 1 ? model.Name : $"{model.Name} ({nth})",
+                    nthName == 1 ? name : $"{name} ({nthName})",
                     Hex(version, 64), Hex(layout, 64)));
             }
             catch (Exception e)
@@ -266,7 +270,14 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     /// depend on how the keyboard answers "get layout", which a firmware
     /// update can change.
     public static bool IsPairedKeyboard(IReadOnlyList<OmniMouse.Paired> paired, byte reportId) =>
-        paired.Any(p => p.ReportId == reportId && Model(p.ProductId) is { Receiver: false });
+        PairedKeyboardName(paired, reportId) is not null;
+
+    /// The model name of the keyboard the receiver's paired list puts on
+    /// `reportId` ("ROG Azoth X"), or null when it names no known keyboard.
+    public static string? PairedKeyboardName(IReadOnlyList<OmniMouse.Paired> paired, byte reportId) =>
+        paired.Where(p => p.ReportId == reportId)
+            .Select(p => Model(p.ProductId))
+            .FirstOrDefault(m => m is { Receiver: false })?.Name;
 
     private static byte[]? Ask(IHidDevice device, HidDeviceInfo info, byte reportId, byte what) =>
         Ask(device, info.OutputReportLength, reportId, what, ReplyTimeout);
