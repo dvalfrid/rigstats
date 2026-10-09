@@ -169,7 +169,9 @@ Section "RIGStats" SecMain
   ; ── Remove old service entry, re-create with fresh binary path ────────────
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
   Sleep 1000
-  nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "$INSTDIR\rigstats-sensor.exe" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
+  ; The path is stored quoted (\" inside the argument): unquoted, a path with
+  ; spaces lets Windows try e.g. C:\Program.exe first.
+  nsExec::ExecToStack 'cmd /C sc create rigstats-sensor binPath= "\"$INSTDIR\rigstats-sensor.exe\"" start= auto obj= LocalSystem displayname= "RIGStats Sensor"'
   Pop $4
   Pop $5
   DetailPrint "Service create: exit $4"
