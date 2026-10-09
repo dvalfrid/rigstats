@@ -99,9 +99,9 @@ $features = @(
      summary="The WebView2 DOM render cost this aimed to reduce is gone entirely after the egui migration; the egui binary sleeps between repaints and idles at ~0% CPU.";
      status="Not planned - superseded by the egui migration (v1.27)" }
 
-  @{ id="floating-panel-groups"; kind="planned"; label="enhancement"; title="Floating panel groups"; milestone="v3.0";
+  @{ id="floating-panel-groups"; kind="dropped"; label="wontfix"; title="Floating panel groups"; milestone="v3.0";
      summary="Build on floating mode: magnetically snap panels into groups that move together (vertical or horizontal), with a flip-orientation context action and a 'Collect panels to screen' tray command.";
-     status="Planned (3.0)" }
+     status="Not planned - polish for floating mode nobody has asked for; reconsider if floating-mode users request it" }
   @{ id="floating-mode-perf"; kind="dropped"; label="wontfix"; title="Floating mode - reduce multi-window rendering cost";
      summary="Investigated via architectural review: the low-hanging fruit (Behind-mode throttle) already shipped separately. The remainder (Arc-wrapping shared state, deferred viewports) is high implementation cost for a sub-1% CPU saving in release builds on the target hardware (gaming rigs); show_viewport_immediate + &-reference is the correct design for panels sharing one 1 Hz data snapshot.";
      status="Not planned - deferred indefinitely unless floating-mode CPU complaints arise on battery systems" }
@@ -111,9 +111,9 @@ $features = @(
   @{ id="desktop-background-we-hosted"; kind="planned"; label="enhancement"; title="Desktop background - WE Application wallpaper"; milestone="v3.0";
      summary="Ship the rigstats-wallpaper host as a Wallpaper Engine Application wallpaper so WE handles the WorkerW reparenting, multi-monitor placement and Explorer-restart recovery. Adds a 32-bit build of the host (WE requires a 32-bit single-window app) and a hosted launch mode that fills the rect WE assigns. WE-owners only; mutually exclusive with the built-in WorkerW mode.";
      status="Planned (3.0)" }
-  @{ id="streamdeck"; kind="planned"; label="enhancement"; title="Stream Deck integration"; milestone="v3.0";
+  @{ id="streamdeck"; kind="dropped"; label="wontfix"; title="Stream Deck integration"; milestone="v3.0";
      summary="Display live hardware stats (CPU/GPU load/temp, VRAM, fan RPM) on Stream Deck keys directly over USB HID via the elgato-streamdeck crate - no Elgato software or HTTP server. Opt-in; requires the Elgato app not be running.";
-     status="Planned (3.0)" }
+     status="Not planned - no Stream Deck to build and test against" }
   @{ id="cross-platform-port"; kind="planned"; label="enhancement"; title="Cross-platform OS abstraction - Linux port"; milestone="v3.0";
      summary="Make the RIGStats core OS-agnostic (ports-and-adapters refactor) so it can be ported to Linux. Extract a win-free rigstats-core defining trait ports (SensorProvider, HardwareProbe, SystemPaths, Autostart, WindowPlatform) and a Platform facade; move WMI/registry/named-pipe/win32 code into a platform-windows adapter crate; add a platform-linux crate (sysfs/NVML/dbus/unix-socket). Replace hard-coded %APPDATA% with the directories crate and the named pipe with interprocess. LHM stays a Windows-only adapter. Per-OS packaging: NSIS/sc on Windows, .deb/AppImage + systemd on Linux.";
      status="Planned (3.0)" }
