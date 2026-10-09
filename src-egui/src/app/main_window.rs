@@ -46,6 +46,15 @@ impl RigStatsApp {
         } else {
             // ── Fixed mode — all panels in one portrait/landscape window ──────
 
+            // Wallpaper mode: the host draws the dashboard and this window is
+            // parked off-screen, so don't lay out every panel for nobody — the
+            // main app now runs a frame a second there (#299). Forget the fitted
+            // height so the first frame after leaving fits the window again.
+            if self.wallpaper.is_active() {
+                self.window.last_fitted_height = None;
+                return;
+            }
+
             // Track the window's current outer position so the padlock can pin
             // the exact spot it is at when clicked, and so a profile change can
             // carry the window over to its current spot. Skip while the window is

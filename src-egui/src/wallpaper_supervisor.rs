@@ -81,15 +81,14 @@ impl WallpaperSupervisor {
         self.active
     }
 
-    /// In wallpaper mode the host owns the dashboard; this app only polls
-    /// (lightly) to feed the game overlay.
-    pub fn poll_mode(&self, overlay_enabled: bool) -> PollMode {
-        if !self.active {
-            PollMode::Full
-        } else if overlay_enabled {
+    /// In wallpaper mode the host owns the dashboard; this app polls lightly
+    /// for what it still shows or checks itself — the overlay, the tray hover
+    /// card and the alerts (#299).
+    pub fn poll_mode(&self) -> PollMode {
+        if self.active {
             PollMode::Light
         } else {
-            PollMode::Paused
+            PollMode::Full
         }
     }
 
@@ -632,17 +631,18 @@ mod tests {
     }
 
     #[test]
-    fn poll_mode_follows_the_mode_and_the_overlay() {
+    fn poll_mode_is_light_in_wallpaper_mode_and_full_outside() {
         let (mut sup, mut host, t0) = (
             WallpaperSupervisor::default(),
             FakeHost::running(),
             Instant::now(),
         );
-        assert_eq!(sup.poll_mode(true), PollMode::Full);
+        assert_eq!(sup.poll_mode(), PollMode::Full);
         sup.step(true, || false, &mut host, t0);
-        assert_eq!(sup.poll_mode(false), PollMode::Paused);
-        assert_eq!(sup.poll_mode(true), PollMode::Light);
+        // Never paused: the main app still feeds the overlay, the tray hover
+        // card and the alerts while the host draws the dashboard (#299).
+        assert_eq!(sup.poll_mode(), PollMode::Light);
         sup.step(false, || false, &mut host, secs(t0, 1));
-        assert_eq!(sup.poll_mode(false), PollMode::Full);
+        assert_eq!(sup.poll_mode(), PollMode::Full);
     }
 }

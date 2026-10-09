@@ -90,7 +90,7 @@ struct RigStatsApp {
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
     os_dark_mode: bool,
     // ── Wallpaper (WorkerW) mode ───────────────────────────────────────────
-    /// Shared with `poll_loop`: `Paused`/`Light` while in wallpaper mode, where
+    /// Shared with `poll_loop`: `Light` while in wallpaper mode, where
     /// the `rigstats-wallpaper` host is the dashboard's poller (see
     /// `update_wallpaper_mode`).
     poll_mode: PollModeHandle,
@@ -418,9 +418,13 @@ impl RigStatsApp {
         // Before `supervise`: on entering, this saves the position the host
         // reads when it starts.
         self.apply_wallpaper_effects(ctx, effects);
-        // Set every frame so an overlay toggle takes effect immediately.
-        self.poll_mode
-            .set(self.wallpaper.poll_mode(self.overlay.enabled));
+        self.poll_mode.set(self.wallpaper.poll_mode());
+        if self.wallpaper.is_active() {
+            // The main window is parked off-screen and nothing else asks for
+            // frames, but each frame drains the poll channel and checks the
+            // alerts — so keep one a second, like floating mode's heartbeat.
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
         self.apply_wallpaper_effects(ctx, effects);
     }
