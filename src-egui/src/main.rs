@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
+use app::state::OverlayState;
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
@@ -199,61 +200,8 @@ struct RigStatsApp {
     wallpaper: WallpaperSupervisor,
     /// The spawned `rigstats-wallpaper` host process, if any.
     wallpaper_host: ChildHost,
-    // ── Overlay (issue #183) ────────────────────────────────────────────────
-    // An independent add-on window — not a `window_layer` value — that can be
-    // shown/hidden regardless of what the main window (Normal/Floating/
-    // Wallpaper/etc.) is doing, the same way in-game overlays coexist with
-    // whatever else is on screen. Rendered via its own `show_viewport_immediate`
-    // viewport (`render_overlay_viewport`), mirroring how floating panels each
-    // own a secondary viewport, rather than reusing the root window.
-    /// Whether the overlay viewport was shown last frame — edge-detects
-    /// enable/disable transitions so `overlay_dcomp`/`overlay_positioned`
-    /// reset cleanly each time it's freshly (re-)enabled.
-    overlay_active: bool,
-    /// Cached from settings — the overlay's on/off state.
-    overlay_enabled: bool,
-    /// Single source of truth for click-through: the tray, the global
-    /// hotkey, and the Settings switch all just flip and persist this —
-    /// applied immediately (bypassing Settings dialog Save/Cancel) via the
-    /// guarded `MousePassthrough` dispatch inside the overlay's own viewport.
-    overlay_click_through: bool,
-    /// Last click-through value actually sent via `MousePassthrough` —
-    /// avoids re-sending the same viewport command every frame.
-    last_applied_click_through: Option<bool>,
-    /// DComp reveal-burst state for the overlay's own OS window — see
-    /// `dcomp_burst::DcompRevealBurst`. Reset (`start()`) each time the
-    /// overlay is freshly (re-)enabled, since the window is destroyed and a
-    /// fresh one is created next time it's shown.
-    overlay_dcomp: DcompRevealBurst,
-    /// Whether the overlay's initial position (anchor or saved free-drag
-    /// spot) has been applied for the current activation — mirrors floating
-    /// panels' `panels_positioned`: after the first frame, a `"free"`-anchored
-    /// overlay's position is OS-owned (via drag) rather than re-sent, which
-    /// would fight the OS and cause sub-pixel blur. Reset to `false` whenever
-    /// the overlay transitions from disabled to enabled.
-    overlay_positioned: bool,
-    /// Content inset (`overlay::content_inset`) applied last frame, used to
-    /// detect a Background/Scale-driven change so a `"free"`-anchored
-    /// overlay's saved drag position can be compensated by the same delta —
-    /// otherwise, since a `"free"` position's window origin is never
-    /// resent once dragged (see `overlay_anchor_position`'s doc comment),
-    /// toggling Background would grow the window from that fixed origin and
-    /// visibly shift the content by the new padding instead of leaving it
-    /// in place.
-    overlay_last_content_inset: Option<[f32; 2]>,
-    /// Last overlay content size seen, used to detect the very first size
-    /// after each activation — only that first size gets the full DComp
-    /// hide/burst treatment (`overlay_dcomp.start()`); later resizes (e.g.
-    /// dragging Scale) just resize immediately, since the DComp binding
-    /// survives an ordinary resize once correctly established.
-    overlay_last_size: Option<[f32; 2]>,
-    /// Current free-drag position for the overlay this session. Loaded from
-    /// `Settings.overlay_position` at startup; updated on drag and persisted
-    /// (debounced via `overlay_position_dirty`), mirroring `floating_positions`.
-    overlay_position: Option<[f32; 2]>,
-    /// Set true when the overlay is dragged this frame; consumed in `ui()`
-    /// to debounce the settings write to once per tick.
-    overlay_position_dirty: bool,
+    /// The game overlay's window state (#183).
+    overlay: OverlayState,
     // ── Tray recording indicator ───────────────────────────────────────────
     /// True while a session is being recorded — drives the blinking tray dot.
     recording_active: bool,
@@ -465,18 +413,7 @@ impl RigStatsApp {
             poll_mode,
             wallpaper: WallpaperSupervisor::default(),
             wallpaper_host: ChildHost::default(),
-            overlay_active: false,
-            overlay_enabled: init_settings.overlay_enabled,
-            overlay_click_through: init_settings.overlay_click_through,
-            last_applied_click_through: None,
-            overlay_dcomp: DcompRevealBurst::default(),
-            overlay_positioned: false,
-            overlay_last_content_inset: None,
-            overlay_last_size: None,
-            overlay_position: init_settings
-                .overlay_position
-                .map(|p| [p[0] as f32, p[1] as f32]),
-            overlay_position_dirty: false,
+            overlay: OverlayState::new(&init_settings),
             recording_active: false,
             recording_active_shared,
             recording_blink_on: true,
@@ -644,7 +581,7 @@ impl RigStatsApp {
         self.apply_wallpaper_effects(ctx, effects);
         // Set every frame so an overlay toggle takes effect immediately.
         self.poll_mode
-            .set(self.wallpaper.poll_mode(self.overlay_enabled));
+            .set(self.wallpaper.poll_mode(self.overlay.enabled));
         let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
         self.apply_wallpaper_effects(ctx, effects);
     }
@@ -716,10 +653,10 @@ impl RigStatsApp {
     /// panels' `panels_positioned` — re-sending it every frame would fight
     /// the OS and cause sub-pixel blur.
     fn render_overlay_viewport(&mut self, ctx: &egui::Context) {
-        let want = self.overlay_enabled;
-        if want && !self.overlay_active {
-            self.overlay_active = true;
-            self.overlay_positioned = false;
+        let want = self.overlay.enabled;
+        if want && !self.overlay.active {
+            self.overlay.active = true;
+            self.overlay.positioned = false;
             // Fresh window each activation (the old one was destroyed on
             // hide) — force the resize-detection block below to treat this
             // activation's first size as "first ever" again, so it calls
@@ -728,17 +665,17 @@ impl RigStatsApp {
             // transient DWM-redirection-bitmap white box, only the final,
             // correctly-composited frame) instead of being silently skipped
             // because a *previous* activation already recorded a size.
-            self.overlay_last_size = None;
+            self.overlay.last_size = None;
             // Same reasoning applies to the MousePassthrough guard below:
             // the new window starts out click-through-less (it's a brand
             // new HWND), but `overlay_click_through`'s logical value may be
             // unchanged from the last activation, so the "only send on
             // change" guard would otherwise skip resending it here — leaving
             // the new window stuck capturing mouse input.
-            self.last_applied_click_through = None;
+            self.overlay.last_applied_click_through = None;
             debug::log_debug(&self.dir, "overlay: showing");
-        } else if !want && self.overlay_active {
-            self.overlay_active = false;
+        } else if !want && self.overlay.active {
+            self.overlay.active = false;
             debug::log_debug(&self.dir, "overlay: hiding");
         }
         if !want {
@@ -759,9 +696,9 @@ impl RigStatsApp {
         };
         let measured = estimate_window_size(ctx, &metrics, columns, scale, background);
         let size = [measured.x, measured.y];
-        if self.overlay_last_size != Some(size) {
+        if self.overlay.last_size != Some(size) {
             // Only the very first size (right after activation,
-            // self.overlay_last_size still None) gets the full hide/burst
+            // self.overlay.last_size still None) gets the full hide/burst
             // treatment. A later resize (e.g. dragging Scale) just resizes
             // silently, same as floating panels' later content-driven
             // resizes (#169) — confirmed by direct visual testing that the
@@ -773,10 +710,10 @@ impl RigStatsApp {
             // that the underlying fix is actually correct. Scale is read
             // live here (no debounce) since a resize no longer re-triggers
             // any hide/reveal flicker for the debounce to guard against.
-            let is_first_size = self.overlay_last_size.is_none();
-            self.overlay_last_size = Some(size);
+            let is_first_size = self.overlay.last_size.is_none();
+            self.overlay.last_size = Some(size);
             if is_first_size {
-                self.overlay_dcomp.start(self.dcomp_available);
+                self.overlay.dcomp.start(self.dcomp_available);
             }
         }
 
@@ -794,25 +731,26 @@ impl RigStatsApp {
         // window would keep its old origin and the new padding would push
         // the content inward by the delta instead.
         let mut inset_compensated = false;
-        if let (Some(prev), Some(pos)) = (self.overlay_last_content_inset, self.overlay_position) {
+        if let (Some(prev), Some(pos)) = (self.overlay.last_content_inset, self.overlay.position) {
             if prev != inset {
-                self.overlay_position =
+                self.overlay.position =
                     Some([pos[0] - (inset[0] - prev[0]), pos[1] - (inset[1] - prev[1])]);
                 inset_compensated = true;
             }
         }
-        self.overlay_last_content_inset = Some(inset);
-        let needs_position = !self.overlay_positioned;
+        self.overlay.last_content_inset = Some(inset);
+        let needs_position = !self.overlay.positioned;
         let pos: Option<[f32; 2]> = if anchor == "free" {
             if needs_position {
                 let fallback = overlay_anchor_position("top-right", margin, size, monitor, inset);
                 Some(
-                    self.overlay_position
+                    self.overlay
+                        .position
                         .map(|p| guard_panel_position(p, fallback))
                         .unwrap_or(fallback),
                 )
             } else if inset_compensated {
-                self.overlay_position
+                self.overlay.position
             } else {
                 None // OS/drag owns it now — don't fight it by resending.
             }
@@ -826,7 +764,7 @@ impl RigStatsApp {
             ))
         };
         if needs_position {
-            self.overlay_positioned = true;
+            self.overlay.positioned = true;
         }
 
         // True per-pixel DComp transparency, without a CentralPanel wrapper.
@@ -848,7 +786,7 @@ impl RigStatsApp {
             // Held hidden until the reapply burst below settles, so the
             // very first frame the user ever sees is already correctly
             // per-pixel composited — see `DcompRevealBurst`'s doc.
-            .with_visible(!self.overlay_dcomp.pending_reveal());
+            .with_visible(!self.overlay.dcomp.pending_reveal());
         if let Some([x, y]) = pos {
             vp_builder = vp_builder.with_position([x, y]);
         }
@@ -856,7 +794,7 @@ impl RigStatsApp {
         let th = self.runtime.app_theme;
         let latest = &self.runtime.latest;
         let thresholds = &self.runtime.thresholds;
-        let click_through = self.overlay_click_through;
+        let click_through = self.overlay.click_through;
         let dcomp_available = self.dcomp_available;
         // The overlay's own hwnd stays hidden (`with_visible(false)`) for
         // most of the reveal burst below — invalidating a hidden window
@@ -868,11 +806,11 @@ impl RigStatsApp {
         // always visible, so forcing its repaint too reliably drives the
         // next `ui()` call regardless of the overlay's own visibility state.
         let main_hwnd = self.hwnd;
-        let mut applied_click_through = self.last_applied_click_through;
+        let mut applied_click_through = self.overlay.last_applied_click_through;
         let current_settings = self.current_settings.clone();
         let dir = self.dir.clone();
         let mut drag_pos: Option<[f32; 2]> = None;
-        let dcomp = &mut self.overlay_dcomp;
+        let dcomp = &mut self.overlay.dcomp;
 
         ctx.show_viewport_immediate(
             egui::ViewportId::from_hash_of("overlay"),
@@ -981,16 +919,16 @@ impl RigStatsApp {
             },
         );
 
-        self.last_applied_click_through = applied_click_through;
+        self.overlay.last_applied_click_through = applied_click_through;
         if let Some(pos) = drag_pos {
-            if self.overlay_position != Some(pos) {
-                self.overlay_position = Some(pos);
-                self.overlay_position_dirty = true;
+            if self.overlay.position != Some(pos) {
+                self.overlay.position = Some(pos);
+                self.overlay.position_dirty = true;
             }
         }
-        if self.overlay_position_dirty {
-            self.overlay_position_dirty = false;
-            if let Some([x, y]) = self.overlay_position {
+        if self.overlay.position_dirty {
+            self.overlay.position_dirty = false;
+            if let Some([x, y]) = self.overlay.position {
                 let mut s = self.current_settings.lock_safe();
                 s.overlay_position = Some([x.round() as i32, y.round() as i32]);
                 self.persist_settings_logged(&s);
@@ -1005,10 +943,10 @@ impl RigStatsApp {
     fn toggle_overlay_lock(&mut self) {
         let mut s = self.current_settings.lock_safe();
         s.overlay_click_through = !s.overlay_click_through;
-        self.overlay_click_through = s.overlay_click_through;
+        self.overlay.click_through = s.overlay_click_through;
         self.persist_settings_logged(&s);
         drop(s);
-        self.tray.set_overlay_lock(self.overlay_click_through);
+        self.tray.set_overlay_lock(self.overlay.click_through);
     }
 
     /// Flips `window_layer` between `"overlay"` and `"normal"` — i.e. show/hide
@@ -1023,7 +961,7 @@ impl RigStatsApp {
     fn toggle_overlay_mode(&mut self) {
         let mut s = self.current_settings.lock_safe();
         s.overlay_enabled = !s.overlay_enabled;
-        self.overlay_enabled = s.overlay_enabled;
+        self.overlay.enabled = s.overlay_enabled;
         self.persist_settings_logged(&s);
         // `render_overlay_viewport` (called every frame) picks up the change
         // on the next frame and shows/hides the overlay's own viewport —
@@ -1388,8 +1326,8 @@ impl eframe::App for RigStatsApp {
                 .store(self.floating_mode, Ordering::Relaxed);
             self.floating_panels_locked = s.floating_panels_locked;
             self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
-            self.overlay_click_through = s.overlay_click_through;
-            self.overlay_enabled = s.overlay_enabled;
+            self.overlay.click_through = s.overlay_click_through;
+            self.overlay.enabled = s.overlay_enabled;
             let preferred_gpu = s.preferred_gpu.clone();
             let was_fullscreen = self.fullscreen_mode;
             self.fullscreen_mode = s.fullscreen_mode;
