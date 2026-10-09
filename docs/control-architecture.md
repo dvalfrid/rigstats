@@ -898,6 +898,27 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   LampArray devices itself: they report `blocked` and Aura Sync skips them,
   the Lighting tab explains it per device, and the rest keep syncing.
 
+### Battery status of wireless devices (#290)
+
+Read-only, from the lighting devices already open. `IBatteryDevice`
+(`Lighting/Battery.cs`) beside `ILightingDevice`: `AsusHeadsetDevice` asks
+`12 07` + `12 08` (every headset in its table), `AsusKeyboardDevice` `12 01`
+(only ids in `BatteryModels` — `hasPowerInfo` in the model's Gear Link
+manifest; behind the Omni receiver, the paired keyboard's id decides), the
+Omni receiver's mouse `12 07` on its channel (`OmniMouse.ReadBattery`, via its
+`LampArrayDevice`; every mouse in `OmniMouse.Models` has power info). The
+reply layouts are in `BatteryReplies`; a standby answer (0 %, not charging) and
+an `FF AA` error read as no answer. `PeripheralBatteryMonitor` asks once a
+minute (first after 10 s), keeps a silent device's last reading while it stays
+connected, logs the first reading and charging changes (`Battery: ROG Azoth X
+82 %.`), and `HardwareHost` adds the list to every telemetry line as
+`peripherals: [{id, name, kind, battery, charging}]` — omitted until the first
+round, so the golden fixtures don't carry it. The field's shape is pinned by
+`sensor-sidecar.Tests/contract/telemetry-peripherals.json`, which the Rust
+reader checks too. Not covered yet: ROG mice on their own 2.4 GHz dongle or
+cable (driven as LampArray, no ASUS protocol path), devices while another
+program owns the lighting, Bluetooth (#291).
+
 ### Philips Hue (#215)
 
 Room lights through a Hue Bridge, on its official local API — no cloud
@@ -992,6 +1013,10 @@ to a device to find them out.
 
 ### Battery
 
+Verified live 2026-10-09 (#294): ROG Azoth X on the Omni receiver 82 %, ROG
+Harpe Ace Aim Lab Edition on the Omni receiver 60 %, ROG Delta II 23 % — one
+device of each type, so all three layouts below are confirmed on hardware.
+
 | Device type | Question | Reply (byte positions incl. report id) | Sources |
 | --- | --- | --- | --- |
 | Headset (GearLink pattern 2: Delta II, Pelta, …) | `12 07` | 5 sleep timer, **6 battery %**, 7 low-battery warning %, 8 low-battery voice prompt | GearLink `powerSaving`/`batteryLevel` (get key 7) + G-Helper `AsusHeadset.ParseBattery` ✓ |
@@ -1007,7 +1032,9 @@ to a device to find them out.
   treats that as "not ready").
 - The Delta II also sends an undocumented event `CC 12 09 00 00 <n>` with `n`
   falling slowly (1E → 18 over an hour, 2026-10-09). Neither source names key
-  9; it may be a battery notification — don't rely on it, ask `12 07`.
+  9, but it matches the battery: the last event read 0x18 (24 %) and `12 07`
+  answered 23 % three hours later. Likely a battery notification — still ask
+  `12 07`, which is documented.
 - GearLink has more families with their own power commands (a gamepad class
   `18, 4`; a keyboard family reading `getDeviceInfo(CurrentPower)` with battery
   at its `n[5]`; a JSON `class_id:"10020000"` protocol). Check a device's own

@@ -11,7 +11,7 @@ namespace SensorSidecar.Control.Lighting;
 /// four header bytes. Lighting: set key 40 / get key 3 with `effectId,
 /// brightness (0–100), R, G, B` — so unlike other lighting devices, every
 /// write is verified by reading it back.
-public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
+public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(800);
 
@@ -20,6 +20,9 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
     private const byte DeviceInfoKey = 0;
     private const byte LightingGetKey = 3;
     private const byte LightingSetKey = 40;
+    // GearLink schema batteryLevel / chargingStatus (every headset in Models).
+    private const byte BatteryKey = 7;
+    private const byte ChargingKey = 8;
     private const ushort VendorPage = 0xFF00;
     public const byte FullBrightness = 100;
 
@@ -133,6 +136,22 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
             _lastLighting = back is null ? "" : Convert.ToHexString(back[..Math.Min(10, back.Length)]);
             if (!ReadBackMatches(back, _reportId, data))
                 throw new IOException($"{Name} did not take the lighting (read back {(_lastLighting.Length > 0 ? _lastLighting : "nothing")}).");
+        }
+    }
+
+    /// Every headset in the model table carries GearLink's `batteryLevel`
+    /// (get key 7) and `chargingStatus` (key 8).
+    public bool HasBattery => true;
+
+    public BatteryStatus? ReadBattery()
+    {
+        lock (_lock)
+        {
+            Send(Frame(_reportId, _info.OutputReportLength, Get, BatteryKey, []));
+            if (ReadReply(Get, BatteryKey) is not { } battery)
+                return null;
+            Send(Frame(_reportId, _info.OutputReportLength, Get, ChargingKey, []));
+            return BatteryReplies.Headset(battery, ReadReply(Get, ChargingKey));
         }
     }
 

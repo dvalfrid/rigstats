@@ -37,7 +37,11 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     private readonly Computer _computer;
     private readonly UpdateVisitor _visitor = new();
     private readonly Func<SensorPayload> _sample;
-    private readonly System.Text.Json.JsonSerializerOptions _telemetryJsonOptions = new()
+    private readonly PeripheralStatusStore? _peripherals;
+
+    /// How the telemetry line is written — public for the contract test
+    /// shared with the Rust reader (sensor-sidecar.Tests/contract/).
+    public static readonly System.Text.Json.JsonSerializerOptions TelemetryJsonOptions = new()
     {
         PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.SnakeCaseLower,
     };
@@ -61,13 +65,16 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // Program.cs release backstop) gets an exception, not a closed Computer.
     private bool _closed;
 
-    public HardwareHost() : this(null) { }
+    public HardwareHost() : this((Func<SensorPayload>?)null) { }
+
+    public HardwareHost(PeripheralStatusStore peripherals) : this(null, peripherals) { }
 
     // Seam for tests (#208): `sample` replaces the LHM read, so the sample
     // rate can be pinned without hardware.
-    internal HardwareHost(Func<SensorPayload>? sample)
+    internal HardwareHost(Func<SensorPayload>? sample, PeripheralStatusStore? peripherals = null)
     {
         _sample = sample ?? SampleLhm;
+        _peripherals = peripherals;
         _computer = new Computer
         {
             IsCpuEnabled = true,
@@ -180,8 +187,8 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         var now = Environment.TickCount64;
         if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
             return;
-        _latestPayload = _sample();
-        _latestLine = System.Text.Json.JsonSerializer.Serialize(_latestPayload, _telemetryJsonOptions);
+        _latestPayload = _sample() with { Peripherals = _peripherals?.Latest?.ToList() };
+        _latestLine = System.Text.Json.JsonSerializer.Serialize(_latestPayload, TelemetryJsonOptions);
         _latestAtMs = now;
     }
 

@@ -70,6 +70,8 @@
     <Compile Include="..\sensor-sidecar\Control\Lighting\HueBridge.cs" Link="Control\Lighting\HueBridge.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\HueRoomDevice.cs" Link="Control\Lighting\HueRoomDevice.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\HueLink.cs" Link="Control\Lighting\HueLink.cs" />
+    <Compile Include="..\sensor-sidecar\Control\Lighting\Battery.cs" Link="Control\Lighting\Battery.cs" />
+    <Compile Include="..\sensor-sidecar\Control\PeripheralBatteryMonitor.cs" Link="Control\PeripheralBatteryMonitor.cs" />
   </ItemGroup>
 
   <!-- Real-hardware sensor fixtures (see fixtures/README.md). Copied next to the

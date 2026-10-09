@@ -28,13 +28,14 @@ public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, 
 ///
 /// Not covered: the ROG Claymore (a different command layout, 2018) and the
 /// Strix Scope TKL family (direct per-key mode only, model key maps).
-public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
+public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(500);
 
     private const byte Get = 0x12;
     private const byte GetVersion = 0x00;
     private const byte GetLayout = 0x12;
+    private const byte GetPower = 0x01;
     private const byte Set = 0x51;
     private const byte SetEffect = 0x2C;
     private const byte PerKeyMarker = 0x02;
@@ -62,8 +63,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
     public IReadOnlyList<AuraZone> Zones { get; } = [new AuraZone("keys", "Keys", Addressable: true, 0, 1)];
 
     private AsusKeyboardDevice(HidDeviceInfo info, IHidDevice device, KeyboardModel model, byte reportId,
-        string id, string name, string version, string layout)
+        string id, string name, string version, string layout, bool hasBattery)
     {
+        HasBattery = hasBattery;
         _info = info;
         _device = device;
         _model = model;
@@ -171,6 +173,33 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
 
     public static KeyboardModel? Model(ushort productId) => Models.GetValueOrDefault(productId);
 
+    /// Keyboards with a battery: `hasPowerInfo` in their Gear Link manifest
+    /// (gearlink.asus.com/view/<pid>/manifest.json, read 2026-10-09), all
+    /// ids of each model. Wired-only models (Falchion Ace HFX, Strix Scope II
+    /// RX, TUF K4, TX75 Core) are false there and are never asked.
+    public static readonly IReadOnlySet<ushort> BatteryModels = new HashSet<ushort>
+    {
+        0x1A83, 0x1A85,                 // ROG Azoth
+        0x1AAE, 0x1AAF, 0x1AB0,         // ROG Strix Scope II 96 Wireless
+        0x1B3F, 0x1B40, 0x1B42,         // ROG Azoth Extreme
+        0x1C10, 0x1C11, 0x1C12,         // ROG Azoth 96 HE / Lite
+        0x1C24, 0x1C25,                 // ROG Azoth X
+        0x1C2F, 0x1C31,                 // ROG Falcata
+        0x1CE8, 0x1CE9, 0x1CEA,         // ROG Strix Morph 96 Wireless
+        0x1CEF, 0x1CF0, 0x1CF1,         // ROG Azoth Extreme Special Edition
+        0x1D45, 0x1D46, 0x1D47,         // ProArt KD300
+        0x1D68, 0x1D6A,                 // ASUS TX75 Analog
+        0x1DA2, 0x1DA3, 0x1DA4,         // ROG Azoth Extreme Edition 20
+        0x1E0A, 0x1E0B, 0x1E0C,         // ROG Strix Morph 96 X Wireless
+        0x1E5B, 0x1E5C, 0x1E5D,         // ROG Strix Morph 96 Wireless PBZ
+    };
+
+    /// The product id the receiver's paired list puts on `reportId` when it
+    /// is a known keyboard, else null.
+    public static ushort? PairedKeyboardProductId(IReadOnlyList<OmniMouse.Paired> paired, byte reportId) =>
+        paired.Where(p => p.ReportId == reportId && Model(p.ProductId) is { Receiver: false })
+            .Select(p => (ushort?)p.ProductId).FirstOrDefault();
+
     /// Every keyboard found: directly connected models on their vendor
     /// collection, and keyboards paired to a receiver on their channel.
     public static IReadOnlyList<AsusKeyboardDevice> Discover(IReadOnlyList<HidDeviceInfo> hid)
@@ -218,10 +247,12 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
                 var nthName = found.Count(f => f.Name == name || f.Name.StartsWith(name + " (", StringComparison.Ordinal)) + 1;
                 LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}" +
                     (name != model.Name ? $" ({name})" : "") + $", layout {Hex(layout, 8)}, version {Hex(version, 16)}.");
+                var batteryId = model.Receiver ? PairedKeyboardProductId(paired, reportId) : info.ProductId;
                 found.Add(new AsusKeyboardDevice(info, device, model, reportId,
                     $"asus-keyboard-{info.ProductId:x4}-{nth}",
                     nthName == 1 ? name : $"{name} ({nthName})",
-                    Hex(version, 64), Hex(layout, 64)));
+                    Hex(version, 64), Hex(layout, 64),
+                    batteryId is { } id && BatteryModels.Contains(id)));
             }
             catch (Exception e)
             {
@@ -357,6 +388,31 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IDisposable
             report[colour + 2] = blue;
         }
         return report;
+    }
+
+    public bool HasBattery { get; }
+
+    /// `12 01` — the keyboards' power question (Gear Link's keyboard power
+    /// classes and G-Helper agree). Only asked when the model has a battery.
+    public BatteryStatus? ReadBattery()
+    {
+        if (!HasBattery)
+            return null;
+        lock (_lock)
+        {
+            byte[]? reply;
+            try
+            {
+                reply = Ask(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
+            {
+                _device?.Dispose();
+                _device = Hid.Open(_info);
+                reply = Ask(_device, _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+            }
+            return reply is null ? null : BatteryReplies.Keyboard(reply);
+        }
     }
 
     // Caller holds _lock. Reopens once (a receiver re-enumerates when a
