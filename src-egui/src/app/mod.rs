@@ -4,6 +4,7 @@ pub(crate) mod background;
 mod dialogs;
 mod floating;
 mod overlay_window;
+mod settings_reload;
 pub(crate) mod startup;
 pub(crate) mod state;
 mod tray_actions;
