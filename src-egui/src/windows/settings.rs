@@ -21,6 +21,7 @@ const ALL_PANELS: &[(&str, &str)] = &[
     ("gpu_processes", "GPU Apps"),
     ("power", "System Power"),
     ("battery", "Battery"),
+    ("peripherals", "Peripherals"),
 ];
 
 const ALL_PROFILES: &[(&str, &str)] = &[

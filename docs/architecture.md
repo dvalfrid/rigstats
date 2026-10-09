@@ -571,6 +571,7 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `process` | Processes | opt-in | sysinfo |
 | `gpu_processes` | GPU Apps | opt-in | PDH `\GPU Engine` · DXGI · sysinfo |
 | `battery` | Battery | opt-in | sidecar · WMI |
+| `peripherals` | Peripherals | opt-in | sidecar (battery of ROG wireless devices, #290) |
 | `power` | System Power | opt-in | sidecar (derived, no new sensors) |
 
 Panel visibility and order are saved as a plain `Vec<String>` of keys in
