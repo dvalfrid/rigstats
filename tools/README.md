@@ -46,6 +46,32 @@ firmware and starts the installed service again. The full workflow is in
 pwsh -File tools\dev-sidecar.ps1 -Live
 ```
 
+## `smoke-app.ps1`
+
+**Start-up smoke test** for the egui app — run it before and after a change
+to start-up, window modes or `main.rs` structure. It launches
+`target\debug\rigstats.exe` once per start mode and checks each:
+
+| Mode | Checks (besides: still running, no `[ERROR]` or panic in the log) |
+| --- | --- |
+| `normal` | main window on-screen, no wallpaper host |
+| `wallpaper` | main window parked, `rigstats-wallpaper` running and attached to WorkerW |
+| `floating` | main window parked, a floating panel shown |
+| `overlay` | main window on-screen, overlay shown |
+| `just-updated` | `--just-updated=…` opens the update window |
+
+It stops every running RIGStats first (the installed app too — single-instance
+guard), switches modes by editing `rigstats-settings.json`, and restores the
+file byte for byte afterwards. Exit code = number of failed modes; a failure
+prints the log's errors and the app's windows.
+
+```powershell
+cargo build --manifest-path src-egui/Cargo.toml
+pwsh -File tools\smoke-app.ps1                  # all modes
+pwsh -File tools\smoke-app.ps1 -Only wallpaper  # one mode
+pwsh -File tools\smoke-app.ps1 -Restart         # start the installed app afterwards
+```
+
 ## `openrgb-asus-watch.ps1`
 
 Reports ASUS lighting devices **added to OpenRGB** since the last review, so
