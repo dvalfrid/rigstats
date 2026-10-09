@@ -216,12 +216,32 @@ pub struct Tray {
     tooltip: std::cell::RefCell<String>,
 }
 
-/// Windows keeps 127 characters of a tray tooltip (`NOTIFYICONDATA.szTip`).
-const TOOLTIP_MAX_CHARS: usize = 127;
+/// What Windows shows of a tray tooltip: `szTip` holds 128 characters, but
+/// an icon registered the legacy way (as `tray-icon` does) shows only the
+/// first 63 — seen cutting "ROG Harpe Ace Aim Lab Edition" mid-line.
+const TOOLTIP_MAX_CHARS: usize = 63;
+
+/// Longest device name in the tooltip before it is cut with "…".
+const TOOLTIP_NAME_CHARS: usize = 18;
+
+/// A device name short enough for the tooltip: brand prefix dropped
+/// ("ROG Azoth X" → "Azoth X"), then cut with "…".
+fn tooltip_name(name: &str) -> String {
+    let trimmed = ["ROG ", "ASUS ", "TUF Gaming "]
+        .iter()
+        .find_map(|prefix| name.strip_prefix(prefix))
+        .unwrap_or(name);
+    if trimmed.chars().count() <= TOOLTIP_NAME_CHARS {
+        trimmed.to_string()
+    } else {
+        let cut: String = trimmed.chars().take(TOOLTIP_NAME_CHARS - 1).collect();
+        format!("{}\u{2026}", cut.trim_end())
+    }
+}
 
 /// The tray tooltip: "RIGStats" (+ " — Recording"), then one line per
-/// wireless device with its battery, as many whole lines as fit in Windows'
-/// 127 characters.
+/// wireless device with its battery, as many whole lines as Windows shows.
+/// Plain text: the native tooltip has no colours or columns.
 pub fn tray_tooltip(recording: bool, peripherals: &[lhm::Peripheral]) -> String {
     let mut text = String::from(if recording {
         "RIGStats \u{2014} Recording"
@@ -231,9 +251,9 @@ pub fn tray_tooltip(recording: bool, peripherals: &[lhm::Peripheral]) -> String 
     for device in peripherals {
         let line = format!(
             "\n{} {}%{}",
-            device.name,
+            tooltip_name(&device.name),
             device.battery,
-            if device.charging { " (charging)" } else { "" }
+            if device.charging { " CHG" } else { "" }
         );
         if text.chars().count() + line.chars().count() > TOOLTIP_MAX_CHARS {
             break;
@@ -579,7 +599,30 @@ mod tests {
         assert_eq!(tray_tooltip(false, &[]), "RIGStats");
         assert_eq!(
             tray_tooltip(true, &devices),
-            "RIGStats \u{2014} Recording\nROG Azoth X 82%\nROG Delta II 23% (charging)"
+            "RIGStats \u{2014} Recording\nAzoth X 82%\nDelta II 23% CHG"
+        );
+    }
+
+    #[test]
+    fn tooltip_names_drop_the_brand_and_cut_long_ones() {
+        assert_eq!(tooltip_name("ROG Azoth X"), "Azoth X");
+        assert_eq!(tooltip_name("ProArt KD300"), "ProArt KD300");
+        assert_eq!(
+            tooltip_name("ROG Harpe Ace Aim Lab Edition"),
+            "Harpe Ace Aim Lab\u{2026}"
+        );
+    }
+
+    #[test]
+    fn tooltip_fits_the_owners_three_devices() {
+        let devices = [
+            peripheral("ROG Azoth X", 82, false),
+            peripheral("ROG Delta II", 23, false),
+            peripheral("ROG Harpe Ace Aim Lab Edition", 60, false),
+        ];
+        assert_eq!(
+            tray_tooltip(false, &devices),
+            "RIGStats\nAzoth X 82%\nDelta II 23%\nHarpe Ace Aim Lab\u{2026} 60%"
         );
     }
 

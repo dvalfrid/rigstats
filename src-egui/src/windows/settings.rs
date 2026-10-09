@@ -1299,7 +1299,7 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
         ui.add_space(4.0);
         ui.label(
             egui::RichText::new(
-                "Charge: alert when % drops below · Power: alert when W exceeds (discharge only)",
+                "Battery charge (laptop and wireless devices): alert when % drops below · Power: alert when W exceeds (discharge only)",
             )
             .size(10.0)
             .color(dc.muted),
@@ -1316,7 +1316,7 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
                     .unwrap_or_default()
             });
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Charge %").size(13.0).color(dc.text));
+            ui.label(egui::RichText::new("Battery %").size(13.0).color(dc.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 threshold_field(ui, &mut bat.crit);
                 ui.add_space(4.0);
@@ -1334,7 +1334,7 @@ fn draw_alerts(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Setti
                     .unwrap_or_default()
             });
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Power W").size(13.0).color(dc.text));
+            ui.label(egui::RichText::new("Battery W").size(13.0).color(dc.text));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 threshold_field(ui, &mut bat_pwr.crit);
                 ui.add_space(4.0);
