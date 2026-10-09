@@ -86,6 +86,8 @@ When the closed issue has a `$features` entry in `tools/sync-roadmap-issues.ps1`
 
 A red `DRIFT`/`ERROR` line means step 6 was skipped — fix the `kind` and re-run.
 
+A feature that is built but not yet verified stays `kind="planned"` with `tableStatus="🚧 In progress — …"` — the table otherwise shows the kind's plain status and a re-run overwrites hand edits in `ROADMAP.md`'s generated table.
+
 ## 7. Update documentation for feature changes
 
 Every feature change must also update all of these — do not wait to be asked:
