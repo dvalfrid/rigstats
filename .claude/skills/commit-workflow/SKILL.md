@@ -17,7 +17,13 @@ This is the mandatory sequence for every bug fix and feature. Do not skip steps 
 - **Bug:** describe the incorrect behaviour, steps to reproduce, and expected behaviour.
 - **Feature:** describe the user-visible change and why it is needed.
 
-## 2. Implement the fix or feature
+## 2. Branch from `main`, then implement
+
+```powershell
+git switch main; git pull; git switch -c <type>/<short-name>   # e.g. fix/tray-ghost, refactor/ui-frame
+```
+
+Never commit to `main` directly. Do not branch off another unmerged branch — PRs are squash-merged, so a stacked PR conflicts after the first one lands.
 
 ## 3. Test in the running app — required before any commit
 
@@ -54,6 +60,16 @@ Closes #N
 - **subject:** imperative, lower-case start, no trailing period
 - Breaking change: `feat!:` or `BREAKING CHANGE:` footer
 
+## 4b. Push and open a pull request
+
+```powershell
+git push -u origin HEAD
+gh pr create --fill   # title = the commit subject; body ends with "Closes #N"
+gh pr checks <n> --required --watch
+```
+
+The PR is ready as soon as the required check **Verify (Windows)** is green — CodeQL is not a merge gate (`docs/release.md`), don't wait for it. The owner merges (`gh pr merge <n> --squash --admin --delete-branch`); tell them it's ready.
+
 ## 5. If you forgot `Closes #N`, close the issue manually
 
 ```powershell
@@ -79,4 +95,4 @@ Every feature change must also update all of these — do not wait to be asked:
 | New panel, data field, or backend module | `docs/architecture.md` — backend modules + renderer modules sections |
 | New panel or user-visible feature | `website/index.html` — panel count in `<h2>`, panel card in `.panels-grid`, hero description if relevant |
 | Feature complete or scope change | `ROADMAP.md` — mark ✓ and add implementation summary |
-| New behaviour or architectural rule | `CLAUDE.md` — Architecture Overview section |
+| New module or architectural rule | `docs/architecture.md` (or `docs/control-architecture.md` for the sidecar's Control side). Touch `CLAUDE.md` only for a rule Claude must follow in *every* session — it is loaded each time, so module descriptions don't belong there |
