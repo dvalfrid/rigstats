@@ -356,15 +356,12 @@ pub fn build_tray(
     } else {
         load_tray_icon()
     };
-    let tooltip = if logging_enabled {
-        "RIGStats \u{2014} Recording"
-    } else {
-        "RIGStats"
-    };
+    // No native tooltip: hovering the icon shows the app's own card instead
+    // (`app/tray_card.rs`, #290) — name, recording state and wireless
+    // batteries in colour — which a plain-text tooltip would sit on top of.
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
         .with_icon(icon)
-        .with_tooltip(tooltip)
         .build()
         .expect("tray icon");
 
@@ -407,12 +404,6 @@ impl Tray {
             menu_icons::record_start()
         }));
         self.set_icon_variant(enabled);
-        let tooltip = if enabled {
-            "RIGStats \u{2014} Recording"
-        } else {
-            "RIGStats"
-        };
-        let _ = self.icon.set_tooltip(Some(tooltip));
     }
 
     /// Swaps both the tray icon glyph and the recording menu row's icon
@@ -491,6 +482,7 @@ pub fn panel_label(key: &str) -> &'static str {
         "gpu_processes" => "GPU Apps",
         "power" => "System Power",
         "battery" => "Battery",
+        "peripherals" => "Peripherals",
         _ => "Panel",
     }
 }

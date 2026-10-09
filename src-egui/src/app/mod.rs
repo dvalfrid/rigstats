@@ -9,3 +9,4 @@ mod settings_reload;
 pub(crate) mod startup;
 pub(crate) mod state;
 mod tray_actions;
+pub(crate) mod tray_card;

@@ -125,6 +125,8 @@ pub struct PollStats {
     pub processes: Vec<ProcessInfo>,
     // Per-process GPU engine usage (PDH \GPU Engine counters), top rows by util
     pub gpu_processes: Vec<GpuProcessInfo>,
+    // Wireless devices' batteries from the sidecar (PERIPHERALS panel, #290)
+    pub peripherals: Vec<rigstats_backend::lhm::Peripheral>,
     // System
     pub uptime_secs: u64,
     pub hostname: String,
@@ -667,6 +669,10 @@ pub async fn poll_loop(
             battery_power_w,
             processes,
             gpu_processes,
+            peripherals: lhm_data
+                .as_ref()
+                .map(|l| l.peripherals.clone())
+                .unwrap_or_default(),
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),

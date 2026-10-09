@@ -139,7 +139,8 @@ rig-dashboard/
 │   │   ├── main.rs         `rigstats` bin: RigStatsApp, eframe::App (ui() = list of calls into app/), alerts, profile cycling
 │   │   ├── app/            `rigstats`-only parts of RigStatsApp split out of main.rs (#225):
 │   │   │                   state.rs (field groups), main_window.rs, floating.rs, overlay_window.rs,
-│   │   │                   dialogs.rs, settings_reload.rs, tray_actions.rs, startup.rs, background.rs
+│   │   │                   dialogs.rs, settings_reload.rs, tray_actions.rs, tray_card.rs (tray hover card,
+│   │   │                   #290), startup.rs, background.rs
 │   │   ├── update_flow.rs  run_check_and_download — the one check → download → verify path (unit-tested)
 │   │   ├── wallpaper_supervisor.rs  Wallpaper-mode enter/leave + host spawn/backoff behind a Host trait (unit-tested)
 │   │   ├── authenticode.rs WinVerifyTrust + signer subject, for the updater
@@ -228,7 +229,7 @@ rig-dashboard/
 | `dashboard.rs` | `DashboardRuntime` (owned telemetry→renderer glue: sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView` (borrowed per-frame render state + `draw_one_panel`/`render_landscape_grid`); `PanelThresholds` |
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping. `PollMode` (shared via `PollModeHandle`): `Full` normally; in wallpaper mode (the host is the dashboard's poller) `Light` while the overlay is on — overlay metrics only, no per-app lists, no session recording — else `Paused` |
-| `alerts.rs` | `pending_alerts` — pure warn/crit threshold-breach detection (no I/O, unit-tested); `notify_on_*` checks, per-alert cooldowns and sending the notification are the caller's job in `main.rs` |
+| `alerts.rs` | `pending_alerts` — pure warn/crit threshold-breach detection (no I/O, unit-tested); `notify_on_*` checks, per-alert cooldowns and sending the notification are the caller's job in `main.rs`. Wireless devices' batteries (#290) use the `battery` charge thresholds while discharging, each with its own cooldown key (`peripheral_<id>`) |
 | `dcomp_burst.rs` | `DcompRevealBurst` — decision logic for revealing a per-pixel-transparent (DComp) viewport only after its style/resize burst settles; used by the overlay and floating panels |
 | `dialog_reveal.rs` | `DialogReveal` — each dialog window is created hidden and revealed after it has rendered, and hidden for one frame before it's torn down (no white flash on open/close); see the dialog lifecycle under `windows/` below |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
@@ -571,6 +572,7 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `process` | Processes | opt-in | sysinfo |
 | `gpu_processes` | GPU Apps | opt-in | PDH `\GPU Engine` · DXGI · sysinfo |
 | `battery` | Battery | opt-in | sidecar · WMI |
+| `peripherals` | Peripherals | opt-in | sidecar (battery of ROG wireless devices, #290) |
 | `power` | System Power | opt-in | sidecar (derived, no new sensors) |
 
 Panel visibility and order are saved as a plain `Vec<String>` of keys in

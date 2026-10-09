@@ -50,7 +50,8 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
     private IHidDevice? _device;
 
     public string Id { get; }
-    public string Name { get; }
+    // Set after discovery numbers same-named keyboards (see Discover).
+    public string Name { get; private set; }
     public string Kind => "keyboard";
 
     /// The keyboard's own USB product id when connected directly, or null
@@ -244,13 +245,12 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
                 // receiver the name is the paired keyboard's own, like the mouse's.
                 var nth = found.Count(f => f._model.Name == model.Name) + 1;
                 var name = model.Receiver ? PairedKeyboardName(paired, reportId) ?? model.Name : model.Name;
-                var nthName = found.Count(f => f.Name == name || f.Name.StartsWith(name + " (", StringComparison.Ordinal)) + 1;
                 LightingLog.Discovery($"[rigstats-control] Lighting: {model.Name} 0x{info.ProductId:X4} report 0x{reportId:X2}" +
                     (name != model.Name ? $" ({name})" : "") + $", layout {Hex(layout, 8)}, version {Hex(version, 16)}.");
                 var batteryId = model.Receiver ? PairedKeyboardProductId(paired, reportId) : info.ProductId;
                 found.Add(new AsusKeyboardDevice(info, device, model, reportId,
                     $"asus-keyboard-{info.ProductId:x4}-{nth}",
-                    nthName == 1 ? name : $"{name} ({nthName})",
+                    name,
                     Hex(version, 64), Hex(layout, 64),
                     batteryId is { } id && BatteryModels.Contains(id)));
             }
@@ -260,7 +260,42 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
                 device?.Dispose();
             }
         }
-        return found;
+        // Names are still the plain model names here, so a receiver keyboard
+        // and the same model by cable compare equal; numbering comes after.
+        var keep = KeepIndices(found.Select(k => (k._model.Receiver, k.Name)).ToList());
+        foreach (var dropped in found.Where((_, i) => !keep.Contains(i)))
+        {
+            LightingLog.Discovery($"[rigstats-control] Lighting: {dropped.Name} is connected by cable too — the receiver's entry is left out.");
+            dropped.Dispose();
+        }
+        var kept = found.Where((_, i) => keep.Contains(i)).ToList();
+        var names = Numbered(kept.Select(k => k.Name).ToList());
+        for (var i = 0; i < kept.Count; i++)
+            kept[i].Name = names[i];
+        return kept;
+    }
+
+    /// Same names numbered in order: "ROG Azoth X", "ROG Azoth X (2)", ….
+    public static IReadOnlyList<string> Numbered(IReadOnlyList<string> names)
+    {
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        return names.Select(n =>
+        {
+            var nth = seen[n] = seen.GetValueOrDefault(n) + 1;
+            return nth == 1 ? n : $"{n} ({nth})";
+        }).ToList();
+    }
+
+    /// Which keyboards to keep: a receiver keyboard is left out when the same
+    /// model is also connected directly. A keyboard switched to its cable
+    /// mode stays in the receiver's paired list (seen with the ROG Azoth X),
+    /// and would otherwise show twice — once going stale.
+    public static IReadOnlySet<int> KeepIndices(IReadOnlyList<(bool Receiver, string Name)> keyboards)
+    {
+        var direct = keyboards.Where(k => !k.Receiver).Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
+        return Enumerable.Range(0, keyboards.Count)
+            .Where(i => !keyboards[i].Receiver || !direct.Contains(keyboards[i].Name))
+            .ToHashSet();
     }
 
     /// `hid` without the collections of keyboards driven here directly —
@@ -392,6 +427,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
 
     public bool HasBattery { get; }
 
+    /// The Omni receiver is 2.4 GHz; a model's own dongle says so in its name.
+    public string Connection => Lighting.Connection.Of(_info.Path, $"{_info.Product} {_model.Name}", _model.Receiver);
+
     /// `12 01` — the keyboards' power question (Gear Link's keyboard power
     /// classes and G-Helper agree). Only asked when the model has a battery.
     public BatteryStatus? ReadBattery()
@@ -400,20 +438,22 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
             return null;
         lock (_lock)
         {
-            byte[]? reply;
             try
             {
-                reply = Ask(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+                return QueryBattery(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId);
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
             {
                 _device?.Dispose();
                 _device = Hid.Open(_info);
-                reply = Ask(_device, _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+                return QueryBattery(_device, _info.OutputReportLength, _reportId);
             }
-            return reply is null ? null : BatteryReplies.Keyboard(reply);
         }
     }
+
+    /// The keyboard's power question and nothing else: `12 01`.
+    public static BatteryStatus? QueryBattery(IHidDevice device, int length, byte reportId) =>
+        Ask(device, length, reportId, GetPower, ReplyTimeout) is { } reply ? BatteryReplies.Keyboard(reply) : null;
 
     // Caller holds _lock. Reopens once (a receiver re-enumerates when a
     // paired device wakes; a USB keyboard may be replugged).

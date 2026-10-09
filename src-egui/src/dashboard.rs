@@ -246,6 +246,17 @@ impl DashboardView<'_> {
                     self.psu_watts,
                 );
             }
+            "peripherals" => {
+                let _ = panels::peripherals::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.thresholds.battery.0,
+                    self.thresholds.battery.1,
+                );
+            }
             "battery" => {
                 let _ = panels::battery::draw(
                     ui,

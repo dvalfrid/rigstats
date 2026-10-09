@@ -18,6 +18,7 @@ RIGStats is a free hardware monitor and control center for Windows gaming PCs, b
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
 - **Control Center** — per-profile fan curves, Windows power plans, AMD Ryzen and Radeon power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
@@ -320,6 +321,16 @@ Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and othe
 | Physical GPU attribution (which app runs on which adapter) | DXGI adapter enumeration matched by LUID — shown when more than one GPU is active |
 
 Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor sidecar involved. See `src-egui/fixtures/gpu-engine/README.md` for the real-hardware regression corpus behind this panel's parsing.
+
+### Peripherals (opt-in)
+
+| Metric | Source |
+| --- | --- |
+| Battery level (%) per wireless device | Sensor service, read once a minute from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
+| Charging state | Same |
+| Connection (USB cable, Bluetooth, 2.4 GHz) | Windows HID path and product name — no device command; shown as a small icon |
+
+Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while discharging, one per device). Hovering the tray icon shows a small card with each device's battery in the same colours. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. Bluetooth devices come later (#291).
 
 ### Battery (opt-in)
 

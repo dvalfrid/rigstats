@@ -143,16 +143,35 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDispos
     /// (get key 7) and `chargingStatus` (key 8).
     public bool HasBattery => true;
 
+    public string Connection => Lighting.Connection.Of(_info.Path, _info.Product);
+
     public BatteryStatus? ReadBattery()
     {
         lock (_lock)
         {
-            Send(Frame(_reportId, _info.OutputReportLength, Get, BatteryKey, []));
-            if (ReadReply(Get, BatteryKey) is not { } battery)
-                return null;
-            Send(Frame(_reportId, _info.OutputReportLength, Get, ChargingKey, []));
-            return BatteryReplies.Headset(battery, ReadReply(Get, ChargingKey));
+            try
+            {
+                return QueryBattery(_device ?? throw new ObjectDisposedException(Name), _reportId, _info.OutputReportLength);
+            }
+            catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
+            {
+                // Reopen once, as `Send` does (the dongle re-enumerates).
+                _device?.Dispose();
+                _device = Hid.Open(_info);
+                return QueryBattery(_device, _reportId, _info.OutputReportLength);
+            }
         }
+    }
+
+    /// The headset's battery questions and nothing else: `12 07`, then
+    /// `12 08` for charging (GearLink `batteryLevel` / `chargingStatus`).
+    public static BatteryStatus? QueryBattery(IHidDevice device, byte reportId, int length)
+    {
+        device.Write(Frame(reportId, length, Get, BatteryKey, []));
+        if (AwaitReply(device, reportId, Get, BatteryKey, ReplyTimeout) is not { } battery)
+            return null;
+        device.Write(Frame(reportId, length, Get, ChargingKey, []));
+        return BatteryReplies.Headset(battery, AwaitReply(device, reportId, Get, ChargingKey, ReplyTimeout));
     }
 
     /// The headset keeps its last lighting.

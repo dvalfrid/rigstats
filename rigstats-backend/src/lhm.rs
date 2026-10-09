@@ -48,6 +48,23 @@ pub struct LhmData {
     /// Used by the frontend to display GPU selector; the backend selects which GPU data to return
     /// in `gpu_*` fields based on user preference and load heuristics.
     pub gpu_devices: Vec<(String, f64)>,
+    /// Wireless devices' batteries (headset, keyboard, mouse — #290), read by
+    /// the sidecar about once a minute. Empty from sidecars without it.
+    pub peripherals: Vec<Peripheral>,
+}
+
+/// One wireless device's battery, as the sidecar last read it.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct Peripheral {
+    pub id: String,
+    pub name: String,
+    /// "keyboard", "mouse", "headset".
+    pub kind: String,
+    pub battery: u8,
+    pub charging: bool,
+    /// How it reaches the PC: "usb", "bluetooth" or "2.4ghz" (empty from a
+    /// sidecar that doesn't say).
+    pub connection: String,
 }
 
 // --- Tests -----------------------------------------------------------------
@@ -55,7 +72,8 @@ pub struct LhmData {
 #[cfg(test)]
 mod tests {
     use super::{
-        gpu_names_match, normalize_gpu_name, select_gpu_idx, SidecarGpuDevice, SidecarPayload,
+        gpu_names_match, normalize_gpu_name, select_gpu_idx, Peripheral, SidecarGpuDevice,
+        SidecarPayload,
     };
 
     /// The sensor pipe contract, checked against the sidecar's own golden
@@ -63,6 +81,40 @@ mod tests {
     /// payload `HardwareHost` sends (same snake_case options, only indented).
     /// With unknown fields denied in tests, a field the sidecar adds or
     /// renames fails here instead of silently reading as `None`.
+    /// The `peripherals` field against the example the sidecar's
+    /// `TelemetryContractTests` serializes to — so neither side can rename a
+    /// field alone.
+    #[test]
+    fn sidecar_contract_example_with_peripherals_parses() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/contract/telemetry-peripherals.json");
+        let text = std::fs::read_to_string(&path).expect("read the contract example");
+        let payload = serde_json::from_str::<SidecarPayload>(&text)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let data = payload.into_lhm_data(None);
+        assert_eq!(
+            data.peripherals,
+            vec![
+                Peripheral {
+                    id: "asus-keyboard-1ace-1".into(),
+                    name: "ROG Azoth X".into(),
+                    kind: "keyboard".into(),
+                    battery: 82,
+                    charging: false,
+                    connection: "2.4ghz".into(),
+                },
+                Peripheral {
+                    id: "asus-headset-1afa-1".into(),
+                    name: "ROG Delta II".into(),
+                    kind: "headset".into(),
+                    battery: 24,
+                    charging: true,
+                    connection: "2.4ghz".into(),
+                },
+            ]
+        );
+    }
+
     #[test]
     fn sidecar_golden_fixtures_match_the_pipe_payload() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -358,6 +410,21 @@ struct SidecarPayload {
     mb_temps: Vec<SidecarMbTemp>,
     mb_voltages: Vec<SidecarMbVoltage>,
     mb_chip: Option<String>,
+    // Left out by the sidecar until its first battery round, and by older ones.
+    #[serde(default)]
+    peripherals: Vec<SidecarPeripheral>,
+}
+
+#[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
+struct SidecarPeripheral {
+    id: String,
+    name: String,
+    kind: String,
+    battery: u8,
+    charging: bool,
+    #[serde(default)]
+    connection: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -528,6 +595,18 @@ impl SidecarPayload {
                 .collect(),
             mb_chip: self.mb_chip,
             gpu_devices,
+            peripherals: self
+                .peripherals
+                .into_iter()
+                .map(|p| Peripheral {
+                    id: p.id,
+                    name: p.name,
+                    kind: p.kind,
+                    battery: p.battery.min(100),
+                    charging: p.charging,
+                    connection: p.connection,
+                })
+                .collect(),
         }
     }
 }

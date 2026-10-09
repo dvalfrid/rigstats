@@ -366,6 +366,15 @@ impl RigStatsApp {
                                     scale,
                                     self.runtime.psu_watts,
                                 ),
+                                "peripherals" => panels::peripherals::draw(
+                                    ui,
+                                    stats,
+                                    content_opacity,
+                                    &app_theme,
+                                    scale,
+                                    self.runtime.thresholds.battery.0,
+                                    self.runtime.thresholds.battery.1,
+                                ),
                                 "battery" => panels::battery::draw(
                                     ui,
                                     stats,
