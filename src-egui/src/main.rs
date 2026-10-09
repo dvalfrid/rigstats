@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::{DialogStates, OverlayState};
+use app::state::{DialogStates, GpuRecovery, OverlayState};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
@@ -201,23 +201,8 @@ struct RigStatsApp {
     font_atlas_toggle: bool,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
-    // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
-    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
-    /// reports a fatal device error. Checked once per frame in `update()`.
-    gpu_lost: Arc<AtomicBool>,
-    /// True once the `gpu_lost` relaunch-and-close sequence has been kicked
-    /// off, so it only runs once even though `update()` keeps being called
-    /// for the few frames it takes `ViewportCommand::Close` to take effect.
-    gpu_relaunch_triggered: bool,
-    /// When this app instance was created. Used to tell a GPU error that
-    /// strikes again within seconds of a relaunch (still-unsettled GPU
-    /// state — back off) from one after a long healthy run (a fresh,
-    /// unrelated hiccup — always retry).
-    gpu_started_at: Instant,
-    /// Consecutive fast GPU-relaunch failures, carried in from the
-    /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
-    /// this one. `0` for a normal (non-relaunch) start.
-    gpu_retry_count: u32,
+    /// Relaunch after a lost GPU device.
+    gpu_recovery: GpuRecovery,
     // ── Threshold alerts ─────────────────────────────────────────────────────
     /// Last time a notification fired for a given `"<component>_<level>"` key,
     /// e.g. `"cpu_warn"` — enforces `Settings.alert_cooldown_secs` per alert.
@@ -372,10 +357,12 @@ impl RigStatsApp {
             font_atlas_toggle: false,
             battery_present,
             recording_blink_at: Instant::now(),
-            gpu_lost,
-            gpu_relaunch_triggered: false,
-            gpu_started_at,
-            gpu_retry_count,
+            gpu_recovery: GpuRecovery {
+                lost: gpu_lost,
+                relaunch_triggered: false,
+                started_at: gpu_started_at,
+                retry_count: gpu_retry_count,
+            },
             alert_cooldowns: HashMap::new(),
         }
     }
@@ -423,9 +410,9 @@ impl RigStatsApp {
         // within seconds of starting — a GPU error after a long healthy run
         // (the common case: hybrid-GPU switches happen at most a few times a
         // day) always gets a full, unthrottled retry.
-        let fast_fail = self.gpu_started_at.elapsed() < Duration::from_secs(10);
+        let fast_fail = self.gpu_recovery.started_at.elapsed() < Duration::from_secs(10);
         let attempt = if fast_fail {
-            self.gpu_retry_count + 1
+            self.gpu_recovery.retry_count + 1
         } else {
             1
         };
@@ -1141,9 +1128,9 @@ impl eframe::App for RigStatsApp {
         // A fatal wgpu device error (see `gpu_guard`) was flagged from off the
         // UI thread. Don't touch the (likely dead) device any further this
         // frame — kick off the relaunch-and-close sequence once and bail.
-        if self.gpu_lost.load(Ordering::Relaxed) {
-            if !self.gpu_relaunch_triggered {
-                self.gpu_relaunch_triggered = true;
+        if self.gpu_recovery.lost.load(Ordering::Relaxed) {
+            if !self.gpu_recovery.relaunch_triggered {
+                self.gpu_recovery.relaunch_triggered = true;
                 self.trigger_gpu_relaunch(ui.ctx());
             }
             return;

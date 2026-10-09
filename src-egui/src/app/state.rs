@@ -6,6 +6,7 @@ use rigstats_egui::dialog_reveal::DialogReveal;
 use rigstats_egui::windows;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 /// The dialog windows — Settings, About, Status, Updates, Session History
 /// and the Control Center: whether each is open, the one-shot flag that
@@ -156,4 +157,25 @@ impl OverlayState {
             position_dirty: false,
         }
     }
+}
+
+/// Recovery from a lost GPU device (e.g. a hybrid iGPU/dGPU switch): the
+/// app relaunches itself, backing off when it keeps failing fast.
+pub(crate) struct GpuRecovery {
+    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
+    /// reports a fatal device error. Checked once per frame in `update()`.
+    pub(crate) lost: Arc<AtomicBool>,
+    /// True once the `lost` relaunch-and-close sequence has been kicked
+    /// off, so it only runs once even though `update()` keeps being called
+    /// for the few frames it takes `ViewportCommand::Close` to take effect.
+    pub(crate) relaunch_triggered: bool,
+    /// When this app instance was created. Used to tell a GPU error that
+    /// strikes again within seconds of a relaunch (still-unsettled GPU
+    /// state — back off) from one after a long healthy run (a fresh,
+    /// unrelated hiccup — always retry).
+    pub(crate) started_at: Instant,
+    /// Consecutive fast GPU-relaunch failures, carried in from the
+    /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
+    /// this one. `0` for a normal (non-relaunch) start.
+    pub(crate) retry_count: u32,
 }
