@@ -21,13 +21,13 @@ use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, S
 pub enum PollMode {
     /// Everything — the process that renders the dashboard.
     Full,
-    /// Only what the game overlay needs: the main app in wallpaper mode with
-    /// the overlay on (the wallpaper host owns the dashboard). Skips the
-    /// GPU-per-app query, the top-process list, the drive list, and session
-    /// recording (the host records — recording here too would duplicate rows).
+    /// The main app in wallpaper mode, where the `rigstats-wallpaper` host
+    /// owns the dashboard: everything the main app still shows or checks
+    /// itself — the game overlay, the tray hover card and the threshold
+    /// alerts (#299: a paused main app left both frozen). Skips the GPU-per-app
+    /// query, the top-process list and session recording (the host records —
+    /// recording here too would duplicate rows).
     Light,
-    /// Nothing — the main app in wallpaper mode with the overlay off.
-    Paused,
 }
 
 /// Lock-free, cloneable handle to a [`PollMode`].
@@ -46,7 +46,6 @@ impl PollModeHandle {
     pub fn get(&self) -> PollMode {
         match self.0.load(Ordering::Relaxed) {
             x if x == PollMode::Light as u8 => PollMode::Light,
-            x if x == PollMode::Paused as u8 => PollMode::Paused,
             _ => PollMode::Full,
         }
     }
@@ -351,19 +350,7 @@ pub async fn poll_loop(
     let mut first_tick_logged = false;
 
     loop {
-        // Paused (the main app is in wallpaper mode with the overlay off): the
-        // wallpaper host does the polling, so release the sensor pipe and skip
-        // the whole tick to save CPU.
-        let current = mode.get();
-        let light = current == PollMode::Light;
-        if current == PollMode::Paused {
-            {
-                let mut p = pipe.lock().await;
-                *p = None;
-            }
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
-        }
+        let light = mode.get() == PollMode::Light;
 
         sys.refresh_specifics(
             RefreshKind::new()
@@ -442,12 +429,11 @@ pub async fn poll_loop(
             Vec::new()
         };
 
-        if !light {
-            disks.refresh();
-        }
+        // Kept in Light too: disk temperature alerts need the drive list.
+        disks.refresh();
         let mut disk_drives: Vec<DriveInfo> = disks
             .iter()
-            .filter(|d| !light && d.total_space() > 1_000_000_000)
+            .filter(|d| d.total_space() > 1_000_000_000)
             .map(|d| {
                 let total = d.total_space();
                 let used = total.saturating_sub(d.available_space());
