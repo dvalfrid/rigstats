@@ -392,6 +392,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
 
     public bool HasBattery { get; }
 
+    /// The Omni receiver is 2.4 GHz; a model's own dongle says so in its name.
+    public string Connection => Lighting.Connection.Of(_info.Path, $"{_info.Product} {_model.Name}", _model.Receiver);
+
     /// `12 01` — the keyboards' power question (Gear Link's keyboard power
     /// classes and G-Helper agree). Only asked when the model has a battery.
     public BatteryStatus? ReadBattery()

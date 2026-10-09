@@ -15,6 +15,33 @@ public interface IBatteryDevice
     /// The battery now, or null when the device doesn't answer (asleep, off,
     /// out of range).
     BatteryStatus? ReadBattery();
+
+    /// How it reaches the PC — one of the <see cref="Connection"/> values.
+    string Connection { get; }
+}
+
+/// How a wireless device reaches the PC, for the Peripherals panel's icon.
+/// Worked out from what Windows already knows (no device command): the HID
+/// path and product string.
+public static class Connection
+{
+    public const string Usb = "usb";
+    public const string Bluetooth = "bluetooth";
+    public const string Radio = "2.4ghz";
+
+    /// Bluetooth when the HID path comes through `BTHENUM` (classic) or the
+    /// HID-over-GATT service `{00001812-…}` (LE); 2.4 GHz for a receiver or
+    /// a dongle whose product or model name says so ("ROG DELTA II
+    /// (2.4GHz)", "ROG Azoth (2.4 GHz)"); otherwise a cable.
+    public static string Of(string path, string? names, bool receiver = false)
+    {
+        if (path.Contains("BTHENUM", StringComparison.OrdinalIgnoreCase)
+            || path.Contains("{00001812-0000-1000-8000-00805f9b34fb}", StringComparison.OrdinalIgnoreCase))
+            return Bluetooth;
+        if (receiver || (names is not null && names.Contains("2.4", StringComparison.Ordinal)))
+            return Radio;
+        return Usb;
+    }
 }
 
 /// Battery reply layouts per device type, byte positions including the

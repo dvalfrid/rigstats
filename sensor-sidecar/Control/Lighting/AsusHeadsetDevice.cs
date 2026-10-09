@@ -143,6 +143,8 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDispos
     /// (get key 7) and `chargingStatus` (key 8).
     public bool HasBattery => true;
 
+    public string Connection => Lighting.Connection.Of(_info.Path, _info.Product);
+
     public BatteryStatus? ReadBattery()
     {
         lock (_lock)

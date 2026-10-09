@@ -62,6 +62,9 @@ pub struct Peripheral {
     pub kind: String,
     pub battery: u8,
     pub charging: bool,
+    /// How it reaches the PC: "usb", "bluetooth" or "2.4ghz" (empty from a
+    /// sidecar that doesn't say).
+    pub connection: String,
 }
 
 // --- Tests -----------------------------------------------------------------
@@ -98,6 +101,7 @@ mod tests {
                     kind: "keyboard".into(),
                     battery: 82,
                     charging: false,
+                    connection: "2.4ghz".into(),
                 },
                 Peripheral {
                     id: "asus-headset-1afa-1".into(),
@@ -105,6 +109,7 @@ mod tests {
                     kind: "headset".into(),
                     battery: 24,
                     charging: true,
+                    connection: "2.4ghz".into(),
                 },
             ]
         );
@@ -418,6 +423,8 @@ struct SidecarPeripheral {
     kind: String,
     battery: u8,
     charging: bool,
+    #[serde(default)]
+    connection: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -597,6 +604,7 @@ impl SidecarPayload {
                     kind: p.kind,
                     battery: p.battery.min(100),
                     charging: p.charging,
+                    connection: p.connection,
                 })
                 .collect(),
         }

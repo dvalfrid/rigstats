@@ -192,6 +192,7 @@ mod tests {
             kind: "mouse".into(),
             battery,
             charging,
+            connection: "2.4ghz".into(),
         }
     }
 

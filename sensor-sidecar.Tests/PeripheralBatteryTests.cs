@@ -51,6 +51,30 @@ public class BatteryRepliesTests
     }
 }
 
+public class ConnectionTests
+{
+    [Fact]
+    public void Bluetooth_shows_in_the_hid_path()
+    {
+        Assert.Equal(Connection.Bluetooth, Connection.Of(@"\?HID#{00001812-0000-1000-8000-00805f9b34fb}_Dev_VID&020b05_PID&1aaf#9&2b6d&0&0000#{4d1e55b2}", "ROG STRIX SCOPE II 96 WIRELESS"));
+        Assert.Equal(Connection.Bluetooth, Connection.Of(@"\?HID#BTHENUM#{00001124-0000-1000-8000-00805f9b34fb}_VID&0002046d_PID&b023#8&1", null));
+    }
+
+    [Fact]
+    public void A_receiver_or_a_dongle_named_for_it_is_2_4_ghz()
+    {
+        Assert.Equal(Connection.Radio, Connection.Of(@"\?HID#VID_0B05&PID_1ACE&MI_02&Col02#8&1", "ROG OMNI RECEIVER", receiver: true));
+        Assert.Equal(Connection.Radio, Connection.Of(@"\?HID#VID_0B05&PID_1AFA&MI_03#8&1", "ROG DELTA II (2.4GHz)"));
+        Assert.Equal(Connection.Radio, Connection.Of(@"\?HID#VID_0B05&PID_1A85&MI_02#8&1", "ROG AZOTH ROG Azoth (2.4 GHz)"));
+    }
+
+    [Fact]
+    public void Anything_else_is_a_cable()
+    {
+        Assert.Equal(Connection.Usb, Connection.Of(@"\?HID#VID_0B05&PID_1C24&MI_01#8&1", "ROG AZOTH X ROG Azoth X"));
+    }
+}
+
 public class PeripheralBatteryMonitorTests
 {
     private sealed class FakeBatteryDevice(string id, string kind, Func<BatteryStatus?> read, bool hasBattery = true)
@@ -66,6 +90,7 @@ public class PeripheralBatteryMonitorTests
         public void Release() { }
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
         public bool HasBattery => hasBattery;
+        public string Connection => SensorSidecar.Control.Lighting.Connection.Radio;
         public int Reads { get; private set; }
         public BatteryStatus? ReadBattery() { Reads++; return read(); }
     }
@@ -80,7 +105,7 @@ public class PeripheralBatteryMonitorTests
 
         var result = Monitor().ReadAll([keyboard, wired]);
 
-        Assert.Equal(new PeripheralStatus("kb", "Device kb", "keyboard", 80, false), Assert.Single(result));
+        Assert.Equal(new PeripheralStatus("kb", "Device kb", "keyboard", 80, false, "2.4ghz"), Assert.Single(result));
         Assert.Equal(0, wired.Reads);
     }
 
@@ -129,8 +154,8 @@ public class TelemetryContractTests
             [new MbVoltage("Vcore", 1.1f)],
             "Nuvoton NCT6799D",
             [
-                new PeripheralStatus("asus-keyboard-1ace-1", "ROG Azoth X", "keyboard", 82, false),
-                new PeripheralStatus("asus-headset-1afa-1", "ROG Delta II", "headset", 24, true),
+                new PeripheralStatus("asus-keyboard-1ace-1", "ROG Azoth X", "keyboard", 82, false, "2.4ghz"),
+                new PeripheralStatus("asus-headset-1afa-1", "ROG Delta II", "headset", 24, true, "2.4ghz"),
             ]);
 
         var json = JsonSerializer.Serialize(payload, HardwareHost.TelemetryJsonOptions);

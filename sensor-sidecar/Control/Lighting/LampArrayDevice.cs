@@ -252,6 +252,9 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
 
     public BatteryStatus? ReadBattery() => _omni?.ReadBattery();
 
+    /// Only the Omni receiver's mouse reports a battery here — 2.4 GHz.
+    public string Connection => Lighting.Connection.Radio;
+
     public void EnableWdl() =>
         (_omni ?? throw new InvalidOperationException($"{Name} has no lighting mode to switch.")).SetWdl(true);
 

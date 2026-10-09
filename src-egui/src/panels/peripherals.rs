@@ -3,7 +3,9 @@
 //! receiver (`PollStats.peripherals`, about once a minute). One row per
 //! device: name, a charge bar, and the percentage.
 
-use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Stroke, Ui, Vec2};
+use egui::{
+    pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Shape, Stroke, Ui, Vec2,
+};
 use rigstats_backend::lhm::Peripheral;
 
 use super::battery::charge_color;
@@ -15,6 +17,77 @@ const CELL_PAD: f32 = 6.0;
 const BAR_SHARE: f32 = 0.30;
 /// Slot for the charging marker between the bar and the percentage.
 const MARK_W: f32 = 9.0;
+/// Slot for the connection icon in front of the name.
+const ICON_W: f32 = 16.0;
+
+/// How a device reaches the PC, from the sidecar's `connection`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Link {
+    Usb,
+    Bluetooth,
+    Radio,
+}
+
+fn link_of(connection: &str) -> Option<Link> {
+    match connection {
+        "usb" => Some(Link::Usb),
+        "bluetooth" => Some(Link::Bluetooth),
+        "2.4ghz" => Some(Link::Radio),
+        _ => None,
+    }
+}
+
+/// A small line-drawn connection icon centred at `c` in a `size` box —
+/// the font has no USB, Bluetooth or radio glyphs.
+fn paint_link_icon(painter: &egui::Painter, c: Pos2, size: f32, link: Link, color: Color32) {
+    let s = size / 2.0;
+    let stroke = Stroke::new((size / 9.0).max(1.0), color);
+    match link {
+        Link::Bluetooth => {
+            // The Bluetooth rune: a bar with two chevrons on its right.
+            let (l, r) = (c.x - s * 0.5, c.x + s * 0.5);
+            painter.add(Shape::line(
+                vec![
+                    pos2(l, c.y - s * 0.45),
+                    pos2(r, c.y + s * 0.45),
+                    pos2(c.x, c.y + s),
+                    pos2(c.x, c.y - s),
+                    pos2(r, c.y - s * 0.45),
+                    pos2(l, c.y + s * 0.45),
+                ],
+                stroke,
+            ));
+        }
+        Link::Radio => {
+            // A transmitter with two waves above it.
+            let base = pos2(c.x, c.y + s * 0.6);
+            painter.circle_filled(base, stroke.width * 1.2, color);
+            for radius in [s * 0.75, s * 1.4] {
+                let points = (0..=8)
+                    .map(|i| {
+                        let a = -std::f32::consts::FRAC_PI_4 * 3.0
+                            + std::f32::consts::FRAC_PI_2 * i as f32 / 8.0;
+                        base + vec2(a.cos(), a.sin()) * radius
+                    })
+                    .collect();
+                painter.add(Shape::line(points, stroke));
+            }
+        }
+        Link::Usb => {
+            // A plug: the head with its two contacts, the cable below.
+            let head = Rect::from_center_size(pos2(c.x, c.y - s * 0.35), vec2(s * 1.2, s * 0.9));
+            painter.rect_stroke(head, 0.0, stroke, egui::StrokeKind::Middle);
+            for dx in [-0.25, 0.25] {
+                let x = c.x + s * dx;
+                painter.line_segment(
+                    [pos2(x, head.top() - s * 0.35), pos2(x, head.top())],
+                    stroke,
+                );
+            }
+            painter.line_segment([pos2(c.x, head.bottom()), pos2(c.x, c.y + s)], stroke);
+        }
+    }
+}
 
 /// Where a row's columns go, as offsets from the row's left edge:
 /// `(name_w, bar_x0, bar_w)`. Right to left: the percentage takes `pct_w`
@@ -31,7 +104,8 @@ fn row_columns(inner_w: f32, pct_w: f32, sc: f32) -> (f32, f32, f32) {
 }
 
 /// One device row painted at fixed x positions (as the PROCESSES and GPU APPS
-/// panels do), so the columns line up whatever the names: name left, bar
+/// panels do), so the columns line up whatever the names: connection icon,
+/// name left, bar
 /// ending just before the right-aligned percentage, and a small accent
 /// triangle in front of the percentage while charging (the font has no bolt
 /// or arrow glyphs). Also drawn by the tray hover card (`app/tray_card.rs`).
@@ -58,9 +132,23 @@ pub fn paint_device_row(
         .x;
     let (name_w, bar_x0, bar_w) = row_columns(inner_w, pct_w, sc);
 
-    let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w, row_h));
+    let icon_w = ICON_W * sc;
+    if let Some(link) = link_of(&device.connection) {
+        paint_link_icon(
+            ui.painter(),
+            pos2(rect.min.x + icon_w / 2.0 - sc, cy),
+            10.0 * sc,
+            link,
+            Color32::from_gray(150),
+        );
+    }
+
+    let name_clip = Rect::from_min_size(
+        pos2(rect.min.x + icon_w, rect.min.y),
+        Vec2::new((name_w - icon_w).max(0.0), row_h),
+    );
     ui.painter().with_clip_rect(name_clip).text(
-        pos2(rect.min.x, cy),
+        pos2(rect.min.x + icon_w, cy),
         Align2::LEFT_CENTER,
         &device.name,
         font.clone(),
@@ -149,6 +237,14 @@ mod tests {
         assert_eq!(bar_x0 + bar_w, 280.0 - 28.0 - MARK_W);
         assert_eq!(bar_w, 280.0 * BAR_SHARE);
         assert_eq!(name_w, bar_x0 - CELL_PAD);
+    }
+
+    #[test]
+    fn connection_strings_map_to_icons() {
+        assert_eq!(link_of("usb"), Some(Link::Usb));
+        assert_eq!(link_of("bluetooth"), Some(Link::Bluetooth));
+        assert_eq!(link_of("2.4ghz"), Some(Link::Radio));
+        assert_eq!(link_of(""), None); // an older sidecar: no icon
     }
 
     #[test]

@@ -4,7 +4,7 @@ using SensorSidecar.Control.Lighting;
 namespace SensorSidecar.Control;
 
 /// One wireless device's battery in the telemetry (`peripherals`, #290).
-public sealed record PeripheralStatus(string Id, string Name, string Kind, int Battery, bool Charging);
+public sealed record PeripheralStatus(string Id, string Name, string Kind, int Battery, bool Charging, string Connection);
 
 /// The latest battery readings, written by `PeripheralBatteryMonitor` and
 /// read by `HardwareHost` for every telemetry sample.
@@ -64,7 +64,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
                     // not every minute.
                     if (!_lastKnown.TryGetValue(device.Id, out var before) || before.Charging != status.Charging)
                         SidecarLog.Log($"[rigstats-control] Battery: {device.Name} {status.Percent} %{(status.Charging ? ", charging" : "")}.");
-                    _lastKnown[device.Id] = new PeripheralStatus(device.Id, device.Name, device.Kind, status.Percent, status.Charging);
+                    _lastKnown[device.Id] = new PeripheralStatus(device.Id, device.Name, device.Kind, status.Percent, status.Charging, battery.Connection);
                     _failureLogged.Remove(device.Id);
                 }
             }

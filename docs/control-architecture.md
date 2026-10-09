@@ -912,7 +912,7 @@ an `FF AA` error read as no answer. `PeripheralBatteryMonitor` asks once a
 minute (first after 10 s), keeps a silent device's last reading while it stays
 connected, logs the first reading and charging changes (`Battery: ROG Azoth X
 82 %.`), and `HardwareHost` adds the list to every telemetry line as
-`peripherals: [{id, name, kind, battery, charging}]` — omitted until the first
+`peripherals: [{id, name, kind, battery, charging, connection}]` (`connection`: `usb`, `bluetooth` or `2.4ghz`, from `Connection.Of` — Bluetooth from the HID path (`BTHENUM` or the HID-over-GATT service `{00001812-…}`), 2.4 GHz for a receiver or a dongle whose product/model name says "2.4", else a cable; no device command) — omitted until the first
 round, so the golden fixtures don't carry it. The field's shape is pinned by
 `sensor-sidecar.Tests/contract/telemetry-peripherals.json`, which the Rust
 reader checks too. Not covered yet: ROG mice on their own 2.4 GHz dongle or
