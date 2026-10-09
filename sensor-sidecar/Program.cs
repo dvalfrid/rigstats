@@ -50,7 +50,8 @@ builder.Services.AddWindowsService(options =>
 // via its own IHostedService registration (must run before SensorWorker, so
 // register it first: hosted services start in registration order).
 builder.Services.AddSingleton<PeripheralStatusStore>();
-builder.Services.AddSingleton(sp => new HardwareHost(sp.GetRequiredService<PeripheralStatusStore>()));
+builder.Services.AddSingleton(sp => new HardwareHost(
+    sp.GetRequiredService<PeripheralStatusStore>(), sp.GetRequiredService<ProfileStore>()));
 builder.Services.AddSingleton<IHardwareHost>(sp => sp.GetRequiredService<HardwareHost>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HardwareHost>());
 

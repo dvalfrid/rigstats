@@ -102,6 +102,17 @@ public sealed class ProfileStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task ActiveProfile_gives_the_active_id_and_name_without_reading_the_file()
+    {
+        Assert.Null(_store.ActiveProfile); // nothing loaded yet
+
+        await _store.SaveProfileAsync(new Profile { Id = "quiet", Name = "Quiet nights", Part = new ProfilePart { PowerPlan = "power_saver" } }, CancellationToken.None);
+        await _store.SetActiveAsync("quiet", CancellationToken.None);
+
+        Assert.Equal(new ActiveProfileStatus("quiet", "Quiet nights"), _store.ActiveProfile);
+    }
+
+    [Fact]
     public async Task SetActive_persists_across_a_fresh_store_instance_reading_the_same_file()
     {
         await _store.SetActiveAsync("gaming", CancellationToken.None);

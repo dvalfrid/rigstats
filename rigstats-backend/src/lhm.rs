@@ -51,6 +51,16 @@ pub struct LhmData {
     /// Wireless devices' batteries (headset, keyboard, mouse — #290), read by
     /// the sidecar about once a minute. Empty from sidecars without it.
     pub peripherals: Vec<Peripheral>,
+    /// The active Control Center profile as the sensor service reports it
+    /// (#302) — what the wallpaper host, which has no control pipe, shows.
+    pub active_profile: Option<ActiveProfile>,
+}
+
+/// The active Control Center profile from the telemetry line.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct ActiveProfile {
+    pub id: String,
+    pub name: String,
 }
 
 /// One wireless device's battery, as the sidecar last read it.
@@ -72,8 +82,8 @@ pub struct Peripheral {
 #[cfg(test)]
 mod tests {
     use super::{
-        gpu_names_match, normalize_gpu_name, select_gpu_idx, Peripheral, SidecarGpuDevice,
-        SidecarPayload,
+        gpu_names_match, normalize_gpu_name, select_gpu_idx, ActiveProfile, Peripheral,
+        SidecarGpuDevice, SidecarPayload,
     };
 
     /// The sensor pipe contract, checked against the sidecar's own golden
@@ -92,6 +102,13 @@ mod tests {
         let payload = serde_json::from_str::<SidecarPayload>(&text)
             .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         let data = payload.into_lhm_data(None);
+        assert_eq!(
+            data.active_profile,
+            Some(ActiveProfile {
+                id: "balanced".into(),
+                name: "Balanced".into(),
+            })
+        );
         assert_eq!(
             data.peripherals,
             vec![
@@ -413,6 +430,16 @@ struct SidecarPayload {
     // Left out by the sidecar until its first battery round, and by older ones.
     #[serde(default)]
     peripherals: Vec<SidecarPeripheral>,
+    // Left out by the sidecar when no profile is active, and by older ones.
+    #[serde(default)]
+    active_profile: Option<SidecarActiveProfile>,
+}
+
+#[derive(serde::Deserialize)]
+#[cfg_attr(test, serde(deny_unknown_fields))]
+struct SidecarActiveProfile {
+    id: String,
+    name: String,
 }
 
 #[derive(serde::Deserialize)]
@@ -607,6 +634,10 @@ impl SidecarPayload {
                     connection: p.connection,
                 })
                 .collect(),
+            active_profile: self.active_profile.map(|p| ActiveProfile {
+                id: p.id,
+                name: p.name,
+            }),
         }
     }
 }
