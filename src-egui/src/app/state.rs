@@ -260,3 +260,63 @@ pub(crate) struct FloatingState {
     /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
     pub(crate) mode_arc: Arc<AtomicBool>,
 }
+
+/// The fixed-mode (non-floating) dashboard window: fullscreen, pinned
+/// position, and fitting the window to its content.
+pub(crate) struct WindowFit {
+    /// When true (and not floating), the fixed window fills the whole monitor
+    /// instead of fitting panel content; the dashboard background fills the rest.
+    pub(crate) fullscreen_mode: bool,
+    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
+    pub(crate) fullscreen_align: String,
+    /// Measured panel-stack content height (excluding drag handle + centering pad),
+    /// cached from the previous frame so fullscreen centering is exact. `None`
+    /// until the first fullscreen frame; `compute_window_height` is the fallback.
+    pub(crate) fullscreen_content_h: Option<f32>,
+    /// When true, the fixed-mode dashboard window is pinned: it cannot be dragged
+    /// and its position is restored from `Settings::pinned_positions` across
+    /// restarts instead of auto-targeting the matching monitor.
+    pub(crate) dashboard_pinned: bool,
+    /// Last outer position observed for the fixed-mode window this session, used
+    /// to capture the spot to pin when the padlock is clicked. `None` until the
+    /// first fixed-mode frame reports a position.
+    pub(crate) last_fixed_pos: Option<[f32; 2]>,
+    /// When > 0, re-applies WindowLevel + opacity for this many more frames.
+    /// Used after floating→non-floating transitions where winit may reset the
+    /// window level when the window is moved back on-screen.
+    pub(crate) reapply_window_props_frames: u8,
+    /// Last [w, h] sent via InnerSize — avoids spurious resize events when
+    /// only opacity or theme changed (which would cause a visible jump).
+    pub(crate) last_applied_window_size: Option<[f32; 2]>,
+    /// Last content height fitted in fixed mode — avoids dispatching an
+    /// InnerSize viewport command every frame when the height is unchanged
+    /// (which during interaction runs at display refresh rate, causing
+    /// needless WM_SIZE churn and sub-pixel jitter).
+    pub(crate) last_fitted_height: Option<f32>,
+    /// Counts down over the first docked frames after launch. Early `InnerSize`
+    /// viewport commands can be dropped before the window is fully realized,
+    /// which leaves the bottom panel clipped until the user toggles floating
+    /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
+    /// drive fast repaints) so the true content height reliably sticks.
+    pub(crate) startup_fit_frames: u8,
+}
+
+impl WindowFit {
+    pub(crate) fn new(s: &Settings) -> Self {
+        Self {
+            fullscreen_mode: s.fullscreen_mode,
+            fullscreen_align: s.fullscreen_align.clone(),
+            fullscreen_content_h: None,
+            dashboard_pinned: s.dashboard_pinned,
+            last_fixed_pos: None,
+            // Apply WindowLevel + opacity for the first few frames at startup when in
+            // non-floating mode: the viewport builder only handles "on_top", so "behind"
+            // must be sent via viewport command, and opacity needs a valid HWND which
+            // may not be available until after the first paint.
+            reapply_window_props_frames: if !s.floating_mode { 4 } else { 0 },
+            last_applied_window_size: None,
+            last_fitted_height: None,
+            startup_fit_frames: 12,
+        }
+    }
+}

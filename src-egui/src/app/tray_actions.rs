@@ -129,10 +129,10 @@ impl RigStatsApp {
                 // window to the true content height instead of the
                 // compute_window_height estimate (which can clip the
                 // bottom panel).
-                self.last_fitted_height = None;
+                self.window.last_fitted_height = None;
                 // Re-apply for the next few frames as winit may reset the
                 // window level when it processes the move event.
-                self.reapply_window_props_frames = 4;
+                self.window.reapply_window_props_frames = 4;
             }
         }
     }

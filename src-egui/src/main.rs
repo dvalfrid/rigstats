@@ -3,6 +3,7 @@ mod app;
 
 use app::state::{
     DialogStates, FloatingState, FontAtlasRefresh, GpuRecovery, OverlayState, RecordingIndicator,
+    WindowFit,
 };
 use eframe::egui;
 use rigstats_backend::control;
@@ -81,49 +82,14 @@ struct RigStatsApp {
     // very old GPUs): falls back to the pre-#101 opaque swap chain +
     // WS_EX_LAYERED opacity instead of crashing at startup.
     dcomp_available: bool,
-    // ── Fullscreen (fill-screen) mode ──────────────────────────────────────
-    /// When true (and not floating), the fixed window fills the whole monitor
-    /// instead of fitting panel content; the dashboard background fills the rest.
-    fullscreen_mode: bool,
-    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
-    fullscreen_align: String,
-    /// Measured panel-stack content height (excluding drag handle + centering pad),
-    /// cached from the previous frame so fullscreen centering is exact. `None`
-    /// until the first fullscreen frame; `compute_window_height` is the fallback.
-    fullscreen_content_h: Option<f32>,
-    // ── Pinned (non-floating) dashboard ────────────────────────────────────
-    /// When true, the fixed-mode dashboard window is pinned: it cannot be dragged
-    /// and its position is restored from `Settings::pinned_positions` across
-    /// restarts instead of auto-targeting the matching monitor.
-    dashboard_pinned: bool,
-    /// Last outer position observed for the fixed-mode window this session, used
-    /// to capture the spot to pin when the padlock is clicked. `None` until the
-    /// first fixed-mode frame reports a position.
-    last_fixed_pos: Option<[f32; 2]>,
+    /// The fixed-mode window: fullscreen, pinned position, fit to content.
+    window: WindowFit,
     /// Floating mode's panels and their windows.
     floating: FloatingState,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
     os_dark_mode: bool,
-    /// When > 0, re-applies WindowLevel + opacity for this many more frames.
-    /// Used after floating→non-floating transitions where winit may reset the
-    /// window level when the window is moved back on-screen.
-    reapply_window_props_frames: u8,
-    /// Last [w, h] sent via InnerSize — avoids spurious resize events when
-    /// only opacity or theme changed (which would cause a visible jump).
-    last_applied_window_size: Option<[f32; 2]>,
-    /// Last content height fitted in fixed mode — avoids dispatching an
-    /// InnerSize viewport command every frame when the height is unchanged
-    /// (which during interaction runs at display refresh rate, causing
-    /// needless WM_SIZE churn and sub-pixel jitter).
-    last_fitted_height: Option<f32>,
-    /// Counts down over the first docked frames after launch. Early `InnerSize`
-    /// viewport commands can be dropped before the window is fully realized,
-    /// which leaves the bottom panel clipped until the user toggles floating
-    /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
-    /// drive fast repaints) so the true content height reliably sticks.
-    startup_fit_frames: u8,
     // ── Wallpaper (WorkerW) mode ───────────────────────────────────────────
     /// Shared with `poll_loop`: `Paused`/`Light` while in wallpaper mode, where
     /// the `rigstats-wallpaper` host is the dashboard's poller (see
@@ -236,11 +202,7 @@ impl RigStatsApp {
             dir,
             hwnd: 0,
             dcomp_available,
-            fullscreen_mode: init_settings.fullscreen_mode,
-            fullscreen_align: init_settings.fullscreen_align.clone(),
-            fullscreen_content_h: None,
-            dashboard_pinned: init_settings.dashboard_pinned,
-            last_fixed_pos: None,
+            window: WindowFit::new(&init_settings),
             floating: FloatingState {
                 mode: init_settings.floating_mode,
                 panels_locked: init_settings.floating_panels_locked,
@@ -279,14 +241,6 @@ impl RigStatsApp {
                     theme::DialogColors::dark()
                 }
             },
-            // Apply WindowLevel + opacity for the first few frames at startup when in
-            // non-floating mode: the viewport builder only handles "on_top", so "behind"
-            // must be sent via viewport command, and opacity needs a valid HWND which
-            // may not be available until after the first paint.
-            reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
-            last_applied_window_size: None,
-            last_fitted_height: None,
-            startup_fit_frames: 12,
             poll_mode,
             wallpaper: WallpaperSupervisor::default(),
             wallpaper_host: ChildHost::default(),
@@ -337,8 +291,8 @@ impl RigStatsApp {
             px, py,
         )));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-        self.last_fitted_height = None;
-        self.reapply_window_props_frames = 4;
+        self.window.last_fitted_height = None;
+        self.window.reapply_window_props_frames = 4;
     }
 
     /// Fired once, from `ui()`, when `gpu_guard`'s device-error callbacks
@@ -499,7 +453,7 @@ impl RigStatsApp {
                     // monitor (or off every monitor). Only trust a
                     // `last_fixed_pos` on a connected monitor; otherwise keep
                     // the saved `wallpaper_position`.
-                    if let Some([x, y]) = self.last_fixed_pos {
+                    if let Some([x, y]) = self.window.last_fixed_pos {
                         if is_position_on_screen([x, y]) {
                             let mut s = self.current_settings.lock_safe();
                             s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
@@ -1128,8 +1082,8 @@ impl eframe::App for RigStatsApp {
 
         // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
-        if self.reapply_window_props_frames > 0 {
-            self.reapply_window_props_frames -= 1;
+        if self.window.reapply_window_props_frames > 0 {
+            self.window.reapply_window_props_frames -= 1;
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                     Self::window_level_from_layer(&self.window_layer),
@@ -1212,10 +1166,10 @@ impl eframe::App for RigStatsApp {
             self.overlay.click_through = s.overlay_click_through;
             self.overlay.enabled = s.overlay_enabled;
             let preferred_gpu = s.preferred_gpu.clone();
-            let was_fullscreen = self.fullscreen_mode;
-            self.fullscreen_mode = s.fullscreen_mode;
-            self.fullscreen_align = s.fullscreen_align.clone();
-            self.dashboard_pinned = s.dashboard_pinned;
+            let was_fullscreen = self.window.fullscreen_mode;
+            self.window.fullscreen_mode = s.fullscreen_mode;
+            self.window.fullscreen_align = s.fullscreen_align.clone();
+            self.window.dashboard_pinned = s.dashboard_pinned;
             let profile = s.dashboard_profile.clone();
             drop(s);
             // Settings → Display → GPU (live preview, Save, or Cancel revert).
@@ -1223,16 +1177,16 @@ impl eframe::App for RigStatsApp {
             // Toggling fullscreen changes how the window is sized; clear the
             // fit-to-content guard so the next fixed frame re-snaps correctly, and
             // drop the cached centering height so it is re-measured.
-            if was_fullscreen != self.fullscreen_mode {
-                self.last_fitted_height = None;
-                self.fullscreen_content_h = None;
+            if was_fullscreen != self.window.fullscreen_mode {
+                self.window.last_fitted_height = None;
+                self.window.fullscreen_content_h = None;
             }
             let (pos, [w, h]) = self.fixed_window_geometry(&profile);
             // Pinned, but this profile has no saved position yet (e.g. the user
             // switched profiles while pinned): persist the auto-targeted position
             // now so the profile is properly pinned and stays put across restarts
             // instead of lingering in a locked-but-unsaved state.
-            if !self.floating.mode && self.dashboard_pinned {
+            if !self.floating.mode && self.window.dashboard_pinned {
                 let mut s = self.current_settings.lock_safe();
                 if !s.pinned_positions.contains_key(&profile) {
                     s.pinned_positions.insert(
@@ -1251,8 +1205,8 @@ impl eframe::App for RigStatsApp {
             // paused) main window back on-screen over the wallpaper, so skip it.
             if !self.floating.mode && !self.wallpaper.is_active() {
                 let new_size = [w, h];
-                if self.last_applied_window_size != Some(new_size) {
-                    self.last_applied_window_size = Some(new_size);
+                if self.window.last_applied_window_size != Some(new_size) {
+                    self.window.last_applied_window_size = Some(new_size);
                     // Resize and snap to the monitor matching the profile orientation.
                     // (A size change implies a profile/fullscreen/panel change, not an
                     // opacity drag, so repositioning here does not cause jitter.)
@@ -1263,7 +1217,7 @@ impl eframe::App for RigStatsApp {
                         )));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-                    self.last_fitted_height = None;
+                    self.window.last_fitted_height = None;
                 }
             }
             ui.ctx()
@@ -1301,7 +1255,7 @@ impl eframe::App for RigStatsApp {
                     // understate the real content height, which would otherwise clip
                     // the bottom panel. Clearing the guard makes the next frame snap
                     // the window to the true min_rect height.
-                    self.last_fitted_height = None;
+                    self.window.last_fitted_height = None;
                 }
             }
         }
@@ -1705,7 +1659,7 @@ impl eframe::App for RigStatsApp {
             // the real position with the parking coordinates.
             if !self.wallpaper.is_active() {
                 if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
-                    self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+                    self.window.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
                 }
             }
 
@@ -1724,7 +1678,7 @@ impl eframe::App for RigStatsApp {
             );
 
             // Padlock at the right of the drag strip: pins the whole dashboard.
-            let pinned = self.dashboard_pinned;
+            let pinned = self.window.dashboard_pinned;
             let padlock_center = egui::pos2(drag_rect.right() - 12.0, drag_rect.center().y);
             let padlock_hit = egui::Rect::from_center_size(
                 padlock_center,
@@ -1756,17 +1710,17 @@ impl eframe::App for RigStatsApp {
             // After drag ends in "behind" mode, the window was activated for SC_MOVE
             // and is now in front. Push it back behind on the next few frames.
             if drag_resp.drag_stopped() && self.window_layer == "behind" {
-                self.reapply_window_props_frames = 4;
+                self.window.reapply_window_props_frames = 4;
             }
 
             if padlock_resp.clicked() {
-                self.dashboard_pinned = !self.dashboard_pinned;
+                self.window.dashboard_pinned = !self.window.dashboard_pinned;
                 let profile = self.current_settings.lock_safe().dashboard_profile.clone();
                 let mut s = self.current_settings.lock_safe();
-                s.dashboard_pinned = self.dashboard_pinned;
-                if self.dashboard_pinned {
+                s.dashboard_pinned = self.window.dashboard_pinned;
+                if self.window.dashboard_pinned {
                     // Pin: remember the current window position for this profile.
-                    if let Some([x, y]) = self.last_fixed_pos {
+                    if let Some([x, y]) = self.window.last_fixed_pos {
                         s.pinned_positions
                             .insert(profile, [x.round() as i32, y.round() as i32]);
                     }
@@ -1839,10 +1793,11 @@ impl eframe::App for RigStatsApp {
                 // only the surrounding background grows. Use the measured content
                 // height from the previous frame (cached) for an exact center; fall
                 // back to the compute_window_height estimate on the first frame.
-                let center_fullscreen = self.fullscreen_mode && self.fullscreen_align == "center";
+                let center_fullscreen =
+                    self.window.fullscreen_mode && self.window.fullscreen_align == "center";
                 let center_pad = if center_fullscreen {
                     // Pure panel-stack height (excludes drag handle and pad).
-                    let content = self.fullscreen_content_h.unwrap_or_else(|| {
+                    let content = self.window.fullscreen_content_h.unwrap_or_else(|| {
                         compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
                     });
                     // Center the visible content with equal background above and below.
@@ -1869,10 +1824,11 @@ impl eframe::App for RigStatsApp {
                     let content = ui.min_rect().height() - theme::DRAG_HANDLE_H - center_pad;
                     if content > 10.0 {
                         let changed = self
+                            .window
                             .fullscreen_content_h
                             .map(|h| (h - content).abs() > 0.5)
                             .unwrap_or(true);
-                        self.fullscreen_content_h = Some(content);
+                        self.window.fullscreen_content_h = Some(content);
                         if changed {
                             ui.ctx().request_repaint();
                         }
@@ -1886,24 +1842,25 @@ impl eframe::App for RigStatsApp {
             // so it shrinks/grows with the panel count just like the portrait stack.
             // Skipped in fullscreen mode — there the window stays at the full monitor
             // size and must NOT shrink to content.
-            if !self.fullscreen_mode {
+            if !self.window.fullscreen_mode {
                 let used_h = ui.min_rect().height();
                 // During the first frames after launch the window may not be fully
                 // realized, so early InnerSize commands can be dropped — which would
                 // leave the bottom panel clipped until the user toggles floating mode.
                 // Force a re-fit (and a fast repaint) for a handful of frames so the
                 // true content height always sticks at startup.
-                if self.startup_fit_frames > 0 {
-                    self.startup_fit_frames -= 1;
-                    self.last_fitted_height = None;
+                if self.window.startup_fit_frames > 0 {
+                    self.window.startup_fit_frames -= 1;
+                    self.window.last_fitted_height = None;
                     ui.ctx().request_repaint();
                 }
                 let changed = self
+                    .window
                     .last_fitted_height
                     .map(|h| (h - used_h).abs() > 0.5)
                     .unwrap_or(true);
                 if used_h > 10.0 && changed {
-                    self.last_fitted_height = Some(used_h);
+                    self.window.last_fitted_height = Some(used_h);
                     let [w, _] = profile_to_size(&profile);
                     // Landscape keeps the full profile width (no trim); the portrait
                     // stack trims 2 px to avoid a sub-pixel edge artifact.
@@ -2110,7 +2067,7 @@ impl RigStatsApp {
             ui,
             panels,
             update_ver,
-            self.fullscreen_mode,
+            self.window.fullscreen_mode,
             ref_h,
             self.effective_opacity(),
         )
@@ -2129,7 +2086,7 @@ impl RigStatsApp {
         // monitor. Used for both orientations so portrait/side profiles land on a
         // matching screen or the main screen — never on an arbitrary small monitor.
         let [mx, my, _mw, mh] = pick_window_rect_for_profile(profile);
-        let (auto_pos, size) = if self.fullscreen_mode {
+        let (auto_pos, size) = if self.window.fullscreen_mode {
             // Fill the height of the monitor the window currently sits on (where
             // the user placed it) — not the profile-matching monitor. Otherwise
             // enabling Fill Screen would teleport the dashboard to another screen.
@@ -2138,6 +2095,7 @@ impl RigStatsApp {
             // landscape grid stretches to fill it, the portrait stack centers/
             // top-aligns within it.
             let m = self
+                .window
                 .last_fixed_pos
                 .and_then(monitor_rect_at)
                 .filter(|r| r[3] > 0.0)
@@ -2161,8 +2119,8 @@ impl RigStatsApp {
         // profiles keeps the dashboard where the user left it. Fall back to the
         // auto-target only when that spot is off every connected monitor. Skipped in
         // fullscreen, which must snap to the monitor it fills.
-        if !self.fullscreen_mode {
-            if let Some(last) = self.last_fixed_pos {
+        if !self.window.fullscreen_mode {
+            if let Some(last) = self.window.last_fixed_pos {
                 return (guard_panel_position(last, auto_pos), size);
             }
         }
@@ -2173,7 +2131,7 @@ impl RigStatsApp {
     /// pinned and the stored position is still on a connected monitor; otherwise
     /// `None` so the caller auto-targets the matching monitor.
     fn pinned_position(&self, profile: &str) -> Option<[f32; 2]> {
-        if !self.dashboard_pinned {
+        if !self.window.dashboard_pinned {
             return None;
         }
         let saved = {
@@ -2184,7 +2142,7 @@ impl RigStatsApp {
         let monitors = win_monitor::list();
         #[cfg(not(windows))]
         let monitors: Vec<(i32, i32, i32, i32)> = Vec::new();
-        resolve_pinned_position(self.dashboard_pinned, saved, &monitors)
+        resolve_pinned_position(self.window.dashboard_pinned, saved, &monitors)
     }
 
     /// Render every visible panel as its own borderless OS window using
