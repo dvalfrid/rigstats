@@ -914,7 +914,7 @@ list comparison; full discovery only on a change — nothing else may trigger
 discovery), reading at once when the device list changed, so a device
 plugged in or switched shows within seconds; charging over a cable on a
 2.4 GHz device appears only in the battery reply, so within one read plus the
-device's own delay in reporting it. A silent
+device's own delay in reporting it (measured on the owner's rig: the Harpe Ace on the Omni receiver ~15 s after plugging or unplugging, the Azoth X up to ~45 s — longer than two reads, so the keyboard itself updates its charging flag late). A silent
 device keeps its last reading for 10 minutes (then it drops off until it
 answers), logs the first reading and charging changes (`Battery: ROG Azoth X
 82 %.`), and `HardwareHost` adds the list to every telemetry line as
