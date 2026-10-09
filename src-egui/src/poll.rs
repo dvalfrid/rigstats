@@ -126,6 +126,9 @@ pub struct PollStats {
     pub gpu_processes: Vec<GpuProcessInfo>,
     // Wireless devices' batteries from the sidecar (PERIPHERALS panel, #290)
     pub peripherals: Vec<rigstats_backend::lhm::Peripheral>,
+    // Active Control Center profile from the sensor service (#302) — the
+    // header chip's source in the wallpaper host, which has no control pipe
+    pub service_profile: Option<rigstats_backend::lhm::ActiveProfile>,
     // System
     pub uptime_secs: u64,
     pub hostname: String,
@@ -659,6 +662,7 @@ pub async fn poll_loop(
                 .as_ref()
                 .map(|l| l.peripherals.clone())
                 .unwrap_or_default(),
+            service_profile: lhm_data.as_ref().and_then(|l| l.active_profile.clone()),
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),
@@ -704,7 +708,13 @@ pub async fn poll_loop(
                 .find(logging::SessionMeta::is_active)
         };
         if let Some(session) = active_session {
-            let payload = poll_stats_to_log_payload(&stats, active_profile.lock_safe().clone());
+            // The main app knows the profile from the control pipe; the
+            // wallpaper host (no control pipe) takes the service's (#302).
+            let profile = active_profile
+                .lock_safe()
+                .clone()
+                .or_else(|| stats.service_profile.as_ref().map(|p| p.id.clone()));
+            let payload = poll_stats_to_log_payload(&stats, profile);
             if let Err(e) = logging::append_stats_row(&payload, &dir, &session) {
                 debug::log_error(&dir, &format!("logging: csv write error — {e}"));
             }

@@ -7,11 +7,31 @@ namespace SensorSidecar.Control;
 /// `docs/control-architecture.md`, "Profile model"). Writable only by this
 /// service; `Users` get read access the same way the telemetry pipe does
 /// (the folder's rules are set by `DataDirectory`).
+/// The active profile as the telemetry line carries it (#302): the
+/// wallpaper host has no control-pipe connection, so it reads it here.
+public sealed record ActiveProfileStatus(string Id, string Name);
+
 public sealed class ProfileStore
 {
     private readonly string _path;
     private readonly SemaphoreSlim _fileLock = new(1, 1);
-    private ProfileFile? _cached;
+    // volatile: read without the file lock by `ActiveProfile` (telemetry).
+    private volatile ProfileFile? _cached;
+
+    /// The active profile's id and name from what was last loaded or saved,
+    /// without touching the file — null before the first load or with no
+    /// active profile. Cheap enough for every telemetry sample.
+    public ActiveProfileStatus? ActiveProfile
+    {
+        get
+        {
+            var file = _cached;
+            if (file?.Active is not { } id)
+                return null;
+            var name = file.Profiles.FirstOrDefault(p => p.Id == id)?.Name ?? id;
+            return new ActiveProfileStatus(id, name);
+        }
+    }
 
     /// Set when profiles.json could not be read and was recovered (#221);
     /// shown in the Control Center until profiles are saved again.

@@ -16,7 +16,11 @@ public sealed record SensorPayload(
     // Wireless devices' batteries (#290), filled in by HardwareHost from
     // PeripheralBatteryMonitor — not part of Extract, so left out when null.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    List<SensorSidecar.Control.PeripheralStatus>? Peripherals = null);
+    List<SensorSidecar.Control.PeripheralStatus>? Peripherals = null,
+    // The active Control Center profile (#302), filled in by HardwareHost
+    // from ProfileStore — left out when there is none.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    SensorSidecar.Control.ActiveProfileStatus? ActiveProfile = null);
 
 public sealed record GpuDevice(
     string Name,

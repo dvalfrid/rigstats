@@ -77,7 +77,7 @@ pub fn draw(
                         .truncate(),
                     );
                 }
-                draw_profile_chip(ui, control, sc);
+                draw_profile_chip(ui, control, stats.service_profile.as_ref(), sc);
             });
 
             if let Some(logo) = logo {
@@ -97,18 +97,35 @@ pub fn draw(
 /// clock panel's
 /// `"open_updater"` badge-click flag is (see `RigStatsApp::draw_one_panel`
 /// in main.rs) — the wallpaper host never consumes it, so clicking there is
-/// a harmless no-op. Nothing renders until the control pipe has connected
-/// and reported an active profile (phase 0's `PowerPlanProvider` is the only
-/// domain that can set one).
-fn draw_profile_chip(ui: &mut Ui, control: &ControlState, sc: f32) {
-    let Some(active_id) = &control.active_profile else {
+/// a harmless no-op. Nothing renders until there is an active profile.
+/// The chip's text: the control pipe's active profile (the main app — it
+/// follows a switch at once), else the one the sensor service reports in the
+/// telemetry (the wallpaper host, which has no control pipe, #302).
+fn chip_label(
+    control: &ControlState,
+    service: Option<&rigstats_backend::lhm::ActiveProfile>,
+) -> Option<String> {
+    if let Some(active_id) = &control.active_profile {
+        return Some(
+            control
+                .profiles
+                .iter()
+                .find(|p| &p.id == active_id)
+                .map_or_else(|| active_id.to_uppercase(), |p| p.name.to_uppercase()),
+        );
+    }
+    service.map(|p| p.name.to_uppercase())
+}
+
+fn draw_profile_chip(
+    ui: &mut Ui,
+    control: &ControlState,
+    service: Option<&rigstats_backend::lhm::ActiveProfile>,
+    sc: f32,
+) {
+    let Some(label) = chip_label(control, service) else {
         return;
     };
-    let label = control
-        .profiles
-        .iter()
-        .find(|p| &p.id == active_id)
-        .map_or_else(|| active_id.to_uppercase(), |p| p.name.to_uppercase());
 
     let color = egui::Color32::from_rgb(0x39, 0xff, 0x88);
     let border = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
@@ -139,4 +156,45 @@ fn draw_profile_chip(ui: &mut Ui, control: &ControlState, sc: f32) {
                 .data_mut(|d| d.insert_temp(egui::Id::new("open_control_center"), true));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rigstats_backend::lhm::ActiveProfile;
+
+    fn service(name: &str) -> ActiveProfile {
+        ActiveProfile {
+            id: name.to_lowercase(),
+            name: name.into(),
+        }
+    }
+
+    #[test]
+    fn the_wallpaper_host_shows_the_service_profile() {
+        // No control pipe (the host): the telemetry's profile.
+        let control = ControlState::default();
+        assert_eq!(
+            chip_label(&control, Some(&service("Balanced"))),
+            Some("BALANCED".into())
+        );
+    }
+
+    #[test]
+    fn the_control_pipe_wins_over_the_telemetry() {
+        // The main app follows a switch at once through the control pipe.
+        let control = ControlState {
+            active_profile: Some("gaming".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            chip_label(&control, Some(&service("Balanced"))),
+            Some("GAMING".into())
+        );
+    }
+
+    #[test]
+    fn no_profile_no_chip() {
+        assert_eq!(chip_label(&ControlState::default(), None), None);
+    }
 }

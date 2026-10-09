@@ -272,7 +272,8 @@ public class TelemetryContractTests
             [
                 new PeripheralStatus("asus-keyboard-1ace-1", "ROG Azoth X", "keyboard", 82, false, "2.4ghz"),
                 new PeripheralStatus("asus-headset-1afa-1", "ROG Delta II", "headset", 24, true, "2.4ghz"),
-            ]);
+            ],
+            new ActiveProfileStatus("balanced", "Balanced"));
 
         var json = JsonSerializer.Serialize(payload, HardwareHost.TelemetryJsonOptions);
         var expected = File.ReadAllText(Path.Combine(RepoRoot(), "sensor-sidecar.Tests", "contract", "telemetry-peripherals.json")).Trim();

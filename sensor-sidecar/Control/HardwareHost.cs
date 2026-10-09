@@ -38,6 +38,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     private readonly UpdateVisitor _visitor = new();
     private readonly Func<SensorPayload> _sample;
     private readonly PeripheralStatusStore? _peripherals;
+    private readonly ProfileStore? _profiles;
 
     /// How the telemetry line is written — public for the contract test
     /// shared with the Rust reader (sensor-sidecar.Tests/contract/).
@@ -67,14 +68,15 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
 
     public HardwareHost() : this((Func<SensorPayload>?)null) { }
 
-    public HardwareHost(PeripheralStatusStore peripherals) : this(null, peripherals) { }
+    public HardwareHost(PeripheralStatusStore peripherals, ProfileStore profiles) : this(null, peripherals, profiles) { }
 
     // Seam for tests (#208): `sample` replaces the LHM read, so the sample
     // rate can be pinned without hardware.
-    internal HardwareHost(Func<SensorPayload>? sample, PeripheralStatusStore? peripherals = null)
+    internal HardwareHost(Func<SensorPayload>? sample, PeripheralStatusStore? peripherals = null, ProfileStore? profiles = null)
     {
         _sample = sample ?? SampleLhm;
         _peripherals = peripherals;
+        _profiles = profiles;
         _computer = new Computer
         {
             IsCpuEnabled = true,
@@ -187,7 +189,11 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         var now = Environment.TickCount64;
         if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
             return;
-        _latestPayload = _sample() with { Peripherals = _peripherals?.Latest?.ToList() };
+        _latestPayload = _sample() with
+        {
+            Peripherals = _peripherals?.Latest?.ToList(),
+            ActiveProfile = _profiles?.ActiveProfile,
+        };
         _latestLine = System.Text.Json.JsonSerializer.Serialize(_latestPayload, TelemetryJsonOptions);
         _latestAtMs = now;
     }
