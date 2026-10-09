@@ -160,7 +160,7 @@ Full rules are in [STANDARDS.md](STANDARDS.md). The essentials:
   not *what*.
 
 **egui secondary windows** must follow the dialog design system documented in
-[CLAUDE.md — egui dialog design system](CLAUDE.md#egui-dialog-design-system)
+[egui dialog design system](src-egui/src/windows/CLAUDE.md)
 (three-panel layout, `gray(38)` surface, `theme::dialog_btn_*` buttons, the Mutex
 extract-then-drop pattern).
 

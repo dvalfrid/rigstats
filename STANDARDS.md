@@ -87,7 +87,7 @@ Keep domain logic in `rigstats-backend/` — `src-egui/` contains only UI and wi
 
 ## egui (secondary windows)
 
-All secondary windows must follow the dialog design system documented in [CLAUDE.md — egui dialog design system](CLAUDE.md#egui-dialog-design-system). Key rules:
+All secondary windows must follow the dialog design system documented in [egui dialog design system](src-egui/src/windows/CLAUDE.md). Key rules:
 
 - **Three-panel layout:** `TopBottomPanel::top` (hero) → `TopBottomPanel::bottom` (footer) → `CentralPanel` (content).
 - **Surface colour:** `Color32::from_gray(38)` for all three panels — uniform dialog background.
