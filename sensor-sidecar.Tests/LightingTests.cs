@@ -861,6 +861,8 @@ public class LampArrayTests
 /// </summary>
 public class OmniMouseTests
 {
+    private static byte[] Hex(string hex) => Convert.FromHexString(hex);
+
     private static byte[] Reply(params byte[] bytes)
     {
         var report = new byte[64];
@@ -884,6 +886,41 @@ public class OmniMouseTests
         Assert.Equal(new ushort[] { 0x1A94, 0x1B18, 0x1B65, 0x1B69 },
             OmniMouse.Models.Where(m => m.Value.Wdl).Select(m => m.Key).Order());
         Assert.Equal(0x1A94, Assert.Single(OmniMouse.Models, m => m.Value.Verified).Key);
+    }
+
+    [Fact]
+    public void Paired_list_reads_a_keyboard_and_a_mouse_four_bytes_each()
+    {
+        // A real ROG Omni receiver with the ROG Azoth X and the Harpe Ace Aim Lab
+        // Edition paired (diagnostics export, 2026-10-09).
+        var paired = OmniMouse.ParsePaired(Hex("01A0000200251C0204941A03050000000000000000000000"));
+
+        Assert.Equal([new OmniMouse.Paired(0x1C25, 2), new OmniMouse.Paired(0x1A94, 3)], paired);
+    }
+
+    [Fact]
+    public void A_known_keyboard_in_the_paired_list_marks_its_channel_as_a_keyboard()
+    {
+        IReadOnlyList<OmniMouse.Paired> paired = [new(0x1C25, 2), new(0x1A94, 3)];
+
+        Assert.True(AsusKeyboardDevice.IsPairedKeyboard(paired, 2));
+        Assert.False(AsusKeyboardDevice.IsPairedKeyboard(paired, 3)); // the mouse
+        Assert.False(AsusKeyboardDevice.IsPairedKeyboard(paired, 1)); // the receiver
+        Assert.False(AsusKeyboardDevice.IsPairedKeyboard([new(0x1ACE, 2)], 2)); // the receiver's own id
+    }
+
+    [Fact]
+    public void Keyboard_ask_skips_other_input_reports_until_the_echo()
+    {
+        var stray = Hex("0212000200010000");          // not the layout echo
+        var layout = Hex("0212120000020B000000000000000000");
+        var hid = new QueuedHid(stray, layout);
+
+        var reply = AsusKeyboardDevice.Ask(hid, 64, 0x02, 0x12, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(layout, reply);
+        Assert.Equal(new byte[] { 0x02, 0x12, 0x12 }, hid.Written.Single()[..3]);
+        Assert.Null(AsusKeyboardDevice.Ask(new QueuedHid(stray), 64, 0x02, 0x12, TimeSpan.FromSeconds(1)));
     }
 
     [Fact]

@@ -89,18 +89,19 @@ public sealed class OmniMouse
     public readonly record struct Paired(ushort ProductId, byte ReportId);
 
     /// The paired list from an `a0 00` reply (report id first):
-    /// `01 a0 00 <count>`, then per device `<slot> <pid lo> <pid hi>
-    /// <report id> <type>`. Seen with one device; entries that don't look
-    /// like a device (pid 0, report id outside 1–3) are skipped.
+    /// `01 a0 00 <count> 00`, then per device `<pid lo> <pid hi>
+    /// <report id> <type>` — four bytes each, as a receiver with a keyboard
+    /// and a mouse answers (`… 02 00 25 1c 02 04 94 1a 03 05`). Entries that
+    /// don't look like a device (pid 0, report id outside 1–3) are skipped.
     public static IReadOnlyList<Paired> ParsePaired(byte[] reply)
     {
         if (reply.Length < 4 || reply[0] != ReceiverReportId || reply[1] != 0xA0 || reply[2] != 0x00)
             return [];
         var found = new List<Paired>();
-        for (int i = 0, at = 4; i < reply[3] && at + 4 < reply.Length; i++, at += 5)
+        for (int i = 0, at = 5; i < reply[3] && at + 3 < reply.Length; i++, at += 4)
         {
-            var pid = (ushort)(reply[at + 1] | reply[at + 2] << 8);
-            var reportId = reply[at + 3];
+            var pid = (ushort)(reply[at] | reply[at + 1] << 8);
+            var reportId = reply[at + 2];
             if (pid != 0 && reportId is >= 1 and <= 3)
                 found.Add(new Paired(pid, reportId));
         }
@@ -117,21 +118,15 @@ public sealed class OmniMouse
     /// than one (which channel belongs to which is unknown), or no mouse.
     public static OmniMouse? Find(IReadOnlyList<HidDeviceInfo> hid)
     {
-        var channels = hid
-            .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == ReceiverProductId
-                && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
-            .ToList();
-        var receiver = channels.Where(h => h.OutputReportId == ReceiverReportId).ToList();
-        if (receiver.Count != 1)
-            return null;
-
-        IReadOnlyList<Paired> paired;
-        using (var device = Hid.Open(receiver[0]))
-            paired = Ask(device, [ReceiverReportId, 0xA0, 0x00]) is { } reply ? ParsePaired(reply) : [];
-
+        var channels = Channels(hid);
+        var paired = PairedDevices(hid);
         foreach (var p in paired)
         {
             if (p.ReportId == ReceiverReportId || channels.FirstOrDefault(c => c.OutputReportId == p.ReportId) is not { } channel)
+                continue;
+            // A keyboard on the receiver is driven by AsusKeyboardDevice; never
+            // ask it the mouse's WDL question.
+            if (AsusKeyboardDevice.Model(p.ProductId) is not null)
                 continue;
             var mouse = new OmniMouse(channel, p.ReportId, p.ProductId);
             // A known mouse is taken as it is; an unknown device counts as the
@@ -146,6 +141,30 @@ public sealed class OmniMouse
             }
         }
         return null;
+    }
+
+    private static List<HidDeviceInfo> Channels(IReadOnlyList<HidDeviceInfo> hid) => hid
+        .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == ReceiverProductId
+            && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
+        .ToList();
+
+    /// What the receiver among `hid` says is paired to it (`a0 00` on its
+    /// own channel); empty without exactly one receiver or when it doesn't
+    /// answer. Also used by keyboard discovery.
+    public static IReadOnlyList<Paired> PairedDevices(IReadOnlyList<HidDeviceInfo> hid)
+    {
+        var receiver = Channels(hid).Where(h => h.OutputReportId == ReceiverReportId).ToList();
+        if (receiver.Count != 1)
+            return [];
+        try
+        {
+            using var device = Hid.Open(receiver[0]);
+            return Ask(device, [ReceiverReportId, 0xA0, 0x00]) is { } reply ? ParsePaired(reply) : [];
+        }
+        catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     /// The mouse's WDL state, or null when it doesn't answer (asleep, gone).
