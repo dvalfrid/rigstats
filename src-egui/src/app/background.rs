@@ -150,6 +150,7 @@ pub(crate) fn spawn_tray_event_thread(
     dir: &Path,
     ctx: &egui::Context,
     recording_active: Arc<AtomicBool>,
+    tray_anchor: crate::app::tray_card::TrayAnchor,
 ) -> mpsc::Receiver<TrayCmd> {
     let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
 
@@ -188,7 +189,32 @@ pub(crate) fn spawn_tray_event_thread(
     // `set_event_handler` (vs. the polled `receiver()`) runs synchronously
     // on this thread for the right-click that *opens* the menu, before
     // `TrackPopupMenu` blocks it — the earliest possible point to act.
-    tray_icon::TrayIconEvent::set_event_handler(Some(|_event| {
+    //
+    // The same handler feeds the tray hover card (#290, `app::tray_card`):
+    // hovering stores the icon's rect, a click hides the card until the
+    // pointer has left (the menu is opening), Leave resets it. The card also
+    // checks the pointer itself each frame, since Leave doesn't arrive while
+    // the menu is open.
+    let card_watch = tray_anchor.clone();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event: tray_icon::TrayIconEvent| {
+        use tray_icon::TrayIconEvent as E;
+        match &event {
+            E::Enter { rect, .. } | E::Move { rect, .. } => {
+                tray_anchor.lock_safe().icon = Some([
+                    rect.position.x as i32,
+                    rect.position.y as i32,
+                    rect.size.width as i32,
+                    rect.size.height as i32,
+                ]);
+            }
+            E::Click { .. } | E::DoubleClick { .. } => {
+                tray_anchor.lock_safe().suppressed = true;
+            }
+            E::Leave { .. } => {
+                *tray_anchor.lock_safe() = crate::app::tray_card::HoverState::default();
+            }
+            _ => {}
+        }
         #[cfg(windows)]
         win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
     }));
@@ -248,6 +274,10 @@ pub(crate) fn spawn_tray_event_thread(
                 #[cfg(windows)]
                 win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
             }
+            // The tray hover card's guard, independent of the UI thread's
+            // frames (see `tray_card::watchdog`).
+            #[cfg(windows)]
+            crate::app::tray_card::watchdog(&card_watch);
         }));
         if outcome.is_err() {
             debug::log_warn(

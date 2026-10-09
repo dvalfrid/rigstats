@@ -403,13 +403,48 @@ pub fn overlay_anchor_position(
     }
 }
 
+/// Where the tray hover card goes, in physical pixels: centred over the tray
+/// icon (`icon` = x, y, w, h), just above it — or just below when there is
+/// no room above (a taskbar at the top of the screen). Never left of x = 0.
+pub fn tray_card_position(icon: [i32; 4], card: [i32; 2]) -> [i32; 2] {
+    const GAP: i32 = 8;
+    let [ix, iy, iw, ih] = icon;
+    let [cw, ch] = card;
+    let x = (ix + iw / 2 - cw / 2).max(0);
+    let above = iy - GAP - ch;
+    let y = if above >= 0 { above } else { iy + ih + GAP };
+    [x, y]
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         compute_landscape_window_height, landscape_grid_layout, monitor_containing_point,
         overlay_anchor_position, position_on_any_monitor, profile_is_landscape, profile_to_size,
-        resolve_pinned_position, select_profile_monitor,
+        resolve_pinned_position, select_profile_monitor, tray_card_position,
     };
+
+    #[test]
+    fn tray_card_sits_centred_above_a_bottom_taskbar_icon() {
+        // 24 px icon at (2400, 1400) on a 1440 px tall screen; 300×120 card.
+        assert_eq!(
+            tray_card_position([2400, 1400, 24, 24], [300, 120]),
+            [2262, 1272]
+        );
+    }
+
+    #[test]
+    fn tray_card_goes_below_a_top_taskbar_icon() {
+        assert_eq!(
+            tray_card_position([2400, 4, 24, 24], [300, 120]),
+            [2262, 36]
+        );
+    }
+
+    #[test]
+    fn tray_card_never_starts_left_of_the_screen() {
+        assert_eq!(tray_card_position([10, 1400, 24, 24], [300, 120])[0], 0);
+    }
 
     #[test]
     fn landscape_profiles_detected_by_prefix() {

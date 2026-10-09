@@ -209,58 +209,6 @@ pub struct Tray {
     menu: Menu,
     lamp_item: IconMenuItem,
     lamp_shown: bool,
-    // Tooltip inputs (recording state + wireless batteries, #290) and the
-    // text last set, so the OS tooltip is only touched when it changes.
-    recording: std::cell::Cell<bool>,
-    peripherals: std::cell::RefCell<Vec<lhm::Peripheral>>,
-    tooltip: std::cell::RefCell<String>,
-}
-
-/// What Windows shows of a tray tooltip: `szTip` holds 128 characters, but
-/// an icon registered the legacy way (as `tray-icon` does) shows only the
-/// first 63 — seen cutting "ROG Harpe Ace Aim Lab Edition" mid-line.
-const TOOLTIP_MAX_CHARS: usize = 63;
-
-/// Longest device name in the tooltip before it is cut with "…".
-const TOOLTIP_NAME_CHARS: usize = 18;
-
-/// A device name short enough for the tooltip: brand prefix dropped
-/// ("ROG Azoth X" → "Azoth X"), then cut with "…".
-fn tooltip_name(name: &str) -> String {
-    let trimmed = ["ROG ", "ASUS ", "TUF Gaming "]
-        .iter()
-        .find_map(|prefix| name.strip_prefix(prefix))
-        .unwrap_or(name);
-    if trimmed.chars().count() <= TOOLTIP_NAME_CHARS {
-        trimmed.to_string()
-    } else {
-        let cut: String = trimmed.chars().take(TOOLTIP_NAME_CHARS - 1).collect();
-        format!("{}\u{2026}", cut.trim_end())
-    }
-}
-
-/// The tray tooltip: "RIGStats" (+ " — Recording"), then one line per
-/// wireless device with its battery, as many whole lines as Windows shows.
-/// Plain text: the native tooltip has no colours or columns.
-pub fn tray_tooltip(recording: bool, peripherals: &[lhm::Peripheral]) -> String {
-    let mut text = String::from(if recording {
-        "RIGStats \u{2014} Recording"
-    } else {
-        "RIGStats"
-    });
-    for device in peripherals {
-        let line = format!(
-            "\n{} {}%{}",
-            tooltip_name(&device.name),
-            device.battery,
-            if device.charging { " CHG" } else { "" }
-        );
-        if text.chars().count() + line.chars().count() > TOOLTIP_MAX_CHARS {
-            break;
-        }
-        text.push_str(&line);
-    }
-    text
 }
 
 /// Where "Toggle Desk Lamp" goes: right after "Control Center…".
@@ -408,11 +356,12 @@ pub fn build_tray(
     } else {
         load_tray_icon()
     };
-    let tooltip = tray_tooltip(logging_enabled, &[]);
+    // No native tooltip: hovering the icon shows the app's own card instead
+    // (`app/tray_card.rs`, #290) — name, recording state and wireless
+    // batteries in colour — which a plain-text tooltip would sit on top of.
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
         .with_icon(icon)
-        .with_tooltip(&tooltip)
         .build()
         .expect("tray icon");
 
@@ -438,9 +387,6 @@ pub fn build_tray(
         menu,
         lamp_item,
         lamp_shown: false,
-        recording: std::cell::Cell::new(logging_enabled),
-        peripherals: std::cell::RefCell::new(Vec::new()),
-        tooltip: std::cell::RefCell::new(tooltip),
     }
 }
 
@@ -458,26 +404,6 @@ impl Tray {
             menu_icons::record_start()
         }));
         self.set_icon_variant(enabled);
-        self.recording.set(enabled);
-        self.refresh_tooltip();
-    }
-
-    /// The wireless devices' batteries for the tooltip; cheap to call every
-    /// telemetry tick — the tooltip only changes when the list does.
-    pub fn set_peripherals(&self, peripherals: &[lhm::Peripheral]) {
-        if self.peripherals.borrow().as_slice() == peripherals {
-            return;
-        }
-        *self.peripherals.borrow_mut() = peripherals.to_vec();
-        self.refresh_tooltip();
-    }
-
-    fn refresh_tooltip(&self) {
-        let text = tray_tooltip(self.recording.get(), &self.peripherals.borrow());
-        if *self.tooltip.borrow() != text {
-            let _ = self.icon.set_tooltip(Some(&text));
-            *self.tooltip.borrow_mut() = text;
-        }
     }
 
     /// Swaps both the tray icon glyph and the recording menu row's icon
@@ -578,62 +504,6 @@ mod tests {
             "AMD Radeon(TM) 890M Graphics".to_string(),
             "NVIDIA GeForce RTX 5070 Ti Laptop GPU".to_string(),
         ]
-    }
-
-    fn peripheral(name: &str, battery: u8, charging: bool) -> lhm::Peripheral {
-        lhm::Peripheral {
-            id: name.to_lowercase(),
-            name: name.into(),
-            kind: "keyboard".into(),
-            battery,
-            charging,
-        }
-    }
-
-    #[test]
-    fn tooltip_lists_each_wireless_device_under_the_title() {
-        let devices = [
-            peripheral("ROG Azoth X", 82, false),
-            peripheral("ROG Delta II", 23, true),
-        ];
-        assert_eq!(tray_tooltip(false, &[]), "RIGStats");
-        assert_eq!(
-            tray_tooltip(true, &devices),
-            "RIGStats \u{2014} Recording\nAzoth X 82%\nDelta II 23% CHG"
-        );
-    }
-
-    #[test]
-    fn tooltip_names_drop_the_brand_and_cut_long_ones() {
-        assert_eq!(tooltip_name("ROG Azoth X"), "Azoth X");
-        assert_eq!(tooltip_name("ProArt KD300"), "ProArt KD300");
-        assert_eq!(
-            tooltip_name("ROG Harpe Ace Aim Lab Edition"),
-            "Harpe Ace Aim Lab\u{2026}"
-        );
-    }
-
-    #[test]
-    fn tooltip_fits_the_owners_three_devices() {
-        let devices = [
-            peripheral("ROG Azoth X", 82, false),
-            peripheral("ROG Delta II", 23, false),
-            peripheral("ROG Harpe Ace Aim Lab Edition", 60, false),
-        ];
-        assert_eq!(
-            tray_tooltip(false, &devices),
-            "RIGStats\nAzoth X 82%\nDelta II 23%\nHarpe Ace Aim Lab\u{2026} 60%"
-        );
-    }
-
-    #[test]
-    fn tooltip_keeps_whole_lines_within_windows_limit() {
-        let devices: Vec<_> = (0..10)
-            .map(|i| peripheral(&format!("ROG Harpe Ace Aim Lab Edition {i}"), 60, false))
-            .collect();
-        let text = tray_tooltip(false, &devices);
-        assert!(text.chars().count() <= TOOLTIP_MAX_CHARS);
-        assert!(text.ends_with("60%"), "cut mid-line: {text:?}");
     }
 
     #[test]

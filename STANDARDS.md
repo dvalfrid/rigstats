@@ -69,6 +69,10 @@ pub fn detect_gpu_name() -> Option<String> { ... }
 - `expect()` is acceptable at startup for genuinely fatal conditions
 - Log errors via the `debug.rs` logging helpers (`log_debug`/`log_warn`/`log_error`) — never `eprintln!` or `dbg!` in production code
 
+### Minimum Rust version
+
+Both crates declare `rust-version = "1.77"`, and clippy enforces it: a standard-library API stabilised later fails `cargo xtask clippy` even though the pinned toolchain compiles it (e.g. `Option::is_none_or`, 1.82 — use `map_or(true, …)`). Raise `rust-version` deliberately, not to make one call compile.
+
 ### Unsafe and global mutable state
 
 - `unsafe_code = "deny"` applies to both crates. Raw Win32/FFI code opts out with a narrowly-scoped, documented `#[allow(unsafe_code)]` — a module-level `#![allow(unsafe_code)]` for modules that are thin FFI shims (`win_opacity.rs`, `win32_*.rs`, `gpu_process.rs`, `hotkey.rs`, `single_instance.rs`), or an item-level `#[allow(unsafe_code)]` on the single block elsewhere (e.g. `geometry.rs`, `update_check.rs`, the tray thread in `main.rs`). Everything else stays safe Rust.

@@ -17,6 +17,91 @@ use winapi::{
     },
 };
 
+/// Move a window to physical screen coordinates — no resize, no Z-order
+/// change, no activation. For placing a window exactly (the tray hover card)
+/// regardless of which monitor's DPI egui would convert a logical position
+/// with. No-op if hwnd is 0.
+pub fn move_window(hwnd: isize, x: i32, y: i32) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        SetWindowPos(
+            hwnd as HWND,
+            std::ptr::null_mut(),
+            x,
+            y,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+/// Hide a window without waiting for its thread — safe from a background
+/// thread while the owner is inside a modal loop (the tray menu's
+/// `TrackPopupMenu`). No-op if hwnd is 0.
+pub fn hide_window_async(hwnd: isize) {
+    if hwnd == 0 {
+        return;
+    }
+    unsafe {
+        winapi::um::winuser::ShowWindowAsync(hwnd as HWND, winapi::um::winuser::SW_HIDE);
+    }
+}
+
+/// Whether one of this process's popup menus is open — the tray context
+/// menu (`TrackPopupMenu` windows have the system class `#32768`). Other
+/// apps' menus don't count.
+pub fn own_popup_menu_open() -> bool {
+    let class: Vec<u16> = "#32768\0".encode_utf16().collect();
+    let own = unsafe { winapi::um::processthreadsapi::GetCurrentProcessId() };
+    let mut after: HWND = std::ptr::null_mut();
+    loop {
+        let hwnd = unsafe {
+            winapi::um::winuser::FindWindowExW(
+                std::ptr::null_mut(),
+                after,
+                class.as_ptr(),
+                std::ptr::null(),
+            )
+        };
+        if hwnd.is_null() {
+            return false;
+        }
+        let mut pid = 0u32;
+        unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid) };
+        if pid == own && unsafe { winapi::um::winuser::IsWindowVisible(hwnd) } != 0 {
+            return true;
+        }
+        after = hwnd;
+    }
+}
+
+/// The mouse pointer's position in physical screen pixels (the process is
+/// per-monitor DPI aware), or None if the call failed.
+pub fn cursor_position() -> Option<[i32; 2]> {
+    let mut point = winapi::shared::windef::POINT { x: 0, y: 0 };
+    let ok = unsafe { winapi::um::winuser::GetCursorPos(&mut point) };
+    (ok != 0).then_some([point.x, point.y])
+}
+
+/// A window's outer size in physical pixels, or None (hwnd 0 or the call
+/// failed).
+pub fn window_size(hwnd: isize) -> Option<[i32; 2]> {
+    if hwnd == 0 {
+        return None;
+    }
+    let mut rect = winapi::shared::windef::RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    let ok = unsafe { winapi::um::winuser::GetWindowRect(hwnd as HWND, &mut rect) };
+    (ok != 0).then_some([rect.right - rect.left, rect.bottom - rect.top])
+}
+
 /// Find the HWND for the top-level window with the given title.
 /// Returns 0 if not found.
 pub fn find_hwnd(title: &str) -> isize {

@@ -102,6 +102,8 @@ struct RigStatsApp {
     overlay: OverlayState,
     /// The tray's recording indicator.
     recording: RecordingIndicator,
+    /// The tray icon's hover card (#290).
+    tray_card: app::tray_card::TrayCard,
     /// Font-atlas rebuilds after a minimize.
     font_atlas: FontAtlasRefresh,
     /// Shared with `SettingsWindow`; set by a startup background thread.
@@ -151,6 +153,7 @@ impl RigStatsApp {
         gpu_started_at: Instant,
         gpu_retry_count: u32,
         recording_active_shared: Arc<AtomicBool>,
+        tray_card: app::tray_card::TrayCard,
     ) -> Self {
         let init_settings = current_settings.lock_safe().clone();
         let init_positions: HashMap<String, [f32; 2]> = init_settings
@@ -250,6 +253,7 @@ impl RigStatsApp {
                 blink_on: true,
                 blink_at: Instant::now(),
             },
+            tray_card,
             font_atlas: FontAtlasRefresh {
                 stale: false,
                 rebuilt_at: Instant::now(),
@@ -700,6 +704,7 @@ impl eframe::App for RigStatsApp {
         // window_layer/floating_mode, so it coexists with whatever the main
         // window below is doing.
         self.render_overlay_viewport(ui.ctx());
+        self.render_tray_card(ui.ctx());
 
         // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
@@ -741,7 +746,6 @@ impl eframe::App for RigStatsApp {
         let new_stats = self.runtime.drain(&self.receiver);
         if new_stats {
             self.check_alerts();
-            self.tray.set_peripherals(&self.runtime.latest.peripherals);
         }
 
         // Control Center (#187): fold any control-pipe events (connect/
@@ -1189,11 +1193,13 @@ fn main() {
 
             // Mirrors `RigStatsApp.recording_active` for the tray thread (#177).
             let recording_active_shared = Arc::new(AtomicBool::new(false));
+            let tray_card = app::tray_card::TrayCard::default();
             let tray_rx = app::background::spawn_tray_event_thread(
                 &tray,
                 &dir,
                 &cc.egui_ctx,
                 recording_active_shared.clone(),
+                tray_card.anchor.clone(),
             );
 
             let current_settings = current_settings_shared;
@@ -1250,6 +1256,7 @@ fn main() {
                 gpu_started_at,
                 gpu_retry_count,
                 recording_active_shared,
+                tray_card,
             )))
         }),
     )

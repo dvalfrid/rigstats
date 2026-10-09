@@ -3,7 +3,7 @@
 //! receiver (`PollStats.peripherals`, about once a minute). One row per
 //! device: name, a charge bar, and the percentage.
 
-use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Ui, Vec2};
+use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Stroke, Ui, Vec2};
 use rigstats_backend::lhm::Peripheral;
 
 use super::battery::charge_color;
@@ -11,21 +11,31 @@ use crate::{theme, PollStats};
 
 const ROW_H: f32 = 18.0;
 const CELL_PAD: f32 = 6.0;
+/// Share of the row the charge bar takes.
+const BAR_SHARE: f32 = 0.30;
+/// Slot for the charging marker between the bar and the percentage.
+const MARK_W: f32 = 9.0;
 
-/// The right column: "82%", or "CHG 82%" while charging (the font has no
-/// bolt or arrow glyphs).
-fn percent_text(device: &Peripheral) -> String {
-    if device.charging {
-        format!("CHG {}%", device.battery)
-    } else {
-        format!("{}%", device.battery)
-    }
+/// Where a row's columns go, as offsets from the row's left edge:
+/// `(name_w, bar_x0, bar_w)`. Right to left: the percentage takes `pct_w`
+/// (the width of "100%"), then the charging-marker slot, then the bar — so
+/// every bar ends just before the numbers, whatever the value or charging
+/// state — and the name gets everything left of the bar.
+fn row_columns(inner_w: f32, pct_w: f32, sc: f32) -> (f32, f32, f32) {
+    let pad = CELL_PAD * sc;
+    let bar_x1 = inner_w - pct_w - MARK_W * sc;
+    let bar_w = (inner_w * BAR_SHARE).max(24.0 * sc).min(bar_x1.max(0.0));
+    let bar_x0 = bar_x1 - bar_w;
+    let name_w = (bar_x0 - pad).max(0.0);
+    (name_w, bar_x0, bar_w)
 }
 
 /// One device row painted at fixed x positions (as the PROCESSES and GPU APPS
-/// panels do), so the columns line up whatever the names: NAME 46%, bar in
-/// the middle, percentage right-aligned in the last 22%.
-fn paint_row(
+/// panels do), so the columns line up whatever the names: name left, bar
+/// ending just before the right-aligned percentage, and a small accent
+/// triangle in front of the percentage while charging (the font has no bolt
+/// or arrow glyphs). Also drawn by the tray hover card (`app/tray_card.rs`).
+pub fn paint_device_row(
     ui: &mut Ui,
     inner_w: f32,
     device: &Peripheral,
@@ -34,7 +44,6 @@ fn paint_row(
     sc: f32,
 ) {
     let row_h = (ROW_H * sc).round();
-    let pad = CELL_PAD * sc;
     let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, row_h), Sense::hover());
     if !ui.is_rect_visible(rect) {
         return;
@@ -42,10 +51,14 @@ fn paint_row(
     let color = charge_color(device.battery, device.charging, charge_warn, charge_crit);
     let font = FontId::proportional(12.0 * sc);
     let cy = rect.center().y;
-    let name_w = inner_w * 0.46;
-    let pct_w = inner_w * 0.22;
+    let pct_w = ui
+        .painter()
+        .layout_no_wrap("100%".to_string(), font.clone(), color)
+        .size()
+        .x;
+    let (name_w, bar_x0, bar_w) = row_columns(inner_w, pct_w, sc);
 
-    let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w - pad, row_h));
+    let name_clip = Rect::from_min_size(rect.min, Vec2::new(name_w, row_h));
     ui.painter().with_clip_rect(name_clip).text(
         pos2(rect.min.x, cy),
         Align2::LEFT_CENTER,
@@ -54,10 +67,11 @@ fn paint_row(
         theme::C_TEXT,
     );
 
-    let bar_x0 = rect.min.x + name_w;
-    let bar_w = (inner_w - name_w - pct_w - pad).max(4.0 * sc);
     let bar_h = (4.0 * sc).max(2.0);
-    let track = Rect::from_min_size(pos2(bar_x0, cy - bar_h / 2.0), Vec2::new(bar_w, bar_h));
+    let track = Rect::from_min_size(
+        pos2(rect.min.x + bar_x0, cy - bar_h / 2.0),
+        Vec2::new(bar_w, bar_h),
+    );
     ui.painter()
         .rect_filled(track, 0.0, egui::Color32::from_gray(42));
     let fill_w = bar_w * f32::from(device.battery.min(100)) / 100.0;
@@ -66,10 +80,24 @@ fn paint_row(
         ui.painter().rect_filled(fill, 0.0, color);
     }
 
+    if device.charging {
+        let cx = track.max.x + MARK_W * sc / 2.0;
+        let half = 3.0 * sc;
+        ui.painter().add(egui::Shape::convex_polygon(
+            vec![
+                pos2(cx, cy - half),
+                pos2(cx + half, cy + half),
+                pos2(cx - half, cy + half),
+            ],
+            color,
+            Stroke::NONE,
+        ));
+    }
+
     ui.painter().text(
         pos2(rect.max.x, cy),
         Align2::RIGHT_CENTER,
-        percent_text(device),
+        format!("{}%", device.battery),
         font,
         color,
     );
@@ -105,7 +133,7 @@ pub fn draw(
 
         let inner_w = ui.available_width();
         for device in &stats.peripherals {
-            paint_row(ui, inner_w, device, charge_warn, charge_crit, sc);
+            paint_device_row(ui, inner_w, device, charge_warn, charge_crit, sc);
         }
     })
 }
@@ -114,19 +142,18 @@ pub fn draw(
 mod tests {
     use super::*;
 
-    fn device(battery: u8, charging: bool) -> Peripheral {
-        Peripheral {
-            id: "asus-keyboard-1ace-1".into(),
-            name: "ROG Azoth X".into(),
-            kind: "keyboard".into(),
-            battery,
-            charging,
-        }
+    #[test]
+    fn bar_ends_just_before_the_percentage_and_the_name_gets_the_rest() {
+        // 280 px row, "100%" 28 px wide, scale 1.
+        let (name_w, bar_x0, bar_w) = row_columns(280.0, 28.0, 1.0);
+        assert_eq!(bar_x0 + bar_w, 280.0 - 28.0 - MARK_W);
+        assert_eq!(bar_w, 280.0 * BAR_SHARE);
+        assert_eq!(name_w, bar_x0 - CELL_PAD);
     }
 
     #[test]
-    fn percent_text_marks_charging() {
-        assert_eq!(percent_text(&device(82, false)), "82%");
-        assert_eq!(percent_text(&device(24, true)), "CHG 24%");
+    fn narrow_rows_never_go_negative() {
+        let (name_w, bar_x0, bar_w) = row_columns(30.0, 28.0, 1.0);
+        assert!(name_w >= 0.0 && bar_w >= 0.0 && bar_x0 + bar_w <= 30.0);
     }
 }
