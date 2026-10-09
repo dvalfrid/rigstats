@@ -32,6 +32,10 @@ SetCompressor /SOLID lzma
 
 Name "RIGStats ${VERSION}"
 OutFile "target\release\RIGStats_${VERSION}_x64-setup.exe"
+; No directory page: the LocalSystem service runs from here, so it stays
+; under Program Files, which only administrators can write to. A folder of
+; the user's choosing could leave the service replaceable by any user.
+; Earlier installs elsewhere keep their folder via the key below.
 InstallDir "$PROGRAMFILES64\RIGStats"
 InstallDirRegKey HKLM "Software\RIGStats" "InstallDir"
 RequestExecutionLevel admin
@@ -53,8 +57,6 @@ Var /GLOBAL AutoUpdate
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE ComponentsPre
 !insertmacro MUI_PAGE_COMPONENTS
-!define MUI_PAGE_CUSTOMFUNCTION_PRE DirectoryPre
-!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_PAGE_CUSTOMFUNCTION_PRE FinishPre
 !insertmacro MUI_PAGE_FINISH
@@ -93,12 +95,6 @@ FunctionEnd
 
 ; ── Page skip functions (used when /autoupdate is passed) ──────────────────────
 Function ComponentsPre
-  ${If} $AutoUpdate == 1
-    Abort
-  ${EndIf}
-FunctionEnd
-
-Function DirectoryPre
   ${If} $AutoUpdate == 1
     Abort
   ${EndIf}
