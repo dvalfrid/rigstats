@@ -75,6 +75,22 @@ public class ConnectionTests
     }
 }
 
+public class KeyboardDedupTests
+{
+    [Fact]
+    public void A_receiver_keyboard_also_on_its_cable_is_left_out()
+    {
+        var keep = AsusKeyboardDevice.KeepIndices([(true, "ROG Azoth X"), (false, "ROG Azoth X"), (false, "ROG Falchion Ace HFX")]);
+        Assert.Equal(new HashSet<int> { 1, 2 }, keep);
+    }
+
+    [Fact]
+    public void A_receiver_keyboard_alone_stays()
+    {
+        Assert.Equal(new HashSet<int> { 0 }, AsusKeyboardDevice.KeepIndices([(true, "ROG Azoth X")]));
+    }
+}
+
 public class PeripheralBatteryMonitorTests
 {
     private sealed class FakeBatteryDevice(string id, string kind, Func<BatteryStatus?> read, bool hasBattery = true)
@@ -122,6 +138,23 @@ public class PeripheralBatteryMonitorTests
 
         Assert.Empty(monitor.ReadAll([]));      // unplugged
         Assert.Empty(monitor.ReadAll([mouse])); // back, still asleep: no stale value
+    }
+
+    [Fact]
+    public void A_reading_goes_stale_after_ten_silent_rounds()
+    {
+        BatteryStatus? next = new BatteryStatus(80, true);
+        var keyboard = new FakeBatteryDevice("kb", "keyboard", () => next);
+        var monitor = Monitor();
+        monitor.ReadAll([keyboard]);
+
+        next = null; // switched to its cable: the receiver entry stops answering
+        for (var round = 1; round < PeripheralBatteryMonitor.StaleRounds; round++)
+            Assert.Single(monitor.ReadAll([keyboard]));
+        Assert.Empty(monitor.ReadAll([keyboard]));
+
+        next = new BatteryStatus(81, true); // answers again
+        Assert.Equal(81, Assert.Single(monitor.ReadAll([keyboard])).Battery);
     }
 
     [Fact]

@@ -909,10 +909,12 @@ Omni receiver's mouse `12 07` on its channel (`OmniMouse.ReadBattery`, via its
 `LampArrayDevice`; every mouse in `OmniMouse.Models` has power info). The
 reply layouts are in `BatteryReplies`; a standby answer (0 %, not charging) and
 an `FF AA` error read as no answer. `PeripheralBatteryMonitor` asks once a
-minute (first after 10 s), keeps a silent device's last reading while it stays
-connected, logs the first reading and charging changes (`Battery: ROG Azoth X
+minute (first after 10 s), first calling `LightingProvider.Rescan()` so a
+device plugged in or switched is found within a minute (nothing else may
+trigger discovery), keeps a silent device's last reading for 10 rounds (then
+it drops off until it answers), logs the first reading and charging changes (`Battery: ROG Azoth X
 82 %.`), and `HardwareHost` adds the list to every telemetry line as
-`peripherals: [{id, name, kind, battery, charging, connection}]` (`connection`: `usb`, `bluetooth` or `2.4ghz`, from `Connection.Of` — Bluetooth from the HID path (`BTHENUM` or the HID-over-GATT service `{00001812-…}`), 2.4 GHz for a receiver or a dongle whose product/model name says "2.4", else a cable; no device command). The icon is the data path, not the power: a cable plugged into the ROG Azoth X while it is in 2.4 GHz mode only charges it — no new HID device appears and the keyboard keeps answering through the Omni receiver, so the panel keeps the 2.4 GHz icon and shows it charging (owner's rig, 2026-10-09). It shows up as a USB device (`1C24`) only in its wired mode — omitted until the first
+`peripherals: [{id, name, kind, battery, charging, connection}]` (`connection`: `usb`, `bluetooth` or `2.4ghz`, from `Connection.Of` — Bluetooth from the HID path (`BTHENUM` or the HID-over-GATT service `{00001812-…}`), 2.4 GHz for a receiver or a dongle whose product/model name says "2.4", else a cable; no device command). The icon is the data path, not the power: a cable plugged into the ROG Azoth X while it is in 2.4 GHz mode only charges it — no new HID device appears and the keyboard keeps answering through the Omni receiver, so the panel keeps the 2.4 GHz icon and shows it charging (owner's rig, 2026-10-09). It shows up as a USB device (`1C24`) only in its wired mode; switched there, it stays in the receiver's paired list, so keyboard discovery leaves a receiver entry out when the same model is connected directly (`AsusKeyboardDevice.KeepIndices`) — omitted until the first
 round, so the golden fixtures don't carry it. The field's shape is pinned by
 `sensor-sidecar.Tests/contract/telemetry-peripherals.json`, which the Rust
 reader checks too. Not covered yet: ROG mice on their own 2.4 GHz dongle or

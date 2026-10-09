@@ -260,7 +260,25 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
                 device?.Dispose();
             }
         }
-        return found;
+        var keep = KeepIndices(found.Select(k => (k._model.Receiver, k.Name)).ToList());
+        foreach (var dropped in found.Where((_, i) => !keep.Contains(i)))
+        {
+            LightingLog.Discovery($"[rigstats-control] Lighting: {dropped.Name} is connected by cable too — the receiver's entry is left out.");
+            dropped.Dispose();
+        }
+        return found.Where((_, i) => keep.Contains(i)).ToList();
+    }
+
+    /// Which keyboards to keep: a receiver keyboard is left out when the same
+    /// model is also connected directly. A keyboard switched to its cable
+    /// mode stays in the receiver's paired list (seen with the ROG Azoth X),
+    /// and would otherwise show twice — once going stale.
+    public static IReadOnlySet<int> KeepIndices(IReadOnlyList<(bool Receiver, string Name)> keyboards)
+    {
+        var direct = keyboards.Where(k => !k.Receiver).Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
+        return Enumerable.Range(0, keyboards.Count)
+            .Where(i => !keyboards[i].Receiver || !direct.Contains(keyboards[i].Name))
+            .ToHashSet();
     }
 
     /// `hid` without the collections of keyboards driven here directly —
