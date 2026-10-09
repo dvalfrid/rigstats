@@ -146,7 +146,8 @@ $features = @(
   @{ id="control-cpu-limits"; kind="done"; pin=189; milestone="v3.0"; title="Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC)" }
   @{ id="control-cpu-limits-intel"; kind="planned"; pin=209; milestone="v3.0"; title="Control Center phase 2b: Intel CPU power limits (PL1/PL2)" }
   @{ id="control-gpu"; kind="done"; pin=190; milestone="v3.0"; title="Control Center phase 3: GPU power profiles (AMD, ADLX)" }
-  @{ id="control-gpu-nvidia"; kind="planned"; pin=210; milestone="v3.0"; title="Control Center phase 3b: NVIDIA GPU power limit (NVML)" }
+  @{ id="control-gpu-nvidia"; kind="planned"; pin=210; milestone="v3.0"; title="Control Center phase 3b: NVIDIA GPU power limit (NVML)";
+     tableStatus="🚧 In progress — built, awaiting a desktop GeForce test" }
   @{ id="control-curve-optimizer"; kind="done"; pin=191; milestone="v3.0"; title="Control Center phase 4: AMD Curve Optimizer" }
   @{ id="control-aura"; kind="done"; pin=192; milestone="v3.0"; title="Control Center phase 5: ASUS Aura RGB" }
   @{ id="control-lighting-more"; kind="planned"; pin=212; milestone="v3.0"; title="Control Center: more lighting devices (ASUS monitors, peripherals, other vendors)" }
@@ -200,12 +201,12 @@ foreach ($f in $features) {
     if ($desiredState -eq "CLOSED") { & $gh issue close $num --reason $closeReason | Out-Null }
     Write-Host "CREATED  #$num  $($f.title)"
     $stats.created++
-    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs }
+    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs; status = $f.tableStatus }
     continue
   }
 
   $num = $issue.number
-  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs }
+  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs; status = $f.tableStatus }
 
   # ---- pinned: ensure marker present + milestone + state only ----
   if ($f.ContainsKey("pin")) {
@@ -267,6 +268,8 @@ foreach ($id in $byMarker.Keys) {
 
 # 5. Regenerate the ROADMAP.md issue-tracking table between its markers.
 #    Grouped Done -> Not planned -> Planned, each sorted by issue number.
+#    A feature's optional `tableStatus` replaces the kind's status text (e.g.
+#    "In progress" for a planned feature that is built but not yet verified).
 $repo = "https://github.com/dvalfrid/rigstats/issues"
 $statusText = @{ done = "✅ Done"; dropped = "⏭ Not planned"; planned = "🔲 Planned" }
 $kindRank = @{ done = 0; dropped = 1; planned = 2 }
@@ -276,7 +279,7 @@ $tableLines = @(
   "| --- | --- | --- | --- | --- |"
 )
 foreach ($r in $sorted) {
-  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($r.ms) | $($statusText[$r.kind]) |"
+  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($r.ms) | $(if ($r.status) { $r.status } else { $statusText[$r.kind] }) |"
 }
 
 $roadmapPath = Join-Path $PSScriptRoot "..\ROADMAP.md"
