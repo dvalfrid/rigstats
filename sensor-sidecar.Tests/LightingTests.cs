@@ -910,6 +910,16 @@ public class OmniMouseTests
     }
 
     [Fact]
+    public void The_paired_list_names_the_keyboard_behind_the_receiver()
+    {
+        IReadOnlyList<OmniMouse.Paired> paired = [new(0x1C25, 2), new(0x1A94, 3)];
+
+        Assert.Equal("ROG Azoth X", AsusKeyboardDevice.PairedKeyboardName(paired, 2));
+        Assert.Null(AsusKeyboardDevice.PairedKeyboardName(paired, 3)); // the mouse
+        Assert.Null(AsusKeyboardDevice.PairedKeyboardName([new(0x9999, 2)], 2)); // unknown id
+    }
+
+    [Fact]
     public void Keyboard_ask_skips_other_input_reports_until_the_echo()
     {
         var stray = Hex("0212000200010000");          // not the layout echo
