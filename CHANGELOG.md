@@ -8,6 +8,28 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.45.0](https://github.com/dvalfrid/rigstats/compare/v1.44.0...v1.45.0) (2026-10-09)
+
+
+### Features
+
+* **lighting:** name the keyboard behind the ROG Omni receiver ([#285](https://github.com/dvalfrid/rigstats/issues/285)) ([a68e391](https://github.com/dvalfrid/rigstats/commit/a68e39150919fbdca5b3d358884aa45c8212b1f1))
+* **peripherals:** Peripherals panel, tray hover card and low-battery alerts ([#295](https://github.com/dvalfrid/rigstats/issues/295)) ([8786ffa](https://github.com/dvalfrid/rigstats/commit/8786ffa876bfa4c6f9bf5ad302b300e05bbcc01a))
+* **peripherals:** read the battery of ROG wireless devices into the telemetry ([#294](https://github.com/dvalfrid/rigstats/issues/294)) ([fb650c2](https://github.com/dvalfrid/rigstats/commit/fb650c2e222629549de683897373ecebcb01a79b))
+* **sidecar:** keep crash dumps of the sensor service for administrators ([cc24bdc](https://github.com/dvalfrid/rigstats/commit/cc24bdc24e20c8936b6eec0c866538155db3f67c)), closes [#220](https://github.com/dvalfrid/rigstats/issues/220)
+
+
+### Bug Fixes
+
+* **ci:** read only the package version when naming the test installer ([#298](https://github.com/dvalfrid/rigstats/issues/298)) ([da9a8b3](https://github.com/dvalfrid/rigstats/commit/da9a8b318905cbd6cfdcac5ed0fb0ef301af40cb))
+* **ci:** submit to winget after each release unless the release PR is held ([ab5d3f7](https://github.com/dvalfrid/rigstats/commit/ab5d3f7694479787c7b545485916b83aad9aca79)), closes [#246](https://github.com/dvalfrid/rigstats/issues/246)
+* **deps:** update crates with security advisories ([1808035](https://github.com/dvalfrid/rigstats/commit/180803521ce0fbbd4b89fda451185f501cb58078)), closes [#224](https://github.com/dvalfrid/rigstats/issues/224)
+* **installer:** quote the service path and always install under Program Files ([#277](https://github.com/dvalfrid/rigstats/issues/277)) ([8383a41](https://github.com/dvalfrid/rigstats/commit/8383a41800c3e16ea51c6680c198900644bf4ed2))
+* **lighting:** find the keyboard on the ROG Omni receiver again ([#281](https://github.com/dvalfrid/rigstats/issues/281)) ([99127fa](https://github.com/dvalfrid/rigstats/commit/99127fab9e0dabcb67f1f851d958b540608e3ba3)), closes [#280](https://github.com/dvalfrid/rigstats/issues/280)
+* **lighting:** match the ROG Delta II's replies to the command they answer ([#283](https://github.com/dvalfrid/rigstats/issues/283)) ([8b7f06a](https://github.com/dvalfrid/rigstats/commit/8b7f06ab5b083d71a1d3a6683dbc55ddc1b11581)), closes [#282](https://github.com/dvalfrid/rigstats/issues/282)
+* **sidecar:** upgrade LibreHardwareMonitor to 0.9.7-pre749 for the NVML crash fix ([#256](https://github.com/dvalfrid/rigstats/issues/256)) ([6afac4d](https://github.com/dvalfrid/rigstats/commit/6afac4d196582b724c23b79bac77ff2990303d2b))
+* **tray:** keep the profile submenu in step with added, renamed and deleted profiles ([#258](https://github.com/dvalfrid/rigstats/issues/258)) ([a55bed3](https://github.com/dvalfrid/rigstats/commit/a55bed30765e894f6c24433e46f11305f8467a02)), closes [#257](https://github.com/dvalfrid/rigstats/issues/257)
+
 ## [1.44.0](https://github.com/dvalfrid/rigstats/compare/v1.43.0...v1.44.0) (2026-10-07)
 
 
