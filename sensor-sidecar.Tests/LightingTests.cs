@@ -1171,6 +1171,36 @@ public class AsusHeadsetTests
 {
     private static byte[] Hex(string hex) => Convert.FromHexString(hex);
 
+    /// Replies queued in order, as the dongle sends them.
+    private sealed class Queued(params string[] replies) : IHidDevice
+    {
+        private readonly Queue<byte[]> _replies = new(replies.Select(Convert.FromHexString));
+        public void Write(byte[] report) { }
+        public byte[]? Read(TimeSpan timeout) => _replies.Count > 0 ? _replies.Dequeue() : null;
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public void Read_back_skips_a_battery_report_and_a_late_acknowledgement()
+    {
+        // Seen on a ROG Delta II (2026-10-09): a key-9 report and the set
+        // acknowledgement arrived where the lighting read-back was expected.
+        var data = AsusHeadsetDevice.LightingData(AuraEffect.Static, 0xFF, 0x00, 0x00);
+        var hid = new Queued("CC120900001E00000000", "CC51280000FFAA000000", "CC120300000164FF0000");
+
+        var back = AsusHeadsetDevice.AwaitReply(hid, 0xCC, 0x12, 3, TimeSpan.FromSeconds(1));
+
+        Assert.True(AsusHeadsetDevice.ReadBackMatches(back, 0xCC, data));
+    }
+
+    [Fact]
+    public void Await_reply_is_null_when_only_other_reports_come()
+    {
+        var hid = new Queued("CC120900001E00000000", "CC51280000FFAA000000");
+
+        Assert.Null(AsusHeadsetDevice.AwaitReply(hid, 0xCC, 0x12, 3, TimeSpan.FromSeconds(1)));
+    }
+
     [Fact]
     public void The_lighting_write_is_the_frame_verified_on_the_delta_ii()
     {
