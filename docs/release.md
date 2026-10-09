@@ -20,6 +20,14 @@ blocked. Admins aren't held to it (`enforce_admins: false`): the maintainer
 can still push directly to `main`, and GitHub records it as a bypass.
 Settings → Branches → `main` to change it.
 
+**CodeQL is not a merge gate:** once `Verify (Windows)` is green a pull
+request can be merged — don't wait for the CodeQL jobs. They keep running
+and report to Security → Code scanning after the merge too. `codeql.yml`
+covers GitHub Actions and C# (about a minute); `codeql-rust.yml` covers
+Rust (about 20 minutes, on Windows so `#[cfg(windows)]` code is analysed)
+and runs on pull requests only when `.rs` or Cargo files changed — every
+push to `main` and the weekly schedule always run it.
+
 ### Pinned Rust toolchain
 
 `build.yml`, `verify.yml`, and `release.yml` all install Rust via

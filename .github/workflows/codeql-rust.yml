@@ -1,0 +1,48 @@
+name: "CodeQL Rust"
+
+# Split from codeql.yml because the Rust analysis takes ~20 minutes (one
+# CodeQL database per language can't be spread over several runners).
+# Pull requests only run it when Rust code or the Cargo files changed;
+# every push to main and the weekly schedule always run it, so every Rust
+# change is analysed. Not a required check — see docs/release.md.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "**/*.rs"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/codeql-rust.yml"
+  schedule:
+    - cron: '18 12 * * 3'
+
+jobs:
+  analyze:
+    name: Analyze (rust)
+    # Windows, so the analysis sees the #[cfg(windows)] code (Win32 FFI,
+    # Authenticode, updater) — on Linux it would be compiled out.
+    runs-on: windows-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      with:
+        languages: rust
+        build-mode: none
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+      with:
+        category: "/language:rust"

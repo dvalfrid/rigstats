@@ -203,7 +203,9 @@ before opening a PR:
 1. Push your branch to your fork and open a PR against `dvalfrid/rigstats:main`.
 2. Reference the issue in the PR description (and in a commit with `Closes #N`).
 3. Describe the user-visible change and how you tested it in the running app.
-4. Make sure the **Verify (Windows)** CI check passes — see below.
+4. Make sure the **Verify (Windows)** CI check passes — see below. The CodeQL
+   jobs are not required to merge; Rust analysis takes ~20 minutes and only
+   runs when Rust code changed.
 
 A maintainer will review and merge. Release Please then folds your commit into the
 next release automatically based on the commit type.
