@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::{DialogStates, FontAtlasRefresh, GpuRecovery, OverlayState};
+use app::state::{DialogStates, FontAtlasRefresh, GpuRecovery, OverlayState, RecordingIndicator};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
@@ -173,23 +173,8 @@ struct RigStatsApp {
     wallpaper_host: ChildHost,
     /// The game overlay's window state (#183).
     overlay: OverlayState,
-    // ── Tray recording indicator ───────────────────────────────────────────
-    /// True while a session is being recorded — drives the blinking tray dot.
-    recording_active: bool,
-    /// Mirrors `recording_active` for the tray-polling background thread (see
-    /// its use of `win_opacity::force_repaint` in `main()`, #177): while a
-    /// context menu is open, winit's own event loop — and so `ui()` — doesn't
-    /// run at all, and neither `request_repaint()`/`request_repaint_of()` nor a
-    /// single pre-emptive `force_repaint()` reliably revives it once the menu
-    /// closes (both empirically confirmed unreliable here). The poller instead
-    /// keeps posting `force_repaint()` on every tick for as long as this is
-    /// true, so the very next tick after the menu closes — whenever that is —
-    /// lands a real repaint no matter how it closed.
-    recording_active_shared: Arc<AtomicBool>,
-    /// Current phase of the blink (dot shown vs. hidden).
-    recording_blink_on: bool,
-    /// When the blink last flipped.
-    recording_blink_at: Instant,
+    /// The tray's recording indicator.
+    recording: RecordingIndicator,
     /// Font-atlas rebuilds after a minimize.
     font_atlas: FontAtlasRefresh,
     /// Shared with `SettingsWindow`; set by a startup background thread.
@@ -342,16 +327,18 @@ impl RigStatsApp {
             wallpaper: WallpaperSupervisor::default(),
             wallpaper_host: ChildHost::default(),
             overlay: OverlayState::new(&init_settings),
-            recording_active: false,
-            recording_active_shared,
-            recording_blink_on: true,
+            recording: RecordingIndicator {
+                active: false,
+                active_shared: recording_active_shared,
+                blink_on: true,
+                blink_at: Instant::now(),
+            },
             font_atlas: FontAtlasRefresh {
                 stale: false,
                 rebuilt_at: Instant::now(),
                 toggle: false,
             },
             battery_present,
-            recording_blink_at: Instant::now(),
             gpu_recovery: GpuRecovery {
                 lost: gpu_lost,
                 relaunch_triggered: false,
@@ -1970,12 +1957,12 @@ impl eframe::App for RigStatsApp {
 
         // While recording, blink the tray dot on/off so an active session reads
         // as an ongoing event rather than a static indicator.
-        if self.recording_active {
+        if self.recording.active {
             const BLINK_PERIOD: Duration = Duration::from_millis(600);
-            if self.recording_blink_at.elapsed() >= BLINK_PERIOD {
-                self.recording_blink_on = !self.recording_blink_on;
-                self.recording_blink_at = Instant::now();
-                self.tray.set_recording_blink(self.recording_blink_on);
+            if self.recording.blink_at.elapsed() >= BLINK_PERIOD {
+                self.recording.blink_on = !self.recording.blink_on;
+                self.recording.blink_at = Instant::now();
+                self.tray.set_recording_blink(self.recording.blink_on);
             }
             ui.ctx().request_repaint_after(BLINK_PERIOD);
         } else {

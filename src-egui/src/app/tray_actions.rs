@@ -149,16 +149,16 @@ impl RigStatsApp {
             logging::end_session(&self.dir, &session.id, logging::unix_now_secs());
             logging::prune_old_sessions(&self.dir, retention_days);
             self.tray.set_recording(false);
-            self.recording_active = false;
-            self.recording_active_shared.store(false, Ordering::Relaxed);
+            self.recording.active = false;
+            self.recording.active_shared.store(false, Ordering::Relaxed);
         } else {
             match logging::start_session(&self.dir) {
                 Ok(_) => {
                     self.tray.set_recording(true);
-                    self.recording_active = true;
-                    self.recording_active_shared.store(true, Ordering::Relaxed);
-                    self.recording_blink_on = true;
-                    self.recording_blink_at = Instant::now();
+                    self.recording.active = true;
+                    self.recording.active_shared.store(true, Ordering::Relaxed);
+                    self.recording.blink_on = true;
+                    self.recording.blink_at = Instant::now();
                 }
                 Err(e) => {
                     debug::log_error(

@@ -192,3 +192,24 @@ pub(crate) struct FontAtlasRefresh {
     /// silently no-ops otherwise.
     pub(crate) toggle: bool,
 }
+
+/// The tray's recording indicator: a blinking icon while a session is
+/// being recorded.
+pub(crate) struct RecordingIndicator {
+    /// True while a session is being recorded — drives the blinking tray dot.
+    pub(crate) active: bool,
+    /// Mirrors `active` for the tray-polling background thread (see its use
+    /// of `win_opacity::force_repaint` in `app::background`, #177): while a
+    /// context menu is open, winit's own event loop — and so `ui()` — doesn't
+    /// run at all, and neither `request_repaint()`/`request_repaint_of()` nor a
+    /// single pre-emptive `force_repaint()` reliably revives it once the menu
+    /// closes (both empirically confirmed unreliable here). The poller instead
+    /// keeps posting `force_repaint()` on every tick for as long as this is
+    /// true, so the very next tick after the menu closes — whenever that is —
+    /// lands a real repaint no matter how it closed.
+    pub(crate) active_shared: Arc<AtomicBool>,
+    /// Current phase of the blink (dot shown vs. hidden).
+    pub(crate) blink_on: bool,
+    /// When the blink last flipped.
+    pub(crate) blink_at: Instant,
+}
