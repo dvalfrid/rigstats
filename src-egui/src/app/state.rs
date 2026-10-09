@@ -1,9 +1,12 @@
 //! Groups of `RigStatsApp` fields that belong to one concern (#225).
 
+use crate::BehindEnforce;
 use rigstats_backend::settings::Settings;
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
 use rigstats_egui::dialog_reveal::DialogReveal;
 use rigstats_egui::windows;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -212,4 +215,48 @@ pub(crate) struct RecordingIndicator {
     pub(crate) blink_on: bool,
     /// When the blink last flipped.
     pub(crate) blink_at: Instant,
+}
+
+/// Floating mode: each panel in its own borderless window.
+pub(crate) struct FloatingState {
+    pub(crate) mode: bool,
+    pub(crate) panels_locked: bool,
+    pub(crate) panel_scale: f32,
+    /// Last-known screen positions for each panel key, keyed by panel key.
+    /// Loaded from settings at startup; updated on drag; persisted on change.
+    pub(crate) positions: Arc<Mutex<HashMap<String, [f32; 2]>>>,
+    /// Set true inside a floating panel viewport when its position changes.
+    /// Consumed in `ui()` to debounce settings writes to once per tick.
+    pub(crate) positions_dirty: Arc<AtomicBool>,
+    /// Receives a new preferred-GPU name when the user clicks a GPU dot
+    /// inside the floating GPU panel viewport.
+    pub(crate) new_pref_gpu: Arc<Mutex<Option<String>>>,
+    /// Live lock state toggled from the padlock icon in the drag handle.
+    /// Propagated back to `panels_locked` and persisted in `update()`.
+    pub(crate) lock_arc: Arc<AtomicBool>,
+    /// Guards the one-time initial hide of the main window when the app
+    /// starts with floating mode already enabled.
+    pub(crate) initial_applied: bool,
+    /// Tracks which floating panel viewports have already had their initial
+    /// position applied.  Once a panel is in this set, `with_position` is
+    /// NOT included in the ViewportBuilder — the OS owns the position from
+    /// that point on, which prevents the builder diff from continuously
+    /// sending SetOuterPosition and causing sub-pixel blur.
+    /// Cleared whenever floating mode transitions from off → on so positions
+    /// are restored from the saved layout on next activation.
+    pub(crate) panels_positioned: HashSet<String>,
+    /// Per-panel "always behind" enforcement state (key → last enforce time +
+    /// previous primary-button state). Used to throttle the Win32 Z-order
+    /// re-push so floating "behind" panels don't re-assert every frame — which
+    /// would create a SetWindowPos → repaint → SetWindowPos spin loop and burn
+    /// CPU. Enforcement happens on creation, in a short burst after a drag, and
+    /// then ~1/s as an idle safety net.
+    pub(crate) behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
+    /// Per-panel DComp reveal-burst state for floating mode's per-pixel
+    /// transparency (issue #169) — see `dcomp_burst::DcompRevealBurst`. Only
+    /// a panel's creation frame triggers a burst; a later content-driven
+    /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
+    pub(crate) dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
+    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
+    pub(crate) mode_arc: Arc<AtomicBool>,
 }

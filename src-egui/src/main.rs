@@ -1,12 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::{DialogStates, FontAtlasRefresh, GpuRecovery, OverlayState, RecordingIndicator};
+use app::state::{
+    DialogStates, FloatingState, FontAtlasRefresh, GpuRecovery, OverlayState, RecordingIndicator,
+};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
-use rigstats_egui::dcomp_burst::DcompRevealBurst;
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -99,47 +100,8 @@ struct RigStatsApp {
     /// to capture the spot to pin when the padlock is clicked. `None` until the
     /// first fixed-mode frame reports a position.
     last_fixed_pos: Option<[f32; 2]>,
-    // ── Floating mode ──────────────────────────────────────────────────────
-    floating_mode: bool,
-    floating_panels_locked: bool,
-    floating_panel_scale: f32,
-    /// Last-known screen positions for each panel key, keyed by panel key.
-    /// Loaded from settings at startup; updated on drag; persisted on change.
-    floating_positions: Arc<Mutex<HashMap<String, [f32; 2]>>>,
-    /// Set true inside a floating panel viewport when its position changes.
-    /// Consumed in `ui()` to debounce settings writes to once per tick.
-    positions_dirty: Arc<AtomicBool>,
-    /// Receives a new preferred-GPU name when the user clicks a GPU dot
-    /// inside the floating GPU panel viewport.
-    float_new_pref_gpu: Arc<Mutex<Option<String>>>,
-    /// Live lock state toggled from the padlock icon in the drag handle.
-    /// Propagated back to `floating_panels_locked` and persisted in `update()`.
-    floating_lock_arc: Arc<AtomicBool>,
-    /// Guards the one-time initial hide of the main window when the app
-    /// starts with floating_mode already enabled.
-    initial_floating_applied: bool,
-    /// Tracks which floating panel viewports have already had their initial
-    /// position applied.  Once a panel is in this set, `with_position` is
-    /// NOT included in the ViewportBuilder — the OS owns the position from
-    /// that point on, which prevents the builder diff from continuously
-    /// sending SetOuterPosition and causing sub-pixel blur.
-    /// Cleared whenever floating mode transitions from off → on so positions
-    /// are restored from the saved layout on next activation.
-    panels_positioned: HashSet<String>,
-    /// Per-panel "always behind" enforcement state (key → last enforce time +
-    /// previous primary-button state). Used to throttle the Win32 Z-order
-    /// re-push so floating "behind" panels don't re-assert every frame — which
-    /// would create a SetWindowPos → repaint → SetWindowPos spin loop and burn
-    /// CPU. Enforcement happens on creation, in a short burst after a drag, and
-    /// then ~1/s as an idle safety net.
-    behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
-    /// Per-panel DComp reveal-burst state for floating mode's per-pixel
-    /// transparency (issue #169) — see `dcomp_burst::DcompRevealBurst`. Only
-    /// a panel's creation frame triggers a burst; a later content-driven
-    /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
-    floating_dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
-    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
-    floating_mode_arc: Arc<AtomicBool>,
+    /// Floating mode's panels and their windows.
+    floating: FloatingState,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
@@ -279,18 +241,20 @@ impl RigStatsApp {
             fullscreen_content_h: None,
             dashboard_pinned: init_settings.dashboard_pinned,
             last_fixed_pos: None,
-            floating_mode: init_settings.floating_mode,
-            floating_panels_locked: init_settings.floating_panels_locked,
-            floating_panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
-            floating_positions: Arc::new(Mutex::new(init_positions)),
-            positions_dirty: Arc::new(AtomicBool::new(false)),
-            float_new_pref_gpu: Arc::new(Mutex::new(None)),
-            floating_lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
-            initial_floating_applied: false,
-            panels_positioned: HashSet::new(),
-            behind_enforce: RefCell::new(HashMap::new()),
-            floating_dcomp: RefCell::new(HashMap::new()),
-            floating_mode_arc,
+            floating: FloatingState {
+                mode: init_settings.floating_mode,
+                panels_locked: init_settings.floating_panels_locked,
+                panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
+                positions: Arc::new(Mutex::new(init_positions)),
+                positions_dirty: Arc::new(AtomicBool::new(false)),
+                new_pref_gpu: Arc::new(Mutex::new(None)),
+                lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
+                initial_applied: false,
+                panels_positioned: HashSet::new(),
+                behind_enforce: RefCell::new(HashMap::new()),
+                dcomp: RefCell::new(HashMap::new()),
+                mode_arc: floating_mode_arc,
+            },
             os_dark_mode: {
                 #[cfg(windows)]
                 {
@@ -486,7 +450,7 @@ impl RigStatsApp {
     /// mode is on when `window_layer == "wallpaper"` and floating mode is off
     /// (floating wins if both are set).
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
-        let want = self.window_layer == "wallpaper" && !self.floating_mode;
+        let want = self.window_layer == "wallpaper" && !self.floating.mode;
         let now = Instant::now();
         let effects = self.wallpaper.transition(
             want,
@@ -1178,7 +1142,7 @@ impl eframe::App for RigStatsApp {
                 // For "behind" mode, also enforce HWND_BOTTOM directly — ViewportCommand
                 // alone is not reliable on Windows. Only needed at startup/transition;
                 // normal operation won't bring the window back to front on its own.
-                if self.window_layer == "behind" && !self.floating_mode {
+                if self.window_layer == "behind" && !self.floating.mode {
                     win32_behind::keep_behind("RigStats");
                 }
             }
@@ -1232,18 +1196,19 @@ impl eframe::App for RigStatsApp {
             if panels_changed {
                 for key in &prev_visible {
                     if !self.runtime.visible_panels.contains(key) {
-                        self.panels_positioned.remove(key);
+                        self.floating.panels_positioned.remove(key);
                     }
                 }
             }
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
             self.window_layer = s.window_layer.clone();
-            let was_floating = self.floating_mode;
-            self.floating_mode = s.floating_mode;
-            self.floating_mode_arc
-                .store(self.floating_mode, Ordering::Relaxed);
-            self.floating_panels_locked = s.floating_panels_locked;
-            self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            let was_floating = self.floating.mode;
+            self.floating.mode = s.floating_mode;
+            self.floating
+                .mode_arc
+                .store(self.floating.mode, Ordering::Relaxed);
+            self.floating.panels_locked = s.floating_panels_locked;
+            self.floating.panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             self.overlay.click_through = s.overlay_click_through;
             self.overlay.enabled = s.overlay_enabled;
             let preferred_gpu = s.preferred_gpu.clone();
@@ -1267,7 +1232,7 @@ impl eframe::App for RigStatsApp {
             // switched profiles while pinned): persist the auto-targeted position
             // now so the profile is properly pinned and stays put across restarts
             // instead of lingering in a locked-but-unsaved state.
-            if !self.floating_mode && self.dashboard_pinned {
+            if !self.floating.mode && self.dashboard_pinned {
                 let mut s = self.current_settings.lock_safe();
                 if !s.pinned_positions.contains_key(&profile) {
                     s.pinned_positions.insert(
@@ -1284,7 +1249,7 @@ impl eframe::App for RigStatsApp {
             // In wallpaper mode our window is parked off-screen and the host owns the
             // visible dashboard — repositioning here would yank the (frozen, polling-
             // paused) main window back on-screen over the wallpaper, so skip it.
-            if !self.floating_mode && !self.wallpaper.is_active() {
+            if !self.floating.mode && !self.wallpaper.is_active() {
                 let new_size = [w, h];
                 if self.last_applied_window_size != Some(new_size) {
                     self.last_applied_window_size = Some(new_size);
@@ -1312,11 +1277,11 @@ impl eframe::App for RigStatsApp {
             // Toggle main window position when floating mode changes.
             // We move it off-screen instead of hiding it — a hidden window is not
             // ticked by eframe, so the floating panels would not update.
-            if was_floating != self.floating_mode {
-                if self.floating_mode {
+            if was_floating != self.floating.mode {
+                if self.floating.mode {
                     // Clear positioned-set so restored positions are re-applied
                     // from the saved layout the first time each panel is shown.
-                    self.panels_positioned.clear();
+                    self.floating.panels_positioned.clear();
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                             -32000.0, -32000.0,
@@ -1351,9 +1316,9 @@ impl eframe::App for RigStatsApp {
         self.handle_tray_commands(ui.ctx());
 
         // Sync floating lock state toggled by padlock icon in drag handle.
-        let arc_locked = self.floating_lock_arc.load(Ordering::Relaxed);
-        if arc_locked != self.floating_panels_locked {
-            self.floating_panels_locked = arc_locked;
+        let arc_locked = self.floating.lock_arc.load(Ordering::Relaxed);
+        if arc_locked != self.floating.panels_locked {
+            self.floating.panels_locked = arc_locked;
             let mut s = self.current_settings.lock_safe();
             s.floating_panels_locked = arc_locked;
             self.persist_settings_logged(&s);
@@ -1706,9 +1671,9 @@ impl eframe::App for RigStatsApp {
         // We NEVER use Visible(false) in floating mode because a hidden window is not
         // ticked by eframe — show_viewport_immediate would stop being called and all
         // floating panels would freeze.
-        if !self.initial_floating_applied {
-            self.initial_floating_applied = true;
-            if self.floating_mode {
+        if !self.floating.initial_applied {
+            self.floating.initial_applied = true;
+            if self.floating.mode {
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                         -32000.0, -32000.0,
@@ -1716,17 +1681,17 @@ impl eframe::App for RigStatsApp {
             }
         }
 
-        if self.floating_mode {
+        if self.floating.mode {
             // ── Floating mode — each panel in its own borderless viewport ─────
             self.render_floating_panels(ui);
 
             // Persist positions when any panel was dragged.
-            if self.positions_dirty.swap(false, Ordering::Relaxed) {
+            if self.floating.positions_dirty.swap(false, Ordering::Relaxed) {
                 self.persist_floating_positions();
             }
 
             // Apply GPU preference change made from the floating GPU panel.
-            let float_pref = self.float_new_pref_gpu.lock_safe().take();
+            let float_pref = self.floating.new_pref_gpu.lock_safe().take();
             if let Some(new_pref) = float_pref {
                 self.select_gpu(Some(new_pref));
             }
@@ -2232,7 +2197,7 @@ impl RigStatsApp {
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock_safe();
         let window_level = Self::window_level_from_layer(&s.window_layer);
-        let scale = self.floating_panel_scale;
+        let scale = self.floating.panel_scale;
         drop(s);
 
         let opacity = self.opacity;
@@ -2256,7 +2221,7 @@ impl RigStatsApp {
 
             let init_pos: [f32; 2] = {
                 let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
-                let positions = self.floating_positions.lock_safe();
+                let positions = self.floating.positions.lock_safe();
                 let saved = positions.get(&key).copied().unwrap_or(default_pos);
                 guard_panel_position(saved, default_pos)
             };
@@ -2268,9 +2233,9 @@ impl RigStatsApp {
             // owns the position (via drag); re-sending with_position every frame
             // causes egui to diff-and-dispatch SetOuterPosition continuously,
             // which fights the OS and produces sub-pixel blur.
-            let needs_position = !self.panels_positioned.contains(&key);
+            let needs_position = !self.floating.panels_positioned.contains(&key);
             if needs_position {
-                self.panels_positioned.insert(key.clone());
+                self.floating.panels_positioned.insert(key.clone());
             }
 
             // Pull this panel's DComp burst state out of the map for the
@@ -2278,7 +2243,8 @@ impl RigStatsApp {
             // returns) — same "extract, mutate as a local, write back" shape
             // the overlay uses for its own (single, not per-key) burst state.
             let mut dcomp = self
-                .floating_dcomp
+                .floating
+                .dcomp
                 .borrow_mut()
                 .remove(&key)
                 .unwrap_or_default();
@@ -2309,11 +2275,11 @@ impl RigStatsApp {
 
             // `show_viewport_immediate` is FnMut with no Send/'static bound —
             // we can borrow self fields directly instead of going through Arc.
-            let positions_arc = &self.floating_positions;
-            let dirty = &self.positions_dirty;
-            let behind_enforce = &self.behind_enforce;
-            let new_pref_arc = &self.float_new_pref_gpu;
-            let lock_arc = &self.floating_lock_arc;
+            let positions_arc = &self.floating.positions;
+            let dirty = &self.floating.positions_dirty;
+            let behind_enforce = &self.floating.behind_enforce;
+            let new_pref_arc = &self.floating.new_pref_gpu;
+            let lock_arc = &self.floating.lock_arc;
             let stats = &self.runtime.latest;
             let cspark = &self.runtime.cpu_spark;
             let gspark = &self.runtime.gpu_spark;
@@ -2754,7 +2720,7 @@ impl RigStatsApp {
                         });
                 },
             );
-            self.floating_dcomp.borrow_mut().insert(key.clone(), dcomp);
+            self.floating.dcomp.borrow_mut().insert(key.clone(), dcomp);
         }
     }
 
@@ -2769,7 +2735,7 @@ impl RigStatsApp {
 
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     fn persist_floating_positions(&self) {
-        let positions = self.floating_positions.lock_safe();
+        let positions = self.floating.positions.lock_safe();
         let mut s = self.current_settings.lock_safe();
         for (key, &[x, y]) in positions.iter() {
             s.panel_layouts.insert(

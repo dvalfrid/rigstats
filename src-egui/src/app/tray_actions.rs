@@ -99,12 +99,12 @@ impl RigStatsApp {
             self.persist_settings_logged(&s);
             s.floating_mode
         };
-        let was_floating = self.floating_mode;
-        self.floating_mode = new_mode;
-        self.floating_mode_arc.store(new_mode, Ordering::Relaxed);
+        let was_floating = self.floating.mode;
+        self.floating.mode = new_mode;
+        self.floating.mode_arc.store(new_mode, Ordering::Relaxed);
         if was_floating != new_mode {
             if new_mode {
-                self.panels_positioned.clear();
+                self.floating.panels_positioned.clear();
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                     -32000.0, -32000.0,
                 )));
