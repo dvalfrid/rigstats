@@ -25,7 +25,7 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.45.0</Program_Version>
+		<Program_Version>1.45.1</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
 		<Program_Release_Day>09</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>lighting: name the keyboard behind the ROG Omni receiver ([#285](https://github.com/dvalfrid/rigstats/issues/285)); peripherals: Peripherals panel, tray hover card and low-battery alerts ([#295](https://github.com/dvalfrid/rigstats/issues/295)); peripherals: read the battery of ROG wireless devices into the telemetry ([#294](https://github.com/dvalfrid/rigstats/issues/294)); sidecar: keep crash dumps of the sensor service for administrators; ci: read only the package version when naming the test installer ([#298](https://github.com/dvalfrid/rigstats/issues/298)); ci: submit to winget after each release unless the release PR is held; deps: update crates with security advisories; installer: quote the service path and always install under Program Files ([#277](https://github.com/dvalfrid/rigstats/issues/277)); lighting: find the keyboard on the ROG Omni receiver again ([#281](https://github.com/dvalfrid/rigstats/issues/281)); lighting: match the ROG Delta II's replies to the command they answer ([#283](https://github.com/dvalfrid/rigstats/issues/283)); sidecar: upgrade LibreHardwareMonitor to 0.9.7-pre749 for the NVML crash fix ([#256](https://github.com/dvalfrid/rigstats/issues/256)); tray: keep the profile submenu in step with added, renamed and deleted profiles ([#258](https://github.com/dvalfrid/rigstats/issues/258))</Program_Change_Info>
+		<Program_Change_Info>wallpaper: tray hover card and alerts keep updating in desktop wallpaper mode ([#300](https://github.com/dvalfrid/rigstats/issues/300))</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.45.0/RIGStats_1.45.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.45.1/RIGStats_1.45.1_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
