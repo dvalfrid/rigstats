@@ -126,10 +126,10 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
         lock (_lock)
         {
             Send(Frame(_reportId, _info.OutputReportLength, Set, LightingSetKey, data));
-            ReadReply(); // the set acknowledgement
+            ReadReply(Set, LightingSetKey); // the set acknowledgement
             // Read the lighting back: what the headset reports is what counts.
             Send(Frame(_reportId, _info.OutputReportLength, Get, LightingGetKey, []));
-            var back = ReadReply();
+            var back = ReadReply(Get, LightingGetKey);
             _lastLighting = back is null ? "" : Convert.ToHexString(back[..Math.Min(10, back.Length)]);
             if (!ReadBackMatches(back, _reportId, data))
                 throw new IOException($"{Name} did not take the lighting (read back {(_lastLighting.Length > 0 ? _lastLighting : "nothing")}).");
@@ -181,11 +181,29 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IDisposable
     private static byte[]? Request(IHidDevice device, HidDeviceInfo info, byte reportId, byte command, byte key, byte[] data)
     {
         device.Write(Frame(reportId, info.OutputReportLength, command, key, data));
-        return device.Read(ReplyTimeout);
+        return AwaitReply(device, reportId, command, key, ReplyTimeout);
     }
 
     // Caller holds _lock.
-    private byte[]? ReadReply() => (_device ?? throw new ObjectDisposedException(Name)).Read(ReplyTimeout);
+    private byte[]? ReadReply(byte command, byte key) =>
+        AwaitReply(_device ?? throw new ObjectDisposedException(Name), _reportId, command, key, ReplyTimeout);
+
+    /// The reply that repeats `command key`, skipping other input reports
+    /// the headset sends meanwhile (a battery report, a late acknowledgement
+    /// of the previous command) — taking those as the answer made good
+    /// writes look failed. Null when none came in time.
+    public static byte[]? AwaitReply(IHidDevice device, byte reportId, byte command, byte key, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        for (var left = timeout; left > TimeSpan.Zero; left = deadline - DateTime.UtcNow)
+        {
+            if (device.Read(left) is not { } reply)
+                return null;
+            if (reply.Length >= 3 && reply[0] == reportId && reply[1] == command && reply[2] == key)
+                return reply;
+        }
+        return null;
+    }
 
     // Caller holds _lock. Reopens once (the dongle re-enumerates when the
     // headset wakes or reconnects).
