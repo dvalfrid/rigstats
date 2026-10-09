@@ -11,7 +11,7 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || (matrix.language == 'rust' && 'windows-latest') || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       packages: read
@@ -26,8 +26,8 @@ jobs:
           build-mode: none
         - language: csharp
           build-mode: none
-        - language: rust
-          build-mode: none
+        # Rust is analysed in codeql-rust.yml — it takes ~20 min, so pull
+        # requests only run it when Rust code changed.
 
     steps:
     - name: Checkout repository
