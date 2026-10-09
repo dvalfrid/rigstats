@@ -2,13 +2,14 @@
 
 ## Overview
 
-This document defines the coding, formatting, and architectural standards for this project. All contributors and AI assistants must follow these rules when writing, modifying, or reviewing code. RIGStats is a Windows-only native Rust/egui desktop app — there is no web frontend — so these standards cover Rust exclusively, plus the egui-specific dialog design system for secondary windows.
+This document defines the coding, formatting, and architectural standards for this project. All contributors and AI assistants must follow these rules when writing, modifying, or reviewing code. RIGStats is a Windows-only native Rust/egui desktop app — there is no web frontend — so these standards cover Rust, the egui-specific dialog design system for secondary windows, and C# for the sensor/control service (`sensor-sidecar/`).
 
 ## Contents
 
 - [Tools and commands](#tools-and-commands)
 - [Rust](#rust)
 - [egui (secondary windows)](#egui-secondary-windows)
+- [C# (sensor-sidecar)](#c-sensor-sidecar)
 - [AI‑generated code](#aigenerated-code)
 
 ---
@@ -87,7 +88,7 @@ Keep domain logic in `rigstats-backend/` — `src-egui/` contains only UI and wi
 
 ## egui (secondary windows)
 
-All secondary windows must follow the dialog design system documented in [CLAUDE.md — egui dialog design system](CLAUDE.md#egui-dialog-design-system). Key rules:
+All secondary windows must follow the dialog design system documented in [egui dialog design system](src-egui/src/windows/CLAUDE.md). Key rules:
 
 - **Three-panel layout:** `TopBottomPanel::top` (hero) → `TopBottomPanel::bottom` (footer) → `CentralPanel` (content).
 - **Surface colour:** `Color32::from_gray(38)` for all three panels — uniform dialog background.
@@ -97,6 +98,45 @@ All secondary windows must follow the dialog design system documented in [CLAUDE
 - **Buttons:** always use `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` / `theme::dialog_btn_secondary_disabled`. Layout with `right_to_left` — primary action on the far right.
 - **Frame API:** use `egui::Frame::new()` — `Frame::none()` is deprecated in egui 0.34.
 - **Mutex pattern:** extract all view data from the guard into local variables before any `show()` call; `drop(guard)` before applying mutations.
+
+---
+
+## C# (sensor-sidecar)
+
+`sensor-sidecar/` is a .NET 10 Windows Service running as **LocalSystem** that writes to real hardware, so its rules are stricter than the app's. Hardware-write safety rules: [sensor-sidecar/Control/CLAUDE.md](sensor-sidecar/Control/CLAUDE.md).
+
+### C# tools
+
+| Purpose | Command |
+|---|---|
+| Build | `dotnet build sensor-sidecar/sensor-sidecar.csproj` |
+| Test (xUnit + NSubstitute) | `dotnet test sensor-sidecar.Tests/sensor-sidecar.Tests.csproj` (also part of `cargo xtask verify`) |
+
+Do not run `dotnet format` yet: `.editorconfig` has no `[*.cs]` section, so it would re-indent the 4-space C# code to the 2-space default.
+
+### C# style
+
+- File-scoped namespaces (`namespace SensorSidecar.Control;`), 4-space indent, primary constructors for services (`public sealed class ControlPipeWorker(ControlBroker broker, …)`), `sealed` by default.
+- `<Nullable>enable</Nullable>` in both projects. A `!` needs a reason a reader can see.
+- `///` comments in prose with Markdown backticks (not XML tags) — explain *why* and what the hardware does, as in the existing code.
+- No new NuGet packages without approval. `LibreHardwareMonitorLib` is pinned to the same version in both csproj files — bump both together.
+
+### C# error handling and logging
+
+- A `BackgroundService` must never let an exception escape `ExecuteAsync` — the default `StopHost` behaviour takes telemetry and fan control down with it. Catch, log, back off (see `ControlPipeWorker.AcceptLoopAsync`).
+- A broad `catch` needs a comment saying why (typically: best-effort release, one provider must not stop the rest).
+- Log through `SidecarLog.Log("[area] …")`: the message for an explained failure, `e.ToString()` (with stack) for an unexpected one.
+- P/Invoke: `SafeHandle`, `SetLastError = true`, and a comment on what the call is for. Keep FFI in its own class (`HidDevice`, `PawnIoModule`, `AdlxGpuPower`).
+
+### C# security
+
+- Pipe ACLs are part of the contract: `rigstats-sensors` is read-only for Users; `rigstats-control` is Interactive read/write and every connection goes through `PipeClientVerifier`. New control methods clamp their parameters and never take a file path.
+- Files under `%ProgramData%\se.codeby.rigstats` are trusted only after `DataDirectory.EnsureSecure`. Secrets are DPAPI-encrypted.
+
+### C# tests
+
+- Hardware sits behind an interface (`IPawnIoModule`, `ILightingDevice`, `FakeFanHeader`) so providers are tested without it. Never call real hardware from a test.
+- Real-hardware captures go in `sensor-sidecar.Tests/fixtures/` (auto-discovered by `FixtureTests`; see `/sensor-fixture`). Lighting models' `Verified` flags generate `docs/supported-devices.md`; `SupportedDevicesTests` fails on drift — regenerate with `RIGSTATS_UPDATE_SUPPORTED_DEVICES=1`.
 
 ---
 

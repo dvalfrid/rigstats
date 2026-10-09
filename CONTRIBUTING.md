@@ -71,10 +71,10 @@ display profiles and installer builds.
    Verify the exe timestamp changed before launching — if not, the process was
    still running and the build was skipped.
 
-> `cargo xtask verify` and `cargo xtask build` fail if the `rigstats-sensor`
-> Windows Service is running, because the service holds the exe open. Stop it
-> first (`sc.exe stop rigstats-sensor` in an elevated terminal), run the command,
-> then restart the service.
+> The installed `rigstats-sensor` service runs from `C:Program FilesRIGStats`
+> and does not block builds. While `toolsdev-sidecar.ps1` runs, the debug
+> sidecar exe in `sensor-sidecarinDebug` is locked: stop it with Ctrl+C
+> before building the sidecar.
 
 ## Development Workflow
 
@@ -160,7 +160,7 @@ Full rules are in [STANDARDS.md](STANDARDS.md). The essentials:
   not *what*.
 
 **egui secondary windows** must follow the dialog design system documented in
-[CLAUDE.md — egui dialog design system](CLAUDE.md#egui-dialog-design-system)
+[egui dialog design system](src-egui/src/windows/CLAUDE.md)
 (three-panel layout, `gray(38)` surface, `theme::dialog_btn_*` buttons, the Mutex
 extract-then-drop pattern).
 

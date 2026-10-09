@@ -136,7 +136,13 @@ rig-dashboard/
 ├── src-egui/               egui library + binaries (rigstats.exe, rigstats-wallpaper.exe)
 │   ├── src/
 │   │   ├── lib.rs          Shared library root — re-exports the modules below
-│   │   ├── main.rs         `rigstats` bin: eframe run_native, RigStatsApp, wallpaper supervisor
+│   │   ├── main.rs         `rigstats` bin: RigStatsApp, eframe::App (ui() = list of calls into app/), alerts, profile cycling
+│   │   ├── app/            `rigstats`-only parts of RigStatsApp split out of main.rs (#225):
+│   │   │                   state.rs (field groups), main_window.rs, floating.rs, overlay_window.rs,
+│   │   │                   dialogs.rs, settings_reload.rs, tray_actions.rs, startup.rs, background.rs
+│   │   ├── update_flow.rs  run_check_and_download — the one check → download → verify path (unit-tested)
+│   │   ├── wallpaper_supervisor.rs  Wallpaper-mode enter/leave + host spawn/backoff behind a Host trait (unit-tested)
+│   │   ├── authenticode.rs WinVerifyTrust + signer subject, for the updater
 │   │   ├── bin/wallpaper.rs  `rigstats-wallpaper` bin: WorkerW desktop-wallpaper host
 │   │   ├── dashboard.rs    Shared DashboardView render core + PanelThresholds
 │   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
@@ -180,8 +186,10 @@ rig-dashboard/
 │   ├── Program.cs          Entry point (Windows service host)
 │   ├── SensorWorker.cs     LHM Computer, multi-client telemetry pipe server, shared ≤1 Hz sample
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
+│   ├── Control/            Control Center service side: control pipe, ControlBroker, providers,
+│   │                       Lighting/, safety (see docs/control-architecture.md)
 │   └── sensor-sidecar.csproj
-├── sensor-sidecar.Tests/   xUnit tests: SensorReader.Extract rules + JSON contract
+├── sensor-sidecar.Tests/   xUnit tests: Extract rules, fixtures corpus, Control providers + protocol
 ├── docs/
 ├── website/
 ├── assets/                 Screenshot PNGs for website/README
