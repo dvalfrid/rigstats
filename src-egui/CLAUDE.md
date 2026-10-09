@@ -1,0 +1,54 @@
+# src-egui — egui library and binaries
+
+Module catalogue for `src-egui/src/`. The dialog design and lifecycle contract is in `src/windows/CLAUDE.md`. Full detail: `docs/architecture.md`.
+
+- **`lib.rs`** — library root; re-exports all modules so both binaries share the same panel renderer
+- **`main.rs`** — `RigStatsApp` (struct, `new`) and `eframe::App`: `ui()` is the frame loop as a list of calls into `app/`; plus `main()`, alerts, profile cycling, `update_wallpaper_mode` (window side of `wallpaper_supervisor`)
+- **`app/`** (binary-only) — parts of `RigStatsApp` split out of `main.rs` (#225): `state.rs` (field groups: `OverlayState`, `DialogStates`, `FloatingState`, `WindowFit`, `RecordingIndicator`, `FontAtlasRefresh`, `GpuRecovery`), `main_window.rs` (fixed dashboard / floating per frame), `floating.rs`, `overlay_window.rs`, `dialogs.rs` (`render_dialogs`, `finish_dialog_frame`), `settings_reload.rs`, `tray_actions.rs`, `startup.rs` (logging, initial window, wgpu/DComp options), `background.rs` (GPU detection, control task, tray thread, heartbeat, updater; tested tray-id mapping)
+- **`update_flow.rs`** — `run_check_and_download`: the one check → download → verify path for the Updates button and the background check (`Trigger`), unit-tested
+- **`wallpaper_supervisor.rs`** — `WallpaperSupervisor`: wallpaper-mode enter/leave and host spawn/backoff/teardown decisions behind a `Host` trait, unit-tested
+- Start-up smoke test for every window mode: `pwsh -File tools\smoke-app.ps1` (see `tools/README.md`) — run it after changes to start-up, window modes or `RigStatsApp`'s structure
+- **`dashboard.rs`** — `DashboardRuntime`: owned telemetry→renderer glue (sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView<'a>`: borrowed per-frame render state; `PanelThresholds` (warn/crit pairs)
+- **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
+- **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
+- **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types; `PollMode` (`Full`/`Light`/`Paused`, shared via `PollModeHandle`)
+- **`alerts.rs`** — `pending_alerts`: pure warn/crit threshold-breach detection; `notify_on_*`, cooldowns and sending live in `main.rs`
+- **`dcomp_burst.rs`** — `DcompRevealBurst`: hide-until-settled reveal policy for per-pixel-transparent (DComp) viewports — overlay and floating panels
+- **`dialog_reveal.rs`** — `DialogReveal`: every dialog is created hidden, revealed after it has rendered, and hidden for one frame before teardown (no white flash, #203). See "Dialog lifecycle" in `docs/architecture.md`
+- **`gpu_process.rs`** — per-process GPU engine utilisation via PDH `\GPU Engine(*)` counters + DXGI LUID→adapter map (`GpuEngineQuery`, `GpuProcessInfo`); vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; Win32 FFI is `#![allow(unsafe_code)]`. Real-hardware regression corpus: `src-egui/fixtures/gpu-engine/` (see its README); `dump_diagnostics()` feeds `gpu-engine.txt` into the diagnostics ZIP so a user export doubles as a fixture. For adding a fixture, run `/gpu-engine-fixture`
+- **`tray.rs`** — system tray icon, `TrayCmd` enum, `load_app_icon`, `panel_label`/`panel_initial_h`; `GpuMenu` ("GPU ▸" submenu, filled in by background adapter detection; `selected_gpu_index` ticks the same adapter the poll loop displays); "Toggle Desk Lamp" row, inserted only while a lamp is connected (`set_lamp_available`)
+- **`menu_icons.rs`** — procedurally-rasterized glyph icons for each tray context-menu row (no external image assets)
+- **`lock_ext.rs`** — `LockSafe::lock_safe()`: poison-tolerant `Mutex` locking used throughout `windows/*.rs`
+- **`gpu_guard.rs`** — `install_gpu_loss_guard`: wgpu device-error/device-lost callbacks that flag a fatal GPU error instead of panicking
+- **`overlay.rs`** — click-through game overlay (issue #183): `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract`/`color` fn) + `draw_overlay` renderer: `Settings.overlay_columns` columns (0 = one row), label left / value right in fixed-width columns with dividers. An independent add-on driven by `Settings.overlay_enabled` — not a `window_layer` value — so it coexists with whatever the main window is doing; `RigStatsApp::render_overlay_viewport` in `main.rs` owns its own always-on-top viewport, DComp reveal-burst (white-flash fix), and resize debounce. Click-through uses `egui::ViewportCommand::MousePassthrough`, no raw Win32 needed
+- **`hotkey.rs`** — global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on its own thread, wakes the main loop via a `Context` clone); fixed `Ctrl+Alt+O` shows/hides the overlay (`RigStatsApp::toggle_overlay_mode`), not remappable in v1
+- **`single_instance.rs`** — `ensure_single_instance`: named-mutex guard checked first thing in `main()`; if another instance is already running, focuses its window (`FindWindowW`/`SetForegroundWindow`) and this process exits instead of starting a second one
+- **`theme.rs`** — `AppTheme`, color helpers, `panel_frame()`, sparkline/bar helpers, `avail_color()`, dialog button API (`dialog_btn_primary`/`dialog_btn_secondary`)
+- **`ring.rs`** — ring gauge renderer; **`spark.rs`** — sparkline ring buffer; **`tempcolor.rs`** — `temp_color()` value→green/yellow/red
+- **`panels/`** — one file per panel; each `draw()` accepts `&AppTheme` and returns `egui::Rect`. `gpu_processes.rs` ("GPU APPS") renders `PollStats.gpu_processes` — top apps by GPU %, attributed to a physical adapter when >1 GPU is active
+- **`brand.rs`** — embedded brand logo PNGs; `rig_logo`, `cpu_logo`, `gpu_logo`
+- **`windows/`** — `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`, `control.rs` (Control Center: profiles with Duplicate/Rename/Delete/Reset, Power/Fans/CPU/GPU/Lighting tabs (Power picks the profile's Windows power plan; Lighting previews live — only the part that changed, so a lamp switched from the tray isn't touched — has quick-pick colour swatches, and a Desk lamp row — on/off, brightness, temperature — when a device has a lamp), fan curve editor; fan channels are mapped to fans only by measured identify results, never by name; CPU limit, Curve Optimizer and GPU changes go through `preview` with auto-revert; the CPU tab shows a red "Reverted after a restart" banner when the boot-crash guard tripped); secondary viewports via `show_viewport_immediate`. Dialog design + lifecycle contract: `src-egui/src/windows/CLAUDE.md` (new dialogs must use `DialogReveal` + `RigStatsApp::finish_dialog_frame`)
+- **`win32_wallpaper.rs`** — `find_wallpaper_workerw`, `attach`/`detach`, `process_alive`; used only by the wallpaper host
+- **`win32_behind.rs`** — `apply_behind`/`prepare_for_drag`/`keep_behind`: Always-Behind window layer support
+- **`win32_dark_mode.rs`** — sets dark mode for OS-drawn tray menu at startup; `apply_titlebar_theme` for dialog title bars
+- **`win_opacity.rs`** — raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores minimized first), `force_repaint`, `find_hwnd`
+- **`update_check.rs`** — `check()` fetches `latest.json`, `download`/`launch_installer`; `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The 10 s-then-6 h background check loop is spawned in `app/background.rs` (`start_updater`) and runs `update_flow`. An installer is only launched as a `VerifiedInstaller`: link inside this repo's releases, SHA-256 from the manifest, valid Authenticode signature from the app's own publisher, and the file held open without write/delete sharing until launch
+- **`authenticode.rs`** — `verified_signer_subject`: `WinVerifyTrust` + the signer's subject, for the updater. FFI, `#![allow(unsafe_code)]`
+
+### Dashboard profiles
+
+Profiles are named `portrait-<size>` or `landscape-<size>` with fixed pixel dimensions (e.g. `portrait-xl` = 450×1920; landscape is always the transpose). Name stored in settings; `profile_to_size`/`profile_is_landscape` in `geometry.rs` drive window sizing and all orientation branches.
+
+**Monitor selection:** `pick_window_rect_for_profile` picks the monitor whose resolution matches the profile (~10 %); falls back to primary. Position is carried over on profile switches when the window is still on a connected monitor.
+
+**Portrait:** one vertical stack; window height fits content per frame.  
+**Landscape:** adaptive grid (`render_landscape_grid`); column count maximises per-cell scale; window fixed to full profile size.  
+**Fullscreen mode** (`fullscreen_mode`): portrait-only, fills monitor height while keeping profile width; `fullscreen_align` = `"top"` or `"center"`.  
+**Pinned dashboard** (`dashboard_pinned`): locks fixed-mode window position per profile in `pinned_positions`.
+
+Valid profile names and panel keys: see `geometry.rs` and `settings.rs`.
+
+### Session recording
+
+Tray `Start/Stop Recording` (`TrayCmd::ToggleRecording` in `main.rs`) starts/ends a session via `logging.rs` and flips `Tray::set_recording` (menu label/icon + tray tooltip). While a session is active, `main.rs` blinks the tray icon (~600 ms, driven by the same idle-repaint tick) via `Tray::set_recording_blink`. The active session lives in the on-disk index, not in-process state, so both this app's and `rigstats-wallpaper`'s `poll_loop` — whichever is currently polling — append rows to it. `windows/history.rs` (opened via `TrayCmd::OpenHistory`) lists/pins/renames/deletes sessions and charts a selected one with `egui_plot`; it refreshes its session list on open, on any list action, and whenever recording starts/stops while it's open.
+
