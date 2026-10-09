@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::{DialogStates, GpuRecovery, OverlayState};
+use app::state::{DialogStates, FontAtlasRefresh, GpuRecovery, OverlayState};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
@@ -190,15 +190,8 @@ struct RigStatsApp {
     recording_blink_on: bool,
     /// When the blink last flipped.
     recording_blink_at: Instant,
-    /// Set while any viewport is minimized; see
-    /// `refresh_font_atlas_after_minimize`.
-    font_atlas_stale: bool,
-    /// Last forced font-atlas rebuild (see `refresh_font_atlas_after_minimize`).
-    font_atlas_rebuilt_at: Instant,
-    /// Flips on every forced rebuild so the `FontDefinitions` passed to
-    /// `set_fonts` always differs from whatever it last saw — `set_fonts`
-    /// silently no-ops otherwise (see `refresh_font_atlas_after_minimize`).
-    font_atlas_toggle: bool,
+    /// Font-atlas rebuilds after a minimize.
+    font_atlas: FontAtlasRefresh,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
     /// Relaunch after a lost GPU device.
@@ -352,9 +345,11 @@ impl RigStatsApp {
             recording_active: false,
             recording_active_shared,
             recording_blink_on: true,
-            font_atlas_stale: false,
-            font_atlas_rebuilt_at: Instant::now(),
-            font_atlas_toggle: false,
+            font_atlas: FontAtlasRefresh {
+                stale: false,
+                rebuilt_at: Instant::now(),
+                toggle: false,
+            },
             battery_present,
             recording_blink_at: Instant::now(),
             gpu_recovery: GpuRecovery {
@@ -984,7 +979,7 @@ impl RigStatsApp {
         let any_minimized =
             ctx.input(|i| i.raw.viewports.values().any(|v| v.minimized == Some(true)));
         if any_minimized {
-            self.font_atlas_stale = true;
+            self.font_atlas.stale = true;
             return;
         }
         // Also rebuild periodically: a Win+D minimizes the root window too,
@@ -994,10 +989,10 @@ impl RigStatsApp {
         // it's hidden for its reveal burst). Cheap: re-rasterizes the ~100
         // glyphs in use.
         const PERIODIC: Duration = Duration::from_secs(30);
-        if std::mem::take(&mut self.font_atlas_stale)
-            || self.font_atlas_rebuilt_at.elapsed() >= PERIODIC
+        if std::mem::take(&mut self.font_atlas.stale)
+            || self.font_atlas.rebuilt_at.elapsed() >= PERIODIC
         {
-            self.font_atlas_rebuilt_at = Instant::now();
+            self.font_atlas.rebuilt_at = Instant::now();
             // The app uses egui's default fonts (text sizes are set via the
             // style in `theme::apply_dashboard_fonts`, not here) — but
             // `set_fonts` only schedules a rebuild if the passed-in
@@ -1005,8 +1000,8 @@ impl RigStatsApp {
             // `Context::set_fonts`), so passing `default()` unchanged every
             // time is a silent no-op forever. Alternate a sub-pixel,
             // invisible nudge so it always compares unequal.
-            self.font_atlas_toggle = !self.font_atlas_toggle;
-            ctx.set_fonts(Self::font_definitions_for_rebuild(self.font_atlas_toggle));
+            self.font_atlas.toggle = !self.font_atlas.toggle;
+            ctx.set_fonts(Self::font_definitions_for_rebuild(self.font_atlas.toggle));
         }
     }
 

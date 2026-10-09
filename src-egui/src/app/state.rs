@@ -179,3 +179,16 @@ pub(crate) struct GpuRecovery {
     /// this one. `0` for a normal (non-relaunch) start.
     pub(crate) retry_count: u32,
 }
+
+/// Forced font-atlas rebuilds after a viewport was minimized (see
+/// `refresh_font_atlas_after_minimize`).
+pub(crate) struct FontAtlasRefresh {
+    /// Set while any viewport is minimized.
+    pub(crate) stale: bool,
+    /// Last forced font-atlas rebuild.
+    pub(crate) rebuilt_at: Instant,
+    /// Flips on every forced rebuild so the `FontDefinitions` passed to
+    /// `set_fonts` always differs from whatever it last saw — `set_fonts`
+    /// silently no-ops otherwise.
+    pub(crate) toggle: bool,
+}
