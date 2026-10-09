@@ -449,8 +449,8 @@ migration needed:
 #### `windows/` (`settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`)
 
 Secondary egui windows, each rendered via `show_viewport_immediate` from
-`RigStatsApp::ui` in `main.rs` while its `*_open` flag is set (tray commands set
-the flags). Every dialog is centred with `geometry::dialog_center(w, h)`, which
+`RigStatsApp::render_dialogs` in `app/dialogs.rs` (called from `ui()`) while
+its `*_open` flag is set (tray commands set the flags). Every dialog is centred with `geometry::dialog_center(w, h)`, which
 enumerates real monitors via `geometry::win_monitor::list()` (falls back to
 `[100.0, 100.0]` when none are found) rather than tracking a tray-click
 position. Settings is 560×600; About, Status, History and Updater have their own
