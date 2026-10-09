@@ -19,10 +19,7 @@ use rigstats_egui::hotkey;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::overlay::{content_inset, draw_overlay, estimate_window_size};
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
-use rigstats_egui::tray::{
-    build_tray, gpu_choice_from_menu_id, load_app_icon, panel_initial_h, panel_label,
-    profile_choice_from_menu_id, Tray, TrayCmd,
-};
+use rigstats_egui::tray::{build_tray, load_app_icon, panel_initial_h, panel_label, Tray, TrayCmd};
 use rigstats_egui::wallpaper_supervisor::{self, ChildHost, WallpaperSupervisor};
 use rigstats_egui::{alerts, panels, theme, update_flow, windows, PollStats};
 #[cfg(windows)]
@@ -33,7 +30,6 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
-use tray_icon::menu::MenuEvent;
 
 fn app_data_dir() -> PathBuf {
     let appdata = std::env::var("APPDATA").unwrap_or_else(|_| ".".to_string());
@@ -3041,25 +3037,8 @@ fn main() {
             // A fresh launch never has an active recording session — any session left
             // open by an unclean shutdown was already closed by reconcile_sessions_on_startup.
             let overlay_locked_init = current_settings_shared.lock_safe().overlay_click_through;
-            // GPU adapter list for the tray "GPU" submenu and Settings. Detected
-            // in the background — it can take a second or more (WMI, or its
-            // PowerShell fallback) and must never delay startup; `GpuMenu::poll`
-            // fills the submenu in when it arrives. Also off this thread
-            // because WMI initialises COM as MTA, which fails on this
-            // (winit/OLE STA) thread.
-            let (gpu_names_tx, gpu_names_rx) = mpsc::channel::<Vec<String>>();
-            {
-                let dir = dir.clone();
-                let ctx = cc.egui_ctx.clone();
-                std::thread::spawn(move || {
-                    let names = hardware::detect_gpu_names();
-                    debug::log_debug(&dir, &format!("hardware: gpu_names={names:?}"));
-                    let _ = gpu_names_tx.send(names);
-                    ctx.request_repaint();
-                });
-            }
+            let gpu_names_rx = app::background::spawn_gpu_name_detection(&dir, &cc.egui_ctx);
             let tray = build_tray(false, overlay_locked_init, gpu_names_rx);
-            let (tray_tx, tray_rx) = mpsc::channel::<TrayCmd>();
 
             // Global hotkey (fixed Ctrl+Alt+O in v1) to toggle overlay
             // click-through without leaving the game. The listener thread
@@ -3069,183 +3048,16 @@ fn main() {
             #[cfg(windows)]
             let _ = rigstats_egui::hotkey::spawn(dir.clone(), hotkey_tx, cc.egui_ctx.clone());
 
-            // Control Center (#187): control_task owns the duplex
-            // \\.\pipe\rigstats-control connection on its own tokio task,
-            // the same way poll_loop owns the telemetry pipe. Commands go in
-            // over an async-native channel (the task awaits them); events
-            // come back over a std channel the UI drains with try_recv(),
-            // mirroring PollStats.
-            let (control_cmd_tx, control_cmd_rx) =
-                tokio::sync::mpsc::channel::<control::ControlCmd>(8);
-            let (control_event_tx, control_rx) = mpsc::channel::<control::ControlEvent>();
-            // Restarted after a panic (#219), on the same command channel.
-            let control_cmd_rx = Arc::new(tokio::sync::Mutex::new(control_cmd_rx));
-            let control_dir = dir.clone();
-            runtime.spawn(debug::supervise(
-                dir.clone(),
-                "Control Center connection",
-                move || {
-                    control::control_task(
-                        control_cmd_rx.clone(),
-                        control_event_tx.clone(),
-                        control_dir.clone(),
-                        env!("CARGO_PKG_VERSION").to_string(),
-                    )
-                },
-            ));
+            let (control_cmd_tx, control_rx) = app::background::spawn_control_task(&runtime, &dir);
 
-            // Spawn a thread that polls tray events at 50 ms intervals and wakes the
-            // egui event loop via request_repaint().  Quit is handled here directly
-            // with process::exit so it is never delayed by a missed repaint.
-            let ctx = cc.egui_ctx.clone();
-
-            // Windows' `TrackPopupMenu` (shown on tray right-click) runs its own
-            // nested modal message loop on *this* thread — winit's own event loop,
-            // and therefore `RigStatsApp::ui()`, doesn't run at all while a context
-            // menu is open. Dismissing the menu without picking an item (Escape /
-            // click-away) never produces a `MenuEvent`, so nothing else reacts
-            // afterward and whatever was mid-animation (the recording blink) could
-            // stay frozen (#177).
-            //
-            // Tried and empirically confirmed *not* to fix it (logged evidence:
-            // dozens of `ctx.request_repaint()` calls, made both from a background
-            // polling thread and synchronously via `TrayIconEvent::set_event_handler`
-            // right before the nested loop starts, produced zero subsequent frames):
-            // `egui::Context::request_repaint()`/`request_repaint_of()`. This is a
-            // confirmed upstream winit bug, not something specific to this app:
-            // https://github.com/rust-windowing/winit/issues/4608 — "redraw_request
-            // is ignored while the system popup menu is shown", open as of
-            // 2026-09-24, no fix yet. Weekly upstream check: Claude Code routine
-            // `trig_01G4L76vcP4am32VnF36tBUZ` (Mondays 08:00 UTC), comments on
-            // #177 if winit/eframe ships a fix — check that thread before
-            // re-investigating whether this workaround can be removed.
-            //
-            // This isn't actually new to this codebase either way —
-            // `win_opacity::force_repaint`'s doc comment already notes
-            // `request_repaint_of` "doesn't work reliably ... on Windows" for a
-            // different deferred-viewport scenario, with the same fix used here:
-            // skip egui's repaint-scheduling layer entirely and post a real
-            // `WM_PAINT` straight to the window via `InvalidateRect`, which winit
-            // turns into a `RedrawRequested` no matter what state its own repaint
-            // bookkeeping thinks it's in.
-            //
-            // `tray_icon::TrayIcon` is `Rc<RefCell<..>>`-backed internally — not
-            // `Send` — so this can't live on a background thread; `TrayIconEvent`'s
-            // `set_event_handler` (vs. the polled `receiver()`) runs synchronously
-            // on this thread for the right-click that *opens* the menu, before
-            // `TrackPopupMenu` blocks it — the earliest possible point to act.
-            tray_icon::TrayIconEvent::set_event_handler(Some(|_event| {
-                #[cfg(windows)]
-                win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
-            }));
-
-            let quit_id = tray.quit_id.clone();
-            let settings_id = tray.settings_id.clone();
-            let about_id = tray.about_id.clone();
-            let status_id = tray.status_id.clone();
-            let history_id = tray.history_id.clone();
-            let control_id = tray.control_id.clone();
-            let updater_id = tray.updater_id.clone();
-            let docs_id = tray.docs_id.clone();
-            let lamp_id = tray.lamp_id.clone();
-            let floating_id = tray.floating_id.clone();
-            let recording_id = tray.recording_id.clone();
-            let overlay_id = tray.overlay_id.clone();
-            let overlay_lock_id = tray.overlay_lock_id.clone();
-            let dir_tray = dir.clone();
-            // Mirrors `RigStatsApp.recording_active`; see the field's doc comment
-            // and the force_repaint call below for why (#177).
+            // Mirrors `RigStatsApp.recording_active` for the tray thread (#177).
             let recording_active_shared = Arc::new(AtomicBool::new(false));
-            let recording_active_tray = recording_active_shared.clone();
-            std::thread::spawn(move || loop {
-                // Guard each iteration: a panic in a tray/Win32 call must not
-                // silently kill this thread, or tray clicks would stop working
-                // for the rest of the session. Recover and log instead.
-                let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    let mut repaint = false;
-                    if let Ok(ev) = MenuEvent::receiver().try_recv() {
-                        // Use the foreground rights that come with the tray-menu interaction.
-                        // We immediately bring the (off-screen) parent window to the foreground
-                        // so that our process owns foreground when the dialog is created a few
-                        // milliseconds later.  Without this the dialog window would be created
-                        // as a background window and SetForegroundWindow would be refused.
-                        #[cfg(windows)]
-                        #[allow(unsafe_code)]
-                        unsafe {
-                            winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
-                            let parent_hwnd = win_opacity::find_hwnd("RigStats");
-                            if parent_hwnd != 0 {
-                                winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
-                            }
-                        }
-
-                        let cmd = if ev.id == quit_id {
-                            debug::append_debug_log(&dir_tray, "shutdown: clean (tray quit)");
-                            std::process::exit(0);
-                        } else if ev.id == floating_id {
-                            Some(TrayCmd::ToggleFloating)
-                        } else if ev.id == recording_id {
-                            Some(TrayCmd::ToggleRecording)
-                        } else if ev.id == overlay_id {
-                            Some(TrayCmd::ToggleOverlay)
-                        } else if ev.id == overlay_lock_id {
-                            Some(TrayCmd::ToggleOverlayLock)
-                        } else if ev.id == settings_id {
-                            Some(TrayCmd::OpenSettings)
-                        } else if ev.id == about_id {
-                            Some(TrayCmd::OpenAbout)
-                        } else if ev.id == status_id {
-                            Some(TrayCmd::OpenStatus)
-                        } else if ev.id == history_id {
-                            Some(TrayCmd::OpenHistory)
-                        } else if ev.id == control_id {
-                            Some(TrayCmd::OpenControlCenter)
-                        } else if ev.id == updater_id {
-                            Some(TrayCmd::OpenUpdater)
-                        } else if ev.id == docs_id {
-                            Some(TrayCmd::OpenDocs)
-                        } else if ev.id == lamp_id {
-                            Some(TrayCmd::ToggleLamp)
-                        } else if let Some(pref) = gpu_choice_from_menu_id(&ev.id) {
-                            Some(TrayCmd::SelectGpu(pref))
-                        } else {
-                            profile_choice_from_menu_id(&ev.id).map(TrayCmd::SelectProfile)
-                        };
-                        if let Some(c) = cmd {
-                            let _ = tray_tx.send(c);
-                            repaint = true;
-                        }
-                    }
-                    // tray-icon click/hover events are handled synchronously via
-                    // `TrayIconEvent::set_event_handler` above (registering a
-                    // handler stops them from reaching this channel at all — see
-                    // that comment for why), so there is nothing left to drain
-                    // here.
-                    if repaint {
-                        ctx.request_repaint();
-                    }
-                    // While recording, keep posting a real repaint on every tick
-                    // (see `recording_active_shared`'s doc comment, #177) rather
-                    // than only reacting to tray events — a context menu can stay
-                    // open for an arbitrary, unbounded time, and neither egui's
-                    // repaint request nor a single pre-emptive force_repaint()
-                    // reliably survives that. This thread runs independently of
-                    // whatever nested Win32 loop may be blocking the main thread,
-                    // so the very next tick after the menu closes — whenever that
-                    // is — lands a real WM_PAINT no matter how it closed.
-                    if recording_active_tray.load(Ordering::Relaxed) {
-                        #[cfg(windows)]
-                        win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
-                    }
-                }));
-                if outcome.is_err() {
-                    debug::log_warn(
-                        &dir_tray,
-                        "tray: event handler panicked — thread recovered, continuing",
-                    );
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            });
+            let tray_rx = app::background::spawn_tray_event_thread(
+                &tray,
+                &dir,
+                &cc.egui_ctx,
+                recording_active_shared.clone(),
+            );
 
             let current_settings = current_settings_shared;
             let settings_reload = Arc::new(AtomicBool::new(false));
@@ -3271,77 +3083,11 @@ fn main() {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
 
-            // Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
-            // active.  With `show_viewport_immediate`, all panels are rendered
-            // synchronously as part of the parent frame, so one `request_repaint()`
-            // per second is enough to drive all panel updates.
             let fm_arc_hb = Arc::new(AtomicBool::new(current_settings.lock_safe().floating_mode));
-            let ctx_hb = cc.egui_ctx.clone();
-            let fm_arc_hb2 = fm_arc_hb.clone();
-            std::thread::spawn(move || loop {
-                std::thread::sleep(Duration::from_millis(950));
-                if fm_arc_hb2.load(Ordering::Relaxed) {
-                    ctx_hb.request_repaint();
-                }
-            });
+            app::background::spawn_floating_heartbeat(&cc.egui_ctx, fm_arc_hb.clone());
 
-            // Background auto-update check: fires 10 s after startup, then every 6 h.
-            // When a newer version is found and downloaded, opens the updater window.
-            let updater_win_bg: Arc<Mutex<windows::updater::UpdaterState>> =
-                Arc::new(Mutex::new(windows::updater::UpdaterState::default()));
-            let updater_open_bg = Arc::new(AtomicBool::new(false));
-            let updater_focus_bg = Arc::new(AtomicBool::new(false));
-
-            // Check for --just-updated=VERSION argument passed by the NSIS /autoupdate installer.
-            if let Some(version) = std::env::args()
-                .find(|a| a.starts_with("--just-updated="))
-                .and_then(|a| a.split_once('=').map(|x| x.1.to_owned()))
-            {
-                if !version.is_empty() {
-                    updater_win_bg.lock_safe().status =
-                        windows::updater::UpdateStatus::JustUpdated { version };
-                    updater_open_bg.store(true, Ordering::Relaxed);
-                    updater_focus_bg.store(true, Ordering::Relaxed);
-                }
-            }
-
-            {
-                let win = updater_win_bg.clone();
-                let open = updater_open_bg.clone();
-                let focus = updater_focus_bg.clone();
-                let ctx = cc.egui_ctx.clone();
-                let dir_upd = dir.clone();
-                runtime.spawn(async move {
-                    tokio::time::sleep(Duration::from_secs(10)).await;
-                    loop {
-                        let (win2, ctx2) = (win.clone(), ctx.clone());
-                        let outcome = tokio::task::spawn_blocking(move || {
-                            update_flow::run_check_and_download(
-                                &win2,
-                                &ctx2,
-                                update_flow::Trigger::Background,
-                            )
-                        })
-                        .await
-                        .unwrap_or_else(|e| update_flow::Outcome::Failed(e.to_string()));
-                        match outcome {
-                            update_flow::Outcome::Ready => {
-                                open.store(true, Ordering::Relaxed);
-                                focus.store(true, Ordering::Relaxed);
-                                ctx.request_repaint();
-                            }
-                            update_flow::Outcome::Failed(e) => {
-                                debug::log_warn(
-                                    &dir_upd,
-                                    &format!("update-check: background check failed — {e}"),
-                                );
-                            }
-                            update_flow::Outcome::UpToDate | update_flow::Outcome::Busy => {}
-                        }
-                        tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
-                    }
-                });
-            }
+            let (updater_win_bg, updater_open_bg, updater_focus_bg) =
+                app::background::start_updater(&runtime, &dir, &cc.egui_ctx);
 
             Ok(Box::new(RigStatsApp::new(
                 dashboard_runtime,

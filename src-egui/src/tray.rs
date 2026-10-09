@@ -13,6 +13,7 @@ use tray_icon::{
 };
 
 /// Commands sent from the tray-polling thread to the UI thread.
+#[derive(Debug, PartialEq, Eq)]
 pub enum TrayCmd {
     OpenSettings,
     OpenAbout,
