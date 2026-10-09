@@ -676,7 +676,12 @@ pub async fn poll_loop(
             lhm_connected,
         };
 
-        let _ = tx.send(stats.clone());
+        // Never block: the channel holds 4 samples and only empties when the
+        // UI renders a frame. `send` used to wait here once it was full — a
+        // main app parked in wallpaper mode stopped polling after 4 s and the
+        // service dropped it for not reading (#299). A skipped sample is
+        // replaced by the next one a second later.
+        let _ = tx.try_send(stats.clone());
         if !first_tick_logged {
             debug::append_debug_log(
                 &dir,

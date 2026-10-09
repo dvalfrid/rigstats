@@ -419,6 +419,12 @@ impl RigStatsApp {
         // reads when it starts.
         self.apply_wallpaper_effects(ctx, effects);
         self.poll_mode.set(self.wallpaper.poll_mode());
+        if self.wallpaper.is_active() {
+            // The main window is parked off-screen and nothing else asks for
+            // frames, but each frame drains the poll channel and checks the
+            // alerts — so keep one a second, like floating mode's heartbeat.
+            ctx.request_repaint_after(Duration::from_secs(1));
+        }
         let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
         self.apply_wallpaper_effects(ctx, effects);
     }
