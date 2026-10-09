@@ -1,12 +1,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod app;
 
-use app::state::{DialogStates, OverlayState};
+use app::state::{
+    DialogStates, FloatingState, FontAtlasRefresh, GpuRecovery, OverlayState, RecordingIndicator,
+    WindowFit,
+};
 use eframe::egui;
 use rigstats_backend::control;
 use rigstats_backend::{debug, hardware, logging, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
-use rigstats_egui::dcomp_burst::DcompRevealBurst;
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
 use rigstats_egui::geometry::{
@@ -80,88 +82,14 @@ struct RigStatsApp {
     // very old GPUs): falls back to the pre-#101 opaque swap chain +
     // WS_EX_LAYERED opacity instead of crashing at startup.
     dcomp_available: bool,
-    // ── Fullscreen (fill-screen) mode ──────────────────────────────────────
-    /// When true (and not floating), the fixed window fills the whole monitor
-    /// instead of fitting panel content; the dashboard background fills the rest.
-    fullscreen_mode: bool,
-    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
-    fullscreen_align: String,
-    /// Measured panel-stack content height (excluding drag handle + centering pad),
-    /// cached from the previous frame so fullscreen centering is exact. `None`
-    /// until the first fullscreen frame; `compute_window_height` is the fallback.
-    fullscreen_content_h: Option<f32>,
-    // ── Pinned (non-floating) dashboard ────────────────────────────────────
-    /// When true, the fixed-mode dashboard window is pinned: it cannot be dragged
-    /// and its position is restored from `Settings::pinned_positions` across
-    /// restarts instead of auto-targeting the matching monitor.
-    dashboard_pinned: bool,
-    /// Last outer position observed for the fixed-mode window this session, used
-    /// to capture the spot to pin when the padlock is clicked. `None` until the
-    /// first fixed-mode frame reports a position.
-    last_fixed_pos: Option<[f32; 2]>,
-    // ── Floating mode ──────────────────────────────────────────────────────
-    floating_mode: bool,
-    floating_panels_locked: bool,
-    floating_panel_scale: f32,
-    /// Last-known screen positions for each panel key, keyed by panel key.
-    /// Loaded from settings at startup; updated on drag; persisted on change.
-    floating_positions: Arc<Mutex<HashMap<String, [f32; 2]>>>,
-    /// Set true inside a floating panel viewport when its position changes.
-    /// Consumed in `ui()` to debounce settings writes to once per tick.
-    positions_dirty: Arc<AtomicBool>,
-    /// Receives a new preferred-GPU name when the user clicks a GPU dot
-    /// inside the floating GPU panel viewport.
-    float_new_pref_gpu: Arc<Mutex<Option<String>>>,
-    /// Live lock state toggled from the padlock icon in the drag handle.
-    /// Propagated back to `floating_panels_locked` and persisted in `update()`.
-    floating_lock_arc: Arc<AtomicBool>,
-    /// Guards the one-time initial hide of the main window when the app
-    /// starts with floating_mode already enabled.
-    initial_floating_applied: bool,
-    /// Tracks which floating panel viewports have already had their initial
-    /// position applied.  Once a panel is in this set, `with_position` is
-    /// NOT included in the ViewportBuilder — the OS owns the position from
-    /// that point on, which prevents the builder diff from continuously
-    /// sending SetOuterPosition and causing sub-pixel blur.
-    /// Cleared whenever floating mode transitions from off → on so positions
-    /// are restored from the saved layout on next activation.
-    panels_positioned: HashSet<String>,
-    /// Per-panel "always behind" enforcement state (key → last enforce time +
-    /// previous primary-button state). Used to throttle the Win32 Z-order
-    /// re-push so floating "behind" panels don't re-assert every frame — which
-    /// would create a SetWindowPos → repaint → SetWindowPos spin loop and burn
-    /// CPU. Enforcement happens on creation, in a short burst after a drag, and
-    /// then ~1/s as an idle safety net.
-    behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
-    /// Per-panel DComp reveal-burst state for floating mode's per-pixel
-    /// transparency (issue #169) — see `dcomp_burst::DcompRevealBurst`. Only
-    /// a panel's creation frame triggers a burst; a later content-driven
-    /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
-    floating_dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
-    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
-    floating_mode_arc: Arc<AtomicBool>,
+    /// The fixed-mode window: fullscreen, pinned position, fit to content.
+    window: WindowFit,
+    /// Floating mode's panels and their windows.
+    floating: FloatingState,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
     os_dark_mode: bool,
-    /// When > 0, re-applies WindowLevel + opacity for this many more frames.
-    /// Used after floating→non-floating transitions where winit may reset the
-    /// window level when the window is moved back on-screen.
-    reapply_window_props_frames: u8,
-    /// Last [w, h] sent via InnerSize — avoids spurious resize events when
-    /// only opacity or theme changed (which would cause a visible jump).
-    last_applied_window_size: Option<[f32; 2]>,
-    /// Last content height fitted in fixed mode — avoids dispatching an
-    /// InnerSize viewport command every frame when the height is unchanged
-    /// (which during interaction runs at display refresh rate, causing
-    /// needless WM_SIZE churn and sub-pixel jitter).
-    last_fitted_height: Option<f32>,
-    /// Counts down over the first docked frames after launch. Early `InnerSize`
-    /// viewport commands can be dropped before the window is fully realized,
-    /// which leaves the bottom panel clipped until the user toggles floating
-    /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
-    /// drive fast repaints) so the true content height reliably sticks.
-    startup_fit_frames: u8,
     // ── Wallpaper (WorkerW) mode ───────────────────────────────────────────
     /// Shared with `poll_loop`: `Paused`/`Light` while in wallpaper mode, where
     /// the `rigstats-wallpaper` host is the dashboard's poller (see
@@ -173,51 +101,14 @@ struct RigStatsApp {
     wallpaper_host: ChildHost,
     /// The game overlay's window state (#183).
     overlay: OverlayState,
-    // ── Tray recording indicator ───────────────────────────────────────────
-    /// True while a session is being recorded — drives the blinking tray dot.
-    recording_active: bool,
-    /// Mirrors `recording_active` for the tray-polling background thread (see
-    /// its use of `win_opacity::force_repaint` in `main()`, #177): while a
-    /// context menu is open, winit's own event loop — and so `ui()` — doesn't
-    /// run at all, and neither `request_repaint()`/`request_repaint_of()` nor a
-    /// single pre-emptive `force_repaint()` reliably revives it once the menu
-    /// closes (both empirically confirmed unreliable here). The poller instead
-    /// keeps posting `force_repaint()` on every tick for as long as this is
-    /// true, so the very next tick after the menu closes — whenever that is —
-    /// lands a real repaint no matter how it closed.
-    recording_active_shared: Arc<AtomicBool>,
-    /// Current phase of the blink (dot shown vs. hidden).
-    recording_blink_on: bool,
-    /// When the blink last flipped.
-    recording_blink_at: Instant,
-    /// Set while any viewport is minimized; see
-    /// `refresh_font_atlas_after_minimize`.
-    font_atlas_stale: bool,
-    /// Last forced font-atlas rebuild (see `refresh_font_atlas_after_minimize`).
-    font_atlas_rebuilt_at: Instant,
-    /// Flips on every forced rebuild so the `FontDefinitions` passed to
-    /// `set_fonts` always differs from whatever it last saw — `set_fonts`
-    /// silently no-ops otherwise (see `refresh_font_atlas_after_minimize`).
-    font_atlas_toggle: bool,
+    /// The tray's recording indicator.
+    recording: RecordingIndicator,
+    /// Font-atlas rebuilds after a minimize.
+    font_atlas: FontAtlasRefresh,
     /// Shared with `SettingsWindow`; set by a startup background thread.
     battery_present: Arc<AtomicBool>,
-    // ── GPU device loss (e.g. a hybrid iGPU/dGPU switch) ────────────────────
-    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
-    /// reports a fatal device error. Checked once per frame in `update()`.
-    gpu_lost: Arc<AtomicBool>,
-    /// True once the `gpu_lost` relaunch-and-close sequence has been kicked
-    /// off, so it only runs once even though `update()` keeps being called
-    /// for the few frames it takes `ViewportCommand::Close` to take effect.
-    gpu_relaunch_triggered: bool,
-    /// When this app instance was created. Used to tell a GPU error that
-    /// strikes again within seconds of a relaunch (still-unsettled GPU
-    /// state — back off) from one after a long healthy run (a fresh,
-    /// unrelated hiccup — always retry).
-    gpu_started_at: Instant,
-    /// Consecutive fast GPU-relaunch failures, carried in from the
-    /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
-    /// this one. `0` for a normal (non-relaunch) start.
-    gpu_retry_count: u32,
+    /// Relaunch after a lost GPU device.
+    gpu_recovery: GpuRecovery,
     // ── Threshold alerts ─────────────────────────────────────────────────────
     /// Last time a notification fired for a given `"<component>_<level>"` key,
     /// e.g. `"cpu_warn"` — enforces `Settings.alert_cooldown_secs` per alert.
@@ -311,23 +202,21 @@ impl RigStatsApp {
             dir,
             hwnd: 0,
             dcomp_available,
-            fullscreen_mode: init_settings.fullscreen_mode,
-            fullscreen_align: init_settings.fullscreen_align.clone(),
-            fullscreen_content_h: None,
-            dashboard_pinned: init_settings.dashboard_pinned,
-            last_fixed_pos: None,
-            floating_mode: init_settings.floating_mode,
-            floating_panels_locked: init_settings.floating_panels_locked,
-            floating_panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
-            floating_positions: Arc::new(Mutex::new(init_positions)),
-            positions_dirty: Arc::new(AtomicBool::new(false)),
-            float_new_pref_gpu: Arc::new(Mutex::new(None)),
-            floating_lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
-            initial_floating_applied: false,
-            panels_positioned: HashSet::new(),
-            behind_enforce: RefCell::new(HashMap::new()),
-            floating_dcomp: RefCell::new(HashMap::new()),
-            floating_mode_arc,
+            window: WindowFit::new(&init_settings),
+            floating: FloatingState {
+                mode: init_settings.floating_mode,
+                panels_locked: init_settings.floating_panels_locked,
+                panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
+                positions: Arc::new(Mutex::new(init_positions)),
+                positions_dirty: Arc::new(AtomicBool::new(false)),
+                new_pref_gpu: Arc::new(Mutex::new(None)),
+                lock_arc: Arc::new(AtomicBool::new(init_settings.floating_panels_locked)),
+                initial_applied: false,
+                panels_positioned: HashSet::new(),
+                behind_enforce: RefCell::new(HashMap::new()),
+                dcomp: RefCell::new(HashMap::new()),
+                mode_arc: floating_mode_arc,
+            },
             os_dark_mode: {
                 #[cfg(windows)]
                 {
@@ -352,30 +241,28 @@ impl RigStatsApp {
                     theme::DialogColors::dark()
                 }
             },
-            // Apply WindowLevel + opacity for the first few frames at startup when in
-            // non-floating mode: the viewport builder only handles "on_top", so "behind"
-            // must be sent via viewport command, and opacity needs a valid HWND which
-            // may not be available until after the first paint.
-            reapply_window_props_frames: if !init_settings.floating_mode { 4 } else { 0 },
-            last_applied_window_size: None,
-            last_fitted_height: None,
-            startup_fit_frames: 12,
             poll_mode,
             wallpaper: WallpaperSupervisor::default(),
             wallpaper_host: ChildHost::default(),
             overlay: OverlayState::new(&init_settings),
-            recording_active: false,
-            recording_active_shared,
-            recording_blink_on: true,
-            font_atlas_stale: false,
-            font_atlas_rebuilt_at: Instant::now(),
-            font_atlas_toggle: false,
+            recording: RecordingIndicator {
+                active: false,
+                active_shared: recording_active_shared,
+                blink_on: true,
+                blink_at: Instant::now(),
+            },
+            font_atlas: FontAtlasRefresh {
+                stale: false,
+                rebuilt_at: Instant::now(),
+                toggle: false,
+            },
             battery_present,
-            recording_blink_at: Instant::now(),
-            gpu_lost,
-            gpu_relaunch_triggered: false,
-            gpu_started_at,
-            gpu_retry_count,
+            gpu_recovery: GpuRecovery {
+                lost: gpu_lost,
+                relaunch_triggered: false,
+                started_at: gpu_started_at,
+                retry_count: gpu_retry_count,
+            },
             alert_cooldowns: HashMap::new(),
         }
     }
@@ -404,8 +291,8 @@ impl RigStatsApp {
             px, py,
         )));
         ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-        self.last_fitted_height = None;
-        self.reapply_window_props_frames = 4;
+        self.window.last_fitted_height = None;
+        self.window.reapply_window_props_frames = 4;
     }
 
     /// Fired once, from `ui()`, when `gpu_guard`'s device-error callbacks
@@ -423,9 +310,9 @@ impl RigStatsApp {
         // within seconds of starting — a GPU error after a long healthy run
         // (the common case: hybrid-GPU switches happen at most a few times a
         // day) always gets a full, unthrottled retry.
-        let fast_fail = self.gpu_started_at.elapsed() < Duration::from_secs(10);
+        let fast_fail = self.gpu_recovery.started_at.elapsed() < Duration::from_secs(10);
         let attempt = if fast_fail {
-            self.gpu_retry_count + 1
+            self.gpu_recovery.retry_count + 1
         } else {
             1
         };
@@ -517,7 +404,7 @@ impl RigStatsApp {
     /// mode is on when `window_layer == "wallpaper"` and floating mode is off
     /// (floating wins if both are set).
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
-        let want = self.window_layer == "wallpaper" && !self.floating_mode;
+        let want = self.window_layer == "wallpaper" && !self.floating.mode;
         let now = Instant::now();
         let effects = self.wallpaper.transition(
             want,
@@ -566,7 +453,7 @@ impl RigStatsApp {
                     // monitor (or off every monitor). Only trust a
                     // `last_fixed_pos` on a connected monitor; otherwise keep
                     // the saved `wallpaper_position`.
-                    if let Some([x, y]) = self.last_fixed_pos {
+                    if let Some([x, y]) = self.window.last_fixed_pos {
                         if is_position_on_screen([x, y]) {
                             let mut s = self.current_settings.lock_safe();
                             s.wallpaper_position = Some([x.round() as i32, y.round() as i32]);
@@ -997,7 +884,7 @@ impl RigStatsApp {
         let any_minimized =
             ctx.input(|i| i.raw.viewports.values().any(|v| v.minimized == Some(true)));
         if any_minimized {
-            self.font_atlas_stale = true;
+            self.font_atlas.stale = true;
             return;
         }
         // Also rebuild periodically: a Win+D minimizes the root window too,
@@ -1007,10 +894,10 @@ impl RigStatsApp {
         // it's hidden for its reveal burst). Cheap: re-rasterizes the ~100
         // glyphs in use.
         const PERIODIC: Duration = Duration::from_secs(30);
-        if std::mem::take(&mut self.font_atlas_stale)
-            || self.font_atlas_rebuilt_at.elapsed() >= PERIODIC
+        if std::mem::take(&mut self.font_atlas.stale)
+            || self.font_atlas.rebuilt_at.elapsed() >= PERIODIC
         {
-            self.font_atlas_rebuilt_at = Instant::now();
+            self.font_atlas.rebuilt_at = Instant::now();
             // The app uses egui's default fonts (text sizes are set via the
             // style in `theme::apply_dashboard_fonts`, not here) — but
             // `set_fonts` only schedules a rebuild if the passed-in
@@ -1018,8 +905,8 @@ impl RigStatsApp {
             // `Context::set_fonts`), so passing `default()` unchanged every
             // time is a silent no-op forever. Alternate a sub-pixel,
             // invisible nudge so it always compares unequal.
-            self.font_atlas_toggle = !self.font_atlas_toggle;
-            ctx.set_fonts(Self::font_definitions_for_rebuild(self.font_atlas_toggle));
+            self.font_atlas.toggle = !self.font_atlas.toggle;
+            ctx.set_fonts(Self::font_definitions_for_rebuild(self.font_atlas.toggle));
         }
     }
 
@@ -1141,9 +1028,9 @@ impl eframe::App for RigStatsApp {
         // A fatal wgpu device error (see `gpu_guard`) was flagged from off the
         // UI thread. Don't touch the (likely dead) device any further this
         // frame — kick off the relaunch-and-close sequence once and bail.
-        if self.gpu_lost.load(Ordering::Relaxed) {
-            if !self.gpu_relaunch_triggered {
-                self.gpu_relaunch_triggered = true;
+        if self.gpu_recovery.lost.load(Ordering::Relaxed) {
+            if !self.gpu_recovery.relaunch_triggered {
+                self.gpu_recovery.relaunch_triggered = true;
                 self.trigger_gpu_relaunch(ui.ctx());
             }
             return;
@@ -1195,8 +1082,8 @@ impl eframe::App for RigStatsApp {
 
         // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.
-        if self.reapply_window_props_frames > 0 {
-            self.reapply_window_props_frames -= 1;
+        if self.window.reapply_window_props_frames > 0 {
+            self.window.reapply_window_props_frames -= 1;
             ui.ctx()
                 .send_viewport_cmd(egui::ViewportCommand::WindowLevel(
                     Self::window_level_from_layer(&self.window_layer),
@@ -1209,7 +1096,7 @@ impl eframe::App for RigStatsApp {
                 // For "behind" mode, also enforce HWND_BOTTOM directly — ViewportCommand
                 // alone is not reliable on Windows. Only needed at startup/transition;
                 // normal operation won't bring the window back to front on its own.
-                if self.window_layer == "behind" && !self.floating_mode {
+                if self.window_layer == "behind" && !self.floating.mode {
                     win32_behind::keep_behind("RigStats");
                 }
             }
@@ -1263,25 +1150,26 @@ impl eframe::App for RigStatsApp {
             if panels_changed {
                 for key in &prev_visible {
                     if !self.runtime.visible_panels.contains(key) {
-                        self.panels_positioned.remove(key);
+                        self.floating.panels_positioned.remove(key);
                     }
                 }
             }
             self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
             self.window_layer = s.window_layer.clone();
-            let was_floating = self.floating_mode;
-            self.floating_mode = s.floating_mode;
-            self.floating_mode_arc
-                .store(self.floating_mode, Ordering::Relaxed);
-            self.floating_panels_locked = s.floating_panels_locked;
-            self.floating_panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            let was_floating = self.floating.mode;
+            self.floating.mode = s.floating_mode;
+            self.floating
+                .mode_arc
+                .store(self.floating.mode, Ordering::Relaxed);
+            self.floating.panels_locked = s.floating_panels_locked;
+            self.floating.panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             self.overlay.click_through = s.overlay_click_through;
             self.overlay.enabled = s.overlay_enabled;
             let preferred_gpu = s.preferred_gpu.clone();
-            let was_fullscreen = self.fullscreen_mode;
-            self.fullscreen_mode = s.fullscreen_mode;
-            self.fullscreen_align = s.fullscreen_align.clone();
-            self.dashboard_pinned = s.dashboard_pinned;
+            let was_fullscreen = self.window.fullscreen_mode;
+            self.window.fullscreen_mode = s.fullscreen_mode;
+            self.window.fullscreen_align = s.fullscreen_align.clone();
+            self.window.dashboard_pinned = s.dashboard_pinned;
             let profile = s.dashboard_profile.clone();
             drop(s);
             // Settings → Display → GPU (live preview, Save, or Cancel revert).
@@ -1289,16 +1177,16 @@ impl eframe::App for RigStatsApp {
             // Toggling fullscreen changes how the window is sized; clear the
             // fit-to-content guard so the next fixed frame re-snaps correctly, and
             // drop the cached centering height so it is re-measured.
-            if was_fullscreen != self.fullscreen_mode {
-                self.last_fitted_height = None;
-                self.fullscreen_content_h = None;
+            if was_fullscreen != self.window.fullscreen_mode {
+                self.window.last_fitted_height = None;
+                self.window.fullscreen_content_h = None;
             }
             let (pos, [w, h]) = self.fixed_window_geometry(&profile);
             // Pinned, but this profile has no saved position yet (e.g. the user
             // switched profiles while pinned): persist the auto-targeted position
             // now so the profile is properly pinned and stays put across restarts
             // instead of lingering in a locked-but-unsaved state.
-            if !self.floating_mode && self.dashboard_pinned {
+            if !self.floating.mode && self.window.dashboard_pinned {
                 let mut s = self.current_settings.lock_safe();
                 if !s.pinned_positions.contains_key(&profile) {
                     s.pinned_positions.insert(
@@ -1315,10 +1203,10 @@ impl eframe::App for RigStatsApp {
             // In wallpaper mode our window is parked off-screen and the host owns the
             // visible dashboard — repositioning here would yank the (frozen, polling-
             // paused) main window back on-screen over the wallpaper, so skip it.
-            if !self.floating_mode && !self.wallpaper.is_active() {
+            if !self.floating.mode && !self.wallpaper.is_active() {
                 let new_size = [w, h];
-                if self.last_applied_window_size != Some(new_size) {
-                    self.last_applied_window_size = Some(new_size);
+                if self.window.last_applied_window_size != Some(new_size) {
+                    self.window.last_applied_window_size = Some(new_size);
                     // Resize and snap to the monitor matching the profile orientation.
                     // (A size change implies a profile/fullscreen/panel change, not an
                     // opacity drag, so repositioning here does not cause jitter.)
@@ -1329,7 +1217,7 @@ impl eframe::App for RigStatsApp {
                         )));
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-                    self.last_fitted_height = None;
+                    self.window.last_fitted_height = None;
                 }
             }
             ui.ctx()
@@ -1343,11 +1231,11 @@ impl eframe::App for RigStatsApp {
             // Toggle main window position when floating mode changes.
             // We move it off-screen instead of hiding it — a hidden window is not
             // ticked by eframe, so the floating panels would not update.
-            if was_floating != self.floating_mode {
-                if self.floating_mode {
+            if was_floating != self.floating.mode {
+                if self.floating.mode {
                     // Clear positioned-set so restored positions are re-applied
                     // from the saved layout the first time each panel is shown.
-                    self.panels_positioned.clear();
+                    self.floating.panels_positioned.clear();
                     ui.ctx()
                         .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                             -32000.0, -32000.0,
@@ -1367,7 +1255,7 @@ impl eframe::App for RigStatsApp {
                     // understate the real content height, which would otherwise clip
                     // the bottom panel. Clearing the guard makes the next frame snap
                     // the window to the true min_rect height.
-                    self.last_fitted_height = None;
+                    self.window.last_fitted_height = None;
                 }
             }
         }
@@ -1382,9 +1270,9 @@ impl eframe::App for RigStatsApp {
         self.handle_tray_commands(ui.ctx());
 
         // Sync floating lock state toggled by padlock icon in drag handle.
-        let arc_locked = self.floating_lock_arc.load(Ordering::Relaxed);
-        if arc_locked != self.floating_panels_locked {
-            self.floating_panels_locked = arc_locked;
+        let arc_locked = self.floating.lock_arc.load(Ordering::Relaxed);
+        if arc_locked != self.floating.panels_locked {
+            self.floating.panels_locked = arc_locked;
             let mut s = self.current_settings.lock_safe();
             s.floating_panels_locked = arc_locked;
             self.persist_settings_logged(&s);
@@ -1737,9 +1625,9 @@ impl eframe::App for RigStatsApp {
         // We NEVER use Visible(false) in floating mode because a hidden window is not
         // ticked by eframe — show_viewport_immediate would stop being called and all
         // floating panels would freeze.
-        if !self.initial_floating_applied {
-            self.initial_floating_applied = true;
-            if self.floating_mode {
+        if !self.floating.initial_applied {
+            self.floating.initial_applied = true;
+            if self.floating.mode {
                 ui.ctx()
                     .send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                         -32000.0, -32000.0,
@@ -1747,17 +1635,17 @@ impl eframe::App for RigStatsApp {
             }
         }
 
-        if self.floating_mode {
+        if self.floating.mode {
             // ── Floating mode — each panel in its own borderless viewport ─────
             self.render_floating_panels(ui);
 
             // Persist positions when any panel was dragged.
-            if self.positions_dirty.swap(false, Ordering::Relaxed) {
+            if self.floating.positions_dirty.swap(false, Ordering::Relaxed) {
                 self.persist_floating_positions();
             }
 
             // Apply GPU preference change made from the floating GPU panel.
-            let float_pref = self.float_new_pref_gpu.lock_safe().take();
+            let float_pref = self.floating.new_pref_gpu.lock_safe().take();
             if let Some(new_pref) = float_pref {
                 self.select_gpu(Some(new_pref));
             }
@@ -1771,7 +1659,7 @@ impl eframe::App for RigStatsApp {
             // the real position with the parking coordinates.
             if !self.wallpaper.is_active() {
                 if let Some(outer) = ui.ctx().input(|i| i.viewport().outer_rect) {
-                    self.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
+                    self.window.last_fixed_pos = Some([outer.left().round(), outer.top().round()]);
                 }
             }
 
@@ -1790,7 +1678,7 @@ impl eframe::App for RigStatsApp {
             );
 
             // Padlock at the right of the drag strip: pins the whole dashboard.
-            let pinned = self.dashboard_pinned;
+            let pinned = self.window.dashboard_pinned;
             let padlock_center = egui::pos2(drag_rect.right() - 12.0, drag_rect.center().y);
             let padlock_hit = egui::Rect::from_center_size(
                 padlock_center,
@@ -1822,17 +1710,17 @@ impl eframe::App for RigStatsApp {
             // After drag ends in "behind" mode, the window was activated for SC_MOVE
             // and is now in front. Push it back behind on the next few frames.
             if drag_resp.drag_stopped() && self.window_layer == "behind" {
-                self.reapply_window_props_frames = 4;
+                self.window.reapply_window_props_frames = 4;
             }
 
             if padlock_resp.clicked() {
-                self.dashboard_pinned = !self.dashboard_pinned;
+                self.window.dashboard_pinned = !self.window.dashboard_pinned;
                 let profile = self.current_settings.lock_safe().dashboard_profile.clone();
                 let mut s = self.current_settings.lock_safe();
-                s.dashboard_pinned = self.dashboard_pinned;
-                if self.dashboard_pinned {
+                s.dashboard_pinned = self.window.dashboard_pinned;
+                if self.window.dashboard_pinned {
                     // Pin: remember the current window position for this profile.
-                    if let Some([x, y]) = self.last_fixed_pos {
+                    if let Some([x, y]) = self.window.last_fixed_pos {
                         s.pinned_positions
                             .insert(profile, [x.round() as i32, y.round() as i32]);
                     }
@@ -1905,10 +1793,11 @@ impl eframe::App for RigStatsApp {
                 // only the surrounding background grows. Use the measured content
                 // height from the previous frame (cached) for an exact center; fall
                 // back to the compute_window_height estimate on the first frame.
-                let center_fullscreen = self.fullscreen_mode && self.fullscreen_align == "center";
+                let center_fullscreen =
+                    self.window.fullscreen_mode && self.window.fullscreen_align == "center";
                 let center_pad = if center_fullscreen {
                     // Pure panel-stack height (excludes drag handle and pad).
-                    let content = self.fullscreen_content_h.unwrap_or_else(|| {
+                    let content = self.window.fullscreen_content_h.unwrap_or_else(|| {
                         compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
                     });
                     // Center the visible content with equal background above and below.
@@ -1935,10 +1824,11 @@ impl eframe::App for RigStatsApp {
                     let content = ui.min_rect().height() - theme::DRAG_HANDLE_H - center_pad;
                     if content > 10.0 {
                         let changed = self
+                            .window
                             .fullscreen_content_h
                             .map(|h| (h - content).abs() > 0.5)
                             .unwrap_or(true);
-                        self.fullscreen_content_h = Some(content);
+                        self.window.fullscreen_content_h = Some(content);
                         if changed {
                             ui.ctx().request_repaint();
                         }
@@ -1952,24 +1842,25 @@ impl eframe::App for RigStatsApp {
             // so it shrinks/grows with the panel count just like the portrait stack.
             // Skipped in fullscreen mode — there the window stays at the full monitor
             // size and must NOT shrink to content.
-            if !self.fullscreen_mode {
+            if !self.window.fullscreen_mode {
                 let used_h = ui.min_rect().height();
                 // During the first frames after launch the window may not be fully
                 // realized, so early InnerSize commands can be dropped — which would
                 // leave the bottom panel clipped until the user toggles floating mode.
                 // Force a re-fit (and a fast repaint) for a handful of frames so the
                 // true content height always sticks at startup.
-                if self.startup_fit_frames > 0 {
-                    self.startup_fit_frames -= 1;
-                    self.last_fitted_height = None;
+                if self.window.startup_fit_frames > 0 {
+                    self.window.startup_fit_frames -= 1;
+                    self.window.last_fitted_height = None;
                     ui.ctx().request_repaint();
                 }
                 let changed = self
+                    .window
                     .last_fitted_height
                     .map(|h| (h - used_h).abs() > 0.5)
                     .unwrap_or(true);
                 if used_h > 10.0 && changed {
-                    self.last_fitted_height = Some(used_h);
+                    self.window.last_fitted_height = Some(used_h);
                     let [w, _] = profile_to_size(&profile);
                     // Landscape keeps the full profile width (no trim); the portrait
                     // stack trims 2 px to avoid a sub-pixel edge artifact.
@@ -1988,12 +1879,12 @@ impl eframe::App for RigStatsApp {
 
         // While recording, blink the tray dot on/off so an active session reads
         // as an ongoing event rather than a static indicator.
-        if self.recording_active {
+        if self.recording.active {
             const BLINK_PERIOD: Duration = Duration::from_millis(600);
-            if self.recording_blink_at.elapsed() >= BLINK_PERIOD {
-                self.recording_blink_on = !self.recording_blink_on;
-                self.recording_blink_at = Instant::now();
-                self.tray.set_recording_blink(self.recording_blink_on);
+            if self.recording.blink_at.elapsed() >= BLINK_PERIOD {
+                self.recording.blink_on = !self.recording.blink_on;
+                self.recording.blink_at = Instant::now();
+                self.tray.set_recording_blink(self.recording.blink_on);
             }
             ui.ctx().request_repaint_after(BLINK_PERIOD);
         } else {
@@ -2176,7 +2067,7 @@ impl RigStatsApp {
             ui,
             panels,
             update_ver,
-            self.fullscreen_mode,
+            self.window.fullscreen_mode,
             ref_h,
             self.effective_opacity(),
         )
@@ -2195,7 +2086,7 @@ impl RigStatsApp {
         // monitor. Used for both orientations so portrait/side profiles land on a
         // matching screen or the main screen — never on an arbitrary small monitor.
         let [mx, my, _mw, mh] = pick_window_rect_for_profile(profile);
-        let (auto_pos, size) = if self.fullscreen_mode {
+        let (auto_pos, size) = if self.window.fullscreen_mode {
             // Fill the height of the monitor the window currently sits on (where
             // the user placed it) — not the profile-matching monitor. Otherwise
             // enabling Fill Screen would teleport the dashboard to another screen.
@@ -2204,6 +2095,7 @@ impl RigStatsApp {
             // landscape grid stretches to fill it, the portrait stack centers/
             // top-aligns within it.
             let m = self
+                .window
                 .last_fixed_pos
                 .and_then(monitor_rect_at)
                 .filter(|r| r[3] > 0.0)
@@ -2227,8 +2119,8 @@ impl RigStatsApp {
         // profiles keeps the dashboard where the user left it. Fall back to the
         // auto-target only when that spot is off every connected monitor. Skipped in
         // fullscreen, which must snap to the monitor it fills.
-        if !self.fullscreen_mode {
-            if let Some(last) = self.last_fixed_pos {
+        if !self.window.fullscreen_mode {
+            if let Some(last) = self.window.last_fixed_pos {
                 return (guard_panel_position(last, auto_pos), size);
             }
         }
@@ -2239,7 +2131,7 @@ impl RigStatsApp {
     /// pinned and the stored position is still on a connected monitor; otherwise
     /// `None` so the caller auto-targets the matching monitor.
     fn pinned_position(&self, profile: &str) -> Option<[f32; 2]> {
-        if !self.dashboard_pinned {
+        if !self.window.dashboard_pinned {
             return None;
         }
         let saved = {
@@ -2250,7 +2142,7 @@ impl RigStatsApp {
         let monitors = win_monitor::list();
         #[cfg(not(windows))]
         let monitors: Vec<(i32, i32, i32, i32)> = Vec::new();
-        resolve_pinned_position(self.dashboard_pinned, saved, &monitors)
+        resolve_pinned_position(self.window.dashboard_pinned, saved, &monitors)
     }
 
     /// Render every visible panel as its own borderless OS window using
@@ -2263,7 +2155,7 @@ impl RigStatsApp {
     fn render_floating_panels(&mut self, ui: &mut egui::Ui) {
         let s = self.current_settings.lock_safe();
         let window_level = Self::window_level_from_layer(&s.window_layer);
-        let scale = self.floating_panel_scale;
+        let scale = self.floating.panel_scale;
         drop(s);
 
         let opacity = self.opacity;
@@ -2287,7 +2179,7 @@ impl RigStatsApp {
 
             let init_pos: [f32; 2] = {
                 let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
-                let positions = self.floating_positions.lock_safe();
+                let positions = self.floating.positions.lock_safe();
                 let saved = positions.get(&key).copied().unwrap_or(default_pos);
                 guard_panel_position(saved, default_pos)
             };
@@ -2299,9 +2191,9 @@ impl RigStatsApp {
             // owns the position (via drag); re-sending with_position every frame
             // causes egui to diff-and-dispatch SetOuterPosition continuously,
             // which fights the OS and produces sub-pixel blur.
-            let needs_position = !self.panels_positioned.contains(&key);
+            let needs_position = !self.floating.panels_positioned.contains(&key);
             if needs_position {
-                self.panels_positioned.insert(key.clone());
+                self.floating.panels_positioned.insert(key.clone());
             }
 
             // Pull this panel's DComp burst state out of the map for the
@@ -2309,7 +2201,8 @@ impl RigStatsApp {
             // returns) — same "extract, mutate as a local, write back" shape
             // the overlay uses for its own (single, not per-key) burst state.
             let mut dcomp = self
-                .floating_dcomp
+                .floating
+                .dcomp
                 .borrow_mut()
                 .remove(&key)
                 .unwrap_or_default();
@@ -2340,11 +2233,11 @@ impl RigStatsApp {
 
             // `show_viewport_immediate` is FnMut with no Send/'static bound —
             // we can borrow self fields directly instead of going through Arc.
-            let positions_arc = &self.floating_positions;
-            let dirty = &self.positions_dirty;
-            let behind_enforce = &self.behind_enforce;
-            let new_pref_arc = &self.float_new_pref_gpu;
-            let lock_arc = &self.floating_lock_arc;
+            let positions_arc = &self.floating.positions;
+            let dirty = &self.floating.positions_dirty;
+            let behind_enforce = &self.floating.behind_enforce;
+            let new_pref_arc = &self.floating.new_pref_gpu;
+            let lock_arc = &self.floating.lock_arc;
             let stats = &self.runtime.latest;
             let cspark = &self.runtime.cpu_spark;
             let gspark = &self.runtime.gpu_spark;
@@ -2785,7 +2678,7 @@ impl RigStatsApp {
                         });
                 },
             );
-            self.floating_dcomp.borrow_mut().insert(key.clone(), dcomp);
+            self.floating.dcomp.borrow_mut().insert(key.clone(), dcomp);
         }
     }
 
@@ -2800,7 +2693,7 @@ impl RigStatsApp {
 
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     fn persist_floating_positions(&self) {
-        let positions = self.floating_positions.lock_safe();
+        let positions = self.floating.positions.lock_safe();
         let mut s = self.current_settings.lock_safe();
         for (key, &[x, y]) in positions.iter() {
             s.panel_layouts.insert(

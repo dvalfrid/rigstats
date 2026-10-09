@@ -1,11 +1,15 @@
 //! Groups of `RigStatsApp` fields that belong to one concern (#225).
 
+use crate::BehindEnforce;
 use rigstats_backend::settings::Settings;
 use rigstats_egui::dcomp_burst::DcompRevealBurst;
 use rigstats_egui::dialog_reveal::DialogReveal;
 use rigstats_egui::windows;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 /// The dialog windows — Settings, About, Status, Updates, Session History
 /// and the Control Center: whether each is open, the one-shot flag that
@@ -154,6 +158,165 @@ impl OverlayState {
             last_size: None,
             position: s.overlay_position.map(|p| [p[0] as f32, p[1] as f32]),
             position_dirty: false,
+        }
+    }
+}
+
+/// Recovery from a lost GPU device (e.g. a hybrid iGPU/dGPU switch): the
+/// app relaunches itself, backing off when it keeps failing fast.
+pub(crate) struct GpuRecovery {
+    /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
+    /// reports a fatal device error. Checked once per frame in `update()`.
+    pub(crate) lost: Arc<AtomicBool>,
+    /// True once the `lost` relaunch-and-close sequence has been kicked
+    /// off, so it only runs once even though `update()` keeps being called
+    /// for the few frames it takes `ViewportCommand::Close` to take effect.
+    pub(crate) relaunch_triggered: bool,
+    /// When this app instance was created. Used to tell a GPU error that
+    /// strikes again within seconds of a relaunch (still-unsettled GPU
+    /// state — back off) from one after a long healthy run (a fresh,
+    /// unrelated hiccup — always retry).
+    pub(crate) started_at: Instant,
+    /// Consecutive fast GPU-relaunch failures, carried in from the
+    /// `RIGSTATS_GPU_RETRY_COUNT` env var set by the process that spawned
+    /// this one. `0` for a normal (non-relaunch) start.
+    pub(crate) retry_count: u32,
+}
+
+/// Forced font-atlas rebuilds after a viewport was minimized (see
+/// `refresh_font_atlas_after_minimize`).
+pub(crate) struct FontAtlasRefresh {
+    /// Set while any viewport is minimized.
+    pub(crate) stale: bool,
+    /// Last forced font-atlas rebuild.
+    pub(crate) rebuilt_at: Instant,
+    /// Flips on every forced rebuild so the `FontDefinitions` passed to
+    /// `set_fonts` always differs from whatever it last saw — `set_fonts`
+    /// silently no-ops otherwise.
+    pub(crate) toggle: bool,
+}
+
+/// The tray's recording indicator: a blinking icon while a session is
+/// being recorded.
+pub(crate) struct RecordingIndicator {
+    /// True while a session is being recorded — drives the blinking tray dot.
+    pub(crate) active: bool,
+    /// Mirrors `active` for the tray-polling background thread (see its use
+    /// of `win_opacity::force_repaint` in `app::background`, #177): while a
+    /// context menu is open, winit's own event loop — and so `ui()` — doesn't
+    /// run at all, and neither `request_repaint()`/`request_repaint_of()` nor a
+    /// single pre-emptive `force_repaint()` reliably revives it once the menu
+    /// closes (both empirically confirmed unreliable here). The poller instead
+    /// keeps posting `force_repaint()` on every tick for as long as this is
+    /// true, so the very next tick after the menu closes — whenever that is —
+    /// lands a real repaint no matter how it closed.
+    pub(crate) active_shared: Arc<AtomicBool>,
+    /// Current phase of the blink (dot shown vs. hidden).
+    pub(crate) blink_on: bool,
+    /// When the blink last flipped.
+    pub(crate) blink_at: Instant,
+}
+
+/// Floating mode: each panel in its own borderless window.
+pub(crate) struct FloatingState {
+    pub(crate) mode: bool,
+    pub(crate) panels_locked: bool,
+    pub(crate) panel_scale: f32,
+    /// Last-known screen positions for each panel key, keyed by panel key.
+    /// Loaded from settings at startup; updated on drag; persisted on change.
+    pub(crate) positions: Arc<Mutex<HashMap<String, [f32; 2]>>>,
+    /// Set true inside a floating panel viewport when its position changes.
+    /// Consumed in `ui()` to debounce settings writes to once per tick.
+    pub(crate) positions_dirty: Arc<AtomicBool>,
+    /// Receives a new preferred-GPU name when the user clicks a GPU dot
+    /// inside the floating GPU panel viewport.
+    pub(crate) new_pref_gpu: Arc<Mutex<Option<String>>>,
+    /// Live lock state toggled from the padlock icon in the drag handle.
+    /// Propagated back to `panels_locked` and persisted in `update()`.
+    pub(crate) lock_arc: Arc<AtomicBool>,
+    /// Guards the one-time initial hide of the main window when the app
+    /// starts with floating mode already enabled.
+    pub(crate) initial_applied: bool,
+    /// Tracks which floating panel viewports have already had their initial
+    /// position applied.  Once a panel is in this set, `with_position` is
+    /// NOT included in the ViewportBuilder — the OS owns the position from
+    /// that point on, which prevents the builder diff from continuously
+    /// sending SetOuterPosition and causing sub-pixel blur.
+    /// Cleared whenever floating mode transitions from off → on so positions
+    /// are restored from the saved layout on next activation.
+    pub(crate) panels_positioned: HashSet<String>,
+    /// Per-panel "always behind" enforcement state (key → last enforce time +
+    /// previous primary-button state). Used to throttle the Win32 Z-order
+    /// re-push so floating "behind" panels don't re-assert every frame — which
+    /// would create a SetWindowPos → repaint → SetWindowPos spin loop and burn
+    /// CPU. Enforcement happens on creation, in a short burst after a drag, and
+    /// then ~1/s as an idle safety net.
+    pub(crate) behind_enforce: RefCell<HashMap<String, BehindEnforce>>,
+    /// Per-panel DComp reveal-burst state for floating mode's per-pixel
+    /// transparency (issue #169) — see `dcomp_burst::DcompRevealBurst`. Only
+    /// a panel's creation frame triggers a burst; a later content-driven
+    /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
+    pub(crate) dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
+    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
+    pub(crate) mode_arc: Arc<AtomicBool>,
+}
+
+/// The fixed-mode (non-floating) dashboard window: fullscreen, pinned
+/// position, and fitting the window to its content.
+pub(crate) struct WindowFit {
+    /// When true (and not floating), the fixed window fills the whole monitor
+    /// instead of fitting panel content; the dashboard background fills the rest.
+    pub(crate) fullscreen_mode: bool,
+    /// Vertical placement of the panel stack when fullscreen: `"top"` | `"center"`.
+    pub(crate) fullscreen_align: String,
+    /// Measured panel-stack content height (excluding drag handle + centering pad),
+    /// cached from the previous frame so fullscreen centering is exact. `None`
+    /// until the first fullscreen frame; `compute_window_height` is the fallback.
+    pub(crate) fullscreen_content_h: Option<f32>,
+    /// When true, the fixed-mode dashboard window is pinned: it cannot be dragged
+    /// and its position is restored from `Settings::pinned_positions` across
+    /// restarts instead of auto-targeting the matching monitor.
+    pub(crate) dashboard_pinned: bool,
+    /// Last outer position observed for the fixed-mode window this session, used
+    /// to capture the spot to pin when the padlock is clicked. `None` until the
+    /// first fixed-mode frame reports a position.
+    pub(crate) last_fixed_pos: Option<[f32; 2]>,
+    /// When > 0, re-applies WindowLevel + opacity for this many more frames.
+    /// Used after floating→non-floating transitions where winit may reset the
+    /// window level when the window is moved back on-screen.
+    pub(crate) reapply_window_props_frames: u8,
+    /// Last [w, h] sent via InnerSize — avoids spurious resize events when
+    /// only opacity or theme changed (which would cause a visible jump).
+    pub(crate) last_applied_window_size: Option<[f32; 2]>,
+    /// Last content height fitted in fixed mode — avoids dispatching an
+    /// InnerSize viewport command every frame when the height is unchanged
+    /// (which during interaction runs at display refresh rate, causing
+    /// needless WM_SIZE churn and sub-pixel jitter).
+    pub(crate) last_fitted_height: Option<f32>,
+    /// Counts down over the first docked frames after launch. Early `InnerSize`
+    /// viewport commands can be dropped before the window is fully realized,
+    /// which leaves the bottom panel clipped until the user toggles floating
+    /// mode. While this is > 0 we force the fit-to-content path to re-snap (and
+    /// drive fast repaints) so the true content height reliably sticks.
+    pub(crate) startup_fit_frames: u8,
+}
+
+impl WindowFit {
+    pub(crate) fn new(s: &Settings) -> Self {
+        Self {
+            fullscreen_mode: s.fullscreen_mode,
+            fullscreen_align: s.fullscreen_align.clone(),
+            fullscreen_content_h: None,
+            dashboard_pinned: s.dashboard_pinned,
+            last_fixed_pos: None,
+            // Apply WindowLevel + opacity for the first few frames at startup when in
+            // non-floating mode: the viewport builder only handles "on_top", so "behind"
+            // must be sent via viewport command, and opacity needs a valid HWND which
+            // may not be available until after the first paint.
+            reapply_window_props_frames: if !s.floating_mode { 4 } else { 0 },
+            last_applied_window_size: None,
+            last_fitted_height: None,
+            startup_fit_frames: 12,
         }
     }
 }

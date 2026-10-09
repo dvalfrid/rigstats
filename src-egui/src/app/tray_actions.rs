@@ -99,12 +99,12 @@ impl RigStatsApp {
             self.persist_settings_logged(&s);
             s.floating_mode
         };
-        let was_floating = self.floating_mode;
-        self.floating_mode = new_mode;
-        self.floating_mode_arc.store(new_mode, Ordering::Relaxed);
+        let was_floating = self.floating.mode;
+        self.floating.mode = new_mode;
+        self.floating.mode_arc.store(new_mode, Ordering::Relaxed);
         if was_floating != new_mode {
             if new_mode {
-                self.panels_positioned.clear();
+                self.floating.panels_positioned.clear();
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
                     -32000.0, -32000.0,
                 )));
@@ -129,10 +129,10 @@ impl RigStatsApp {
                 // window to the true content height instead of the
                 // compute_window_height estimate (which can clip the
                 // bottom panel).
-                self.last_fitted_height = None;
+                self.window.last_fitted_height = None;
                 // Re-apply for the next few frames as winit may reset the
                 // window level when it processes the move event.
-                self.reapply_window_props_frames = 4;
+                self.window.reapply_window_props_frames = 4;
             }
         }
     }
@@ -149,16 +149,16 @@ impl RigStatsApp {
             logging::end_session(&self.dir, &session.id, logging::unix_now_secs());
             logging::prune_old_sessions(&self.dir, retention_days);
             self.tray.set_recording(false);
-            self.recording_active = false;
-            self.recording_active_shared.store(false, Ordering::Relaxed);
+            self.recording.active = false;
+            self.recording.active_shared.store(false, Ordering::Relaxed);
         } else {
             match logging::start_session(&self.dir) {
                 Ok(_) => {
                     self.tray.set_recording(true);
-                    self.recording_active = true;
-                    self.recording_active_shared.store(true, Ordering::Relaxed);
-                    self.recording_blink_on = true;
-                    self.recording_blink_at = Instant::now();
+                    self.recording.active = true;
+                    self.recording.active_shared.store(true, Ordering::Relaxed);
+                    self.recording.blink_on = true;
+                    self.recording.blink_at = Instant::now();
                 }
                 Err(e) => {
                     debug::log_error(
