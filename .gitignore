@@ -1,8 +1,12 @@
-# Claude Code local settings (machine-specific — settings.json contains hardcoded paths)
-# Use .claude/* (not .claude/) so the skills/ subdir can be un-excluded
+# Claude Code: personal settings stay local (settings.local.json, worktrees, …).
+# Shared: skills, hooks and the project settings.json (no machine-specific paths there).
+# Use .claude/* (not .claude/) so these can be un-excluded
 .claude/*
 !.claude/skills/
 !.claude/skills/**
+!.claude/hooks/
+!.claude/hooks/**
+!.claude/settings.json
 
 node_modules/
 website/images/
