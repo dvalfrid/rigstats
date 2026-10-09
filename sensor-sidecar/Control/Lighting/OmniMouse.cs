@@ -182,7 +182,7 @@ public sealed class OmniMouse
             lock (_lock)
             {
                 using var device = Hid.Open(_channel);
-                return Ask(device, [_reportId, 0x12, 0x07]) is { } reply ? BatteryReplies.Mouse(reply) : null;
+                return QueryBattery(device, _reportId);
             }
         }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
@@ -190,6 +190,10 @@ public sealed class OmniMouse
             return null;
         }
     }
+
+    /// The mouse's power question and nothing else: `12 07` on its channel.
+    public static BatteryStatus? QueryBattery(IHidDevice device, byte reportId) =>
+        Ask(device, [reportId, 0x12, 0x07]) is { } reply ? BatteryReplies.Mouse(reply) : null;
 
     /// The mouse's WDL state, or null when it doesn't answer (asleep, gone).
     public bool? WdlOn()

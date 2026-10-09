@@ -56,7 +56,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
                 lighting.Rescan();
                 var devices = lighting.Devices;
                 var ids = devices.Select(d => d.Id).ToList();
-                if (DateTime.UtcNow - lastRead >= ReadInterval || !ids.SequenceEqual(lastIds))
+                if (ShouldRead(lastRead, DateTime.UtcNow, lastIds, ids))
                 {
                     store.Set(ReadAll(devices));
                     lastRead = DateTime.UtcNow;
@@ -67,6 +67,11 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
         }
         catch (OperationCanceledException) { }
     }
+
+    /// Whether this scan tick reads the batteries: the read interval has
+    /// passed, or the device list changed (plugged, unplugged, switched).
+    public static bool ShouldRead(DateTime lastRead, DateTime now, IReadOnlyList<string> lastIds, IReadOnlyList<string> ids) =>
+        now - lastRead >= ReadInterval || !ids.SequenceEqual(lastIds);
 
     /// One read over `devices`: fresh readings, else the last known one for
     /// a device still connected and silent for fewer than <see cref="StaleRounds"/> reads. Each device is guarded on its own, so one

@@ -438,20 +438,22 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
             return null;
         lock (_lock)
         {
-            byte[]? reply;
             try
             {
-                reply = Ask(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+                return QueryBattery(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId);
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
             {
                 _device?.Dispose();
                 _device = Hid.Open(_info);
-                reply = Ask(_device, _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
+                return QueryBattery(_device, _info.OutputReportLength, _reportId);
             }
-            return reply is null ? null : BatteryReplies.Keyboard(reply);
         }
     }
+
+    /// The keyboard's power question and nothing else: `12 01`.
+    public static BatteryStatus? QueryBattery(IHidDevice device, int length, byte reportId) =>
+        Ask(device, length, reportId, GetPower, ReplyTimeout) is { } reply ? BatteryReplies.Keyboard(reply) : null;
 
     // Caller holds _lock. Reopens once (a receiver re-enumerates when a
     // paired device wakes; a USB keyboard may be replugged).
