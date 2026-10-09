@@ -1013,6 +1013,10 @@ to a device to find them out.
 
 ### Battery
 
+Verified live 2026-10-09 (#294): ROG Azoth X on the Omni receiver 82 %, ROG
+Harpe Ace Aim Lab Edition on the Omni receiver 60 %, ROG Delta II 23 % — one
+device of each type, so all three layouts below are confirmed on hardware.
+
 | Device type | Question | Reply (byte positions incl. report id) | Sources |
 | --- | --- | --- | --- |
 | Headset (GearLink pattern 2: Delta II, Pelta, …) | `12 07` | 5 sleep timer, **6 battery %**, 7 low-battery warning %, 8 low-battery voice prompt | GearLink `powerSaving`/`batteryLevel` (get key 7) + G-Helper `AsusHeadset.ParseBattery` ✓ |
@@ -1028,7 +1032,9 @@ to a device to find them out.
   treats that as "not ready").
 - The Delta II also sends an undocumented event `CC 12 09 00 00 <n>` with `n`
   falling slowly (1E → 18 over an hour, 2026-10-09). Neither source names key
-  9; it may be a battery notification — don't rely on it, ask `12 07`.
+  9, but it matches the battery: the last event read 0x18 (24 %) and `12 07`
+  answered 23 % three hours later. Likely a battery notification — still ask
+  `12 07`, which is documented.
 - GearLink has more families with their own power commands (a gamepad class
   `18, 4`; a keyboard family reading `getDeviceInfo(CurrentPower)` with battery
   at its `n[5]`; a JSON `class_id:"10020000"` protocol). Check a device's own
