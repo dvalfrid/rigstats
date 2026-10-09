@@ -28,6 +28,12 @@ Rust (about 20 minutes, on Windows so `#[cfg(windows)]` code is analysed)
 and runs on pull requests only when `.rs` or Cargo files changed — every
 push to `main` and the weekly schedule always run it.
 
+On a pull request without Rust changes, the "Code scanning results / CodeQL"
+check reports **"1 configuration not found"** and shows as skipped. That is
+expected: `main` has a Rust analysis, the pull request doesn't. The
+`Analyze (actions)` and `Analyze (csharp)` jobs still run and cover the
+change. Nothing to fix.
+
 ### Pinned Rust toolchain
 
 `build.yml`, `verify.yml`, and `release.yml` all install Rust via
