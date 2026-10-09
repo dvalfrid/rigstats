@@ -153,6 +153,10 @@ $features = @(
   @{ id="control-desk-lamp"; kind="done"; pin=214; milestone="v3.0"; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
   @{ id="control-lighting-hue"; kind="done"; pin=215; milestone="v3.0"; title="Lighting: Philips Hue via the Hue Bridge" }
   @{ id="control-armoury-crate"; kind="planned"; pin=193; milestone="v3.0"; title="Control Center phase 6: Armoury Crate replacement" }
+  @{ id="peripheral-battery"; kind="done"; pin=290; milestone="v3.0"; title="Peripherals: battery status of ROG wireless devices (panel, tray card, alerts)" }
+  @{ id="peripheral-battery-bluetooth"; kind="planned"; pin=291; milestone="v3.0"; title="Peripherals: battery status for Bluetooth devices" }
+  @{ id="peripheral-config"; kind="planned"; pin=292; milestone="v3.0"; title="Peripherals: device configuration (DPI, polling rate, sidetone, EQ)" }
+  @{ id="omni-multi-receiver"; kind="planned"; pin=296; milestone="v3.0"; title="Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check" }
   @{ id="control-asus-laptop"; kind="planned"; pin=234; milestone="v3.0"; title="Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits)" }
 )
 

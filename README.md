@@ -18,6 +18,7 @@ RIGStats is a free hardware monitor and control center for Windows gaming PCs, b
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
 - **Control Center** — per-profile fan curves, Windows power plans, AMD Ryzen and Radeon power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
