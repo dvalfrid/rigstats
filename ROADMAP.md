@@ -47,9 +47,9 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
 | Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
 | Remove Node.js / npm infrastructure | ✅ Done |
-| Session history — record, browse, and visualize past sessions | ✅ Done — releasing in v1.38 (not yet released) |
+| Session history — record, browse, and visualize past sessions | ✅ Done (v1.38) |
 | Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), NVIDIA desktop GPU power limit (#210, untested on hardware), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210, #234 |
-| Peripherals — battery status of ROG wireless devices (panel, tray hover card, low-battery alerts, connection type) | ✅ Done (3.0, not yet released) — #290 |
+| Peripherals — battery status of ROG wireless devices (panel, tray hover card, low-battery alerts, connection type) | ✅ Done (v1.45) — #290 |
 | Peripherals — battery status for Bluetooth devices | 🔲 Planned (3.0) — #291 |
 | Peripherals — device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned (3.0) — #292 |
 
@@ -1543,7 +1543,7 @@ vendor's driver download page rather than claiming to know the newest release.
 
 ---
 
-## Session history — record, browse, and visualize past sessions ✅ (shipped on `main`, releasing in v1.38.0 — not yet released)
+## Session history — record, browse, and visualize past sessions ✅ (v1.38)
 
 **Panel:** History window, opened from the tray
 **Data source:** Existing `StatsPayload` fields already logged by `stats-logging` — no new sensors required
@@ -1589,7 +1589,7 @@ no way to look at it inside the app. This turned that into named, browsable
 Full design detail and history are in the issue.
 ---
 
-## Peripherals — battery status ✅ (Milestone 3.0, not yet released)
+## Peripherals — battery status ✅ (v1.45)
 
 [#290](https://github.com/dvalfrid/rigstats/issues/290). The sensor service reads the battery of the ROG wireless devices it already drives for lighting — headsets (`12 07`/`12 08`), keyboards with power info (`12 01`), the mouse on the ROG Omni receiver (`12 07`) — every 20 s, and notices devices plugged in or switched within seconds. Commands from ASUS Gear Link's device modules, cross-checked with G-Helper; verified live on the ROG Azoth X, Harpe Ace Aim Lab Edition and Delta II. The app shows them in an opt-in PERIPHERALS panel and a hover card over the tray icon (connection icon, name, bar, percentage, charging), and raises the Battery-threshold alert per device. Details: `docs/control-architecture.md` ("Peripherals: battery and settings", "Battery status of wireless devices"). Next: Bluetooth devices (#291), more than one Omni receiver (#296), device configuration (#292).
 
