@@ -21,6 +21,7 @@ use rigstats_backend::control::{
     FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HueCaps, LampPart,
     PowerScheme, Profile,
 };
+use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -849,6 +850,9 @@ fn hex_color([r, g, b]: [u8; 3]) -> String {
 /// desk lamp, the devices themselves and Philips Hue — each a group of
 /// rows. Changes show on the lights at once (live preview); Save keeps them
 /// in the profile.
+// The page needs the control state, its caps, the saved part, the command
+// channel, the UI state and the telemetry's peripherals.
+#[allow(clippy::too_many_arguments)]
 fn lighting_tab(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -857,6 +861,7 @@ fn lighting_tab(
     saved: Option<&AuraPart>,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     ui_state: &mut ControlUi,
+    peripherals: &[Peripheral],
 ) {
     let hue = control.hue_caps();
     let Some(caps) = caps else {
@@ -886,6 +891,11 @@ fn lighting_tab(
         .as_ref()
         .map_or_else(|| saved.cloned(), |d| d.part.clone());
     let before = part.clone();
+    let battery_levels = ui_state
+        .look
+        .current()
+        .and_then(|l| l.thresholds.get("battery").cloned())
+        .map_or((20, 10), |t| (t.warn.unwrap_or(20), t.crit.unwrap_or(10)));
 
     // ── The effect ───────────────────────────────────────────────────────
     ui_kit::group(
@@ -957,18 +967,24 @@ fn lighting_tab(
                 .collect::<Vec<_>>()
                 .join(", ");
             let kind = device_kind(&device.kind);
-            g.row(&device.name, Some(&zones), |ui| {
-                let (text, color) = if device.blocked.is_some() || device.problem.is_some() {
-                    ("Needs attention", WARN_TEXT)
-                } else {
-                    (kind.as_str(), dc.muted)
-                };
-                ui.label(egui::RichText::new(text).size(12.0).color(color))
-                    .on_hover_text(if device.firmware.is_empty() {
-                        kind.clone()
-                    } else {
-                        format!("{kind}, firmware {}", device.firmware)
-                    });
+            let about = if device.firmware.is_empty() {
+                kind.clone()
+            } else {
+                format!("{kind}, firmware {}", device.firmware)
+            };
+            // A wireless device's battery and link, from the telemetry (same id).
+            let wireless = peripherals.iter().find(|p| p.id == device.id);
+            g.row(&device.name, Some(&format!("{kind} · {zones}")), |ui| {
+                if device.blocked.is_some() || device.problem.is_some() {
+                    ui.label(
+                        egui::RichText::new("Needs attention")
+                            .size(12.0)
+                            .color(WARN_TEXT),
+                    )
+                    .on_hover_text(about);
+                } else if let Some(p) = wireless {
+                    battery_and_link(ui, dc, p, battery_levels);
+                }
             });
             let warnings: Vec<&str> = [device.blocked.as_deref(), device.problem.as_deref()]
                 .into_iter()
@@ -1052,6 +1068,37 @@ fn lighting_tab(
 /// Amber text for something that needs the user (a device taken by another
 /// app, a setting on the device that blocks us).
 const WARN_TEXT: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
+
+/// A wireless device's charge (coloured by the battery alert levels, a
+/// triangle while charging) and how it is connected. For a row's
+/// right-to-left layout.
+fn battery_and_link(ui: &mut egui::Ui, dc: &DialogColors, p: &Peripheral, (warn, crit): (u8, u8)) {
+    use crate::panels::peripherals::{link_label, link_of, paint_battery_glyph, paint_link_icon};
+    let color = crate::panels::battery::charge_color(p.battery, p.charging, warn, crit);
+    ui.add_sized(
+        [40.0, 20.0],
+        egui::Label::new(
+            egui::RichText::new(format!("{} %", p.battery))
+                .size(12.0)
+                .color(color),
+        ),
+    );
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(24.0, 13.0), egui::Sense::hover());
+    paint_battery_glyph(ui.painter(), rect, p.battery, color, dc.muted);
+    if p.charging {
+        resp.on_hover_text("Charging");
+    }
+    if let Some(link) = link_of(&p.connection) {
+        ui.add_space(14.0);
+        ui.label(
+            egui::RichText::new(link_label(link))
+                .size(12.0)
+                .color(dc.muted),
+        );
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+        paint_link_icon(ui.painter(), rect.center(), 12.0, link, dc.muted);
+    }
+}
 
 /// "monitor_light_bar" → "Monitor light bar".
 fn device_kind(kind: &str) -> String {
@@ -1464,6 +1511,7 @@ pub fn show(
     dc: &DialogColors,
     ui_state: &mut ControlUi,
     look_link: &LookLink,
+    peripherals: &[Peripheral],
 ) {
     dc.apply_to_ctx(ctx);
     if !ui_state.shown {
@@ -1849,6 +1897,7 @@ pub fn show(
                             saved_aura.as_ref(),
                             cmd_tx,
                             ui_state,
+                            peripherals,
                         );
                     }
                     Page::Gpu => {

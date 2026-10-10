@@ -22,13 +22,13 @@ const ICON_W: f32 = 16.0;
 
 /// How a device reaches the PC, from the sidecar's `connection`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Link {
+pub enum Link {
     Usb,
     Bluetooth,
     Radio,
 }
 
-fn link_of(connection: &str) -> Option<Link> {
+pub fn link_of(connection: &str) -> Option<Link> {
     match connection {
         "usb" => Some(Link::Usb),
         "bluetooth" => Some(Link::Bluetooth),
@@ -39,7 +39,47 @@ fn link_of(connection: &str) -> Option<Link> {
 
 /// A small line-drawn connection icon centred at `c` in a `size` box —
 /// the font has no USB, Bluetooth or radio glyphs.
-fn paint_link_icon(painter: &egui::Painter, c: Pos2, size: f32, link: Link, color: Color32) {
+/// "USB", "Bluetooth", "2.4 GHz".
+pub fn link_label(link: Link) -> &'static str {
+    match link {
+        Link::Usb => "USB",
+        Link::Bluetooth => "Bluetooth",
+        Link::Radio => "2.4 GHz",
+    }
+}
+
+/// A small battery outline filled to `pct` in `color`, in `rect`.
+pub fn paint_battery_glyph(
+    painter: &egui::Painter,
+    rect: Rect,
+    pct: u8,
+    color: Color32,
+    outline: Color32,
+) {
+    let body = Rect::from_min_max(rect.min, pos2(rect.max.x - 2.5, rect.max.y));
+    painter.rect_stroke(
+        body,
+        egui::CornerRadius::same(2),
+        Stroke::new(1.2_f32, outline),
+        egui::StrokeKind::Inside,
+    );
+    let nub = Rect::from_min_max(
+        pos2(body.max.x, rect.center().y - rect.height() * 0.2),
+        pos2(rect.max.x, rect.center().y + rect.height() * 0.2),
+    );
+    painter.rect_filled(nub, egui::CornerRadius::same(1), outline);
+    let inner = body.shrink(2.5);
+    let fill_w = inner.width() * f32::from(pct.min(100)) / 100.0;
+    if fill_w > 0.0 {
+        painter.rect_filled(
+            Rect::from_min_size(inner.min, vec2(fill_w, inner.height())),
+            egui::CornerRadius::same(1),
+            color,
+        );
+    }
+}
+
+pub fn paint_link_icon(painter: &egui::Painter, c: Pos2, size: f32, link: Link, color: Color32) {
     let s = size / 2.0;
     let stroke = Stroke::new((size / 9.0).max(1.0), color);
     match link {
@@ -138,7 +178,7 @@ fn row_columns(inner_w: f32, pct_w: f32, sc: f32) -> (f32, f32, f32) {
 /// name left, bar
 /// ending just before the right-aligned percentage, and a small accent
 /// triangle in front of the percentage while charging (the font has no bolt
-/// or arrow glyphs). Also drawn by the tray hover card (`app/tray_card.rs`).
+/// or arrow glyphs). The tray hover card has its own row, `paint_card_row`.
 pub fn paint_device_row(
     ui: &mut Ui,
     inner_w: f32,
@@ -218,6 +258,75 @@ pub fn paint_device_row(
         format!("{}%", device.battery),
         font,
         color,
+    );
+}
+
+/// One device row for the tray hover card, in the Control Center's style:
+/// name left; then, in fixed columns so every row lines up, the connection
+/// (icon and "USB" / "Bluetooth" / "2.4 GHz"), a battery glyph and the
+/// percentage, coloured by the battery alert levels (accent while charging,
+/// with a small triangle).
+pub fn paint_card_row(
+    ui: &mut Ui,
+    inner_w: f32,
+    device: &Peripheral,
+    charge_warn: u8,
+    charge_crit: u8,
+) {
+    const H: f32 = 24.0;
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, H), Sense::hover());
+    if !ui.is_rect_visible(rect) {
+        return;
+    }
+    let p = ui.painter();
+    let font = FontId::proportional(12.0);
+    let muted = Color32::from_gray(140);
+    let color = charge_color(device.battery, device.charging, charge_warn, charge_crit);
+    let cy = rect.center().y;
+    let width = |t: &str| p.layout_no_wrap(t.to_owned(), font.clone(), muted).size().x;
+
+    // Right to left: percentage, charging mark, battery, connection.
+    let pct_w = width("100 %");
+    p.text(
+        pos2(rect.max.x, cy),
+        Align2::RIGHT_CENTER,
+        format!("{} %", device.battery),
+        font.clone(),
+        color,
+    );
+    let mark_x = rect.max.x - pct_w - 7.0;
+    if device.charging {
+        p.add(Shape::convex_polygon(
+            vec![
+                pos2(mark_x, cy - 3.0),
+                pos2(mark_x + 3.0, cy + 3.0),
+                pos2(mark_x - 3.0, cy + 3.0),
+            ],
+            color,
+            Stroke::NONE,
+        ));
+    }
+    let glyph = Rect::from_min_size(pos2(mark_x - 8.0 - 22.0, cy - 6.0), vec2(22.0, 12.0));
+    paint_battery_glyph(p, glyph, device.battery, color, muted);
+    let link_w = width("Bluetooth") + 18.0;
+    let link_x = glyph.min.x - 12.0 - link_w;
+    if let Some(link) = link_of(&device.connection) {
+        paint_link_icon(p, pos2(link_x + 6.0, cy), 11.0, link, muted);
+        p.text(
+            pos2(link_x + 16.0, cy),
+            Align2::LEFT_CENTER,
+            link_label(link),
+            font.clone(),
+            muted,
+        );
+    }
+    let name_clip = Rect::from_min_max(rect.min, pos2(link_x - 8.0, rect.max.y));
+    p.with_clip_rect(name_clip).text(
+        pos2(rect.min.x, cy),
+        Align2::LEFT_CENTER,
+        &device.name,
+        FontId::proportional(13.0),
+        theme::C_TEXT,
     );
 }
 

@@ -222,6 +222,7 @@ impl RigStatsApp {
             let mut found_hwnd: isize = 0;
             let visible = self.dialogs.dialog_reveal.visible("control");
             let control_state = self.runtime.control.clone();
+            let peripherals = self.runtime.latest.peripherals.clone();
             let control_ui = &mut self.dialogs.control_ui;
             let look_link = windows::profile_look::LookLink {
                 settings: &self.current_settings,
@@ -256,6 +257,7 @@ impl RigStatsApp {
                         &dc,
                         control_ui,
                         &look_link,
+                        &peripherals,
                     );
                 },
             );

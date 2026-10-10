@@ -85,10 +85,10 @@ pub(crate) fn watchdog(anchor: &TrayAnchor) {
 
 const ID: &str = "tray_card";
 const TITLE: &str = "RigStats \u{2014} Tray card";
-const CARD_W: f32 = 300.0;
+const CARD_W: f32 = 380.0;
 const MARGIN: f32 = 10.0;
 const TITLE_H: f32 = 22.0;
-const ROW_H: f32 = 18.0;
+const ROW_H: f32 = 24.0;
 
 /// The card's hover anchor and its reveal state.
 #[derive(Default)]
@@ -185,7 +185,7 @@ impl RigStatsApp {
                     }
                     let inner_w = ui.available_width();
                     for device in &devices {
-                        panels::peripherals::paint_device_row(ui, inner_w, device, warn, crit, 1.0);
+                        panels::peripherals::paint_card_row(ui, inner_w, device, warn, crit);
                     }
                 });
         });
