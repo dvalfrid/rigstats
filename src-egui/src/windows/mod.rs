@@ -16,12 +16,16 @@ use std::sync::{Arc, Mutex};
 pub enum OpenRequest {
     Settings(settings::Page),
     Control(control::Page),
+    About,
+    Status,
+    Updates,
+    History,
 }
 
 pub type OpenRequests = Arc<Mutex<Option<OpenRequest>>>;
 
-/// Debug builds only: `RIGSTATS_OPEN=control:<page>` or `settings:<page>`
-/// opens that dialog at start-up, so a page can be screenshotted without
+/// Debug builds only: `RIGSTATS_OPEN=control:<page>`, `settings:<page>`,
+/// `about`, `status`, `updates` or `history` opens that dialog at start-up, so a page can be screenshotted without
 /// clicking through the tray (`/verifier-gui`). Pages are the sidebar's
 /// names in lower case, e.g. `control:overview`, `settings:display`.
 pub fn dev_open_request() -> Option<OpenRequest> {
@@ -51,6 +55,10 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "lighting" => control::Page::Lighting,
             _ => control::Page::Overview,
         })),
+        "about" => Some(OpenRequest::About),
+        "status" => Some(OpenRequest::Status),
+        "updates" => Some(OpenRequest::Updates),
+        "history" => Some(OpenRequest::History),
         _ => None,
     }
 }
@@ -69,6 +77,7 @@ mod tests {
             parse_open_request("settings"),
             Some(OpenRequest::Settings(settings::Page::General))
         );
+        assert_eq!(parse_open_request("history"), Some(OpenRequest::History));
         assert_eq!(parse_open_request("nope:x"), None);
     }
 }

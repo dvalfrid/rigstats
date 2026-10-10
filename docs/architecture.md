@@ -545,11 +545,13 @@ dialog and the clock panel's update badge).
 
 #### `history.rs`
 
-Session History window, opened via `TrayCmd::OpenHistory`. Left panel lists
-sessions (name, time range, duration, avg CPU/GPU) with Pin/Rename/Reveal/Delete
-row actions — buttons share one fixed size per row and wrap onto a second line
-rather than overflow a narrow panel. Renaming swaps the row into an inline
-`TextEdit` with Save/Cancel (Enter/Escape also commit/cancel). Selecting a
+Session History window, opened via `TrayCmd::OpenHistory`. The sidebar lists
+recordings (`ui_kit::list_item`: name, start or "Recording", duration,
+pinned). The selected one shows its name and time span with Pin / Rename /
+Show File / Delete… under it — renaming turns the title into a `TextEdit`
+(Enter/Escape commit/cancel), Delete asks first (`HistoryState::confirm_delete`) —
+then average/peak cards for CPU, GPU and memory. New recordings are named in
+local time (`logging::default_session_name`; it used to be UTC). Selecting a
 session loads its CSV rows on a background thread
 (`spawn_load_rows`/`spawn_load_sessions`, guarded by an `AtomicBool` so a
 second load while one is in flight is a no-op) and renders CPU/GPU/RAM/

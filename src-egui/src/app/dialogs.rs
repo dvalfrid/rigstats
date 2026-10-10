@@ -375,16 +375,16 @@ impl RigStatsApp {
             let focus = self.dialogs.updater_focus.clone();
             let state = self.dialogs.updater_win.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(490.0, 560.0);
+            let [px, py] = dialog_center(600.0, 620.0);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let visible = self.dialogs.dialog_reveal.visible("updater");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats Update")
+                    .with_title("RigStats — Updates")
                     .with_visible(visible)
-                    .with_inner_size([490.0, 560.0])
+                    .with_inner_size([600.0, 620.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -393,7 +393,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats Update");
+                        found_hwnd = win_opacity::find_hwnd("RigStats — Updates");
                     }
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dc);
                 },

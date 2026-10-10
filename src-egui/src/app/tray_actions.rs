@@ -27,6 +27,10 @@ impl RigStatsApp {
                 self.dialogs.control_open.store(true, Ordering::Relaxed);
                 self.dialogs.control_focus.store(true, Ordering::Relaxed);
             }
+            Some(windows::OpenRequest::About) => self.tray_open_about(),
+            Some(windows::OpenRequest::Status) => self.tray_open_status(ctx),
+            Some(windows::OpenRequest::Updates) => self.tray_open_updater(),
+            Some(windows::OpenRequest::History) => self.tray_open_history(ctx),
             None => {}
         }
         while let Ok(cmd) = self.tray_rx.try_recv() {

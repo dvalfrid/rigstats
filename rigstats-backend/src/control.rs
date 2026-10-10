@@ -1106,7 +1106,7 @@ async fn request(
                     // A response to some earlier, already-abandoned request
                     // (e.g. after a prior timeout) — ignore and keep waiting.
                     Ok(IncomingLine::Response(_)) => {}
-                    Ok(IncomingLine::Event(ev)) => handle_event(ev, event_tx),
+                    Ok(IncomingLine::Event(ev)) => handle_event(ev, event_tx, dir),
                     Err(e) => {
                         let preview = buf.trim().chars().take(120).collect::<String>();
                         log_error(
@@ -1217,7 +1217,7 @@ async fn handle_cmd(
                         let _ = event_tx.send(ControlEvent::ProfilesNotice(None));
                         let _ = event_tx.send(ControlEvent::PreviewEnded { kept: false });
                     }
-                    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+                    publish_apply_result(r, event_tx, dir);
                 }
             }
             Ok(())
@@ -1357,7 +1357,7 @@ async fn handle_cmd(
             .await?
             {
                 if let Ok(r) = serde_json::from_value::<ApplyResult>(value) {
-                    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+                    publish_apply_result(r, event_tx, dir);
                 }
             }
             fetch_and_publish(writer, reader, next_id, event_tx, dir).await;
@@ -1387,7 +1387,7 @@ async fn handle_cmd(
                             revert_in,
                         });
                     }
-                    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+                    publish_apply_result(r, event_tx, dir);
                 }
             }
             Ok(())
@@ -1517,7 +1517,7 @@ fn hue_done(
 /// as a protocol oddity rather than silently dropped.
 fn handle_pushed_line(text: &str, event_tx: &SyncSender<ControlEvent>, dir: &Path) {
     match serde_json::from_str::<IncomingLine>(text.trim()) {
-        Ok(IncomingLine::Event(ev)) => handle_event(ev, event_tx),
+        Ok(IncomingLine::Event(ev)) => handle_event(ev, event_tx, dir),
         Ok(IncomingLine::Response(resp)) => {
             log_warn(
                 dir,
@@ -1537,7 +1537,21 @@ fn handle_pushed_line(text: &str, event_tx: &SyncSender<ControlEvent>, dir: &Pat
 /// `subscribe`'s event stream: `profile_changed`, `apply_result`, and the
 /// fan loop's `fan_duty` / `safety_tripped` (#188). Unknown events are
 /// ignored, so a newer service can add events without breaking this app.
-fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
+/// Hands an apply result to the UI and writes a failed one to the debug log
+/// (the Status window shows that log; the service logs its own side).
+fn publish_apply_result(r: ApplyResult, event_tx: &SyncSender<ControlEvent>, dir: &Path) {
+    if !r.ok {
+        let profile = r.profile_id.as_deref().unwrap_or("?");
+        let why = r.message.as_deref().unwrap_or("no reason given");
+        log_warn(
+            dir,
+            &format!("control: applying profile '{profile}' failed — {why}"),
+        );
+    }
+    let _ = event_tx.send(ControlEvent::ApplyResult(r));
+}
+
+fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>, dir: &Path) {
     match ev.event.as_str() {
         "profile_changed" => {
             let id = ev
@@ -1551,7 +1565,7 @@ fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>) {
         "apply_result" => {
             if let Some(data) = ev.data {
                 if let Ok(result) = serde_json::from_value::<ApplyResult>(data) {
-                    let _ = event_tx.send(ControlEvent::ApplyResult(result));
+                    publish_apply_result(result, event_tx, dir);
                 }
             }
         }
@@ -1616,6 +1630,37 @@ fn log_pipe_trouble_throttled(dir: &Path, msg: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_apply_is_written_to_the_debug_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let failed = ApplyResult {
+            ok: false,
+            message: Some("fan header control/1 did not accept 40 %".into()),
+            profile_id: Some("gaming".into()),
+        };
+        publish_apply_result(failed.clone(), &tx, dir.path());
+        assert!(matches!(rx.try_recv(), Ok(ControlEvent::ApplyResult(r)) if r == failed));
+        let log = std::fs::read_to_string(dir.path().join("rigstats-debug.log")).unwrap();
+        assert!(log.contains("applying profile 'gaming' failed"), "{log}");
+        assert!(log.contains("did not accept 40 %"), "{log}");
+    }
+
+    #[test]
+    fn a_successful_apply_is_not_logged_as_a_problem() {
+        let dir = tempfile::tempdir().unwrap();
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let ok = ApplyResult {
+            ok: true,
+            message: None,
+            profile_id: Some("gaming".into()),
+        };
+        publish_apply_result(ok, &tx, dir.path());
+        let log =
+            std::fs::read_to_string(dir.path().join("rigstats-debug.log")).unwrap_or_default();
+        assert!(!log.contains("failed"), "{log}");
+    }
 
     #[test]
     fn control_state_apply_connected_clears_mismatch_and_error() {
@@ -1971,7 +2016,7 @@ mod tests {
             r#"{"event":"fan_duty","data":{"duty":{"/lpc/nct6799d/0/control/1":42.5}}}"#,
         )
         .unwrap();
-        handle_event(ev, &tx);
+        handle_event(ev, &tx, &std::env::temp_dir());
 
         let mut state = ControlState::default();
         let event = rx.try_recv().unwrap();
@@ -1987,7 +2032,7 @@ mod tests {
             r#"{"event":"fan_identified","data":{"header":"/lpc/x/0/control/1","responders":[{"label":"Fan #2","before_rpm":996,"peak_rpm":2015},{"label":"Fan #5","before_rpm":1007,"peak_rpm":1988}]}}"#,
         )
         .unwrap();
-        handle_event(ev, &tx);
+        handle_event(ev, &tx, &std::env::temp_dir());
 
         let mut state = ControlState::default();
         assert!(state.apply(rx.try_recv().unwrap()));
@@ -2137,7 +2182,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let ev: EventIn =
             serde_json::from_str(r#"{"event":"preview_reverted","data":{"id":"p"}}"#).unwrap();
-        handle_event(ev, &tx);
+        handle_event(ev, &tx, &std::env::temp_dir());
         assert!(matches!(
             rx.try_recv(),
             Ok(ControlEvent::PreviewEnded { kept: false })
@@ -2367,7 +2412,7 @@ mod tests {
         let ev: EventIn =
             serde_json::from_str(r#"{"event":"safety_tripped","data":{"reason":"CPU 97°C"}}"#)
                 .unwrap();
-        handle_event(ev, &tx);
+        handle_event(ev, &tx, &std::env::temp_dir());
         assert!(matches!(rx.try_recv(), Ok(ControlEvent::SafetyTripped(r)) if r == "CPU 97°C"));
     }
 }

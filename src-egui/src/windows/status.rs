@@ -1,6 +1,7 @@
 use crate::gpu_process;
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
+use crate::windows::ui_kit;
 use chrono::Local;
 use rigstats_backend::control::ControlState;
 use rigstats_backend::{debug, hardware};
@@ -100,9 +101,8 @@ fn query_service_running() -> bool {
 }
 
 // Semantic status colours — independent of light/dark mode.
-const C_GOOD: egui::Color32 = egui::Color32::from_rgb(80, 190, 90);
-const C_BAD: egui::Color32 = egui::Color32::from_rgb(200, 70, 60);
-const C_WARN: egui::Color32 = egui::Color32::from_rgb(220, 170, 60);
+const C_GOOD: egui::Color32 = ui_kit::C_GOOD;
+const C_WARN: egui::Color32 = ui_kit::C_ATTENTION;
 
 // A GPU driver older than this is flagged as potentially outdated. Outdated AMD
 // drivers are a known cause of missing GPU sensors (see docs/troubleshooting.md).
@@ -112,9 +112,9 @@ const DRIVER_STALE_DAYS: i64 = 270;
 fn driver_age_label(age_days: i64) -> (String, egui::Color32) {
     let months = age_days / 30;
     if age_days >= DRIVER_STALE_DAYS {
-        (format!("⚠ {months} mo old"), C_WARN)
+        (format!("{months} months old"), C_WARN)
     } else if months >= 1 {
-        (format!("{months} mo old"), C_GOOD)
+        (format!("{months} months old"), C_GOOD)
     } else {
         ("Up to date".to_string(), C_GOOD)
     }
@@ -138,314 +138,157 @@ fn gpu_driver_support(name: &str) -> Option<(&'static str, &'static str)> {
     }
 }
 
-// ── Widget helpers ────────────────────────────────────────────────────────────
+// ── Groups ────────────────────────────────────────────────────────────────────
 
-fn card_frame(dc: &DialogColors) -> egui::Frame {
-    egui::Frame::new()
-        .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
-        .corner_radius(egui::CornerRadius::same(10))
-        .inner_margin(egui::Margin::symmetric(12, 10))
-}
-
-fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
-    ui.label(
-        egui::RichText::new(text)
-            .size(12.0)
-            .strong()
-            .color(dc.label),
-    );
-    ui.add_space(4.0);
-}
-
-fn meta_row(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    label: &str,
-    value: &str,
-    value_color: egui::Color32,
-) {
-    ui.label(egui::RichText::new(label).size(11.0).color(dc.muted));
-    ui.label(egui::RichText::new(value).size(13.0).color(value_color));
-}
-
-fn status_badge(ui: &mut egui::Ui, ok: bool) {
-    let (text, fill, text_color) = if ok {
-        (
-            "SUCCESS",
-            egui::Color32::from_rgb(28, 100, 42),
-            egui::Color32::WHITE,
-        )
+/// One row per part RIGStats depends on, with its state on the right.
+fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control: &ControlState) {
+    let checked = if st.last_refresh.is_empty() {
+        "Checking…".to_owned()
     } else {
-        (
-            "FAILED",
-            egui::Color32::from_rgb(120, 30, 30),
-            egui::Color32::WHITE,
-        )
+        format!("Checked {}.", st.last_refresh)
     };
-    egui::Frame::new()
-        .fill(fill)
-        .corner_radius(egui::CornerRadius::same(4))
-        .inner_margin(egui::Margin {
-            left: 6,
-            right: 6,
-            top: 2,
-            bottom: 2,
-        })
-        .show(ui, |ui| {
-            ui.label(
-                egui::RichText::new(text)
-                    .size(10.0)
-                    .strong()
-                    .color(text_color),
-            );
+    ui_kit::group(ui, dc, Some("Health"), Some(&checked), |g| {
+        g.row(
+            "Sensor service",
+            Some(&format!(
+                "rigstats-sensor · LibreHardwareMonitor {DEP_LHM_VER}"
+            )),
+            |ui| {
+                if st.service_running {
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Running");
+                } else {
+                    ui_kit::status(ui, ui_kit::C_BAD, "Stopped");
+                }
+            },
+        );
+        g.row(
+            "Sensor data",
+            Some("Live readings from the service"),
+            |ui| {
+                if st.wallpaper_active {
+                    // The main app hands the pipe to the wallpaper host on purpose.
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Read by the wallpaper");
+                } else if st.pipe_connected {
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Connected");
+                } else {
+                    ui_kit::status(ui, ui_kit::C_BAD, "Disconnected");
+                }
+            },
+        );
+        let protocol = match control.protocol_mismatch {
+            Some(m) => format!("Control pipe · app v{} but service v{}", m.expected, m.got),
+            // The service only lets the installed, signed RIGStats in
+            // (PipeClientVerifier) — say so instead of a bare "Disconnected".
+            None if control.refused => {
+                "The service only accepts the installed RIGStats — this copy runs from elsewhere or isn't signed".to_owned()
+            }
+            None => "Control pipe · protocol v1".to_owned(),
+        };
+        g.row("Control Center", Some(&protocol), |ui| {
+            if control.protocol_mismatch.is_some() {
+                ui_kit::status(ui, ui_kit::C_BAD, "Version mismatch");
+            } else if control.refused {
+                ui_kit::status(ui, ui_kit::C_ATTENTION, "Not allowed");
+            } else if control.connected {
+                ui_kit::status(ui, ui_kit::C_GOOD, "Connected");
+            } else {
+                ui_kit::status(ui, ui_kit::C_BAD, "Disconnected");
+            }
         });
-}
-
-// ── Section renderers ─────────────────────────────────────────────────────────
-
-fn render_diagnostics(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
-    section_label(ui, dc, "Diagnostics");
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-
-        // Service + Pipe side by side
-        egui::Grid::new("diag_status_grid")
-            .num_columns(2)
-            .min_col_width(180.0)
-            .spacing([8.0, 2.0])
-            .show(ui, |ui| {
-                ui.label(egui::RichText::new("Service").size(11.0).color(dc.muted));
-                ui.label(egui::RichText::new("Pipe").size(11.0).color(dc.muted));
-                ui.end_row();
-                let svc_color = if state.service_running { C_GOOD } else { C_BAD };
-                let svc_text = if state.service_running {
-                    "RUNNING"
+        g.row(
+            "System stats",
+            Some(&format!(
+                "sysinfo {DEP_SYSINFO_VER} · CPU, memory, disks, network"
+            )),
+            |ui| ui_kit::status(ui, ui_kit::C_GOOD, "Working"),
+        );
+        g.row(
+            "Hardware details",
+            Some(&format!("WMI {DEP_WMI_VER} · names, memory, motherboard")),
+            |ui| {
+                if st.wmi_ok {
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Working");
                 } else {
-                    "STOPPED"
-                };
-                ui.label(
-                    egui::RichText::new(svc_text)
-                        .size(13.0)
-                        .strong()
-                        .color(svc_color),
-                );
-                let (pipe_text, pipe_color) = if state.wallpaper_active {
-                    // Desktop Wallpaper mode: the main app released the pipe to the
-                    // wallpaper host on purpose — not an error.
-                    ("Wallpaper host", C_GOOD)
-                } else if state.pipe_connected {
-                    ("Connected", C_GOOD)
-                } else {
-                    ("Disconnected", C_BAD)
-                };
-                ui.label(
-                    egui::RichText::new(pipe_text)
-                        .size(13.0)
-                        .strong()
-                        .color(pipe_color),
-                );
-                ui.end_row();
-            });
-
-        ui.add_space(6.0);
-        meta_row(ui, dc, "Debug Log Path", &state.log_path, dc.text);
-        ui.add_space(6.0);
-        meta_row(
-            ui,
-            dc,
-            "Last Successful Refresh",
-            &state.last_refresh,
-            dc.text,
+                    ui_kit::status(ui, ui_kit::C_BAD, "Not answering");
+                }
+            },
         );
     });
 }
 
-/// Control Center (#187) summary — service-pipe connection, protocol
-/// version, and the last `apply_profile` result. `ControlState` already
-/// lives on the UI thread continuously (via `DashboardRuntime::drain_control`,
-/// no background load needed), so unlike `StatusState`'s fields this is
-/// passed straight through `show`'s params rather than cloned into it.
-fn render_control_center(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
-    section_label(ui, dc, "Control Center");
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        egui::Grid::new("control_status_grid")
-            .num_columns(2)
-            .min_col_width(180.0)
-            .spacing([8.0, 2.0])
-            .show(ui, |ui| {
-                ui.label(
-                    egui::RichText::new("Service pipe")
-                        .size(11.0)
-                        .color(dc.muted),
-                );
-                ui.label(egui::RichText::new("Protocol").size(11.0).color(dc.muted));
-                ui.end_row();
-                let (conn_text, conn_color) = if control.protocol_mismatch.is_some() {
-                    ("Version mismatch", C_BAD)
-                } else if control.connected {
-                    ("Connected", C_GOOD)
-                } else {
-                    ("Disconnected", C_BAD)
-                };
-                ui.label(
-                    egui::RichText::new(conn_text)
-                        .size(13.0)
-                        .strong()
-                        .color(conn_color),
-                );
-                let protocol_text = match control.protocol_mismatch {
-                    Some(m) => format!("app v{} \u{2260} service v{}", m.expected, m.got),
-                    None => "v1".to_string(),
-                };
-                ui.label(egui::RichText::new(protocol_text).size(13.0).color(dc.text));
-                ui.end_row();
-            });
-        ui.add_space(6.0);
-        let (result_text, result_color) = match &control.last_apply_result {
-            Some(r) if r.ok => ("Applied successfully".to_string(), C_GOOD),
-            Some(r) => (
-                r.message
-                    .clone()
-                    .unwrap_or_else(|| "Apply failed".to_string()),
-                C_BAD,
-            ),
-            None => ("\u{2014}".to_string(), dc.muted),
-        };
-        meta_row(ui, dc, "Last Apply Result", &result_text, result_color);
-    });
-}
-
-fn render_components(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
-    ui.add_space(8.0);
-    ui.columns(2, |cols| {
-        section_label(&mut cols[0], dc, "Dependencies");
-        let before = cols[0].min_rect().height();
-        dependencies_card(&mut cols[0], dc, state);
-        let dep_card_h = cols[0].min_rect().height() - before;
-
-        section_label(&mut cols[1], dc, "GPU Drivers");
-        drivers_card(&mut cols[1], dc, state, dep_card_h);
-    });
-}
-
-fn dependencies_card(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState) {
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        let sensor_ver = format!("LHM {DEP_LHM_VER}");
-        let deps: [(&str, &str, &str, bool); 3] = [
-            (
-                "rigstats-sensor",
-                "Hardware sensor feed\n(Windows Service)",
-                sensor_ver.as_str(),
-                state.service_running,
-            ),
-            (
-                "sysinfo",
-                "CPU, RAM, disk, network stats",
-                DEP_SYSINFO_VER,
-                true,
-            ),
-            (
-                "wmi",
-                "Windows hardware metadata",
-                DEP_WMI_VER,
-                state.wmi_ok,
-            ),
-        ];
-        for (i, (name, desc, ver, ok)) in deps.iter().enumerate() {
-            if i > 0 {
-                ui.add(egui::Separator::default().spacing(6.0));
+/// Each graphics card's driver, how old it is, and where the latest is.
+fn drivers_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState) {
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Graphics drivers"),
+        Some("An old AMD driver is a common cause of missing GPU sensors."),
+        |g| {
+            if st.gpu_drivers.is_empty() {
+                g.block(|ui| {
+                    ui_kit::footnote(ui, dc, "No graphics driver information available.");
+                });
             }
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.label(
-                        egui::RichText::new(*name)
-                            .size(13.0)
-                            .strong()
-                            .color(dc.text),
-                    );
-                    ui.label(egui::RichText::new(*desc).size(11.0).color(dc.muted));
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    status_badge(ui, *ok);
-                    ui.add_space(8.0);
-                    ui.label(egui::RichText::new(*ver).size(12.0).color(dc.muted));
-                });
-            });
-        }
-    });
-}
-
-fn drivers_card(ui: &mut egui::Ui, dc: &DialogColors, state: &StatusState, target_h: f32) {
-    // Inner height available for content = target minus the frame's vertical
-    // chrome (inner_margin 10+10 plus the 1 px stroke top/bottom).
-    let inner_h = (target_h - 22.0).max(0.0);
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-
-        if state.gpu_drivers.is_empty() {
-            ui.set_min_height(inner_h);
-            ui.label(
-                egui::RichText::new("No GPU driver information available.")
-                    .size(11.0)
-                    .color(dc.muted),
-            );
-            return;
-        }
-
-        egui::ScrollArea::vertical()
-            .id_salt("gpu_drivers_scroll")
-            .max_height(inner_h)
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.set_min_height(inner_h);
-                for (i, d) in state.gpu_drivers.iter().enumerate() {
-                    if i > 0 {
-                        ui.add(egui::Separator::default().spacing(6.0));
-                    }
-                    ui.label(
-                        egui::RichText::new(&d.name)
-                            .size(13.0)
-                            .strong()
-                            .color(dc.text),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Driver {}",
-                            d.version.as_deref().unwrap_or("unknown")
-                        ))
-                        .size(11.0)
-                        .color(dc.muted),
-                    );
-                    ui.horizontal(|ui| {
-                        if let Some(date) = &d.date {
-                            ui.label(egui::RichText::new(date).size(11.0).color(dc.muted));
-                        }
-                        if let Some(age) = d.age_days {
-                            let (txt, col) = driver_age_label(age);
-                            ui.label(egui::RichText::new(txt).size(11.0).strong().color(col));
-                        }
-                        if let Some((_, url)) = gpu_driver_support(&d.name) {
-                            ui.with_layout(
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    ui.add(egui::Hyperlink::from_label_and_url(
-                                        egui::RichText::new("↗ Latest driver")
-                                            .size(11.0)
-                                            .color(dc.link),
-                                        url,
-                                    ));
-                                },
-                            );
-                        }
-                    });
+            for d in &st.gpu_drivers {
+                let mut sub = format!("Driver {}", d.version.as_deref().unwrap_or("unknown"));
+                if let Some(date) = &d.date {
+                    sub.push_str(&format!(" · {date}"));
                 }
-            });
-    });
+                g.row(&d.name, Some(&sub), |ui| {
+                    if let Some((vendor, url)) = gpu_driver_support(&d.name) {
+                        if theme::dialog_btn_secondary(ui, "Latest driver", dc)
+                            .on_hover_text(format!("Opens {vendor}'s driver download page"))
+                            .clicked()
+                        {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(url));
+                        }
+                        ui.add_space(8.0);
+                    }
+                    if let Some(age) = d.age_days {
+                        let (text, color) = driver_age_label(age);
+                        ui_kit::status(ui, color, &text);
+                    }
+                });
+            }
+        },
+    );
 }
 
+/// The app's debug log, newest at the bottom, with a copy button.
+fn log_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState) {
+    ui_kit::group(ui, dc, Some("Debug log"), None, |g| {
+        g.row("rigstats-debug.log", Some(&st.log_path), |ui| {
+            if theme::dialog_btn_secondary(ui, "Copy", dc)
+                .on_hover_text("Copies the whole log")
+                .clicked()
+            {
+                ui.ctx().copy_text(st.log.clone());
+            }
+        });
+        g.block(|ui| {
+            egui::Frame::new()
+                .fill(dc.inset)
+                .corner_radius(egui::CornerRadius::same(6))
+                .inner_margin(egui::Margin::same(8))
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("status_log")
+                        .max_height(240.0)
+                        .stick_to_bottom(true)
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            let mut text = st.log.as_str();
+                            ui.add(
+                                egui::TextEdit::multiline(&mut text)
+                                    .font(egui::TextStyle::Monospace)
+                                    .desired_width(f32::INFINITY)
+                                    .interactive(false),
+                            );
+                        });
+                });
+        });
+    });
+}
 /// Run a PowerShell snippet and return stdout as a String.
 fn run_ps_capture(script: &str) -> String {
     match rigstats_backend::debug::run_hidden_command(
@@ -809,48 +652,9 @@ pub fn spawn_collect(
     });
 }
 
-fn render_debug_log(ui: &mut egui::Ui, dc: &DialogColors, log: &str, log_h: f32) {
-    ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        section_label(ui, dc, "Debug Log");
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if theme::dialog_btn_secondary(ui, "Copy Log", dc).clicked() {
-                ui.ctx().copy_text(log.to_string());
-            }
-        });
-    });
-
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        egui::Frame::new()
-            .fill(dc.inset)
-            .corner_radius(egui::CornerRadius::same(4))
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .max_height(log_h)
-                    .stick_to_bottom(true)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        let mut text = log;
-                        ui.add(
-                            egui::TextEdit::multiline(&mut text)
-                                .font(egui::TextStyle::Monospace)
-                                .desired_width(f32::INFINITY)
-                                .interactive(false),
-                        );
-                    });
-            });
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new("Showing latest log lines from RigStats backend diagnostics.")
-                .size(11.0)
-                .color(dc.muted),
-        );
-    });
-}
-
 // ── Window ────────────────────────────────────────────────────────────────────
 
+// The ctx-level panel API, as in every other dialog.
 #[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -878,38 +682,26 @@ pub fn show(
     let mut action_close = false;
 
     let st = state.lock_safe().clone();
+    let busy = refreshing.load(Ordering::Relaxed);
 
-    // ── Hero ──────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::top("status_hero")
-        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
-            left: 14,
-            right: 14,
-            top: 14,
-            bottom: 12,
-        }))
-        .show_separator_line(true)
-        .show(ctx, |ui| {
+    ui_kit::hero(ctx, dc, "status", "Status", |ui| {
+        if busy {
             ui.label(
-                egui::RichText::new("Status")
-                    .size(20.0)
-                    .strong()
-                    .color(dc.text),
-            );
-            ui.add_space(2.0);
-            ui.label(
-                egui::RichText::new("Diagnostics, debug log and dependency health.")
-                    .size(12.0)
+                egui::RichText::new("Refreshing…")
+                    .size(11.0)
                     .color(dc.muted),
             );
-        });
+            ui.spinner();
+        }
+    });
 
     // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("status_footer")
-        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
-            left: 12,
-            right: 12,
-            top: 8,
-            bottom: 10,
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 10,
+            bottom: 12,
         }))
         .show_separator_line(true)
         .show(ctx, |ui| {
@@ -920,55 +712,56 @@ pub fn show(
                 } else {
                     "Collect Diagnostics…"
                 };
-                if theme::dialog_btn_secondary(ui, collect_label, dc).clicked() && !collect_busy {
+                if theme::dialog_btn_secondary(ui, collect_label, dc)
+                    .on_hover_text(
+                        "Saves logs and system details to a ZIP you can attach to an issue",
+                    )
+                    .clicked()
+                    && !collect_busy
+                {
                     action_collect_diag = true;
                 }
                 if collect_busy {
-                    ui.add_space(4.0);
                     ui.spinner();
                 }
                 ui.add_space(4.0);
-                if theme::dialog_btn_secondary(ui, "Log Folder", dc).clicked() {
+                if theme::dialog_btn_secondary(ui, "Open Log Folder", dc).clicked() {
                     action_open_folder = true;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_secondary(ui, "Close", dc).clicked() {
+                    if theme::dialog_btn_primary(ui, "Close").clicked() {
                         action_close = true;
                     }
                     ui.add_space(6.0);
-                    if theme::dialog_btn_primary(ui, "Refresh").clicked() {
+                    if theme::dialog_btn_secondary(ui, "Refresh", dc).clicked() {
                         action_refresh = true;
-                    }
-                    if refreshing.load(Ordering::Relaxed) {
-                        ui.add_space(6.0);
-                        ui.spinner();
-                        ui.label(
-                            egui::RichText::new("Refreshing…")
-                                .size(11.0)
-                                .color(dc.muted),
-                        );
                     }
                 });
             });
         });
 
-    // ── Central content ───────────────────────────────────────────────────────
+    // ── The page ──────────────────────────────────────────────────────────────
     egui::CentralPanel::default()
-        .frame(
-            egui::Frame::new()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin::same(10)),
-        )
+        .frame(ui_kit::dialog_frame(dc))
         .show(ctx, |ui| {
-            // Reserve space for the debug log scroll — takes what's left after
-            // Diagnostics (~130 px) + Dependencies (~130 px) + Debug Log header + note.
-            const STATIC_H: f32 = 360.0;
-            let log_h = (ui.available_height() - STATIC_H).max(80.0);
-
-            render_diagnostics(ui, dc, &st);
-            render_control_center(ui, dc, control);
-            render_components(ui, dc, &st);
-            render_debug_log(ui, dc, &st.log, log_h);
+            egui::ScrollArea::vertical()
+                .id_salt("status_page")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    egui::Frame::new()
+                        .inner_margin(egui::Margin {
+                            left: 24,
+                            right: 24,
+                            top: 18,
+                            bottom: 8,
+                        })
+                        .show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            health_group(ui, dc, &st, control);
+                            drivers_group(ui, dc, &st);
+                            log_group(ui, dc, &st);
+                        });
+                });
         });
 
     if action_refresh {
@@ -996,17 +789,11 @@ pub fn show(
             main_ctx.clone(),
         );
     }
-    if action_close {
-        open.store(false, Ordering::Relaxed);
-        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-    }
-
-    if ctx.input(|i| i.viewport().close_requested()) {
+    if action_close || ctx.input(|i| i.viewport().close_requested()) {
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::{driver_age_label, gpu_driver_support, C_GOOD, C_WARN, DRIVER_STALE_DAYS};
@@ -1021,17 +808,14 @@ mod tests {
     #[test]
     fn months_old_but_not_stale_is_good() {
         let (txt, col) = driver_age_label(60);
-        assert_eq!(txt, "2 mo old");
+        assert_eq!(txt, "2 months old");
         assert_eq!(col, C_GOOD);
     }
 
     #[test]
     fn stale_driver_is_warned() {
         let (txt, col) = driver_age_label(DRIVER_STALE_DAYS);
-        assert!(
-            txt.starts_with('\u{26a0}'),
-            "expected warning prefix, got {txt}"
-        );
+        assert!(txt.ends_with("months old"), "got {txt}");
         assert_eq!(col, C_WARN);
     }
 

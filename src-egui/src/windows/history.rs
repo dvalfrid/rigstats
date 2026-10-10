@@ -1,7 +1,10 @@
-//! Session History window — browse past recording sessions and chart them.
+//! Session History window: recordings in a sidebar list; the selected one
+//! with its actions (pin, rename, show file, delete — confirmed), summary
+//! cards and synced charts. Built from `ui_kit`.
 
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
+use crate::windows::ui_kit;
 use eframe::egui;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
 use rigstats_backend::logging::{self, SessionMeta, SessionRow, SessionSummary};
@@ -19,6 +22,8 @@ pub struct HistoryState {
     pub rows: Vec<SessionRow>,
     /// `(session id, in-progress name text)` while a rename is being edited.
     pub rename_draft: Option<(String, String)>,
+    /// The session whose Delete is waiting for confirmation.
+    pub confirm_delete: Option<String>,
 }
 
 impl HistoryState {
@@ -119,41 +124,28 @@ fn session_duration_secs(meta: &SessionMeta) -> u64 {
 
 // ── Widget helpers ────────────────────────────────────────────────────────────
 
-fn card_frame(dc: &DialogColors) -> egui::Frame {
-    egui::Frame::new()
-        .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
-        .corner_radius(egui::CornerRadius::same(10))
-        .inner_margin(egui::Margin::symmetric(10, 8))
-}
-
-fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
-    ui.label(
-        egui::RichText::new(text)
-            .size(12.0)
-            .strong()
-            .color(dc.label),
-    );
-    ui.add_space(4.0);
-}
-
-fn stat_tile(ui: &mut egui::Ui, dc: &DialogColors, label: &str, value: &str, color: egui::Color32) {
-    egui::Frame::new()
-        .fill(dc.inset)
-        .corner_radius(egui::CornerRadius::same(4))
-        .inner_margin(egui::Margin::symmetric(10, 6))
+/// One resource's summary as a small card: label, average, peak.
+fn stat_tile(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    label: &str,
+    value: &str,
+    peak: &str,
+    color: egui::Color32,
+) {
+    ui_kit::card_frame(dc)
+        .inner_margin(egui::Margin::symmetric(14, 10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.vertical(|ui| {
-                ui.label(egui::RichText::new(label).size(10.0).color(dc.muted));
-                ui.label(egui::RichText::new(value).size(15.0).strong().color(color));
-            });
+            ui.label(egui::RichText::new(label).size(11.0).color(dc.muted));
+            ui.label(egui::RichText::new(value).size(18.0).strong().color(color));
+            ui.label(egui::RichText::new(peak).size(11.0).color(dc.muted));
         });
 }
 
-// ── Session list (left panel) ────────────────────────────────────────────────
+// ── Session list (sidebar) ───────────────────────────────────────────────────
 
-/// Actions the list can request; applied after all panels have rendered.
+/// Actions the window can request; applied after all panels have rendered.
 #[derive(Default)]
 struct ListActions {
     select: Option<String>,
@@ -163,202 +155,150 @@ struct ListActions {
     start_rename: Option<(String, String)>,
     commit_rename: Option<(String, String)>,
     cancel_rename: bool,
+    ask_delete: Option<String>,
+    cancel_delete: bool,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn render_session_row(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    meta: &SessionMeta,
-    selected: bool,
-    rename_draft: &mut Option<(String, String)>,
-    actions: &mut ListActions,
-) {
-    let is_active = meta.is_active();
-    let frame = egui::Frame::new()
-        .fill(if selected {
-            dc.inner
-        } else {
-            egui::Color32::TRANSPARENT
-        })
-        .corner_radius(egui::CornerRadius::same(4))
-        .inner_margin(egui::Margin::symmetric(8, 6));
-
-    frame.show(ui, |ui| {
-        ui.set_width(ui.available_width());
-
-        // Name row: inline edit if this session is being renamed.
-        let editing = rename_draft.as_ref().is_some_and(|(id, _)| *id == meta.id);
-        if editing {
-            let (_, text) = rename_draft.as_mut().unwrap();
-            let resp = ui.add(egui::TextEdit::singleline(text).desired_width(f32::INFINITY));
-            resp.request_focus();
-            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                actions.commit_rename = Some((meta.id.clone(), text.clone()));
-            }
-            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                actions.cancel_rename = true;
-            }
-        } else {
-            // Every piece of the header (name, status/duration, avg stats) senses
-            // its own click so the whole visual block acts as one target — not
-            // just the name text — and shows a pointer cursor wherever hovered.
-            let mut header_hovered = false;
-            let mut header_clicked = false;
-            let mut sense_click = |resp: egui::Response| {
-                let resp = resp.interact(egui::Sense::click());
-                header_hovered |= resp.hovered();
-                header_clicked |= resp.clicked();
-            };
-
-            sense_click(
-                ui.label(
-                    egui::RichText::new(&meta.name)
-                        .size(13.0)
-                        .strong()
-                        .color(if selected { dc.title } else { dc.text }),
-                ),
-            );
-
-            ui.horizontal(|ui| {
-                if is_active {
-                    // Painted dot rather than a Unicode bullet glyph, which the
-                    // embedded font doesn't have (renders as a tofu box).
-                    let (dot_rect, dot_resp) =
-                        ui.allocate_exact_size(egui::vec2(8.0, 11.0), egui::Sense::click());
-                    ui.painter()
-                        .circle_filled(dot_rect.center(), 3.0, theme::C_AMD);
-                    sense_click(dot_resp);
-                    sense_click(
-                        ui.label(
-                            egui::RichText::new("Recording")
-                                .size(11.0)
-                                .strong()
-                                .color(theme::C_AMD),
-                        ),
-                    );
-                } else {
-                    sense_click(
-                        ui.label(
-                            egui::RichText::new(fmt_local(meta.start_unix))
-                                .size(11.0)
-                                .color(dc.muted),
-                        ),
-                    );
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    sense_click(
-                        ui.label(
-                            egui::RichText::new(fmt_duration(session_duration_secs(meta)))
-                                .size(11.0)
-                                .color(dc.muted),
-                        ),
-                    );
-                });
-            });
-
-            if header_hovered {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
-            if header_clicked {
-                actions.select = Some(meta.id.clone());
-            }
-        }
-
-        // All row buttons share one size (the widest label in the current
-        // group) and the same Windows 11-style chrome as the dialog buttons,
-        // just scaled down — keeps them visually consistent with each other
-        // and with the rest of the app instead of each auto-sizing to text.
-        let font_id = egui::FontId::new(11.5, egui::FontFamily::Proportional);
-        let btn_pad = 14.0;
-        let btn_h = 22.0;
-        let group_width = |ui: &egui::Ui, labels: &[&str]| -> f32 {
-            labels
-                .iter()
-                .map(|label| {
-                    ui.painter()
-                        .layout_no_wrap((*label).to_owned(), font_id.clone(), egui::Color32::WHITE)
-                        .size()
-                        .x
-                })
-                .fold(0.0_f32, f32::max)
-                + btn_pad
-        };
-
-        ui.add_space(4.0);
-        // Wrapped (not a plain horizontal) so a narrow panel makes the button
-        // row overflow onto a second line instead of spilling past the panel
-        // edge — that overflow was rendering as a bright stray line at the
-        // panel boundary.
-        ui.horizontal_wrapped(|ui| {
-            if editing {
-                let size = egui::vec2(group_width(ui, &["Save", "Cancel"]), btn_h);
-                if theme::dialog_btn_secondary_compact(ui, "Save", dc, size).clicked() {
-                    let text = rename_draft.as_ref().unwrap().1.clone();
-                    actions.commit_rename = Some((meta.id.clone(), text));
-                }
-                if theme::dialog_btn_secondary_compact(ui, "Cancel", dc, size).clicked() {
-                    actions.cancel_rename = true;
-                }
-            } else {
-                let size = egui::vec2(
-                    group_width(ui, &["Pin", "Unpin", "Rename", "Reveal", "Delete"]),
-                    btn_h,
-                );
-                let pin_label = if meta.pinned { "Unpin" } else { "Pin" };
-                if theme::dialog_btn_secondary_compact(ui, pin_label, dc, size).clicked() {
-                    actions.toggle_pin = Some(meta.id.clone());
-                }
-                if theme::dialog_btn_secondary_compact(ui, "Rename", dc, size).clicked() {
-                    actions.start_rename = Some((meta.id.clone(), meta.name.clone()));
-                }
-                if theme::dialog_btn_secondary_compact(ui, "Reveal", dc, size).clicked() {
-                    actions.reveal = Some(meta.id.clone());
-                }
-                if !is_active
-                    && theme::dialog_btn_secondary_compact(ui, "Delete", dc, size).clicked()
-                {
-                    actions.delete = Some(meta.id.clone());
-                }
-            }
-        });
-    });
+/// "Recording · 12m 5s" / "2026-10-10 14:02 · 1h 3m · Pinned".
+fn session_subtitle(meta: &SessionMeta) -> String {
+    let when = if meta.is_active() {
+        "Recording".to_owned()
+    } else {
+        fmt_local(meta.start_unix)
+    };
+    let mut s = format!("{when} · {}", fmt_duration(session_duration_secs(meta)));
+    if meta.pinned {
+        s.push_str(" · Pinned");
+    }
+    s
 }
 
+/// Every session as a list item, newest first; a click selects it.
 fn render_session_list(
     ui: &mut egui::Ui,
     dc: &DialogColors,
     st: &HistoryState,
-    rename_draft: &mut Option<(String, String)>,
-) -> ListActions {
-    let mut actions = ListActions::default();
-
+    actions: &mut ListActions,
+) {
     if st.sessions.is_empty() {
-        ui.add_space(12.0);
-        ui.label(
-            egui::RichText::new(
-                "No recording sessions yet.\nUse the tray's \"Start Recording\" to begin one.",
-            )
-            .size(12.0)
-            .color(dc.muted),
+        ui.add_space(8.0);
+        ui_kit::footnote(
+            ui,
+            dc,
+            "No recordings yet. Choose Start Recording in the tray menu to make one.",
         );
-        return actions;
+        return;
     }
-
     egui::ScrollArea::vertical()
         .id_salt("history_session_list")
-        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .auto_shrink([false, false])
         .show(ui, |ui| {
-            for (i, meta) in st.sessions.iter().enumerate() {
-                if i > 0 {
-                    ui.add_space(2.0);
-                }
+            for meta in &st.sessions {
                 let selected = st.selected.as_deref() == Some(meta.id.as_str());
-                render_session_row(ui, dc, meta, selected, rename_draft, &mut actions);
+                let dot = meta.is_active().then_some(ui_kit::C_BAD);
+                if ui_kit::list_item(ui, dc, &meta.name, &session_subtitle(meta), selected, dot)
+                    .clicked()
+                    && !selected
+                {
+                    actions.select = Some(meta.id.clone());
+                }
             }
         });
+}
 
-    actions
+/// The selected session's name and time span, with its actions on the
+/// right; renaming and deleting are confirmed in place.
+fn detail_header(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    st: &HistoryState,
+    meta: &SessionMeta,
+    rename_draft: &mut Option<(String, String)>,
+    actions: &mut ListActions,
+) {
+    let range = match meta.end_unix {
+        Some(end) => format!("{} – {}", fmt_local(meta.start_unix), fmt_local(end)),
+        None => format!("{} – now (recording)", fmt_local(meta.start_unix)),
+    };
+    let renaming = rename_draft.as_ref().is_some_and(|(id, _)| *id == meta.id);
+    let deleting = st.confirm_delete.as_deref() == Some(meta.id.as_str());
+    ui.horizontal(|ui| {
+        if renaming {
+            if let Some((_, text)) = rename_draft.as_mut() {
+                let resp = ui.add(
+                    egui::TextEdit::singleline(text)
+                        .desired_width(260.0)
+                        .font(egui::FontId::proportional(15.0)),
+                );
+                resp.request_focus();
+                if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    actions.commit_rename = Some((meta.id.clone(), text.clone()));
+                }
+                if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    actions.cancel_rename = true;
+                }
+                if theme::dialog_btn_primary(ui, "Rename").clicked() {
+                    actions.commit_rename = Some((meta.id.clone(), text.clone()));
+                }
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                    actions.cancel_rename = true;
+                }
+            }
+            return;
+        }
+        ui.vertical(|ui| {
+            ui.label(
+                egui::RichText::new(&meta.name)
+                    .size(18.0)
+                    .strong()
+                    .color(dc.title),
+            );
+            ui.label(egui::RichText::new(range).size(12.0).color(dc.muted));
+        });
+    });
+    if renaming {
+        ui.add_space(14.0);
+        return;
+    }
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 6.0;
+        if deleting {
+            ui.label(
+                egui::RichText::new("Delete this recording?")
+                    .size(12.0)
+                    .color(dc.title),
+            );
+            ui.add_space(4.0);
+            if theme::dialog_btn_primary(ui, "Delete").clicked() {
+                actions.delete = Some(meta.id.clone());
+            }
+            if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                actions.cancel_delete = true;
+            }
+            return;
+        }
+        let pin = if meta.pinned { "Unpin" } else { "Pin" };
+        if theme::dialog_btn_secondary(ui, pin, dc)
+            .on_hover_text("Pinned recordings are never deleted automatically")
+            .clicked()
+        {
+            actions.toggle_pin = Some(meta.id.clone());
+        }
+        if theme::dialog_btn_secondary(ui, "Rename", dc).clicked() {
+            actions.start_rename = Some((meta.id.clone(), meta.name.clone()));
+        }
+        if theme::dialog_btn_secondary(ui, "Show File", dc)
+            .on_hover_text("Shows the recording's CSV file in Explorer")
+            .clicked()
+        {
+            actions.reveal = Some(meta.id.clone());
+        }
+        if !meta.is_active() && theme::dialog_btn_secondary(ui, "Delete…", dc).clicked() {
+            actions.ask_delete = Some(meta.id.clone());
+        }
+    });
+    ui.add_space(14.0);
 }
 
 // ── Detail pane (charts) ─────────────────────────────────────────────────────
@@ -386,7 +326,13 @@ fn plot_metric(
     if !any_data {
         return None;
     }
-    section_label(ui, dc, chart.title);
+    ui.label(
+        egui::RichText::new(chart.title)
+            .size(12.0)
+            .strong()
+            .color(dc.label),
+    );
+    ui.add_space(4.0);
     // Keyed by group_id (which already includes the session id) so switching
     // sessions never inherits another session's zoom/pan state, and manual
     // drag/zoom is disabled so the y-axis always auto-fits the full data range
@@ -484,24 +430,6 @@ fn draw_synced_readout(
 }
 
 fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows: &[SessionRow]) {
-    ui.horizontal(|ui| {
-        ui.vertical(|ui| {
-            ui.label(
-                egui::RichText::new(&meta.name)
-                    .size(16.0)
-                    .strong()
-                    .color(dc.title),
-            );
-            let range = if let Some(end) = meta.end_unix {
-                format!("{} - {}", fmt_local(meta.start_unix), fmt_local(end))
-            } else {
-                format!("{} - now", fmt_local(meta.start_unix))
-            };
-            ui.label(egui::RichText::new(range).size(11.0).color(dc.muted));
-        });
-    });
-    ui.add_space(8.0);
-
     let summary: SessionSummary = logging::summarize_rows(rows);
     if summary.row_count == 0 {
         ui.label(
@@ -512,43 +440,33 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
         return;
     }
 
-    let mut tiles: Vec<(&str, String, egui::Color32)> = vec![
-        (
-            "AVG CPU",
-            format!("{:.0}%", summary.avg_cpu_load),
-            theme::C_ACCENT,
-        ),
-        (
-            "PEAK CPU",
-            format!("{:.0}%", summary.peak_cpu_load),
-            theme::C_ACCENT,
-        ),
-    ];
-    if let Some(avg_gpu) = summary.avg_gpu_load {
-        tiles.push(("AVG GPU", format!("{avg_gpu:.0}%"), theme::C_AMD));
-    }
-    if let Some(peak_gpu) = summary.peak_gpu_load {
-        tiles.push(("PEAK GPU", format!("{peak_gpu:.0}%"), theme::C_AMD));
+    // One card per resource: the average, and the peak beneath it.
+    let mut tiles: Vec<(&str, String, String, egui::Color32)> = vec![(
+        "CPU load",
+        format!("{:.0} %", summary.avg_cpu_load),
+        format!("Peak {:.0} %", summary.peak_cpu_load),
+        theme::C_ACCENT,
+    )];
+    if let (Some(avg), Some(peak)) = (summary.avg_gpu_load, summary.peak_gpu_load) {
+        tiles.push((
+            "GPU load",
+            format!("{avg:.0} %"),
+            format!("Peak {peak:.0} %"),
+            theme::C_AMD,
+        ));
     }
     tiles.push((
-        "AVG RAM",
+        "Memory used",
         format!("{:.1} GB", summary.avg_ram_gb),
+        format!("Peak {:.1} GB", summary.peak_ram_gb),
         theme::C_RAM,
     ));
-    tiles.push((
-        "PEAK RAM",
-        format!("{:.1} GB", summary.peak_ram_gb),
-        theme::C_RAM,
-    ));
-
-    // Equal-width columns so the tile row reads as a balanced grid instead of
-    // ragged auto-sized boxes with leftover whitespace on the right.
     ui.columns(tiles.len(), |cols| {
-        for (col, (label, value, color)) in cols.iter_mut().zip(tiles.iter()) {
-            stat_tile(col, dc, label, value, *color);
+        for (col, (label, value, peak, color)) in cols.iter_mut().zip(tiles.iter()) {
+            stat_tile(col, dc, label, value, peak, *color);
         }
     });
-    ui.add_space(10.0);
+    ui.add_space(12.0);
 
     let t0 = meta.start_unix as f64;
     let xs = |r: &SessionRow| r.timestamp_unix as f64 - t0;
@@ -656,43 +574,46 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
         },
     ];
 
-    card_frame(dc).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        let pointer_pos = ui.input(|i| i.pointer.hover_pos());
-        egui::ScrollArea::vertical()
-            .id_salt("history_detail_scroll")
-            .show(ui, |ui| {
-                let plot_geo: Vec<Option<(egui::Rect, egui_plot::PlotTransform)>> = charts
-                    .iter()
-                    .map(|chart| plot_metric(ui, dc, chart, group_id))
-                    .collect();
+    ui_kit::card_frame(dc)
+        .inner_margin(egui::Margin::symmetric(14, 12))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let pointer_pos = ui.input(|i| i.pointer.hover_pos());
+            egui::ScrollArea::vertical()
+                .id_salt("history_detail_scroll")
+                .show(ui, |ui| {
+                    let plot_geo: Vec<Option<(egui::Rect, egui_plot::PlotTransform)>> = charts
+                        .iter()
+                        .map(|chart| plot_metric(ui, dc, chart, group_id))
+                        .collect();
 
-                // Whichever chart the pointer is actually over defines the shared
-                // hover x for this frame; every chart (including that one) then
-                // draws its own values at that same x in the same style, so a
-                // moment in time reads identically across all of them — the
-                // mouse-following native tooltip is time-only (see
-                // `label_formatter` above).
-                let hover_x = pointer_pos.and_then(|pos| {
-                    plot_geo.iter().find_map(|geo| {
-                        let (rect, transform) = geo.as_ref()?;
-                        rect.contains(pos)
-                            .then(|| transform.value_from_position(pos).x)
-                    })
-                });
-                if let Some(x) = hover_x {
-                    for (chart, geo) in charts.iter().zip(plot_geo.iter()) {
-                        if let Some((rect, transform)) = geo {
-                            draw_synced_readout(ui, *rect, transform, x, chart);
+                    // Whichever chart the pointer is actually over defines the shared
+                    // hover x for this frame; every chart (including that one) then
+                    // draws its own values at that same x in the same style, so a
+                    // moment in time reads identically across all of them — the
+                    // mouse-following native tooltip is time-only (see
+                    // `label_formatter` above).
+                    let hover_x = pointer_pos.and_then(|pos| {
+                        plot_geo.iter().find_map(|geo| {
+                            let (rect, transform) = geo.as_ref()?;
+                            rect.contains(pos)
+                                .then(|| transform.value_from_position(pos).x)
+                        })
+                    });
+                    if let Some(x) = hover_x {
+                        for (chart, geo) in charts.iter().zip(plot_geo.iter()) {
+                            if let Some((rect, transform)) = geo {
+                                draw_synced_readout(ui, *rect, transform, x, chart);
+                            }
                         }
                     }
-                }
-            });
-    });
+                });
+        });
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
+// The ctx-level panel API, as in every other dialog.
 #[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
@@ -713,95 +634,73 @@ pub fn show(
 
     let mut action_refresh = false;
     let mut action_close = false;
-    let mut list_actions = ListActions::default();
+    let mut actions = ListActions::default();
     let mut rename_draft = state.lock_safe().rename_draft.clone();
 
     let st = state.lock_safe().clone();
+    let busy = refreshing.load(Ordering::Relaxed) || loading_rows.load(Ordering::Relaxed);
 
-    // ── Hero ──────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::top("history_hero")
-        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
-            left: 14,
-            right: 14,
-            top: 14,
+    ui_kit::hero(ctx, dc, "history", "Session History", |ui| {
+        if busy {
+            ui.spinner();
+        }
+    });
+
+    // ── Footer ────────────────────────────────────────────────────────────────
+    egui::TopBottomPanel::bottom("history_footer")
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 10,
             bottom: 12,
         }))
         .show_separator_line(true)
         .show(ctx, |ui| {
-            ui.label(
-                egui::RichText::new("Session History")
-                    .size(20.0)
-                    .strong()
-                    .color(dc.text),
-            );
-            ui.add_space(2.0);
-            ui.label(
-                egui::RichText::new("Browse and chart past recording sessions.")
-                    .size(12.0)
-                    .color(dc.muted),
-            );
-        });
-
-    // ── Footer ────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("history_footer")
-        .frame(egui::Frame::new().fill(dc.bg).inner_margin(egui::Margin {
-            left: 12,
-            right: 12,
-            top: 8,
-            bottom: 10,
-        }))
-        .show_separator_line(true)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if theme::dialog_btn_secondary(ui, "Close", dc).clicked() {
-                        action_close = true;
-                    }
-                    ui.add_space(6.0);
-                    if theme::dialog_btn_primary(ui, "Refresh").clicked() {
-                        action_refresh = true;
-                    }
-                    if refreshing.load(Ordering::Relaxed) || loading_rows.load(Ordering::Relaxed) {
-                        ui.add_space(6.0);
-                        ui.spinner();
-                    }
-                });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if theme::dialog_btn_primary(ui, "Close").clicked() {
+                    action_close = true;
+                }
+                ui.add_space(6.0);
+                if theme::dialog_btn_secondary(ui, "Refresh", dc).clicked() {
+                    action_refresh = true;
+                }
             });
         });
 
-    // ── Session list ──────────────────────────────────────────────────────────
+    // ── Recordings (sidebar) ──────────────────────────────────────────────────
     egui::SidePanel::left("history_sessions")
         .resizable(false)
-        .exact_width(290.0)
-        .frame(
-            egui::Frame::new()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin::same(10)),
-        )
+        .exact_width(260.0)
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::same(10)))
         .show(ctx, |ui| {
-            section_label(ui, dc, "Sessions");
-            list_actions = render_session_list(ui, dc, &st, &mut rename_draft);
+            ui_kit::nav_header(ui, dc, "Recordings");
+            ui.add_space(2.0);
+            render_session_list(ui, dc, &st, &mut actions);
         });
 
-    // ── Detail ────────────────────────────────────────────────────────────────
+    // ── The selected recording ────────────────────────────────────────────────
     egui::CentralPanel::default()
-        .frame(
-            egui::Frame::new()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin::same(10)),
-        )
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 24,
+            right: 24,
+            top: 18,
+            bottom: 8,
+        }))
         .show(ctx, |ui| {
             let selected_meta = st
                 .selected
                 .as_ref()
                 .and_then(|id| st.sessions.iter().find(|s| &s.id == id));
             match selected_meta {
-                Some(meta) => render_detail(ui, dc, meta, &st.rows),
+                Some(meta) => {
+                    detail_header(ui, dc, &st, meta, &mut rename_draft, &mut actions);
+                    render_detail(ui, dc, meta, &st.rows);
+                }
                 None => {
-                    ui.add_space(24.0);
+                    ui.add_space(40.0);
                     ui.vertical_centered(|ui| {
                         ui.label(
-                            egui::RichText::new("Select a session on the left to see its charts.")
+                            egui::RichText::new("Choose a recording to see its charts.")
                                 .size(13.0)
                                 .color(dc.muted),
                         );
@@ -811,7 +710,8 @@ pub fn show(
         });
 
     // ── Apply actions ────────────────────────────────────────────────────────
-    if let Some(id) = list_actions.select {
+    if let Some(id) = actions.select {
+        state.lock_safe().confirm_delete = None;
         spawn_load_rows(
             state.clone(),
             loading_rows.clone(),
@@ -820,22 +720,30 @@ pub fn show(
             main_ctx.clone(),
         );
     }
-    if let Some(id) = list_actions.toggle_pin {
+    if let Some(id) = actions.toggle_pin {
         if let Some(meta) = st.sessions.iter().find(|s| s.id == id) {
             logging::set_session_pinned(dir, &id, !meta.pinned);
         }
         action_refresh = true;
     }
-    if let Some(id) = list_actions.delete {
+    if let Some(id) = actions.ask_delete {
+        state.lock_safe().confirm_delete = Some(id);
+    }
+    if actions.cancel_delete {
+        state.lock_safe().confirm_delete = None;
+    }
+    if let Some(id) = actions.delete {
         logging::delete_session(dir, &id);
-        if state.lock_safe().selected.as_deref() == Some(id.as_str()) {
-            let mut s = state.lock_safe();
+        let mut s = state.lock_safe();
+        s.confirm_delete = None;
+        if s.selected.as_deref() == Some(id.as_str()) {
             s.selected = None;
             s.rows.clear();
         }
+        drop(s);
         action_refresh = true;
     }
-    if let Some(id) = list_actions.reveal {
+    if let Some(id) = actions.reveal {
         if let Some(meta) = st.sessions.iter().find(|s| s.id == id) {
             let path = logging::session_file_path(dir, meta);
             let _ = Command::new("explorer")
@@ -843,13 +751,13 @@ pub fn show(
                 .spawn();
         }
     }
-    if let Some(pair) = list_actions.start_rename {
+    if let Some(pair) = actions.start_rename {
         rename_draft = Some(pair);
     }
-    if list_actions.cancel_rename {
+    if actions.cancel_rename {
         rename_draft = None;
     }
-    if let Some((id, name)) = list_actions.commit_rename {
+    if let Some((id, name)) = actions.commit_rename {
         let trimmed = name.trim();
         if !trimmed.is_empty() {
             logging::rename_session(dir, &id, trimmed.to_string());
@@ -867,16 +775,12 @@ pub fn show(
             main_ctx.clone(),
         );
     }
-    if action_close {
-        open.store(false, Ordering::Relaxed);
-        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-    }
-    if ctx.input(|i| i.viewport().close_requested()) {
+    if action_close || ctx.input(|i| i.viewport().close_requested()) {
+        state.lock_safe().confirm_delete = None;
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

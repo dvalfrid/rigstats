@@ -47,7 +47,7 @@ egui::CentralPanel::default().frame(ui_kit::dialog_frame(dc)).show(ctx, |ui| {
 });
 ```
 
-The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile, `icon_button` + / ⋯). Single-page dialogs (About, Status, Updates) keep hero / central / footer with `dialog_frame` and a local `card_frame` using the same 10 px radius; `history.rs` adds a `SidePanel` (session list) for its master/detail layout.
+The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile, `icon_button` + / ⋯). Single-page dialogs (About, Status, Updates) are `ui_kit::hero` / footer / central with groups of rows — no sidebar; state shows as `ui_kit::status` (coloured dot + text). Session History is master/detail: a sidebar of `ui_kit::list_item`s, the selected item's actions in a row under its title (destructive ones confirmed in place), summary cards and charts in `card_frame`s.
 
 ## Controls — pick by the choice
 
@@ -62,6 +62,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
 | A summary that opens a page | `tile` |
+| Content that scrolls (release notes, a log) | `fixed_card` — exact size, content clipped inside, so it can never widen the page (a `ScrollArea` inside a `group` puts its scrollbar beside the given width and pushes the card past the margin) |
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
@@ -100,4 +101,4 @@ let st = state.lock_safe().clone();
 
 ## Seeing a page
 
-Debug builds open a dialog at start-up with `RIGSTATS_OPEN=control:<page>` or `settings:<page>` (sidebar names in lower case, e.g. `control:alerts`) — see `/verifier-gui`.
+Debug builds open a dialog at start-up with `RIGSTATS_OPEN=control:<page>`, `settings:<page>` (sidebar names in lower case, e.g. `control:alerts`), `about`, `status`, `updates` or `history` — see `/verifier-gui`.

@@ -304,7 +304,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | Header panel | Active-profile chip (`● GAMING`); click opens Control Center. |
 | Existing panels | Control *next to* the value it affects: fan RPM in the Motherboard panel opens its curve; CPU panel shows `PL1 180 W`; GPU panel shows the power limit. |
 | Control Center (`windows/control.rs`) | One window: profiles on the left, tabs Fans / CPU / GPU / Lighting / Power on the right. Follows the dialog contract in `src-egui/src/windows/CLAUDE.md` and `AppTheme`. Only tabs with capabilities are shown. |
-| Status window | Service capabilities, conflicts and last apply result. |
+| Status window | Whether the Control Center pipe is connected (and its protocol version). A failed profile apply is written to the debug log, which Status shows. |
 | Session recording | Active profile is logged per row, so History can compare Silent vs Gaming in one chart. |
 | Errors | One consolidated message per transaction, same notification style as temperature alerts. |
 
