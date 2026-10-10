@@ -188,26 +188,6 @@ fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control:
                 ui_kit::status(ui, ui_kit::C_BAD, "Disconnected");
             }
         });
-        let failure = control
-            .last_apply_result
-            .as_ref()
-            .filter(|r| !r.ok)
-            .map(|r| {
-                r.message
-                    .clone()
-                    .unwrap_or_else(|| "Apply failed".to_owned())
-            });
-        g.row(
-            "Last profile change",
-            failure.as_deref(),
-            |ui| match &control.last_apply_result {
-                Some(r) if r.ok => ui_kit::status(ui, ui_kit::C_GOOD, "Applied"),
-                Some(_) => ui_kit::status(ui, ui_kit::C_BAD, "Failed"),
-                None => {
-                    ui.label(egui::RichText::new("None yet").size(12.0).color(dc.muted));
-                }
-            },
-        );
         g.row(
             "System stats",
             Some(&format!(
