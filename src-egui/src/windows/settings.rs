@@ -261,6 +261,12 @@ pub fn show(
                             // change it while this dialog is open).
                             let applied_layer = saved.lock_safe().window_layer.clone();
                             let page = st.page;
+                            // In wallpaper mode the visible dashboard is the
+                            // host process, which reads the settings file:
+                            // nothing previews until Save.
+                            if applied_layer == "wallpaper" {
+                                wallpaper_notice(ui, dc);
+                            }
                             let gpu_names = st.gpu_names.clone();
                             let draft = &mut st.draft;
                             match page {
@@ -336,6 +342,29 @@ pub fn show(
         open.store(false, Ordering::Relaxed);
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
+}
+
+/// Amber notice on every page while the dashboard is in the desktop
+/// wallpaper: changes show when Save writes them to disk.
+fn wallpaper_notice(ui: &mut egui::Ui, dc: &DialogColors) {
+    const AMBER: egui::Color32 = egui::Color32::from_rgb(0xE5, 0xC0, 0x7B);
+    ui_kit::card_frame(dc)
+        .stroke(egui::Stroke::new(1.0_f32, AMBER.gamma_multiply(0.6)))
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(
+                        "The dashboard is in the desktop wallpaper, so changes show when you click Save.",
+                    )
+                    .size(12.0)
+                    .color(AMBER),
+                )
+                .wrap(),
+            );
+        });
+    ui.add_space(14.0);
 }
 
 /// A "where it is now" row that opens the Control Center on `page`.

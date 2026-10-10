@@ -392,7 +392,7 @@ Relevant for gaming laptops (ASUS ROG, Razer, Alienware). Shows charge %, status
 > `panels/battery.rs`, sourced the same way (WMI `Win32_Battery` +
 > `root\wmi BatteryStatus` in `hardware.rs`). The charge/power colour
 > thresholds are no longer hardcoded — they're user-configurable warn/crit
-> values under Settings → Alerts (defaults: charge warn 10 % / crit 5 %,
+> values under Control Center → Alerts (defaults: charge warn 10 % / crit 5 %,
 > power warn 15 W / crit 25 W).
 
 ---
@@ -558,7 +558,7 @@ Settings" and "Close panel".
 > per open viewport. The lock toggle is a single shared
 > `floating_lock_arc` rather than a per-window Tauri command, and there is no
 > right-click "Open Settings" / "Close panel" context menu — panels are
-> shown/hidden entirely from Settings → Panels.
+> shown/hidden entirely from Control Center → Dashboard.
 
 ---
 

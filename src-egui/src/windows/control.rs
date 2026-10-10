@@ -412,80 +412,114 @@ fn cpu_tab(
     };
     let mut limits = ui_state.cpu_draft.as_ref().map_or(*saved, |d| d.limits);
     let before = limits;
-
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "CPU power limits");
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(format!(
-                "AMD Ryzen ({}). Lower limits run cooler and quieter; the maximum is what \
-                 the BIOS set. New limits are tried first and revert by themselves unless \
-                 you keep them.",
-                caps.generation
-            ))
-            .size(11.0)
-            .color(dc.muted),
-        );
-        ui.add_space(10.0);
-
+    let now = caps.current;
+    let footer = format!(
+        "AMD Ryzen ({}). Lower limits run cooler and quieter; the maximum is what the BIOS \
+         set. New limits are tried first and revert by themselves unless you keep them.",
+        caps.generation
+    );
+    ui_kit::group(ui, dc, Some("Power limits"), Some(&footer), |g| {
         // No edits while a try is running: Keep/Undo in the footer first.
-        ui.add_enabled_ui(control.preview.is_none(), |ui| {
-            ui.horizontal(|ui| {
-                if theme::dialog_btn_secondary(ui, "BIOS", dc).clicked() {
-                    limits = AmdCpuLimit::default();
-                }
-                for (name, values) in CPU_PRESETS {
-                    if theme::dialog_btn_secondary(ui, name, dc).clicked() {
-                        limits = preset_limits(values, &caps.stock);
-                    }
+        let editable = control.preview.is_none();
+        g.row("Preset", None, |ui| {
+            ui.add_enabled_ui(editable, |ui| {
+                // Which preset the limits are, if any (none lit = custom).
+                let mut chosen = if limits.is_stock() {
+                    0
+                } else {
+                    CPU_PRESETS
+                        .iter()
+                        .position(|(_, v)| preset_limits(*v, &caps.stock) == limits)
+                        .map_or(usize::MAX, |i| i + 1)
+                };
+                let mut options = vec![(0, "BIOS")];
+                options.extend(
+                    CPU_PRESETS
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (n, _))| (i + 1, *n)),
+                );
+                if ui_kit::segmented(ui, dc, &mut chosen, &options) {
+                    limits = match chosen {
+                        0 => AmdCpuLimit::default(),
+                        i => preset_limits(CPU_PRESETS[i - 1].1, &caps.stock),
+                    };
                 }
             });
-            ui.add_space(8.0);
-            limit_row(
-                ui,
-                dc,
-                "PPT (package power)",
+        });
+        let rows: [LimitRow<'_>; 3] = [
+            (
+                "Package power (PPT)",
                 "W",
                 &mut limits.ppt_w,
                 caps.min.ppt_w,
                 caps.stock.ppt_w,
-            );
-            limit_row(
-                ui,
-                dc,
-                "TDC (sustained current)",
+                now.ppt_w,
+            ),
+            (
+                "Sustained current (TDC)",
                 "A",
                 &mut limits.tdc_a,
                 caps.min.tdc_a,
                 caps.stock.tdc_a,
-            );
-            limit_row(
-                ui,
-                dc,
-                "EDC (peak current)",
+                now.tdc_a,
+            ),
+            (
+                "Peak current (EDC)",
                 "A",
                 &mut limits.edc_a,
                 caps.min.edc_a,
                 caps.stock.edc_a,
+                now.edc_a,
+            ),
+        ];
+        for (label, unit, value, min, stock, in_force) in rows {
+            g.row(
+                label,
+                Some(&format!("In force now: {in_force:.0} {unit}")),
+                |ui| {
+                    ui.add_enabled_ui(editable, |ui| limit_slider(ui, dc, unit, value, min, stock));
+                },
             );
-        });
-
-        ui.add_space(8.0);
-        let now = caps.current;
-        ui.label(
-            egui::RichText::new(format!(
-                "In force now: PPT {:.0} W · TDC {:.0} A · EDC {:.0} A",
-                now.ppt_w, now.tdc_a, now.edc_a
-            ))
-            .size(11.0)
-            .color(dc.muted),
-        );
-        dry_run_note(ui, dc, control);
+        }
     });
+    dry_run_note(ui, dc, control);
 
     if limits != before {
         ui_state.cpu_draft = Some(CpuDraft { profile_id, limits });
+    }
+}
+
+/// One power-limit row: label, unit, the value, its minimum, the BIOS
+/// value and the value in force now.
+type LimitRow<'a> = (&'a str, &'a str, &'a mut Option<f64>, f64, f64, f64);
+
+/// A limit's slider with its value beside it; a value at the BIOS
+/// maximum is no limit at all. For a row's right-to-left layout.
+fn limit_slider(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    unit: &str,
+    value: &mut Option<f64>,
+    min: f64,
+    stock: f64,
+) {
+    let text = match value {
+        Some(v) => format!("{v:.0} {unit}"),
+        None => format!("{stock:.0} {unit} (BIOS)"),
+    };
+    ui.add_sized(
+        [90.0, 20.0],
+        egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+    );
+    ui.spacing_mut().slider_width = 170.0;
+    // Whole units, compared before writing, so drawing never edits.
+    let mut v = value.unwrap_or(stock).round() as i32;
+    let slider = egui::Slider::new(&mut v, min.round() as i32..=stock.round() as i32)
+        .show_value(false)
+        .trailing_fill(true);
+    if ui.add(slider).changed() {
+        *value = below_stock(f64::from(v), stock);
     }
 }
 
@@ -587,7 +621,7 @@ fn co_summary(values: &[i32]) -> String {
     }
 }
 
-/// Curve Optimizer (#191) in the CPU tab: all-core, optionally per core.
+/// Curve Optimizer (#191) on the CPU page: all-core, optionally per core.
 fn curve_opt_card(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -605,79 +639,106 @@ fn curve_opt_card(
         .map_or_else(|| saved.clone(), |d| d.part.clone());
     let before = part.clone();
     let bios = |i: usize| caps.bios.get(i).copied().unwrap_or(0);
+    let editable = control.preview.is_none();
+    let mut per_core_ticked = ui_state.co_per_core;
 
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Curve Optimizer (undervolt)");
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(
-                "Negative offsets lower the CPU voltage: cooler, and often faster under \
-                 load. Too far and the PC becomes unstable or crashes, so start small \
-                 (−5 … −15) and test under load. A change runs for 15 s unless you keep \
-                 it; if the PC restarts within 3 minutes of a change, it is not applied \
-                 again at start-up.",
-            )
-            .size(11.0)
-            .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-        );
-        ui.add_space(10.0);
-        ui.add_enabled_ui(control.preview.is_none(), |ui| {
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("All cores").size(12.0).color(dc.muted));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let text = match part.all_core {
-                        Some(v) => co_text(v),
-                        None => "BIOS".to_owned(),
-                    };
-                    ui.add_sized(
-                        [86.0, 18.0],
-                        egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
-                    );
-                    let mut v = part.all_core.unwrap_or(0);
-                    let slider = egui::Slider::new(&mut v, caps.min..=caps.max)
-                        .show_value(false)
-                        .trailing_fill(true);
-                    if ui.add(slider).changed() {
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Curve Optimizer (undervolt)"),
+        Some(
+            "A change runs for 15 s unless you keep it; if the PC restarts within 3 minutes \
+             of a change, it is not applied again at start-up.",
+        ),
+        |g| {
+            g.block(|ui| {
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(
+                            "Negative offsets lower the CPU voltage: cooler, and often faster \
+                             under load. Too far and the PC becomes unstable or crashes, so \
+                             start small (−5 … −15) and test under load.",
+                        )
+                        .size(11.0)
+                        .color(WARN_TEXT),
+                    )
+                    .wrap(),
+                );
+            });
+            let in_force = format!("In force now: {}", co_summary(&caps.current));
+            g.row("All cores", Some(&in_force), |ui| {
+                ui.add_enabled_ui(editable, |ui| {
+                    let text = part.all_core.map_or_else(|| "BIOS".to_owned(), co_text);
+                    if let Some(v) = co_slider(
+                        ui,
+                        dc,
+                        text,
+                        part.all_core.unwrap_or(0),
+                        caps.min..=caps.max,
+                    ) {
                         part.all_core = Some(v);
                     }
-                    if theme::dialog_btn_secondary(ui, "BIOS", dc).clicked() {
+                    if part.all_core.is_some()
+                        && theme::dialog_btn_secondary(ui, "BIOS", dc).clicked()
+                    {
                         part = CurveOptPart::default();
                     }
                 });
             });
             if caps.per_core {
-                ui.add_space(4.0);
                 // Per-core values in the profile always show their rows;
-                // unticking removes them (a draft, tried like any change).
-                let mut shown = per_core_shown(ui_state.co_per_core, &part);
-                if ui
-                    .checkbox(
-                        &mut shown,
-                        egui::RichText::new("Per core").size(12.0).color(dc.muted),
-                    )
-                    .changed()
-                {
-                    ui_state.co_per_core = shown;
-                    if !shown {
-                        part.per_core = None;
-                    }
-                }
+                // switching off removes them (a draft, tried like any change).
+                let mut shown = per_core_shown(per_core_ticked, &part);
+                g.row("Set each core", Some("Its own offset per core"), |ui| {
+                    ui.add_enabled_ui(editable, |ui| {
+                        if ui_kit::toggle(ui, dc, &mut shown).changed() {
+                            per_core_ticked = shown;
+                            if !shown {
+                                part.per_core = None;
+                            }
+                        }
+                    });
+                });
                 if shown {
                     for core in 0..caps.cores {
-                        co_core_row(ui, dc, core, &mut part, bios(core), caps.min..=caps.max);
+                        let key = core.to_string();
+                        let own = part.per_core.as_ref().and_then(|m| m.get(&key).copied());
+                        let inherited = part.all_core.unwrap_or(bios(core));
+                        let sub = if own.is_some() {
+                            "Its own offset"
+                        } else {
+                            "Follows all cores"
+                        };
+                        g.row(&format!("Core {core}"), Some(sub), |ui| {
+                            ui.add_enabled_ui(editable, |ui| {
+                                let text = own.map_or_else(|| co_text(inherited), co_text);
+                                if let Some(v) = co_slider(
+                                    ui,
+                                    dc,
+                                    text,
+                                    own.unwrap_or(inherited),
+                                    caps.min..=caps.max,
+                                ) {
+                                    part.per_core
+                                        .get_or_insert_with(BTreeMap::new)
+                                        .insert(key.clone(), v);
+                                }
+                                if own.is_some()
+                                    && theme::dialog_btn_secondary(ui, "Follow all", dc).clicked()
+                                {
+                                    if let Some(map) = part.per_core.as_mut() {
+                                        map.remove(&key);
+                                    }
+                                }
+                            });
+                        });
                     }
                 }
             }
-        });
-        ui.add_space(8.0);
-        ui.label(
-            egui::RichText::new(format!("In force now: {}", co_summary(&caps.current)))
-                .size(11.0)
-                .color(dc.muted),
-        );
-        dry_run_note(ui, dc, control);
-    });
+        },
+    );
+    ui_state.co_per_core = per_core_ticked;
+    dry_run_note(ui, dc, control);
 
     let part = normalized_co(&part);
     if part != normalized_co(&before) {
@@ -685,49 +746,24 @@ fn curve_opt_card(
     }
 }
 
-/// One core: its own offset, or "(all)" when it follows the all-core value.
-fn co_core_row(
+/// An offset slider with its value beside it; `Some(new)` when moved.
+fn co_slider(
     ui: &mut egui::Ui,
     dc: &DialogColors,
-    core: usize,
-    part: &mut CurveOptPart,
-    bios: i32,
+    text: String,
+    value: i32,
     range: std::ops::RangeInclusive<i32>,
-) {
-    let key = core.to_string();
-    let own = part.per_core.as_ref().and_then(|m| m.get(&key).copied());
-    let inherited = part.all_core.unwrap_or(bios);
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(format!("Core {core}"))
-                .size(12.0)
-                .color(dc.muted),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let text = match own {
-                Some(v) => co_text(v),
-                None => format!("{} (all)", co_text(inherited)),
-            };
-            ui.add_sized(
-                [86.0, 18.0],
-                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
-            );
-            let mut v = own.unwrap_or(inherited);
-            let slider = egui::Slider::new(&mut v, range)
-                .show_value(false)
-                .trailing_fill(true);
-            if ui.add(slider).changed() {
-                part.per_core
-                    .get_or_insert_with(BTreeMap::new)
-                    .insert(key.clone(), v);
-            }
-            if own.is_some() && theme::dialog_btn_secondary(ui, "All", dc).clicked() {
-                if let Some(map) = part.per_core.as_mut() {
-                    map.remove(&key);
-                }
-            }
-        });
-    });
+) -> Option<i32> {
+    ui.add_sized(
+        [56.0, 20.0],
+        egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+    );
+    ui.spacing_mut().slider_width = 170.0;
+    let mut v = value;
+    let slider = egui::Slider::new(&mut v, range)
+        .show_value(false)
+        .trailing_fill(true);
+    (ui.add(slider).changed() && v != value).then_some(v)
 }
 
 /// Lighting effects in the order the Lighting tab offers them.
@@ -1347,81 +1383,65 @@ fn gpu_tab(
         .map_or_else(|| saved.clone(), |d| d.limits.clone());
     let before = limits.clone();
 
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "GPU power limit");
-        ui.add_space(4.0);
-        ui.label(
-            egui::RichText::new(
-                "The same setting as the Power Limit in AMD Adrenalin or MSI Afterburner, \
-                 relative to the driver default. Lower runs cooler and quieter; higher allows more boost. \
-                 New limits are tried first and revert by themselves unless you keep them.",
-            )
-            .size(11.0)
-            .color(dc.muted),
-        );
-        ui.add_space(10.0);
-        ui.add_enabled_ui(control.preview.is_none(), |ui| {
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Power limit"),
+        Some(
+            "The same setting as the Power Limit in AMD Adrenalin or MSI Afterburner, relative \
+             to the driver default. Lower runs cooler and quieter; higher allows more boost. \
+             New limits are tried first and revert by themselves unless you keep them.",
+        ),
+        |g| {
             for adapter in &caps.adapters {
-                gpu_limit_row(ui, dc, adapter, &mut limits);
+                let in_force = format!("In force now: {}", pct_text(adapter.current));
+                g.row(&adapter.name, Some(&in_force), |ui| {
+                    ui.add_enabled_ui(control.preview.is_none(), |ui| {
+                        gpu_limit_slider(ui, dc, adapter, &mut limits);
+                    });
+                });
             }
-        });
-        ui.add_space(8.0);
-        let now = caps
-            .adapters
-            .iter()
-            .map(|a| format!("{} {}", a.name, pct_text(a.current)))
-            .collect::<Vec<_>>()
-            .join(" · ");
-        ui.label(
-            egui::RichText::new(format!("In force now: {now}"))
-                .size(11.0)
-                .color(dc.muted),
-        );
-        dry_run_note(ui, dc, control);
-    });
+        },
+    );
+    dry_run_note(ui, dc, control);
 
     if limits != before {
         ui_state.gpu_draft = Some(GpuDraft { profile_id, limits });
     }
 }
 
-/// One adapter: name, an "Original" reset and a slider over the driver's
-/// range. A value equal to the original is stored as no value at all.
-fn gpu_limit_row(
+/// One adapter's slider over the driver's range, its value and an
+/// "Original" reset. A value equal to the original is stored as no value.
+fn gpu_limit_slider(
     ui: &mut egui::Ui,
     dc: &DialogColors,
     adapter: &GpuAdapterCap,
     limits: &mut BTreeMap<String, i32>,
 ) {
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new(&adapter.name)
-                .size(12.0)
-                .color(dc.muted),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let text = match limits.get(&adapter.id) {
-                Some(&v) => pct_text(v),
-                None => format!("{} (original)", pct_text(adapter.original)),
-            };
-            ui.add_sized(
-                [86.0, 18.0],
-                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
-            );
-            let mut v = limits.get(&adapter.id).copied().unwrap_or(adapter.original);
-            let slider = egui::Slider::new(&mut v, adapter.min..=adapter.max)
-                .step_by(f64::from(adapter.step.max(1)))
-                .show_value(false)
-                .trailing_fill(true);
-            if ui.add(slider).changed() {
-                set_gpu_limit(limits, adapter, v);
-            }
-            if theme::dialog_btn_secondary(ui, "Original", dc).clicked() {
-                limits.remove(&adapter.id);
-            }
-        });
-    });
+    let set = limits.get(&adapter.id).copied();
+    if set.is_some() && theme::dialog_btn_secondary(ui, "Original", dc).clicked() {
+        limits.remove(&adapter.id);
+    }
+    let text = match set {
+        Some(v) => pct_text(v),
+        None => format!("{} (original)", pct_text(adapter.original)),
+    };
+    ui.add_sized(
+        [96.0, 20.0],
+        egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
+    );
+    ui.spacing_mut().slider_width = 170.0;
+    let current = set.unwrap_or(adapter.original);
+    let mut v = current;
+    let step = adapter.step.max(1);
+    let slider = egui::Slider::new(&mut v, adapter.min..=adapter.max)
+        .show_value(false)
+        .trailing_fill(true);
+    if ui.add(slider).changed() && v != current {
+        // Snap to the driver's step only on a real move.
+        let snapped = adapter.min + ((v - adapter.min) as f32 / step as f32).round() as i32 * step;
+        set_gpu_limit(limits, adapter, snapped.clamp(adapter.min, adapter.max));
+    }
 }
 
 fn set_gpu_limit(limits: &mut BTreeMap<String, i32>, adapter: &GpuAdapterCap, value: i32) {
@@ -1430,38 +1450,6 @@ fn set_gpu_limit(limits: &mut BTreeMap<String, i32>, adapter: &GpuAdapterCap, va
     } else {
         limits.insert(adapter.id.clone(), value);
     }
-}
-
-fn limit_row(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    label: &str,
-    unit: &str,
-    value: &mut Option<f64>,
-    min: f64,
-    stock: f64,
-) {
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new(label).size(12.0).color(dc.muted));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let text = match value {
-                Some(v) => format!("{v:.0} {unit}"),
-                None => format!("{stock:.0} {unit} (BIOS)"),
-            };
-            ui.add_sized(
-                [86.0, 18.0],
-                egui::Label::new(egui::RichText::new(text).size(12.0).color(dc.text)),
-            );
-            let mut v = value.unwrap_or(stock) as f32;
-            let slider = egui::Slider::new(&mut v, min as f32..=stock as f32)
-                .step_by(1.0)
-                .show_value(false)
-                .trailing_fill(true);
-            if ui.add(slider).changed() {
-                *value = below_stock(f64::from(v), stock);
-            }
-        });
-    });
 }
 
 #[allow(deprecated)]
@@ -2619,7 +2607,7 @@ fn fans_tab(
             ui.add_space(8.0);
             ui.label(
                 egui::RichText::new(
-                    "The motherboard firmware controls this fan. Choose Curve to set your own.",
+                    "The motherboard firmware controls this fan. Choose Custom curve to set your own.",
                 )
                 .size(11.0)
                 .color(dc.muted),

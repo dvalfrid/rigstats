@@ -252,11 +252,11 @@
         </div>
         <ul class="floating-features">
           <li>Corner-anchored (drag-free) or free-dragged anywhere on screen</li>
-          <li>Choose which metrics appear and reorder them with arrows</li>
+          <li>Choose which metrics appear and reorder them with arrows — per profile, so Gaming can show more than Quiet</li>
           <li>Adjustable scale, opacity, and an optional frosted background card</li>
           <li>Click-through by default — mouse clicks pass to the game underneath</li>
           <li>Global <strong>Ctrl+Alt+O</strong> hotkey shows/hides it without leaving the game</li>
-          <li>Toggle from the tray menu or Settings — independent of window layer or floating mode</li>
+          <li>Toggle from the tray menu or the Control Center — independent of window layer or floating mode</li>
         </ul>
       </div>
     </div>
@@ -301,16 +301,22 @@
       <div class="floating-showcase">
         <div class="dual-shots">
           <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-fans.png" alt="Control Center, Fans tab: a fan curve editor with draggable points, the channel's measured fans (Fan #2 and Fan #5), live duty, and several fans sharing one curve" class="hero-img">
+            <img src="images/control-center-overview.png" alt="Control Center, Overview: the profile bar with Silent, Eco, Gaming and Balanced, a sidebar of pages, and a tile per page summarising what the Balanced profile does — dashboard look, overlay, alerts, power plan, fans, CPU, graphics card and lighting" class="hero-img">
           </div>
           <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-cpu.png" alt="Control Center, CPU tab: PPT, TDC and EDC sliders with BIOS, 105 W Eco and 65 W Eco presets, and a Curve Optimizer card with an all-core offset, a per-core option and a risk notice" class="hero-img">
+            <img src="images/control-center-dashboard.png" alt="Control Center, Dashboard page: the profile's accent colour as colour dots, panel opacity, and every panel with a switch and arrows to set the order" class="hero-img">
           </div>
           <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-gpu.png" alt="Control Center, GPU tab: the AMD Radeon RX 9070 XT power limit slider at -15 %, an Original button, and the limit currently in force" class="hero-img">
+            <img src="images/control-center-fans.png" alt="Control Center, Fans page: Automatic (BIOS) or Custom curve for a fan header, the temperature it follows, Silent/Balanced/Performance starting points, a curve editor with draggable points, and fans sharing the same curve" class="hero-img">
           </div>
           <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-lighting.png" alt="Control Center, Lighting tab: Aura Sync to the ASUS Aura motherboard controller, the ROG Aura Monitor Light Bar, two ROG Strix XG27AQDMG monitors, the ROG Azoth X and the ROG Omni receiver; a static red effect with quick-pick colour swatches and brightness, and the light bar's desk lamp on at 50 % and 4000 K" class="hero-img">
+            <img src="images/control-center-cpu.png" alt="Control Center, CPU page: BIOS, 105 W Eco and 65 W Eco presets, package power, sustained and peak current sliders with the values in force, and a Curve Optimizer group with an all-core offset, per-core option and a risk notice" class="hero-img">
+          </div>
+          <div class="screen-wrap screen-wrap--wide">
+            <img src="images/control-center-gpu.png" alt="Control Center, Graphics card page: the AMD Radeon RX 9070 XT power limit slider with the value in force" class="hero-img">
+          </div>
+          <div class="screen-wrap screen-wrap--wide">
+            <img src="images/control-center-lighting.png" alt="Control Center, Lighting page: Unchanged/Off/Static/Breathing/Colour cycle effect buttons, colour dots, brightness, the desk lamp's on/off, brightness and colour temperature, and the list of lighting devices" class="hero-img">
           </div>
           <div class="screen-wrap">
             <img src="images/tray-menue-profile.png" alt="Tray menu with the Profile submenu open, listing Silent, Gaming, Eco and Balanced with a check on the active profile" class="hero-img">
@@ -524,7 +530,7 @@
           </div>
           <div class="panel-body">
             <h3>Motherboard</h3>
-            <p>Super I/O chip sensors for the full board — all active fan channels, board temperatures, and key voltage rails. Board name and chip model auto-detected at startup. Optional panel, enabled in Settings.</p>
+            <p>Super I/O chip sensors for the full board — all active fan channels, board temperatures, and key voltage rails. Board name and chip model auto-detected at startup. Optional panel, switched on per profile in the Control Center.</p>
             <ul>
               <li>Fan channels (RPM) — all active, sorted by speed</li>
               <li>Board temperatures (°C) — unnamed slots shown as T1–T6</li>
@@ -541,7 +547,7 @@
           </div>
           <div class="panel-body">
             <h3>Processes</h3>
-            <p>A miniature Task Manager always visible on the portrait display. Shows the top 8 processes sorted by CPU usage so you can instantly see which game, encoder, or background service is consuming your hardware. Optional panel, enabled in Settings.</p>
+            <p>A miniature Task Manager always visible on the portrait display. Shows the top 8 processes sorted by CPU usage so you can instantly see which game, encoder, or background service is consuming your hardware. Optional panel, switched on per profile in the Control Center.</p>
             <ul>
               <li>Top 8 processes by CPU usage</li>
               <li>Per-process CPU % of total system capacity</li>
@@ -557,7 +563,7 @@
           </div>
           <div class="panel-body">
             <h3>GPU Apps</h3>
-            <p>Task-Manager-style per-process GPU usage — see exactly which game, encoder, or background app is actually using the GPU, not just overall load. Attributes each process to a physical adapter when more than one GPU is active. Optional panel, enabled in Settings.</p>
+            <p>Task-Manager-style per-process GPU usage — see exactly which game, encoder, or background app is actually using the GPU, not just overall load. Attributes each process to a physical adapter when more than one GPU is active. Optional panel, switched on per profile in the Control Center.</p>
             <ul>
               <li>Top processes by GPU usage (%)</li>
               <li>Engine type per process (3D, Video Decode, etc.)</li>
@@ -592,7 +598,7 @@
           </div>
           <div class="panel-body">
             <h3>Peripherals</h3>
-            <p>Battery levels of your wireless gear at a glance — ROG headsets, and ROG keyboards and mice on the ROG Omni receiver — read by the background service about once a minute. Optional panel, enabled in Settings.</p>
+            <p>Battery levels of your wireless gear at a glance — ROG headsets, and ROG keyboards and mice on the ROG Omni receiver — read by the background service about once a minute. Optional panel, switched on per profile in the Control Center.</p>
             <ul>
               <li>Battery level (%) per device</li>
               <li>Charging state</li>
@@ -609,7 +615,7 @@
           </div>
           <div class="panel-body">
             <h3>System Power</h3>
-            <p>Estimated total system power draw with a CPU/GPU/Other breakdown, so you can see at a glance what your rig is pulling from the wall. Optional panel, enabled in Settings.</p>
+            <p>Estimated total system power draw with a CPU/GPU/Other breakdown, so you can see at a glance what your rig is pulling from the wall. Optional panel, switched on per profile in the Control Center.</p>
             <ul>
               <li>Estimated total draw (~W) — CPU Package + GPU Package + platform overhead</li>
               <li>Proportional breakdown bars: CPU (cyan), GPU (red), Other (platform overhead)</li>
@@ -678,26 +684,22 @@
 
         <article class="dialog-card dialog-card--settings">
           <div class="settings-tabs" role="tablist">
-            <button class="settings-tab active" data-img="settings-display-dialog.png" role="tab" aria-selected="true">Display</button>
-            <button class="settings-tab" data-img="settings-panels-dialog.png" role="tab" aria-selected="false">Panels</button>
-            <button class="settings-tab" data-img="settings-alerts-dialog.png" role="tab" aria-selected="false">Alerts</button>
-            <button class="settings-tab" data-img="settings-appearance-dialog.png" role="tab" aria-selected="false">Appearance</button>
-            <button class="settings-tab" data-img="settings-general-dialog.png" role="tab" aria-selected="false">General</button>
+            <button class="settings-tab active" data-img="settings-general-dialog.png" role="tab" aria-selected="true">General</button>
+            <button class="settings-tab" data-img="settings-display-dialog.png" role="tab" aria-selected="false">Display</button>
             <button class="settings-tab" data-img="settings-overlay-dialog.png" role="tab" aria-selected="false">Overlay</button>
+            <button class="settings-tab" data-img="settings-notifications-dialog.png" role="tab" aria-selected="false">Notifications</button>
           </div>
           <div class="dialog-img-wrap">
-            <img id="settings-preview" src="images/settings-display-dialog.png" alt="Settings — Display tab" class="dialog-img">
+            <img id="settings-preview" src="images/settings-general-dialog.png" alt="Settings — General page: Start with Windows, model name, and how long recordings are kept" class="dialog-img">
           </div>
           <div class="dialog-body">
             <h3>Settings</h3>
-            <p>Six focused tabs to configure every aspect of the dashboard. Changes apply as a live preview; Cancel restores the previous state. In <strong>Desktop Wallpaper</strong> mode the dashboard is a separate background process, so settings apply on <strong>Save</strong> instead of live preview, no-op controls grey out, and the display profile is locked — switch to a non-wallpaper layer to change it.</p>
+            <p>What applies to the whole app, whichever profile is active. Changes preview live; Cancel restores the previous state. Accent colour, panels, overlay metrics and alert levels belong to your profile and live in the Control Center — Settings links straight there. In <strong>Desktop Wallpaper</strong> mode the window layer changes on <strong>Save</strong> and the display profile is locked — switch to another layer to change it.</p>
             <ul>
-              <li><strong>Display</strong> — display profile, window layer (Normal / Always on Top / Always Behind / Desktop Wallpaper — lives in the wallpaper layer and survives Win+D), opacity, floating mode and panel scale, fill screen and alignment</li>
-              <li><strong>Panels</strong> — toggle panel visibility, use arrows to reorder, set PSU rated wattage</li>
-              <li><strong>Alerts</strong> — Notify on Critical toggle, cooldown, Warn/Crit thresholds for CPU/GPU/RAM/Disk temperature (°C), CPU/GPU/RAM/Disk usage (%), and battery charge % and power W</li>
-              <li><strong>Appearance</strong> — override model name, colour theme</li>
-              <li><strong>General</strong> — launch at startup, stats CSV logging and retention</li>
-              <li><strong>Overlay</strong> — enable the game overlay, choose and reorder metrics, columns/anchor/scale/opacity/background, click-through lock</li>
+              <li><strong>General</strong> — start with Windows, model name, how long recordings are kept, open the log folder</li>
+              <li><strong>Display</strong> — display profile, window layer (Normal / Always on Top / Always Behind / Desktop Wallpaper — survives Win+D), floating panels and their size, fill screen and position, the graphics card shown, power supply rating</li>
+              <li><strong>Overlay</strong> — corner and distance from the edge, size, background and opacity, click-through</li>
+              <li><strong>Notifications</strong> — critical alerts and warnings on or off, how often an alert repeats, a test notification</li>
             </ul>
           </div>
         </article>

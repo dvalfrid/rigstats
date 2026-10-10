@@ -119,9 +119,11 @@ See [docs/architecture.md](docs/architecture.md) for module-level detail and [do
 
 ## Display & Placement
 
-The dashboard renders on a secondary monitor and is configured entirely from
-**Settings** (a 560×600 dialog with six tabs: Display, Panels, Alerts,
-Appearance, General, Overlay).
+The dashboard renders on a secondary monitor. Where it goes is set in
+**Settings** (pages: General, Display, Overlay, Notifications — what applies to
+the whole app); how it looks — accent colour, opacity, which panels in what
+order, the overlay's metrics and the alert levels — belongs to each
+**Control Center profile** and switches with it.
 
 - **Display profiles** — pick a portrait or landscape profile that matches the
   target screen (e.g. `portrait-xl` = 450×1920, `landscape-xl` = 1920×450). The
@@ -159,7 +161,9 @@ details.
 
 A compact strip of chosen metrics drawn on top of games, independent of
 whatever the main dashboard is doing. Show/hide it from the tray or with
-**Ctrl+Alt+O**; configure it under **Settings → Overlay**.
+**Ctrl+Alt+O**. What it shows (metrics, layout) is part of the profile — set
+it under **Control Center → Overlay**; where it sits and how it looks is under
+**Settings → Overlay**.
 
 - **Metrics** — pick and reorder from CPU/GPU load, temperature, clock and
   power, VRAM, RAM, network, ping, battery and more; values are coloured by
@@ -283,7 +287,7 @@ Supports NVIDIA and AMD discrete GPUs through LHM. Intel Arc GPUs should work bu
 | Temperatures (°C) | LHM — all `/lpc/` temperature sensors ≥ 5 °C |
 | Voltage rails (V) | LHM — named `/lpc/` voltage rails only; generic `Voltage #N` slots excluded |
 
-Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and other Super I/O controllers. Opt-in via Settings → Panels.
+Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and other Super I/O controllers. Opt-in via Control Center → Dashboard (per profile).
 
 ### Network
 
