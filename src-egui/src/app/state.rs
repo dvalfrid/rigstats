@@ -41,6 +41,8 @@ pub(crate) struct DialogStates {
     pub(crate) history_loading_rows: Arc<AtomicBool>,
     /// Control Center tab/selection and unsaved fan-curve draft (#188).
     pub(crate) control_ui: windows::control::ControlUi,
+    /// A dialog asking for another to open (Settings ↔ Control Center links).
+    pub(crate) open_requests: windows::OpenRequests,
     /// Keeps each freshly opened dialog hidden until it has rendered (no
     /// white flash) — see `dialog_reveal`.
     pub(crate) dialog_reveal: DialogReveal,
@@ -81,6 +83,7 @@ impl DialogStates {
             history_refreshing: flag(),
             history_loading_rows: flag(),
             control_ui: windows::control::ControlUi::default(),
+            open_requests: Arc::new(Mutex::new(windows::dev_open_request())),
             dialog_reveal: DialogReveal::default(),
             any_dialog_open_prev: false,
         }

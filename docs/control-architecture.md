@@ -209,6 +209,12 @@ Stored by the service in `%ProgramData%\se.codeby.rigstats\profiles.json`
 (ACL: SYSTEM + Administrators write, Users read). The UI edits profiles only
 through the pipe.
 
+The app's own part of a profile (accent colour, panels, overlay content, alert
+thresholds — #305) is not part of this model: it is per Windows user, in the
+app's settings file (`Settings.profile_looks`), keyed by profile id, and
+switched by the app when the active profile changes. See `settings.rs` in
+`docs/architecture.md`; the Control Center shows both halves side by side.
+
 Each save first copies the file it replaces to `profiles.json.bak`. A file
 that can't be read (a downgrade, a disk error, a manual edit) is moved to
 `profiles.json.corrupt`, and the profiles come from the `.bak`, else the

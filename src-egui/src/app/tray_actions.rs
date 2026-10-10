@@ -15,6 +15,20 @@ use std::time::Instant;
 impl RigStatsApp {
     /// Runs the tray commands forwarded by the background polling thread.
     pub(crate) fn handle_tray_commands(&mut self, ctx: &egui::Context) {
+        // A link from one dialog to the other (Settings ↔ Control Center).
+        let request = self.dialogs.open_requests.lock_safe().take();
+        match request {
+            Some(windows::OpenRequest::Settings(page)) => {
+                self.tray_open_settings();
+                self.dialogs.settings_win.lock_safe().page = page;
+            }
+            Some(windows::OpenRequest::Control(page)) => {
+                self.dialogs.control_ui.open_page(page);
+                self.dialogs.control_open.store(true, Ordering::Relaxed);
+                self.dialogs.control_focus.store(true, Ordering::Relaxed);
+            }
+            None => {}
+        }
         while let Ok(cmd) = self.tray_rx.try_recv() {
             match cmd {
                 TrayCmd::OpenSettings => self.tray_open_settings(),
@@ -45,11 +59,8 @@ impl RigStatsApp {
     fn tray_open_settings(&mut self) {
         // Re-initialise draft from current settings each time the window opens.
         let s = self.current_settings.lock_safe().clone();
-        *self.dialogs.settings_win.lock_safe() = windows::settings::SettingsWindow::from_settings(
-            &s,
-            self.tray.gpu_menu.names(),
-            self.battery_present.clone(),
-        );
+        *self.dialogs.settings_win.lock_safe() =
+            windows::settings::SettingsWindow::from_settings(&s, self.tray.gpu_menu.names());
         self.dialogs.settings_open.store(true, Ordering::Relaxed);
         self.dialogs.settings_focus.store(true, Ordering::Relaxed);
     }

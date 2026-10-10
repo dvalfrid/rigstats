@@ -13,6 +13,10 @@ use rigstats_egui::{win32_dark_mode, win_opacity};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Settings and the Control Center: a sidebar of pages beside grouped rows.
+const SETTINGS_SIZE: [f32; 2] = [760.0, 620.0];
+const CONTROL_SIZE: [f32; 2] = [940.0, 700.0];
+
 impl RigStatsApp {
     /// Shared tail of every dialog's per-frame render (Settings, About,
     /// Status, History, Updater), after its `show_viewport_immediate`:
@@ -43,6 +47,10 @@ impl RigStatsApp {
             win_opacity::disable_dwm_transitions(found_hwnd);
         }
         if !visible {
+            // Glyphs first drawn in a hidden pass can lose their atlas upload
+            // (egui 0.34, see `refresh_font_atlas_after_minimize`): rebuild
+            // the atlas once the dialog shows instead of up to 30 s later.
+            self.font_atlas.stale = true;
             ctx.request_repaint();
             #[cfg(windows)]
             win_opacity::force_repaint(self.hwnd);
@@ -124,8 +132,9 @@ impl RigStatsApp {
             let dir = self.dir.clone();
             let saved = self.current_settings.clone();
             let reload = self.settings_reload.clone();
+            let requests = self.dialogs.open_requests.clone();
             let mctx = main_ctx.clone();
-            let [px, py] = dialog_center(560.0, 600.0);
+            let [px, py] = dialog_center(SETTINGS_SIZE[0], SETTINGS_SIZE[1]);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let dcomp_available = self.dcomp_available;
@@ -135,7 +144,7 @@ impl RigStatsApp {
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Settings")
                     .with_visible(visible)
-                    .with_inner_size([560.0, 600.0])
+                    .with_inner_size(SETTINGS_SIZE)
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -158,6 +167,7 @@ impl RigStatsApp {
                         &reload,
                         &dc,
                         dcomp_available,
+                        &requests,
                     );
                 },
             );
@@ -207,18 +217,25 @@ impl RigStatsApp {
             let focus = self.dialogs.control_focus.clone();
             let mctx = main_ctx.clone();
             let cmd_tx = self.control_cmd_tx.clone();
-            let [px, py] = dialog_center(780.0, 640.0);
+            let [px, py] = dialog_center(CONTROL_SIZE[0], CONTROL_SIZE[1]);
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let visible = self.dialogs.dialog_reveal.visible("control");
             let control_state = self.runtime.control.clone();
             let control_ui = &mut self.dialogs.control_ui;
+            let look_link = windows::profile_look::LookLink {
+                settings: &self.current_settings,
+                dir: &self.dir,
+                reload: &self.settings_reload,
+                open: &self.dialogs.open_requests,
+                battery_present: &self.battery_present,
+            };
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),
                 egui::ViewportBuilder::default()
                     .with_title("RigStats — Control Center")
                     .with_visible(visible)
-                    .with_inner_size([780.0, 640.0])
+                    .with_inner_size(CONTROL_SIZE)
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
@@ -238,6 +255,7 @@ impl RigStatsApp {
                         &cmd_tx,
                         &dc,
                         control_ui,
+                        &look_link,
                     );
                 },
             );

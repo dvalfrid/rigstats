@@ -15,7 +15,7 @@ fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
         .fill(dc.card)
         .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
-        .corner_radius(egui::CornerRadius::same(6))
+        .corner_radius(egui::CornerRadius::same(10))
         .inner_margin(egui::Margin::symmetric(14, 12))
 }
 

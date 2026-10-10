@@ -550,7 +550,7 @@ pub fn show(
         .show(ctx, |ui| {
             ui.label(
                 egui::RichText::new(&heading)
-                    .size(22.0)
+                    .size(20.0)
                     .strong()
                     .color(heading_color),
             );
