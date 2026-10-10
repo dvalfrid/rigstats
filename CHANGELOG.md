@@ -8,6 +8,21 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.46.0](https://github.com/dvalfrid/rigstats/compare/v1.45.1...v1.46.0) (2026-10-10)
+
+
+### Features
+
+* **control:** give every profile its own dashboard look and rebuild Settings and the Control Center ([#309](https://github.com/dvalfrid/rigstats/issues/309)) ([1fd382f](https://github.com/dvalfrid/rigstats/commit/1fd382f610b86a928ce02a106f31c26d8563b398))
+* **control:** row-style CPU, Graphics card and Lighting pages; new screenshots ([573c7d4](https://github.com/dvalfrid/rigstats/commit/573c7d4f639e177f4e52d0135ca1d29c87b77219))
+* **control:** show battery and connection for wireless devices and in the tray card ([29e24e3](https://github.com/dvalfrid/rigstats/commit/29e24e3eb707e2fcf2d89940fafa24e498e112a4))
+* **ui:** move About, Status, Updates and Session History onto ui_kit ([#311](https://github.com/dvalfrid/rigstats/issues/311)) ([6f1bff7](https://github.com/dvalfrid/rigstats/commit/6f1bff7310666a8be0b5cdeff70d47ead4268643))
+
+
+### Bug Fixes
+
+* **wallpaper:** show the active Control Center profile in desktop wallpaper mode ([#304](https://github.com/dvalfrid/rigstats/issues/304)) ([57b2316](https://github.com/dvalfrid/rigstats/commit/57b2316b52f66407ea5faff8c135b4d0d2ffeb83)), closes [#302](https://github.com/dvalfrid/rigstats/issues/302)
+
 ## [1.45.1](https://github.com/dvalfrid/rigstats/compare/v1.45.0...v1.45.1) (2026-10-09)
 
 
