@@ -629,14 +629,30 @@ pub fn show(
         .show(ctx, |ui| {
             version_group(ui, dc, &st.status);
             if let (true, Some((_, entries))) = (has_notes, &st.notes_cache) {
-                let height = (ui.available_height() - 40.0).max(120.0);
+                // Minus the group heading, the card's padding and the gap below it.
+                let height = (ui.available_height() - 72.0).max(120.0);
                 ui_kit::group(ui, dc, Some("What's new"), None, |g| {
                     g.block(|ui| {
-                        egui::ScrollArea::vertical()
-                            .id_salt("updater_notes")
-                            .max_height(height)
-                            .auto_shrink([false, false])
-                            .show(ui, |ui| render_notes(ui, dc, entries));
+                        // A fixed region the size of the card: long note
+                        // lines wrap (or clip) inside it instead of widening
+                        // the card past the page margin.
+                        // The scrollbar sits beside the content, so leave room for it.
+                        let bar = ui.spacing().scroll.allocated_width();
+                        let size = egui::vec2(ui.available_width() - bar, height);
+                        ui.allocate_ui_with_layout(
+                            size,
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_clip_rect(ui.max_rect().intersect(ui.clip_rect()));
+                                egui::ScrollArea::vertical()
+                                    .id_salt("updater_notes")
+                                    .auto_shrink([false, false])
+                                    .show(ui, |ui| {
+                                        ui.set_max_width(ui.available_width());
+                                        render_notes(ui, dc, entries);
+                                    });
+                            },
+                        );
                     });
                 });
             }
