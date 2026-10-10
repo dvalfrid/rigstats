@@ -1,6 +1,7 @@
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::update_check::{self, UpdateInfo, VerifiedInstaller, BUNDLED_CHANGELOG};
+use crate::windows::ui_kit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -287,7 +288,7 @@ fn extract_hash(raw: &str) -> (String, Option<(String, String)>) {
                 let hash = &inner[..bar];
                 let url = &inner[bar + 2..];
                 if is_hex(hash) {
-                    let text = s[..open].trim().to_string();
+                    let text = tidy_item_text(&s[..open]);
                     return (text, Some((hash.to_string(), url.to_string())));
                 }
             }
@@ -299,13 +300,31 @@ fn extract_hash(raw: &str) -> (String, Option<(String, String)>) {
         if let Some(open) = s.rfind('(') {
             let hash = s[open + 1..s.len() - 1].trim();
             if is_hex(hash) && (6..=10).contains(&hash.len()) {
-                let text = s[..open].trim().to_string();
+                let text = tidy_item_text(&s[..open]);
                 return (text, Some((hash.to_string(), String::new())));
             }
         }
     }
 
     (strip_md_links(s), None)
+}
+
+/// An item's text without its markdown links and issue references:
+/// release-please writes `… mode ([#300](url))` before the commit link.
+fn tidy_item_text(text: &str) -> String {
+    let mut t = strip_md_links(text.trim());
+    // "(#300)" left by the link: drop it, the item reads on its own.
+    while let Some(open) = t.rfind(" (#") {
+        let Some(close) = t[open..].find(')') else {
+            break;
+        };
+        let inner = &t[open + 3..open + close];
+        if inner.is_empty() || !inner.chars().all(|c| c.is_ascii_digit()) {
+            break;
+        }
+        t.replace_range(open..open + close + 1, "");
+    }
+    t.trim().to_owned()
 }
 
 fn is_hex(s: &str) -> bool {
@@ -439,40 +458,84 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui:
     });
 }
 
-// ── Changelog area ────────────────────────────────────────────────────────────
+// ── Version group ─────────────────────────────────────────────────────────────
 
-fn render_changelog_panel(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    entries: &[ReleaseEntry],
-    scroll_h: f32,
-) {
-    // "What's New" — free label, part of the dialog, not inside any frame.
-    ui.label(
-        egui::RichText::new("What's New")
-            .size(11.0)
-            .strong()
-            .color(dc.label),
-    );
-    ui.add_space(5.0);
-
-    // Scroll area with inset fill — no border stroke.
-    egui::Frame::new()
-        .fill(dc.inset)
-        .corner_radius(egui::CornerRadius::same(4))
-        .show(ui, |ui| {
-            egui::ScrollArea::vertical()
-                .max_height(scroll_h)
-                .show(ui, |ui| {
-                    egui::Frame::new()
-                        .inner_margin(egui::Margin::symmetric(10, 6))
-                        .show(ui, |ui| render_notes(ui, dc, entries));
-                });
+/// The installed version and where an update stands, as rows.
+fn version_group(ui: &mut egui::Ui, dc: &DialogColors, status: &UpdateStatus) {
+    let error_note = match status {
+        UpdateStatus::Error(e) => Some(e.as_str()),
+        _ => None,
+    };
+    ui_kit::group(ui, dc, None, error_note, |g| {
+        let installed = match status {
+            UpdateStatus::JustUpdated { version } => version.clone(),
+            _ => VERSION.to_owned(),
+        };
+        g.row("Installed", None, |ui| {
+            ui.label(
+                egui::RichText::new(format!("v{installed}"))
+                    .size(12.0)
+                    .color(dc.text),
+            );
         });
+        match status {
+            UpdateStatus::Ready { info, .. } => {
+                g.row(
+                    "New version",
+                    Some("Downloaded and checked — ready to install"),
+                    |ui| ui_kit::status(ui, ui_kit::C_GOOD, &format!("v{}", info.version)),
+                );
+            }
+            UpdateStatus::UpToDate => {
+                g.row("Latest version", None, |ui| {
+                    ui_kit::status(ui, ui_kit::C_GOOD, "You're up to date");
+                });
+            }
+            UpdateStatus::JustUpdated { version } => {
+                g.row("Update", None, |ui| {
+                    ui_kit::status(ui, ui_kit::C_GOOD, &format!("Updated to v{version}"));
+                });
+            }
+            UpdateStatus::Checking => {
+                g.row("Checking for updates…", None, |ui| {
+                    ui.spinner();
+                });
+            }
+            UpdateStatus::Downloading { downloaded, total } => {
+                let mb = |b: u64| b as f32 / 1_048_576.0;
+                let sub = if *total > 0 {
+                    format!("{:.1} of {:.1} MB", mb(*downloaded), mb(*total))
+                } else {
+                    format!("{:.1} MB", mb(*downloaded))
+                };
+                g.row("Downloading", Some(&sub), |ui| {
+                    let bar = if *total > 0 {
+                        egui::ProgressBar::new(*downloaded as f32 / *total as f32)
+                    } else {
+                        egui::ProgressBar::new(0.0).animate(true)
+                    };
+                    ui.add_sized([ui_kit::CONTROL_W, 14.0], bar);
+                });
+            }
+            UpdateStatus::Error(_) => {
+                g.row("Update", None, |ui| {
+                    ui_kit::status(ui, ui_kit::C_BAD, "Couldn't update");
+                });
+            }
+            UpdateStatus::Idle => {
+                g.row(
+                    "Updates",
+                    Some("Checked automatically a few seconds after start and every 6 hours"),
+                    |_| {},
+                );
+            }
+        }
+    });
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
+// The ctx-level panel API, as in every other dialog.
 #[allow(deprecated)]
 pub fn show(
     ctx: &egui::Context,
@@ -502,87 +565,20 @@ pub fn show(
     );
 
     // Parse the changelog at most once per status change (not every frame).
-    st.ensure_changelog_cache();
+    let has_notes = st.ensure_changelog_cache();
 
-    // Extract everything we need for display while the guard is held.
-    let (heading, heading_color) = match &st.status {
-        UpdateStatus::Ready { info, .. } => (
-            format!("v{} Available", info.version),
-            egui::Color32::from_rgb(88, 200, 88),
-        ),
-        UpdateStatus::UpToDate => ("Up to Date".to_string(), dc.text),
-        UpdateStatus::JustUpdated { version } => (
-            format!("Updated to v{version}"),
-            egui::Color32::from_rgb(88, 200, 88),
-        ),
-        UpdateStatus::Error(_) => (
-            "Update Error".to_string(),
-            egui::Color32::from_rgb(220, 80, 80),
-        ),
-        _ => ("Updates".to_string(), dc.text),
-    };
+    ui_kit::hero(ctx, dc, "updater", "Updates", |_| {});
 
-    let installed_row: Option<String> = match &st.status {
-        UpdateStatus::Ready { .. } => Some(format!("v{VERSION}")),
-        UpdateStatus::JustUpdated { version } => Some(format!("v{version}")),
-        _ => None,
-    };
-
-    let status_below: Option<&str> = match &st.status {
-        UpdateStatus::UpToDate => Some("You are running the latest version."),
-        _ => None,
-    };
-
-    // ── Hero (top) ────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::top("updater_hero")
-        .frame(
-            egui::Frame::none()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin {
-                    left: 14,
-                    right: 14,
-                    top: 14,
-                    bottom: 12,
-                })
-                .stroke(egui::Stroke::new(1.0_f32, dc.card_border)),
-        )
-        .show_separator_line(true)
-        .show(ctx, |ui| {
-            ui.label(
-                egui::RichText::new(&heading)
-                    .size(20.0)
-                    .strong()
-                    .color(heading_color),
-            );
-            if let Some(ver) = &installed_row {
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("Installed:").color(dc.muted));
-                    ui.add_space(4.0);
-                    ui.label(egui::RichText::new(ver.as_str()).color(dc.text));
-                });
-            }
-        });
-
-    // ── Footer (bottom) ───────────────────────────────────────────────────────
+    // ── Footer ────────────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("updater_footer")
-        .frame(
-            egui::Frame::none()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin {
-                    left: 12,
-                    right: 12,
-                    top: 8,
-                    bottom: 10,
-                })
-                .stroke(egui::Stroke::new(1.0_f32, dc.card_border)),
-        )
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 10,
+            bottom: 12,
+        }))
         .show_separator_line(true)
         .show(ctx, |ui| {
-            if let Some(msg) = status_below {
-                ui.label(egui::RichText::new(msg).small().color(dc.muted));
-                ui.add_space(6.0);
-            }
             ui.with_layout(
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| match &st.status {
@@ -595,84 +591,54 @@ pub fn show(
                             action_close = true;
                         }
                     }
-                    UpdateStatus::UpToDate | UpdateStatus::JustUpdated { .. } => {
-                        if theme::dialog_btn_primary(ui, "Close").clicked() {
-                            action_close = true;
-                        }
-                        ui.add_space(6.0);
-                        theme::dialog_btn_secondary_disabled(ui, "Update Now", dc);
-                    }
                     UpdateStatus::Idle => {
                         if theme::dialog_btn_primary(ui, "Check for Updates").clicked() {
                             action_check = true;
                         }
+                        ui.add_space(6.0);
+                        if theme::dialog_btn_secondary(ui, "Close", dc).clicked() {
+                            action_close = true;
+                        }
                     }
-                    UpdateStatus::Error(_)
-                        if theme::dialog_btn_primary(ui, "Try again").clicked() =>
-                    {
-                        action_check = true;
+                    UpdateStatus::Error(_) => {
+                        if theme::dialog_btn_primary(ui, "Try Again").clicked() {
+                            action_check = true;
+                        }
+                        ui.add_space(6.0);
+                        if theme::dialog_btn_secondary(ui, "Close", dc).clicked() {
+                            action_close = true;
+                        }
                     }
-                    _ => {}
+                    _ => {
+                        if theme::dialog_btn_primary(ui, "Close").clicked() {
+                            action_close = true;
+                        }
+                    }
                 },
             );
         });
 
-    // ── Central content ───────────────────────────────────────────────────────
+    // ── The page ──────────────────────────────────────────────────────────────
     egui::CentralPanel::default()
-        .frame(
-            egui::Frame::new()
-                .fill(dc.bg)
-                .inner_margin(egui::Margin::same(10)),
-        )
-        .show(ctx, |ui| match &st.status {
-            UpdateStatus::Ready { .. }
-            | UpdateStatus::UpToDate
-            | UpdateStatus::JustUpdated { .. }
-            | UpdateStatus::Idle => {
-                if let Some((_, entries)) = &st.notes_cache {
-                    render_changelog_panel(ui, dc, entries, ui.available_height());
-                }
-            }
-            UpdateStatus::Checking => {
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label("Checking for updates…");
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: 8,
+        }))
+        .show(ctx, |ui| {
+            version_group(ui, dc, &st.status);
+            if let (true, Some((_, entries))) = (has_notes, &st.notes_cache) {
+                let height = (ui.available_height() - 40.0).max(120.0);
+                ui_kit::group(ui, dc, Some("What's new"), None, |g| {
+                    g.block(|ui| {
+                        egui::ScrollArea::vertical()
+                            .id_salt("updater_notes")
+                            .max_height(height)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| render_notes(ui, dc, entries));
+                    });
                 });
-            }
-            UpdateStatus::Downloading { downloaded, total } => {
-                ui.label("Downloading update…");
-                ui.add_space(8.0);
-                if *total > 0 {
-                    let progress = *downloaded as f32 / *total as f32;
-                    ui.add(egui::ProgressBar::new(progress).show_percentage());
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{:.1} / {:.1} MB",
-                            *downloaded as f32 / 1_048_576.0,
-                            *total as f32 / 1_048_576.0,
-                        ))
-                        .small()
-                        .color(dc.muted),
-                    );
-                } else {
-                    ui.add(egui::ProgressBar::new(0.0).animate(true));
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{:.1} MB downloaded",
-                            *downloaded as f32 / 1_048_576.0,
-                        ))
-                        .small()
-                        .color(dc.muted),
-                    );
-                }
-            }
-            UpdateStatus::Error(e) => {
-                ui.label(
-                    egui::RichText::new(format!("Error: {e}"))
-                        .color(egui::Color32::from_rgb(220, 80, 80)),
-                );
             }
         });
 
@@ -687,15 +653,7 @@ pub fn show(
             state.lock_safe().status = UpdateStatus::Error(e);
         }
     }
-    if action_close {
-        if reset_to_idle_on_close {
-            state.lock_safe().status = UpdateStatus::Idle;
-        }
-        open.store(false, Ordering::Relaxed);
-        main_ctx.request_repaint_of(egui::ViewportId::ROOT);
-    }
-
-    if ctx.input(|i| i.viewport().close_requested()) {
+    if action_close || ctx.input(|i| i.viewport().close_requested()) {
         if reset_to_idle_on_close {
             state.lock_safe().status = UpdateStatus::Idle;
         }
@@ -703,7 +661,6 @@ pub fn show(
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -727,6 +684,21 @@ mod tests {
             split_scope("**bold** text"),
             (None, "**bold** text".to_owned())
         );
+    }
+
+    #[test]
+    fn issue_links_before_the_commit_link_are_dropped() {
+        let notes = parse_notes(
+            "## [1.45.1](https://x) (2026-10-09)
+
+### Bug Fixes
+
+* **wallpaper:** tray hover card keeps updating ([#300](https://github.com/x/issues/300)) ([f104ba6](https://github.com/x/commit/f104ba6))
+",
+        );
+        let item = &notes[0].sections[0].items[0];
+        assert_eq!(item.text, "tray hover card keeps updating");
+        assert_eq!(item.hash.as_ref().map(|h| h.0.as_str()), Some("f104ba6"));
     }
 
     #[test]

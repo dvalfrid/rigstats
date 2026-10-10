@@ -382,7 +382,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats Update")
+                    .with_title("RigStats — Updates")
                     .with_visible(visible)
                     .with_inner_size([490.0, 560.0])
                     .with_position([px, py])
@@ -393,7 +393,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats Update");
+                        found_hwnd = win_opacity::find_hwnd("RigStats — Updates");
                     }
                     windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dc);
                 },

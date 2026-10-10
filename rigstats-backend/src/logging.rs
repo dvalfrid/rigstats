@@ -83,30 +83,6 @@ pub fn unix_now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// Converts a Unix timestamp in seconds to `(year, month, day)`.
-///
-/// Uses Howard Hinnant's civil_from_days algorithm; accurate from 1970 to 2200.
-fn ymd_from_unix(secs: u64) -> (u32, u32, u32) {
-    let days = (secs / 86400) as i64;
-    let z = days + 719_468;
-    let era = (if z >= 0 { z } else { z - 146_096 }) / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y as u32, m as u32, d as u32)
-}
-
-/// Converts a Unix timestamp in seconds to `(hour, minute)` within its day (UTC).
-fn hm_from_unix(secs: u64) -> (u32, u32) {
-    let s = secs % 86400;
-    ((s / 3600) as u32, (s % 3600 / 60) as u32)
-}
-
 fn fmt_opt(v: Option<f64>, precision: usize) -> String {
     v.map_or_else(String::new, |f| format!("{:.prec$}", f, prec = precision))
 }
@@ -274,11 +250,21 @@ fn new_session_id() -> String {
 }
 
 /// Default display name for a session started at `start_unix`, e.g.
-/// "Session 2026-08-22 14:32" (UTC).
+/// "Session 2026-08-22 14:32", in local time like every other time the app
+/// shows (it used to be UTC — hours off from the session's own date line).
 pub fn default_session_name(start_unix: u64) -> String {
-    let (y, m, d) = ymd_from_unix(start_unix);
-    let (h, mi) = hm_from_unix(start_unix);
-    format!("Session {y:04}-{m:02}-{d:02} {h:02}:{mi:02}")
+    format!("Session {}", local_minutes(start_unix))
+}
+
+/// `start_unix` as "2026-08-22 14:32" in local time.
+fn local_minutes(unix: u64) -> String {
+    chrono::DateTime::from_timestamp(unix as i64, 0)
+        .map(|t| {
+            t.with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M")
+                .to_string()
+        })
+        .unwrap_or_default()
 }
 
 /// Starts a new recording session: creates its CSV file (with header) and adds
@@ -614,33 +600,12 @@ mod tests {
     use super::*;
     use std::fs;
 
-    // --- ymd_from_unix / hm_from_unix ---
-
-    #[test]
-    fn ymd_unix_epoch_is_1970_01_01() {
-        assert_eq!(ymd_from_unix(0), (1970, 1, 1));
-    }
-
-    #[test]
-    fn ymd_known_dates() {
-        // 2024-01-01 00:00:00 UTC
-        assert_eq!(ymd_from_unix(1_704_067_200), (2024, 1, 1));
-        // 2024-02-29 00:00:00 UTC  (leap day)
-        assert_eq!(ymd_from_unix(1_709_164_800), (2024, 2, 29));
-        // 2000-03-01 00:00:00 UTC  (century year, not a leap year in non-400 centuries)
-        assert_eq!(ymd_from_unix(951_868_800), (2000, 3, 1));
-    }
-
-    #[test]
-    fn hm_known_time() {
-        // 2024-01-01 14:32:00 UTC = 1704067200 + 14*3600 + 32*60
-        assert_eq!(hm_from_unix(1_704_067_200 + 14 * 3600 + 32 * 60), (14, 32));
-    }
-
     #[test]
     fn default_session_name_format() {
-        let name = default_session_name(1_704_067_200 + 14 * 3600 + 32 * 60);
-        assert_eq!(name, "Session 2024-01-01 14:32");
+        let start = 1_704_067_200 + 14 * 3600 + 32 * 60;
+        let name = default_session_name(start);
+        assert_eq!(name, format!("Session {}", local_minutes(start)));
+        assert_eq!(name.len(), "Session 2024-01-01 14:32".len());
     }
 
     // --- fmt_opt / parse_opt_f64 ---

@@ -47,7 +47,7 @@ egui::CentralPanel::default().frame(ui_kit::dialog_frame(dc)).show(ctx, |ui| {
 });
 ```
 
-The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile, `icon_button` + / ⋯). Single-page dialogs (About, Status, Updates) keep hero / central / footer with `dialog_frame` and a local `card_frame` using the same 10 px radius; `history.rs` adds a `SidePanel` (session list) for its master/detail layout.
+The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile, `icon_button` + / ⋯). Single-page dialogs (About, Status, Updates) are `ui_kit::hero` / footer / central with groups of rows — no sidebar; state shows as `ui_kit::status` (coloured dot + text). Session History is master/detail: a sidebar of `ui_kit::list_item`s, the selected item's actions in a row under its title (destructive ones confirmed in place), summary cards and charts in `card_frame`s.
 
 ## Controls — pick by the choice
 
@@ -100,4 +100,4 @@ let st = state.lock_safe().clone();
 
 ## Seeing a page
 
-Debug builds open a dialog at start-up with `RIGSTATS_OPEN=control:<page>` or `settings:<page>` (sidebar names in lower case, e.g. `control:alerts`) — see `/verifier-gui`.
+Debug builds open a dialog at start-up with `RIGSTATS_OPEN=control:<page>`, `settings:<page>` (sidebar names in lower case, e.g. `control:alerts`), `about`, `status`, `updates` or `history` — see `/verifier-gui`.

@@ -560,6 +560,72 @@ pub fn nav_item(
     resp
 }
 
+/// Good / attention / bad, for [`status`].
+pub const C_GOOD: Color32 = Color32::from_rgb(48, 209, 88);
+pub const C_ATTENTION: Color32 = Color32::from_rgb(255, 179, 71);
+pub const C_BAD: Color32 = Color32::from_rgb(255, 99, 88);
+
+/// A state as a coloured dot and text ("● Running"). For a row's control.
+pub fn status(ui: &mut Ui, color: Color32, text: &str) {
+    // Right-to-left row: the text first, so the dot ends up before it.
+    ui.label(RichText::new(text).size(12.0).color(color));
+    let (rect, _) = ui.allocate_exact_size(vec2(10.0, 12.0), Sense::hover());
+    ui.painter().circle_filled(rect.center(), 4.0, color);
+}
+
+/// A two-line item in a sidebar list (a recording session): title, a muted
+/// subtitle and an optional coloured dot before the subtitle. Filled while
+/// selected.
+pub fn list_item(
+    ui: &mut Ui,
+    dc: &DialogColors,
+    title: &str,
+    subtitle: &str,
+    selected: bool,
+    dot: Option<Color32>,
+) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 46.0), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let p = ui.painter();
+        if selected {
+            p.rect_filled(rect, CornerRadius::same(7), dc.tab_active);
+        } else if resp.hovered() {
+            p.rect_filled(rect, CornerRadius::same(7), dc.inner);
+        }
+        let (title_c, sub_c) = if selected {
+            (dc.tab_active_text, dc.tab_active_text.gamma_multiply(0.75))
+        } else {
+            (dc.title, dc.muted)
+        };
+        let clip = rect.shrink2(vec2(10.0, 0.0));
+        let p = p.with_clip_rect(clip);
+        p.text(
+            pos2(clip.left(), rect.top() + 14.0),
+            egui::Align2::LEFT_CENTER,
+            title,
+            FontId::proportional(13.0),
+            title_c,
+        );
+        let mut x = clip.left();
+        if let Some(c) = dot {
+            p.circle_filled(pos2(x + 4.0, rect.top() + 32.0), 3.5, c);
+            x += 12.0;
+        }
+        p.text(
+            pos2(x, rect.top() + 32.0),
+            egui::Align2::LEFT_CENTER,
+            subtitle,
+            FontId::proportional(11.0),
+            sub_c,
+        );
+    }
+    if resp.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    ui.add_space(2.0);
+    resp
+}
+
 /// A pill-shaped choice (a profile). Filled while selected.
 pub fn chip(ui: &mut Ui, dc: &DialogColors, label: &str, selected: bool) -> Response {
     let font = FontId::proportional(13.0);

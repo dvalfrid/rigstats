@@ -100,7 +100,7 @@ Every dialog is built from the design system in `src-egui/src/windows/ui_kit.rs`
 - **Words:** plain, sentence case, say what a setting does; a subtitle explains the row, a footnote the group.
 - **Behaviour:** changes preview live; Save keeps, Revert / Cancel / Close undo. A control must never change a value just by being drawn.
 - **Buttons:** `theme::dialog_btn_primary` / `theme::dialog_btn_secondary`; `right_to_left`, primary on the far right.
-- **Verify by eye:** open the page in a debug build with `RIGSTATS_OPEN=control:<page>` / `settings:<page>` and screenshot it before handing over.
+- **Verify by eye:** open the page in a debug build with `RIGSTATS_OPEN=control:<page>` / `settings:<page>` / `about` / `status` / `updates` / `history` and screenshot it before handing over.
 - **Frame API:** `egui::Frame::new()` — `Frame::none()` is deprecated in egui 0.34.
 - **Mutex pattern:** extract all view data from the guard into local variables before any `show()` call; `drop(guard)` before applying mutations.
 

@@ -97,7 +97,7 @@ $modes = [ordered]@{
         Args     = @('--just-updated=0.0.0-smoke')
         Checks   = [ordered]@{
             'main window on-screen'  = { $r.Main.Visible -and $r.Main.X -gt $parked }
-            'update window shown'    = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq 'RigStats Update' }).Count -eq 1 }
+            'update window shown'    = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq ('RigStats ' + [char]0x2014 + ' Updates') }).Count -eq 1 }
         }
     }
 }
