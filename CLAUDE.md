@@ -123,7 +123,7 @@ Module catalogues sit next to the code and load when you work there:
 | Area | File |
 |---|---|
 | egui app (`src-egui/src/`): modules, dashboard profiles, session recording | `src-egui/CLAUDE.md` |
-| Dialogs: design system + lifecycle contract | `src-egui/src/windows/CLAUDE.md` |
+| Dialogs: design system (`ui_kit.rs`), where a setting lives, lifecycle contract — read before any UI work | `src-egui/src/windows/CLAUDE.md` |
 | Backend (`rigstats-backend/src/`) | `rigstats-backend/CLAUDE.md` |
 | Control Center service side + **hardware-write safety rules** | `sensor-sidecar/Control/CLAUDE.md` |
 | Full architecture, design decisions | `docs/architecture.md`, `docs/control-architecture.md` |

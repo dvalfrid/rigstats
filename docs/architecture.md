@@ -249,7 +249,7 @@ rig-dashboard/
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `gpu_processes`, `power`, `battery`, `clock`, `header` |
-| `windows/` | Secondary windows: `settings.rs`, `about.rs`, `status.rs`, `updater.rs`, `history.rs`, `control.rs` (Control Center: profiles with Duplicate / Rename / Delete or Reset, Power tab choosing the profile's Windows power plan with a shortcut to Windows' Power Options, Fans tab with curve editor, identify, shared curves, CPU tab with PPT/TDC/EDC sliders, Eco presets and a Curve Optimizer card (all-core, per-core), GPU tab with a power-limit slider per adapter, Lighting tab (Aura Sync to ASUS Aura motherboards, Aura monitors + light bar, ROG keyboards, the ROG Delta II and any Dynamic Lighting device: effect, colour (picker plus fixed quick-pick swatches), brightness, live preview of only what changed (`preview_delta`); a Desk lamp row — on/off, brightness, colour temperature — for the light bar's lamp, with a note when the lamp's real state (`lamp_on`, read at open) differs from the profile; per-device "blocked" reasons; a Philips Hue card — find/pair a Hue Bridge, choose which rooms/zones follow the rig (#215)); limit changes go Try → Keep/Undo). Opened from the tray, the header's profile chip, or a fan name in the Motherboard panel — which opens the curve of the channel that drives that fan, as measured by identify (never matched by name) |
+| `windows/` | Secondary windows, all built from `ui_kit.rs` (the design system: hero, sidebar `nav_item`s with tinted `Icon`s, `page_header`, `group`s of `row`s, `toggle`, `segmented`, `dropdown`, `slider_pct`, `swatches`, `ordered_rows`, `chip`, `tile`; contract in `src-egui/src/windows/CLAUDE.md`). `settings.rs` — app-wide settings: General, Display, Overlay (placement), Notifications pages. `control.rs` — the Control Center: a profile bar (chips, + copy, ⋯ rename/delete/reset) over a sidebar of the profile's pages — Overview (a tile per page summarising what the profile does), Dashboard / Overlay / Alerts (`profile_look.rs`, #305: accent colour, opacity, panels and order, overlay content, thresholds — live preview, Save/Revert in the footer) and the hardware pages Power (Windows power plan), Fans (curve editor, identify, "Automatic (BIOS)" / "Custom curve"), CPU (PPT/TDC/EDC, Eco presets, Curve Optimizer), Graphics card (power limit per adapter), Lighting (Aura Sync, quick-pick swatches, desk lamp, Philips Hue #215; live preview of only what changed); limit changes go Try → Keep/Undo. The two windows link to each other where a setting lives in the other (`windows::OpenRequest`, handled in `app/tray_actions.rs`); debug builds open either at start-up with `RIGSTATS_OPEN=control:<page>` / `settings:<page>`. Also `about.rs`, `status.rs`, `updater.rs`, `history.rs`. The Control Center opens from the tray, the header's profile chip, or a fan name in the Motherboard panel (the curve of the channel that drives that fan, as measured by identify — never matched by name) |
 
 ### Module details
 
@@ -394,6 +394,25 @@ where `ComponentThresholds { warn: Option<u8>, crit: Option<u8> }` and the keys
 are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"cpu_load"`, `"gpu_load"`,
 `"ram_load"`, `"disk_usage"`, `"battery"`, `"battery_power"`.
 
+Dashboard look per Control Center profile (#305): a `ProfileLook` is the part
+of a profile that is the app's own — accent colour (`theme`), opacity,
+visible panels and their order, overlay shown, overlay metrics and columns,
+alert thresholds. A profile always holds all of it. The current settings *are*
+the active profile's look; `profile_looks` keeps the others by profile id and
+`look_profile` names the profile the current look belongs to.
+`switch_profile_look` runs in the main app (`follow_profile_look`) whenever the
+control pipe reports the active profile: on a real switch it stores the current
+look in the outgoing profile and loads the incoming one (a profile seen for the
+first time starts from the current look, so nothing changes on the first run);
+the same profile again (restart, reconnect) does nothing. So every change — the
+Control Center, the tray, Ctrl+Alt+O — simply applies to the active profile.
+`prune_profile_looks` forgets deleted profiles. The wallpaper host follows
+through its own reload of the settings file. Looks are per Windows user, here,
+not in the service's `profiles.json`. Everything else in `Settings` is
+app-wide. The Settings window carries the look (and click-through) over from
+the live settings whenever it writes its draft back (`carry_live`), so a draft
+from when it opened can't undo a Control Center edit or a profile switch.
+
 Threshold semantics differ by key:
 
 - **Temperature keys** (`cpu`/`gpu`/`ram`/`disk`): alert fires when the reading
@@ -462,7 +481,8 @@ Secondary egui windows, each rendered via `show_viewport_immediate` from
 its `*_open` flag is set (tray commands set the flags). Every dialog is centred with `geometry::dialog_center(w, h)`, which
 enumerates real monitors via `geometry::win_monitor::list()` (falls back to
 `[100.0, 100.0]` when none are found) rather than tracking a tray-click
-position. Settings is 560×600; About, Status, History and Updater have their own
+position. Settings is 760×620 and the Control Center 940×700 (`SETTINGS_SIZE` /
+`CONTROL_SIZE` in `app/dialogs.rs`); About, Status, History and Updater have their own
 fixed sizes set at their `show_viewport_immediate` call sites. Visual design:
 `src-egui/src/windows/CLAUDE.md`.
 

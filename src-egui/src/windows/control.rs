@@ -1,17 +1,20 @@
-//! Control Center window — profiles on the left, capability-driven tabs on
-//! the right: "Power" (#187), "Fans" (#188) and "CPU" (#189) — Fans and CPU
-//! only when the service reports the capability; unsupported features are
-//! hidden, not greyed out. Follows the dialog contract in `src-egui/src/windows/CLAUDE.md`:
-//! three panels sharing `dialog_frame`, `DialogColors`, `theme::dialog_btn_*`.
+//! Control Center window: everything a profile does, in one place. A
+//! profile bar on top (chips to switch, + to copy, ⋯ to rename/delete/reset)
+//! says which profile the rest belongs to; the sidebar lists its pages —
+//! an Overview of tiles, the profile's RIGStats look (Dashboard, Overlay,
+//! Alerts — `profile_look.rs`, #305) and its hardware (Power #187, Fans
+//! #188, CPU #189, Graphics card, Lighting), hardware pages only when the
+//! service reports the capability. Built from `ui_kit` and the dialog
+//! contract in `src-egui/src/windows/CLAUDE.md`.
 //! Actions are fire-and-forget `ControlCmd`s sent to `control_task`; results
 //! come back later as `ControlEvent`s already folded into `control` by the
-//! time this renders. The only local state is [`ControlUi`]: the selected
-//! tab/header and unsaved drafts of the active profile's fan curves and CPU
-//! limits. CPU limit changes go through `preview`: the service reverts them
-//! by itself unless "Keep" arrives in time.
+//! time this renders. The only local state is [`ControlUi`]: the page,
+//! the selected fan header and unsaved drafts. CPU limit changes go through
+//! `preview`: the service reverts them by itself unless "Keep" arrives in time.
 
 use crate::theme::{self, DialogColors};
-use crate::windows::settings::tab_btn;
+use crate::windows::profile_look::{self, LookEditor, LookLink};
+use crate::windows::ui_kit::{self, Icon};
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
@@ -75,8 +78,12 @@ const PRESETS: [(&str, &[[f64; 2]]); 3] = [
 pub const SELECT_FAN_ID: &str = "control_select_fan";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-enum Tab {
+pub enum Page {
     #[default]
+    Overview,
+    Dashboard,
+    Overlay,
+    Alerts,
     Power,
     Fans,
     Cpu,
@@ -129,7 +136,7 @@ struct GpuDraft {
 /// Per-window UI state, owned by `RigStatsApp` across frames.
 #[derive(Debug, Default)]
 pub struct ControlUi {
-    tab: Tab,
+    tab: Page,
     selected_header: Option<String>,
     draft: Option<FanDraft>,
     cpu_draft: Option<CpuDraft>,
@@ -161,6 +168,8 @@ pub struct ControlUi {
     hue_ip: String,
     /// `ControlState::errors` when the footer's error was dismissed.
     dismissed_errors: u32,
+    /// The Dashboard/Overlay/Alerts pages' edit (#305).
+    look: LookEditor,
 }
 
 #[derive(Debug)]
@@ -171,11 +180,18 @@ struct Awaiting {
 }
 
 impl ControlUi {
+    /// Shows `page` the next time the window renders (a link from Settings).
+    pub fn open_page(&mut self, page: Page) {
+        self.tab = page;
+    }
+}
+
+impl ControlUi {
     /// A Motherboard-panel fan was clicked: show the Fans tab on the header
     /// that drives it, or explain how to find it when it hasn't been
     /// identified yet.
     fn select_fan(&mut self, fan: &str, control: &ControlState) {
-        self.tab = Tab::Fans;
+        self.tab = Page::Fans;
         self.dragging = None;
         match control.header_for_fan(fan) {
             Some(header) => {
@@ -293,24 +309,16 @@ impl ControlUi {
     }
 }
 
-fn dialog_frame(dc: &DialogColors) -> egui::Frame {
-    egui::Frame::new()
-        .fill(dc.bg)
-        .inner_margin(egui::Margin::same(0))
-}
-
+/// A card for the hardware pages' free-form content — the shared card
+/// with room for sliders and editors.
 fn card_frame(dc: &DialogColors) -> egui::Frame {
-    egui::Frame::new()
-        .fill(dc.card)
-        .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::symmetric(14, 12))
+    ui_kit::card_frame(dc).inner_margin(egui::Margin::symmetric(16, 14))
 }
 
 fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
     ui.label(
         egui::RichText::new(text)
-            .size(11.0)
+            .size(12.0)
             .strong()
             .color(dc.label),
     );
@@ -727,12 +735,12 @@ const AURA_EFFECTS: [(&str, &str); 4] = [
     ("off", "Off"),
     ("static", "Static"),
     ("breathing", "Breathing"),
-    ("spectrum_cycle", "Spectrum cycle"),
+    ("spectrum_cycle", "Colour cycle"),
 ];
 
 fn effect_name(effect: Option<&str>) -> &'static str {
     match effect {
-        None => "Leave as is",
+        None => "Unchanged",
         Some(e) => AURA_EFFECTS
             .iter()
             .find(|(id, _)| *id == e)
@@ -755,30 +763,27 @@ const AURA_SWATCHES: [(&str, [u8; 3]); 9] = [
     ("White", [255, 255, 255]),
 ];
 
-/// The quick-pick swatches; returns the one clicked. The current colour's
-/// swatch is outlined.
+/// The quick-pick swatches as colour dots, the current one ringed; returns
+/// the one clicked. For a row's right-to-left layout (added in reverse so
+/// they read left to right).
 fn color_swatches(ui: &mut egui::Ui, dc: &DialogColors, current: [u8; 3]) -> Option<[u8; 3]> {
     let mut picked = None;
-    ui.spacing_mut().item_spacing.x = 4.0;
-    for (name, rgb) in AURA_SWATCHES {
-        let (rect, response) = ui.allocate_exact_size(egui::vec2(20.0, 20.0), egui::Sense::click());
+    ui.spacing_mut().item_spacing.x = 6.0;
+    for (name, rgb) in AURA_SWATCHES.iter().rev() {
+        let (rect, response) = ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
         let fill = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-        let stroke = if rgb == current {
-            egui::Stroke::new(2.0_f32, dc.text)
-        } else if response.hovered() {
-            egui::Stroke::new(1.0_f32, dc.text)
-        } else {
-            egui::Stroke::new(1.0_f32, dc.muted)
-        };
-        ui.painter().rect(
-            rect,
-            egui::CornerRadius::same(4),
-            fill,
-            stroke,
-            egui::StrokeKind::Inside,
-        );
-        if response.on_hover_text(name).clicked() {
-            picked = Some(rgb);
+        let selected = *rgb == current;
+        if selected {
+            ui.painter()
+                .circle_stroke(rect.center(), 10.5, egui::Stroke::new(2.0_f32, dc.title));
+        }
+        ui.painter()
+            .circle_filled(rect.center(), if selected { 7.0 } else { 9.0 }, fill);
+        if response.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if response.on_hover_text(*name).clicked() {
+            picked = Some(*rgb);
         }
     }
     picked
@@ -804,9 +809,10 @@ fn hex_color([r, g, b]: [u8; 3]) -> String {
     format!("#{r:02x}{g:02x}{b:02x}")
 }
 
-/// Lighting (#192): one effect for every zone of the board's Aura
-/// controller. Changes show on the lights at once (live preview); Save &
-/// apply keeps them in the profile.
+/// Lighting (#192): one effect for every lighting device (Aura Sync), the
+/// desk lamp, the devices themselves and Philips Hue — each a group of
+/// rows. Changes show on the lights at once (live preview); Save keeps them
+/// in the profile.
 fn lighting_tab(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -816,40 +822,97 @@ fn lighting_tab(
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     ui_state: &mut ControlUi,
 ) {
-    let blocked = control.aura_unavailable();
     let hue = control.hue_caps();
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Lighting");
-        ui.add_space(4.0);
-        let Some(caps) = caps else {
-            // Present but taken by another app — explained, not hidden.
-            let reason = match (blocked.as_deref(), &hue) {
-                (Some(blocked), _) => blocked,
-                (None, Some(_)) => {
-                    "No RGB device found here. Pair a Hue Bridge below to light the room."
+    let Some(caps) = caps else {
+        // Present but taken by another app — explained, not hidden.
+        let reason = match (control.aura_unavailable().as_deref(), &hue) {
+            (Some(blocked), _) => blocked.to_owned(),
+            (None, Some(_)) => {
+                "No RGB device found. Pair a Hue Bridge below to light the room.".to_owned()
+            }
+            (None, None) => "Lighting is unavailable.".to_owned(),
+        };
+        ui_kit::group(ui, dc, None, None, |g| {
+            g.block(|ui| {
+                ui.label(egui::RichText::new(reason).size(12.0).color(WARN_TEXT));
+            });
+        });
+        if let Some(hue) = &hue {
+            hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+        }
+        return;
+    };
+    let Some(profile_id) = control.active_profile.clone() else {
+        return;
+    };
+    let mut part = ui_state
+        .aura_draft
+        .as_ref()
+        .map_or_else(|| saved.cloned(), |d| d.part.clone());
+    let before = part.clone();
+
+    // ── The effect ───────────────────────────────────────────────────────
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Effect"),
+        Some("Every device below shows it. Changes show on the lights at once; Save keeps them."),
+        |g| {
+            g.row("Effect", None, |ui| {
+                let mut effect = part.as_ref().and_then(|p| p.effect.clone());
+                let options: Vec<(Option<String>, &str)> = std::iter::once((None, "Unchanged"))
+                    .chain(
+                        AURA_EFFECTS
+                            .iter()
+                            .map(|(id, name)| (Some((*id).to_owned()), *name)),
+                    )
+                    .collect();
+                if ui_kit::segmented(ui, dc, &mut effect, &options) {
+                    part = with_effect(part.take(), effect);
                 }
-                (None, None) => "Lighting is unavailable.",
-            };
-            ui.label(
-                egui::RichText::new(reason)
-                    .size(11.0)
-                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-            );
-            return;
-        };
-        let Some(profile_id) = control.active_profile.clone() else {
-            return;
-        };
-        ui.label(
-            egui::RichText::new(
-                "Aura Sync: the effect goes to every device below. Changes show on the \
-                 lights at once; Save & apply keeps them in this profile.",
-            )
-            .size(11.0)
-            .color(dc.muted),
-        );
-        ui.add_space(6.0);
+            });
+            let effect = part.as_ref().and_then(|p| p.effect.clone());
+            let takes_color = matches!(effect.as_deref(), Some("static" | "breathing"));
+            if let (true, Some(p)) = (takes_color, part.as_mut()) {
+                g.row("Colour", None, |ui| {
+                    let mut rgb = parse_hex_color(p.color.as_deref());
+                    if egui::color_picker::color_edit_button_srgb(ui, &mut rgb)
+                        .on_hover_text("Any colour")
+                        .changed()
+                    {
+                        p.color = Some(hex_color(rgb));
+                    }
+                    ui.add_space(6.0);
+                    if let Some(picked) = color_swatches(ui, dc, rgb) {
+                        p.color = Some(hex_color(picked));
+                    }
+                });
+                g.row("Brightness", None, |ui| {
+                    let mut b = p.brightness.unwrap_or(1.0);
+                    if ui_kit::slider_pct(ui, dc, &mut b, 0.0..=1.0) {
+                        p.brightness = Some(b);
+                    }
+                });
+            }
+        },
+    );
+
+    // ── The desk lamp ────────────────────────────────────────────────────
+    if caps.devices.iter().any(|d| d.lamp && d.blocked.is_none()) {
+        let lamp_now = caps
+            .devices
+            .iter()
+            .filter(|d| d.lamp && d.blocked.is_none())
+            .filter_map(|d| d.lamp_on)
+            .reduce(|a, b| a || b);
+        let note = lamp_state_note(lamp_now, saved, part.as_ref());
+        ui_kit::group(ui, dc, Some("Desk lamp"), note, |g| {
+            lamp_rows(g, dc, &mut part)
+        });
+    }
+
+    // ── The devices ──────────────────────────────────────────────────────
+    ui_kit::group(ui, dc, Some("Devices"), None, |g| {
         for device in &caps.devices {
             let zones = device
                 .zones
@@ -857,173 +920,110 @@ fn lighting_tab(
                 .map(|z| z.name.as_str())
                 .collect::<Vec<_>>()
                 .join(", ");
-            ui.label(
-                egui::RichText::new(format!("{} — {zones}", device.name))
-                    .size(12.0)
-                    .color(dc.text),
-            )
-            .on_hover_text(if device.firmware.is_empty() {
-                device.kind.replace('_', " ")
-            } else {
-                format!(
-                    "{}, firmware {}",
-                    device.kind.replace('_', " "),
-                    device.firmware
-                )
+            let kind = device_kind(&device.kind);
+            g.row(&device.name, Some(&zones), |ui| {
+                let (text, color) = if device.blocked.is_some() || device.problem.is_some() {
+                    ("Needs attention", WARN_TEXT)
+                } else {
+                    (kind.as_str(), dc.muted)
+                };
+                ui.label(egui::RichText::new(text).size(12.0).color(color))
+                    .on_hover_text(if device.firmware.is_empty() {
+                        kind.clone()
+                    } else {
+                        format!("{kind}, firmware {}", device.firmware)
+                    });
             });
-            if let Some(blocked) = &device.blocked {
-                // Skipped by Aura Sync until the other controller lets go.
-                ui.label(
-                    egui::RichText::new(blocked)
-                        .size(11.0)
-                        .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-                );
-            }
-            if let Some(problem) = &device.problem {
-                ui.label(
-                    egui::RichText::new(problem)
-                        .size(11.0)
-                        .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-                );
-            }
-            // An ASUS Dynamic Lighting device in "Device Lighting" mode takes
-            // every write and ignores it. Where the service can read that mode
-            // (#236) it offers the switch; elsewhere say where the switch is.
-            // Not on laptop keyboards: Gear Link doesn't manage those.
-            if device.blocked.is_none() && device.wdl_on == Some(false) {
-                ui.label(
-                    egui::RichText::new(
-                        "Ignores lighting changes: its Cross-device Lighting Toggle is set to \
-                         \"Device Lighting\".",
-                    )
-                    .size(11.0)
-                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-                );
-                if theme::dialog_btn_secondary(ui, "Let RIGStats control it", dc)
-                    .on_hover_text(
-                        "Switches the device to \"Aura Sync & Windows Dynamic Lighting\" — \
-                         the same setting as in Gear Link or Armoury Crate, saved in the device.",
-                    )
-                    .clicked()
-                {
-                    let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
-                }
-            } else if device.blocked.is_none()
+            let warnings: Vec<&str> = [device.blocked.as_deref(), device.problem.as_deref()]
+                .into_iter()
+                .flatten()
+                .collect();
+            // An ASUS Dynamic Lighting device in "Device Lighting" mode
+            // takes every write and ignores it. Where the service can read
+            // that mode (#236) it offers the switch; elsewhere say where the
+            // switch is. Not on laptop keyboards: Gear Link doesn't manage
+            // those.
+            let wdl_off = device.blocked.is_none() && device.wdl_on == Some(false);
+            let wdl_hint = device.blocked.is_none()
                 && device.wdl_on.is_none()
                 && device.wdl_toggle != Some(false)
                 && device.id.starts_with("lamparray-0b05-")
-                && device.kind != "keyboard"
-            {
-                ui.label(
-                    egui::RichText::new(
+                && device.kind != "keyboard";
+            if warnings.is_empty() && !wdl_off && !wdl_hint {
+                continue;
+            }
+            g.block(|ui| {
+                for w in &warnings {
+                    ui.label(egui::RichText::new(*w).size(11.0).color(WARN_TEXT));
+                }
+                if wdl_off {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new(
+                                "Ignores lighting changes: its Cross-device Lighting Toggle is \
+                                 set to \"Device Lighting\".",
+                            )
+                            .size(11.0)
+                            .color(WARN_TEXT),
+                        );
+                        if theme::dialog_btn_secondary(ui, "Let RIGStats control it", dc)
+                            .on_hover_text(
+                                "Switches the device to \"Aura Sync & Windows Dynamic Lighting\" \
+                                 — the same setting as in Gear Link or Armoury Crate, saved in \
+                                 the device.",
+                            )
+                            .clicked()
+                        {
+                            let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
+                        }
+                    });
+                } else if wdl_hint {
+                    ui_kit::footnote(
+                        ui,
+                        dc,
                         "No change on the device? Set its Cross-device Lighting Toggle to \
                          \"Aura Sync & Windows Dynamic Lighting\" in Gear Link or Armoury Crate.",
-                    )
-                    .size(11.0)
-                    .color(dc.muted),
-                );
-            }
-        }
-        ui.add_space(4.0);
-        ui.scope(|ui| {
-            ui.style_mut().visuals.hyperlink_color = dc.link;
-            ui.hyperlink_to(
-                egui::RichText::new("Supported devices ↗").size(11.0),
-                "https://rigstats.app/#supported-devices",
-            )
-            .on_hover_text(
-                "Every lighting device RIGStats drives, and which are verified on hardware",
-            );
-        });
-        ui.add_space(10.0);
-
-        let mut part = ui_state
-            .aura_draft
-            .as_ref()
-            .map_or_else(|| saved.cloned(), |d| d.part.clone());
-        let before = part.clone();
-
-        ui.horizontal(|ui| {
-            ui.spacing_mut().interact_size.y = 26.0;
-            ui.add_sized(
-                [80.0, 26.0],
-                egui::Label::new(egui::RichText::new("Effect").size(12.0).color(dc.muted)),
-            );
-            let mut effect = part.as_ref().and_then(|p| p.effect.clone());
-            egui::ComboBox::from_id_salt("control_aura_effect")
-                .width(220.0)
-                .selected_text(effect_name(effect.as_deref()))
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut effect, None, "Leave as is");
-                    for (id, name) in AURA_EFFECTS {
-                        ui.selectable_value(&mut effect, Some(id.to_owned()), name);
-                    }
-                });
-            if effect != part.as_ref().and_then(|p| p.effect.clone()) {
-                part = with_effect(part.take(), effect);
-            }
-        });
-
-        let effect = part.as_ref().and_then(|p| p.effect.clone());
-        let takes_color = matches!(effect.as_deref(), Some("static" | "breathing"));
-        if let (true, Some(p)) = (takes_color, part.as_mut()) {
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.add_sized(
-                    [80.0, 22.0],
-                    egui::Label::new(egui::RichText::new("Colour").size(12.0).color(dc.muted)),
-                );
-                let mut rgb = parse_hex_color(p.color.as_deref());
-                if egui::color_picker::color_edit_button_srgb(ui, &mut rgb).changed() {
-                    p.color = Some(hex_color(rgb));
-                }
-                ui.add_space(8.0);
-                if let Some(picked) = color_swatches(ui, dc, rgb) {
-                    p.color = Some(hex_color(picked));
-                }
-            });
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.add_sized(
-                    [80.0, 22.0],
-                    egui::Label::new(egui::RichText::new("Brightness").size(12.0).color(dc.muted)),
-                );
-                let mut pct = (p.brightness.unwrap_or(1.0) * 100.0).round() as i32;
-                let slider = egui::Slider::new(&mut pct, 0..=100)
-                    .suffix(" %")
-                    .trailing_fill(true);
-                if ui.add(slider).changed() {
-                    p.brightness = Some(f64::from(pct) / 100.0);
+                    );
                 }
             });
         }
-        if caps.devices.iter().any(|d| d.lamp && d.blocked.is_none()) {
-            ui.add_space(10.0);
-            lamp_rows(ui, dc, &mut part);
-            let lamp_now = caps
-                .devices
-                .iter()
-                .filter(|d| d.lamp && d.blocked.is_none())
-                .filter_map(|d| d.lamp_on)
-                .reduce(|a, b| a || b);
-            if let Some(note) = lamp_state_note(lamp_now, saved, part.as_ref()) {
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new(note).size(11.0).color(dc.muted));
-            }
-        }
-        dry_run_note(ui, dc, control);
-
-        if part != before {
-            if let Some(p) = &part {
-                ui_state.queue_aura_preview(before.as_ref(), p);
-            }
-            ui_state.aura_draft = Some(AuraDraft { profile_id, part });
-        }
+        g.row(
+            "Supported devices",
+            Some("Every lighting device RIGStats drives, and which are verified"),
+            |ui| {
+                if theme::dialog_btn_secondary(ui, "Open list", dc).clicked() {
+                    ui.ctx().open_url(egui::OpenUrl::new_tab(
+                        "https://rigstats.app/#supported-devices",
+                    ));
+                }
+            },
+        );
     });
+    dry_run_note(ui, dc, control);
+
+    if part != before {
+        if let Some(p) = &part {
+            ui_state.queue_aura_preview(before.as_ref(), p);
+        }
+        ui_state.aura_draft = Some(AuraDraft { profile_id, part });
+    }
     if let Some(hue) = &hue {
-        ui.add_space(10.0);
+        ui.add_space(16.0);
         hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
     }
+}
+
+/// Amber text for something that needs the user (a device taken by another
+/// app, a setting on the device that blocks us).
+const WARN_TEXT: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
+
+/// "monitor_light_bar" → "Monitor light bar".
+fn device_kind(kind: &str) -> String {
+    let words = kind.replace('_', " ");
+    let mut chars = words.chars();
+    chars.next().map_or_else(String::new, |c| {
+        c.to_uppercase().collect::<String>() + chars.as_str()
+    })
 }
 
 /// Philips Hue (#215): find and pair a bridge, then choose which rooms and
@@ -1037,47 +1037,42 @@ fn hue_card(
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     typed_ip: &mut String,
 ) {
-    let muted = |text: &str| egui::RichText::new(text).size(11.0).color(dc.muted);
-    card_frame(dc).show(ui, |ui| {
-        ui.set_min_width(ui.available_width());
-        section_label(ui, dc, "Philips Hue");
-        ui.add_space(4.0);
-        let busy = control.hue_busy;
+    let busy = control.hue_busy;
+    let paired = matches!((&hue.bridge, hue.paired), (Some(_), true));
+    let footer = if paired {
+        "Breathing and colour cycle run slowly on Hue: the bridge takes about one command a \
+         second, so it fades between steps. Other lights are never touched."
+    } else if !control.hue_found.is_empty() {
+        "Press the round link button on the bridge, then Pair within 30 seconds."
+    } else {
+        "Room lights through a Hue Bridge on this network — no cloud account needed."
+    };
+    ui_kit::group(ui, dc, Some("Philips Hue"), Some(footer), |g| {
         match (&hue.bridge, hue.paired) {
             (Some(bridge), true) => {
-                ui.horizontal(|ui| {
-                    let model = if bridge.model.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" ({})", bridge.model)
-                    };
-                    ui.label(
-                        egui::RichText::new(format!("{}{model} at {}", bridge.name, bridge.ip))
-                            .size(12.0)
-                            .color(dc.text),
-                    )
-                    .on_hover_text(format!(
-                        "Bridge {}, firmware {}",
-                        bridge.id, bridge.firmware
-                    ));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add_enabled_ui(!busy, |ui| {
-                            if theme::dialog_btn_secondary(ui, "Unpair", dc).clicked() {
-                                let _ = cmd_tx.try_send(ControlCmd::HueUnpair);
-                            }
-                            if theme::dialog_btn_secondary(ui, "Refresh rooms", dc).clicked() {
-                                let _ = cmd_tx.try_send(ControlCmd::HueRefresh);
-                            }
-                        });
+                let model = if bridge.model.is_empty() {
+                    String::new()
+                } else {
+                    format!("{} · ", bridge.model)
+                };
+                g.row(&bridge.name, Some(&format!("{model}{}", bridge.ip)), |ui| {
+                    ui.add_enabled_ui(!busy, |ui| {
+                        if theme::dialog_btn_secondary(ui, "Unpair", dc).clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::HueUnpair);
+                        }
+                        if theme::dialog_btn_secondary(ui, "Refresh rooms", dc).clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::HueRefresh);
+                        }
                     });
                 });
-                ui.add_space(6.0);
-                ui.label(muted(
-                    "Rooms and zones that follow the rig's lighting. Other lights are never touched.",
-                ));
-                ui.add_space(4.0);
                 if hue.groups.is_empty() {
-                    ui.label(muted("The bridge has no rooms or zones yet — add them in the Hue app."));
+                    g.block(|ui| {
+                        ui_kit::footnote(
+                            ui,
+                            dc,
+                            "The bridge has no rooms or zones yet — add them in the Hue app.",
+                        );
+                    });
                 }
                 let mut chosen: Vec<String> = hue
                     .groups
@@ -1086,89 +1081,82 @@ fn hue_card(
                     .map(|g| g.id.clone())
                     .collect();
                 let mut changed = false;
-                ui.add_enabled_ui(!busy, |ui| {
-                    for group in &hue.groups {
-                        let mut on = group.chosen;
-                        let label = format!("{} ({})", group.name, group.kind);
-                        if ui.checkbox(&mut on, label).changed() {
-                            chosen.retain(|id| id != &group.id);
-                            if on {
-                                chosen.push(group.id.clone());
-                            }
-                            changed = true;
-                        }
-                    }
-                });
+                for group in &hue.groups {
+                    let kind = device_kind(&group.kind);
+                    g.row(
+                        &group.name,
+                        Some(&format!("{kind} · follows the rig")),
+                        |ui| {
+                            ui.add_enabled_ui(!busy, |ui| {
+                                let mut on = group.chosen;
+                                if ui_kit::toggle(ui, dc, &mut on).changed() {
+                                    chosen.retain(|id| id != &group.id);
+                                    if on {
+                                        chosen.push(group.id.clone());
+                                    }
+                                    changed = true;
+                                }
+                            });
+                        },
+                    );
+                }
                 if changed {
                     let _ = cmd_tx.try_send(ControlCmd::HueChoose(chosen));
                 }
-                ui.add_space(4.0);
-                ui.label(muted(
-                    "Breathing and spectrum cycle run slowly on Hue: the bridge takes about one \
-                     command a second, so it fades between steps.",
-                ));
             }
             _ => {
-                ui.label(muted(
-                    "Room lights through a Hue Bridge on this network — no cloud account, no OpenRGB.",
-                ));
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                g.row("Find a Hue Bridge", Some("Searches this network"), |ui| {
                     ui.add_enabled_ui(!busy, |ui| {
-                        if theme::dialog_btn_secondary(ui, "Find bridges", dc).clicked() {
+                        if theme::dialog_btn_secondary(ui, "Search", dc).clicked() {
                             let _ = cmd_tx.try_send(ControlCmd::HueDiscover(None));
-                        }
-                        ui.add_space(12.0);
-                        ui.label(muted("or IP address"));
-                        ui.add(
-                            egui::TextEdit::singleline(typed_ip)
-                                .desired_width(120.0)
-                                .hint_text("192.168.1.20"),
-                        );
-                        let ip = typed_ip.trim();
-                        if !ip.is_empty() && theme::dialog_btn_secondary(ui, "Look up", dc).clicked() {
-                            let _ = cmd_tx.try_send(ControlCmd::HueDiscover(Some(ip.to_owned())));
                         }
                     });
                 });
-                if !control.hue_found.is_empty() {
-                    ui.add_space(6.0);
-                    ui.label(muted(
-                        "Press the round link button on the bridge, then Pair within 30 seconds.",
-                    ));
-                    for bridge in &control.hue_found {
-                        ui.horizontal(|ui| {
-                            ui.label(
-                                egui::RichText::new(format!(
-                                    "{} ({}) at {}",
-                                    bridge.name, bridge.model, bridge.ip
-                                ))
-                                .size(12.0)
-                                .color(dc.text),
+                g.row(
+                    "Bridge address",
+                    Some("If the search finds nothing"),
+                    |ui| {
+                        ui.add_enabled_ui(!busy, |ui| {
+                            let ip = typed_ip.trim().to_owned();
+                            if !ip.is_empty()
+                                && theme::dialog_btn_secondary(ui, "Look up", dc).clicked()
+                            {
+                                let _ = cmd_tx.try_send(ControlCmd::HueDiscover(Some(ip)));
+                            }
+                            ui.add(
+                                egui::TextEdit::singleline(typed_ip)
+                                    .desired_width(130.0)
+                                    .hint_text("192.168.1.20"),
                             );
+                        });
+                    },
+                );
+                for bridge in &control.hue_found {
+                    g.row(
+                        &bridge.name,
+                        Some(&format!("{} · {}", bridge.model, bridge.ip)),
+                        |ui| {
                             ui.add_enabled_ui(!busy, |ui| {
                                 if theme::dialog_btn_primary(ui, "Pair").clicked() {
                                     let _ = cmd_tx.try_send(ControlCmd::HuePair(bridge.ip.clone()));
                                 }
                             });
-                        });
-                    }
+                        },
+                    );
                 }
             }
         }
         if busy {
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label(muted("Talking to the Hue Bridge…"));
+            g.block(|ui| {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui_kit::footnote(ui, dc, "Talking to the Hue Bridge…");
+                });
             });
         } else if let Some(message) = &control.hue_message {
-            ui.add_space(4.0);
-            ui.label(
-                egui::RichText::new(message)
-                    .size(11.0)
-                    .color(egui::Color32::from_rgb(0xff, 0xb3, 0x47)),
-            );
+            g.block(|ui| {
+                ui.label(egui::RichText::new(message).size(11.0).color(WARN_TEXT));
+            });
         }
     });
 }
@@ -1212,9 +1200,9 @@ fn lamp_state_note(
     }
     let (now, lamp) = (now?, shown_lamp?);
     (now != lamp.on).then_some(if now {
-        "The lamp is on now (from the tray or its own button). Save & apply turns it off."
+        "The lamp is on now (from the tray or its own button). Save turns it off."
     } else {
-        "The lamp is off now (from the tray or its own button). Save & apply turns it on."
+        "The lamp is off now (from the tray or its own button). Save turns it on."
     })
 }
 
@@ -1263,29 +1251,16 @@ fn with_lamp(part: Option<AuraPart>, lamp: Option<LampPart>) -> Option<AuraPart>
 
 /// Desk lamp (#214): on/off, brightness and colour temperature, separate
 /// from the Aura Sync effect.
-fn lamp_rows(ui: &mut egui::Ui, dc: &DialogColors, part: &mut Option<AuraPart>) {
+fn lamp_rows(g: &mut ui_kit::Group<'_>, dc: &DialogColors, part: &mut Option<AuraPart>) {
     let lamp = part.as_ref().and_then(|p| p.lamp.clone());
-    ui.horizontal(|ui| {
-        ui.spacing_mut().interact_size.y = 26.0;
-        ui.add_sized(
-            [80.0, 26.0],
-            egui::Label::new(egui::RichText::new("Desk lamp").size(12.0).color(dc.muted)),
-        );
+    g.row("Lamp", None, |ui| {
         let mut on = lamp.as_ref().map(|l| l.on);
-        let text = match on {
-            None => "Leave as is",
-            Some(true) => "On",
-            Some(false) => "Off",
-        };
-        egui::ComboBox::from_id_salt("control_aura_lamp")
-            .width(220.0)
-            .selected_text(text)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut on, None, "Leave as is");
-                ui.selectable_value(&mut on, Some(true), "On");
-                ui.selectable_value(&mut on, Some(false), "Off");
-            });
-        if on != lamp.as_ref().map(|l| l.on) {
+        let options = [
+            (None, "Unchanged"),
+            (Some(true), "On"),
+            (Some(false), "Off"),
+        ];
+        if ui_kit::segmented(ui, dc, &mut on, &options) {
             // Brightness and warmth are kept while the lamp is off.
             let next = on.map(|on| LampPart {
                 on,
@@ -1305,34 +1280,26 @@ fn lamp_rows(ui: &mut egui::Ui, dc: &DialogColors, part: &mut Option<AuraPart>) 
     let Some(l) = part.as_mut().and_then(|p| p.lamp.as_mut()).filter(|l| l.on) else {
         return;
     };
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.add_sized(
-            [80.0, 22.0],
-            egui::Label::new(egui::RichText::new("Brightness").size(12.0).color(dc.muted)),
-        );
-        let mut pct = (l.brightness.unwrap_or(LampPart::DEFAULT_BRIGHTNESS) * 100.0).round() as i32;
-        let slider = egui::Slider::new(&mut pct, 1..=100)
-            .suffix(" %")
-            .trailing_fill(true);
-        if ui.add(slider).changed() {
-            l.brightness = Some(f64::from(pct) / 100.0);
+    g.row("Brightness", None, |ui| {
+        let mut b = l.brightness.unwrap_or(LampPart::DEFAULT_BRIGHTNESS);
+        if ui_kit::slider_pct(ui, dc, &mut b, 0.01..=1.0) {
+            l.brightness = Some(b);
         }
     });
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
+    g.row("Colour temperature", Some("Lower is warmer"), |ui| {
+        let mut kelvin = l.temperature.unwrap_or(LampPart::DEFAULT_KELVIN);
         ui.add_sized(
-            [80.0, 22.0],
+            [52.0, 20.0],
             egui::Label::new(
-                egui::RichText::new("Temperature")
+                egui::RichText::new(format!("{kelvin:.0} K"))
                     .size(12.0)
-                    .color(dc.muted),
+                    .color(dc.text),
             ),
         );
-        let mut kelvin = l.temperature.unwrap_or(LampPart::DEFAULT_KELVIN);
+        ui.spacing_mut().slider_width = 150.0;
         let slider = egui::Slider::new(&mut kelvin, LampPart::MIN_KELVIN..=LampPart::MAX_KELVIN)
             .step_by(100.0)
-            .suffix(" K")
+            .show_value(false)
             .trailing_fill(true);
         if ui.add(slider).changed() {
             l.temperature = Some(kelvin);
@@ -1508,6 +1475,7 @@ pub fn show(
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     dc: &DialogColors,
     ui_state: &mut ControlUi,
+    look_link: &LookLink,
 ) {
     dc.apply_to_ctx(ctx);
     if !ui_state.shown {
@@ -1517,6 +1485,9 @@ pub fn show(
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
+    ui_state
+        .look
+        .sync(control.active_profile.as_deref(), look_link);
 
     let fan_caps = control.fan_caps();
     if let Some(fan) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new(SELECT_FAN_ID))) {
@@ -1530,10 +1501,10 @@ pub fn show(
     let lighting_shown = aura_caps.is_some() || aura_blocked.is_some() || hue_caps.is_some();
     let gpu_caps = control.gpu_caps();
     match ui_state.tab {
-        Tab::Fans if fan_caps.is_none() => ui_state.tab = Tab::Power,
-        Tab::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Tab::Power,
-        Tab::Gpu if gpu_caps.is_none() => ui_state.tab = Tab::Power,
-        Tab::Lighting if !lighting_shown => ui_state.tab = Tab::Power,
+        Page::Fans if fan_caps.is_none() => ui_state.tab = Page::Overview,
+        Page::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Page::Overview,
+        Page::Gpu if gpu_caps.is_none() => ui_state.tab = Page::Overview,
+        Page::Lighting if !lighting_shown => ui_state.tab = Page::Overview,
         _ => {}
     }
     let active = control.active();
@@ -1584,8 +1555,9 @@ pub fn show(
     if ui_state.flush_aura_preview(cmd_tx) {
         ctx.request_repaint_after(Duration::from_millis(100));
     }
-    let dirty =
+    let hardware_dirty =
         ui_state.draft.is_some() || ui_state.has_limit_draft() || ui_state.aura_draft.is_some();
+    let dirty = hardware_dirty || ui_state.look.dirty();
     // The countdown needs a repaint every second without user input.
     let preview_left = control
         .preview
@@ -1597,59 +1569,47 @@ pub fn show(
     }
 
     // ── Hero ─────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::top("control_hero")
-        .frame(dialog_frame(dc).inner_margin(egui::Margin {
-            left: 16,
-            right: 16,
-            top: 14,
-            bottom: 12,
+    ui_kit::hero(ctx, dc, "control", "Control Center", |ui| {
+        let (dot, text) = if control.protocol_mismatch.is_some() {
+            (
+                egui::Color32::from_rgb(0xff, 0x55, 0x55),
+                "Version mismatch",
+            )
+        } else if control.connected {
+            (egui::Color32::from_rgb(0x30, 0xd1, 0x58), "Connected")
+        } else if control.refused {
+            (
+                egui::Color32::from_rgb(0xff, 0x55, 0x55),
+                "Refused by the service",
+            )
+        } else {
+            (dc.muted, "Connecting…")
+        };
+        ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
+        // Painted dot: the embedded font has no bullet glyph.
+        let (dot_rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 11.0), egui::Sense::hover());
+        ui.painter().circle_filled(dot_rect.center(), 3.5, dot);
+    });
+
+    // ── Profile bar: which profile everything below belongs to ───────────
+    egui::TopBottomPanel::top("control_profiles")
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 10,
+            bottom: 10,
         }))
         .show_separator_line(true)
         .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("Control Center")
-                        .size(18.0)
-                        .strong()
-                        .color(dc.title),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (dot, text) = if control.protocol_mismatch.is_some() {
-                        (
-                            egui::Color32::from_rgb(0xff, 0x55, 0x55),
-                            "Version mismatch".to_string(),
-                        )
-                    } else if control.connected {
-                        (
-                            egui::Color32::from_rgb(0x39, 0xff, 0x88),
-                            "Connected".to_string(),
-                        )
-                    } else if control.refused {
-                        (
-                            egui::Color32::from_rgb(0xff, 0x55, 0x55),
-                            "Refused by the service".to_string(),
-                        )
-                    } else {
-                        (dc.muted, "Connecting…".to_string())
-                    };
-                    ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
-                    // Painted dot rather than a Unicode bullet glyph, which
-                    // the embedded font doesn't have (renders as a tofu box)
-                    // — same fix as the "Recording" indicator in
-                    // windows/history.rs.
-                    let (dot_rect, _) =
-                        ui.allocate_exact_size(egui::vec2(8.0, 11.0), egui::Sense::hover());
-                    ui.painter().circle_filled(dot_rect.center(), 2.5, dot);
-                });
-            });
+            profile_bar(ui, dc, control, ui_state, cmd_tx, busy);
         });
 
     // ── Footer ───────────────────────────────────────────────────────────
     egui::TopBottomPanel::bottom("control_footer")
-        .frame(dialog_frame(dc).inner_margin(egui::Margin {
-            left: 14,
-            right: 14,
-            top: 8,
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 20,
+            right: 20,
+            top: 10,
             bottom: 12,
         }))
         .show_separator_line(true)
@@ -1685,6 +1645,7 @@ pub fn show(
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
                     ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
+                    ui_state.look.discard(look_link);
                     ui_state.shown = false;
                     open.store(false, Ordering::Relaxed);
                     ui_state.notice = None;
@@ -1715,26 +1676,29 @@ pub fn show(
                     );
                 } else if dirty {
                     ui.add_space(6.0);
-                    // CPU limits are tried first (auto-revert); fan-only
-                    // edits are saved directly, as before.
+                    // CPU limits are tried first (auto-revert); everything
+                    // else is saved directly.
                     let label = if ui_state.has_limit_draft() {
                         "Try new limits"
                     } else {
-                        "Save & apply"
+                        "Save"
                     };
                     if theme::dialog_btn_primary(ui, label).clicked() {
-                        if let Some(profile) = active {
-                            let profile = with_drafts(profile, ui_state);
-                            let cmd = if ui_state.has_limit_draft() {
-                                ControlCmd::Preview(Box::new(profile))
-                            } else {
-                                ControlCmd::SaveProfile {
-                                    profile: Box::new(profile),
-                                    apply: true,
-                                }
-                            };
-                            let _ = cmd_tx.try_send(cmd);
-                            ui_state.await_reply(control);
+                        ui_state.look.save(look_link);
+                        if hardware_dirty {
+                            if let Some(profile) = active {
+                                let profile = with_drafts(profile, ui_state);
+                                let cmd = if ui_state.has_limit_draft() {
+                                    ControlCmd::Preview(Box::new(profile))
+                                } else {
+                                    ControlCmd::SaveProfile {
+                                        profile: Box::new(profile),
+                                        apply: true,
+                                    }
+                                };
+                                let _ = cmd_tx.try_send(cmd);
+                                ui_state.await_reply(control);
+                            }
                         }
                     }
                     ui.add_space(6.0);
@@ -1744,13 +1708,17 @@ pub fn show(
                         ui_state.gpu_draft = None;
                         ui_state.co_draft = None;
                         ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
+                        ui_state.look.discard(look_link);
                         ui_state.dragging = None;
                     }
                     ui.add_space(10.0);
                     ui.label(
-                        egui::RichText::new("Unsaved changes")
-                            .size(11.0)
-                            .color(dc.muted),
+                        egui::RichText::new(format!(
+                            "Unsaved changes to {}",
+                            active.map_or("this profile", |p| p.name.as_str())
+                        ))
+                        .size(11.0)
+                        .color(dc.muted),
                     );
                 } else if control.preview_reverted {
                     ui.add_space(10.0);
@@ -1763,139 +1731,523 @@ pub fn show(
             });
         });
 
-    // ── Profiles (left) ──────────────────────────────────────────────────
-    egui::SidePanel::left("control_profiles")
+    // ── Sidebar: the profile's pages ─────────────────────────────────────
+    let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
+    let shown = PageShown {
+        fans: fan_caps.is_some(),
+        cpu: cpu_tab_shown,
+        gpu: gpu_caps.is_some(),
+        lighting: lighting_shown,
+    };
+    egui::SidePanel::left("control_nav")
         .resizable(false)
-        .exact_width(210.0)
-        .frame(dialog_frame(dc).inner_margin(egui::Margin::same(10)))
+        .exact_width(ui_kit::SIDEBAR_W)
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::same(10)))
         .show(ctx, |ui| {
-            section_label(ui, dc, "Profiles");
-            ui.add_space(6.0);
-            if control.profiles.is_empty() {
-                ui.label(
-                    egui::RichText::new("No profiles yet.")
-                        .size(11.0)
-                        .color(dc.muted),
-                );
-            }
-            for profile in &control.profiles {
-                let is_active = control.active_profile.as_deref() == Some(profile.id.as_str());
-                let resp = ui.add(
-                    egui::Button::new(
-                        egui::RichText::new(&profile.name)
-                            .size(13.0)
-                            .color(if is_active { dc.title } else { dc.text }),
-                    )
-                    .fill(if is_active {
-                        dc.card
-                    } else {
-                        egui::Color32::TRANSPARENT
-                    })
-                    .min_size(egui::vec2(ui.available_width(), 28.0)),
-                );
-                if resp.hovered() {
-                    ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_space(4.0);
+                for (i, &(page, icon, label)) in PAGES.iter().enumerate() {
+                    if !shown.has(page) {
+                        continue;
+                    }
+                    match i {
+                        1 => ui_kit::nav_header(ui, dc, "RIGStats"),
+                        4 => ui_kit::nav_header(ui, dc, "Hardware"),
+                        _ => {}
+                    }
+                    if ui_kit::nav_item(ui, dc, icon, label, ui_state.tab == page).clicked() {
+                        ui_state.tab = page;
+                    }
                 }
-                if resp.clicked() && !is_active {
-                    let _ = cmd_tx.try_send(ControlCmd::ApplyProfile(profile.id.clone()));
-                }
-                ui.add_space(2.0);
-            }
-            // Not while a try runs or a click awaits its answer: both act on
-            // the active profile.
-            if control.connected && control.preview.is_none() && !busy {
-                ui.add_space(8.0);
-                profile_actions(ui, dc, control, ui_state, cmd_tx);
-            }
+            });
         });
 
-    // ── Tabs (central) ───────────────────────────────────────────────────
+    // ── The page ─────────────────────────────────────────────────────────
     egui::CentralPanel::default()
-        .frame(dialog_frame(dc).inner_margin(egui::Margin::same(14)))
+        .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
+            left: 24,
+            right: 24,
+            top: 18,
+            bottom: 8,
+        }))
         .show(ctx, |ui| {
             profiles_notice_banner(ui, control);
-            let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
-            if fan_caps.is_some() || cpu_tab_shown || gpu_caps.is_some() || lighting_shown {
-                ui.horizontal(|ui| {
-                    if tab_btn(ui, dc, "Power", ui_state.tab == Tab::Power, 90.0) {
-                        ui_state.tab = Tab::Power;
-                    }
-                    if fan_caps.is_some()
-                        && tab_btn(ui, dc, "Fans", ui_state.tab == Tab::Fans, 90.0)
-                    {
-                        ui_state.tab = Tab::Fans;
-                    }
-                    if cpu_tab_shown && tab_btn(ui, dc, "CPU", ui_state.tab == Tab::Cpu, 90.0) {
-                        ui_state.tab = Tab::Cpu;
-                    }
-                    if gpu_caps.is_some() && tab_btn(ui, dc, "GPU", ui_state.tab == Tab::Gpu, 90.0)
-                    {
-                        ui_state.tab = Tab::Gpu;
-                    }
-                    if lighting_shown
-                        && tab_btn(ui, dc, "Lighting", ui_state.tab == Tab::Lighting, 90.0)
-                    {
-                        ui_state.tab = Tab::Lighting;
-                    }
-                });
-                ui.add_space(10.0);
-            }
-            if ui_state.tab == Tab::Cpu && cpu_tab_shown {
-                // Eight per-core rows don't fit the window: scroll.
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    crash_guard_banner(ui, control);
-                    if let Some(caps) = &cpu_caps {
-                        cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
-                        ui.add_space(10.0);
-                    }
-                    if let Some(caps) = &co_caps {
-                        curve_opt_card(ui, dc, control, caps, &saved_co, ui_state);
-                    }
-                });
+            let profile_name = active.map_or("this profile", |p| p.name.as_str());
+            // The fan curve editor sizes itself to the page: no scrolling.
+            if let (Page::Fans, Some(caps)) = (ui_state.tab, &fan_caps) {
+                ui_kit::page_header(
+                    ui,
+                    dc,
+                    "Fans",
+                    &format!("How fast each fan runs in {profile_name}."),
+                );
+                fans_tab(
+                    ui,
+                    dc,
+                    control,
+                    caps,
+                    active,
+                    &saved_headers,
+                    ui_state,
+                    cmd_tx,
+                );
                 return;
             }
-            if ui_state.tab == Tab::Lighting && lighting_shown {
-                // Many devices plus the Hue card don't fit the window: scroll.
-                egui::ScrollArea::vertical().show(ui, |ui| {
-                    lighting_tab(
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| match ui_state.tab {
+                    Page::Overview => overview_page(
                         ui,
                         dc,
                         control,
-                        aura_caps.as_ref(),
-                        saved_aura.as_ref(),
-                        cmd_tx,
-                        ui_state,
-                    );
-                });
-                return;
-            }
-            if let (Tab::Gpu, Some(caps)) = (ui_state.tab, &gpu_caps) {
-                gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
-                return;
-            }
-            match (ui_state.tab, &fan_caps) {
-                (Tab::Fans, Some(caps)) => {
-                    fans_tab(
-                        ui,
-                        dc,
-                        control,
-                        caps,
                         active,
+                        &shown,
                         &saved_headers,
+                        &saved_cpu,
+                        &saved_co,
+                        &saved_gpu,
+                        saved_aura.as_ref(),
                         ui_state,
-                        cmd_tx,
-                    );
-                }
-                _ => power_tab(ui, dc, control, cmd_tx),
-            }
+                    ),
+                    Page::Dashboard => profile_look::dashboard_page(
+                        ui,
+                        dc,
+                        profile_name,
+                        &mut ui_state.look,
+                        look_link,
+                    ),
+                    Page::Overlay => profile_look::overlay_page(
+                        ui,
+                        dc,
+                        profile_name,
+                        &mut ui_state.look,
+                        look_link,
+                    ),
+                    Page::Alerts => profile_look::alerts_page(
+                        ui,
+                        dc,
+                        profile_name,
+                        &mut ui_state.look,
+                        look_link,
+                    ),
+                    Page::Cpu => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "CPU",
+                            &format!("The processor's power limits in {profile_name}."),
+                        );
+                        crash_guard_banner(ui, control);
+                        if let Some(caps) = &cpu_caps {
+                            cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
+                            ui.add_space(10.0);
+                        }
+                        if let Some(caps) = &co_caps {
+                            curve_opt_card(ui, dc, control, caps, &saved_co, ui_state);
+                        }
+                    }
+                    Page::Lighting => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Lighting",
+                            &format!("The RGB lighting of your devices in {profile_name}."),
+                        );
+                        lighting_tab(
+                            ui,
+                            dc,
+                            control,
+                            aura_caps.as_ref(),
+                            saved_aura.as_ref(),
+                            cmd_tx,
+                            ui_state,
+                        );
+                    }
+                    Page::Gpu => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Graphics card",
+                            &format!("The graphics card's power limit in {profile_name}."),
+                        );
+                        if let Some(caps) = &gpu_caps {
+                            gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
+                        }
+                    }
+                    Page::Power | Page::Fans => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Power",
+                            &format!("The Windows power plan in {profile_name}."),
+                        );
+                        power_tab(ui, dc, control, cmd_tx);
+                    }
+                });
         });
 
     if ctx.input(|i| i.viewport().close_requested()) {
         ui_state.discard_aura(saved_aura.as_ref(), cmd_tx);
+        ui_state.look.discard(look_link);
         ui_state.shown = false;
         open.store(false, Ordering::Relaxed);
         ui_state.notice = None;
         main_ctx.request_repaint_of(egui::ViewportId::ROOT);
+    }
+}
+
+/// The Control Center's pages, in sidebar order: the overview, the
+/// profile's RIGStats look, then its hardware.
+const PAGES: &[(Page, Icon, &str)] = &[
+    (Page::Overview, Icon::Overview, "Overview"),
+    (Page::Dashboard, Icon::Dashboard, "Dashboard"),
+    (Page::Overlay, Icon::Overlay, "Overlay"),
+    (Page::Alerts, Icon::Alerts, "Alerts"),
+    (Page::Power, Icon::Power, "Power"),
+    (Page::Fans, Icon::Fans, "Fans"),
+    (Page::Cpu, Icon::Cpu, "CPU"),
+    (Page::Gpu, Icon::Gpu, "Graphics card"),
+    (Page::Lighting, Icon::Lighting, "Lighting"),
+];
+
+/// Which hardware pages this PC has (the service's capabilities);
+/// unsupported features are hidden, not greyed out.
+struct PageShown {
+    fans: bool,
+    cpu: bool,
+    gpu: bool,
+    lighting: bool,
+}
+
+impl PageShown {
+    fn has(&self, page: Page) -> bool {
+        match page {
+            Page::Fans => self.fans,
+            Page::Cpu => self.cpu,
+            Page::Gpu => self.gpu,
+            Page::Lighting => self.lighting,
+            _ => true,
+        }
+    }
+}
+
+/// The profile chips, an add button and a menu with the profile's actions.
+/// Renaming and deleting replace the chips with an inline editor.
+fn profile_bar(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    ui_state: &mut ControlUi,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    busy: bool,
+) {
+    // An edit for a profile that is no longer the active one is stale.
+    let active = control.active();
+    if let Some(ProfileEdit::Renaming { id, .. } | ProfileEdit::ConfirmDelete { id }) =
+        &ui_state.profile_edit
+    {
+        if active.map(|a| &a.id) != Some(id) {
+            ui_state.profile_edit = None;
+        }
+    }
+    // Actions act on the active profile: not while a try runs or a click
+    // awaits its answer.
+    let can_edit = control.connected && control.preview.is_none() && !busy;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        ui.label(
+            egui::RichText::new("Profile")
+                .size(12.0)
+                .strong()
+                .color(dc.label),
+        );
+        ui.add_space(4.0);
+        match (ui_state.profile_edit.clone(), active) {
+            (Some(ProfileEdit::Renaming { id, mut name }), Some(active)) => {
+                let edit = ui.add(
+                    egui::TextEdit::singleline(&mut name)
+                        .desired_width(200.0)
+                        .hint_text("Profile name"),
+                );
+                edit.request_focus();
+                let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+                let trimmed = name.trim().to_owned();
+                let mut done = escape;
+                if (theme::dialog_btn_primary(ui, "Rename").clicked() || enter)
+                    && !trimmed.is_empty()
+                {
+                    let mut profile = active.clone();
+                    profile.name = trimmed;
+                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                        profile: Box::new(profile),
+                        apply: false,
+                    });
+                    done = true;
+                }
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                    done = true;
+                }
+                ui_state.profile_edit = (!done).then_some(ProfileEdit::Renaming { id, name });
+            }
+            (Some(ProfileEdit::ConfirmDelete { id }), Some(active)) => {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "Delete {}? Its fan curves, limits and look go with it.",
+                        active.name
+                    ))
+                    .size(12.0)
+                    .color(dc.title),
+                );
+                if theme::dialog_btn_primary(ui, "Delete").clicked() {
+                    let _ = cmd_tx.try_send(ControlCmd::DeleteProfile(id));
+                    ui_state.profile_edit = None;
+                }
+                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
+                    ui_state.profile_edit = None;
+                }
+            }
+            _ => {
+                if control.profiles.is_empty() {
+                    ui.label(
+                        egui::RichText::new("No profiles yet.")
+                            .size(12.0)
+                            .color(dc.muted),
+                    );
+                }
+                for profile in &control.profiles {
+                    let is_active = active.map(|a| &a.id) == Some(&profile.id);
+                    let resp = ui_kit::chip(ui, dc, &profile.name, is_active);
+                    if resp.clicked() && !is_active {
+                        let _ = cmd_tx.try_send(ControlCmd::ApplyProfile(profile.id.clone()));
+                    }
+                }
+                let Some(active) = active.filter(|_| can_edit) else {
+                    return;
+                };
+                ui.add_space(4.0);
+                if ui_kit::icon_button(
+                    ui,
+                    dc,
+                    Icon::Plus,
+                    &format!("New profile — a copy of {}", active.name),
+                )
+                .clicked()
+                {
+                    let copy = duplicate_profile(active, &control.profiles);
+                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                        profile: Box::new(copy),
+                        apply: true,
+                    });
+                }
+                let more = ui_kit::icon_button(ui, dc, Icon::More, "Rename, delete or reset");
+                egui::Popup::menu(&more).show(|ui| {
+                    ui.set_min_width(170.0);
+                    if ui.button(format!("Rename {}…", active.name)).clicked() {
+                        ui_state.profile_edit = Some(ProfileEdit::Renaming {
+                            id: active.id.clone(),
+                            name: active.name.clone(),
+                        });
+                    }
+                    if ui.button(format!("Duplicate {}", active.name)).clicked() {
+                        let copy = duplicate_profile(active, &control.profiles);
+                        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                            profile: Box::new(copy),
+                            apply: true,
+                        });
+                    }
+                    ui.separator();
+                    if active.builtin {
+                        // Built-ins can't be deleted, only put back.
+                        if ui
+                            .button("Reset to defaults")
+                            .on_hover_text("Back to this built-in profile's hardware defaults")
+                            .clicked()
+                        {
+                            let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
+                        }
+                    } else if ui.button(format!("Delete {}…", active.name)).clicked() {
+                        ui_state.profile_edit = Some(ProfileEdit::ConfirmDelete {
+                            id: active.id.clone(),
+                        });
+                    }
+                });
+            }
+        }
+    });
+}
+
+/// One-line summaries of a profile's parts, for the overview tiles.
+fn fans_summary(headers: &BTreeMap<String, FanHeaderConfig>) -> String {
+    match headers.len() {
+        0 => "Motherboard default".to_owned(),
+        1 => "Custom curve on 1 fan header".to_owned(),
+        n => format!("Custom curves on {n} fan headers"),
+    }
+}
+
+fn cpu_summary(limits: &AmdCpuLimit, co: &CurveOptPart) -> String {
+    let limit = match limits.ppt_w {
+        Some(ppt) => format!("{ppt:.0} W power limit"),
+        None if limits.is_stock() => "Stock limits".to_owned(),
+        None => "Custom limits".to_owned(),
+    };
+    if co.is_bios() {
+        limit
+    } else {
+        format!("{limit} · Curve Optimizer")
+    }
+}
+
+fn gpu_summary(limits: &BTreeMap<String, i32>) -> String {
+    match limits.values().next() {
+        None => "Stock power limit".to_owned(),
+        Some(v) => format!("Power limit {v:+} %"),
+    }
+}
+
+fn lighting_summary(aura: Option<&AuraPart>) -> (String, Option<egui::Color32>) {
+    let Some(aura) = aura else {
+        return ("Left as it is".to_owned(), None);
+    };
+    match aura.effect.as_deref() {
+        Some(effect) => {
+            let dot = (effect != "off" && effect != "spectrum_cycle").then(|| {
+                let [r, g, b] = parse_hex_color(aura.color.as_deref());
+                egui::Color32::from_rgb(r, g, b)
+            });
+            (effect_name(Some(effect)).to_owned(), dot)
+        }
+        None if aura.lamp.is_some() => ("Desk lamp only".to_owned(), None),
+        None => ("Left as it is".to_owned(), None),
+    }
+}
+
+/// The profile at a glance: a tile per page with what it does; a click
+/// opens the page.
+#[allow(clippy::too_many_arguments)]
+fn overview_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    active: Option<&Profile>,
+    shown: &PageShown,
+    headers: &BTreeMap<String, FanHeaderConfig>,
+    cpu: &AmdCpuLimit,
+    co: &CurveOptPart,
+    gpu: &BTreeMap<String, i32>,
+    aura: Option<&AuraPart>,
+    ui_state: &mut ControlUi,
+) {
+    let Some(profile) = active else {
+        ui_kit::page_header(ui, dc, "Overview", "");
+        ui.label(
+            egui::RichText::new("Waiting for the RIGStats service…")
+                .size(12.0)
+                .color(dc.muted),
+        );
+        return;
+    };
+    ui_kit::page_header(
+        ui,
+        dc,
+        &profile.name,
+        "Everything this profile changes. Click a tile to change it.",
+    );
+    let Some(look) = ui_state.look.current().cloned() else {
+        return;
+    };
+    let warn = |key: &str| {
+        look.thresholds
+            .get(key)
+            .and_then(|t| t.warn)
+            .map_or_else(|| "off".to_owned(), |v| format!("{v} °C"))
+    };
+    let lighting = lighting_summary(aura);
+    let power = active
+        .and_then(|p| p.part.power_plan.as_deref())
+        .map_or_else(
+            || "Power plan left as it is".to_owned(),
+            |id| scheme_name(id, &control.power_schemes()),
+        );
+    let look_tiles = [
+        (
+            Page::Dashboard,
+            Icon::Dashboard,
+            "Dashboard",
+            format!(
+                "{} · {} panels",
+                profile_look::theme_name(&look.theme),
+                look.visible_panels.len()
+            ),
+            Some(theme::AppTheme::from_key(&look.theme).accent),
+        ),
+        (
+            Page::Overlay,
+            Icon::Overlay,
+            "Overlay",
+            if look.overlay_enabled {
+                format!("Shown · {} metrics", look.overlay_metrics.len())
+            } else {
+                "Hidden".to_owned()
+            },
+            None,
+        ),
+        (
+            Page::Alerts,
+            Icon::Alerts,
+            "Alerts",
+            format!("CPU {} · GPU {}", warn("cpu"), warn("gpu")),
+            None,
+        ),
+    ];
+    let hardware_tiles = [
+        (Page::Power, Icon::Power, "Power", power, None),
+        (Page::Fans, Icon::Fans, "Fans", fans_summary(headers), None),
+        (Page::Cpu, Icon::Cpu, "CPU", cpu_summary(cpu, co), None),
+        (
+            Page::Gpu,
+            Icon::Gpu,
+            "Graphics card",
+            gpu_summary(gpu),
+            None,
+        ),
+        (
+            Page::Lighting,
+            Icon::Lighting,
+            "Lighting",
+            lighting.0,
+            lighting.1,
+        ),
+    ];
+    let gap = 12.0;
+    let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
+    for (title, tiles) in [
+        ("RIGStats", &look_tiles[..]),
+        ("Hardware", &hardware_tiles[..]),
+    ] {
+        ui.label(
+            egui::RichText::new(title)
+                .size(12.0)
+                .strong()
+                .color(dc.label),
+        );
+        ui.add_space(6.0);
+        let visible: Vec<_> = tiles.iter().filter(|t| shown.has(t.0)).collect();
+        for row in visible.chunks(3) {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for (page, icon, label, value, dot) in row {
+                    let resp =
+                        ui_kit::tile(ui, dc, egui::vec2(tile_w, 92.0), *icon, label, value, *dot);
+                    if resp.clicked() {
+                        ui_state.tab = *page;
+                    }
+                }
+            });
+            ui.add_space(gap);
+        }
+        ui.add_space(8.0);
     }
 }
 
@@ -1937,94 +2289,75 @@ fn power_tab(
             );
         }
         Some(_) => {
-            card_frame(dc).show(ui, |ui| {
-                ui.set_min_width(ui.available_width());
-                section_label(ui, dc, "Windows power plan");
-                ui.add_space(4.0);
-                ui.label(
-                    egui::RichText::new(
-                        "The power plan this profile switches Windows to. A power plan is \
-                         not risky, so a change is saved and applied at once.",
+            let Some(active) = control.active() else {
+                return;
+            };
+            // The plan the active profile sets — not the profile's own
+            // name, which a "Gaming" profile would have shown here.
+            let current = active.part.power_plan.clone();
+            let mut chosen = current.clone();
+            let schemes = control.power_schemes();
+            // Which plans exist is up to the PC (Modern Standby laptops
+            // often have Balanced only); the service then uses the closest one.
+            let missing = chosen
+                .as_deref()
+                .filter(|id| !schemes.iter().any(|s| s.id == *id))
+                .map(|id| {
+                    format!(
+                        "{} isn't available on this PC — Windows' closest plan (usually \
+                         Balanced) is used instead.",
+                        power_plan_name(id)
                     )
-                    .size(11.0)
-                    .color(dc.muted),
-                );
-                ui.add_space(8.0);
-                let Some(active) = control.active() else {
-                    return;
-                };
-                // The plan the active profile sets — not the profile's own
-                // name, which a "Gaming" profile would have shown here.
-                let current = active.part.power_plan.clone();
-                let mut chosen = current.clone();
-                let schemes = control.power_schemes();
-                ui.horizontal(|ui| {
-                    // As tall as the standard button beside it, so the row lines up.
-                    ui.spacing_mut().interact_size.y = 26.0;
-                    ui.add_sized(
-                        [62.0, 26.0],
-                        egui::Label::new(
-                            egui::RichText::new("Power plan").size(12.0).color(dc.muted),
-                        ),
-                    );
-                    let combo = egui::ComboBox::from_id_salt("control_power_plan")
-                        .width(220.0)
-                        .selected_text(chosen.as_deref().map_or_else(
-                            || "Leave unchanged".to_owned(),
-                            |id| scheme_name(id, &schemes),
-                        ))
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut chosen, None, "Leave unchanged");
-                            for scheme in &schemes {
-                                ui.selectable_value(
-                                    &mut chosen,
-                                    Some(scheme.id.clone()),
-                                    &scheme.name,
-                                );
-                            }
-                        });
-                    // Re-read the schemes on open, so a plan just created in
-                    // Windows' Power Options shows up without a restart.
-                    if combo.response.clicked() {
-                        let _ = cmd_tx.try_send(ControlCmd::Refresh);
-                    }
-                    ui.add_space(6.0);
-                    if theme::dialog_btn_secondary(ui, "Edit power plans…", dc)
-                        .on_hover_text(
-                            "Opens Windows' Power Options, where plans are created and edited",
-                        )
-                        .clicked()
-                    {
-                        open_power_options();
-                    }
                 });
-                // Which plans exist is up to the PC (Modern Standby laptops
-                // often have Balanced only); the service then uses the closest one.
-                if let Some(id) = chosen
-                    .as_deref()
-                    .filter(|id| !schemes.iter().any(|s| s.id == *id))
-                {
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} isn't available on this PC — Windows' closest plan \
-                             (usually Balanced) is used instead.",
-                            power_plan_name(id)
-                        ))
-                        .size(11.0)
-                        .color(dc.muted),
-                    );
-                }
-                if chosen != current {
-                    let mut profile = active.clone();
-                    profile.part.power_plan = chosen;
-                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                        profile: Box::new(profile),
-                        apply: true,
-                    });
-                }
-                dry_run_note(ui, dc, control);
+            ui_kit::group(ui, dc, None, missing.as_deref(), |g| {
+                g.row(
+                    "Windows power plan",
+                    Some("Switched to with the profile; saved at once"),
+                    |ui| {
+                        let combo = ui_kit::dropdown(
+                            ui,
+                            "control_power_plan",
+                            chosen.as_deref().map_or_else(
+                                || "Leave unchanged".to_owned(),
+                                |id| scheme_name(id, &schemes),
+                            ),
+                            |ui| {
+                                ui.selectable_value(&mut chosen, None, "Leave unchanged");
+                                for scheme in &schemes {
+                                    ui.selectable_value(
+                                        &mut chosen,
+                                        Some(scheme.id.clone()),
+                                        &scheme.name,
+                                    );
+                                }
+                            },
+                        );
+                        // Re-read the schemes on open, so a plan just created
+                        // in Windows' Power Options shows up without a restart.
+                        if combo.clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::Refresh);
+                        }
+                    },
+                );
+                g.row(
+                    "Power plans",
+                    Some("Plans are created and edited in Windows"),
+                    |ui| {
+                        if theme::dialog_btn_secondary(ui, "Open Power Options", dc).clicked() {
+                            open_power_options();
+                        }
+                    },
+                );
             });
+            if chosen != current {
+                let mut profile = active.clone();
+                profile.part.power_plan = chosen;
+                let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+                    profile: Box::new(profile),
+                    apply: true,
+                });
+            }
+            dry_run_note(ui, dc, control);
         }
     }
 }
@@ -2080,111 +2413,6 @@ fn unique_profile_id(name: &str, existing: &[Profile]) -> String {
         })
         .find(|id| !taken(id))
         .unwrap_or(slug)
-}
-
-/// Duplicate / Rename / Delete (custom) or Reset (built-in) for the active
-/// profile, with rename and delete confirmed inline.
-fn profile_actions(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    control: &ControlState,
-    ui_state: &mut ControlUi,
-    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
-) {
-    let Some(active) = control.active() else {
-        return;
-    };
-    // An edit for a profile that is no longer the active one is stale.
-    let stale = match &ui_state.profile_edit {
-        Some(ProfileEdit::Renaming { id, .. } | ProfileEdit::ConfirmDelete { id }) => {
-            *id != active.id
-        }
-        None => false,
-    };
-    if stale {
-        ui_state.profile_edit = None;
-    }
-
-    match ui_state.profile_edit.clone() {
-        Some(ProfileEdit::Renaming { id, mut name }) => {
-            let edit = ui.add(egui::TextEdit::singleline(&mut name).desired_width(f32::INFINITY));
-            let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let trimmed = name.trim().to_owned();
-            let mut done = false;
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                if (theme::dialog_btn_secondary(ui, "Save", dc).clicked() || enter)
-                    && !trimmed.is_empty()
-                {
-                    let mut profile = active.clone();
-                    profile.name = trimmed.clone();
-                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                        profile: Box::new(profile),
-                        apply: false,
-                    });
-                    done = true;
-                }
-                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
-                    done = true;
-                }
-            });
-            ui_state.profile_edit = (!done).then_some(ProfileEdit::Renaming { id, name });
-        }
-        Some(ProfileEdit::ConfirmDelete { id }) => {
-            ui.label(
-                egui::RichText::new(format!("Delete {}?", active.name))
-                    .size(11.0)
-                    .color(dc.text),
-            );
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                if theme::dialog_btn_secondary(ui, "Delete", dc).clicked() {
-                    let _ = cmd_tx.try_send(ControlCmd::DeleteProfile(id.clone()));
-                    ui_state.profile_edit = None;
-                }
-                if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
-                    ui_state.profile_edit = None;
-                }
-            });
-        }
-        None => {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = 4.0;
-                if theme::dialog_btn_secondary(ui, "Duplicate", dc).clicked() {
-                    let copy = duplicate_profile(active, &control.profiles);
-                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                        profile: Box::new(copy),
-                        apply: true,
-                    });
-                }
-                if theme::dialog_btn_secondary(ui, "Rename", dc).clicked() {
-                    ui_state.profile_edit = Some(ProfileEdit::Renaming {
-                        id: active.id.clone(),
-                        name: active.name.clone(),
-                    });
-                }
-            });
-            ui.add_space(4.0);
-            // In a row like the buttons above: egui places a button's text by
-            // the surrounding layout, so a lone button in this left-aligned
-            // column would have its label pushed left.
-            ui.horizontal(|ui| {
-                if active.builtin {
-                    // Built-ins can't be deleted, only put back.
-                    if theme::dialog_btn_secondary(ui, "Reset", dc)
-                        .on_hover_text("Back to this built-in profile's defaults")
-                        .clicked()
-                    {
-                        let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
-                    }
-                } else if theme::dialog_btn_secondary(ui, "Delete", dc).clicked() {
-                    ui_state.profile_edit = Some(ProfileEdit::ConfirmDelete {
-                        id: active.id.clone(),
-                    });
-                }
-            });
-        }
-    }
 }
 
 /// Windows' classic Power Options (`powercfg.cpl`) — still the only place
@@ -2283,26 +2511,6 @@ fn fans_tab(
         ui.add_space(6.0);
     }
 
-    // ── Which profile is being edited ────────────────────────────────────
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("Fan curves for profile")
-                .size(12.0)
-                .color(dc.muted),
-        );
-        ui.label(
-            egui::RichText::new(&profile.name)
-                .size(12.0)
-                .strong()
-                .color(dc.title),
-        )
-        .on_hover_text(
-            "Each profile keeps its own fan curves. Choosing another profile on the \
-             left switches to it, and its curves are edited here.",
-        );
-    });
-    ui.add_space(6.0);
-
     // ── Header picker + identify ─────────────────────────────────────────
     ui.horizontal(|ui| {
         let mut selected = header.id.clone();
@@ -2372,12 +2580,19 @@ fn fans_tab(
         let controlled = shown.contains_key(&header.id);
 
         ui.horizontal(|ui| {
-            section_label(ui, dc, "CONTROL");
+            section_label(ui, dc, "Control");
             ui.add_space(8.0);
-            if tab_btn(ui, dc, "BIOS", !controlled, 80.0) && controlled {
+            let mut curve = controlled;
+            let picked = ui_kit::segmented(
+                ui,
+                dc,
+                &mut curve,
+                &[(false, "Automatic (BIOS)"), (true, "Custom curve")],
+            );
+            if picked && !curve {
                 ui_state.edit(&profile.id, saved).remove(&header.id);
             }
-            if tab_btn(ui, dc, "Curve", controlled, 80.0) && !controlled {
+            if picked && curve {
                 let preset = PRESETS[default_preset(&profile.id)].1;
                 ui_state.edit(&profile.id, saved).insert(
                     header.id.clone(),
@@ -3321,8 +3536,8 @@ mod tests {
 
     #[test]
     fn lighting_effect_names() {
-        assert_eq!(effect_name(None), "Leave as is");
-        assert_eq!(effect_name(Some("spectrum_cycle")), "Spectrum cycle");
+        assert_eq!(effect_name(None), "Unchanged");
+        assert_eq!(effect_name(Some("spectrum_cycle")), "Colour cycle");
     }
 
     #[test]

@@ -123,14 +123,14 @@ fn card_frame(dc: &DialogColors) -> egui::Frame {
     egui::Frame::new()
         .fill(dc.card)
         .stroke(egui::Stroke::new(1.0_f32, dc.card_border))
-        .corner_radius(egui::CornerRadius::same(6))
+        .corner_radius(egui::CornerRadius::same(10))
         .inner_margin(egui::Margin::symmetric(10, 8))
 }
 
 fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
     ui.label(
         egui::RichText::new(text)
-            .size(11.0)
+            .size(12.0)
             .strong()
             .color(dc.label),
     );
@@ -730,7 +730,7 @@ pub fn show(
         .show(ctx, |ui| {
             ui.label(
                 egui::RichText::new("Session History")
-                    .size(22.0)
+                    .size(20.0)
                     .strong()
                     .color(dc.text),
             );

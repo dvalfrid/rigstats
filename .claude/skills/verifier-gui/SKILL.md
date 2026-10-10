@@ -42,19 +42,20 @@ $bmp.Save("$env:TEMP\rigstats_header.png"); $g.Dispose(); $bmp.Dispose()
 
 Then `Read` the saved PNG to view it.
 
-### 3. Open the Settings window
+### 3. Open a dialog on a given page
 
-The tray icon lives in the system notification area. Right-click it to get the context menu → Settings. Alternatively, interact via Windows automation:
+Debug builds read `RIGSTATS_OPEN` at start-up and open that dialog themselves — no tray clicking:
 
 ```powershell
-# Option A: send a WM_RBUTTONUP to the tray area (fragile, position-dependent)
-# Option B: use App Control keys if available
-# Option C: for verification purposes, check if Settings is already open:
-Get-Process rigstats | Select-Object MainWindowTitle
-# Returns "RigStats — Settings" when Settings viewport is open
+$env:RIGSTATS_OPEN = "control:overview"   # or control:dashboard|overlay|alerts|power|fans|cpu|gpu|lighting
+                                          # or settings:general|display|overlay|notifications
+Start-Process .\target\debug\rigstats.exe
+Remove-Item Env:RIGSTATS_OPEN
 ```
 
-The most reliable approach is to open Settings manually before invoking the verifier, or ask the user to open it.
+The window can take 20–40 s to appear after a fresh start (hardware detection runs first). Then switch pages by clicking the sidebar (step 5) — items sit at x≈90, 37 px apart.
+
+Finding the window: enumerate top-level windows (`EnumWindows` + `GetWindowText`) and match a title that **starts with `RigStats`** and contains `Control Center` / `Settings`. Don't use `FindWindow("Settings")` — that finds Windows' own Settings app (with the user's account details). Don't use `(Get-Process rigstats).MainWindowHandle` either: with the overlay shown it points at the overlay. The Control Center needs the control pipe: with the installed service a debug build is refused, so it shows "Waiting…" unless the owner runs `tools\dev-sidecar.ps1`.
 
 ### 4. Screenshot a specific dialog window
 

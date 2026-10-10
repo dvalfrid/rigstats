@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document defines the coding, formatting, and architectural standards for this project. All contributors and AI assistants must follow these rules when writing, modifying, or reviewing code. RIGStats is a Windows-only native Rust/egui desktop app — there is no web frontend — so these standards cover Rust, the egui-specific dialog design system for secondary windows, and C# for the sensor/control service (`sensor-sidecar/`).
+This document defines the coding, formatting, and architectural standards for this project. All contributors and AI assistants must follow these rules when writing, modifying, or reviewing code. RIGStats is a Windows-only native Rust/egui desktop app — there is no web frontend — so these standards cover Rust, the egui dialog design system (`ui_kit.rs`) for secondary windows, and C# for the sensor/control service (`sensor-sidecar/`).
 
 ## Contents
 
@@ -92,15 +92,16 @@ Keep domain logic in `rigstats-backend/` — `src-egui/` contains only UI and wi
 
 ## egui (secondary windows)
 
-All secondary windows must follow the dialog design system documented in [egui dialog design system](src-egui/src/windows/CLAUDE.md). Key rules:
+Every dialog is built from the design system in `src-egui/src/windows/ui_kit.rs`, documented (with the reasoning) in [egui dialog design system](src-egui/src/windows/CLAUDE.md). It follows Apple's Human Interface Guidelines for grouped lists. Key rules:
 
-- **Three-panel layout:** `TopBottomPanel::top` (hero) → `TopBottomPanel::bottom` (footer) → `CentralPanel` (content).
-- **Surface colour:** `Color32::from_gray(38)` for all three panels — uniform dialog background.
-- **Inset colour:** `Color32::from_gray(27)` for scroll areas and content wells — no border stroke, fill difference is the only visual cue.
-- **No visible frame borders** inside dialogs — use fill tone differences, not strokes, to separate regions.
-- **Section labels** (`"What's New"`, tab headings, etc.) are free `ui.label()` calls — never wrapped in a frame.
-- **Buttons:** always use `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` / `theme::dialog_btn_secondary_disabled`. Layout with `right_to_left` — primary action on the far right.
-- **Frame API:** use `egui::Frame::new()` — `Frame::none()` is deprecated in egui 0.34.
+- **One home per setting:** what changes with the activity (gaming, quiet, work) belongs to a Control Center profile; everything app-wide to Settings. Where a setting lives in the other window, add a link row (`windows::OpenRequest`), never a second editor.
+- **Layout:** `ui_kit::hero` → footer → sidebar of `nav_item`s → page: `page_header`, then `group`s of `row`s (title and subtitle left, control right). Single-page dialogs keep hero / central / footer.
+- **Controls by the choice:** on/off `toggle`, 2–5 short options `segmented`, longer lists `dropdown`, percentages `slider_pct`, show/hide + order `ordered_rows`. Don't hand-roll frames, toggles or tab buttons; change a value in `ui_kit`, never per dialog.
+- **Words:** plain, sentence case, say what a setting does; a subtitle explains the row, a footnote the group.
+- **Behaviour:** changes preview live; Save keeps, Revert / Cancel / Close undo. A control must never change a value just by being drawn.
+- **Buttons:** `theme::dialog_btn_primary` / `theme::dialog_btn_secondary`; `right_to_left`, primary on the far right.
+- **Verify by eye:** open the page in a debug build with `RIGSTATS_OPEN=control:<page>` / `settings:<page>` and screenshot it before handing over.
+- **Frame API:** `egui::Frame::new()` — `Frame::none()` is deprecated in egui 0.34.
 - **Mutex pattern:** extract all view data from the guard into local variables before any `show()` call; `drop(guard)` before applying mutations.
 
 ---

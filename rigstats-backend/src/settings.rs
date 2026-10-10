@@ -253,6 +253,15 @@ pub struct Settings {
     /// from outside the Settings dialog while it's open).
     #[serde(default)]
     pub overlay_enabled: bool,
+    /// The dashboard look of each Control Center profile (#305), keyed by
+    /// profile id. The current settings are the active profile's look; a
+    /// switch stores them in the outgoing profile and loads the incoming one
+    /// (`switch_profile_look`).
+    #[serde(default)]
+    pub profile_looks: HashMap<String, ProfileLook>,
+    /// Id of the profile the current look belongs to.
+    #[serde(default)]
+    pub look_profile: Option<String>,
 
     // ---- Legacy migration shims (schema version 0) --------------------------
     // These fields existed in older settings files as eight flat values.
@@ -399,6 +408,8 @@ impl Default for Settings {
             overlay_background: true,
             overlay_click_through: false,
             overlay_enabled: false,
+            profile_looks: HashMap::new(),
+            look_profile: None,
             warning_cpu_temp: None,
             critical_cpu_temp: None,
             warning_gpu_temp: None,
@@ -410,6 +421,101 @@ impl Default for Settings {
             overlay_layout: None,
         }
     }
+}
+
+// --- Dashboard look per Control Center profile (#305) ---------------------
+
+/// What a Control Center profile holds of the app's own settings: how the
+/// dashboard looks, the overlay's content and the alert thresholds. A
+/// profile always holds all of them. Everything else (window layer,
+/// display profile, overlay placement, notifications, start-up, …) applies
+/// to the whole app and stays out of profiles.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileLook {
+    #[serde(default = "default_theme")]
+    pub theme: String,
+    #[serde(default = "default_opacity")]
+    pub opacity: f64,
+    #[serde(default = "default_visible_panels")]
+    pub visible_panels: Vec<String>,
+    #[serde(default)]
+    pub overlay_enabled: bool,
+    #[serde(default = "default_overlay_metrics")]
+    pub overlay_metrics: Vec<String>,
+    #[serde(default)]
+    pub overlay_columns: u8,
+    #[serde(default = "default_thresholds")]
+    pub thresholds: HashMap<String, ComponentThresholds>,
+}
+
+impl ProfileLook {
+    /// The look the app has now.
+    pub fn capture(s: &Settings) -> Self {
+        Self {
+            theme: s.theme.clone(),
+            opacity: s.opacity,
+            visible_panels: s.visible_panels.clone(),
+            overlay_enabled: s.overlay_enabled,
+            overlay_metrics: s.overlay_metrics.clone(),
+            overlay_columns: s.overlay_columns,
+            thresholds: s.thresholds.clone(),
+        }
+    }
+
+    /// Makes this the app's look. Returns whether anything changed.
+    pub fn apply_to(&self, s: &mut Settings) -> bool {
+        let before = Self::capture(s);
+        s.theme = self.theme.clone();
+        s.opacity = self.opacity.clamp(0.1, 1.0);
+        s.visible_panels = self.visible_panels.clone();
+        s.overlay_enabled = self.overlay_enabled;
+        s.overlay_metrics = self.overlay_metrics.clone();
+        s.overlay_columns = self.overlay_columns.min(6);
+        s.thresholds = self.thresholds.clone();
+        Self::capture(s) != before
+    }
+}
+
+/// Called when the active Control Center profile is `profile_id`. Returns
+/// `None` when the current look already belongs to it (a restart or pipe
+/// reconnect). Otherwise the current look is stored in the outgoing
+/// profile and the incoming one's is loaded — a profile seen for the first
+/// time starts from the current look — and it returns whether the look
+/// changed. Either way the caller persists.
+pub fn switch_profile_look(s: &mut Settings, profile_id: &str) -> Option<bool> {
+    if s.look_profile.as_deref() == Some(profile_id) {
+        return None;
+    }
+    let current = ProfileLook::capture(s);
+    if let Some(old) = s.look_profile.take() {
+        s.profile_looks.insert(old, current.clone());
+    }
+    s.look_profile = Some(profile_id.to_string());
+    match s.profile_looks.get(profile_id).cloned() {
+        Some(look) => Some(look.apply_to(s)),
+        None => {
+            s.profile_looks.insert(profile_id.to_string(), current);
+            Some(false)
+        }
+    }
+}
+
+/// Stores the current look in the active profile, e.g. after a Save in the
+/// Control Center, so `profile_looks` is up to date for the overview.
+pub fn store_active_look(s: &mut Settings) {
+    if let Some(id) = s.look_profile.clone() {
+        let look = ProfileLook::capture(s);
+        s.profile_looks.insert(id, look);
+    }
+}
+
+/// Forgets the looks of profiles that no longer exist.
+pub fn prune_profile_looks(s: &mut Settings, profile_ids: &[&str]) -> bool {
+    let before = s.profile_looks.len();
+    s.profile_looks
+        .retain(|id, _| profile_ids.contains(&id.as_str()));
+    s.profile_looks.len() != before
 }
 
 /// Maps the old `overlayLayout` onto `overlay_columns`: vertical → 1 column,
@@ -753,5 +859,104 @@ mod tests {
             );
             assert_eq!(super::load_settings(dir.path()).overlay_columns, want);
         }
+    }
+}
+
+#[cfg(test)]
+mod profile_look_tests {
+    use super::*;
+
+    fn with_theme(theme: &str) -> Settings {
+        Settings {
+            theme: theme.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_first_switch_keeps_the_look_and_remembers_it_for_the_profile() {
+        let mut s = with_theme("amber");
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(false));
+        assert_eq!(s.theme, "amber");
+        assert_eq!(s.look_profile.as_deref(), Some("gaming"));
+        assert_eq!(s.profile_looks["gaming"].theme, "amber");
+    }
+
+    #[test]
+    fn switching_stores_the_outgoing_look_and_loads_the_incoming_one() {
+        let mut s = with_theme("amber");
+        switch_profile_look(&mut s, "gaming");
+        s.theme = "red".into(); // changed while Gaming was active
+        switch_profile_look(&mut s, "silent");
+        assert_eq!(s.profile_looks["gaming"].theme, "red");
+        s.theme = "blue".into();
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(true));
+        assert_eq!(s.theme, "red");
+        assert_eq!(s.profile_looks["silent"].theme, "blue");
+    }
+
+    #[test]
+    fn the_same_profile_again_changes_nothing() {
+        // A restart or reconnect on the profile keeps the user's changes.
+        let mut s = with_theme("amber");
+        switch_profile_look(&mut s, "gaming");
+        s.theme = "light".into();
+        assert_eq!(switch_profile_look(&mut s, "gaming"), None);
+        assert_eq!(s.theme, "light");
+    }
+
+    #[test]
+    fn only_the_look_follows_the_profile() {
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "a");
+        s.window_layer = "wallpaper".into();
+        s.overlay_enabled = true;
+        switch_profile_look(&mut s, "b");
+        s.overlay_enabled = false;
+        switch_profile_look(&mut s, "a");
+        assert!(s.overlay_enabled, "the overlay belongs to the profile");
+        assert_eq!(s.window_layer, "wallpaper", "the window layer is app-wide");
+    }
+
+    #[test]
+    fn values_are_clamped() {
+        let mut s = Settings::default();
+        let look = ProfileLook {
+            opacity: 5.0,
+            overlay_columns: 40,
+            ..ProfileLook::capture(&s)
+        };
+        look.apply_to(&mut s);
+        assert_eq!(s.opacity, 1.0);
+        assert_eq!(s.overlay_columns, 6);
+    }
+
+    #[test]
+    fn store_and_prune() {
+        let mut s = with_theme("amber");
+        switch_profile_look(&mut s, "gaming");
+        s.theme = "red".into();
+        store_active_look(&mut s);
+        assert_eq!(s.profile_looks["gaming"].theme, "red");
+        s.profile_looks
+            .insert("gone".into(), ProfileLook::capture(&s));
+        assert!(prune_profile_looks(&mut s, &["gaming"]));
+        assert!(!s.profile_looks.contains_key("gone"));
+        assert!(!prune_profile_looks(&mut s, &["gaming"]));
+    }
+
+    #[test]
+    fn round_trips_through_json_and_old_files_load() {
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "gaming");
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("\"profileLooks\""));
+        let back: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.profile_looks, s.profile_looks);
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert!(old.profile_looks.is_empty());
+        // A look written by an older version without a field gets its default.
+        let look: ProfileLook = serde_json::from_str(r#"{"theme":"red"}"#).unwrap();
+        assert_eq!(look.visible_panels, default_visible_panels());
     }
 }

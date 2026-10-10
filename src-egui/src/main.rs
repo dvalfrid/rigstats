@@ -187,11 +187,7 @@ impl RigStatsApp {
             window_layer: init_settings.window_layer.clone(),
             tray,
             dialogs: DialogStates::new(
-                windows::settings::SettingsWindow::from_settings(
-                    &init_settings,
-                    gpu_names,
-                    battery_present.clone(),
-                ),
+                windows::settings::SettingsWindow::from_settings(&init_settings, gpu_names),
                 updater_win,
                 updater_open,
                 updater_focus,
@@ -766,6 +762,7 @@ impl eframe::App for RigStatsApp {
             // Hand off to poll_loop for the session-recording CSV column —
             // poll_loop runs on its own tokio task with no access to `runtime`.
             *self.active_profile_shared.lock_safe() = self.runtime.control.active_profile.clone();
+            self.follow_profile_look();
             self.notify_fan_safety_trip();
         }
 
@@ -1065,6 +1062,28 @@ impl RigStatsApp {
     /// Persist settings to disk, logging any failure instead of swallowing it
     /// silently — a failed write means the user loses settings/layout changes,
     /// which should never pass unnoticed.
+    /// Follows the active Control Center profile with the dashboard look
+    /// (#305): on a switch the current look is stored in the outgoing
+    /// profile and the incoming one's is loaded; looks of deleted profiles
+    /// are forgotten. The wallpaper host follows through its own reload of
+    /// the settings file.
+    fn follow_profile_look(&mut self) {
+        let control = &self.runtime.control;
+        let Some(id) = control.active_profile.clone() else {
+            return;
+        };
+        let ids: Vec<&str> = control.profiles.iter().map(|p| p.id.as_str()).collect();
+        let mut s = self.current_settings.lock_safe();
+        let switched = settings::switch_profile_look(&mut s, &id);
+        let pruned = !ids.is_empty() && settings::prune_profile_looks(&mut s, &ids);
+        if switched.is_some() || pruned {
+            self.persist_settings_logged(&s);
+        }
+        if switched == Some(true) {
+            self.settings_reload.store(true, Ordering::Relaxed);
+        }
+    }
+
     fn persist_settings_logged(&self, s: &settings::Settings) {
         if let Err(e) = settings::persist_settings(&self.dir, s) {
             debug::log_error(&self.dir, &format!("settings: persist failed — {e}"));
