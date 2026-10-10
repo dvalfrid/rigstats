@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.45.1</Program_Version>
+		<Program_Version>1.46.0</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
-		<Program_Release_Day>09</Program_Release_Day>
+		<Program_Release_Day>10</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>wallpaper: tray hover card and alerts keep updating in desktop wallpaper mode ([#300](https://github.com/dvalfrid/rigstats/issues/300))</Program_Change_Info>
+		<Program_Change_Info>control: give every profile its own dashboard look and rebuild Settings and the Control Center ([#309](https://github.com/dvalfrid/rigstats/issues/309)); control: row-style CPU, Graphics card and Lighting pages;  new screenshots; control: show battery and connection for wireless devices and in the tray card; ui: move About, Status, Updates and Session History onto ui_kit ([#311](https://github.com/dvalfrid/rigstats/issues/311)); wallpaper: show the active Control Center profile in desktop wallpaper mode ([#304](https://github.com/dvalfrid/rigstats/issues/304))</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.45.1/RIGStats_1.45.1_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.46.0/RIGStats_1.46.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
