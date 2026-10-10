@@ -177,11 +177,18 @@ fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control:
         );
         let protocol = match control.protocol_mismatch {
             Some(m) => format!("Control pipe · app v{} but service v{}", m.expected, m.got),
+            // The service only lets the installed, signed RIGStats in
+            // (PipeClientVerifier) — say so instead of a bare "Disconnected".
+            None if control.refused => {
+                "The service only accepts the installed RIGStats — this copy runs from elsewhere or isn't signed".to_owned()
+            }
             None => "Control pipe · protocol v1".to_owned(),
         };
         g.row("Control Center", Some(&protocol), |ui| {
             if control.protocol_mismatch.is_some() {
                 ui_kit::status(ui, ui_kit::C_BAD, "Version mismatch");
+            } else if control.refused {
+                ui_kit::status(ui, ui_kit::C_ATTENTION, "Not allowed");
             } else if control.connected {
                 ui_kit::status(ui, ui_kit::C_GOOD, "Connected");
             } else {
