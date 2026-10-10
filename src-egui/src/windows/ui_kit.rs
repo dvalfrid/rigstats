@@ -122,6 +122,30 @@ pub fn group(
     ui.add_space(16.0);
 }
 
+/// A card of exactly `size`, for content that scrolls (release notes, a
+/// log): the card is allocated and painted first and the content placed
+/// inside it, clipped, so nothing in it can make the card wider than the
+/// page or taller than `size`.
+pub fn fixed_card(ui: &mut Ui, dc: &DialogColors, size: Vec2, add: impl FnOnce(&mut Ui)) {
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, CornerRadius::same(CARD_RADIUS), dc.card);
+    p.rect_stroke(
+        rect,
+        CornerRadius::same(CARD_RADIUS),
+        Stroke::new(1.0_f32, dc.card_border),
+        StrokeKind::Inside,
+    );
+    let inner = rect.shrink2(vec2(14.0, 10.0));
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(inner)
+            .layout(Layout::top_down(Align::Min)),
+    );
+    child.set_clip_rect(inner.intersect(ui.clip_rect()));
+    add(&mut child);
+}
+
 /// The rows of one [`group`]; each one after the first gets a hairline.
 pub struct Group<'a> {
     ui: &'a mut Ui,

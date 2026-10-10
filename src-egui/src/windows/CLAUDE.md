@@ -62,6 +62,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
 | A summary that opens a page | `tile` |
+| Content that scrolls (release notes, a log) | `fixed_card` — exact size, content clipped inside, so it can never widen the page (a `ScrollArea` inside a `group` puts its scrollbar beside the given width and pushes the card past the margin) |
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
