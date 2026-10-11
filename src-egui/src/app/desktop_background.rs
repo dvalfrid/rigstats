@@ -7,7 +7,7 @@
 use crate::RigStatsApp;
 use rigstats_backend::debug;
 use rigstats_backend::desktop_background::{self, DesktopBackground};
-use rigstats_backend::wallpaper_engine::{self, Install, WeChoice, WeCommand};
+use rigstats_backend::wallpaper_engine::{self, Install, Playback, WeChoice, WeCommand};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::we_link::{WeAction, WeLink};
 use std::path::PathBuf;
@@ -32,9 +32,9 @@ pub(crate) struct DesktopBackgroundSync {
     we: Option<Install>,
     we_running: bool,
     we_checked: Option<Instant>,
-    /// Whether RIGStats last paused (`Some(true)`) or resumed it; `None`
+    /// What RIGStats last left it in (playing, paused, stopped); `None`
     /// until then, and again after it (re)started.
-    we_paused: Option<bool>,
+    we_playback: Option<Playback>,
     /// Whether it was found at the last check (`None` before the first):
     /// changes are logged once.
     we_found: Option<bool>,
@@ -117,7 +117,7 @@ impl DesktopBackgroundSync {
             we: None,
             we_running: false,
             we_checked: None,
-            we_paused: None,
+            we_playback: None,
             we_found: None,
             we_config_broken: false,
             link,
@@ -205,7 +205,7 @@ impl RigStatsApp {
                 if running {
                     debug::append_debug_log(&dir, "wallpaper engine: running");
                     sync.we_seen = None;
-                    sync.we_paused = None;
+                    sync.we_playback = None;
                 } else {
                     debug::log_warn(&dir, "wallpaper engine: not running (closed or crashed)");
                 }
@@ -256,8 +256,7 @@ impl RigStatsApp {
                 WeAction::Stop if sync.we_running => {
                     debug::append_debug_log(&dir, "wallpaper engine: stopped by the user");
                     sync.link.lock_safe().stopped = true;
-                    // Whatever plays next needs an explicit play.
-                    sync.we_paused = None;
+                    sync.we_playback = Some(Playback::Stopped);
                     let _ = sync
                         .tx
                         .send(Job::WallpaperEngine(install.clone(), vec![WeCommand::Stop]));
@@ -265,7 +264,7 @@ impl RigStatsApp {
                 WeAction::Resume | WeAction::Start if sync.we_running => {
                     debug::append_debug_log(&dir, "wallpaper engine: resumed by the user");
                     sync.link.lock_safe().stopped = false;
-                    sync.we_paused = Some(false);
+                    sync.we_playback = Some(Playback::Playing);
                     let _ = sync
                         .tx
                         .send(Job::WallpaperEngine(install.clone(), vec![WeCommand::Play]));
@@ -343,16 +342,12 @@ impl RigStatsApp {
                 _ => true,
             })
             .collect();
-        let commands = wallpaper_engine::prune(present, &config.selected, sync.we_paused);
+        let commands = wallpaper_engine::prune(present, &config.selected, sync.we_playback);
         for c in &commands {
-            match c {
-                WeCommand::Pause => sync.we_paused = Some(true),
-                WeCommand::Play => {
-                    sync.we_paused = Some(false);
-                    sync.link.lock_safe().stopped = false;
-                }
-                WeCommand::Stop | WeCommand::Open { .. } => {}
-            }
+            let now = sync.we_playback.unwrap_or(Playback::Playing).after(c);
+            sync.we_playback = Some(now);
+            // The state row says "Stopped" in a profile that turns it off.
+            sync.link.lock_safe().stopped = now == Playback::Stopped;
         }
         if !commands.is_empty() {
             let _ = sync.tx.send(Job::WallpaperEngine(install, commands));

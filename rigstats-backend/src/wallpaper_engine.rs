@@ -30,8 +30,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum WeChoice {
-    /// Pause every wallpaper (frees the graphics card).
+    /// Pause every wallpaper (frees the graphics card; the paused frame
+    /// stays on the desktop).
     Pause,
+    /// Stop its wallpapers: the Windows background (the profile's own
+    /// picture, if it has one) shows, and Wallpaper Engine waits in the tray
+    /// for a profile that uses it.
+    Off,
     /// Show these wallpapers: `path` is a wallpaper's `project.json`, per
     /// Windows monitor id.
     Show {
@@ -107,6 +112,10 @@ pub fn step(
             commands: vec![WeCommand::Pause],
             before: keep(before),
         },
+        Some(WeChoice::Off) => WeStep {
+            commands: vec![WeCommand::Stop],
+            before: keep(before),
+        },
         Some(WeChoice::Show { screens }) => {
             let mut commands = vec![WeCommand::Play];
             commands.extend(screens.iter().filter_map(|s| {
@@ -140,23 +149,62 @@ pub fn step(
     }
 }
 
-/// Drops commands that would change nothing, so a screen whose wallpaper
-/// stays isn't reloaded (it would flash): an `Open` for what `shown` already
-/// has on that screen (Wallpaper Engine writes its `config.json` on every
-/// change, so that is current), and a `Play`/`Pause` matching `paused`
-/// (`None` = not known, e.g. just after Wallpaper Engine started).
-pub fn prune(commands: Vec<WeCommand>, shown: &[WeSlot], paused: Option<bool>) -> Vec<WeCommand> {
-    commands
-        .into_iter()
-        .filter(|c| match c {
-            WeCommand::Pause => paused != Some(true),
-            WeCommand::Play => paused != Some(false),
-            WeCommand::Stop => true,
+/// Whether Wallpaper Engine's wallpapers play, are paused (frozen on the
+/// desktop) or stopped (the Windows background shows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Playback {
+    Playing,
+    Paused,
+    Stopped,
+}
+
+impl Playback {
+    /// What `command` leaves it in.
+    pub fn after(self, command: &WeCommand) -> Self {
+        match command {
+            WeCommand::Play => Playback::Playing,
+            WeCommand::Pause => Playback::Paused,
+            WeCommand::Stop => Playback::Stopped,
+            WeCommand::Open { .. } => self,
+        }
+    }
+}
+
+/// Fits the commands to what Wallpaper Engine does now, going through them
+/// in order: drops what would change nothing, so a screen whose wallpaper
+/// stays isn't reloaded (it would flash) — an `Open` for what `shown`
+/// already has on that screen (Wallpaper Engine writes its `config.json` on
+/// every change, so that is current) and a `Play`/`Pause`/`Stop` it is
+/// already in — and plays stopped wallpapers before pausing them, as a
+/// paused frame needs one to show. `state` is `None` when not known (just
+/// after Wallpaper Engine started).
+pub fn prune(
+    commands: Vec<WeCommand>,
+    shown: &[WeSlot],
+    state: Option<Playback>,
+) -> Vec<WeCommand> {
+    let mut state = state;
+    let mut out = Vec::new();
+    for c in commands {
+        let keep = match &c {
+            WeCommand::Play => state != Some(Playback::Playing),
+            WeCommand::Pause => {
+                if state == Some(Playback::Stopped) {
+                    out.push(WeCommand::Play);
+                }
+                state != Some(Playback::Paused)
+            }
+            WeCommand::Stop => state != Some(Playback::Stopped),
             WeCommand::Open { monitor, file } => !shown
                 .iter()
                 .any(|s| s.monitor == *monitor && s.file.eq_ignore_ascii_case(file)),
-        })
-        .collect()
+        };
+        state = Some(state.unwrap_or(Playback::Playing).after(&c));
+        if keep {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// A wallpaper in the user's Wallpaper Engine library.
@@ -592,7 +640,7 @@ mod tests {
         ];
         // Playing already, screen 0 shows A already: only screen 1 changes.
         assert_eq!(
-            prune(cmds.clone(), &shown, Some(false)),
+            prune(cmds.clone(), &shown, Some(Playback::Playing)),
             vec![open(1, "c.json")]
         );
         // Not known whether it plays: Play is sent.
@@ -600,16 +648,53 @@ mod tests {
             prune(cmds, &shown, None),
             vec![WeCommand::Play, open(1, "c.json")]
         );
-        assert!(prune(vec![WeCommand::Pause], &[], Some(true)).is_empty());
-        // Stop is the user's own click: always sent.
+        assert!(prune(vec![WeCommand::Pause], &[], Some(Playback::Paused)).is_empty());
+        // Stopping wallpapers that play: sent.
         assert_eq!(
-            prune(vec![WeCommand::Stop], &[], Some(false)),
+            prune(vec![WeCommand::Stop], &[], Some(Playback::Playing)),
             vec![WeCommand::Stop]
         );
         assert_eq!(
-            prune(vec![WeCommand::Pause], &[], Some(false)),
+            prune(vec![WeCommand::Pause], &[], Some(Playback::Playing)),
             vec![WeCommand::Pause]
         );
+        assert!(prune(vec![WeCommand::Stop], &[], Some(Playback::Stopped)).is_empty());
+    }
+
+    #[test]
+    fn off_stops_and_keeps_its_own_wallpapers() {
+        let s = step(
+            Some(&WeChoice::Off),
+            None,
+            || Some(vec![slot(0, "own.json")]),
+            map,
+        );
+        assert_eq!(s.commands, vec![WeCommand::Stop]);
+        assert_eq!(s.before, Some(vec![slot(0, "own.json")]));
+        let json = serde_json::to_string(&WeChoice::Off).unwrap();
+        assert_eq!(json, r#"{"mode":"off"}"#);
+    }
+
+    #[test]
+    fn from_off_to_paused_plays_first_so_a_frame_shows() {
+        assert_eq!(
+            prune(vec![WeCommand::Pause], &[], Some(Playback::Stopped)),
+            vec![WeCommand::Play, WeCommand::Pause]
+        );
+    }
+
+    #[test]
+    fn the_state_follows_each_command_in_turn() {
+        // Not known, then Stop, then Play: both sent; a second Play isn't.
+        assert_eq!(
+            prune(
+                vec![WeCommand::Stop, WeCommand::Play, WeCommand::Play],
+                &[],
+                None
+            ),
+            vec![WeCommand::Stop, WeCommand::Play]
+        );
+        assert_eq!(Playback::Paused.after(&WeCommand::Stop), Playback::Stopped);
     }
 
     #[test]

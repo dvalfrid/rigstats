@@ -430,6 +430,7 @@ enum WeMode {
     Leave,
     Show,
     Pause,
+    Off,
 }
 
 /// The Wallpaper Engine group (#306): leave it alone, show a wallpaper per
@@ -497,6 +498,7 @@ fn wallpaper_engine_group(
         None => WeMode::Leave,
         Some(WeChoice::Show { .. }) => WeMode::Show,
         Some(WeChoice::Pause) => WeMode::Pause,
+        Some(WeChoice::Off) => WeMode::Off,
     };
     let screens = &picker.screens;
     let pictures = &mut picker.pictures;
@@ -506,7 +508,7 @@ fn wallpaper_engine_group(
         ui,
         dc,
         Some("Wallpaper Engine"),
-        Some("While it shows a wallpaper, Wallpaper Engine covers the Windows background. Paused frees the graphics card — handy for gaming."),
+        Some("While it shows a wallpaper, Wallpaper Engine covers the Windows background. Paused freezes the wallpaper and frees the graphics card — handy for gaming. Off shows the Windows background in this profile; the others start it again."),
         |g| {
             let state_sub = match button {
                 Some((_, WeAction::Stop)) => {
@@ -544,6 +546,7 @@ fn wallpaper_engine_group(
                         (WeMode::Leave, "As it is"),
                         (WeMode::Show, "Wallpapers"),
                         (WeMode::Pause, "Paused"),
+                        (WeMode::Off, "Off"),
                     ],
                 );
             });
@@ -551,6 +554,7 @@ fn wallpaper_engine_group(
             look.wallpaper_engine = match (mode, look.wallpaper_engine.take()) {
                 (WeMode::Leave, _) => None,
                 (WeMode::Pause, _) => Some(WeChoice::Pause),
+                (WeMode::Off, _) => Some(WeChoice::Off),
                 (WeMode::Show, Some(show @ WeChoice::Show { .. })) => Some(show),
                 (WeMode::Show, _) => Some(WeChoice::Show {
                     screens: screens
@@ -644,6 +648,7 @@ pub fn desktop_summary(bg: Option<&DesktopBackground>, we: Option<&WeChoice>) ->
     match we {
         None => picture,
         Some(WeChoice::Pause) => format!("{picture} · Wallpaper Engine paused"),
+        Some(WeChoice::Off) => format!("{picture} · Wallpaper Engine off"),
         Some(WeChoice::Show { .. }) => "Wallpaper Engine".to_owned(),
     }
 }
@@ -1156,6 +1161,10 @@ mod tests {
         assert_eq!(
             desktop_summary(None, Some(&WeChoice::Pause)),
             "Windows' own background · Wallpaper Engine paused"
+        );
+        assert_eq!(
+            desktop_summary(None, Some(&WeChoice::Off)),
+            "Windows' own background · Wallpaper Engine off"
         );
         assert_eq!(
             desktop_summary(

@@ -456,7 +456,7 @@ engine — it drives Wallpaper Engine through its documented command line
 (`wallpaper64.exe -control openWallpaper -file <project.json> -monitor N`,
 `pause`, `play`; help.wallpaperengine.io/en/functionality/cli.html), which
 only reaches a running instance. `ProfileLook::wallpaper_engine` is `None`
-(leave it alone), `Pause` (frees the graphics card — for Gaming) or `Show`
+(leave it alone), `Pause` (freezes the frame, frees the graphics card — for Gaming), `Off` (`-control stop`: the Windows background — the profile's own picture — shows; the next profile that uses it plays it again) or `Show`
 (a `project.json` per Windows monitor id). `rigstats-backend/src/wallpaper_engine.rs`:
 `find` (`HKCU\Software\WallpaperEngine\installPath`), `Install::library` (the
 Workshop folder `steamapps\workshop\content\431960` in the Steam library
@@ -468,7 +468,7 @@ Wallpaper Engine rewrites it on every change), `is_running` (process list).
 The pure `step` mirrors the Windows background's: the first time a profile
 pauses or shows wallpapers, Wallpaper Engine's own are kept in
 `Settings::wallpaper_engine_before`; a profile that leaves it alone resumes it and
-reopens its own. `prune` drops commands that change nothing (a screen that
+reopens its own. `prune` follows the playback state (`Playback`: playing, paused, stopped) command by command, plays stopped wallpapers before pausing them, and drops commands that change nothing (a screen that
 already shows the wallpaper isn't reloaded, `play` isn't sent while playing).
 The main app's `sync_wallpaper_engine` checks every 5 s whether it is installed
 and running and applies the profile's choice again when it starts (after
