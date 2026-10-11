@@ -69,6 +69,13 @@ Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary ad
 
 Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
 
+## Saving
+
+One rule, the same in every window:
+
+- **Save / Revert (or Cancel)** where a change is previewed or tried first, or can be risky — Settings, the Control Center's Dashboard, Overlay, Alerts, Fans, CPU, Graphics card and Lighting. Footer: "Unsaved changes to …" with Revert and Save.
+- **Saved at once** where nothing can go wrong — the Power plan and App rules (and Settings' click-through). The page subtitle says "Changes are saved at once." and the footer shows a green **Saved** for a few seconds after each change (`ControlUi::saved_at`), so a change never passes silently.
+
 ## Words
 
 Write for someone who has never seen the app: say what a setting does ("How see-through the panels are"), not what it is called internally; sentence case; no jargon where a plain word exists ("Automatic (BIOS)" / "Custom curve", "Graphics card"). A row's subtitle explains, a group's footnote adds what applies to the whole group.

@@ -173,6 +173,9 @@ pub struct ControlUi {
     dismissed_errors: u32,
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
+    /// When a page that saves at once (Power, App rules) last saved — the
+    /// footer confirms it for a moment.
+    saved_at: Option<Instant>,
     /// The App rules page's "Add a rule" form (#307).
     rule_form: crate::windows::rules_page::RulesPage,
 }
@@ -1762,6 +1765,13 @@ pub fn show(
                         .size(11.0)
                         .color(dc.muted),
                     );
+                } else if ui_state
+                    .saved_at
+                    .is_some_and(|t| t.elapsed() < Duration::from_secs(3))
+                {
+                    ui.add_space(10.0);
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Saved");
+                    ui.ctx().request_repaint_after(Duration::from_millis(500));
                 } else if control.preview_reverted {
                     ui.add_space(10.0);
                     ui.label(
@@ -1919,21 +1929,29 @@ pub fn show(
                             gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
                         }
                     }
-                    Page::Rules => crate::windows::rules_page::rules_page(
-                        ui,
-                        dc,
-                        &control.profiles,
-                        look_link,
-                        &mut ui_state.rule_form,
-                    ),
+                    Page::Rules => {
+                        if crate::windows::rules_page::rules_page(
+                            ui,
+                            dc,
+                            &control.profiles,
+                            look_link,
+                            &mut ui_state.rule_form,
+                        ) {
+                            ui_state.saved_at = Some(Instant::now());
+                        }
+                    }
                     Page::Power | Page::Fans => {
                         ui_kit::page_header(
                             ui,
                             dc,
                             "Power",
-                            &format!("The Windows power plan in {profile_name}."),
+                            &format!(
+                                "The Windows power plan in {profile_name}. Changes are saved at once."
+                            ),
                         );
-                        power_tab(ui, dc, control, cmd_tx);
+                        if power_tab(ui, dc, control, cmd_tx) {
+                            ui_state.saved_at = Some(Instant::now());
+                        }
                     }
                 });
         });
@@ -2329,7 +2347,8 @@ fn power_tab(
     dc: &DialogColors,
     control: &ControlState,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
-) {
+) -> bool {
+    let mut saved = false;
     let power = control
         .capabilities
         .iter()
@@ -2363,7 +2382,7 @@ fn power_tab(
         }
         Some(_) => {
             let Some(active) = control.active() else {
-                return;
+                return false;
             };
             // The plan the active profile sets — not the profile's own
             // name, which a "Gaming" profile would have shown here.
@@ -2423,6 +2442,7 @@ fn power_tab(
                 );
             });
             if chosen != current {
+                saved = true;
                 let mut profile = active.clone();
                 profile.part.power_plan = chosen;
                 let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
@@ -2433,6 +2453,7 @@ fn power_tab(
             dry_run_note(ui, dc, control);
         }
     }
+    saved
 }
 
 /// A copy of `source` as a new custom profile, with an id and a name no

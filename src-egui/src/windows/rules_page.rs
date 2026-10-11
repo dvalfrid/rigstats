@@ -99,13 +99,13 @@ pub fn rules_page(
     profiles: &[Profile],
     link: &LookLink,
     page: &mut RulesPage,
-) {
+) -> bool {
     let ctx = ui.ctx().clone();
     ui_kit::page_header(
         ui,
         dc,
         "App rules",
-        "Switch profile automatically while a program runs — for example Gaming while your game is open.",
+        "Switch profile automatically while a program runs — for example Gaming while your game is open. Changes are saved at once.",
     );
     // Keep the running-programs list fresh while this page is open.
     let (status, running) = {
@@ -361,7 +361,9 @@ pub fn rules_page(
 
     if rules != before {
         save(link, rules);
+        return true;
     }
+    false
 }
 
 #[cfg(test)]
