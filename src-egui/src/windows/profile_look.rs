@@ -118,7 +118,14 @@ struct BackgroundPicker {
     we: Option<WeView>,
     /// Looked for it and it isn't installed.
     we_missing: bool,
-    we_library_at: Option<Instant>,
+    /// The library being read on a thread of its own.
+    we_loading: Option<Receiver<Vec<wallpaper_engine::Wallpaper>>>,
+    /// When the Desktop page was last drawn: a gap means it was opened
+    /// again, and the library is read again.
+    we_page_seen: Option<Instant>,
+    /// A wallpaper list was open last frame: opening one reads the library
+    /// again, so a new Workshop subscription shows up.
+    we_list_open: bool,
 }
 
 /// What the Wallpaper Engine group shows: the install, the user's
@@ -162,21 +169,46 @@ impl BackgroundPicker {
             return;
         };
         self.we_missing = false;
-        let stale = self
-            .we_library_at
-            .map_or(true, |t| t.elapsed() > Duration::from_secs(15));
+        // The library itself is read off the UI thread (`load_library`).
         let library = match self.we.take() {
-            Some(old) if !stale && old.install == install => old.library,
-            _ => {
-                self.we_library_at = Some(Instant::now());
-                install.library()
-            }
+            Some(old) if old.install == install => old.library,
+            _ => Vec::new(),
         };
         self.we = Some(WeView {
             config: install.config().unwrap_or_default(),
             library,
             install,
         });
+    }
+
+    /// Reads the library on a thread of its own (a large Workshop library
+    /// takes a while); `take_library` picks the answer up.
+    fn load_library(&mut self, ctx: &egui::Context) {
+        let Some(install) = self.we.as_ref().map(|we| we.install.clone()) else {
+            return;
+        };
+        if self.we_loading.is_some() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        let _ = std::thread::Builder::new()
+            .name("we-library".into())
+            .spawn(move || {
+                let _ = tx.send(install.library());
+                ctx.request_repaint();
+            });
+        self.we_loading = Some(rx);
+    }
+
+    fn take_library(&mut self) {
+        let Some(library) = self.we_loading.as_ref().and_then(|rx| rx.try_recv().ok()) else {
+            return;
+        };
+        self.we_loading = None;
+        if let Some(we) = self.we.as_mut() {
+            we.library = library;
+        }
     }
 
     /// The main screen's id, else the first one's.
@@ -373,6 +405,16 @@ pub fn desktop_page(
     let kept = link.settings.lock_safe().desktop_background_before.clone();
     editor.background.refresh(kept.as_ref());
     desktop_background_group(ui, dc, look, &mut editor.background);
+    // The library: read when the page is opened (again).
+    let picker = &mut editor.background;
+    let reopened = picker
+        .we_page_seen
+        .map_or(true, |t| t.elapsed() > Duration::from_secs(1));
+    picker.we_page_seen = Some(Instant::now());
+    if reopened {
+        picker.load_library(ui.ctx());
+    }
+    picker.take_library();
     if editor.background.we.is_some() {
         wallpaper_engine_group(ui, dc, look, &mut editor.background, link.we);
     } else if editor.background.we_missing {
@@ -458,6 +500,8 @@ fn wallpaper_engine_group(
     };
     let screens = &picker.screens;
     let pictures = &mut picker.pictures;
+    let mut list_open = false;
+    let loading = picker.we_loading.is_some();
     ui_kit::group(
         ui,
         dc,
@@ -556,6 +600,11 @@ fn wallpaper_engine_group(
                     }
                     let shown = wallpaper.map_or("Choose…", |w| w.title.as_str());
                     ui_kit::combo(ui, ("we_screen", i), ui_kit::CONTROL_W, shown, |ui| {
+                        list_open = true;
+                        if we.library.is_empty() {
+                            let text = if loading { "Reading your library…" } else { "No wallpapers found" };
+                            ui.label(egui::RichText::new(text).color(dc.muted));
+                        }
                         for w in &we.library {
                             let on = current.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(&w.file));
                             if ui.selectable_label(on, &w.title).clicked() {
@@ -576,6 +625,11 @@ fn wallpaper_engine_group(
             }
         },
     );
+    // Opening a list reads the library again (new subscriptions show up).
+    if list_open && !picker.we_list_open {
+        picker.load_library(&ctx);
+    }
+    picker.we_list_open = list_open;
 }
 
 /// What the Overview's Desktop tile says.

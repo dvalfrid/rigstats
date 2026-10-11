@@ -475,7 +475,10 @@ and running and applies the profile's choice again when it starts (after
 RIGStats at boot, or restarted); the commands run on the same worker thread as
 the Windows background. The Desktop page's "Wallpaper Engine" group (only when
 it is installed): As it is / Wallpapers / Paused, and per screen the wallpaper
-from the library with its preview (jpg or gif).
+from the library with its preview (jpg or gif). The library is read on a thread
+of its own — never on the UI thread, a large Workshop library takes a while —
+when the Desktop page is opened and again when a wallpaper list is opened, so a
+new subscription shows up; nothing is read while the page is closed.
 
 Error handling and troubleshooting (#306): every change of state is logged
 once (`wallpaper engine: found at …` / `not installed` / `running` /
