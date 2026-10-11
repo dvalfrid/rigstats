@@ -74,6 +74,8 @@ struct RigStatsApp {
     /// App rules (#307): the watcher thread's shared state — profile ids in,
     /// status and running programs out.
     rules: rigstats_egui::app_rules::RulesHandle,
+    /// The active profile's desktop background (#306).
+    desktop_background: app::desktop_background::DesktopBackgroundSync,
     dir: Arc<PathBuf>,
     // Win32 HWND stored as isize for window-level opacity (SetLayeredWindowAttributes).
     // Found via FindWindowW on the first ui() frame; 0 until then.
@@ -210,6 +212,9 @@ impl RigStatsApp {
             preferred_gpu,
             active_profile_shared,
             rules,
+            desktop_background: app::desktop_background::DesktopBackgroundSync::new(
+                dir.as_ref().clone(),
+            ),
             dir,
             hwnd: 0,
             dcomp_available,
@@ -788,6 +793,7 @@ impl eframe::App for RigStatsApp {
 
         // Apply settings saved from the settings window.
         self.apply_reloaded_settings(ui.ctx());
+        self.sync_desktop_background();
 
         // Fill the tray "GPU" submenu and Settings' GPU list in once the
         // background adapter detection reports back.

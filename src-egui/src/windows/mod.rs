@@ -49,6 +49,7 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "dashboard" => control::Page::Dashboard,
             "overlay" => control::Page::Overlay,
             "alerts" => control::Page::Alerts,
+            "desktop" => control::Page::Desktop,
             "power" => control::Page::Power,
             "fans" => control::Page::Fans,
             "cpu" => control::Page::Cpu,

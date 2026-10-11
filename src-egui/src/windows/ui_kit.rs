@@ -156,6 +156,18 @@ pub struct Group<'a> {
     rows: usize,
 }
 
+/// What leads a row.
+#[derive(Clone, Copy)]
+enum Lead {
+    None,
+    Icon(Option<egui::TextureId>),
+    /// A picture's texture and size.
+    Picture(Option<(egui::TextureId, egui::Vec2)>),
+}
+
+/// Width of a picture preview in a row (16:9).
+const PICTURE_W: f32 = 96.0;
+
 impl Group<'_> {
     fn divider(&mut self) {
         if self.rows > 0 {
@@ -170,7 +182,7 @@ impl Group<'_> {
 
     /// A row: `title` (and `subtitle`) left, `control` right-aligned.
     pub fn row(&mut self, title: &str, subtitle: Option<&str>, control: impl FnOnce(&mut Ui)) {
-        self.row_inner(None, title, subtitle, control);
+        self.row_inner(Lead::None, title, subtitle, control);
     }
 
     /// A row led by a program's icon (a generic one when `icon` is None, so
@@ -183,23 +195,40 @@ impl Group<'_> {
         control: impl FnOnce(&mut Ui),
     ) {
         self.row_inner(
-            Some(icon.map(egui::TextureHandle::id)),
+            Lead::Icon(icon.map(egui::TextureHandle::id)),
             title,
             subtitle,
             control,
         );
     }
 
+    /// A row led by a picture's preview, cropped to fill a 16:9 frame (an
+    /// empty frame while it loads, or when there is none).
+    pub fn row_picture(
+        &mut self,
+        picture: Option<&egui::TextureHandle>,
+        title: &str,
+        subtitle: Option<&str>,
+        control: impl FnOnce(&mut Ui),
+    ) {
+        let picture = picture.map(|t| (t.id(), t.size_vec2()));
+        self.row_inner(Lead::Picture(picture), title, subtitle, control);
+    }
+
     fn row_inner(
         &mut self,
-        icon: Option<Option<egui::TextureId>>,
+        lead_with: Lead,
         title: &str,
         subtitle: Option<&str>,
         control: impl FnOnce(&mut Ui),
     ) {
         self.divider();
         // Room for the icon before the text.
-        let lead = if icon.is_some() { 34.0 } else { 0.0 };
+        let lead = match lead_with {
+            Lead::None => 0.0,
+            Lead::Icon(_) => 34.0,
+            Lead::Picture(_) => PICTURE_W + 12.0,
+        };
         let dc = self.dc;
         let w = self.ui.available_width();
         // The text is laid out first, at the width left of a typical
@@ -220,7 +249,11 @@ impl Group<'_> {
             Option<std::sync::Arc<egui::Galley>>,
         )| { t.0.size().y + t.1.as_ref().map_or(0.0, |g| g.size().y + 2.0) };
         let estimate = texts(self.ui, (w - CONTROL_W - 16.0 - lead).max(80.0));
-        let base = if subtitle.is_some() { ROW_H_SUB } else { ROW_H };
+        let base = match lead_with {
+            Lead::Picture(_) => PICTURE_W * 9.0 / 16.0 + 16.0,
+            _ if subtitle.is_some() => ROW_H_SUB,
+            _ => ROW_H,
+        };
         let h = base.max(text_h(&estimate) + 16.0);
         self.ui
             .allocate_ui_with_layout(vec2(w, h), Layout::right_to_left(Align::Center), |ui| {
@@ -234,7 +267,36 @@ impl Group<'_> {
                 let mut y = row.center().y - text_h(&laid) / 2.0;
                 let (title, sub) = laid;
                 let title_h = title.size().y;
-                if let Some(icon) = icon {
+                if let Lead::Picture(picture) = lead_with {
+                    let r = Rect::from_min_size(
+                        pos2(row.left(), row.center().y - PICTURE_W * 9.0 / 32.0),
+                        vec2(PICTURE_W, PICTURE_W * 9.0 / 16.0),
+                    );
+                    let rounding = CornerRadius::same(4);
+                    ui.painter().rect_filled(r, rounding, dc.inset);
+                    if let Some((id, size)) = picture {
+                        // Crop the middle so the frame is filled, like Fill.
+                        let (img, frame) = (size.x / size.y.max(1.0), 16.0 / 9.0);
+                        let uv = if img > frame {
+                            let w = frame / img;
+                            Rect::from_min_max(pos2(0.5 - w / 2.0, 0.0), pos2(0.5 + w / 2.0, 1.0))
+                        } else {
+                            let h = img / frame;
+                            Rect::from_min_max(pos2(0.0, 0.5 - h / 2.0), pos2(1.0, 0.5 + h / 2.0))
+                        };
+                        egui::Image::new((id, r.size()))
+                            .uv(uv)
+                            .corner_radius(rounding)
+                            .paint_at(ui, r);
+                    }
+                    ui.painter().rect_stroke(
+                        r,
+                        rounding,
+                        Stroke::new(1.0_f32, dc.card_border),
+                        egui::StrokeKind::Inside,
+                    );
+                }
+                if let Lead::Icon(icon) = lead_with {
                     let r = Rect::from_center_size(
                         pos2(row.left() + 12.0, row.center().y),
                         vec2(24.0, 24.0),
@@ -865,6 +927,7 @@ pub enum Icon {
     Dashboard,
     Overlay,
     Alerts,
+    Desktop,
     Power,
     Fans,
     Cpu,
@@ -886,6 +949,7 @@ impl Icon {
             Icon::Dashboard => Color32::from_rgb(10, 132, 255),
             Icon::Overlay => Color32::from_rgb(175, 82, 222),
             Icon::Alerts => Color32::from_rgb(255, 69, 58),
+            Icon::Desktop => Color32::from_rgb(0, 190, 180),
             Icon::Power => Color32::from_rgb(48, 176, 80),
             Icon::Fans => Color32::from_rgb(50, 173, 200),
             Icon::Cpu => Color32::from_rgb(255, 149, 0),
@@ -948,6 +1012,14 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
                 at(-0.27, -0.2),
             ]));
             p.circle_filled(at(0.0, 0.36), s * 0.08, color);
+        }
+        Icon::Desktop => {
+            // A framed picture: a hill and the sun.
+            let r = Rect::from_center_size(c, vec2(s * 0.84, s * 0.64));
+            p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
+            p.add(fill(vec![at(-0.3, 0.22), at(-0.06, -0.06), at(0.18, 0.22)]));
+            p.add(fill(vec![at(0.04, 0.22), at(0.18, 0.06), at(0.32, 0.22)]));
+            p.circle_filled(at(0.18, -0.12), s * 0.07, color);
         }
         Icon::Power => {
             p.add(fill(vec![at(0.1, -0.48), at(-0.26, 0.08), at(0.04, 0.08)]));

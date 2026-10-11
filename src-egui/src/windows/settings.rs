@@ -143,6 +143,8 @@ fn carry_live(dst: &mut settings::Settings, live: &settings::Settings) {
     ProfileLook::capture(live).apply_to(dst);
     dst.profile_looks = live.profile_looks.clone();
     dst.look_profile = live.look_profile.clone();
+    dst.app_rules = live.app_rules.clone();
+    dst.desktop_background_before = live.desktop_background_before.clone();
 }
 
 /// The draft as the app should run it now: the window layer stays what is
@@ -895,6 +897,21 @@ mod tests {
         live.theme = "red".into();
         live.overlay_enabled = true;
         settings::switch_profile_look(&mut live, "gaming");
+        // Edited in the Control Center while this window was open.
+        live.app_rules = vec![rigstats_backend::profile_rules::AppRule {
+            exe: "cs2.exe".into(),
+            profile_id: "gaming".into(),
+            foreground_only: false,
+            path: None,
+            name: None,
+        }];
+        let own = rigstats_backend::desktop_background::DesktopBackground {
+            path: r"C:own.jpg".into(),
+            fit: Default::default(),
+            screens: Vec::new(),
+        };
+        live.desktop_background = Some(own.clone());
+        live.desktop_background_before = Some(own);
         // A draft from when the dialog opened, with one change of its own.
         let mut draft = settings::Settings::default();
         draft.model_name = "My rig".into();
@@ -907,5 +924,14 @@ mod tests {
         assert!(written.overlay_enabled);
         assert_eq!(written.look_profile.as_deref(), Some("gaming"));
         assert!(written.profile_looks.contains_key("gaming"));
+        assert_eq!(
+            written.app_rules, live.app_rules,
+            "rules aren't edited here"
+        );
+        assert_eq!(written.desktop_background, live.desktop_background);
+        assert_eq!(
+            written.desktop_background_before, live.desktop_background_before,
+            "Windows' own background, kept by the app"
+        );
     }
 }

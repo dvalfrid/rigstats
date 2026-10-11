@@ -1,7 +1,8 @@
 //! Program icons and names for the app rules (#307), and the "Choose a
 //! program" dialog. Windows only: the icon comes from `SHGetFileInfo`, the
 //! name from the file's version information ("Counter-Strike 2" rather than
-//! `cs2.exe`), the dialog is the common Open dialog on its own thread.
+//! `cs2.exe`), the dialog is the common Open dialog on its own thread
+//! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
 
 use std::collections::HashMap;
@@ -35,6 +36,85 @@ impl AppInfoCache {
             })
             .clone()
     }
+}
+
+/// Previews of pictures (#306), decoded on a thread of their own — a 4K
+/// photo takes a moment — and kept as textures.
+pub struct PictureCache {
+    map: HashMap<String, Option<egui::TextureHandle>>,
+    tx: std::sync::mpsc::Sender<(String, Option<egui::ColorImage>)>,
+    rx: std::sync::mpsc::Receiver<(String, Option<egui::ColorImage>)>,
+}
+
+impl Default for PictureCache {
+    fn default() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self {
+            map: HashMap::new(),
+            tx,
+            rx,
+        }
+    }
+}
+
+impl std::fmt::Debug for PictureCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PictureCache")
+            .field("pictures", &self.map.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PictureCache {
+    /// The preview of the picture at `path`; `None` while it loads or when
+    /// it can't be read.
+    pub fn get(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
+        while let Ok((p, img)) = self.rx.try_recv() {
+            let tex = img.map(|img| {
+                ctx.load_texture(format!("picture:{p}"), img, egui::TextureOptions::LINEAR)
+            });
+            self.map.insert(p, tex);
+        }
+        if path.is_empty() {
+            return None;
+        }
+        if let Some(tex) = self.map.get(path) {
+            return tex.clone();
+        }
+        self.map.insert(path.to_owned(), None);
+        let (tx, ctx, path) = (self.tx.clone(), ctx.clone(), path.to_owned());
+        let _ = std::thread::Builder::new()
+            .name("picture-preview".into())
+            .spawn(move || {
+                let img = preview(&path);
+                let _ = tx.send((path, img));
+                ctx.request_repaint();
+            });
+        None
+    }
+}
+
+/// The picture at `path`, scaled down to at most 384 × 216. The format
+/// is read from the file itself: Windows' own background can be its
+/// `TranscodedWallpaper` copy, which has no extension.
+fn preview(path: &str) -> Option<egui::ColorImage> {
+    let img = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
+    // Only ever smaller: a small picture keeps its size.
+    let img = if img.width() > 384 || img.height() > 216 {
+        img.thumbnail(384, 216)
+    } else {
+        img
+    }
+    .to_rgba8();
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [img.width() as usize, img.height() as usize],
+        img.as_raw(),
+    ))
 }
 
 #[cfg(windows)]
@@ -197,30 +277,60 @@ fn icon_image(_path: &str) -> Option<egui::ColorImage> {
     None
 }
 
-/// Opens the Open dialog for programs on its own thread (it blocks until
-/// closed), owned by the window titled `owner_title` so it stays on top of
-/// it. The chosen path arrives on the returned channel (`None` = cancelled).
+/// Opens the Open dialog for programs; see [`pick_file`].
 pub fn pick_program(
     owner_title: &'static str,
     ctx: egui::Context,
 ) -> std::sync::mpsc::Receiver<Option<String>> {
+    pick_file(
+        owner_title,
+        "Choose a program",
+        "Programs (*.exe)\0*.exe\0\0",
+        ctx,
+    )
+}
+
+/// Opens the Open dialog for pictures Windows can show as the desktop
+/// background (#306); see [`pick_file`].
+pub fn pick_picture(
+    owner_title: &'static str,
+    ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Option<String>> {
+    pick_file(
+        owner_title,
+        "Choose a picture",
+        "Pictures (*.jpg, *.png, *.bmp, *.webp)\0*.jpg;*.jpeg;*.png;*.bmp;*.webp\0\0",
+        ctx,
+    )
+}
+
+/// Opens the Open dialog on its own thread (it blocks until closed), owned
+/// by the window titled `owner_title` so it stays on top of it. `filter` is
+/// the dialog's NUL-separated filter list. The chosen path arrives on the
+/// returned channel (`None` = cancelled).
+fn pick_file(
+    owner_title: &'static str,
+    title: &'static str,
+    filter: &'static str,
+    ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Option<String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = std::thread::Builder::new()
-        .name("pick-program".into())
+        .name("pick-file".into())
         .spawn(move || {
-            let _ = tx.send(open_dialog(owner_title));
+            let _ = tx.send(open_dialog(owner_title, title, filter));
             ctx.request_repaint();
         });
     rx
 }
 
 #[cfg(windows)]
-fn open_dialog(owner_title: &str) -> Option<String> {
+fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
     use winapi::um::commdlg::{
         GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
-    let filter: Vec<u16> = "Programs (*.exe)\0*.exe\0\0".encode_utf16().collect();
-    let title = wide("Choose a program");
+    let filter: Vec<u16> = filter.encode_utf16().collect();
+    let title = wide(title);
     let mut file = vec![0u16; 2048];
     let owner = crate::win_opacity::find_hwnd(owner_title);
     let mut ofn: OPENFILENAMEW = unsafe { std::mem::zeroed() };
@@ -239,8 +349,44 @@ fn open_dialog(owner_title: &str) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-fn open_dialog(_owner_title: &str) -> Option<String> {
+fn open_dialog(_owner_title: &str, _title: &str, _filter: &str) -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod picture_tests {
+    use super::*;
+
+    #[test]
+    fn a_preview_is_small_and_keeps_its_shape() {
+        let path = std::env::temp_dir().join("rigstats-preview-test.png");
+        image::RgbaImage::from_pixel(1920, 1080, image::Rgba([200, 30, 30, 255]))
+            .save(&path)
+            .unwrap();
+        let img = preview(path.to_str().unwrap()).expect("a png reads");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(img.size, [384, 216]);
+        assert_eq!(img.pixels[0], egui::Color32::from_rgb(200, 30, 30));
+    }
+
+    #[test]
+    fn a_picture_without_an_extension_still_has_a_preview() {
+        // Like Windows' TranscodedWallpaper copy of its own background.
+        let png = std::env::temp_dir().join("rigstats-preview-test-2.png");
+        let bare = std::env::temp_dir().join("RigstatsTranscodedTest");
+        image::RgbaImage::from_pixel(64, 36, image::Rgba([0, 90, 200, 255]))
+            .save(&png)
+            .unwrap();
+        std::fs::rename(&png, &bare).unwrap();
+        let img = preview(bare.to_str().unwrap());
+        let _ = std::fs::remove_file(&bare);
+        assert_eq!(img.expect("read by its content").size, [64, 36]);
+    }
+
+    #[test]
+    fn a_missing_picture_has_no_preview() {
+        assert!(preview(r"C:\no\such\picture.jpg").is_none());
+    }
 }
 
 #[cfg(all(test, windows))]

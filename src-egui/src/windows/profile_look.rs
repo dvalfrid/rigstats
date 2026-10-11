@@ -9,16 +9,23 @@
 //! file, so the wallpaper host follows), Save keeps it for the profile,
 //! Revert or Close puts back what was there before.
 
+use crate::app_icons::{pick_picture, PictureCache};
 use crate::lock_ext::LockSafe;
 use crate::overlay::ALL_OVERLAY_METRICS;
 use crate::theme::{self, AppTheme, DialogColors};
 use crate::windows::settings::{self as settings_win, ALL_PANELS};
 use crate::windows::ui_kit::{self, Group, C_CRIT, C_WARN};
 use crate::windows::{OpenRequest, OpenRequests};
+use rigstats_backend::desktop_background::{self, DesktopBackground, Fit, Screen};
 use rigstats_backend::settings::{self, ProfileLook, Settings};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+/// The Control Center's window title — the Open dialog's owner.
+const CONTROL_TITLE: &str = "RigStats — Control Center";
 
 /// What the pages need to read and save the settings.
 pub struct LookLink<'a> {
@@ -67,13 +74,13 @@ const BATTERY_THRESHOLDS: &[(&str, &str, &str, Option<&str>)] = &[
         "battery",
         "Battery charge",
         "%",
-        Some("Alerts when it drops below"),
+        Some("The laptop and every wireless device — alerts when one drops below"),
     ),
     (
         "battery_power",
         "Battery power draw",
         "W",
-        Some("While running on battery"),
+        Some("The laptop only, while it runs on battery"),
     ),
 ];
 /// Width of the unit after each row's fields.
@@ -87,6 +94,72 @@ pub struct LookEditor {
     profile_id: Option<String>,
     look: Option<ProfileLook>,
     before: Option<ProfileLook>,
+    /// The desktop background group's state.
+    background: BackgroundPicker,
+}
+
+/// The desktop background group's state (#306): the "Choose a picture"
+/// dialog's answer to come (and for which screen — `None` = every
+/// screen), previews, the connected screens and the "one per screen" choice.
+#[derive(Debug, Default)]
+struct BackgroundPicker {
+    picking: Option<(Option<String>, Receiver<Option<String>>)>,
+    pictures: PictureCache,
+    screens: Vec<Screen>,
+    screens_at: Option<Instant>,
+    /// Windows' own background, for its preview.
+    own: Option<DesktopBackground>,
+    per_screen: bool,
+}
+
+impl BackgroundPicker {
+    /// The connected screens and Windows' own background, looked up again
+    /// every few seconds. Windows' own is the one kept when a profile
+    /// replaced it (`kept`), else what Windows shows now.
+    fn refresh(&mut self, kept: Option<&DesktopBackground>) {
+        if self
+            .screens_at
+            .map_or(true, |t| t.elapsed() > Duration::from_secs(3))
+        {
+            self.screens = desktop_background::screens();
+            self.own = kept.cloned().or_else(desktop_background::current);
+            self.screens_at = Some(Instant::now());
+        }
+    }
+
+    /// The main screen's id, else the first one's.
+    fn main_screen(&self) -> Option<&str> {
+        self.screens
+            .iter()
+            .find(|s| s.is_main())
+            .or(self.screens.first())
+            .map(|s| s.id.as_str())
+    }
+}
+
+/// Puts the chosen picture `path` on `screen` (`None` = every screen).
+/// The first picture goes on every screen, whichever screen it was chosen
+/// for: a profile can't name Windows' own picture for the others.
+fn choose_picture(
+    bg: &mut Option<DesktopBackground>,
+    screen: Option<&str>,
+    path: String,
+    screens: &[String],
+) {
+    match (bg.as_mut(), screen) {
+        (Some(b), Some(screen)) => b.set_screen(screen, path, screens),
+        (Some(b), None) => {
+            b.path = path;
+            b.screens.clear();
+        }
+        (None, _) => {
+            *bg = Some(DesktopBackground {
+                path,
+                fit: Fit::Fill,
+                screens: Vec::new(),
+            });
+        }
+    }
 }
 
 fn persist(link: &LookLink, s: &Settings) {
@@ -200,6 +273,14 @@ pub fn dashboard_page(
         g.row("Opacity", Some("How see-through the panels are"), |ui| {
             ui_kit::slider_pct(ui, dc, &mut look.opacity, 0.1..=1.0);
         });
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Window and screen",
+            "Display profile, window layer and full screen apply to every profile",
+            settings_win::Page::Display,
+        );
     });
     let battery = link.battery_present.load(Ordering::Relaxed);
     let items: Vec<(&str, String)> = ALL_PANELS
@@ -217,19 +298,196 @@ pub fn dashboard_page(
             });
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Window and screen",
-            "Display profile, window layer and full screen apply to every profile",
-            settings_win::Page::Display,
-        );
-    });
     editor.preview(link);
 }
 
+/// The Desktop page (#306): the profile's desktop background.
+pub fn desktop_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    profile: &str,
+    editor: &mut LookEditor,
+    link: &LookLink,
+) {
+    ui_kit::page_header(
+        ui,
+        dc,
+        "Desktop",
+        &format!("The Windows desktop background in {profile}."),
+    );
+    let Some(look) = editor.look.as_mut() else {
+        return;
+    };
+    let kept = link.settings.lock_safe().desktop_background_before.clone();
+    editor.background.refresh(kept.as_ref());
+    desktop_background_group(ui, dc, look, &mut editor.background);
+    editor.preview(link);
+}
+
+/// What the Overview's Desktop tile says.
+pub fn desktop_summary(bg: Option<&DesktopBackground>) -> String {
+    match bg {
+        None => "Windows' own background".to_owned(),
+        Some(b) if b.screens.is_empty() => file_name(&b.path),
+        Some(b) => format!("One per screen · {} pictures", b.screens.len()),
+    }
+}
+
+fn file_name(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_owned(), |n| n.to_string_lossy().into_owned())
+}
+
+/// The profile's desktop background (#306): a picture — the same on every
+/// screen or one per screen — and how it fits, or Windows' own background.
+fn desktop_background_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    look: &mut ProfileLook,
+    picker: &mut BackgroundPicker,
+) {
+    let ctx = ui.ctx().clone();
+    let ids: Vec<String> = picker.screens.iter().map(|s| s.id.clone()).collect();
+    // A picture chosen in the Open dialog.
+    let answer = picker
+        .picking
+        .as_ref()
+        .and_then(|(_, rx)| rx.try_recv().ok());
+    if let Some(answer) = answer {
+        let screen = picker.picking.take().and_then(|(screen, _)| screen);
+        if let Some(path) = answer {
+            choose_picture(&mut look.desktop_background, screen.as_deref(), path, &ids);
+        }
+    }
+    let several = picker.screens.len() > 1;
+    let per_screen = several
+        && look
+            .desktop_background
+            .as_ref()
+            .is_some_and(|b| picker.per_screen || !b.screens.is_empty());
+    let waiting = picker.picking.is_some();
+    let choose = |ui: &mut egui::Ui| {
+        ui.add_enabled_ui(!waiting, |ui| {
+            let label = if waiting { "Choosing…" } else { "Choose…" };
+            theme::dialog_btn_secondary(ui, label, dc).clicked()
+        })
+        .inner
+    };
+    // Which screen a Choose… was clicked for (`Some(None)` = every screen).
+    let mut chosen_for: Option<Option<String>> = None;
+    let mut own = false;
+    let own_preview = picker.own.clone().map(|own| {
+        let path = picker
+            .main_screen()
+            .map_or(own.path.as_str(), |m| own.path_for(m))
+            .to_owned();
+        let sub = if own.screens.is_empty() {
+            file_name(&path)
+        } else {
+            "One picture per screen".to_owned()
+        };
+        (picker.pictures.get(&ctx, &path), sub)
+    });
+    let screens = &picker.screens;
+    let pictures = &mut picker.pictures;
+    let mut each = per_screen;
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Background"),
+        Some("Without a picture, the profile shows Windows' own background."),
+        |g| {
+            let Some(bg) = look.desktop_background.as_mut() else {
+                // Windows' own, as it looks on the main screen.
+                let own = own_preview.as_ref().map(|(_, sub)| sub.as_str());
+                let tex = own_preview.as_ref().and_then(|(t, _)| t.as_ref());
+                let sub = own.unwrap_or("Pick a picture to show in this profile");
+                g.row_picture(tex, "Windows' own background", Some(sub), |ui| {
+                    if choose(ui) {
+                        chosen_for = Some(None);
+                    }
+                });
+                return;
+            };
+            if several {
+                g.row(
+                    "Screens",
+                    Some("Each screen can show a picture of its own"),
+                    |ui| {
+                        if ui_kit::segmented(
+                            ui,
+                            dc,
+                            &mut each,
+                            &[(false, "Same picture"), (true, "One per screen")],
+                        ) && !each
+                        {
+                            // The main screen's picture goes everywhere.
+                            let main = screens.iter().find(|s| s.is_main()).or(screens.first());
+                            if let Some(main) = main {
+                                bg.path = bg.path_for(&main.id).to_owned();
+                            }
+                            bg.screens.clear();
+                        }
+                    },
+                );
+            }
+            if per_screen {
+                for (i, screen) in screens.iter().enumerate() {
+                    let path = bg.path_for(&screen.id).to_owned();
+                    let preview = pictures.get(&ctx, &path);
+                    let (w, h) = screen.size();
+                    let title = if screen.is_main() {
+                        format!("Screen {} (main)", i + 1)
+                    } else {
+                        format!("Screen {}", i + 1)
+                    };
+                    let sub = format!("{w} × {h} · {}", file_name(&path));
+                    g.row_picture(preview.as_ref(), &title, Some(&sub), |ui| {
+                        if choose(ui) {
+                            chosen_for = Some(Some(screen.id.clone()));
+                        }
+                    });
+                }
+            } else {
+                let preview = pictures.get(&ctx, &bg.path);
+                let sub = file_name(&bg.path);
+                g.row_picture(preview.as_ref(), "Picture", Some(&sub), |ui| {
+                    if choose(ui) {
+                        chosen_for = Some(None);
+                    }
+                });
+            }
+            let fit_sub = if several {
+                "How the pictures fill the screens — Windows uses one setting for all"
+            } else {
+                "How the picture fills the screen"
+            };
+            g.row("Fit", Some(fit_sub), |ui| {
+                ui_kit::dropdown(ui, "desktop_fit", bg.fit.label(), |ui| {
+                    for fit in Fit::ALL {
+                        ui.selectable_value(&mut bg.fit, fit, fit.label());
+                    }
+                });
+            });
+            g.row(
+                "Windows' own background",
+                Some("Show it in this profile instead"),
+                |ui| {
+                    own = theme::dialog_btn_secondary(ui, "Use Windows' own", dc).clicked();
+                },
+            );
+        },
+    );
+    picker.per_screen = each;
+    if own {
+        look.desktop_background = None;
+        picker.per_screen = false;
+    }
+    if let Some(screen) = chosen_for {
+        picker.picking = Some((screen, pick_picture(CONTROL_TITLE, ctx.clone())));
+    }
+}
 /// What an overlay metric is, in words — the overlay itself shows short
 /// labels ("CPU", "HOTSPOT") with a unit.
 fn metric_name(key: &str) -> Option<&'static str> {
@@ -304,6 +562,14 @@ pub fn overlay_page(
                 },
             );
         });
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Position and size",
+            "Where the overlay sits, its size and click-through apply to every profile",
+            settings_win::Page::Overlay,
+        );
     });
     let battery = link.battery_present.load(Ordering::Relaxed);
     let items: Vec<(&str, String)> = ALL_OVERLAY_METRICS
@@ -325,16 +591,6 @@ pub fn overlay_page(
             });
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Position and size",
-            "Where the overlay sits, its size and click-through apply to every profile",
-            settings_win::Page::Overlay,
-        );
-    });
     editor.preview(link);
 }
 
@@ -394,6 +650,16 @@ pub fn alerts_page(
             });
         }
     };
+    ui_kit::group(ui, dc, None, None, |g| {
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Notifications",
+            "Turning alerts on or off and how often they repeat apply to every profile",
+            settings_win::Page::Notifications,
+        );
+    });
     ui_kit::group(
         ui,
         dc,
@@ -408,22 +674,12 @@ pub fn alerts_page(
         ui,
         dc,
         Some("Battery"),
-        Some("Laptop battery and wireless devices."),
+        Some("Each wireless device (headset, mouse, keyboard — see Peripherals) alerts on its own, and not while it is charging."),
         |g| {
             header(g, "Alert at");
             rows(g, BATTERY_THRESHOLDS);
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Notifications",
-            "Turning alerts on or off and how often they repeat apply to every profile",
-            settings_win::Page::Notifications,
-        );
-    });
     editor.preview(link);
 }
 
@@ -547,5 +803,39 @@ mod tests {
             "amber"
         );
         assert!(!editor.dirty());
+    }
+
+    #[test]
+    fn the_desktop_tile_names_the_picture_or_counts_them() {
+        assert_eq!(desktop_summary(None), "Windows' own background");
+        let ids = vec!["left".to_owned(), "right".to_owned()];
+        let mut bg = None;
+        choose_picture(&mut bg, None, r"C:\pics\calm.jpg".into(), &ids);
+        assert_eq!(desktop_summary(bg.as_ref()), "calm.jpg");
+        choose_picture(&mut bg, Some("right"), "b.jpg".into(), &ids);
+        assert_eq!(desktop_summary(bg.as_ref()), "One per screen · 2 pictures");
+    }
+
+    #[test]
+    fn the_first_picture_goes_on_every_screen_then_one_screen_gets_its_own() {
+        let ids = vec!["left".to_owned(), "right".to_owned()];
+        let mut bg = None;
+        choose_picture(&mut bg, Some("right"), "a.jpg".into(), &ids);
+        let b = bg.clone().unwrap();
+        assert_eq!(
+            (b.path_for("left"), b.path_for("right")),
+            ("a.jpg", "a.jpg")
+        );
+        choose_picture(&mut bg, Some("right"), "b.jpg".into(), &ids);
+        let b = bg.clone().unwrap();
+        assert_eq!(
+            (b.path_for("left"), b.path_for("right")),
+            ("a.jpg", "b.jpg")
+        );
+        // A picture for every screen replaces the per-screen ones.
+        choose_picture(&mut bg, None, "c.jpg".into(), &ids);
+        let b = bg.unwrap();
+        assert!(b.screens.is_empty());
+        assert_eq!(b.path, "c.jpg");
     }
 }

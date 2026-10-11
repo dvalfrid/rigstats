@@ -86,6 +86,7 @@ pub enum Page {
     Dashboard,
     Overlay,
     Alerts,
+    Desktop,
     Power,
     Fans,
     Cpu,
@@ -1817,15 +1818,12 @@ pub fn show(
         .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(4.0);
-                for (i, &(page, icon, label)) in PAGES.iter().enumerate() {
+                for &(page, icon, label) in PAGES {
                     if !shown.has(page) {
                         continue;
                     }
-                    match i {
-                        1 => ui_kit::nav_header(ui, dc, "RIGStats"),
-                        4 => ui_kit::nav_header(ui, dc, "Hardware"),
-                        9 => ui_kit::nav_header(ui, dc, "Automation"),
-                        _ => {}
+                    if let Some(header) = nav_section(page) {
+                        ui_kit::nav_header(ui, dc, header);
                     }
                     if ui_kit::nav_item(ui, dc, icon, label, ui_state.tab == page).clicked() {
                         ui_state.tab = page;
@@ -1890,6 +1888,13 @@ pub fn show(
                         look_link,
                     ),
                     Page::Overlay => profile_look::overlay_page(
+                        ui,
+                        dc,
+                        profile_name,
+                        &mut ui_state.look,
+                        look_link,
+                    ),
+                    Page::Desktop => profile_look::desktop_page(
                         ui,
                         dc,
                         profile_name,
@@ -1986,12 +1991,14 @@ pub fn show(
 }
 
 /// The Control Center's pages, in sidebar order: the overview, the
-/// profile's RIGStats look, then its hardware.
+/// profile's RIGStats look, its Windows desktop, its hardware, then the
+/// app rules.
 const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Overview, Icon::Overview, "Overview"),
     (Page::Dashboard, Icon::Dashboard, "Dashboard"),
     (Page::Overlay, Icon::Overlay, "Overlay"),
     (Page::Alerts, Icon::Alerts, "Alerts"),
+    (Page::Desktop, Icon::Desktop, "Desktop"),
     (Page::Power, Icon::Power, "Power"),
     (Page::Fans, Icon::Fans, "Fans"),
     (Page::Cpu, Icon::Cpu, "CPU"),
@@ -1999,6 +2006,18 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Lighting, Icon::Lighting, "Lighting"),
     (Page::Rules, Icon::Rules, "App rules"),
 ];
+
+/// The sidebar section a page starts, if it starts one. The Overview's
+/// tile groups use the same names.
+fn nav_section(page: Page) -> Option<&'static str> {
+    match page {
+        Page::Dashboard => Some("RIGStats"),
+        Page::Desktop => Some("Windows"),
+        Page::Power => Some("Hardware"),
+        Page::Rules => Some("Automation"),
+        _ => None,
+    }
+}
 
 /// Which hardware pages this PC has (the service's capabilities);
 /// unsupported features are hidden, not greyed out.
@@ -2295,6 +2314,13 @@ fn overview_page(
             None,
         ),
     ];
+    let windows_tiles = [(
+        Page::Desktop,
+        Icon::Desktop,
+        "Desktop",
+        profile_look::desktop_summary(look.desktop_background.as_ref()),
+        None,
+    )];
     let hardware_tiles = [
         (Page::Power, Icon::Power, "Power", power, None),
         (Page::Fans, Icon::Fans, "Fans", fans_summary(headers), None),
@@ -2332,11 +2358,18 @@ fn overview_page(
     )];
     let gap = 12.0;
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
-    for (title, tiles) in [
-        ("RIGStats", &look_tiles[..]),
-        ("Hardware", &hardware_tiles[..]),
-        ("Automation", &automation_tiles[..]),
-    ] {
+    let size = egui::vec2(tile_w, 92.0);
+    // Sections side by side when they fit in one row of three tiles:
+    // Windows and Automation hold a tile each, so they share a row.
+    let lines: [&[(&str, &[OverviewTile])]; 3] = [
+        &[("RIGStats", &look_tiles[..])],
+        &[
+            ("Windows", &windows_tiles[..]),
+            ("Automation", &automation_tiles[..]),
+        ],
+        &[("Hardware", &hardware_tiles[..])],
+    ];
+    let heading = |ui: &mut egui::Ui, title: &str| {
         ui.label(
             egui::RichText::new(title)
                 .size(12.0)
@@ -2344,22 +2377,54 @@ fn overview_page(
                 .color(dc.label),
         );
         ui.add_space(6.0);
-        let visible: Vec<_> = tiles.iter().filter(|t| shown.has(t.0)).collect();
-        for row in visible.chunks(3) {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = gap;
-                for (page, icon, label, value, dot) in row {
-                    let resp =
-                        ui_kit::tile(ui, dc, egui::vec2(tile_w, 92.0), *icon, label, value, *dot);
-                    if resp.clicked() {
-                        ui_state.tab = *page;
+    };
+    let mut clicked = None;
+    for line in lines {
+        if let [(title, tiles)] = line {
+            heading(ui, title);
+            let visible: Vec<_> = tiles.iter().filter(|t| shown.has(t.0)).collect();
+            for row in visible.chunks(3) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for t in row {
+                        if overview_tile(ui, dc, size, t) {
+                            clicked = Some(t.0);
+                        }
                     }
+                });
+                ui.add_space(gap);
+            }
+        } else {
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for (title, tiles) in line {
+                    ui.vertical(|ui| {
+                        ui.set_width(tile_w);
+                        heading(ui, title);
+                        for t in tiles.iter().filter(|t| shown.has(t.0)) {
+                            if overview_tile(ui, dc, size, t) {
+                                clicked = Some(t.0);
+                            }
+                        }
+                    });
                 }
             });
             ui.add_space(gap);
         }
         ui.add_space(8.0);
     }
+    if let Some(page) = clicked {
+        ui_state.tab = page;
+    }
+}
+
+/// A tile on the Overview: page, icon, title, summary, colour dot.
+type OverviewTile = (Page, Icon, &'static str, String, Option<egui::Color32>);
+
+/// One Overview tile; true when clicked.
+fn overview_tile(ui: &mut egui::Ui, dc: &DialogColors, size: egui::Vec2, t: &OverviewTile) -> bool {
+    let (_, icon, label, value, dot) = t;
+    ui_kit::tile(ui, dc, size, *icon, label, value, *dot).clicked()
 }
 
 fn power_tab(

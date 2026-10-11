@@ -412,7 +412,7 @@ are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"cpu_load"`, `"gpu_load"`,
 Dashboard look per Control Center profile (#305): a `ProfileLook` is the part
 of a profile that is the app's own — accent colour (`theme`), opacity,
 visible panels and their order, overlay shown, overlay metrics and columns,
-alert thresholds. A profile always holds all of it. The current settings *are*
+alert thresholds, desktop background (#306). A profile always holds all of it. The current settings *are*
 the active profile's look; `profile_looks` keeps the others by profile id and
 `look_profile` names the profile the current look belongs to.
 `switch_profile_look` runs in the main app (`follow_profile_look`) whenever the
@@ -427,6 +427,29 @@ not in the service's `profiles.json`. Everything else in `Settings` is
 app-wide. The Settings window carries the look (and click-through) over from
 the live settings whenever it writes its draft back (`carry_live`), so a draft
 from when it opened can't undo a Control Center edit or a profile switch.
+It carries the app rules and the kept Windows background over the same way.
+
+Desktop background per profile (#306): `ProfileLook::desktop_background` is a
+picture — the same on every screen, or one per screen (`screens`, keyed by
+Windows' monitor id; a screen not listed shows `path`) — and how it fits
+(`desktop_background::DesktopBackground`, `Fit` = the choices Windows' Settings
+offers; Windows has one fit for all screens); `None` = Windows' own background.
+Windows' `IDesktopWallpaper` (COM) reads and sets it per monitor. The main
+app's `sync_desktop_background` (`src-egui/src/app/desktop_background.rs`)
+checks every frame whether the active profile's background changed — a profile
+switch, a preview in the Control Center's Desktop page and a Revert all arrive
+that way — and asks the pure `desktop_background::step` what to show: the first
+time a profile replaces the background, Windows' own (each screen's picture and
+the fit) is kept
+in `Settings::desktop_background_before` (app-wide, not in a look); a profile
+without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
+several quick changes. The Desktop page (its own sidebar section, "Windows") shows previews of the pictures
+(`app_icons::PictureCache`, decoded with the `image` crate — format read from the
+content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
+own), Windows' own background included (the kept one, else what Windows
+shows now), and lists the connected screens left to right. The wallpaper host doesn't
+touch it. Step 2 of #306
+(Wallpaper Engine) is still open.
 
 Threshold semantics differ by key:
 
