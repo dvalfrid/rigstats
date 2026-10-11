@@ -107,19 +107,33 @@ struct BackgroundPicker {
     pictures: PictureCache,
     screens: Vec<Screen>,
     screens_at: Option<Instant>,
+    /// Windows' own background, for its preview.
+    own: Option<DesktopBackground>,
     per_screen: bool,
 }
 
 impl BackgroundPicker {
-    /// The connected screens, looked up again every few seconds.
-    fn refresh_screens(&mut self) {
+    /// The connected screens and Windows' own background, looked up again
+    /// every few seconds. Windows' own is the one kept when a profile
+    /// replaced it (`kept`), else what Windows shows now.
+    fn refresh(&mut self, kept: Option<&DesktopBackground>) {
         if self
             .screens_at
             .map_or(true, |t| t.elapsed() > Duration::from_secs(3))
         {
             self.screens = desktop_background::screens();
+            self.own = kept.cloned().or_else(desktop_background::current);
             self.screens_at = Some(Instant::now());
         }
+    }
+
+    /// The main screen's id, else the first one's.
+    fn main_screen(&self) -> Option<&str> {
+        self.screens
+            .iter()
+            .find(|s| s.is_main())
+            .or(self.screens.first())
+            .map(|s| s.id.as_str())
     }
 }
 
@@ -306,6 +320,8 @@ pub fn desktop_page(
     let Some(look) = editor.look.as_mut() else {
         return;
     };
+    let kept = link.settings.lock_safe().desktop_background_before.clone();
+    editor.background.refresh(kept.as_ref());
     desktop_background_group(ui, dc, look, &mut editor.background);
     editor.preview(link);
 }
@@ -334,7 +350,6 @@ fn desktop_background_group(
     picker: &mut BackgroundPicker,
 ) {
     let ctx = ui.ctx().clone();
-    picker.refresh_screens();
     let ids: Vec<String> = picker.screens.iter().map(|s| s.id.clone()).collect();
     // A picture chosen in the Open dialog.
     let answer = picker
@@ -364,6 +379,18 @@ fn desktop_background_group(
     // Which screen a Choose… was clicked for (`Some(None)` = every screen).
     let mut chosen_for: Option<Option<String>> = None;
     let mut own = false;
+    let own_preview = picker.own.clone().map(|own| {
+        let path = picker
+            .main_screen()
+            .map_or(own.path.as_str(), |m| own.path_for(m))
+            .to_owned();
+        let sub = if own.screens.is_empty() {
+            file_name(&path)
+        } else {
+            "One picture per screen".to_owned()
+        };
+        (picker.pictures.get(&ctx, &path), sub)
+    });
     let screens = &picker.screens;
     let pictures = &mut picker.pictures;
     let mut each = per_screen;
@@ -374,7 +401,11 @@ fn desktop_background_group(
         Some("Without a picture, the profile shows Windows' own background."),
         |g| {
             let Some(bg) = look.desktop_background.as_mut() else {
-                g.row_picture(None, "Picture", Some("Windows' own background"), |ui| {
+                // Windows' own, as it looks on the main screen.
+                let own = own_preview.as_ref().map(|(_, sub)| sub.as_str());
+                let tex = own_preview.as_ref().and_then(|(t, _)| t.as_ref());
+                let sub = own.unwrap_or("Pick a picture to show in this profile");
+                g.row_picture(tex, "Windows' own background", Some(sub), |ui| {
                     if choose(ui) {
                         chosen_for = Some(None);
                     }

@@ -444,8 +444,10 @@ the fit) is kept
 in `Settings::desktop_background_before` (app-wide, not in a look); a profile
 without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
 several quick changes. The Desktop page (its own sidebar section, "Windows") shows previews of the pictures
-(`app_icons::PictureCache`, decoded with the `image` crate on a thread of its
-own) and lists the connected screens left to right. The wallpaper host doesn't
+(`app_icons::PictureCache`, decoded with the `image` crate — format read from the
+content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
+own), Windows' own background included (the kept one, else what Windows
+shows now), and lists the connected screens left to right. The wallpaper host doesn't
 touch it. Step 2 of #306
 (Wallpaper Engine) is still open.
 

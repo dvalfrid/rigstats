@@ -94,9 +94,23 @@ impl PictureCache {
     }
 }
 
-/// The picture at `path`, scaled down to at most 384 × 216.
+/// The picture at `path`, scaled down to at most 384 × 216. The format
+/// is read from the file itself: Windows' own background can be its
+/// `TranscodedWallpaper` copy, which has no extension.
 fn preview(path: &str) -> Option<egui::ColorImage> {
-    let img = image::open(path).ok()?.thumbnail(384, 216).to_rgba8();
+    let img = image::ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .decode()
+        .ok()?;
+    // Only ever smaller: a small picture keeps its size.
+    let img = if img.width() > 384 || img.height() > 216 {
+        img.thumbnail(384, 216)
+    } else {
+        img
+    }
+    .to_rgba8();
     Some(egui::ColorImage::from_rgba_unmultiplied(
         [img.width() as usize, img.height() as usize],
         img.as_raw(),
@@ -353,6 +367,20 @@ mod picture_tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(img.size, [384, 216]);
         assert_eq!(img.pixels[0], egui::Color32::from_rgb(200, 30, 30));
+    }
+
+    #[test]
+    fn a_picture_without_an_extension_still_has_a_preview() {
+        // Like Windows' TranscodedWallpaper copy of its own background.
+        let png = std::env::temp_dir().join("rigstats-preview-test-2.png");
+        let bare = std::env::temp_dir().join("RigstatsTranscodedTest");
+        image::RgbaImage::from_pixel(64, 36, image::Rgba([0, 90, 200, 255]))
+            .save(&png)
+            .unwrap();
+        std::fs::rename(&png, &bare).unwrap();
+        let img = preview(bare.to_str().unwrap());
+        let _ = std::fs::remove_file(&bare);
+        assert_eq!(img.expect("read by its content").size, [64, 36]);
     }
 
     #[test]
