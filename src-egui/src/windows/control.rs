@@ -2358,12 +2358,18 @@ fn overview_page(
     )];
     let gap = 12.0;
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
-    for (title, tiles) in [
-        ("RIGStats", &look_tiles[..]),
-        ("Windows", &windows_tiles[..]),
-        ("Hardware", &hardware_tiles[..]),
-        ("Automation", &automation_tiles[..]),
-    ] {
+    let size = egui::vec2(tile_w, 92.0);
+    // Sections side by side when they fit in one row of three tiles:
+    // Windows and Automation hold a tile each, so they share a row.
+    let lines: [&[(&str, &[OverviewTile])]; 3] = [
+        &[("RIGStats", &look_tiles[..])],
+        &[
+            ("Windows", &windows_tiles[..]),
+            ("Automation", &automation_tiles[..]),
+        ],
+        &[("Hardware", &hardware_tiles[..])],
+    ];
+    let heading = |ui: &mut egui::Ui, title: &str| {
         ui.label(
             egui::RichText::new(title)
                 .size(12.0)
@@ -2371,22 +2377,54 @@ fn overview_page(
                 .color(dc.label),
         );
         ui.add_space(6.0);
-        let visible: Vec<_> = tiles.iter().filter(|t| shown.has(t.0)).collect();
-        for row in visible.chunks(3) {
-            ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing.x = gap;
-                for (page, icon, label, value, dot) in row {
-                    let resp =
-                        ui_kit::tile(ui, dc, egui::vec2(tile_w, 92.0), *icon, label, value, *dot);
-                    if resp.clicked() {
-                        ui_state.tab = *page;
+    };
+    let mut clicked = None;
+    for line in lines {
+        if let [(title, tiles)] = line {
+            heading(ui, title);
+            let visible: Vec<_> = tiles.iter().filter(|t| shown.has(t.0)).collect();
+            for row in visible.chunks(3) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for t in row {
+                        if overview_tile(ui, dc, size, t) {
+                            clicked = Some(t.0);
+                        }
                     }
+                });
+                ui.add_space(gap);
+            }
+        } else {
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                for (title, tiles) in line {
+                    ui.vertical(|ui| {
+                        ui.set_width(tile_w);
+                        heading(ui, title);
+                        for t in tiles.iter().filter(|t| shown.has(t.0)) {
+                            if overview_tile(ui, dc, size, t) {
+                                clicked = Some(t.0);
+                            }
+                        }
+                    });
                 }
             });
             ui.add_space(gap);
         }
         ui.add_space(8.0);
     }
+    if let Some(page) = clicked {
+        ui_state.tab = page;
+    }
+}
+
+/// A tile on the Overview: page, icon, title, summary, colour dot.
+type OverviewTile = (Page, Icon, &'static str, String, Option<egui::Color32>);
+
+/// One Overview tile; true when clicked.
+fn overview_tile(ui: &mut egui::Ui, dc: &DialogColors, size: egui::Vec2, t: &OverviewTile) -> bool {
+    let (_, icon, label, value, dot) = t;
+    ui_kit::tile(ui, dc, size, *icon, label, value, *dot).clicked()
 }
 
 fn power_tab(
