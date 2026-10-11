@@ -606,6 +606,32 @@ code {
   line-height: 1.55;
 }
 
+/* "Also on" row under the download button: listing badges, served from this site. */
+.also-on {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.also-on-label {
+  color: var(--text-dim);
+  font-size: .85rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.also-on img {
+  display: block;
+  transition: opacity .15s ease;
+}
+
+.also-on a:hover img {
+  opacity: .85;
+}
+
 .download-cta {
   grid-column: 1 / -1;
   display: flex;
