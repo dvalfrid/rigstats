@@ -17,13 +17,18 @@ RIGStats is a free hardware monitor and control center for Windows gaming PCs, b
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
-- **Control Center** — per-profile fan curves, Windows power plans, AMD Ryzen and Radeon power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
 - **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
 
-<img src="assets/rigStats.png" width="260" alt="Main Dashboard">
+<p align="center">
+  <img src="assets/rigStats.png" width="220" alt="The RIGStats dashboard on a portrait secondary display: CPU, GPU, RAM, network and disk panels">
+  &nbsp;
+  <img src="assets/control-center-overview.png" width="560" alt="The Control Center's Overview: a profile bar, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop, app rules, power, fans, CPU, graphics card and lighting">
+</p>
 
 ## Installation
 
@@ -109,7 +114,15 @@ dotnet build sensor-sidecar/sensor-sidecar.csproj
 cargo test --manifest-path rigstats-backend/Cargo.toml classify_system_brand
 ```
 
-> Stop `rigstats-sensor` before running `cargo xtask verify` or `cargo xtask build` — the service holds the exe open.
+> The installed `rigstats-sensor` service runs from `C:\Program Files\RIGStats` and doesn't block builds. A running dev sidecar (`tools\dev-sidecar.ps1`) holds the sidecar's debug exe open — stop it with Ctrl+C before `cargo xtask verify` or `cargo xtask build`.
+
+### How it's built
+
+RIGStats is developed by one person with AI assistance (Anthropic's Claude) — commits it helped with say so in their `Co-Authored-By` line. Nothing lands on `main` without passing the same bar:
+
+- **Tests and checks in CI:** several hundred Rust tests and the sensor service's .NET tests, clippy with zero warnings, a format check and a dependency audit (`cargo xtask verify`, required for every pull request), plus CodeQL.
+- **Live testing on real hardware** for anything that touches it — fan control, power limits and lighting are tried on the developer's own PC before they ship, and hardware writes follow strict safety rules inside the service ([sensor-sidecar/Control/CLAUDE.md](sensor-sidecar/Control/CLAUDE.md)).
+- **Signed releases** through a documented routine ([docs/release.md](docs/release.md)): the installer is code-signed, and the app only installs an update whose checksum and signature check out.
 
 ## Architecture
 
