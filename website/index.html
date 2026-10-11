@@ -298,58 +298,140 @@
         <h2>Control Center &amp; Fan Curves</h2>
         <p>Profiles bundle your power plan and fan curves — and on supported hardware, CPU and GPU power limits and RGB lighting — together with how RIGStats itself looks: accent colour, panels, overlay and alert levels. They switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
       </header>
-      <div class="floating-showcase">
-        <div class="dual-shots">
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-overview.png" alt="Control Center, Overview: the profile bar with Silent, Eco, Gaming and Balanced, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop background, app rules, power plan, fans, CPU, graphics card and lighting" class="hero-img">
+      <div class="cc-rows">
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-overview.png" alt="Control Center, Overview: the profile bar with Silent, Eco, Gaming and Balanced, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop background, app rules, power plan, fans, CPU, graphics card and lighting" class="hero-img" loading="lazy">
           </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-dashboard.png" alt="Control Center, Dashboard page: the profile's accent colour as colour dots, panel opacity, and every panel with a switch and arrows to set the order" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-desktop.png" alt="Control Center, Desktop page: the profile's Windows background picture, and a Wallpaper Engine group showing it running with a Stop button, the choices As it is, Wallpapers, Paused and Off, and a wallpaper with its preview for each of three screens" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-fans.png" alt="Control Center, Fans page: Automatic (BIOS) or Custom curve for a fan header, the temperature it follows, Silent/Balanced/Performance starting points, a curve editor with draggable points, and fans sharing the same curve" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-cpu.png" alt="Control Center, CPU page: BIOS, 105 W Eco and 65 W Eco presets, package power, sustained and peak current sliders with the values in force, and a Curve Optimizer group with an all-core offset, per-core option and a risk notice" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-gpu.png" alt="Control Center, Graphics card page: the AMD Radeon RX 9070 XT power limit slider with the value in force" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-lighting.png" alt="Control Center, Lighting page: Unchanged/Off/Static/Breathing/Colour cycle effect buttons, colour dots, brightness, the desk lamp's on/off, brightness and colour temperature, and the list of lighting devices" class="hero-img">
-          </div>
-          <div class="screen-wrap screen-wrap--wide">
-            <img src="images/control-center-lighting-devices.png" alt="Control Center, Lighting page, devices: monitors, the ROG Azoth X keyboard, ROG Delta II headset and ROG Harpe Ace mouse with their 2.4 GHz connection and battery level, a Hue room, and the paired Philips Hue Bridge with a switch per room" class="hero-img">
-          </div>
-          <div class="screen-wrap">
-            <img src="images/tray-menue-profile.png" alt="Tray menu with the Profile submenu open, listing Silent, Gaming, Eco and Balanced with a check on the active profile" class="hero-img">
+          <div class="cc-text">
+            <h3>Profiles</h3>
+            <p>A profile bundles everything at once: power plan, fans, limits, lighting, the desktop and how RIGStats looks.</p>
+            <ul class="floating-features">
+              <li><strong>Silent, Balanced, Gaming, Eco</strong> — and your own: duplicate, rename and delete them</li>
+              <li><strong>Overview</strong> shows everything a profile does at a glance; each tile opens its page</li>
+              <li>Choose the Windows power plan each profile switches to</li>
+            </ul>
           </div>
         </div>
-        <ul class="floating-features">
-          <li><strong>Silent, Balanced, Gaming, Eco</strong> — switch from the tray, the header chip, or <strong>Ctrl+Alt+P</strong></li>
-          <li><strong>App rules</strong> switch profile by themselves while a program runs — Gaming while your game is open, back when it closes; optionally only while it is in front</li>
-          <li><strong>Overview</strong> shows everything a profile does at a glance; each tile opens its page</li>
-          <li>Each profile has its own <strong>dashboard look</strong> — accent colour, opacity, which panels and in what order, the overlay and its metrics, alert levels, even the desktop background, one picture per screen if you like, or Wallpaper Engine wallpapers per screen — paused while you game, or off in a profile of its own — previewed live as you change it</li>
-          <li>Duplicate, rename and delete your own profiles; choose the Windows power plan each profile switches to</li>
-          <li>Per-fan curves with draggable points, following CPU, GPU or a motherboard temperature</li>
-          <li><strong>Same curve on</strong> runs several fans on one curve</li>
-          <li><strong>Identify</strong> spins a fan channel and measures which fans respond — channel and fan numbers don't always match</li>
-          <li>Click a fan in the Motherboard panel to open its curve</li>
-          <li>Safety in the service: CPU above 95 °C or GPU above 90 °C sends every controlled fan to 100 %, and a lost temperature sensor does the same for its fan</li>
-          <li>Stopping the service hands every fan back to the BIOS</li>
-          <li>Shown only when your motherboard exposes writable fan control</li>
-          <li><strong>CPU power limits</strong> (AMD Ryzen 9000): lower PPT, TDC and EDC per profile, with 105 W and 65 W Eco presets — never above what the BIOS set</li>
-          <li>New limits are tried for 15 seconds and revert by themselves unless you click <strong>Keep</strong>; if the PC goes down right after a change, the limits aren't re-applied at the next start</li>
-          <li>The CPU panel shows the active limit, e.g. <strong>PPT 88 W</strong></li>
-          <li><strong>Curve Optimizer</strong> (Ryzen 9000): undervolt all cores or each core, −30 to 0 — and if the PC goes down right after a change, it is reverted at the next start</li>
-          <li><strong>GPU power limit</strong> (AMD Radeon, desktop NVIDIA GeForce): the same setting as Adrenalin's or Afterburner's Power Limit, over the driver's own range — and back to the driver default when you return to the original</li>
-          <li>The GPU panel shows the active limit, e.g. <strong>PL -15 %</strong></li>
-          <li><strong>Lighting with Aura Sync</strong>: off, static, breathing or spectrum cycle per profile, with colour (or one-click quick-pick colours) and brightness and a live preview — on ASUS Aura motherboards, ROG monitors and the Aura Monitor Light Bar, ROG keyboards and headsets, and any Windows Dynamic Lighting keyboard or mouse (<a href="#supported-devices">full list below</a>) — no Armoury Crate needed. Philips Hue rooms and zones you choose follow along through the Hue Bridge on your local network — no OpenRGB, no Hue account. Devices plugged in or switched between cable and dongle are picked up while RIGStats runs</li>
-          <li><strong>Desk lamp</strong>: the Aura Monitor Light Bar's white lamp gets its own on/off, brightness and colour temperature (2700–6500 K) per profile, independent of the RGB</li>
-        </ul>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap cc-shot--narrow">
+            <img src="images/tray-menue-profile.png" alt="Tray menu with the Profile submenu open, listing Silent, Gaming, Eco and Balanced with a check on the active profile" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Switch in one click — or let your apps do it</h3>
+            <p>From the tray, the dashboard's header chip, or <strong>Ctrl+Alt+P</strong>.</p>
+            <ul class="floating-features">
+              <li><strong>App rules</strong> switch profile by themselves while a program runs — Gaming while your game is open, back when it closes; optionally only while it is in front</li>
+              <li>A profile you pick by hand wins over the programs already running</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-dashboard.png" alt="Control Center, Dashboard page: the profile's accent colour as colour dots, panel opacity, and every panel with a switch and arrows to set the order" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>How RIGStats looks</h3>
+            <p>Each profile has its own dashboard look, previewed live as you change it.</p>
+            <ul class="floating-features">
+              <li>Accent colour, opacity, and which panels show in what order</li>
+              <li>The game overlay and its metrics</li>
+              <li>Alert levels — Gaming can run hotter before it warns</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-desktop.png" alt="Control Center, Desktop page: the profile's Windows background picture, and a Wallpaper Engine group showing it running with a Stop button, the choices As it is, Wallpapers, Paused and Off, and a wallpaper with its preview for each of three screens" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Your desktop, per profile</h3>
+            <p>A calm picture for Silent, a live wallpaper for Balanced — and nothing running in the background while you game.</p>
+            <ul class="floating-features">
+              <li><strong>Desktop background</strong> per profile — one picture, or one per screen, with previews</li>
+              <li><strong>Wallpaper Engine</strong> per profile: chosen wallpapers per screen, <strong>paused</strong> while you game, or <strong>off</strong> in a profile of its own — with Start and Stop right there</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-fans.png" alt="Control Center, Fans page: Automatic (BIOS) or Custom curve for a fan header, the temperature it follows, Silent/Balanced/Performance starting points, a curve editor with draggable points, and fans sharing the same curve" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Fan curves</h3>
+            <p>Shown when your motherboard exposes writable fan control. Curves run inside the RIGStats service, so they keep working with the app closed.</p>
+            <ul class="floating-features">
+              <li>Per-fan curves with draggable points, following CPU, GPU or a motherboard temperature</li>
+              <li><strong>Same curve on</strong> runs several fans on one curve</li>
+              <li><strong>Identify</strong> spins a fan channel and measures which fans respond — channel and fan numbers don't always match</li>
+              <li>Click a fan in the Motherboard panel to open its curve</li>
+              <li>Safety in the service: CPU above 95 °C or GPU above 90 °C sends every controlled fan to 100 %, and a lost temperature sensor does the same for its fan; stopping the service hands every fan back to the BIOS</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-cpu.png" alt="Control Center, CPU page: BIOS, 105 W Eco and 65 W Eco presets, package power, sustained and peak current sliders with the values in force, and a Curve Optimizer group with an all-core offset, per-core option and a risk notice" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>CPU power limits</h3>
+            <p>AMD Ryzen 9000 — never above what the BIOS set.</p>
+            <ul class="floating-features">
+              <li>Lower PPT, TDC and EDC per profile, with 105 W and 65 W Eco presets</li>
+              <li>New limits are tried for 15 seconds and revert by themselves unless you click <strong>Keep</strong>; if the PC goes down right after a change, they aren't re-applied at the next start</li>
+              <li><strong>Curve Optimizer</strong>: undervolt all cores or each core, −30 to 0 — reverted at the next start if the PC goes down right after a change</li>
+              <li>The CPU panel shows the active limit, e.g. <strong>PPT 88 W</strong></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-gpu.png" alt="Control Center, Graphics card page: the AMD Radeon RX 9070 XT power limit slider with the value in force" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Graphics card power limit</h3>
+            <p>AMD Radeon and desktop NVIDIA GeForce.</p>
+            <ul class="floating-features">
+              <li>The same setting as Adrenalin's or Afterburner's Power Limit, over the driver's own range — and back to the driver default when you return to the original</li>
+              <li>The GPU panel shows the active limit, e.g. <strong>PL -15 %</strong></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-lighting.png" alt="Control Center, Lighting page: Unchanged/Off/Static/Breathing/Colour cycle effect buttons, colour dots, brightness, the desk lamp's on/off, brightness and colour temperature, and the list of lighting devices" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Lighting with Aura Sync</h3>
+            <p>No Armoury Crate needed.</p>
+            <ul class="floating-features">
+              <li>Off, static, breathing or spectrum cycle per profile, with colour (or one-click quick-pick colours) and brightness and a live preview</li>
+              <li><strong>Desk lamp</strong>: the Aura Monitor Light Bar's white lamp gets its own on/off, brightness and colour temperature (2700–6500 K) per profile, independent of the RGB</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-lighting-devices.png" alt="Control Center, Lighting page, devices: monitors, the ROG Azoth X keyboard, ROG Delta II headset and ROG Harpe Ace mouse with their 2.4 GHz connection and battery level, a Hue room, and the paired Philips Hue Bridge with a switch per room" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Your devices — and Philips Hue</h3>
+            <p>ASUS Aura motherboards, ROG monitors and the Aura Monitor Light Bar, ROG keyboards and headsets, and any Windows Dynamic Lighting keyboard or mouse — <a href="#supported-devices">full list below</a>.</p>
+            <ul class="floating-features">
+              <li>Philips Hue rooms and zones you choose follow along through the Hue Bridge on your local network — no OpenRGB, no Hue account</li>
+              <li>Wireless devices show their connection and battery</li>
+              <li>Devices plugged in or switched between cable and dongle are picked up while RIGStats runs</li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <div class="supported-devices" id="supported-devices">

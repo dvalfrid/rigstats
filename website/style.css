@@ -891,6 +891,62 @@ code {
   }
 }
 
+/* ── Control Center: one row per topic, picture and its text side by side,
+      alternating sides (stacked on narrow screens). ────────── */
+.cc-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+  margin-top: 56px;
+}
+
+.cc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+}
+
+.cc-row:nth-child(even) {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+.cc-row:nth-child(even) .cc-shot {
+  order: 2;
+}
+
+.cc-shot .hero-img {
+  width: 100%;
+  max-height: none;
+}
+
+.cc-shot--narrow {
+  justify-self: center;
+  max-width: 320px;
+}
+
+.cc-text h3 {
+  font-size: 1.3rem;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.cc-text p {
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 860px) {
+  .cc-rows { gap: 48px; }
+  .cc-row,
+  .cc-row:nth-child(even) {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .cc-row:nth-child(even) .cc-shot { order: 0; }
+}
+
 /* ── Wallpaper mode shot ───────────────────────────────────── */
 .wallpaper-shot {
   max-width: 420px;
