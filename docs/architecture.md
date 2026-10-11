@@ -477,6 +477,25 @@ the Windows background. The Desktop page's "Wallpaper Engine" group (only when
 it is installed): As it is / Wallpapers / Paused, and per screen the wallpaper
 from the library with its preview (jpg or gif).
 
+Error handling and troubleshooting (#306): every change of state is logged
+once (`wallpaper engine: found at …` / `not installed` / `running` /
+`not running (closed or crashed)` / `starting …` / `stopped by the user` /
+`resumed by the user`), a failed command as a warning with its reason, an
+unreadable `config.json`, a screen missing from its monitor map and a wallpaper
+that is gone (not sent) as warnings. `src-egui/src/we_link.rs` (`WeLink`) is
+shared between the Desktop page and the main app: the page's Start / Stop
+buttons queue a `WeAction` (Start launches it, Stop sends `-control stop` —
+the Windows background shows and it stays in the tray; Wallpaper Engine has no
+documented way to quit, and a polite close request is ignored — Resume sends
+`play`), and the app reports back `running`, `stopped`, `starting` and the
+last error, which the page shows in red until a command succeeds. Not
+installed: the page shows what it would add and **Get it on Steam**
+(`store_link`: `steam://store/431960` when Steam is installed, else the store
+web page). Status → Health has a Wallpaper Engine row; the diagnostics ZIP has
+`wallpaper-engine.txt` (`wallpaper_engine::diagnostics`: path, running, monitor
+map, library size, no titles). User-facing steps: "Wallpaper Engine" in
+`docs/troubleshooting.md`.
+
 Threshold semantics differ by key:
 
 - **Temperature keys** (`cpu`/`gpu`/`ram`/`disk`): alert fires when the reading

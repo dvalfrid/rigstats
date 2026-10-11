@@ -33,6 +33,7 @@ pub mod tray;
 pub mod update_check;
 pub mod update_flow;
 pub mod wallpaper_supervisor;
+pub mod we_link;
 #[cfg(windows)]
 pub mod win32_behind;
 #[cfg(windows)]

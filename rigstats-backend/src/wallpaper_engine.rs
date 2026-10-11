@@ -53,7 +53,13 @@ pub struct WeSlot {
 pub enum WeCommand {
     Pause,
     Play,
-    Open { monitor: u32, file: String },
+    /// Stops every wallpaper: the Windows background shows, Wallpaper
+    /// Engine keeps running in the tray, and `Play` brings them back.
+    Stop,
+    Open {
+        monitor: u32,
+        file: String,
+    },
 }
 
 impl WeCommand {
@@ -63,6 +69,7 @@ impl WeCommand {
         match self {
             WeCommand::Pause => a.push("pause".into()),
             WeCommand::Play => a.push("play".into()),
+            WeCommand::Stop => a.push("stop".into()),
             WeCommand::Open { monitor, file } => a.extend([
                 "openWallpaper".into(),
                 "-file".into(),
@@ -144,6 +151,7 @@ pub fn prune(commands: Vec<WeCommand>, shown: &[WeSlot], paused: Option<bool>) -
         .filter(|c| match c {
             WeCommand::Pause => paused != Some(true),
             WeCommand::Play => paused != Some(false),
+            WeCommand::Stop => true,
             WeCommand::Open { monitor, file } => !shown
                 .iter()
                 .any(|s| s.monitor == *monitor && s.file.eq_ignore_ascii_case(file)),
@@ -332,6 +340,16 @@ impl Install {
         list
     }
 
+    /// Starts Wallpaper Engine (it opens in the tray with its own
+    /// wallpapers). Doesn't wait for it.
+    pub fn launch(&self) -> Result<(), String> {
+        std::process::Command::new(&self.exe)
+            .current_dir(self.dir())
+            .spawn()
+            .map(drop)
+            .map_err(|e| e.to_string())
+    }
+
     /// Sends `command` to the running Wallpaper Engine. Waits up to a few
     /// seconds for it to be handed over.
     pub fn send(&self, command: &WeCommand) -> Result<(), String> {
@@ -354,6 +372,59 @@ impl Install {
         }
         Err("no answer within 5 s".into())
     }
+}
+
+/// Where to get Wallpaper Engine: its page in the Steam client when Steam
+/// is installed, else the store page in the browser.
+pub fn store_link() -> &'static str {
+    if steam_installed() {
+        "steam://store/431960"
+    } else {
+        "https://store.steampowered.com/app/431960/Wallpaper_Engine/"
+    }
+}
+
+#[cfg(windows)]
+fn steam_installed() -> bool {
+    use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Valve\Steam")
+        .and_then(|k| k.get_value::<String, _>("SteamExe"))
+        .is_ok_and(|exe| Path::new(&exe).is_file())
+}
+
+#[cfg(not(windows))]
+fn steam_installed() -> bool {
+    false
+}
+
+/// What the diagnostics ZIP says about Wallpaper Engine: found or not,
+/// running, its screen map and how many wallpapers it has — no titles.
+pub fn diagnostics() -> String {
+    let Some(install) = find() else {
+        return "Wallpaper Engine: not installed (no HKCU\\Software\\WallpaperEngine\\installPath)\n"
+            .to_owned();
+    };
+    let mut out = format!(
+        "Wallpaper Engine: {}\nrunning: {}\n",
+        install.exe.display(),
+        is_running()
+    );
+    match install.config() {
+        Some(c) => {
+            out += &format!(
+                "config.json: {} screens in its monitor map\n",
+                c.monitors.len()
+            );
+            for (id, n) in &c.monitors {
+                out += &format!("  {n} = {id}\n");
+            }
+            out += &format!("showing: {} screens\n", c.selected.len());
+        }
+        None => out += "config.json: couldn't be read\n",
+    }
+    out += &format!("library: {} wallpapers\n", install.library().len());
+    out
 }
 
 /// Wallpaper Engine's install, from the path it registers for itself.
@@ -530,6 +601,11 @@ mod tests {
             vec![WeCommand::Play, open(1, "c.json")]
         );
         assert!(prune(vec![WeCommand::Pause], &[], Some(true)).is_empty());
+        // Stop is the user's own click: always sent.
+        assert_eq!(
+            prune(vec![WeCommand::Stop], &[], Some(false)),
+            vec![WeCommand::Stop]
+        );
         assert_eq!(
             prune(vec![WeCommand::Pause], &[], Some(false)),
             vec![WeCommand::Pause]
@@ -540,6 +616,7 @@ mod tests {
     fn commands_are_the_documented_arguments() {
         assert_eq!(WeCommand::Pause.args(), ["-control", "pause"]);
         assert_eq!(WeCommand::Play.args(), ["-control", "play"]);
+        assert_eq!(WeCommand::Stop.args(), ["-control", "stop"]);
         assert_eq!(
             WeCommand::Open {
                 monitor: 2,
@@ -621,6 +698,21 @@ mod tests {
         // No project.json next to the missing scene.pkg: kept as it is.
         assert_eq!(c.selected[0].file, r"D:\no\such\2229371846\scene.pkg");
         assert_eq!(c.selected[2].file, r"D:\no\such\3102345696\project.json");
+    }
+
+    #[test]
+    fn the_store_link_is_steam_or_the_web() {
+        let link = store_link();
+        assert!(
+            link == "steam://store/431960"
+                || link.starts_with("https://store.steampowered.com/app/431960"),
+            "{link}"
+        );
+    }
+
+    #[test]
+    fn diagnostics_always_say_something() {
+        assert!(diagnostics().starts_with("Wallpaper Engine: "));
     }
 
     #[test]

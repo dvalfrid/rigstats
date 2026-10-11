@@ -13,6 +13,7 @@ use crate::app_icons::{pick_picture, PictureCache};
 use crate::lock_ext::LockSafe;
 use crate::overlay::ALL_OVERLAY_METRICS;
 use crate::theme::{self, AppTheme, DialogColors};
+use crate::we_link::WeAction;
 use crate::windows::settings::{self as settings_win, ALL_PANELS};
 use crate::windows::ui_kit::{self, Group, C_CRIT, C_WARN};
 use crate::windows::{OpenRequest, OpenRequests};
@@ -37,6 +38,8 @@ pub struct LookLink<'a> {
     pub battery_present: &'a Arc<AtomicBool>,
     /// The app rules watcher's shared state (#307).
     pub rules: &'a crate::app_rules::RulesHandle,
+    /// Wallpaper Engine's state and the Start/Stop buttons' requests (#306).
+    pub we: &'a crate::we_link::WeLink,
 }
 
 /// Theme keys with their colour and a readable name.
@@ -113,17 +116,18 @@ struct BackgroundPicker {
     per_screen: bool,
     /// Wallpaper Engine, when it is installed.
     we: Option<WeView>,
+    /// Looked for it and it isn't installed.
+    we_missing: bool,
     we_library_at: Option<Instant>,
 }
 
 /// What the Wallpaper Engine group shows: the install, the user's
-/// wallpapers, its screen map and whether it runs.
+/// wallpapers and its screen map (whether it runs comes from `we_link`).
 #[derive(Debug)]
 struct WeView {
     install: wallpaper_engine::Install,
     library: Vec<wallpaper_engine::Wallpaper>,
     config: wallpaper_engine::Config,
-    running: bool,
 }
 
 impl WeView {
@@ -154,8 +158,10 @@ impl BackgroundPicker {
     fn refresh_wallpaper_engine(&mut self) {
         let Some(install) = wallpaper_engine::find() else {
             self.we = None;
+            self.we_missing = true;
             return;
         };
+        self.we_missing = false;
         let stale = self
             .we_library_at
             .map_or(true, |t| t.elapsed() > Duration::from_secs(15));
@@ -168,7 +174,6 @@ impl BackgroundPicker {
         };
         self.we = Some(WeView {
             config: install.config().unwrap_or_default(),
-            running: wallpaper_engine::is_running(),
             library,
             install,
         });
@@ -369,7 +374,9 @@ pub fn desktop_page(
     editor.background.refresh(kept.as_ref());
     desktop_background_group(ui, dc, look, &mut editor.background);
     if editor.background.we.is_some() {
-        wallpaper_engine_group(ui, dc, look, &mut editor.background);
+        wallpaper_engine_group(ui, dc, look, &mut editor.background, link.we);
+    } else if editor.background.we_missing {
+        wallpaper_engine_missing(ui, dc);
     }
     editor.preview(link);
 }
@@ -385,13 +392,62 @@ enum WeMode {
 
 /// The Wallpaper Engine group (#306): leave it alone, show a wallpaper per
 /// screen, or pause it.
+/// Wallpaper Engine isn't installed: what it would add, and where to get it.
+fn wallpaper_engine_missing(ui: &mut egui::Ui, dc: &DialogColors) {
+    ui_kit::group(ui, dc, Some("Wallpaper Engine"), None, |g| {
+        g.row(
+            "Not installed",
+            Some("Wallpaper Engine adds live wallpapers — video, animated scenes — that each profile can switch, or pause while you game"),
+            |ui| {
+                if theme::dialog_btn_secondary(ui, "Get it on Steam", dc).clicked() {
+                    // explorer hands steam:// to Steam and https:// to the browser.
+                    let _ = std::process::Command::new("explorer")
+                        .arg(wallpaper_engine::store_link())
+                        .spawn();
+                }
+            },
+        );
+    });
+}
+
+/// The state row's words, colour and button for what `we_link` reports.
+fn we_state(
+    state: &crate::we_link::WeShared,
+) -> (
+    &'static str,
+    egui::Color32,
+    Option<(&'static str, WeAction)>,
+) {
+    use crate::we_link::WeAction;
+    match (state.running, state.stopped, state.starting) {
+        (false, _, true) => ("Starting…", ui_kit::C_ATTENTION, None),
+        (false, _, false) => (
+            "Not running",
+            ui_kit::C_ATTENTION,
+            Some(("Start", WeAction::Start)),
+        ),
+        (true, true, _) => (
+            "Stopped",
+            ui_kit::C_ATTENTION,
+            Some(("Start", WeAction::Resume)),
+        ),
+        (true, false, _) => ("Running", ui_kit::C_GOOD, Some(("Stop", WeAction::Stop))),
+    }
+}
+
 fn wallpaper_engine_group(
     ui: &mut egui::Ui,
     dc: &DialogColors,
     look: &mut ProfileLook,
     picker: &mut BackgroundPicker,
+    we_link: &crate::we_link::WeLink,
 ) {
     let ctx = ui.ctx().clone();
+    let state = {
+        let s = we_link.lock_safe();
+        (we_state(&s), s.running, s.last_error.clone())
+    };
+    let ((state_text, state_colour, button), running, last_error) = state;
     let Some(we) = picker.we.as_ref() else {
         return;
     };
@@ -408,12 +464,34 @@ fn wallpaper_engine_group(
         Some("Wallpaper Engine"),
         Some("While it shows a wallpaper, Wallpaper Engine covers the Windows background. Paused frees the graphics card — handy for gaming."),
         |g| {
-            let sub = if we.running {
-                "Live wallpapers from your Wallpaper Engine library"
-            } else {
-                "Not running — start Wallpaper Engine and this profile's choice applies"
+            let state_sub = match button {
+                Some((_, WeAction::Stop)) => {
+                    "Stop shows the Windows background; it stays in the tray, and Start brings the wallpapers back"
+                }
+                Some((_, WeAction::Resume)) => "The Windows background shows until you start it again",
+                _ if running => "",
+                _ => "Start it here or from the Start menu",
             };
-            g.row("Wallpaper Engine", Some(sub), |ui| {
+            g.row("Wallpaper Engine", Some(state_sub), |ui| {
+                if let Some((label, action)) = button {
+                    if theme::dialog_btn_secondary(ui, label, dc).clicked() {
+                        we_link.lock_safe().requests.push(action);
+                    }
+                    ui.add_space(8.0);
+                }
+                ui_kit::status(ui, state_colour, state_text);
+            });
+            if let Some(err) = &last_error {
+                g.row("Last problem", Some("Details in the log (Status → Log)"), |ui| {
+                    ui_kit::status(ui, ui_kit::C_BAD, err);
+                });
+            }
+            let sub = if running {
+                "What Wallpaper Engine does while this profile is active"
+            } else {
+                "Applies as soon as Wallpaper Engine runs"
+            };
+            g.row("In this profile", Some(sub), |ui| {
                 ui_kit::segmented(
                     ui,
                     dc,
@@ -465,6 +543,9 @@ fn wallpaper_engine_group(
                 let sub = match (known, wallpaper, &current) {
                     (false, _, _) => "Wallpaper Engine doesn't know this screen yet".to_owned(),
                     (true, Some(w), _) => w.title.clone(),
+                    (true, None, Some(f)) if !std::path::Path::new(f).is_file() => {
+                        "No longer in your library — choose another".to_owned()
+                    }
                     (true, None, Some(f)) => file_name(f),
                     (true, None, None) => "Left as it is".to_owned(),
                 };
@@ -874,6 +955,7 @@ mod tests {
         open: OpenRequests,
         battery: Arc<AtomicBool>,
         rules: crate::app_rules::RulesHandle,
+        we: crate::we_link::WeLink,
     }
 
     impl Env {
@@ -891,6 +973,7 @@ mod tests {
                 open: OpenRequests::default(),
                 battery: Arc::new(AtomicBool::new(false)),
                 rules: crate::app_rules::RulesHandle::default(),
+                we: crate::we_link::WeLink::default(),
             }
         }
 
@@ -902,6 +985,7 @@ mod tests {
                 open: &self.open,
                 battery_present: &self.battery,
                 rules: &self.rules,
+                we: &self.we,
             }
         }
 
@@ -981,6 +1065,33 @@ mod tests {
             "amber"
         );
         assert!(!editor.dirty());
+    }
+
+    #[test]
+    fn the_state_row_offers_the_button_that_fits() {
+        use crate::we_link::WeShared;
+        let state = |running, stopped, starting| WeShared {
+            running,
+            stopped,
+            starting,
+            ..Default::default()
+        };
+        let button = |s: &WeShared| we_state(s).2.map(|(label, action)| (label, action));
+        assert_eq!(
+            button(&state(false, false, false)),
+            Some(("Start", WeAction::Start))
+        );
+        assert_eq!(button(&state(false, false, true)), None, "starting: wait");
+        assert_eq!(
+            button(&state(true, false, false)),
+            Some(("Stop", WeAction::Stop))
+        );
+        assert_eq!(
+            button(&state(true, true, false)),
+            Some(("Start", WeAction::Resume))
+        );
+        assert_eq!(we_state(&state(true, false, false)).0, "Running");
+        assert_eq!(we_state(&state(true, true, false)).0, "Stopped");
     }
 
     #[test]
