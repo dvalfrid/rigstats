@@ -921,6 +921,7 @@ mod profile_look_tests {
         let calm = DesktopBackground {
             path: r"C:\calm.jpg".into(),
             fit: crate::desktop_background::Fit::Fit,
+            screens: Vec::new(),
         };
         let mut s = Settings::default();
         switch_profile_look(&mut s, "silent");
@@ -928,6 +929,7 @@ mod profile_look_tests {
         s.desktop_background_before = Some(DesktopBackground {
             path: r"C:\own.jpg".into(),
             fit: Default::default(),
+            screens: Vec::new(),
         });
         assert_eq!(switch_profile_look(&mut s, "gaming"), Some(false));
         assert_eq!(

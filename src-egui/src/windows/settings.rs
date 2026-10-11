@@ -908,6 +908,7 @@ mod tests {
         let own = rigstats_backend::desktop_background::DesktopBackground {
             path: r"C:own.jpg".into(),
             fit: Default::default(),
+            screens: Vec::new(),
         };
         live.desktop_background = Some(own.clone());
         live.desktop_background_before = Some(own);

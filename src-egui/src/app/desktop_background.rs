@@ -32,10 +32,18 @@ impl DesktopBackgroundSync {
                         bg = newer;
                     }
                     match desktop_background::show(&bg) {
-                        Ok(()) => debug::log_debug(
+                        Ok(()) if bg.screens.is_empty() => debug::log_debug(
                             &dir,
                             &format!("desktop background: showing '{}'", bg.path),
                         ),
+                        Ok(()) => {
+                            let each: Vec<&str> =
+                                bg.screens.iter().map(|s| s.path.as_str()).collect();
+                            debug::log_debug(
+                                &dir,
+                                &format!("desktop background: one per screen {each:?}"),
+                            )
+                        }
                         Err(e) => debug::log_warn(
                             &dir,
                             &format!("desktop background: couldn't show '{}' — {e}", bg.path),

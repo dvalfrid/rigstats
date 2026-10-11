@@ -430,19 +430,23 @@ from when it opened can't undo a Control Center edit or a profile switch.
 It carries the app rules and the kept Windows background over the same way.
 
 Desktop background per profile (#306): `ProfileLook::desktop_background` is a
-picture and how it fits (`desktop_background::DesktopBackground`, `Fit` = the
-choices Windows' Settings offers); `None` = Windows' own background. The main
+picture — the same on every screen, or one per screen (`screens`, keyed by
+Windows' monitor id; a screen not listed shows `path`) — and how it fits
+(`desktop_background::DesktopBackground`, `Fit` = the choices Windows' Settings
+offers; Windows has one fit for all screens); `None` = Windows' own background.
+Windows' `IDesktopWallpaper` (COM) reads and sets it per monitor. The main
 app's `sync_desktop_background` (`src-egui/src/app/desktop_background.rs`)
 checks every frame whether the active profile's background changed — a profile
 switch, a preview in the Control Center's Dashboard page and a Revert all arrive
 that way — and asks the pure `desktop_background::step` what to show: the first
-time a profile replaces the background, Windows' own (`SPI_GETDESKWALLPAPER` +
-`WallpaperStyle`/`TileWallpaper` under `HKCU\Control Panel\Desktop`) is kept
+time a profile replaces the background, Windows' own (each screen's picture and
+the fit) is kept
 in `Settings::desktop_background_before` (app-wide, not in a look); a profile
-without a picture puts it back and forgets it. Setting it
-(`SPI_SETDESKWALLPAPER` with `SPIF_SENDWININICHANGE`) blocks while Windows
-notifies every window, so a worker thread does it and shows only the latest of
-several quick changes. The wallpaper host doesn't touch it. Step 2 of #306
+without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
+several quick changes. The Dashboard page shows previews of the pictures
+(`app_icons::PictureCache`, decoded with the `image` crate on a thread of its
+own) and lists the connected screens left to right. The wallpaper host doesn't
+touch it. Step 2 of #306
 (Wallpaper Engine) is still open.
 
 Threshold semantics differ by key:

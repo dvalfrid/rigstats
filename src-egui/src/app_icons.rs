@@ -38,6 +38,71 @@ impl AppInfoCache {
     }
 }
 
+/// Previews of pictures (#306), decoded on a thread of their own — a 4K
+/// photo takes a moment — and kept as textures.
+pub struct PictureCache {
+    map: HashMap<String, Option<egui::TextureHandle>>,
+    tx: std::sync::mpsc::Sender<(String, Option<egui::ColorImage>)>,
+    rx: std::sync::mpsc::Receiver<(String, Option<egui::ColorImage>)>,
+}
+
+impl Default for PictureCache {
+    fn default() -> Self {
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self {
+            map: HashMap::new(),
+            tx,
+            rx,
+        }
+    }
+}
+
+impl std::fmt::Debug for PictureCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PictureCache")
+            .field("pictures", &self.map.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl PictureCache {
+    /// The preview of the picture at `path`; `None` while it loads or when
+    /// it can't be read.
+    pub fn get(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
+        while let Ok((p, img)) = self.rx.try_recv() {
+            let tex = img.map(|img| {
+                ctx.load_texture(format!("picture:{p}"), img, egui::TextureOptions::LINEAR)
+            });
+            self.map.insert(p, tex);
+        }
+        if path.is_empty() {
+            return None;
+        }
+        if let Some(tex) = self.map.get(path) {
+            return tex.clone();
+        }
+        self.map.insert(path.to_owned(), None);
+        let (tx, ctx, path) = (self.tx.clone(), ctx.clone(), path.to_owned());
+        let _ = std::thread::Builder::new()
+            .name("picture-preview".into())
+            .spawn(move || {
+                let img = preview(&path);
+                let _ = tx.send((path, img));
+                ctx.request_repaint();
+            });
+        None
+    }
+}
+
+/// The picture at `path`, scaled down to at most 384 × 216.
+fn preview(path: &str) -> Option<egui::ColorImage> {
+    let img = image::open(path).ok()?.thumbnail(384, 216).to_rgba8();
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [img.width() as usize, img.height() as usize],
+        img.as_raw(),
+    ))
+}
+
 #[cfg(windows)]
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -272,6 +337,28 @@ fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
 #[cfg(not(windows))]
 fn open_dialog(_owner_title: &str, _title: &str, _filter: &str) -> Option<String> {
     None
+}
+
+#[cfg(test)]
+mod picture_tests {
+    use super::*;
+
+    #[test]
+    fn a_preview_is_small_and_keeps_its_shape() {
+        let path = std::env::temp_dir().join("rigstats-preview-test.png");
+        image::RgbaImage::from_pixel(1920, 1080, image::Rgba([200, 30, 30, 255]))
+            .save(&path)
+            .unwrap();
+        let img = preview(path.to_str().unwrap()).expect("a png reads");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(img.size, [384, 216]);
+        assert_eq!(img.pixels[0], egui::Color32::from_rgb(200, 30, 30));
+    }
+
+    #[test]
+    fn a_missing_picture_has_no_preview() {
+        assert!(preview(r"C:\no\such\picture.jpg").is_none());
+    }
 }
 
 #[cfg(all(test, windows))]
