@@ -13,13 +13,17 @@
 //! Rules of thumb it follows:
 //! - A program counts once it has run for [`SETTLE_SECS`] (launchers and
 //!   updaters that flash past don't switch anything).
-//! - Several matching programs: the one started last wins.
+//! - Several matching programs: one whose window is in front beats one
+//!   that only runs; otherwise the one started last wins. When it closes,
+//!   the next one's profile takes over.
+//! - The profile from before the first rule — not a fixed default — comes
+//!   back once no rule's program counts any more.
 //! - The profile goes back [`RELEASE_SECS`] after the program closes (or,
 //!   for a foreground-only rule, loses focus), so a quick restart or an
 //!   Alt+Tab doesn't flip profiles back and forth.
-//! - A profile picked by hand while a rule is active pauses rules until
-//!   that program is gone — the user's choice wins, and nothing is
-//!   switched back behind their back.
+//! - A profile picked by hand while a rule is active pauses the rules until
+//!   none of their programs runs — the user's choice wins, and nothing is
+//!   switched behind their back.
 
 use serde::{Deserialize, Serialize};
 
@@ -67,7 +71,8 @@ pub enum RuleStatus {
     Idle,
     /// `exe` runs, so `profile_id` is in use.
     Active { exe: String, profile_id: String },
-    /// A profile was picked by hand while `exe` ran: rules wait until it's gone.
+    /// A profile was picked by hand while `exe` ran: rules wait until none of
+    /// their programs runs.
     Paused { exe: String },
 }
 
@@ -136,44 +141,71 @@ impl RuleEngine {
             }
         }
         let best = best_match(rules, profiles, snap);
-        if let Some(exe) = &self.paused {
-            if matching(rules, profiles, snap).any(|(r, _)| r.exe.eq_ignore_ascii_case(exe)) {
+        if self.paused.is_some() {
+            if matching(rules, profiles, snap).next().is_some() {
                 return None;
             }
             self.paused = None;
         }
+        // Whether the program that decided so far still counts: if it does,
+        // a different winner (started later, or brought to the front) takes
+        // over at once; if it doesn't, the grace period runs first, whatever
+        // comes next — another rule's profile or the one from before.
+        let engaged_counts = self.engaged.as_ref().is_some_and(|e| {
+            matching(rules, profiles, snap).any(|(r, _)| r.exe.eq_ignore_ascii_case(&e.exe))
+        });
         match (best, self.engaged.as_mut()) {
             (Some(rule), Some(e)) if rule.exe.eq_ignore_ascii_case(&e.exe) => {
                 e.released_at = None;
                 None
             }
-            (Some(rule), engaged) => {
-                let return_to = match engaged {
-                    Some(e) => e.return_to.clone(),
-                    None => active.map(str::to_owned),
-                };
-                self.engaged = Some(Engaged {
-                    exe: rule.exe.to_ascii_lowercase(),
-                    profile_id: rule.profile_id.clone(),
-                    return_to,
-                    released_at: None,
-                });
-                self.request(&rule.profile_id, active, now)
+            (Some(rule), Some(e)) if engaged_counts => {
+                let return_to = e.return_to.clone();
+                self.engage(rule, return_to, active, now)
             }
-            (None, Some(e)) => {
+            (best, Some(e)) => {
                 let released = *e.released_at.get_or_insert(now);
                 if now.saturating_sub(released) < RELEASE_SECS {
                     return None;
                 }
                 let back = e.return_to.clone();
-                self.engaged = None;
-                match back {
-                    Some(id) if profiles.contains(&id.as_str()) => self.request(&id, active, now),
-                    _ => None,
+                match best {
+                    Some(rule) => self.engage(rule, back, active, now),
+                    None => {
+                        self.engaged = None;
+                        match back {
+                            Some(id) if profiles.contains(&id.as_str()) => {
+                                self.request(&id, active, now)
+                            }
+                            _ => None,
+                        }
+                    }
                 }
+            }
+            (Some(rule), None) => {
+                let return_to = active.map(str::to_owned);
+                self.engage(rule, return_to, active, now)
             }
             (None, None) => None,
         }
+    }
+
+    /// Lets `rule` decide from now on, remembering the profile to go
+    /// back to, and asks for its profile.
+    fn engage(
+        &mut self,
+        rule: &AppRule,
+        return_to: Option<String>,
+        active: Option<&str>,
+        now: u64,
+    ) -> Option<String> {
+        self.engaged = Some(Engaged {
+            exe: rule.exe.to_ascii_lowercase(),
+            profile_id: rule.profile_id.clone(),
+            return_to,
+            released_at: None,
+        });
+        self.request(&rule.profile_id, active, now)
     }
 
     fn request(&mut self, profile: &str, active: Option<&str>, now: u64) -> Option<String> {
@@ -218,13 +250,20 @@ fn matching<'a>(
 }
 
 /// The rule whose program started last.
+/// The rule that decides: a program in front beats one that only runs,
+/// otherwise the one started last.
 fn best_match<'a>(
     rules: &'a [AppRule],
     profiles: &'a [&str],
     snap: &'a Snapshot,
 ) -> Option<&'a AppRule> {
+    let in_front = |rule: &AppRule| {
+        snap.foreground
+            .as_deref()
+            .is_some_and(|f| f.eq_ignore_ascii_case(&rule.exe))
+    };
     matching(rules, profiles, snap)
-        .max_by_key(|(_, started)| *started)
+        .max_by_key(|(rule, started)| (in_front(rule), *started))
         .map(|(rule, _)| rule)
 }
 
@@ -449,6 +488,213 @@ mod tests {
                 &snap(210, &[("game.exe", 200)], None)
             ),
             Some("gaming".into())
+        );
+    }
+
+    #[test]
+    fn programs_sharing_a_profile_keep_it_until_the_last_one_closes() {
+        let rules = [rule("game.exe", "gaming"), rule("voice.exe", "gaming")];
+        let mut e = RuleEngine::default();
+        let both = [("game.exe", 100), ("voice.exe", 150)];
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("balanced"), &snap(160, &both, None)),
+            Some("gaming".into())
+        );
+        // The game closes; the voice app still runs: Gaming stays.
+        let voice = [("voice.exe", 150)];
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("gaming"), &snap(200, &voice, None)),
+            None
+        );
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("gaming"), &snap(210, &voice, None)),
+            None
+        );
+        // The last one closes: back to the profile from before.
+        e.tick(&rules, PROFILES, Some("gaming"), &snap(300, &[], None));
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("gaming"), &snap(306, &[], None)),
+            Some("balanced".into())
+        );
+    }
+
+    #[test]
+    fn when_the_deciding_program_closes_the_next_ones_profile_takes_over() {
+        // A (Gaming) first, B (Silent) later: B decides.
+        let rules = [rule("a.exe", "gaming"), rule("b.exe", "silent")];
+        let mut e = RuleEngine::default();
+        let both = [("a.exe", 100), ("b.exe", 200)];
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(110, &[("a.exe", 100)], None)
+            ),
+            Some("gaming".into())
+        );
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("gaming"), &snap(206, &both, None)),
+            Some("silent".into())
+        );
+        // B closes, A still runs: A's profile again.
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("silent"),
+            &snap(300, &[("a.exe", 100)], None),
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("silent"),
+                &snap(306, &[("a.exe", 100)], None)
+            ),
+            Some("gaming".into())
+        );
+        // A closes too: the profile from before any rule.
+        e.tick(&rules, PROFILES, Some("gaming"), &snap(400, &[], None));
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("gaming"), &snap(406, &[], None)),
+            Some("balanced".into())
+        );
+    }
+
+    #[test]
+    fn an_earlier_program_closing_first_changes_nothing() {
+        let rules = [rule("a.exe", "gaming"), rule("b.exe", "silent")];
+        let mut e = RuleEngine::default();
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("balanced"),
+            &snap(110, &[("a.exe", 100)], None),
+        );
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("gaming"),
+            &snap(206, &[("a.exe", 100), ("b.exe", 200)], None),
+        );
+        // A closes while B decides: Silent stays.
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("silent"),
+                &snap(300, &[("b.exe", 200)], None)
+            ),
+            None
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("silent"),
+                &snap(310, &[("b.exe", 200)], None)
+            ),
+            None
+        );
+        // B closes: back to Balanced.
+        e.tick(&rules, PROFILES, Some("silent"), &snap(400, &[], None));
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("silent"), &snap(406, &[], None)),
+            Some("balanced".into())
+        );
+    }
+
+    #[test]
+    fn a_hand_picked_profile_holds_until_no_rule_program_runs() {
+        let rules = [rule("a.exe", "gaming"), rule("b.exe", "silent")];
+        let mut e = RuleEngine::default();
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("balanced"),
+            &snap(110, &[("a.exe", 100)], None),
+        );
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("gaming"),
+            &snap(206, &[("a.exe", 100), ("b.exe", 200)], None),
+        );
+        // Balanced picked by hand while B decides.
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(220, &[("a.exe", 100), ("b.exe", 200)], None)
+            ),
+            None
+        );
+        // B closes, A still runs: the user's choice still holds.
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(300, &[("a.exe", 100)], None)
+            ),
+            None
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(310, &[("a.exe", 100)], None)
+            ),
+            None
+        );
+        assert!(matches!(e.status(), RuleStatus::Paused { .. }));
+        // A closes too: rules are ready again, nothing switched.
+        assert_eq!(
+            e.tick(&rules, PROFILES, Some("balanced"), &snap(400, &[], None)),
+            None
+        );
+        assert_eq!(e.status(), RuleStatus::Idle);
+    }
+
+    #[test]
+    fn a_program_in_front_beats_one_that_only_runs() {
+        // The game (In front) started before the voice app (Runs).
+        let rules = [
+            AppRule {
+                foreground_only: true,
+                ..rule("game.exe", "gaming")
+            },
+            rule("voice.exe", "silent"),
+        ];
+        let mut e = RuleEngine::default();
+        let both = [("game.exe", 100), ("voice.exe", 200)];
+        // Playing: the game is in front and decides, though it started first.
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(210, &both, Some("game.exe"))
+            ),
+            Some("gaming".into())
+        );
+        // Away from the game long enough: the voice app decides.
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("gaming"),
+            &snap(220, &both, Some("explorer.exe")),
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("gaming"),
+                &snap(226, &both, Some("explorer.exe"))
+            ),
+            Some("silent".into())
         );
     }
 

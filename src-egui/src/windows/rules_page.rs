@@ -151,9 +151,10 @@ pub fn rules_page(
 
     // ── Add a rule ───────────────────────────────────────────────────────
     let footer = format!(
-        "A program counts once it has run for {SETTLE_SECS} seconds, and the profile goes back \
-         {RELEASE_SECS} seconds after it closes. Picking a profile yourself pauses the rules \
-         until that program closes."
+        "A program counts once it has run for {SETTLE_SECS} seconds. If several have rules, the one \
+         in front decides, otherwise the one started last; when it closes, the next one's profile \
+         takes over, and {RELEASE_SECS} seconds after the last one closes, the profile from before \
+         comes back. Picking a profile yourself pauses the rules until none of their programs runs."
     );
     ui_kit::group(ui, dc, Some("Add a rule"), Some(&footer), |g| {
         g.row(
