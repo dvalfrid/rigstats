@@ -162,7 +162,7 @@ pub fn rules_page(
                 RuleStatus::Paused { .. } => ui_kit::status(
                     ui,
                     ui_kit::C_ATTENTION,
-                    "Paused — you picked a profile; rules wait until their programs close",
+                    "Your pick holds — programs you start now still switch",
                 ),
                 RuleStatus::Idle => {
                     ui.label(
@@ -228,7 +228,7 @@ pub fn rules_page(
         "A program counts once it has run for {SETTLE_SECS} seconds. If several have rules, the one \
          in front decides, otherwise the one started last; when it closes, the next one's profile \
          takes over, and {RELEASE_SECS} seconds after the last one closes, the profile from before \
-         comes back. Picking a profile yourself pauses the rules until none of their programs runs."
+         comes back. A profile you pick yourself holds over the programs already running until they \n         close; a program you start after that still switches, and gives your pick back when it closes."
     );
     let exe = normalize_exe(&page.exe);
     let chosen_icon = page.path.clone().and_then(|p| page.apps.get(&ctx, &p).1);
