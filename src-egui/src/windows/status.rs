@@ -12,11 +12,13 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use sysinfo::System;
 
-// ── Dependency metadata (compile-time constants from Cargo.toml) ──────────────
+// ── Dependency metadata ───────────────────────────────────────────────────────
 
-const DEP_LHM_VER: &str = "0.9.6";
-const DEP_SYSINFO_VER: &str = "0.30";
-const DEP_WMI_VER: &str = "0.13";
+// Read from the sensor service's project file and Cargo.lock at build time
+// (`build.rs`), so they always name what is actually built in.
+const DEP_LHM_VER: &str = env!("RIGSTATS_LHM_VERSION");
+const DEP_SYSINFO_VER: &str = env!("RIGSTATS_SYSINFO_VERSION");
+const DEP_WMI_VER: &str = env!("RIGSTATS_WMI_VERSION");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -796,7 +798,20 @@ pub fn show(
 }
 #[cfg(test)]
 mod tests {
-    use super::{driver_age_label, gpu_driver_support, C_GOOD, C_WARN, DRIVER_STALE_DAYS};
+    use super::{
+        driver_age_label, gpu_driver_support, C_GOOD, C_WARN, DEP_LHM_VER, DEP_SYSINFO_VER,
+        DEP_WMI_VER, DRIVER_STALE_DAYS,
+    };
+
+    #[test]
+    fn the_build_found_every_dependency_version() {
+        // build.rs reads them from sensor-sidecar.csproj and Cargo.lock; a
+        // changed file layout would otherwise show "unknown" in Status.
+        for v in [DEP_LHM_VER, DEP_SYSINFO_VER, DEP_WMI_VER] {
+            assert_ne!(v, "unknown");
+            assert!(v.chars().next().is_some_and(|c| c.is_ascii_digit()), "{v}");
+        }
+    }
 
     #[test]
     fn fresh_driver_is_up_to_date() {
