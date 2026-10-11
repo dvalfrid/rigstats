@@ -45,6 +45,34 @@ pub struct AppRule {
     /// Only while the program's window is in the foreground.
     #[serde(default)]
     pub foreground_only: bool,
+    /// Where the program lives, when known (picked from running programs or
+    /// chosen with Browse) — for its icon. Matching uses `exe` only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The program's own name ("Counter-Strike 2"), when known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+impl AppRule {
+    /// What to call the program: its own name, else the file name without
+    /// ".exe" ("cs2").
+    pub fn display_name(&self) -> String {
+        match self.name.as_deref().filter(|n| !n.trim().is_empty()) {
+            Some(n) => n.to_owned(),
+            None => exe_stem(&self.exe).to_owned(),
+        }
+    }
+}
+
+/// "cs2.exe" → "cs2".
+pub fn exe_stem(exe: &str) -> &str {
+    let n = exe.len();
+    if n > 4 && exe[n - 4..].eq_ignore_ascii_case(".exe") {
+        &exe[..n - 4]
+    } else {
+        exe
+    }
 }
 
 /// A running program: its file name in lower case and when it started.
@@ -278,6 +306,8 @@ mod tests {
             exe: exe.into(),
             profile_id: profile.into(),
             foreground_only: false,
+            path: None,
+            name: None,
         }
     }
 
@@ -829,6 +859,16 @@ mod tests {
                 exe: "cs2.exe".into()
             }
         );
+    }
+
+    #[test]
+    fn a_rule_is_called_by_its_own_name_or_its_file_name_without_exe() {
+        let mut r = rule("cs2.exe", "gaming");
+        assert_eq!(r.display_name(), "cs2");
+        r.name = Some("Counter-Strike 2".into());
+        assert_eq!(r.display_name(), "Counter-Strike 2");
+        assert_eq!(exe_stem("Game.EXE"), "Game");
+        assert_eq!(exe_stem("tool"), "tool");
     }
 
     #[test]

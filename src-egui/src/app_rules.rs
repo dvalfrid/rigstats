@@ -29,14 +29,21 @@ pub struct RulesShared {
     pub profile_ids: Vec<String>,
     /// What the rules are doing now.
     pub status: RuleStatus,
-    /// Programs with a window, for the Control Center's picker (sorted,
-    /// lower case); only kept up to date while asked for.
-    pub running_apps: Vec<String>,
+    /// Programs with a window, for the Control Center's picker (sorted by
+    /// file name); only kept up to date while asked for.
+    pub running_apps: Vec<RunningApp>,
     /// When the Control Center last asked for `running_apps`.
     pub list_wanted_at: Option<Instant>,
 }
 
 pub type RulesHandle = Arc<Mutex<RulesShared>>;
+
+/// A program with a window: its file name (lower case) and where it lives.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RunningApp {
+    pub exe: String,
+    pub path: Option<String>,
+}
 
 /// Starts the watcher thread for the process lifetime.
 pub fn spawn(
@@ -63,7 +70,13 @@ pub fn spawn(
                     shared.lock_safe().status = RuleStatus::Idle;
                     continue;
                 }
-                sys.refresh_processes_specifics(sysinfo::ProcessRefreshKind::new());
+                // Paths only for the picker's icons, read once per process.
+                let kind = if list_wanted {
+                    sysinfo::ProcessRefreshKind::new().with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
+                } else {
+                    sysinfo::ProcessRefreshKind::new()
+                };
+                sys.refresh_processes_specifics(kind);
                 let now_unix = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs());
@@ -84,14 +97,18 @@ pub fn spawn(
                     foreground: foreground_pid().and_then(name_of),
                 };
                 if list_wanted {
-                    let mut apps: Vec<String> = windowed_pids()
+                    let mut seen = HashSet::new();
+                    let mut apps: Vec<RunningApp> = windowed_pids()
                         .into_iter()
-                        .filter_map(name_of)
-                        .filter(|n| n != "rigstats.exe" && n != "explorer.exe")
-                        .collect::<HashSet<_>>()
-                        .into_iter()
+                        .filter_map(|pid| sys.process(sysinfo::Pid::from_u32(pid)))
+                        .map(|p| RunningApp {
+                            exe: p.name().to_ascii_lowercase(),
+                            path: p.exe().map(|x| x.display().to_string()),
+                        })
+                        .filter(|a| a.exe != "rigstats.exe" && a.exe != "explorer.exe")
+                        .filter(|a| seen.insert(a.exe.clone()))
                         .collect();
-                    apps.sort();
+                    apps.sort_by(|x, y| x.exe.cmp(&y.exe));
                     shared.lock_safe().running_apps = apps;
                 }
                 if rules.is_empty() {

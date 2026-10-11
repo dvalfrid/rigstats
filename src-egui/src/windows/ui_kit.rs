@@ -167,7 +167,36 @@ impl Group<'_> {
 
     /// A row: `title` (and `subtitle`) left, `control` right-aligned.
     pub fn row(&mut self, title: &str, subtitle: Option<&str>, control: impl FnOnce(&mut Ui)) {
+        self.row_inner(None, title, subtitle, control);
+    }
+
+    /// A row led by a program's icon (a generic one when `icon` is None, so
+    /// rows line up).
+    pub fn row_icon(
+        &mut self,
+        icon: Option<&egui::TextureHandle>,
+        title: &str,
+        subtitle: Option<&str>,
+        control: impl FnOnce(&mut Ui),
+    ) {
+        self.row_inner(
+            Some(icon.map(egui::TextureHandle::id)),
+            title,
+            subtitle,
+            control,
+        );
+    }
+
+    fn row_inner(
+        &mut self,
+        icon: Option<Option<egui::TextureId>>,
+        title: &str,
+        subtitle: Option<&str>,
+        control: impl FnOnce(&mut Ui),
+    ) {
         self.divider();
+        // Room for the icon before the text.
+        let lead = if icon.is_some() { 34.0 } else { 0.0 };
         let dc = self.dc;
         let w = self.ui.available_width();
         // The text is laid out first, at the width left of a typical
@@ -187,7 +216,7 @@ impl Group<'_> {
             std::sync::Arc<egui::Galley>,
             Option<std::sync::Arc<egui::Galley>>,
         )| { t.0.size().y + t.1.as_ref().map_or(0.0, |g| g.size().y + 2.0) };
-        let estimate = texts(self.ui, (w - CONTROL_W - 16.0).max(80.0));
+        let estimate = texts(self.ui, (w - CONTROL_W - 16.0 - lead).max(80.0));
         let base = if subtitle.is_some() { ROW_H_SUB } else { ROW_H };
         let h = base.max(text_h(&estimate) + 16.0);
         self.ui
@@ -197,15 +226,32 @@ impl Group<'_> {
                 let row = ui.max_rect();
                 control(ui);
                 // What the control left, minus a gap.
-                let wrap = (ui.available_width() - 12.0).max(60.0);
+                let wrap = (ui.available_width() - 12.0 - lead).max(60.0);
                 let laid = texts(ui, wrap);
                 let mut y = row.center().y - text_h(&laid) / 2.0;
                 let (title, sub) = laid;
                 let title_h = title.size().y;
-                ui.painter().galley(pos2(row.left(), y), title, dc.title);
+                if let Some(icon) = icon {
+                    let r = Rect::from_center_size(
+                        pos2(row.left() + 12.0, row.center().y),
+                        vec2(24.0, 24.0),
+                    );
+                    match icon {
+                        Some(id) => {
+                            let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                            ui.painter().image(id, r, uv, Color32::WHITE);
+                        }
+                        None => {
+                            ui.painter().rect_filled(r, CornerRadius::same(6), dc.inner);
+                            paint_glyph(ui.painter(), r.shrink(5.0), Icon::Rules, dc.muted);
+                        }
+                    }
+                }
+                let x = row.left() + lead;
+                ui.painter().galley(pos2(x, y), title, dc.title);
                 if let Some(sub) = sub {
                     y += title_h + 2.0;
-                    ui.painter().galley(pos2(row.left(), y), sub, dc.muted);
+                    ui.painter().galley(pos2(x, y), sub, dc.muted);
                 }
             });
     }

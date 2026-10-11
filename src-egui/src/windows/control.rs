@@ -174,7 +174,7 @@ pub struct ControlUi {
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
     /// The App rules page's "Add a rule" form (#307).
-    rule_form: crate::windows::rules_page::RuleForm,
+    rule_form: crate::windows::rules_page::RulesPage,
 }
 
 #[derive(Debug)]
