@@ -27,6 +27,8 @@ pub struct LookLink<'a> {
     pub reload: &'a Arc<AtomicBool>,
     pub open: &'a OpenRequests,
     pub battery_present: &'a Arc<AtomicBool>,
+    /// The app rules watcher's shared state (#307).
+    pub rules: &'a crate::app_rules::RulesHandle,
 }
 
 /// Theme keys with their colour and a readable name.

@@ -71,6 +71,9 @@ struct RigStatsApp {
     /// access to `runtime`, so this is the cross-task handoff (see the
     /// `drain_control` call site in `update()`).
     active_profile_shared: Arc<Mutex<Option<String>>>,
+    /// App rules (#307): the watcher thread's shared state — profile ids in,
+    /// status and running programs out.
+    rules: rigstats_egui::app_rules::RulesHandle,
     dir: Arc<PathBuf>,
     // Win32 HWND stored as isize for window-level opacity (SetLayeredWindowAttributes).
     // Found via FindWindowW on the first ui() frame; 0 until then.
@@ -176,6 +179,15 @@ impl RigStatsApp {
                 flag.store(present, Ordering::Relaxed);
             });
         }
+        // App rules (#307): switch profile while a listed program runs.
+        let rules = rigstats_egui::app_rules::RulesHandle::default();
+        rigstats_egui::app_rules::spawn(
+            current_settings.clone(),
+            active_profile_shared.clone(),
+            rules.clone(),
+            control_cmd_tx.clone(),
+            dir.as_ref().clone(),
+        );
         Self {
             runtime,
             receiver,
@@ -197,6 +209,7 @@ impl RigStatsApp {
             settings_reload,
             preferred_gpu,
             active_profile_shared,
+            rules,
             dir,
             hwnd: 0,
             dcomp_available,
@@ -762,6 +775,13 @@ impl eframe::App for RigStatsApp {
             // Hand off to poll_loop for the session-recording CSV column —
             // poll_loop runs on its own tokio task with no access to `runtime`.
             *self.active_profile_shared.lock_safe() = self.runtime.control.active_profile.clone();
+            self.rules.lock_safe().profile_ids = self
+                .runtime
+                .control
+                .profiles
+                .iter()
+                .map(|p| p.id.clone())
+                .collect();
             self.follow_profile_look();
             self.notify_fan_safety_trip();
         }

@@ -2,6 +2,7 @@ pub mod about;
 pub mod control;
 pub mod history;
 pub mod profile_look;
+pub mod rules_page;
 pub mod settings;
 pub mod status;
 pub mod ui_kit;
@@ -53,6 +54,7 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "cpu" => control::Page::Cpu,
             "gpu" => control::Page::Gpu,
             "lighting" => control::Page::Lighting,
+            "rules" => control::Page::Rules,
             _ => control::Page::Overview,
         })),
         "about" => Some(OpenRequest::About),

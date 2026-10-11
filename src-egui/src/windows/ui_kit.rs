@@ -805,6 +805,7 @@ pub enum Icon {
     Lighting,
     General,
     Display,
+    Rules,
     More,
     Plus,
     Chevron,
@@ -825,6 +826,7 @@ impl Icon {
             Icon::Lighting => Color32::from_rgb(255, 55, 95),
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
+            Icon::Rules => Color32::from_rgb(255, 159, 10),
             Icon::More | Icon::Plus | Icon::Chevron => Color32::from_rgb(142, 142, 147),
         }
     }
@@ -945,6 +947,13 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
             p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
             p.line_segment([at(0.0, 0.18), at(0.0, 0.34)], stroke);
             p.line_segment([at(-0.2, 0.36), at(0.2, 0.36)], stroke);
+        }
+        Icon::Rules => {
+            // A program window with a "play" mark: starts with an app.
+            let r = Rect::from_center_size(c, vec2(s * 0.84, s * 0.7));
+            p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
+            p.line_segment([at(-0.42, -0.18), at(0.42, -0.18)], stroke);
+            p.add(fill(vec![at(-0.1, -0.04), at(0.16, 0.12), at(-0.1, 0.28)]));
         }
         Icon::More => {
             for dx in [-0.3, 0.0, 0.3] {

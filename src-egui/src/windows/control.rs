@@ -12,6 +12,7 @@
 //! the selected fan header and unsaved drafts. CPU limit changes go through
 //! `preview`: the service reverts them by itself unless "Keep" arrives in time.
 
+use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::windows::profile_look::{self, LookEditor, LookLink};
 use crate::windows::ui_kit::{self, Icon};
@@ -90,6 +91,7 @@ pub enum Page {
     Cpu,
     Gpu,
     Lighting,
+    Rules,
 }
 
 /// Unsaved edits to one profile's fan headers.
@@ -171,6 +173,8 @@ pub struct ControlUi {
     dismissed_errors: u32,
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
+    /// The App rules page's "Add a rule" form (#307).
+    rule_form: crate::windows::rules_page::RuleForm,
 }
 
 #[derive(Debug)]
@@ -1789,6 +1793,7 @@ pub fn show(
                     match i {
                         1 => ui_kit::nav_header(ui, dc, "RIGStats"),
                         4 => ui_kit::nav_header(ui, dc, "Hardware"),
+                        9 => ui_kit::nav_header(ui, dc, "Automation"),
                         _ => {}
                     }
                     if ui_kit::nav_item(ui, dc, icon, label, ui_state.tab == page).clicked() {
@@ -1844,6 +1849,7 @@ pub fn show(
                         &saved_gpu,
                         saved_aura.as_ref(),
                         ui_state,
+                        &look_link.settings.lock_safe().app_rules.clone(),
                     ),
                     Page::Dashboard => profile_look::dashboard_page(
                         ui,
@@ -1911,6 +1917,13 @@ pub fn show(
                             gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
                         }
                     }
+                    Page::Rules => crate::windows::rules_page::rules_page(
+                        ui,
+                        dc,
+                        &control.profiles,
+                        look_link,
+                        &mut ui_state.rule_form,
+                    ),
                     Page::Power | Page::Fans => {
                         ui_kit::page_header(
                             ui,
@@ -1945,6 +1958,7 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Cpu, Icon::Cpu, "CPU"),
     (Page::Gpu, Icon::Gpu, "Graphics card"),
     (Page::Lighting, Icon::Lighting, "Lighting"),
+    (Page::Rules, Icon::Rules, "App rules"),
 ];
 
 /// Which hardware pages this PC has (the service's capabilities);
@@ -2175,6 +2189,7 @@ fn overview_page(
     gpu: &BTreeMap<String, i32>,
     aura: Option<&AuraPart>,
     ui_state: &mut ControlUi,
+    rules: &[rigstats_backend::profile_rules::AppRule],
 ) {
     let Some(profile) = active else {
         ui_kit::page_header(ui, dc, "Overview", "");
@@ -2257,11 +2272,28 @@ fn overview_page(
             lighting.1,
         ),
     ];
+    let starts_with: Vec<&str> = rules
+        .iter()
+        .filter(|r| r.profile_id == profile.id)
+        .map(|r| r.exe.as_str())
+        .collect();
+    let automation_tiles = [(
+        Page::Rules,
+        Icon::Rules,
+        "Starts automatically with",
+        if starts_with.is_empty() {
+            "No app rules".to_owned()
+        } else {
+            starts_with.join(", ")
+        },
+        None,
+    )];
     let gap = 12.0;
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
     for (title, tiles) in [
         ("RIGStats", &look_tiles[..]),
         ("Hardware", &hardware_tiles[..]),
+        ("Automation", &automation_tiles[..]),
     ] {
         ui.label(
             egui::RichText::new(title)
