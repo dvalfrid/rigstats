@@ -1,5 +1,6 @@
 //! Persistent user settings model and file I/O helpers.
 
+use crate::desktop_background::DesktopBackground;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -266,6 +267,14 @@ pub struct Settings {
     /// (#307), checked in order; see `profile_rules`.
     #[serde(default)]
     pub app_rules: Vec<crate::profile_rules::AppRule>,
+    /// The active profile's desktop background (#306); `None` = Windows'
+    /// own. Part of the profile's look.
+    #[serde(default)]
+    pub desktop_background: Option<DesktopBackground>,
+    /// Windows' own background, kept the first time a profile replaced it
+    /// and put back in a profile without one (`desktop_background::step`).
+    #[serde(default)]
+    pub desktop_background_before: Option<DesktopBackground>,
 
     // ---- Legacy migration shims (schema version 0) --------------------------
     // These fields existed in older settings files as eight flat values.
@@ -415,6 +424,8 @@ impl Default for Settings {
             profile_looks: HashMap::new(),
             look_profile: None,
             app_rules: Vec::new(),
+            desktop_background: None,
+            desktop_background_before: None,
             warning_cpu_temp: None,
             critical_cpu_temp: None,
             warning_gpu_temp: None,
@@ -431,7 +442,8 @@ impl Default for Settings {
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
-/// dashboard looks, the overlay's content and the alert thresholds. A
+/// dashboard looks, the overlay's content, the alert thresholds and the
+/// desktop background. A
 /// profile always holds all of them. Everything else (window layer,
 /// display profile, overlay placement, notifications, start-up, …) applies
 /// to the whole app and stays out of profiles.
@@ -452,6 +464,8 @@ pub struct ProfileLook {
     pub overlay_columns: u8,
     #[serde(default = "default_thresholds")]
     pub thresholds: HashMap<String, ComponentThresholds>,
+    #[serde(default)]
+    pub desktop_background: Option<DesktopBackground>,
 }
 
 impl ProfileLook {
@@ -465,6 +479,7 @@ impl ProfileLook {
             overlay_metrics: s.overlay_metrics.clone(),
             overlay_columns: s.overlay_columns,
             thresholds: s.thresholds.clone(),
+            desktop_background: s.desktop_background.clone(),
         }
     }
 
@@ -478,6 +493,7 @@ impl ProfileLook {
         s.overlay_metrics = self.overlay_metrics.clone();
         s.overlay_columns = self.overlay_columns.min(6);
         s.thresholds = self.thresholds.clone();
+        s.desktop_background = self.desktop_background.clone();
         Self::capture(s) != before
     }
 }
@@ -898,6 +914,37 @@ mod profile_look_tests {
         assert_eq!(switch_profile_look(&mut s, "gaming"), Some(true));
         assert_eq!(s.theme, "red");
         assert_eq!(s.profile_looks["silent"].theme, "blue");
+    }
+
+    #[test]
+    fn the_desktop_background_belongs_to_the_profile() {
+        let calm = DesktopBackground {
+            path: r"C:\calm.jpg".into(),
+            fit: crate::desktop_background::Fit::Fit,
+            screens: Vec::new(),
+        };
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "silent");
+        s.desktop_background = Some(calm.clone());
+        s.desktop_background_before = Some(DesktopBackground {
+            path: r"C:\own.jpg".into(),
+            fit: Default::default(),
+            screens: Vec::new(),
+        });
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(false));
+        assert_eq!(
+            s.desktop_background,
+            Some(calm.clone()),
+            "a new profile starts from the current look"
+        );
+        s.desktop_background = None;
+        assert_eq!(switch_profile_look(&mut s, "silent"), Some(true));
+        assert_eq!(s.desktop_background, Some(calm));
+        assert_eq!(s.profile_looks["gaming"].desktop_background, None);
+        assert!(
+            s.desktop_background_before.is_some(),
+            "app-wide, not in a look"
+        );
     }
 
     #[test]

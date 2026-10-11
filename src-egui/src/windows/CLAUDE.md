@@ -9,11 +9,11 @@ Every setting has exactly one home:
 | A Control Center profile holds (`ProfileLook` + the service's profile) | Settings holds (applies to the whole app) |
 |---|---|
 | Power plan, fans, CPU/GPU limits, lighting | Start with Windows, model name, recordings |
-| Accent colour, opacity, panels and their order | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
+| Accent colour, opacity, panels and their order, desktop background | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval |
 
-Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears.
+Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears, and its row sits next to the settings it belongs with (in the page's first group, or first on the page), never at the bottom under a long list.
 
 ## Window lifecycle (mandatory for every dialog, #203)
 
@@ -62,6 +62,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
 | A summary that opens a page | `tile` |
+| A picture (desktop background) | `Group::row_picture` — a 16:9 preview leading the row, cropped to fill; previews from `app_icons::PictureCache` |
 | Content that scrolls (release notes, a log) | `fixed_card` — exact size, content clipped inside, so it can never widen the page (a `ScrollArea` inside a `group` puts its scrollbar beside the given width and pushes the card past the margin) |
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
 
@@ -73,7 +74,7 @@ Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, t
 
 One rule, the same in every window:
 
-- **Save / Revert (or Cancel)** where a change is previewed or tried first, or can be risky — Settings, the Control Center's Dashboard, Overlay, Alerts, Fans, CPU, Graphics card and Lighting. Footer: "Unsaved changes to …" with Revert and Save.
+- **Save / Revert (or Cancel)** where a change is previewed or tried first, or can be risky — Settings, the Control Center's Dashboard, Overlay, Alerts, Desktop, Fans, CPU, Graphics card and Lighting. Footer: "Unsaved changes to …" with Revert and Save.
 - **Saved at once** where nothing can go wrong — the Power plan and App rules (and Settings' click-through). The page subtitle says "Changes are saved at once." and the footer shows a green **Saved** for a few seconds after each change (`ControlUi::saved_at`), so a change never passes silently. The same goes for one-off actions without a visible result: a Hue room switched ("Saved"), a profile reset ("Reset to its defaults"), a device's Dynamic Lighting switched ("Sent to the device"), and Settings' click-through ("Saved" beside Save/Cancel). Actions whose result shows by itself (rename, duplicate, delete, pairing) need none.
 
 ## Words
