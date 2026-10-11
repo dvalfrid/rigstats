@@ -12,6 +12,8 @@ Module catalogue for `src-egui/src/`. The dialog design and lifecycle contract i
 - **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
 - **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types; `PollMode` (`Full`, or `Light` in wallpaper mode; shared via `PollModeHandle`)
+- **`app_icons.rs`** — program icon (`SHGetFileInfo`) and own name (`FileDescription` from the version info) per path, cached as textures (`AppInfoCache`); `pick_program` runs the Open dialog on its own thread, owned by the Control Center window. FFI, `#![allow(unsafe_code)]`
+- **`app_rules.rs`** — app rules watcher (#307): background thread, every 2 s snapshots processes (sysinfo) and the foreground program (Win32), runs `profile_rules::RuleEngine`, switches via `ControlCmd::ApplyProfile`; `RulesShared` carries profile ids in and status / running programs out to the Control Center's App rules page (`windows/rules_page.rs`)
 - **`alerts.rs`** — `pending_alerts`: pure warn/crit threshold-breach detection; `notify_on_*`, cooldowns and sending live in `main.rs`. Wireless batteries use the `battery` thresholds with a per-device cooldown key
 - **`dcomp_burst.rs`** — `DcompRevealBurst`: hide-until-settled reveal policy for per-pixel-transparent (DComp) viewports — overlay and floating panels
 - **`dialog_reveal.rs`** — `DialogReveal`: every dialog is created hidden, revealed after it has rendered, and hidden for one frame before teardown (no white flash, #203). See "Dialog lifecycle" in `docs/architecture.md`

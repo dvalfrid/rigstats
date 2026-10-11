@@ -27,6 +27,8 @@ pub struct LookLink<'a> {
     pub reload: &'a Arc<AtomicBool>,
     pub open: &'a OpenRequests,
     pub battery_present: &'a Arc<AtomicBool>,
+    /// The app rules watcher's shared state (#307).
+    pub rules: &'a crate::app_rules::RulesHandle,
 }
 
 /// Theme keys with their colour and a readable name.
@@ -423,4 +425,127 @@ pub fn alerts_page(
         );
     });
     editor.preview(link);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rigstats_backend::settings::switch_profile_look;
+
+    /// A settings handle and folder for one test, removed afterwards.
+    struct Env {
+        settings: Arc<Mutex<Settings>>,
+        dir: std::path::PathBuf,
+        reload: Arc<AtomicBool>,
+        open: OpenRequests,
+        battery: Arc<AtomicBool>,
+        rules: crate::app_rules::RulesHandle,
+    }
+
+    impl Env {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir()
+                .join(format!("rigstats-look-test-{name}-{}", std::process::id()));
+            let _ = std::fs::create_dir_all(&dir);
+            let mut s = Settings::default();
+            s.theme = "amber".into();
+            switch_profile_look(&mut s, "balanced");
+            Self {
+                settings: Arc::new(Mutex::new(s)),
+                dir,
+                reload: Arc::new(AtomicBool::new(false)),
+                open: OpenRequests::default(),
+                battery: Arc::new(AtomicBool::new(false)),
+                rules: crate::app_rules::RulesHandle::default(),
+            }
+        }
+
+        fn link(&self) -> LookLink<'_> {
+            LookLink {
+                settings: &self.settings,
+                dir: &self.dir,
+                reload: &self.reload,
+                open: &self.open,
+                battery_present: &self.battery,
+                rules: &self.rules,
+            }
+        }
+
+        fn theme(&self) -> String {
+            self.settings.lock_safe().theme.clone()
+        }
+    }
+
+    impl Drop for Env {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn edit(editor: &mut LookEditor, theme: &str) {
+        editor.look.as_mut().expect("synced").theme = theme.into();
+    }
+
+    #[test]
+    fn an_edit_shows_at_once_and_revert_puts_it_back() {
+        let env = Env::new("revert");
+        let mut editor = LookEditor::default();
+        editor.sync(Some("balanced"), &env.link());
+        edit(&mut editor, "red");
+        editor.preview(&env.link());
+        assert_eq!(env.theme(), "red", "previewed live");
+        assert!(env.reload.load(Ordering::Relaxed));
+        assert!(editor.dirty());
+        editor.discard(&env.link());
+        assert_eq!(env.theme(), "amber");
+        assert!(!editor.dirty());
+    }
+
+    #[test]
+    fn save_keeps_the_edit_in_the_active_profile_and_on_disk() {
+        let env = Env::new("save");
+        let mut editor = LookEditor::default();
+        editor.sync(Some("balanced"), &env.link());
+        edit(&mut editor, "red");
+        editor.preview(&env.link());
+        editor.save(&env.link());
+        assert!(!editor.dirty());
+        assert_eq!(
+            env.settings.lock_safe().profile_looks["balanced"].theme,
+            "red"
+        );
+        let on_disk = settings::load_settings(&env.dir);
+        assert_eq!(on_disk.theme, "red");
+        assert_eq!(on_disk.profile_looks["balanced"].theme, "red");
+    }
+
+    #[test]
+    fn outside_an_edit_the_page_follows_changes_made_elsewhere() {
+        let env = Env::new("follow");
+        let mut editor = LookEditor::default();
+        editor.sync(Some("balanced"), &env.link());
+        // The tray or Ctrl+Alt+O changes the overlay while the page is open.
+        env.settings.lock_safe().overlay_enabled = true;
+        editor.sync(Some("balanced"), &env.link());
+        assert!(editor.current().unwrap().overlay_enabled);
+        assert!(!editor.dirty());
+    }
+
+    #[test]
+    fn a_profile_switch_mid_edit_gives_the_outgoing_profile_its_look_back() {
+        let env = Env::new("switch");
+        let mut editor = LookEditor::default();
+        editor.sync(Some("balanced"), &env.link());
+        edit(&mut editor, "red");
+        editor.preview(&env.link());
+        // The app switches profile: it stores the previewed look in Balanced.
+        switch_profile_look(&mut env.settings.lock_safe(), "gaming");
+        editor.sync(Some("gaming"), &env.link());
+        // Balanced keeps what it had before the unsaved edit.
+        assert_eq!(
+            env.settings.lock_safe().profile_looks["balanced"].theme,
+            "amber"
+        );
+        assert!(!editor.dirty());
+    }
 }

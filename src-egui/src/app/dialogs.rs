@@ -230,6 +230,7 @@ impl RigStatsApp {
                 reload: &self.settings_reload,
                 open: &self.dialogs.open_requests,
                 battery_present: &self.battery_present,
+                rules: &self.rules,
             };
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),

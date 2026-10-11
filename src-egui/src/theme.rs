@@ -470,7 +470,8 @@ const DBTN_PRIMARY_HOV: Color32 = Color32::from_rgb(26, 134, 219);
 const DBTN_PRIMARY_ACT: Color32 = Color32::from_rgb(0, 108, 190);
 const DBTN_PRIMARY_BORDER: Color32 = Color32::from_rgb(0, 90, 170);
 const DBTN_SEC_ACT_DARKEN: u8 = 10; // how much to darken fill for active state
-const DBTN_MIN_SIZE: Vec2 = Vec2::new(90.0, 26.0);
+                                    // As tall as every other control in a dialog row (ui_kit::CONTROL_H).
+const DBTN_MIN_SIZE: Vec2 = Vec2::new(90.0, 28.0);
 const DBTN_RADIUS: u8 = 4;
 
 fn with_btn_visuals<R>(

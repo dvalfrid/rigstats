@@ -12,6 +12,7 @@
 //! the selected fan header and unsaved drafts. CPU limit changes go through
 //! `preview`: the service reverts them by itself unless "Keep" arrives in time.
 
+use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::windows::profile_look::{self, LookEditor, LookLink};
 use crate::windows::ui_kit::{self, Icon};
@@ -90,6 +91,7 @@ pub enum Page {
     Cpu,
     Gpu,
     Lighting,
+    Rules,
 }
 
 /// Unsaved edits to one profile's fan headers.
@@ -171,6 +173,11 @@ pub struct ControlUi {
     dismissed_errors: u32,
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
+    /// When a page that saves at once (Power, App rules) last saved — the
+    /// footer confirms it for a moment.
+    saved_at: Option<(Instant, &'static str)>,
+    /// The App rules page's "Add a rule" form (#307).
+    rule_form: crate::windows::rules_page::RulesPage,
 }
 
 #[derive(Debug)]
@@ -879,7 +886,15 @@ fn lighting_tab(
             });
         });
         if let Some(hue) = &hue {
-            hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+            hue_card(
+                ui,
+                dc,
+                control,
+                hue,
+                cmd_tx,
+                &mut ui_state.hue_ip,
+                &mut ui_state.saved_at,
+            );
         }
         return;
     };
@@ -1027,6 +1042,7 @@ fn lighting_tab(
                             .clicked()
                         {
                             let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
+                            ui_state.saved_at = Some((Instant::now(), "Sent to the device"));
                         }
                     });
                 } else if wdl_hint {
@@ -1061,7 +1077,15 @@ fn lighting_tab(
     }
     if let Some(hue) = &hue {
         ui.add_space(16.0);
-        hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+        hue_card(
+            ui,
+            dc,
+            control,
+            hue,
+            cmd_tx,
+            &mut ui_state.hue_ip,
+            &mut ui_state.saved_at,
+        );
     }
 }
 
@@ -1119,6 +1143,7 @@ fn hue_card(
     hue: &HueCaps,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     typed_ip: &mut String,
+    saved_at: &mut Option<(Instant, &'static str)>,
 ) {
     let busy = control.hue_busy;
     let paired = matches!((&hue.bridge, hue.paired), (Some(_), true));
@@ -1185,6 +1210,7 @@ fn hue_card(
                 }
                 if changed {
                     let _ = cmd_tx.try_send(ControlCmd::HueChoose(chosen));
+                    *saved_at = Some((Instant::now(), "Saved"));
                 }
             }
             _ => {
@@ -1208,7 +1234,9 @@ fn hue_card(
                             }
                             ui.add(
                                 egui::TextEdit::singleline(typed_ip)
+                                    .vertical_align(egui::Align::Center)
                                     .desired_width(130.0)
+                                    .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                                     .hint_text("192.168.1.20"),
                             );
                         });
@@ -1756,6 +1784,13 @@ pub fn show(
                         .size(11.0)
                         .color(dc.muted),
                     );
+                } else if let Some((_, text)) = ui_state
+                    .saved_at
+                    .filter(|(t, _)| t.elapsed() < Duration::from_secs(3))
+                {
+                    ui.add_space(10.0);
+                    ui_kit::status(ui, ui_kit::C_GOOD, text);
+                    ui.ctx().request_repaint_after(Duration::from_millis(500));
                 } else if control.preview_reverted {
                     ui.add_space(10.0);
                     ui.label(
@@ -1789,6 +1824,7 @@ pub fn show(
                     match i {
                         1 => ui_kit::nav_header(ui, dc, "RIGStats"),
                         4 => ui_kit::nav_header(ui, dc, "Hardware"),
+                        9 => ui_kit::nav_header(ui, dc, "Automation"),
                         _ => {}
                     }
                     if ui_kit::nav_item(ui, dc, icon, label, ui_state.tab == page).clicked() {
@@ -1844,6 +1880,7 @@ pub fn show(
                         &saved_gpu,
                         saved_aura.as_ref(),
                         ui_state,
+                        &look_link.settings.lock_safe().app_rules.clone(),
                     ),
                     Page::Dashboard => profile_look::dashboard_page(
                         ui,
@@ -1911,14 +1948,29 @@ pub fn show(
                             gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
                         }
                     }
+                    Page::Rules => {
+                        if crate::windows::rules_page::rules_page(
+                            ui,
+                            dc,
+                            &control.profiles,
+                            look_link,
+                            &mut ui_state.rule_form,
+                        ) {
+                            ui_state.saved_at = Some((Instant::now(), "Saved"));
+                        }
+                    }
                     Page::Power | Page::Fans => {
                         ui_kit::page_header(
                             ui,
                             dc,
                             "Power",
-                            &format!("The Windows power plan in {profile_name}."),
+                            &format!(
+                                "The Windows power plan in {profile_name}. Changes are saved at once."
+                            ),
                         );
-                        power_tab(ui, dc, control, cmd_tx);
+                        if power_tab(ui, dc, control, cmd_tx) {
+                            ui_state.saved_at = Some((Instant::now(), "Saved"));
+                        }
                     }
                 });
         });
@@ -1945,6 +1997,7 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Cpu, Icon::Cpu, "CPU"),
     (Page::Gpu, Icon::Gpu, "Graphics card"),
     (Page::Lighting, Icon::Lighting, "Lighting"),
+    (Page::Rules, Icon::Rules, "App rules"),
 ];
 
 /// Which hardware pages this PC has (the service's capabilities);
@@ -2003,7 +2056,9 @@ fn profile_bar(
             (Some(ProfileEdit::Renaming { id, mut name }), Some(active)) => {
                 let edit = ui.add(
                     egui::TextEdit::singleline(&mut name)
+                        .vertical_align(egui::Align::Center)
                         .desired_width(200.0)
+                        .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                         .hint_text("Profile name"),
                 );
                 edit.request_focus();
@@ -2102,6 +2157,7 @@ fn profile_bar(
                             .clicked()
                         {
                             let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
+                            ui_state.saved_at = Some((Instant::now(), "Reset to its defaults"));
                         }
                     } else if ui.button(format!("Delete {}…", active.name)).clicked() {
                         ui_state.profile_edit = Some(ProfileEdit::ConfirmDelete {
@@ -2175,6 +2231,7 @@ fn overview_page(
     gpu: &BTreeMap<String, i32>,
     aura: Option<&AuraPart>,
     ui_state: &mut ControlUi,
+    rules: &[rigstats_backend::profile_rules::AppRule],
 ) {
     let Some(profile) = active else {
         ui_kit::page_header(ui, dc, "Overview", "");
@@ -2257,11 +2314,28 @@ fn overview_page(
             lighting.1,
         ),
     ];
+    let starts_with: Vec<&str> = rules
+        .iter()
+        .filter(|r| r.profile_id == profile.id)
+        .map(|r| r.exe.as_str())
+        .collect();
+    let automation_tiles = [(
+        Page::Rules,
+        Icon::Rules,
+        "Starts automatically with",
+        if starts_with.is_empty() {
+            "No app rules".to_owned()
+        } else {
+            starts_with.join(", ")
+        },
+        None,
+    )];
     let gap = 12.0;
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
     for (title, tiles) in [
         ("RIGStats", &look_tiles[..]),
         ("Hardware", &hardware_tiles[..]),
+        ("Automation", &automation_tiles[..]),
     ] {
         ui.label(
             egui::RichText::new(title)
@@ -2293,7 +2367,8 @@ fn power_tab(
     dc: &DialogColors,
     control: &ControlState,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
-) {
+) -> bool {
+    let mut saved = false;
     let power = control
         .capabilities
         .iter()
@@ -2327,7 +2402,7 @@ fn power_tab(
         }
         Some(_) => {
             let Some(active) = control.active() else {
-                return;
+                return false;
             };
             // The plan the active profile sets — not the profile's own
             // name, which a "Gaming" profile would have shown here.
@@ -2387,6 +2462,7 @@ fn power_tab(
                 );
             });
             if chosen != current {
+                saved = true;
                 let mut profile = active.clone();
                 profile.part.power_plan = chosen;
                 let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
@@ -2397,6 +2473,7 @@ fn power_tab(
             dry_run_note(ui, dc, control);
         }
     }
+    saved
 }
 
 /// A copy of `source` as a new custom profile, with an id and a name no
@@ -2551,10 +2628,7 @@ fn fans_tab(
     // ── Header picker + identify ─────────────────────────────────────────
     ui.horizontal(|ui| {
         let mut selected = header.id.clone();
-        egui::ComboBox::from_id_salt("fan_header")
-            .width(260.0)
-            .selected_text(header_name(&header, shown.get(&header.id)))
-            .show_ui(ui, |ui| {
+        ui_kit::combo(ui, "fan_header", 260.0, header_name(&header, shown.get(&header.id)), |ui| {
                 for h in &caps.headers {
                     let mode = match control.fan_duty.get(&h.id) {
                         Some(duty) if shown.contains_key(&h.id) => format!("   {duty:.0} %"),
@@ -2672,17 +2746,16 @@ fn fans_tab(
             let mut label = config.label.clone().unwrap_or_default();
             ui.add(
                 egui::TextEdit::singleline(&mut label)
+                    .vertical_align(egui::Align::Center)
                     .hint_text("e.g. CPU cooler")
-                    .desired_width(150.0),
+                    .desired_width(150.0)
+.min_size(egui::vec2(0.0, ui_kit::CONTROL_H)),
             );
             config.label = Some(label.trim().to_owned()).filter(|l| !l.is_empty());
 
             ui.add_space(12.0);
             ui.label(egui::RichText::new("Follows").size(12.0).color(dc.text));
-            egui::ComboBox::from_id_salt("fan_source")
-                .width(170.0)
-                .selected_text(source_name(&config.source))
-                .show_ui(ui, |ui| {
+            ui_kit::combo(ui, "fan_source", 170.0, source_name(&config.source), |ui| {
                     for source in &caps.sources {
                         ui.selectable_value(
                             &mut config.source,
@@ -3085,6 +3158,79 @@ fn header_name(cap: &FanHeaderCap, config: Option<&FanHeaderConfig>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overview_summaries_say_what_a_profile_does() {
+        assert_eq!(fans_summary(&BTreeMap::new()), "Motherboard default");
+        let mut headers = BTreeMap::new();
+        let curve = FanHeaderConfig {
+            label: None,
+            source: "cpu_package".into(),
+            curve: vec![[30.0, 30.0], [80.0, 100.0]],
+            hysteresis_c: 3.0,
+        };
+        headers.insert("a".to_owned(), curve.clone());
+        assert_eq!(fans_summary(&headers), "Custom curve on 1 fan header");
+        headers.insert("b".to_owned(), curve);
+        assert_eq!(fans_summary(&headers), "Custom curves on 2 fan headers");
+
+        let stock = AmdCpuLimit::default();
+        assert_eq!(
+            cpu_summary(&stock, &CurveOptPart::default()),
+            "Stock limits"
+        );
+        let eco = AmdCpuLimit {
+            ppt_w: Some(142.0),
+            ..Default::default()
+        };
+        let co = CurveOptPart {
+            all_core: Some(-10),
+            per_core: None,
+        };
+        assert_eq!(
+            cpu_summary(&eco, &co),
+            "142 W power limit · Curve Optimizer"
+        );
+
+        assert_eq!(gpu_summary(&BTreeMap::new()), "Stock power limit");
+        assert_eq!(
+            gpu_summary(&BTreeMap::from([("gpu".to_owned(), -15)])),
+            "Power limit -15 %"
+        );
+    }
+
+    #[test]
+    fn lighting_summary_names_the_effect_and_its_colour() {
+        assert_eq!(lighting_summary(None), ("Left as it is".to_owned(), None));
+        let red = AuraPart {
+            effect: Some("static".into()),
+            color: Some("#ff0000".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            lighting_summary(Some(&red)),
+            (
+                "Static".to_owned(),
+                Some(egui::Color32::from_rgb(255, 0, 0))
+            )
+        );
+        let cycle = AuraPart {
+            effect: Some("spectrum_cycle".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            lighting_summary(Some(&cycle)),
+            ("Colour cycle".to_owned(), None),
+            "no single colour"
+        );
+    }
+
+    #[test]
+    fn device_kinds_read_as_words() {
+        assert_eq!(device_kind("monitor_light_bar"), "Monitor light bar");
+        assert_eq!(device_kind("keyboard"), "Keyboard");
+        assert_eq!(device_kind(""), "");
+    }
 
     fn curve() -> Vec<[f64; 2]> {
         vec![[30.0, 25.0], [50.0, 40.0], [70.0, 80.0]]

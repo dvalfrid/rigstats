@@ -13,7 +13,7 @@ Every setting has exactly one home:
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval |
 
-Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor.
+Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears.
 
 ## Window lifecycle (mandatory for every dialog, #203)
 
@@ -55,7 +55,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 |---|---|
 | On/off | `toggle` (animated switch) |
 | 2–5 short options | `segmented` |
-| A longer list | `dropdown` (`CONTROL_W` wide, so rows line up) |
+| A longer list | `dropdown` (`CONTROL_W` wide, so rows line up), or `combo` for another width — never a raw `egui::ComboBox`, it comes out lower than the buttons beside it |
 | A percentage | `slider_pct` (value shown beside it) |
 | A colour from a few | `swatches` |
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
@@ -66,6 +66,15 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
+
+Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
+
+## Saving
+
+One rule, the same in every window:
+
+- **Save / Revert (or Cancel)** where a change is previewed or tried first, or can be risky — Settings, the Control Center's Dashboard, Overlay, Alerts, Fans, CPU, Graphics card and Lighting. Footer: "Unsaved changes to …" with Revert and Save.
+- **Saved at once** where nothing can go wrong — the Power plan and App rules (and Settings' click-through). The page subtitle says "Changes are saved at once." and the footer shows a green **Saved** for a few seconds after each change (`ControlUi::saved_at`), so a change never passes silently. The same goes for one-off actions without a visible result: a Hue room switched ("Saved"), a profile reset ("Reset to its defaults"), a device's Dynamic Lighting switched ("Sent to the device"), and Settings' click-through ("Saved" beside Save/Cancel). Actions whose result shows by itself (rename, duplicate, delete, pairing) need none.
 
 ## Words
 

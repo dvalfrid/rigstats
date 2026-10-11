@@ -5,6 +5,8 @@
 //! panel rendering core lives in exactly one place. See `docs/architecture.md`.
 
 pub mod alerts;
+pub mod app_icons;
+pub mod app_rules;
 #[cfg(windows)]
 pub mod authenticode;
 pub mod brand;

@@ -104,6 +104,9 @@ pub struct SettingsWindow {
     last_preview: settings::Settings,
     pub page: Page,
     pub error: Option<String>,
+    /// When click-through (applied at once) last changed — the footer
+    /// confirms it for a moment.
+    saved_at: Option<std::time::Instant>,
     /// Detected GPU adapter names for the Display page's GPU selector.
     gpu_names: Vec<String>,
 }
@@ -118,6 +121,7 @@ impl SettingsWindow {
             draft,
             page: Page::default(),
             error: None,
+            saved_at: None,
             gpu_names,
         }
     }
@@ -205,6 +209,16 @@ pub fn show(
                 if theme::dialog_btn_primary(ui, "Save").clicked() {
                     action_save = true;
                 }
+                let recent = state
+                    .lock_safe()
+                    .saved_at
+                    .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3));
+                if recent {
+                    ui.add_space(10.0);
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Saved");
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(500));
+                }
             });
         });
 
@@ -268,9 +282,11 @@ pub fn show(
                                 wallpaper_notice(ui, dc);
                             }
                             let gpu_names = st.gpu_names.clone();
-                            let draft = &mut st.draft;
+                            let SettingsWindow {
+                                draft, saved_at, ..
+                            } = &mut *st;
                             match page {
-                                Page::General => general_page(ui, dc, draft, dir.as_ref()),
+                                Page::General => general_page(ui, dc, draft),
                                 Page::Display => {
                                     display_page(ui, dc, draft, &applied_layer, &gpu_names)
                                 }
@@ -283,6 +299,7 @@ pub fn show(
                                     dir.as_ref(),
                                     dcomp_available,
                                     requests,
+                                    saved_at,
                                 ),
                                 Page::Notifications => notifications_page(ui, dc, draft, requests),
                             }
@@ -377,7 +394,7 @@ fn control_center_row(
     page: control::Page,
 ) {
     g.row(title, Some(subtitle), |ui| {
-        if theme::dialog_btn_secondary(ui, "Control Center", dc).clicked() {
+        if theme::dialog_btn_secondary(ui, "Open Control Center", dc).clicked() {
             *requests.lock_safe() = Some(OpenRequest::Control(page));
         }
     });
@@ -385,7 +402,7 @@ fn control_center_row(
 
 // ── General ───────────────────────────────────────────────────────────────────
 
-fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings, dir: &Path) {
+fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
     ui_kit::page_header(ui, dc, "General", "Start-up, the header and recordings.");
     ui_kit::group(ui, dc, None, None, |g| {
         g.row(
@@ -400,8 +417,9 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
             Some("Shown in the header panel; empty uses the detected model"),
             |ui| {
                 ui.add_sized(
-                    [ui_kit::CONTROL_W, 24.0],
+                    [ui_kit::CONTROL_W, ui_kit::CONTROL_H],
                     egui::TextEdit::singleline(&mut draft.model_name)
+                        .vertical_align(egui::Align::Center)
                         .hint_text("Detected automatically")
                         .text_color(dc.text),
                 );
@@ -412,7 +430,7 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
         ui,
         dc,
         Some("Session recording"),
-        Some("Start and stop a recording from the tray menu; browse past ones in Session History."),
+        Some("Start and stop a recording from the tray menu; browse past ones — and their files — in Session History."),
         |g| {
             g.row("Keep recordings for", None, |ui| {
                 let current = LOG_RETENTION_OPTIONS
@@ -424,11 +442,6 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
                         ui.selectable_value(&mut draft.log_retention_days, days, label);
                     }
                 });
-            });
-            g.row("Recordings and logs", None, |ui| {
-                if theme::dialog_btn_secondary(ui, "Open Folder", dc).clicked() {
-                    let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                }
             });
         },
     );
@@ -647,6 +660,7 @@ fn overlay_page(
     dir: &Path,
     dcomp_available: bool,
     requests: &OpenRequests,
+    saved_at: &mut Option<std::time::Instant>,
 ) {
     ui_kit::page_header(
         ui,
@@ -734,6 +748,7 @@ fn overlay_page(
                         );
                     }
                     reload.store(true, Ordering::Relaxed);
+                    *saved_at = Some(std::time::Instant::now());
                 }
             },
         );
@@ -864,4 +879,33 @@ pub fn send_notification(title: &str, message: &str, icon: NotifyIcon) {
 
 fn send_test_notification() {
     send_notification("RigStats", "Test notification", NotifyIcon::Info);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writing_the_draft_back_keeps_what_this_window_does_not_edit() {
+        // The live settings: wallpaper layer, click-through on, a look the
+        // Control Center set, and a profile's stored look.
+        let mut live = settings::Settings::default();
+        live.window_layer = "wallpaper".into();
+        live.overlay_click_through = true;
+        live.theme = "red".into();
+        live.overlay_enabled = true;
+        settings::switch_profile_look(&mut live, "gaming");
+        // A draft from when the dialog opened, with one change of its own.
+        let mut draft = settings::Settings::default();
+        draft.model_name = "My rig".into();
+
+        let written = live_preview(&draft, &live);
+        assert_eq!(written.model_name, "My rig", "the dialog's own change");
+        assert_eq!(written.window_layer, "wallpaper", "layer waits for Save");
+        assert!(written.overlay_click_through);
+        assert_eq!(written.theme, "red", "the look belongs to the profile");
+        assert!(written.overlay_enabled);
+        assert_eq!(written.look_profile.as_deref(), Some("gaming"));
+        assert!(written.profile_looks.contains_key("gaming"));
+    }
 }

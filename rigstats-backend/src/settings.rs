@@ -262,6 +262,10 @@ pub struct Settings {
     /// Id of the profile the current look belongs to.
     #[serde(default)]
     pub look_profile: Option<String>,
+    /// Programs that switch the Control Center profile while they run
+    /// (#307), checked in order; see `profile_rules`.
+    #[serde(default)]
+    pub app_rules: Vec<crate::profile_rules::AppRule>,
 
     // ---- Legacy migration shims (schema version 0) --------------------------
     // These fields existed in older settings files as eight flat values.
@@ -410,6 +414,7 @@ impl Default for Settings {
             overlay_enabled: false,
             profile_looks: HashMap::new(),
             look_profile: None,
+            app_rules: Vec::new(),
             warning_cpu_temp: None,
             critical_cpu_temp: None,
             warning_gpu_temp: None,

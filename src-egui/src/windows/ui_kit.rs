@@ -23,6 +23,9 @@ pub const ROW_H: f32 = 40.0;
 const ROW_H_SUB: f32 = 50.0;
 /// Width of dropdowns and other right-hand controls, so they line up.
 pub const CONTROL_W: f32 = 210.0;
+/// Height of every control in a row — buttons, dropdowns, text fields,
+/// segmented controls — so they line up.
+pub const CONTROL_H: f32 = 28.0;
 pub const SIDEBAR_W: f32 = 200.0;
 const CARD_RADIUS: u8 = 10;
 
@@ -167,7 +170,36 @@ impl Group<'_> {
 
     /// A row: `title` (and `subtitle`) left, `control` right-aligned.
     pub fn row(&mut self, title: &str, subtitle: Option<&str>, control: impl FnOnce(&mut Ui)) {
+        self.row_inner(None, title, subtitle, control);
+    }
+
+    /// A row led by a program's icon (a generic one when `icon` is None, so
+    /// rows line up).
+    pub fn row_icon(
+        &mut self,
+        icon: Option<&egui::TextureHandle>,
+        title: &str,
+        subtitle: Option<&str>,
+        control: impl FnOnce(&mut Ui),
+    ) {
+        self.row_inner(
+            Some(icon.map(egui::TextureHandle::id)),
+            title,
+            subtitle,
+            control,
+        );
+    }
+
+    fn row_inner(
+        &mut self,
+        icon: Option<Option<egui::TextureId>>,
+        title: &str,
+        subtitle: Option<&str>,
+        control: impl FnOnce(&mut Ui),
+    ) {
         self.divider();
+        // Room for the icon before the text.
+        let lead = if icon.is_some() { 34.0 } else { 0.0 };
         let dc = self.dc;
         let w = self.ui.available_width();
         // The text is laid out first, at the width left of a typical
@@ -187,7 +219,7 @@ impl Group<'_> {
             std::sync::Arc<egui::Galley>,
             Option<std::sync::Arc<egui::Galley>>,
         )| { t.0.size().y + t.1.as_ref().map_or(0.0, |g| g.size().y + 2.0) };
-        let estimate = texts(self.ui, (w - CONTROL_W - 16.0).max(80.0));
+        let estimate = texts(self.ui, (w - CONTROL_W - 16.0 - lead).max(80.0));
         let base = if subtitle.is_some() { ROW_H_SUB } else { ROW_H };
         let h = base.max(text_h(&estimate) + 16.0);
         self.ui
@@ -197,15 +229,32 @@ impl Group<'_> {
                 let row = ui.max_rect();
                 control(ui);
                 // What the control left, minus a gap.
-                let wrap = (ui.available_width() - 12.0).max(60.0);
+                let wrap = (ui.available_width() - 12.0 - lead).max(60.0);
                 let laid = texts(ui, wrap);
                 let mut y = row.center().y - text_h(&laid) / 2.0;
                 let (title, sub) = laid;
                 let title_h = title.size().y;
-                ui.painter().galley(pos2(row.left(), y), title, dc.title);
+                if let Some(icon) = icon {
+                    let r = Rect::from_center_size(
+                        pos2(row.left() + 12.0, row.center().y),
+                        vec2(24.0, 24.0),
+                    );
+                    match icon {
+                        Some(id) => {
+                            let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+                            ui.painter().image(id, r, uv, Color32::WHITE);
+                        }
+                        None => {
+                            ui.painter().rect_filled(r, CornerRadius::same(6), dc.inner);
+                            paint_glyph(ui.painter(), r.shrink(5.0), Icon::Rules, dc.muted);
+                        }
+                    }
+                }
+                let x = row.left() + lead;
+                ui.painter().galley(pos2(x, y), title, dc.title);
                 if let Some(sub) = sub {
                     y += title_h + 2.0;
-                    ui.painter().galley(pos2(row.left(), y), sub, dc.muted);
+                    ui.painter().galley(pos2(x, y), sub, dc.muted);
                 }
             });
     }
@@ -279,7 +328,7 @@ pub fn segmented<T: PartialEq + Clone>(
         })
         .fold(0.0_f32, f32::max)
         + 24.0;
-    let size = vec2(seg_w * options.len() as f32 + 4.0, 28.0);
+    let size = vec2(seg_w * options.len() as f32 + 4.0, CONTROL_H);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter().clone();
     let track = if dc.is_dark {
@@ -333,11 +382,28 @@ pub fn dropdown(
     selected: impl Into<egui::WidgetText>,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
-    egui::ComboBox::from_id_salt(id)
-        .width(CONTROL_W)
-        .selected_text(selected)
-        .show_ui(ui, add)
-        .response
+    combo(ui, id, CONTROL_W, selected, add)
+}
+
+/// A drop-down list of `width`, as tall as the other controls
+/// ([`CONTROL_H`]). Every drop-down goes through here.
+pub fn combo(
+    ui: &mut Ui,
+    id: impl std::hash::Hash,
+    width: f32,
+    selected: impl Into<egui::WidgetText>,
+    add: impl FnOnce(&mut Ui),
+) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = CONTROL_H;
+        egui::ComboBox::from_id_salt(id)
+            .width(width)
+            .height(320.0)
+            .selected_text(selected)
+            .show_ui(ui, add)
+            .response
+    })
+    .inner
 }
 
 /// A slider with its value shown to the right of it, as a percentage.
@@ -380,8 +446,9 @@ pub fn slider_pct(
 pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     let mut text = value.map(|v| v.to_string()).unwrap_or_default();
     let resp = ui.add_sized(
-        [48.0, 24.0],
+        [48.0, CONTROL_H],
         egui::TextEdit::singleline(&mut text)
+            .vertical_align(egui::Align::Center)
             .hint_text("—")
             .horizontal_align(Align::Center)
             .font(egui::TextStyle::Monospace),
@@ -805,6 +872,7 @@ pub enum Icon {
     Lighting,
     General,
     Display,
+    Rules,
     More,
     Plus,
     Chevron,
@@ -825,6 +893,7 @@ impl Icon {
             Icon::Lighting => Color32::from_rgb(255, 55, 95),
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
+            Icon::Rules => Color32::from_rgb(255, 159, 10),
             Icon::More | Icon::Plus | Icon::Chevron => Color32::from_rgb(142, 142, 147),
         }
     }
@@ -945,6 +1014,13 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
             p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
             p.line_segment([at(0.0, 0.18), at(0.0, 0.34)], stroke);
             p.line_segment([at(-0.2, 0.36), at(0.2, 0.36)], stroke);
+        }
+        Icon::Rules => {
+            // A program window with a "play" mark: starts with an app.
+            let r = Rect::from_center_size(c, vec2(s * 0.84, s * 0.7));
+            p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
+            p.line_segment([at(-0.42, -0.18), at(0.42, -0.18)], stroke);
+            p.add(fill(vec![at(-0.1, -0.04), at(0.16, 0.12), at(-0.1, 0.28)]));
         }
         Icon::More => {
             for dx in [-0.3, 0.0, 0.3] {
