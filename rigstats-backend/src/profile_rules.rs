@@ -21,9 +21,11 @@
 //! - The profile goes back [`RELEASE_SECS`] after the program closes (or,
 //!   for a foreground-only rule, loses focus), so a quick restart or an
 //!   Alt+Tab doesn't flip profiles back and forth.
-//! - A profile picked by hand while a rule is active pauses the rules until
-//!   none of their programs runs — the user's choice wins, and nothing is
-//!   switched behind their back.
+//! - A profile picked by hand while a rule is active sets aside the rule
+//!   programs running at that moment until they close — the user's choice
+//!   wins over them, and nothing switches back behind their back. A program
+//!   started after the pick is new and switches as usual; when it closes,
+//!   the hand-picked profile comes back.
 
 use serde::{Deserialize, Serialize};
 
@@ -99,8 +101,8 @@ pub enum RuleStatus {
     Idle,
     /// `exe` runs, so `profile_id` is in use.
     Active { exe: String, profile_id: String },
-    /// A profile was picked by hand while `exe` ran: rules wait until none of
-    /// their programs runs.
+    /// A profile was picked by hand while `exe` ran: it is set aside until
+    /// it closes (a program started later still switches).
     Paused { exe: String },
 }
 
@@ -118,22 +120,22 @@ struct Engaged {
 #[derive(Debug, Default)]
 pub struct RuleEngine {
     engaged: Option<Engaged>,
-    paused: Option<String>,
+    /// Rule programs (lower case) that ran when a profile was picked by
+    /// hand: ignored until they stop running.
+    set_aside: Vec<String>,
     /// A switch we asked for and haven't seen confirmed: (profile, asked at).
     pending: Option<(String, u64)>,
 }
 
 impl RuleEngine {
     pub fn status(&self) -> RuleStatus {
-        if let Some(exe) = &self.paused {
-            return RuleStatus::Paused { exe: exe.clone() };
-        }
-        match &self.engaged {
-            Some(e) => RuleStatus::Active {
+        match (&self.engaged, self.set_aside.first()) {
+            (Some(e), _) => RuleStatus::Active {
                 exe: e.exe.clone(),
                 profile_id: e.profile_id.clone(),
             },
-            None => RuleStatus::Idle,
+            (None, Some(exe)) => RuleStatus::Paused { exe: exe.clone() },
+            (None, None) => RuleStatus::Idle,
         }
     }
 
@@ -161,20 +163,35 @@ impl RuleEngine {
                 return None;
             }
         }
-        // Someone picked another profile while a rule was active: pause.
+        // Someone picked another profile while a rule was active: the rule
+        // programs running now are overruled until they close.
         if let (Some(e), Some(active)) = (&self.engaged, active) {
             if active != e.profile_id {
-                self.paused = Some(e.exe.clone());
+                let mut aside: Vec<String> = matching(rules, profiles, snap)
+                    .map(|(r, _)| r.exe.to_ascii_lowercase())
+                    .collect();
+                if !aside.contains(&e.exe) {
+                    aside.push(e.exe.clone());
+                }
+                self.set_aside = aside;
                 self.engaged = None;
             }
         }
+        // A set-aside program counts again once it has stopped running.
+        self.set_aside
+            .retain(|exe| snap.running.iter().any(|p| p.exe.eq_ignore_ascii_case(exe)));
+        let live: Vec<AppRule> = rules
+            .iter()
+            .filter(|r| {
+                !self
+                    .set_aside
+                    .iter()
+                    .any(|a| a.eq_ignore_ascii_case(&r.exe))
+            })
+            .cloned()
+            .collect();
+        let rules = &live[..];
         let best = best_match(rules, profiles, snap);
-        if self.paused.is_some() {
-            if matching(rules, profiles, snap).next().is_some() {
-                return None;
-            }
-            self.paused = None;
-        }
         // Whether the program that decided so far still counts: if it does,
         // a different winner (started later, or brought to the front) takes
         // over at once; if it doesn't, the grace period runs first, whatever
@@ -686,6 +703,98 @@ mod tests {
             None
         );
         assert_eq!(e.status(), RuleStatus::Idle);
+    }
+
+    #[test]
+    fn a_program_started_after_a_hand_pick_still_switches() {
+        // The owner's case: Claude (always open) → Silent, then Balanced
+        // picked by hand, then World of Warcraft (→ Gaming) started.
+        let rules = [rule("claude.exe", "silent"), rule("wowb.exe", "gaming")];
+        let mut e = RuleEngine::default();
+        let claude = ("claude.exe", 100);
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("balanced"),
+            &snap(110, &[claude], None),
+        );
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("silent"),
+            &snap(111, &[claude], None),
+        );
+        // Balanced by hand: Claude is set aside.
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(200, &[claude], None)
+            ),
+            None
+        );
+        assert!(matches!(e.status(), RuleStatus::Paused { .. }));
+        // The game starts and settles: Gaming.
+        let game = ("wowb.exe", 300);
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(306, &[claude, game], None)
+            ),
+            Some("gaming".into())
+        );
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("gaming"),
+            &snap(307, &[claude, game], None),
+        );
+        // The game closes: back to the hand-picked Balanced, not Silent —
+        // Claude is still set aside.
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("gaming"),
+            &snap(400, &[claude], None),
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("gaming"),
+                &snap(406, &[claude], None)
+            ),
+            Some("balanced".into())
+        );
+        e.tick(
+            &rules,
+            PROFILES,
+            Some("balanced"),
+            &snap(407, &[claude], None),
+        );
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(420, &[claude], None)
+            ),
+            None
+        );
+        // Claude closed and opened again: it counts again.
+        e.tick(&rules, PROFILES, Some("balanced"), &snap(500, &[], None));
+        assert_eq!(
+            e.tick(
+                &rules,
+                PROFILES,
+                Some("balanced"),
+                &snap(510, &[("claude.exe", 503)], None)
+            ),
+            Some("silent".into())
+        );
     }
 
     #[test]
