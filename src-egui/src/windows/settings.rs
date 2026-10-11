@@ -145,6 +145,7 @@ fn carry_live(dst: &mut settings::Settings, live: &settings::Settings) {
     dst.look_profile = live.look_profile.clone();
     dst.app_rules = live.app_rules.clone();
     dst.desktop_background_before = live.desktop_background_before.clone();
+    dst.wallpaper_engine_before = live.wallpaper_engine_before.clone();
 }
 
 /// The draft as the app should run it now: the window layer stays what is
@@ -912,6 +913,10 @@ mod tests {
         };
         live.desktop_background = Some(own.clone());
         live.desktop_background_before = Some(own);
+        live.wallpaper_engine_before = Some(vec![rigstats_backend::wallpaper_engine::WeSlot {
+            monitor: 0,
+            file: r"D:\we\project.json".into(),
+        }]);
         // A draft from when the dialog opened, with one change of its own.
         let mut draft = settings::Settings::default();
         draft.model_name = "My rig".into();
@@ -932,6 +937,10 @@ mod tests {
         assert_eq!(
             written.desktop_background_before, live.desktop_background_before,
             "Windows' own background, kept by the app"
+        );
+        assert_eq!(
+            written.wallpaper_engine_before,
+            live.wallpaper_engine_before
         );
     }
 }

@@ -2318,7 +2318,10 @@ fn overview_page(
         Page::Desktop,
         Icon::Desktop,
         "Desktop",
-        profile_look::desktop_summary(look.desktop_background.as_ref()),
+        profile_look::desktop_summary(
+            look.desktop_background.as_ref(),
+            look.wallpaper_engine.as_ref(),
+        ),
         None,
     )];
     let hardware_tiles = [

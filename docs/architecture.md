@@ -448,8 +448,34 @@ several quick changes. The Desktop page (its own sidebar section, "Windows") sho
 content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
 own), Windows' own background included (the kept one, else what Windows
 shows now), and lists the connected screens left to right. The wallpaper host doesn't
-touch it. Step 2 of #306
-(Wallpaper Engine) is still open.
+touch it.
+
+Wallpaper Engine per profile (#306, step 2): RIGStats doesn't draw live
+wallpapers itself — that would mean a video player, a web renderer and a scene
+engine — it drives Wallpaper Engine through its documented command line
+(`wallpaper64.exe -control openWallpaper -file <project.json> -monitor N`,
+`pause`, `play`; help.wallpaperengine.io/en/functionality/cli.html), which
+only reaches a running instance. `ProfileLook::wallpaper_engine` is `None`
+(leave it alone), `Pause` (frees the graphics card — for Gaming) or `Show`
+(a `project.json` per Windows monitor id). `rigstats-backend/src/wallpaper_engine.rs`:
+`find` (`HKCU\Software\WallpaperEngine\installPath`), `Install::library` (the
+Workshop folder `steamapps\workshop\content\431960` in the Steam library
+Wallpaper Engine sits in, plus `projects\myprojects`; title, type and preview
+from each `project.json`), `Install::config` (`config.json`: `user.monitormap`
+maps Windows' monitor id — written with `/` — to Wallpaper Engine's screen
+number, and `wallpaperconfig.selectedwallpapers.MonitorN` is what shows now;
+Wallpaper Engine rewrites it on every change), `is_running` (process list).
+The pure `step` mirrors the Windows background's: the first time a profile
+pauses or shows wallpapers, Wallpaper Engine's own are kept in
+`Settings::wallpaper_engine_before`; a profile that leaves it alone resumes it and
+reopens its own. `prune` drops commands that change nothing (a screen that
+already shows the wallpaper isn't reloaded, `play` isn't sent while playing).
+The main app's `sync_wallpaper_engine` checks every 5 s whether it is installed
+and running and applies the profile's choice again when it starts (after
+RIGStats at boot, or restarted); the commands run on the same worker thread as
+the Windows background. The Desktop page's "Wallpaper Engine" group (only when
+it is installed): As it is / Wallpapers / Paused, and per screen the wallpaper
+from the library with its preview (jpg or gif).
 
 Threshold semantics differ by key:
 

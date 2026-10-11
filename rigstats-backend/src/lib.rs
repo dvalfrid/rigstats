@@ -10,3 +10,4 @@ pub mod pipe_server;
 pub mod profile_rules;
 pub mod settings;
 pub mod stats;
+pub mod wallpaper_engine;

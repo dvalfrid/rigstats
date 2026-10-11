@@ -16,8 +16,9 @@ use crate::theme::{self, AppTheme, DialogColors};
 use crate::windows::settings::{self as settings_win, ALL_PANELS};
 use crate::windows::ui_kit::{self, Group, C_CRIT, C_WARN};
 use crate::windows::{OpenRequest, OpenRequests};
-use rigstats_backend::desktop_background::{self, DesktopBackground, Fit, Screen};
+use rigstats_backend::desktop_background::{self, DesktopBackground, Fit, Screen, ScreenPicture};
 use rigstats_backend::settings::{self, ProfileLook, Settings};
+use rigstats_backend::wallpaper_engine::{self, WeChoice};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Receiver;
@@ -110,6 +111,27 @@ struct BackgroundPicker {
     /// Windows' own background, for its preview.
     own: Option<DesktopBackground>,
     per_screen: bool,
+    /// Wallpaper Engine, when it is installed.
+    we: Option<WeView>,
+    we_library_at: Option<Instant>,
+}
+
+/// What the Wallpaper Engine group shows: the install, the user's
+/// wallpapers, its screen map and whether it runs.
+#[derive(Debug)]
+struct WeView {
+    install: wallpaper_engine::Install,
+    library: Vec<wallpaper_engine::Wallpaper>,
+    config: wallpaper_engine::Config,
+    running: bool,
+}
+
+impl WeView {
+    fn wallpaper(&self, file: &str) -> Option<&wallpaper_engine::Wallpaper> {
+        self.library
+            .iter()
+            .find(|w| w.file.eq_ignore_ascii_case(file))
+    }
 }
 
 impl BackgroundPicker {
@@ -124,7 +146,32 @@ impl BackgroundPicker {
             self.screens = desktop_background::screens();
             self.own = kept.cloned().or_else(desktop_background::current);
             self.screens_at = Some(Instant::now());
+            self.refresh_wallpaper_engine();
         }
+    }
+
+    /// Wallpaper Engine's state with the screens; its library less often.
+    fn refresh_wallpaper_engine(&mut self) {
+        let Some(install) = wallpaper_engine::find() else {
+            self.we = None;
+            return;
+        };
+        let stale = self
+            .we_library_at
+            .map_or(true, |t| t.elapsed() > Duration::from_secs(15));
+        let library = match self.we.take() {
+            Some(old) if !stale && old.install == install => old.library,
+            _ => {
+                self.we_library_at = Some(Instant::now());
+                install.library()
+            }
+        };
+        self.we = Some(WeView {
+            config: install.config().unwrap_or_default(),
+            running: wallpaper_engine::is_running(),
+            library,
+            install,
+        });
     }
 
     /// The main screen's id, else the first one's.
@@ -313,7 +360,7 @@ pub fn desktop_page(
         ui,
         dc,
         "Desktop",
-        &format!("The Windows desktop background in {profile}."),
+        &format!("The desktop background in {profile}."),
     );
     let Some(look) = editor.look.as_mut() else {
         return;
@@ -321,15 +368,146 @@ pub fn desktop_page(
     let kept = link.settings.lock_safe().desktop_background_before.clone();
     editor.background.refresh(kept.as_ref());
     desktop_background_group(ui, dc, look, &mut editor.background);
+    if editor.background.we.is_some() {
+        wallpaper_engine_group(ui, dc, look, &mut editor.background);
+    }
     editor.preview(link);
 }
 
+/// What a profile does with Wallpaper Engine, as the segmented control
+/// offers it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WeMode {
+    Leave,
+    Show,
+    Pause,
+}
+
+/// The Wallpaper Engine group (#306): leave it alone, show a wallpaper per
+/// screen, or pause it.
+fn wallpaper_engine_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    look: &mut ProfileLook,
+    picker: &mut BackgroundPicker,
+) {
+    let ctx = ui.ctx().clone();
+    let Some(we) = picker.we.as_ref() else {
+        return;
+    };
+    let mut mode = match &look.wallpaper_engine {
+        None => WeMode::Leave,
+        Some(WeChoice::Show { .. }) => WeMode::Show,
+        Some(WeChoice::Pause) => WeMode::Pause,
+    };
+    let screens = &picker.screens;
+    let pictures = &mut picker.pictures;
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Wallpaper Engine"),
+        Some("While it shows a wallpaper, Wallpaper Engine covers the Windows background. Paused frees the graphics card — handy for gaming."),
+        |g| {
+            let sub = if we.running {
+                "Live wallpapers from your Wallpaper Engine library"
+            } else {
+                "Not running — start Wallpaper Engine and this profile's choice applies"
+            };
+            g.row("Wallpaper Engine", Some(sub), |ui| {
+                ui_kit::segmented(
+                    ui,
+                    dc,
+                    &mut mode,
+                    &[
+                        (WeMode::Leave, "As it is"),
+                        (WeMode::Show, "Wallpapers"),
+                        (WeMode::Pause, "Paused"),
+                    ],
+                );
+            });
+            // A new choice starts from what Wallpaper Engine shows now.
+            look.wallpaper_engine = match (mode, look.wallpaper_engine.take()) {
+                (WeMode::Leave, _) => None,
+                (WeMode::Pause, _) => Some(WeChoice::Pause),
+                (WeMode::Show, Some(show @ WeChoice::Show { .. })) => Some(show),
+                (WeMode::Show, _) => Some(WeChoice::Show {
+                    screens: screens
+                        .iter()
+                        .filter_map(|s| {
+                            let n = we.config.monitor_of(&s.id)?;
+                            let slot = we.config.selected.iter().find(|w| w.monitor == n)?;
+                            Some(ScreenPicture {
+                                screen: s.id.clone(),
+                                path: slot.file.clone(),
+                            })
+                        })
+                        .collect(),
+                }),
+            };
+            let Some(WeChoice::Show { screens: chosen }) = look.wallpaper_engine.as_mut() else {
+                return;
+            };
+            for (i, screen) in screens.iter().enumerate() {
+                let known = we.config.monitor_of(&screen.id).is_some();
+                let current = chosen
+                    .iter()
+                    .find(|c| c.screen == screen.id)
+                    .map(|c| c.path.clone());
+                let wallpaper = current.as_deref().and_then(|f| we.wallpaper(f));
+                let preview = wallpaper
+                    .and_then(|w| w.preview.as_deref())
+                    .and_then(|p| pictures.get(&ctx, p));
+                let title = if screen.is_main() {
+                    format!("Screen {} (main)", i + 1)
+                } else {
+                    format!("Screen {}", i + 1)
+                };
+                let sub = match (known, wallpaper, &current) {
+                    (false, _, _) => "Wallpaper Engine doesn't know this screen yet".to_owned(),
+                    (true, Some(w), _) => w.title.clone(),
+                    (true, None, Some(f)) => file_name(f),
+                    (true, None, None) => "Left as it is".to_owned(),
+                };
+                let mut pick: Option<String> = None;
+                g.row_picture(preview.as_ref(), &title, Some(&sub), |ui| {
+                    if !known {
+                        return;
+                    }
+                    let shown = wallpaper.map_or("Choose…", |w| w.title.as_str());
+                    ui_kit::combo(ui, ("we_screen", i), ui_kit::CONTROL_W, shown, |ui| {
+                        for w in &we.library {
+                            let on = current.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(&w.file));
+                            if ui.selectable_label(on, &w.title).clicked() {
+                                pick = Some(w.file.clone());
+                            }
+                        }
+                    });
+                });
+                if let Some(file) = pick {
+                    match chosen.iter_mut().find(|c| c.screen == screen.id) {
+                        Some(c) => c.path = file,
+                        None => chosen.push(ScreenPicture {
+                            screen: screen.id.clone(),
+                            path: file,
+                        }),
+                    }
+                }
+            }
+        },
+    );
+}
+
 /// What the Overview's Desktop tile says.
-pub fn desktop_summary(bg: Option<&DesktopBackground>) -> String {
-    match bg {
+pub fn desktop_summary(bg: Option<&DesktopBackground>, we: Option<&WeChoice>) -> String {
+    let picture = match bg {
         None => "Windows' own background".to_owned(),
         Some(b) if b.screens.is_empty() => file_name(&b.path),
         Some(b) => format!("One per screen · {} pictures", b.screens.len()),
+    };
+    match we {
+        None => picture,
+        Some(WeChoice::Pause) => format!("{picture} · Wallpaper Engine paused"),
+        Some(WeChoice::Show { .. }) => "Wallpaper Engine".to_owned(),
     }
 }
 
@@ -807,13 +985,29 @@ mod tests {
 
     #[test]
     fn the_desktop_tile_names_the_picture_or_counts_them() {
-        assert_eq!(desktop_summary(None), "Windows' own background");
+        assert_eq!(desktop_summary(None, None), "Windows' own background");
+        assert_eq!(
+            desktop_summary(None, Some(&WeChoice::Pause)),
+            "Windows' own background · Wallpaper Engine paused"
+        );
+        assert_eq!(
+            desktop_summary(
+                None,
+                Some(&WeChoice::Show {
+                    screens: Vec::new()
+                })
+            ),
+            "Wallpaper Engine"
+        );
         let ids = vec!["left".to_owned(), "right".to_owned()];
         let mut bg = None;
         choose_picture(&mut bg, None, r"C:\pics\calm.jpg".into(), &ids);
-        assert_eq!(desktop_summary(bg.as_ref()), "calm.jpg");
+        assert_eq!(desktop_summary(bg.as_ref(), None), "calm.jpg");
         choose_picture(&mut bg, Some("right"), "b.jpg".into(), &ids);
-        assert_eq!(desktop_summary(bg.as_ref()), "One per screen · 2 pictures");
+        assert_eq!(
+            desktop_summary(bg.as_ref(), None),
+            "One per screen · 2 pictures"
+        );
     }
 
     #[test]
