@@ -1,6 +1,8 @@
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
-use crate::update_check::{self, UpdateInfo, VerifiedInstaller, BUNDLED_CHANGELOG};
+use crate::update_check::{
+    self, UpdateInfo, VerifiedInstaller, BUNDLED_CHANGELOG, BUNDLED_HIGHLIGHTS,
+};
 use crate::windows::ui_kit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -74,13 +76,13 @@ impl UpdaterState {
             let entries = match &self.status {
                 UpdateStatus::Ready { info, .. } => {
                     let combined = if info.notes.is_empty() {
-                        BUNDLED_CHANGELOG.to_string()
+                        bundled_notes()
                     } else {
-                        format!("{}\n\n{BUNDLED_CHANGELOG}", info.notes)
+                        format!("{}\n\n{}", info.notes, bundled_notes())
                     };
                     parse_notes(&combined)
                 }
-                _ => parse_notes(BUNDLED_CHANGELOG),
+                _ => parse_notes(&bundled_notes()),
             };
             self.notes_cache = Some((key, entries));
         }
@@ -92,6 +94,8 @@ impl UpdaterState {
 
 #[derive(Clone, Copy, PartialEq)]
 enum SectionKind {
+    /// The release's highlights for users (`release-highlights.md`), first.
+    Highlights,
     Features,
     BugFixes,
     Other,
@@ -146,7 +150,9 @@ fn parse_notes(markdown: &str) -> Vec<ReleaseEntry> {
         } else if line.starts_with("### ") {
             flush_section(&mut cur_entry, &mut cur_section);
             let title = line.trim_start_matches('#').trim().to_string();
-            let kind = if title.eq_ignore_ascii_case("features") {
+            let kind = if title.eq_ignore_ascii_case("highlights") {
+                SectionKind::Highlights
+            } else if title.eq_ignore_ascii_case("features") {
                 SectionKind::Features
             } else if title.to_lowercase().contains("bug fix") {
                 SectionKind::BugFixes
@@ -168,7 +174,11 @@ fn parse_notes(markdown: &str) -> Vec<ReleaseEntry> {
             }
             if let Some(sec) = cur_section.as_mut() {
                 let (text, hash) = extract_hash(raw);
-                let (scope, text) = split_scope(&text);
+                let (scope, text) = if sec.kind == SectionKind::Highlights {
+                    split_title(&text)
+                } else {
+                    split_scope(&text)
+                };
                 sec.items.push(NoteItem { scope, text, hash });
             }
         }
@@ -262,6 +272,29 @@ fn strip_issue_refs(s: &str) -> String {
 
 /// Splits release-please's leading `**scope:** ` off an item, so it renders
 /// as a bold label instead of literal asterisks.
+/// A highlight's bold title off the front: `**Title** — what it does`
+/// (also `-` or `:` after the title).
+fn split_title(text: &str) -> (Option<String>, String) {
+    text.strip_prefix("**")
+        .and_then(|rest| rest.split_once("**"))
+        .filter(|(title, _)| !title.is_empty())
+        .map_or_else(
+            || (None, text.to_owned()),
+            |(title, rest)| {
+                let rest = rest
+                    .trim_start()
+                    .trim_start_matches(['—', '–', '-', ':'])
+                    .trim_start();
+                (Some(title.to_owned()), rest.to_owned())
+            },
+        )
+}
+
+/// The bundled changelog with this version's highlights first.
+fn bundled_notes() -> String {
+    update_check::with_highlights(BUNDLED_CHANGELOG, BUNDLED_HIGHLIGHTS)
+}
+
 fn split_scope(text: &str) -> (Option<String>, String) {
     text.strip_prefix("**")
         .and_then(|rest| rest.split_once(":**"))
@@ -340,9 +373,12 @@ const C_OTHER_SECTION: egui::Color32 = egui::Color32::from_gray(128);
 const C_BAR_FEAT: egui::Color32 = egui::Color32::from_rgb(50, 136, 70);
 const C_BAR_FIX: egui::Color32 = egui::Color32::from_rgb(162, 130, 48);
 const C_BAR_OTHER: egui::Color32 = egui::Color32::from_rgb(36, 132, 158);
+const C_HIGHLIGHTS: egui::Color32 = egui::Color32::from_rgb(0, 180, 216);
+const C_BAR_HIGHLIGHTS: egui::Color32 = egui::Color32::from_rgb(0, 150, 186);
 
 fn section_color(kind: SectionKind) -> egui::Color32 {
     match kind {
+        SectionKind::Highlights => C_HIGHLIGHTS,
         SectionKind::Features => C_FEATURES,
         SectionKind::BugFixes => C_BUG_FIXES,
         SectionKind::Other => C_OTHER_SECTION,
@@ -351,6 +387,7 @@ fn section_color(kind: SectionKind) -> egui::Color32 {
 
 fn bar_color(kind: SectionKind) -> egui::Color32 {
     match kind {
+        SectionKind::Highlights => C_BAR_HIGHLIGHTS,
         SectionKind::Features => C_BAR_FEAT,
         SectionKind::BugFixes => C_BAR_FIX,
         SectionKind::Other => C_BAR_OTHER,
@@ -392,7 +429,7 @@ fn render_notes(ui: &mut egui::Ui, dc: &DialogColors, entries: &[ReleaseEntry]) 
             );
 
             for item in &section.items {
-                render_item(ui, dc, item, bar_color(section.kind));
+                render_item(ui, dc, item, section.kind);
             }
             ui.add_space(2.0);
         }
@@ -401,7 +438,8 @@ fn render_notes(ui: &mut egui::Ui, dc: &DialogColors, entries: &[ReleaseEntry]) 
     }
 }
 
-fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui::Color32) {
+fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, kind: SectionKind) {
+    let bar = bar_color(kind);
     let bar_w = 3.0;
     let gap = 6.0;
     let text_w = (ui.available_width() - bar_w - gap - 4.0).max(10.0);
@@ -417,8 +455,14 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, bar: egui:
                 ui.set_max_width(text_w);
 
                 if let Some(scope) = &item.scope {
+                    // A highlight's title reads "Title — text", a scope "gpu: text".
+                    let label = if kind == SectionKind::Highlights {
+                        format!("{scope} —")
+                    } else {
+                        format!("{scope}:")
+                    };
                     ui.label(
-                        egui::RichText::new(format!("{scope}:"))
+                        egui::RichText::new(label)
                             .strong()
                             .color(dc.title)
                             .font(egui::FontId::proportional(12.0)),
@@ -676,6 +720,40 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn highlights_parse_first_with_their_titles() {
+        let notes = parse_notes(&update_check::with_highlights(
+            "## [1.48.0](https://x) (2026-11-01)\n\n### Features\n\n* **profiles:** a feature ([abc1234](https://x/c))\n",
+            "# 1.48.0\n- **Desktop per profile** — a picture of its own.\n",
+        ));
+        let sections = &notes[0].sections;
+        assert!(sections[0].kind == SectionKind::Highlights);
+        assert_eq!(sections[0].title, "Highlights");
+        let item = &sections[0].items[0];
+        assert_eq!(item.scope.as_deref(), Some("Desktop per profile"));
+        assert_eq!(item.text, "a picture of its own.");
+        assert!(sections[1].kind == SectionKind::Features);
+    }
+
+    #[test]
+    fn split_title_takes_the_bold_title_and_its_dash() {
+        assert_eq!(
+            split_title("**Wallpaper Engine** — paused while you game"),
+            (
+                Some("Wallpaper Engine".into()),
+                "paused while you game".into()
+            )
+        );
+        assert_eq!(
+            split_title("**App rules**: switch by themselves"),
+            (Some("App rules".into()), "switch by themselves".into())
+        );
+        assert_eq!(
+            split_title("plain highlight"),
+            (None, "plain highlight".into())
+        );
+    }
 
     #[test]
     fn split_scope_takes_the_bold_scope_off_the_front() {

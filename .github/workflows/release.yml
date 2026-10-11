@@ -149,6 +149,9 @@ jobs:
           $escapedVer  = [regex]::Escape($version)
           $clMatch     = [regex]::Match($changelogMd, "(?ms)^(## \[$escapedVer\].+?)(?=^## \[|\z)")
           $notes       = if ($clMatch.Success) { $clMatch.Value.Trim() } else { "See ${repoUrl}/releases/tag/$env:RELEASE_TAG" }
+          # The release's highlights (release-highlights.md), first — only a
+          # list for this version counts (see docs/release.md).
+          $notes = (& tools\release-highlights.ps1 -Version $version -Notes $notes) -join "`n"
 
           $manifest = [ordered]@{
             version  = $version
@@ -173,6 +176,22 @@ jobs:
           files: |
             target\release\RIGStats_*_x64-setup.exe
             latest.json
+
+      # The highlights above the text release-please wrote — only a list for
+      # this version (release-highlights.md); otherwise nothing changes.
+      - name: Put the release highlights on the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = ($env:RELEASE_TAG -replace '^v', '')
+          $highlights = (& tools\release-highlights.ps1 -Version $version -Body) -join "`n"
+          if (-not $highlights) { Write-Host "No highlights for $version"; exit 0 }
+          $generated = (gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json body --jq .body) -join "`n"
+          if ($generated -match '(?m)^## Highlights') { Write-Host "Highlights already on the release"; exit 0 }
+          Set-Content notes.md -Value ($highlights + "`n" + $generated) -Encoding utf8NoBOM
+          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --notes-file notes.md
+          Write-Host "Highlights added to $env:RELEASE_TAG"
 
       # Dispatched, not chained with `workflow_run`: this run was started with
       # GITHUB_TOKEN, and GitHub starts no workflow from a GITHUB_TOKEN-caused

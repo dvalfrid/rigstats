@@ -244,34 +244,37 @@ Leave the "Use workflow from" dropdown on `main`.
    sections, the dependency versions it names), the website's text and
    screenshots (`assets/*.png`, copied to the site when it is deployed), and
    `docs/troubleshooting.md` for every new feature that can go wrong.
-6. **`winget: hold`?** Only when testers should try it first (see
+6. **Highlights:** write `release-highlights.md` for the version the release
+   PR will publish: a few lines for users, `- **Title** — what it does for
+   you`, under `# <version>` (the file's comment has an example). The big
+   features, anything optional, and where to report a problem if something new
+   can go wrong. The Release workflow (`tools/release-highlights.ps1`) puts
+   them first in `latest.json`'s notes, so the app's Updates window shows them
+   for the update, and above the generated text on the GitHub Release. The
+   release build includes them, so the new version's "What's new" shows them
+   too (`update_check::with_highlights`). Only a list for the version being
+   released counts: last release's list is ignored, and without one nothing is
+   added.
+7. **`winget: hold`?** Only when testers should try it first (see
    [Winget](#winget)).
 
 **After merging it:**
 
-7. **Wait for the Release workflow** until the installer and `latest.json` are
-   on the release.
-8. **The release text on GitHub.** `CHANGELOG.md` (written by release-please,
-   built into the app's "What's new") and the GitHub Release's text are two
-   different things. The release text can be edited at any time without
-   touching the tag, the code or the installer. Put a short **Highlights**
-   section, written for users, above the generated list: the big features,
-   anything optional, and where to report a problem (a diagnostics ZIP from
-   Status → Collect Diagnostics…). Either use **Edit release** on the release
-   page, or:
-
-   ```powershell
-   gh release view vX.Y.Z --json body --jq .body > generated.md
-   Get-Content highlights.md, generated.md | Set-Content notes.md
-   gh release edit vX.Y.Z --notes-file notes.md
-   ```
-
-   The upload step in `release.yml` only adds files, so it never overwrites the
+8. **Wait for the Release workflow** until the installer and `latest.json` are
+   on the release, and check that the highlights are on top of the release
    text.
 9. **The signed installer** — the Control Center check in the manual checklist,
    which only the released installer can show.
 10. **Screenshots that show a version** (the website's Status screenshot names
     the built-in dependency versions): retake them from the installed release.
+
+**Fixing the release text later:** `CHANGELOG.md` (written by release-please,
+built into the app) and the GitHub Release's text are two different things. The
+release text can be edited at any time, either with **Edit release** on the
+release page or with `gh release edit vX.Y.Z --notes-file notes.md`, without
+touching the tag, the code or the installer. The app's Updates window doesn't
+read it, though: what users see there is fixed when the release is built, so
+the highlights belong in `release-highlights.md` before the release.
 
 ## Commit Style
 

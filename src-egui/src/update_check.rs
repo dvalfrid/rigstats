@@ -24,6 +24,72 @@ const FILE_SHARE_READ: u32 = 0x1;
 /// Full version history bundled at compile time from CHANGELOG.md.
 pub const BUNDLED_CHANGELOG: &str = include_str!("../../CHANGELOG.md");
 
+/// The release's highlights, written for users before the release
+/// (`release-highlights.md`, see "Release routine" in docs/release.md).
+pub const BUNDLED_HIGHLIGHTS: &str = include_str!("../../release-highlights.md");
+
+/// The highlights file's version and its item lines (`- …`), or `None`
+/// when it has neither. HTML comments (the file's instructions and example)
+/// are skipped.
+pub fn parse_highlights(text: &str) -> Option<(String, Vec<String>)> {
+    let mut rest = text;
+    let mut visible = String::new();
+    while let Some(start) = rest.find("<!--") {
+        visible.push_str(&rest[..start]);
+        rest = rest[start..]
+            .find("-->")
+            .map_or("", |end| &rest[start + end + 3..]);
+    }
+    visible.push_str(rest);
+    let version = visible
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("# "))?
+        .trim()
+        .trim_start_matches('v')
+        .to_owned();
+    let items: Vec<String> = visible
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("- "))
+        .map(str::to_owned)
+        .collect();
+    (!version.is_empty() && !items.is_empty()).then_some((version, items))
+}
+
+/// `changelog` with a `### Highlights` section first under the heading of
+/// the version `highlights` is for. Unchanged when that version isn't in
+/// it, so an old highlights file never shows up under a new release. The
+/// Release workflow does the same for `latest.json`'s notes.
+pub fn with_highlights(changelog: &str, highlights: &str) -> String {
+    let Some((version, items)) = parse_highlights(highlights) else {
+        return changelog.to_owned();
+    };
+    let is_heading = |line: &str| {
+        line.strip_prefix("## ").is_some_and(|h| {
+            let h = h.trim_start_matches('[').trim_start_matches('v');
+            h.strip_prefix(version.as_str()).is_some_and(|after| {
+                after.is_empty()
+                    || !after.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '.')
+            })
+        })
+    };
+    let mut out = String::with_capacity(changelog.len() + 512);
+    let mut done = false;
+    for line in changelog.lines() {
+        out.push_str(line);
+        out.push('\n');
+        if !done && is_heading(line.trim()) {
+            out.push_str("\n### Highlights\n\n");
+            for item in &items {
+                out.push_str(item);
+                out.push('\n');
+            }
+            done = true;
+        }
+    }
+    out
+}
+
 #[derive(Debug, Deserialize)]
 struct LatestManifest {
     version: String,
@@ -451,5 +517,82 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"installer");
         drop(lock);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    const HIGHLIGHTS: &str = "<!--
+Write them under the version:
+# 9.9.9
+- **Not this** — the example in the comment
+-->
+# 1.48.0
+- **Desktop per profile** — a picture of its own.
+- **Wallpaper Engine** — paused while you game.
+";
+
+    const CHANGELOG: &str = "# Changelog
+
+## [1.48.0](https://x/compare/v1.47.0...v1.48.0) (2026-11-01)
+
+
+### Features
+
+* **profiles:** something ([abc1234](https://x/commit/abc1234))
+
+## [1.47.0](https://x) (2026-10-11)
+
+### Features
+
+* **profiles:** older
+";
+
+    #[test]
+    fn highlights_come_from_outside_the_comment() {
+        let (version, items) = parse_highlights(HIGHLIGHTS).unwrap();
+        assert_eq!(version, "1.48.0");
+        assert_eq!(
+            items,
+            [
+                "- **Desktop per profile** — a picture of its own.",
+                "- **Wallpaper Engine** — paused while you game."
+            ]
+        );
+    }
+
+    #[test]
+    fn the_shipped_file_has_only_its_instructions() {
+        // The repo's file between releases: nothing to show.
+        assert_eq!(parse_highlights(BUNDLED_HIGHLIGHTS), None);
+    }
+
+    #[test]
+    fn highlights_go_first_under_their_own_version_only() {
+        let out = with_highlights(CHANGELOG, HIGHLIGHTS);
+        let heading = out.find("## [1.48.0]").unwrap();
+        let hl = out.find("### Highlights").unwrap();
+        let features = out.find("### Features").unwrap();
+        assert!(heading < hl && hl < features, "{out}");
+        assert_eq!(out.matches("### Highlights").count(), 1);
+        assert!(out.contains("- **Wallpaper Engine** — paused while you game.\n"));
+    }
+
+    #[test]
+    fn highlights_for_another_version_change_nothing() {
+        let old = HIGHLIGHTS.replace("# 1.48.0", "# 1.4");
+        assert_eq!(with_highlights(CHANGELOG, &old), CHANGELOG);
+        // 1.4 must not match 1.48.0 or 1.47.0.
+        let none = HIGHLIGHTS.replace("# 1.48.0", "# 2.0.0");
+        assert_eq!(with_highlights(CHANGELOG, &none), CHANGELOG);
+    }
+
+    #[test]
+    fn a_plain_version_heading_matches_too() {
+        let out = with_highlights(
+            "## v1.48.0 - 2026-11-01\n\n### Bug Fixes\n\n- x\n",
+            HIGHLIGHTS,
+        );
+        assert!(
+            out.starts_with("## v1.48.0 - 2026-11-01\n\n### Highlights\n"),
+            "{out}"
+        );
     }
 }

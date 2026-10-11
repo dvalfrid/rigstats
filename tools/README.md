@@ -46,6 +46,21 @@ firmware and starts the installed service again. The full workflow is in
 pwsh -File tools\dev-sidecar.ps1 -Live
 ```
 
+## `release-highlights.ps1`
+
+Puts the release's highlights (`release-highlights.md` in the repo root) into a
+release; used by `.github/workflows/release.yml`. `-Version X -Notes <text>`
+returns the notes with a `### Highlights` section first under that version's
+heading (for `latest.json`, shown by the app's Updates window); `-Version X
+-Body` returns a `## Highlights` block for the top of the GitHub Release text.
+Only a list headed `# X` counts, and HTML comments are skipped. The app does
+the same for its bundled copy (`update_check::with_highlights`). See "Release
+routine" in [docs/release.md](../docs/release.md).
+
+```powershell
+pwsh -File tools\release-highlights.ps1 -Version 1.48.0 -Body   # preview the release text's block
+```
+
 ## `smoke-app.ps1`
 
 **Start-up smoke test** for the egui app — run it before and after a change
