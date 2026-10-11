@@ -211,14 +211,11 @@ pub fn rules_page(
                 } else {
                     profile_name(profiles, &rule.profile_id).to_owned()
                 };
-                egui::ComboBox::from_id_salt(("rule_profile", i))
-                    .width(150.0)
-                    .selected_text(current)
-                    .show_ui(ui, |ui| {
-                        for p in profiles {
-                            ui.selectable_value(&mut rule.profile_id, p.id.clone(), &p.name);
-                        }
-                    });
+                ui_kit::combo(ui, ("rule_profile", i), 150.0, current, |ui| {
+                    for p in profiles {
+                        ui.selectable_value(&mut rule.profile_id, p.id.clone(), &p.name);
+                    }
+                });
             });
         }
         if let Some(i) = remove {
@@ -260,53 +257,49 @@ pub fn rules_page(
                 }
             });
             let mut picked = None;
-            egui::ComboBox::from_id_salt("rule_running")
-                .width(170.0)
-                .selected_text("Running apps")
-                .show_ui(ui, |ui| {
-                    if running.is_empty() {
-                        ui.label(egui::RichText::new("Looking…").color(dc.muted));
-                    }
-                    // By the name people see, not the file name.
-                    let mut entries: Vec<_> = running
-                        .iter()
-                        .map(|app| {
-                            let (name, icon) = app
-                                .path
-                                .as_deref()
-                                .map_or((None, None), |p| page.apps.get(&ctx, p));
-                            (app, name, icon)
-                        })
-                        .collect();
-                    entries.sort_by_key(|(app, name, _)| {
-                        name.clone()
-                            .unwrap_or_else(|| exe_stem(&app.exe).to_owned())
-                            .to_lowercase()
-                    });
-                    for (app, name, icon) in entries {
-                        ui.horizontal(|ui| {
-                            match &icon {
-                                Some(t) => {
-                                    ui.add(
-                                        egui::Image::new(t)
-                                            .fit_to_exact_size(egui::vec2(16.0, 16.0)),
-                                    );
-                                }
-                                None => {
-                                    ui.add_space(20.0);
-                                }
-                            }
-                            let label = name.unwrap_or_else(|| exe_stem(&app.exe).to_owned());
-                            if ui
-                                .selectable_label(page.exe == app.exe, label)
-                                .on_hover_text(&app.exe)
-                                .clicked()
-                            {
-                                picked = Some(app.clone());
-                            }
-                        });
-                    }
+            ui_kit::combo(ui, "rule_running", 170.0, "Running apps", |ui| {
+                if running.is_empty() {
+                    ui.label(egui::RichText::new("Looking…").color(dc.muted));
+                }
+                // By the name people see, not the file name.
+                let mut entries: Vec<_> = running
+                    .iter()
+                    .map(|app| {
+                        let (name, icon) = app
+                            .path
+                            .as_deref()
+                            .map_or((None, None), |p| page.apps.get(&ctx, p));
+                        (app, name, icon)
+                    })
+                    .collect();
+                entries.sort_by_key(|(app, name, _)| {
+                    name.clone()
+                        .unwrap_or_else(|| exe_stem(&app.exe).to_owned())
+                        .to_lowercase()
                 });
+                for (app, name, icon) in entries {
+                    ui.horizontal(|ui| {
+                        match &icon {
+                            Some(t) => {
+                                ui.add(
+                                    egui::Image::new(t).fit_to_exact_size(egui::vec2(16.0, 16.0)),
+                                );
+                            }
+                            None => {
+                                ui.add_space(20.0);
+                            }
+                        }
+                        let label = name.unwrap_or_else(|| exe_stem(&app.exe).to_owned());
+                        if ui
+                            .selectable_label(page.exe == app.exe, label)
+                            .on_hover_text(&app.exe)
+                            .clicked()
+                        {
+                            picked = Some(app.clone());
+                        }
+                    });
+                }
+            });
             if let Some(app) = picked {
                 page.choose(&ctx, app.exe, app.path);
             }
@@ -314,8 +307,10 @@ pub fn rules_page(
         g.row("Or type its file name", None, |ui| {
             let before = page.exe.clone();
             ui.add_sized(
-                [ui_kit::CONTROL_W, 24.0],
-                egui::TextEdit::singleline(&mut page.exe).hint_text("game.exe"),
+                [ui_kit::CONTROL_W, ui_kit::CONTROL_H],
+                egui::TextEdit::singleline(&mut page.exe)
+                    .vertical_align(egui::Align::Center)
+                    .hint_text("game.exe"),
             );
             // Typing a different program forgets the chosen one's path.
             if page.exe != before {

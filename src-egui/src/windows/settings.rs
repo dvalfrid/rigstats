@@ -400,8 +400,9 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
             Some("Shown in the header panel; empty uses the detected model"),
             |ui| {
                 ui.add_sized(
-                    [ui_kit::CONTROL_W, 24.0],
+                    [ui_kit::CONTROL_W, ui_kit::CONTROL_H],
                     egui::TextEdit::singleline(&mut draft.model_name)
+                        .vertical_align(egui::Align::Center)
                         .hint_text("Detected automatically")
                         .text_color(dc.text),
                 );

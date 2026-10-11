@@ -1212,7 +1212,9 @@ fn hue_card(
                             }
                             ui.add(
                                 egui::TextEdit::singleline(typed_ip)
+                                    .vertical_align(egui::Align::Center)
                                     .desired_width(130.0)
+                                    .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                                     .hint_text("192.168.1.20"),
                             );
                         });
@@ -2017,7 +2019,9 @@ fn profile_bar(
             (Some(ProfileEdit::Renaming { id, mut name }), Some(active)) => {
                 let edit = ui.add(
                     egui::TextEdit::singleline(&mut name)
+                        .vertical_align(egui::Align::Center)
                         .desired_width(200.0)
+                        .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                         .hint_text("Profile name"),
                 );
                 edit.request_focus();
@@ -2583,10 +2587,7 @@ fn fans_tab(
     // ── Header picker + identify ─────────────────────────────────────────
     ui.horizontal(|ui| {
         let mut selected = header.id.clone();
-        egui::ComboBox::from_id_salt("fan_header")
-            .width(260.0)
-            .selected_text(header_name(&header, shown.get(&header.id)))
-            .show_ui(ui, |ui| {
+        ui_kit::combo(ui, "fan_header", 260.0, header_name(&header, shown.get(&header.id)), |ui| {
                 for h in &caps.headers {
                     let mode = match control.fan_duty.get(&h.id) {
                         Some(duty) if shown.contains_key(&h.id) => format!("   {duty:.0} %"),
@@ -2704,17 +2705,16 @@ fn fans_tab(
             let mut label = config.label.clone().unwrap_or_default();
             ui.add(
                 egui::TextEdit::singleline(&mut label)
+                    .vertical_align(egui::Align::Center)
                     .hint_text("e.g. CPU cooler")
-                    .desired_width(150.0),
+                    .desired_width(150.0)
+.min_size(egui::vec2(0.0, ui_kit::CONTROL_H)),
             );
             config.label = Some(label.trim().to_owned()).filter(|l| !l.is_empty());
 
             ui.add_space(12.0);
             ui.label(egui::RichText::new("Follows").size(12.0).color(dc.text));
-            egui::ComboBox::from_id_salt("fan_source")
-                .width(170.0)
-                .selected_text(source_name(&config.source))
-                .show_ui(ui, |ui| {
+            ui_kit::combo(ui, "fan_source", 170.0, source_name(&config.source), |ui| {
                     for source in &caps.sources {
                         ui.selectable_value(
                             &mut config.source,

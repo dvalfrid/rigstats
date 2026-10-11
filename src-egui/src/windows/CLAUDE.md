@@ -55,7 +55,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 |---|---|
 | On/off | `toggle` (animated switch) |
 | 2–5 short options | `segmented` |
-| A longer list | `dropdown` (`CONTROL_W` wide, so rows line up) |
+| A longer list | `dropdown` (`CONTROL_W` wide, so rows line up), or `combo` for another width — never a raw `egui::ComboBox`, it comes out lower than the buttons beside it |
 | A percentage | `slider_pct` (value shown beside it) |
 | A colour from a few | `swatches` |
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
@@ -66,6 +66,8 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
+
+Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
 
 ## Words
 

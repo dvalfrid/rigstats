@@ -23,6 +23,9 @@ pub const ROW_H: f32 = 40.0;
 const ROW_H_SUB: f32 = 50.0;
 /// Width of dropdowns and other right-hand controls, so they line up.
 pub const CONTROL_W: f32 = 210.0;
+/// Height of every control in a row — buttons, dropdowns, text fields,
+/// segmented controls — so they line up.
+pub const CONTROL_H: f32 = 28.0;
 pub const SIDEBAR_W: f32 = 200.0;
 const CARD_RADIUS: u8 = 10;
 
@@ -325,7 +328,7 @@ pub fn segmented<T: PartialEq + Clone>(
         })
         .fold(0.0_f32, f32::max)
         + 24.0;
-    let size = vec2(seg_w * options.len() as f32 + 4.0, 28.0);
+    let size = vec2(seg_w * options.len() as f32 + 4.0, CONTROL_H);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
     let p = ui.painter().clone();
     let track = if dc.is_dark {
@@ -379,11 +382,28 @@ pub fn dropdown(
     selected: impl Into<egui::WidgetText>,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
-    egui::ComboBox::from_id_salt(id)
-        .width(CONTROL_W)
-        .selected_text(selected)
-        .show_ui(ui, add)
-        .response
+    combo(ui, id, CONTROL_W, selected, add)
+}
+
+/// A drop-down list of `width`, as tall as the other controls
+/// ([`CONTROL_H`]). Every drop-down goes through here.
+pub fn combo(
+    ui: &mut Ui,
+    id: impl std::hash::Hash,
+    width: f32,
+    selected: impl Into<egui::WidgetText>,
+    add: impl FnOnce(&mut Ui),
+) -> Response {
+    ui.scope(|ui| {
+        ui.spacing_mut().interact_size.y = CONTROL_H;
+        egui::ComboBox::from_id_salt(id)
+            .width(width)
+            .height(320.0)
+            .selected_text(selected)
+            .show_ui(ui, add)
+            .response
+    })
+    .inner
 }
 
 /// A slider with its value shown to the right of it, as a percentage.
@@ -426,8 +446,9 @@ pub fn slider_pct(
 pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     let mut text = value.map(|v| v.to_string()).unwrap_or_default();
     let resp = ui.add_sized(
-        [48.0, 24.0],
+        [48.0, CONTROL_H],
         egui::TextEdit::singleline(&mut text)
+            .vertical_align(egui::Align::Center)
             .hint_text("—")
             .horizontal_align(Align::Center)
             .font(egui::TextStyle::Monospace),
