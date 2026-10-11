@@ -444,12 +444,61 @@ the fit) is kept
 in `Settings::desktop_background_before` (app-wide, not in a look); a profile
 without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
 several quick changes. The Desktop page (its own sidebar section, "Windows") shows previews of the pictures
-(`app_icons::PictureCache`, decoded with the `image` crate — format read from the
+(`app_icons::PictureCache`: one decode thread with a queue — newest request first, so the rows in view load first, at most 64 waiting — rows up to 384 × 216, list lines 128 × 72, at most 150 kept, the least recently used dropped first; decoded with the `image` crate — format read from the
 content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
 own), Windows' own background included (the kept one, else what Windows
 shows now), and lists the connected screens left to right. The wallpaper host doesn't
-touch it. Step 2 of #306
-(Wallpaper Engine) is still open.
+touch it.
+
+Wallpaper Engine per profile (#306, step 2): RIGStats doesn't draw live
+wallpapers itself — that would mean a video player, a web renderer and a scene
+engine — it drives Wallpaper Engine through its documented command line
+(`wallpaper64.exe -control openWallpaper -file <project.json> -monitor N`,
+`pause`, `play`; help.wallpaperengine.io/en/functionality/cli.html), which
+only reaches a running instance. `ProfileLook::wallpaper_engine` is `None`
+(leave it alone), `Pause` (freezes the frame, frees the graphics card — for Gaming), `Off` (`-control stop`: the Windows background — the profile's own picture — shows; the next profile that uses it plays it again) or `Show`
+(a `project.json` per Windows monitor id). `rigstats-backend/src/wallpaper_engine.rs`:
+`find` (`HKCU\Software\WallpaperEngine\installPath`), `Install::library` (the
+Workshop folder `steamapps\workshop\content\431960` in the Steam library
+Wallpaper Engine sits in, plus `projects\myprojects`; title, type and preview
+from each `project.json`), `Install::config` (`config.json`: `user.monitormap`
+maps Windows' monitor id — written with `/` — to Wallpaper Engine's screen
+number, and `wallpaperconfig.selectedwallpapers.MonitorN` is what shows now;
+Wallpaper Engine rewrites it on every change), `is_running` (process list).
+The pure `step` mirrors the Windows background's: the first time a profile
+pauses or shows wallpapers, Wallpaper Engine's own are kept in
+`Settings::wallpaper_engine_before`; a profile that leaves it alone resumes it and
+reopens its own. `prune` follows the playback state (`Playback`: playing, paused, stopped) command by command, plays stopped wallpapers before pausing them, and drops commands that change nothing (a screen that
+already shows the wallpaper isn't reloaded, `play` isn't sent while playing).
+The main app's `sync_wallpaper_engine` checks every 5 s whether it is installed
+and running and applies the profile's choice again when it starts (after
+RIGStats at boot, or restarted); the commands run on the same worker thread as
+the Windows background. The Desktop page's "Wallpaper Engine" group (only when
+it is installed): As it is / Wallpapers / Paused, and per screen the wallpaper
+from the library with its preview (jpg or gif). The library is read on a thread
+of its own — never on the UI thread, a large Workshop library takes a while —
+when the Desktop page is opened and again when a wallpaper list is opened, so a
+new subscription shows up; nothing is read while the page is closed.
+
+Error handling and troubleshooting (#306): every change of state is logged
+once (`wallpaper engine: found at …` / `not installed` / `running` /
+`not running (closed or crashed)` / `starting …` / `stopped by the user` /
+`resumed by the user`), a failed command as a warning with its reason, an
+unreadable `config.json`, a screen missing from its monitor map and a wallpaper
+that is gone (not sent) as warnings. `src-egui/src/we_link.rs` (`WeLink`) is
+shared between the Desktop page and the main app: the page's Start / Stop
+buttons queue a `WeAction` (Start launches it, Stop sends `-control stop` —
+the Windows background shows and it stays in the tray; Wallpaper Engine has no
+documented way to quit, and a polite close request is ignored — Resume sends
+`play`), and the app reports back `running`, `stopped`, `starting` and the
+last error, which the page shows in red until a command succeeds. The worker, the preview decoder and the library read catch a panic (logged by the panic logger) and carry on. A launch that isn't running 30 s later is reported
+(`starting_since`) instead of "Starting…" for ever. Not
+installed: the page shows what it would add and **Get it on Steam**
+(`store_link`: `steam://store/431960` when Steam is installed, else the store
+web page). Status → Health has a Wallpaper Engine row; the diagnostics ZIP has
+`wallpaper-engine.txt` (`wallpaper_engine::diagnostics`: path, running, monitor
+map, library size, no titles). User-facing steps: "Wallpaper Engine" in
+`docs/troubleshooting.md`.
 
 Threshold semantics differ by key:
 

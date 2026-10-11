@@ -1,6 +1,7 @@
 //! Persistent user settings model and file I/O helpers.
 
 use crate::desktop_background::DesktopBackground;
+use crate::wallpaper_engine::{WeChoice, WeSlot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -275,6 +276,15 @@ pub struct Settings {
     /// and put back in a profile without one (`desktop_background::step`).
     #[serde(default)]
     pub desktop_background_before: Option<DesktopBackground>,
+    /// The active profile's Wallpaper Engine choice (#306); `None` = leave
+    /// it alone. Part of the profile's look.
+    #[serde(default)]
+    pub wallpaper_engine: Option<WeChoice>,
+    /// Wallpaper Engine's own wallpapers, kept the first time a profile
+    /// changed them and put back in a profile that leaves it alone
+    /// (`wallpaper_engine::step`).
+    #[serde(default)]
+    pub wallpaper_engine_before: Option<Vec<WeSlot>>,
 
     // ---- Legacy migration shims (schema version 0) --------------------------
     // These fields existed in older settings files as eight flat values.
@@ -426,6 +436,8 @@ impl Default for Settings {
             app_rules: Vec::new(),
             desktop_background: None,
             desktop_background_before: None,
+            wallpaper_engine: None,
+            wallpaper_engine_before: None,
             warning_cpu_temp: None,
             critical_cpu_temp: None,
             warning_gpu_temp: None,
@@ -442,8 +454,8 @@ impl Default for Settings {
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
-/// dashboard looks, the overlay's content, the alert thresholds and the
-/// desktop background. A
+/// dashboard looks, the overlay's content, the alert thresholds, the
+/// desktop background and what Wallpaper Engine does. A
 /// profile always holds all of them. Everything else (window layer,
 /// display profile, overlay placement, notifications, start-up, …) applies
 /// to the whole app and stays out of profiles.
@@ -466,6 +478,8 @@ pub struct ProfileLook {
     pub thresholds: HashMap<String, ComponentThresholds>,
     #[serde(default)]
     pub desktop_background: Option<DesktopBackground>,
+    #[serde(default)]
+    pub wallpaper_engine: Option<WeChoice>,
 }
 
 impl ProfileLook {
@@ -480,6 +494,7 @@ impl ProfileLook {
             overlay_columns: s.overlay_columns,
             thresholds: s.thresholds.clone(),
             desktop_background: s.desktop_background.clone(),
+            wallpaper_engine: s.wallpaper_engine.clone(),
         }
     }
 
@@ -494,6 +509,7 @@ impl ProfileLook {
         s.overlay_columns = self.overlay_columns.min(6);
         s.thresholds = self.thresholds.clone();
         s.desktop_background = self.desktop_background.clone();
+        s.wallpaper_engine = self.wallpaper_engine.clone();
         Self::capture(s) != before
     }
 }
@@ -941,6 +957,14 @@ mod profile_look_tests {
         assert_eq!(switch_profile_look(&mut s, "silent"), Some(true));
         assert_eq!(s.desktop_background, Some(calm));
         assert_eq!(s.profile_looks["gaming"].desktop_background, None);
+        s.wallpaper_engine = Some(WeChoice::Pause);
+        switch_profile_look(&mut s, "gaming");
+        assert_eq!(
+            s.profile_looks["silent"].wallpaper_engine,
+            Some(WeChoice::Pause),
+            "Wallpaper Engine's choice belongs to the profile too"
+        );
+        assert_eq!(s.wallpaper_engine, None);
         assert!(
             s.desktop_background_before.is_some(),
             "app-wide, not in a look"

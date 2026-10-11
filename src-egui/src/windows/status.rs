@@ -37,6 +37,8 @@ pub struct StatusState {
     pub log_path: String,
     pub last_refresh: String,
     pub gpu_drivers: Vec<hardware::GpuDriverInfo>,
+    /// Wallpaper Engine's install (#306), if it has one, and whether it runs.
+    pub wallpaper_engine: Option<(String, bool)>,
 }
 
 impl StatusState {
@@ -53,6 +55,12 @@ impl StatusState {
             log_path: log_path.display().to_string(),
             last_refresh: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
             gpu_drivers: hardware::detect_gpu_drivers(),
+            wallpaper_engine: rigstats_backend::wallpaper_engine::find().map(|i| {
+                (
+                    i.exe.display().to_string(),
+                    rigstats_backend::wallpaper_engine::is_running(),
+                )
+            }),
         }
     }
 
@@ -70,6 +78,7 @@ impl StatusState {
             log_path: String::new(),
             last_refresh: String::new(),
             gpu_drivers: Vec::new(),
+            wallpaper_engine: None,
         }
     }
 }
@@ -204,6 +213,17 @@ fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control:
             )),
             |ui| ui_kit::status(ui, ui_kit::C_GOOD, "Working"),
         );
+        let (we_sub, we_state) = match &st.wallpaper_engine {
+            None => (
+                "Optional · live wallpapers per profile".to_owned(),
+                (dc.muted, "Not installed"),
+            ),
+            Some((path, true)) => (path.clone(), (ui_kit::C_GOOD, "Running")),
+            Some((path, false)) => (path.clone(), (ui_kit::C_ATTENTION, "Not running")),
+        };
+        g.row("Wallpaper Engine", Some(&we_sub), |ui| {
+            ui_kit::status(ui, we_state.0, we_state.1);
+        });
         g.row(
             "Hardware details",
             Some(&format!("WMI {DEP_WMI_VER} · names, memory, motherboard")),
@@ -573,6 +593,8 @@ fn collect_and_open_diagnostics_impl(
     // Blocks ~1s for PDH's two-spaced-collects requirement; fine here, this
     // whole function already runs off the UI thread (see `spawn_collect`).
     let gpu_engine_txt = gpu_process::dump_diagnostics();
+    // Found, running, its screen map and library size — no titles (#306).
+    let wallpaper_engine_txt = rigstats_backend::wallpaper_engine::diagnostics();
 
     // ── Write ZIP ─────────────────────────────────────────────────────────────
 
@@ -599,6 +621,7 @@ fn collect_and_open_diagnostics_impl(
         ("event-log.txt", event_log_txt.as_bytes()),
         ("displays.json", displays_json.as_bytes()),
         ("gpu-engine.txt", gpu_engine_txt.as_bytes()),
+        ("wallpaper-engine.txt", wallpaper_engine_txt.as_bytes()),
     ];
 
     for (name, data) in entries {

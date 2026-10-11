@@ -205,6 +205,9 @@ Each tab appears only when this PC's hardware supports it.
 
 | Tab | What it controls | Where it works |
 | --- | --- | --- |
+| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order, the game overlay's metrics, alert levels — previewed live | Any PC |
+| Desktop | The Windows background picture (one per screen if you like), and Wallpaper Engine: as it is, chosen wallpapers per screen, paused, or off — with Start/Stop | Any PC; the Wallpaper Engine part when it is installed ([troubleshooting](docs/troubleshooting.md#wallpaper-engine)) |
+| App rules | Switch profile automatically while a program runs (e.g. Gaming while your game is open) | Any PC |
 | Power | The Windows power plan each profile switches to | Any PC |
 | Fans | Per-fan curves on CPU, GPU or a motherboard temperature; **Identify** measures which fans a channel drives | Motherboards with writable fan control (LibreHardwareMonitor) |
 | CPU | PPT/TDC/EDC power limits, and **Curve Optimizer** (−30…0, all-core or per core) | AMD Ryzen 9000, on hardware-verified SMU tables |
