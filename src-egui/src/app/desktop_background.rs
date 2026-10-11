@@ -179,6 +179,9 @@ impl RigStatsApp {
         let dir = self.dir.clone();
         let sync = &mut self.desktop_background;
         let requests = std::mem::take(&mut sync.link.lock_safe().requests);
+        if !requests.is_empty() {
+            debug::log_debug(&dir, &format!("wallpaper engine: requested {requests:?}"));
+        }
         if sync
             .we_checked
             .map_or(true, |t| t.elapsed() > Duration::from_secs(5))
@@ -211,6 +214,19 @@ impl RigStatsApp {
             let mut shared = sync.link.lock_safe();
             if running {
                 shared.starting = false;
+                shared.starting_since = None;
+            } else if shared
+                .starting_since
+                .is_some_and(|t| t.elapsed() > Duration::from_secs(30))
+            {
+                debug::log_warn(
+                    &dir,
+                    "wallpaper engine: started, but not running 30 s later — it may be waiting for an answer in its own window",
+                );
+                shared.starting = false;
+                shared.starting_since = None;
+                shared.last_error =
+                    Some("It didn't come up — open Wallpaper Engine yourself to see why".into());
             }
             if running && !shared.running {
                 // It starts playing its own wallpapers.
@@ -219,6 +235,12 @@ impl RigStatsApp {
             shared.running = running;
         }
         let Some(install) = sync.we.clone() else {
+            if !requests.is_empty() {
+                debug::log_warn(
+                    &dir,
+                    "wallpaper engine: a button was clicked, but it isn't installed (any more)",
+                );
+            }
             return;
         };
         for action in requests {
@@ -226,6 +248,7 @@ impl RigStatsApp {
                 WeAction::Start if !sync.we_running => {
                     let mut shared = sync.link.lock_safe();
                     shared.starting = true;
+                    shared.starting_since = Some(Instant::now());
                     shared.last_error = None;
                     drop(shared);
                     let _ = sync.tx.send(Job::Launch(install.clone()));

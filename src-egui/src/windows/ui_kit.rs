@@ -168,6 +168,89 @@ enum Lead {
 /// Width of a picture preview in a row (16:9).
 const PICTURE_W: f32 = 96.0;
 
+/// A picture's preview in `r`: cropped to fill the frame (like Fill),
+/// rounded and outlined; an empty frame while it loads, or when there is
+/// none. `picture` is its texture and size.
+pub fn paint_picture(
+    ui: &Ui,
+    dc: &DialogColors,
+    r: Rect,
+    picture: Option<(egui::TextureId, egui::Vec2)>,
+) {
+    let rounding = CornerRadius::same(4);
+    ui.painter().rect_filled(r, rounding, dc.inset);
+    if let Some((id, size)) = picture {
+        let (img, frame) = (size.x / size.y.max(1.0), r.width() / r.height().max(1.0));
+        let uv = if img > frame {
+            let w = frame / img;
+            Rect::from_min_max(pos2(0.5 - w / 2.0, 0.0), pos2(0.5 + w / 2.0, 1.0))
+        } else {
+            let h = img / frame;
+            Rect::from_min_max(pos2(0.0, 0.5 - h / 2.0), pos2(1.0, 0.5 + h / 2.0))
+        };
+        egui::Image::new((id, r.size()))
+            .uv(uv)
+            .corner_radius(rounding)
+            .paint_at(ui, r);
+    }
+    ui.painter().rect_stroke(
+        r,
+        rounding,
+        Stroke::new(1.0_f32, dc.card_border),
+        egui::StrokeKind::Inside,
+    );
+}
+
+/// One choice in a drop-down list, led by its picture's preview (the
+/// Wallpaper Engine library). `load` gives the preview and is only called
+/// while the row is in view, so a long list only loads what is seen.
+/// Returns whether it was clicked.
+pub fn picture_choice(
+    ui: &mut Ui,
+    dc: &DialogColors,
+    selected: bool,
+    title: &str,
+    load: impl FnOnce() -> Option<egui::TextureHandle>,
+) -> bool {
+    let h = 44.0;
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), egui::Sense::click());
+    if !ui.is_rect_visible(rect) {
+        return resp.clicked();
+    }
+    if selected || resp.hovered() {
+        let fill = if selected {
+            dc.tab_active.gamma_multiply(0.35)
+        } else {
+            dc.inner
+        };
+        ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
+    }
+    let pic_h = h - 8.0;
+    let pic = Rect::from_min_size(
+        pos2(rect.left() + 4.0, rect.top() + 4.0),
+        vec2(pic_h * 16.0 / 9.0, pic_h),
+    );
+    let texture = load();
+    paint_picture(
+        ui,
+        dc,
+        pic,
+        texture.as_ref().map(|t| (t.id(), t.size_vec2())),
+    );
+    let x = pic.right() + 8.0;
+    let mut job = egui::text::LayoutJob::simple(
+        title.to_owned(),
+        FontId::proportional(12.5),
+        dc.title,
+        (rect.right() - x - 4.0).max(40.0),
+    );
+    job.wrap.max_rows = 2;
+    let galley = ui.painter().layout_job(job);
+    let y = rect.center().y - galley.size().y / 2.0;
+    ui.painter().galley(pos2(x, y), galley, dc.title);
+    resp.clicked()
+}
+
 impl Group<'_> {
     fn divider(&mut self) {
         if self.rows > 0 {
@@ -272,29 +355,7 @@ impl Group<'_> {
                         pos2(row.left(), row.center().y - PICTURE_W * 9.0 / 32.0),
                         vec2(PICTURE_W, PICTURE_W * 9.0 / 16.0),
                     );
-                    let rounding = CornerRadius::same(4);
-                    ui.painter().rect_filled(r, rounding, dc.inset);
-                    if let Some((id, size)) = picture {
-                        // Crop the middle so the frame is filled, like Fill.
-                        let (img, frame) = (size.x / size.y.max(1.0), 16.0 / 9.0);
-                        let uv = if img > frame {
-                            let w = frame / img;
-                            Rect::from_min_max(pos2(0.5 - w / 2.0, 0.0), pos2(0.5 + w / 2.0, 1.0))
-                        } else {
-                            let h = img / frame;
-                            Rect::from_min_max(pos2(0.0, 0.5 - h / 2.0), pos2(1.0, 0.5 + h / 2.0))
-                        };
-                        egui::Image::new((id, r.size()))
-                            .uv(uv)
-                            .corner_radius(rounding)
-                            .paint_at(ui, r);
-                    }
-                    ui.painter().rect_stroke(
-                        r,
-                        rounding,
-                        Stroke::new(1.0_f32, dc.card_border),
-                        egui::StrokeKind::Inside,
-                    );
+                    paint_picture(ui, dc, r, picture);
                 }
                 if let Lead::Icon(icon) = lead_with {
                     let r = Rect::from_center_size(

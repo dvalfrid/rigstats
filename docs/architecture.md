@@ -491,7 +491,8 @@ buttons queue a `WeAction` (Start launches it, Stop sends `-control stop` —
 the Windows background shows and it stays in the tray; Wallpaper Engine has no
 documented way to quit, and a polite close request is ignored — Resume sends
 `play`), and the app reports back `running`, `stopped`, `starting` and the
-last error, which the page shows in red until a command succeeds. Not
+last error, which the page shows in red until a command succeeds. A launch that isn't running 30 s later is reported
+(`starting_since`) instead of "Starting…" for ever. Not
 installed: the page shows what it would add and **Get it on Steam**
 (`store_link`: `steam://store/431960` when Steam is installed, else the store
 web page). Status → Health has a Wallpaper Engine row; the diagnostics ZIP has

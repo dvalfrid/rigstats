@@ -26,6 +26,9 @@ pub struct WeShared {
     pub stopped: bool,
     /// Launched, and not seen running yet.
     pub starting: bool,
+    /// When it was launched: if it isn't running half a minute later, that
+    /// is reported instead of "Starting…" for ever.
+    pub starting_since: Option<std::time::Instant>,
     /// What went wrong last, until something succeeds.
     pub last_error: Option<String>,
     /// Button clicks waiting for the app.
