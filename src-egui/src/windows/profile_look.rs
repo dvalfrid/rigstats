@@ -273,6 +273,14 @@ pub fn dashboard_page(
         g.row("Opacity", Some("How see-through the panels are"), |ui| {
             ui_kit::slider_pct(ui, dc, &mut look.opacity, 0.1..=1.0);
         });
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Window and screen",
+            "Display profile, window layer and full screen apply to every profile",
+            settings_win::Page::Display,
+        );
     });
     let battery = link.battery_present.load(Ordering::Relaxed);
     let items: Vec<(&str, String)> = ALL_PANELS
@@ -290,16 +298,6 @@ pub fn dashboard_page(
             });
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Window and screen",
-            "Display profile, window layer and full screen apply to every profile",
-            settings_win::Page::Display,
-        );
-    });
     editor.preview(link);
 }
 
@@ -564,6 +562,14 @@ pub fn overlay_page(
                 },
             );
         });
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Position and size",
+            "Where the overlay sits, its size and click-through apply to every profile",
+            settings_win::Page::Overlay,
+        );
     });
     let battery = link.battery_present.load(Ordering::Relaxed);
     let items: Vec<(&str, String)> = ALL_OVERLAY_METRICS
@@ -585,16 +591,6 @@ pub fn overlay_page(
             });
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Position and size",
-            "Where the overlay sits, its size and click-through apply to every profile",
-            settings_win::Page::Overlay,
-        );
-    });
     editor.preview(link);
 }
 
@@ -654,6 +650,16 @@ pub fn alerts_page(
             });
         }
     };
+    ui_kit::group(ui, dc, None, None, |g| {
+        open_settings_row(
+            g,
+            dc,
+            link,
+            "Notifications",
+            "Turning alerts on or off and how often they repeat apply to every profile",
+            settings_win::Page::Notifications,
+        );
+    });
     ui_kit::group(
         ui,
         dc,
@@ -674,16 +680,6 @@ pub fn alerts_page(
             rows(g, BATTERY_THRESHOLDS);
         },
     );
-    ui_kit::group(ui, dc, None, None, |g| {
-        open_settings_row(
-            g,
-            dc,
-            link,
-            "Notifications",
-            "Turning alerts on or off and how often they repeat apply to every profile",
-            settings_win::Page::Notifications,
-        );
-    });
     editor.preview(link);
 }
 
