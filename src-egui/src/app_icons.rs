@@ -5,6 +5,7 @@
 //! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
 
+use crate::lock_ext::LockSafe;
 use std::collections::HashMap;
 
 /// A program's name and icon, loaded once per path.
@@ -38,66 +39,257 @@ impl AppInfoCache {
     }
 }
 
-/// Previews of pictures (#306), decoded on a thread of their own — a 4K
-/// photo takes a moment — and kept as textures.
+/// How big a preview is decoded: a screen's row (up to 384 × 216) or a
+/// line in the wallpaper list (up to 128 × 72, a ninth of the memory).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewSize {
+    Row,
+    List,
+}
+
+impl PreviewSize {
+    fn max(self) -> (u32, u32) {
+        match self {
+            PreviewSize::Row => (384, 216),
+            PreviewSize::List => (128, 72),
+        }
+    }
+
+    fn key(self, path: &str) -> String {
+        match self {
+            PreviewSize::Row => format!("row|{path}"),
+            PreviewSize::List => format!("list|{path}"),
+        }
+    }
+}
+
+/// At most this many previews are kept; the least recently used goes first.
+const KEEP: usize = 150;
+/// At most this many waiting to be decoded; older requests are dropped
+/// (their rows ask again when they come back into view).
+const QUEUE: usize = 64;
+
+/// The previews loaded or loading, with when each was last asked for.
+#[derive(Debug)]
+struct Slots<V> {
+    map: HashMap<String, Slot<V>>,
+    tick: u64,
+    keep: usize,
+}
+
+#[derive(Debug)]
+struct Slot<V> {
+    /// `None` while loading, or when it couldn't be read (`loading` false).
+    value: Option<V>,
+    loading: bool,
+    used: u64,
+}
+
+impl<V: Clone> Slots<V> {
+    fn new(keep: usize) -> Self {
+        Self {
+            map: HashMap::new(),
+            tick: 0,
+            keep,
+        }
+    }
+
+    /// `Some(value)` when known (loaded, or failed: `Some(None)`), marking
+    /// it used; `None` when it was never asked for.
+    fn get(&mut self, key: &str) -> Option<Option<V>> {
+        self.tick += 1;
+        let tick = self.tick;
+        self.map.get_mut(key).map(|s| {
+            s.used = tick;
+            s.value.clone()
+        })
+    }
+
+    fn start(&mut self, key: String) {
+        self.tick += 1;
+        self.map.insert(
+            key,
+            Slot {
+                value: None,
+                loading: true,
+                used: self.tick,
+            },
+        );
+    }
+
+    /// Stores what was decoded, then drops the least recently used beyond
+    /// the limit — never one still loading.
+    fn finish(&mut self, key: &str, value: Option<V>) {
+        if let Some(s) = self.map.get_mut(key) {
+            s.value = value;
+            s.loading = false;
+        }
+        while self.map.values().filter(|s| !s.loading).count() > self.keep {
+            let Some(oldest) = self
+                .map
+                .iter()
+                .filter(|(_, s)| !s.loading)
+                .min_by_key(|(_, s)| s.used)
+                .map(|(k, _)| k.clone())
+            else {
+                break;
+            };
+            self.map.remove(&oldest);
+        }
+    }
+
+    fn forget(&mut self, key: &str) {
+        self.map.remove(key);
+    }
+}
+
+/// A preview to decode: its cache key, the file and the size.
+type Job = (String, String, PreviewSize);
+
+/// The decode queue: newest first, so the rows in view load first while
+/// the list scrolls.
+#[derive(Default)]
+struct Pending {
+    jobs: Vec<Job>,
+    closed: bool,
+    ctx: Option<egui::Context>,
+}
+
+impl Pending {
+    /// Queues `job`; returns the keys of the oldest jobs dropped to stay
+    /// within `limit`.
+    fn push(&mut self, job: Job, limit: usize) -> Vec<String> {
+        self.jobs.push(job);
+        let over = self.jobs.len().saturating_sub(limit);
+        self.jobs.drain(..over).map(|(key, _, _)| key).collect()
+    }
+
+    fn pop_newest(&mut self) -> Option<Job> {
+        self.jobs.pop()
+    }
+}
+
+/// Previews of pictures (#306), decoded one at a time on a thread of their
+/// own — a 4K photo takes a moment, and a long Workshop list must not start
+/// a thread per row — and kept as textures, at most [`KEEP`] of them.
 pub struct PictureCache {
-    map: HashMap<String, Option<egui::TextureHandle>>,
-    tx: std::sync::mpsc::Sender<(String, Option<egui::ColorImage>)>,
+    slots: Slots<egui::TextureHandle>,
+    queue: std::sync::Arc<(std::sync::Mutex<Pending>, std::sync::Condvar)>,
     rx: std::sync::mpsc::Receiver<(String, Option<egui::ColorImage>)>,
 }
 
 impl Default for PictureCache {
     fn default() -> Self {
         let (tx, rx) = std::sync::mpsc::channel();
+        let queue = std::sync::Arc::new((
+            std::sync::Mutex::new(Pending::default()),
+            std::sync::Condvar::new(),
+        ));
+        let worker = queue.clone();
+        let _ = std::thread::Builder::new()
+            .name("picture-preview".into())
+            .spawn(move || {
+                let (lock, wake) = &*worker;
+                loop {
+                    let (job, ctx) = {
+                        let mut p = lock.lock_safe();
+                        loop {
+                            if p.closed {
+                                return;
+                            }
+                            if let Some(job) = p.pop_newest() {
+                                break (job, p.ctx.clone());
+                            }
+                            p = wake.wait(p).unwrap_or_else(|e| e.into_inner());
+                        }
+                    };
+                    let (key, path, size) = job;
+                    // A broken file must not end the thread for every other.
+                    let img = std::panic::catch_unwind(|| preview(&path, size.max()))
+                        .ok()
+                        .flatten();
+                    if tx.send((key, img)).is_err() {
+                        return;
+                    }
+                    if let Some(ctx) = ctx {
+                        ctx.request_repaint();
+                    }
+                }
+            });
         Self {
-            map: HashMap::new(),
-            tx,
+            slots: Slots::new(KEEP),
+            queue,
             rx,
         }
+    }
+}
+
+impl Drop for PictureCache {
+    fn drop(&mut self) {
+        let (lock, wake) = &*self.queue;
+        lock.lock_safe().closed = true;
+        wake.notify_all();
     }
 }
 
 impl std::fmt::Debug for PictureCache {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PictureCache")
-            .field("pictures", &self.map.len())
+            .field("pictures", &self.slots.map.len())
             .finish_non_exhaustive()
     }
 }
 
 impl PictureCache {
-    /// The preview of the picture at `path`; `None` while it loads or when
-    /// it can't be read.
+    /// The preview of the picture at `path` for a screen's row; `None`
+    /// while it loads or when it can't be read.
     pub fn get(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
-        while let Ok((p, img)) = self.rx.try_recv() {
+        self.get_sized(ctx, path, PreviewSize::Row)
+    }
+
+    /// The same, small, for a line in a list.
+    pub fn get_small(&mut self, ctx: &egui::Context, path: &str) -> Option<egui::TextureHandle> {
+        self.get_sized(ctx, path, PreviewSize::List)
+    }
+
+    fn get_sized(
+        &mut self,
+        ctx: &egui::Context,
+        path: &str,
+        size: PreviewSize,
+    ) -> Option<egui::TextureHandle> {
+        while let Ok((key, img)) = self.rx.try_recv() {
             let tex = img.map(|img| {
-                ctx.load_texture(format!("picture:{p}"), img, egui::TextureOptions::LINEAR)
+                ctx.load_texture(format!("picture:{key}"), img, egui::TextureOptions::LINEAR)
             });
-            self.map.insert(p, tex);
+            self.slots.finish(&key, tex);
         }
         if path.is_empty() {
             return None;
         }
-        if let Some(tex) = self.map.get(path) {
-            return tex.clone();
+        let key = size.key(path);
+        if let Some(known) = self.slots.get(&key) {
+            return known;
         }
-        self.map.insert(path.to_owned(), None);
-        let (tx, ctx, path) = (self.tx.clone(), ctx.clone(), path.to_owned());
-        let _ = std::thread::Builder::new()
-            .name("picture-preview".into())
-            .spawn(move || {
-                let img = preview(&path);
-                let _ = tx.send((path, img));
-                ctx.request_repaint();
-            });
+        self.slots.start(key.clone());
+        let (lock, wake) = &*self.queue;
+        let dropped = {
+            let mut p = lock.lock_safe();
+            p.ctx.get_or_insert_with(|| ctx.clone());
+            p.push((key, path.to_owned(), size), QUEUE)
+        };
+        for key in dropped {
+            self.slots.forget(&key);
+        }
+        wake.notify_one();
         None
     }
 }
 
-/// The picture at `path`, scaled down to at most 384 × 216. The format
-/// is read from the file itself: Windows' own background can be its
+/// The picture at `path`, scaled down to at most `max`. The format is read
+/// from the file itself: Windows' own background can be its
 /// `TranscodedWallpaper` copy, which has no extension.
-fn preview(path: &str) -> Option<egui::ColorImage> {
+fn preview(path: &str, max: (u32, u32)) -> Option<egui::ColorImage> {
     let img = image::ImageReader::open(path)
         .ok()?
         .with_guessed_format()
@@ -105,8 +297,8 @@ fn preview(path: &str) -> Option<egui::ColorImage> {
         .decode()
         .ok()?;
     // Only ever smaller: a small picture keeps its size.
-    let img = if img.width() > 384 || img.height() > 216 {
-        img.thumbnail(384, 216)
+    let img = if img.width() > max.0 || img.height() > max.1 {
+        img.thumbnail(max.0, max.1)
     } else {
         img
     }
@@ -363,7 +555,7 @@ mod picture_tests {
         image::RgbaImage::from_pixel(1920, 1080, image::Rgba([200, 30, 30, 255]))
             .save(&path)
             .unwrap();
-        let img = preview(path.to_str().unwrap()).expect("a png reads");
+        let img = preview(path.to_str().unwrap(), (384, 216)).expect("a png reads");
         let _ = std::fs::remove_file(&path);
         assert_eq!(img.size, [384, 216]);
         assert_eq!(img.pixels[0], egui::Color32::from_rgb(200, 30, 30));
@@ -378,14 +570,65 @@ mod picture_tests {
             .save(&png)
             .unwrap();
         std::fs::rename(&png, &bare).unwrap();
-        let img = preview(bare.to_str().unwrap());
+        let img = preview(bare.to_str().unwrap(), (384, 216));
         let _ = std::fs::remove_file(&bare);
         assert_eq!(img.expect("read by its content").size, [64, 36]);
     }
 
     #[test]
+    fn the_least_recently_used_preview_goes_first_but_never_one_loading() {
+        let mut slots: Slots<u32> = Slots::new(2);
+        for k in ["a", "b"] {
+            slots.start(k.into());
+            slots.finish(k, Some(1));
+        }
+        slots.start("loading".into());
+        slots.get("a"); // a is used again: b is now the oldest
+        slots.start("c".into());
+        slots.finish("c", Some(3));
+        assert!(slots.get("b").is_none(), "b went");
+        assert!(slots.get("a").is_some());
+        assert!(slots.get("c").is_some());
+        assert!(slots.get("loading").is_some(), "still loading: kept");
+    }
+
+    #[test]
+    fn a_picture_that_cant_be_read_is_remembered_as_such() {
+        let mut slots: Slots<u32> = Slots::new(5);
+        slots.start("bad".into());
+        slots.finish("bad", None);
+        assert_eq!(slots.get("bad"), Some(None), "not asked for again");
+        slots.forget("bad");
+        assert_eq!(slots.get("bad"), None);
+    }
+
+    #[test]
+    fn the_queue_serves_the_newest_and_drops_the_oldest() {
+        let job = |k: &str| (k.to_owned(), format!("{k}.jpg"), PreviewSize::List);
+        let mut q = Pending::default();
+        assert!(q.push(job("1"), 2).is_empty());
+        assert!(q.push(job("2"), 2).is_empty());
+        assert_eq!(q.push(job("3"), 2), ["1"], "the oldest is dropped");
+        assert_eq!(q.pop_newest().map(|j| j.0), Some("3".into()));
+        assert_eq!(q.pop_newest().map(|j| j.0), Some("2".into()));
+        assert!(q.pop_newest().is_none());
+    }
+
+    #[test]
+    fn a_list_preview_is_smaller_than_a_row_preview() {
+        let path = std::env::temp_dir().join("rigstats-preview-test-3.png");
+        image::RgbaImage::from_pixel(1920, 1080, image::Rgba([1, 2, 3, 255]))
+            .save(&path)
+            .unwrap();
+        let small = preview(path.to_str().unwrap(), PreviewSize::List.max()).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(small.size, [128, 72]);
+        assert_ne!(PreviewSize::List.key("x"), PreviewSize::Row.key("x"));
+    }
+
+    #[test]
     fn a_missing_picture_has_no_preview() {
-        assert!(preview(r"C:\no\such\picture.jpg").is_none());
+        assert!(preview(r"C:\no\such\picture.jpg", (384, 216)).is_none());
     }
 }
 

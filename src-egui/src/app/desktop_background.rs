@@ -67,47 +67,60 @@ impl DesktopBackgroundSync {
                             Job::Launch(i) => launch = Some(i),
                         }
                     }
-                    if let Some(install) = launch {
-                        match install.launch() {
-                            Ok(()) => debug::append_debug_log(
-                                &dir,
-                                &format!("wallpaper engine: starting {}", install.exe.display()),
-                            ),
-                            Err(e) => {
-                                debug::log_error(
+                    // A panic in one job is logged (the panic logger has the
+                    // details) and the worker goes on with the next.
+                    let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        if let Some(install) = launch {
+                            match install.launch() {
+                                Ok(()) => debug::append_debug_log(
                                     &dir,
                                     &format!(
-                                        "wallpaper engine: couldn't start {} — {e}",
+                                        "wallpaper engine: starting {}",
                                         install.exe.display()
                                     ),
-                                );
-                                let mut s = shared.lock_safe();
-                                s.starting = false;
-                                s.last_error = Some(format!("Couldn't start it: {e}"));
-                            }
-                        }
-                    }
-                    if let Some(bg) = bg {
-                        show_background(&dir, &bg);
-                    }
-                    if let Some((install, commands)) = we {
-                        let mut failed = None;
-                        for c in &commands {
-                            let what = c.args()[1..].join(" ");
-                            match install.send(c) {
-                                Ok(()) => {
-                                    debug::log_debug(&dir, &format!("wallpaper engine: {what}"))
-                                }
+                                ),
                                 Err(e) => {
-                                    debug::log_warn(
+                                    debug::log_error(
                                         &dir,
-                                        &format!("wallpaper engine: '{what}' failed — {e}"),
+                                        &format!(
+                                            "wallpaper engine: couldn't start {} — {e}",
+                                            install.exe.display()
+                                        ),
                                     );
-                                    failed = Some(format!("'{}' failed: {e}", c.args()[1]));
+                                    let mut s = shared.lock_safe();
+                                    s.starting = false;
+                                    s.last_error = Some(format!("Couldn't start it: {e}"));
                                 }
                             }
                         }
-                        shared.lock_safe().last_error = failed;
+                        if let Some(bg) = bg {
+                            show_background(&dir, &bg);
+                        }
+                        if let Some((install, commands)) = we {
+                            let mut failed = None;
+                            for c in &commands {
+                                let what = c.args()[1..].join(" ");
+                                match install.send(c) {
+                                    Ok(()) => {
+                                        debug::log_debug(&dir, &format!("wallpaper engine: {what}"))
+                                    }
+                                    Err(e) => {
+                                        debug::log_warn(
+                                            &dir,
+                                            &format!("wallpaper engine: '{what}' failed — {e}"),
+                                        );
+                                        failed = Some(format!("'{}' failed: {e}", c.args()[1]));
+                                    }
+                                }
+                            }
+                            shared.lock_safe().last_error = failed;
+                        }
+                    }));
+                    if done.is_err() {
+                        debug::log_error(
+                            &dir,
+                            "desktop background: a job panicked — the worker carries on",
+                        );
                     }
                 }
             });

@@ -444,7 +444,7 @@ the fit) is kept
 in `Settings::desktop_background_before` (app-wide, not in a look); a profile
 without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
 several quick changes. The Desktop page (its own sidebar section, "Windows") shows previews of the pictures
-(`app_icons::PictureCache`, decoded with the `image` crate — format read from the
+(`app_icons::PictureCache`: one decode thread with a queue — newest request first, so the rows in view load first, at most 64 waiting — rows up to 384 × 216, list lines 128 × 72, at most 150 kept, the least recently used dropped first; decoded with the `image` crate — format read from the
 content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
 own), Windows' own background included (the kept one, else what Windows
 shows now), and lists the connected screens left to right. The wallpaper host doesn't
@@ -491,7 +491,7 @@ buttons queue a `WeAction` (Start launches it, Stop sends `-control stop` —
 the Windows background shows and it stays in the tray; Wallpaper Engine has no
 documented way to quit, and a polite close request is ignored — Resume sends
 `play`), and the app reports back `running`, `stopped`, `starting` and the
-last error, which the page shows in red until a command succeeds. A launch that isn't running 30 s later is reported
+last error, which the page shows in red until a command succeeds. The worker, the preview decoder and the library read catch a panic (logged by the panic logger) and carry on. A launch that isn't running 30 s later is reported
 (`starting_since`) instead of "Starting…" for ever. Not
 installed: the page shows what it would add and **Get it on Steam**
 (`store_link`: `steam://store/431960` when Steam is installed, else the store

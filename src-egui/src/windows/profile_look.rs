@@ -195,7 +195,9 @@ impl BackgroundPicker {
         let _ = std::thread::Builder::new()
             .name("we-library".into())
             .spawn(move || {
-                let _ = tx.send(install.library());
+                // A broken library must not take the thread down unseen.
+                let library = std::panic::catch_unwind(|| install.library()).unwrap_or_default();
+                let _ = tx.send(library);
                 ctx.request_repaint();
             });
         self.we_loading = Some(rx);
@@ -611,7 +613,7 @@ fn wallpaper_engine_group(
                         }
                         for w in &we.library {
                             let on = current.as_deref().is_some_and(|f| f.eq_ignore_ascii_case(&w.file));
-                            let load = || w.preview.as_deref().and_then(|p| pictures.get(&ctx, p));
+                            let load = || w.preview.as_deref().and_then(|p| pictures.get_small(&ctx, p));
                             if ui_kit::picture_choice(ui, dc, on, &w.title, load) {
                                 pick = Some(w.file.clone());
                                 ui.close();
