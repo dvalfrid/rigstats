@@ -37,7 +37,7 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 ring = "0.17"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef", "wintrust", "softpub", "wincrypt", "winver", "wingdi", "commdlg"] }
+winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef", "wintrust", "softpub", "wincrypt", "winver", "wingdi", "commdlg", "combaseapi", "objbase"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"

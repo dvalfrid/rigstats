@@ -786,6 +786,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_session_subtitle_says_when_how_long_and_pinned() {
+        let meta = SessionMeta {
+            id: "1".into(),
+            name: "Session".into(),
+            start_unix: 1_700_000_000,
+            end_unix: Some(1_700_000_725),
+            pinned: true,
+            legacy: false,
+            summary: Default::default(),
+        };
+        assert_eq!(
+            session_subtitle(&meta),
+            format!("{} · 12m 5s · Pinned", fmt_local(1_700_000_000))
+        );
+        let running = SessionMeta {
+            end_unix: None,
+            pinned: false,
+            ..meta
+        };
+        assert!(session_subtitle(&running).starts_with("Recording · "));
+    }
+
+    #[test]
     fn fmt_duration_formats_hours_minutes_seconds() {
         assert_eq!(fmt_duration(45), "45s");
         assert_eq!(fmt_duration(125), "2m 5s");

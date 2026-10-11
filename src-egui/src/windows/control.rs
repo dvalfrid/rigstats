@@ -3159,6 +3159,79 @@ fn header_name(cap: &FanHeaderCap, config: Option<&FanHeaderConfig>) -> String {
 mod tests {
     use super::*;
 
+    #[test]
+    fn overview_summaries_say_what_a_profile_does() {
+        assert_eq!(fans_summary(&BTreeMap::new()), "Motherboard default");
+        let mut headers = BTreeMap::new();
+        let curve = FanHeaderConfig {
+            label: None,
+            source: "cpu_package".into(),
+            curve: vec![[30.0, 30.0], [80.0, 100.0]],
+            hysteresis_c: 3.0,
+        };
+        headers.insert("a".to_owned(), curve.clone());
+        assert_eq!(fans_summary(&headers), "Custom curve on 1 fan header");
+        headers.insert("b".to_owned(), curve);
+        assert_eq!(fans_summary(&headers), "Custom curves on 2 fan headers");
+
+        let stock = AmdCpuLimit::default();
+        assert_eq!(
+            cpu_summary(&stock, &CurveOptPart::default()),
+            "Stock limits"
+        );
+        let eco = AmdCpuLimit {
+            ppt_w: Some(142.0),
+            ..Default::default()
+        };
+        let co = CurveOptPart {
+            all_core: Some(-10),
+            per_core: None,
+        };
+        assert_eq!(
+            cpu_summary(&eco, &co),
+            "142 W power limit · Curve Optimizer"
+        );
+
+        assert_eq!(gpu_summary(&BTreeMap::new()), "Stock power limit");
+        assert_eq!(
+            gpu_summary(&BTreeMap::from([("gpu".to_owned(), -15)])),
+            "Power limit -15 %"
+        );
+    }
+
+    #[test]
+    fn lighting_summary_names_the_effect_and_its_colour() {
+        assert_eq!(lighting_summary(None), ("Left as it is".to_owned(), None));
+        let red = AuraPart {
+            effect: Some("static".into()),
+            color: Some("#ff0000".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            lighting_summary(Some(&red)),
+            (
+                "Static".to_owned(),
+                Some(egui::Color32::from_rgb(255, 0, 0))
+            )
+        );
+        let cycle = AuraPart {
+            effect: Some("spectrum_cycle".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            lighting_summary(Some(&cycle)),
+            ("Colour cycle".to_owned(), None),
+            "no single colour"
+        );
+    }
+
+    #[test]
+    fn device_kinds_read_as_words() {
+        assert_eq!(device_kind("monitor_light_bar"), "Monitor light bar");
+        assert_eq!(device_kind("keyboard"), "Keyboard");
+        assert_eq!(device_kind(""), "");
+    }
+
     fn curve() -> Vec<[f64; 2]> {
         vec![[30.0, 25.0], [50.0, 40.0], [70.0, 80.0]]
     }

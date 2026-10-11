@@ -885,3 +885,32 @@ pub fn send_notification(title: &str, message: &str, icon: NotifyIcon) {
 fn send_test_notification() {
     send_notification("RigStats", "Test notification", NotifyIcon::Info);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn writing_the_draft_back_keeps_what_this_window_does_not_edit() {
+        // The live settings: wallpaper layer, click-through on, a look the
+        // Control Center set, and a profile's stored look.
+        let mut live = settings::Settings::default();
+        live.window_layer = "wallpaper".into();
+        live.overlay_click_through = true;
+        live.theme = "red".into();
+        live.overlay_enabled = true;
+        settings::switch_profile_look(&mut live, "gaming");
+        // A draft from when the dialog opened, with one change of its own.
+        let mut draft = settings::Settings::default();
+        draft.model_name = "My rig".into();
+
+        let written = live_preview(&draft, &live);
+        assert_eq!(written.model_name, "My rig", "the dialog's own change");
+        assert_eq!(written.window_layer, "wallpaper", "layer waits for Save");
+        assert!(written.overlay_click_through);
+        assert_eq!(written.theme, "red", "the look belongs to the profile");
+        assert!(written.overlay_enabled);
+        assert_eq!(written.look_profile.as_deref(), Some("gaming"));
+        assert!(written.profile_looks.contains_key("gaming"));
+    }
+}

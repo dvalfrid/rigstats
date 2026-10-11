@@ -85,6 +85,24 @@ pub fn file_description(_path: &str) -> Option<String> {
 /// The program's large (32 px) icon as an image.
 #[cfg(windows)]
 fn icon_image(path: &str) -> Option<egui::ColorImage> {
+    // SHGetFileInfo needs COM on this thread (Microsoft's docs). The UI
+    // thread already has it; anywhere else, set it up for this call.
+    let com = unsafe {
+        winapi::um::combaseapi::CoInitializeEx(
+            std::ptr::null_mut(),
+            winapi::um::objbase::COINIT_APARTMENTTHREADED,
+        )
+    };
+    let image = icon_image_com(path);
+    // S_OK / S_FALSE: this call initialized (or re-counted) COM — undo it.
+    if com >= 0 {
+        unsafe { winapi::um::combaseapi::CoUninitialize() };
+    }
+    image
+}
+
+#[cfg(windows)]
+fn icon_image_com(path: &str) -> Option<egui::ColorImage> {
     use winapi::um::shellapi::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
     use winapi::um::wingdi::{
         DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
@@ -223,4 +241,30 @@ fn open_dialog(owner_title: &str) -> Option<String> {
 #[cfg(not(windows))]
 fn open_dialog(_owner_title: &str) -> Option<String> {
     None
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    /// Notepad is on every Windows machine, the CI runner included.
+    fn notepad() -> String {
+        let root = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+        format!(r"{root}\System32\notepad.exe")
+    }
+
+    #[test]
+    fn a_program_has_its_own_name_and_an_icon() {
+        let name = file_description(&notepad());
+        assert!(name.as_deref().is_some_and(|n| !n.is_empty()), "{name:?}");
+        let icon = icon_image(&notepad()).expect("notepad has an icon");
+        assert!(icon.size[0] >= 16 && icon.size[1] >= 16, "{:?}", icon.size);
+        assert!(icon.pixels.iter().any(|p| p.a() > 0), "not blank");
+    }
+
+    #[test]
+    fn a_missing_file_has_neither() {
+        let gone = r"C:\no\such\program.exe";
+        assert_eq!(file_description(gone), None);
+    }
 }
