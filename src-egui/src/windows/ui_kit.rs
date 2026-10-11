@@ -927,6 +927,7 @@ pub enum Icon {
     Dashboard,
     Overlay,
     Alerts,
+    Desktop,
     Power,
     Fans,
     Cpu,
@@ -948,6 +949,7 @@ impl Icon {
             Icon::Dashboard => Color32::from_rgb(10, 132, 255),
             Icon::Overlay => Color32::from_rgb(175, 82, 222),
             Icon::Alerts => Color32::from_rgb(255, 69, 58),
+            Icon::Desktop => Color32::from_rgb(0, 190, 180),
             Icon::Power => Color32::from_rgb(48, 176, 80),
             Icon::Fans => Color32::from_rgb(50, 173, 200),
             Icon::Cpu => Color32::from_rgb(255, 149, 0),
@@ -1010,6 +1012,14 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
                 at(-0.27, -0.2),
             ]));
             p.circle_filled(at(0.0, 0.36), s * 0.08, color);
+        }
+        Icon::Desktop => {
+            // A framed picture: a hill and the sun.
+            let r = Rect::from_center_size(c, vec2(s * 0.84, s * 0.64));
+            p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
+            p.add(fill(vec![at(-0.3, 0.22), at(-0.06, -0.06), at(0.18, 0.22)]));
+            p.add(fill(vec![at(0.04, 0.22), at(0.18, 0.06), at(0.32, 0.22)]));
+            p.circle_filled(at(0.18, -0.12), s * 0.07, color);
         }
         Icon::Power => {
             p.add(fill(vec![at(0.1, -0.48), at(-0.26, 0.08), at(0.04, 0.08)]));

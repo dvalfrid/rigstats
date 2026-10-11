@@ -247,7 +247,7 @@ pub fn dashboard_page(
         ui,
         dc,
         "Dashboard",
-        &format!("How the dashboard and the desktop look in {profile}."),
+        &format!("How the dashboard looks in {profile}."),
     );
     let Some(look) = editor.look.as_mut() else {
         return;
@@ -276,7 +276,6 @@ pub fn dashboard_page(
             });
         },
     );
-    desktop_background_group(ui, dc, look, &mut editor.background);
     ui_kit::group(ui, dc, None, None, |g| {
         open_settings_row(
             g,
@@ -288,6 +287,42 @@ pub fn dashboard_page(
         );
     });
     editor.preview(link);
+}
+
+/// The Desktop page (#306): the profile's desktop background.
+pub fn desktop_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    profile: &str,
+    editor: &mut LookEditor,
+    link: &LookLink,
+) {
+    ui_kit::page_header(
+        ui,
+        dc,
+        "Desktop",
+        &format!("The Windows desktop background in {profile}."),
+    );
+    let Some(look) = editor.look.as_mut() else {
+        return;
+    };
+    desktop_background_group(ui, dc, look, &mut editor.background);
+    editor.preview(link);
+}
+
+/// What the Overview's Desktop tile says.
+pub fn desktop_summary(bg: Option<&DesktopBackground>) -> String {
+    match bg {
+        None => "Windows' own background".to_owned(),
+        Some(b) if b.screens.is_empty() => file_name(&b.path),
+        Some(b) => format!("One per screen · {} pictures", b.screens.len()),
+    }
+}
+
+fn file_name(path: &str) -> String {
+    Path::new(path)
+        .file_name()
+        .map_or_else(|| path.to_owned(), |n| n.to_string_lossy().into_owned())
 }
 
 /// The profile's desktop background (#306): a picture — the same on every
@@ -312,11 +347,6 @@ fn desktop_background_group(
             choose_picture(&mut look.desktop_background, screen.as_deref(), path, &ids);
         }
     }
-    let file_name = |path: &str| {
-        Path::new(path)
-            .file_name()
-            .map_or_else(|| path.to_owned(), |n| n.to_string_lossy().into_owned())
-    };
     let several = picker.screens.len() > 1;
     let per_screen = several
         && look
@@ -340,7 +370,7 @@ fn desktop_background_group(
     ui_kit::group(
         ui,
         dc,
-        Some("Desktop background"),
+        Some("Background"),
         Some("Without a picture, the profile shows Windows' own background."),
         |g| {
             let Some(bg) = look.desktop_background.as_mut() else {
@@ -746,6 +776,17 @@ mod tests {
             "amber"
         );
         assert!(!editor.dirty());
+    }
+
+    #[test]
+    fn the_desktop_tile_names_the_picture_or_counts_them() {
+        assert_eq!(desktop_summary(None), "Windows' own background");
+        let ids = vec!["left".to_owned(), "right".to_owned()];
+        let mut bg = None;
+        choose_picture(&mut bg, None, r"C:\pics\calm.jpg".into(), &ids);
+        assert_eq!(desktop_summary(bg.as_ref()), "calm.jpg");
+        choose_picture(&mut bg, Some("right"), "b.jpg".into(), &ids);
+        assert_eq!(desktop_summary(bg.as_ref()), "One per screen · 2 pictures");
     }
 
     #[test]

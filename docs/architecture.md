@@ -437,13 +437,13 @@ offers; Windows has one fit for all screens); `None` = Windows' own background.
 Windows' `IDesktopWallpaper` (COM) reads and sets it per monitor. The main
 app's `sync_desktop_background` (`src-egui/src/app/desktop_background.rs`)
 checks every frame whether the active profile's background changed — a profile
-switch, a preview in the Control Center's Dashboard page and a Revert all arrive
+switch, a preview in the Control Center's Desktop page and a Revert all arrive
 that way — and asks the pure `desktop_background::step` what to show: the first
 time a profile replaces the background, Windows' own (each screen's picture and
 the fit) is kept
 in `Settings::desktop_background_before` (app-wide, not in a look); a profile
 without a picture puts it back and forgets it. Setting it blocks while Windows notifies every window, so a worker thread does it and shows only the latest of
-several quick changes. The Dashboard page shows previews of the pictures
+several quick changes. The Desktop page (its own sidebar section, "Windows") shows previews of the pictures
 (`app_icons::PictureCache`, decoded with the `image` crate on a thread of its
 own) and lists the connected screens left to right. The wallpaper host doesn't
 touch it. Step 2 of #306

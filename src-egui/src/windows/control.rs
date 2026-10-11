@@ -86,6 +86,7 @@ pub enum Page {
     Dashboard,
     Overlay,
     Alerts,
+    Desktop,
     Power,
     Fans,
     Cpu,
@@ -1817,15 +1818,12 @@ pub fn show(
         .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(4.0);
-                for (i, &(page, icon, label)) in PAGES.iter().enumerate() {
+                for &(page, icon, label) in PAGES {
                     if !shown.has(page) {
                         continue;
                     }
-                    match i {
-                        1 => ui_kit::nav_header(ui, dc, "RIGStats"),
-                        4 => ui_kit::nav_header(ui, dc, "Hardware"),
-                        9 => ui_kit::nav_header(ui, dc, "Automation"),
-                        _ => {}
+                    if let Some(header) = nav_section(page) {
+                        ui_kit::nav_header(ui, dc, header);
                     }
                     if ui_kit::nav_item(ui, dc, icon, label, ui_state.tab == page).clicked() {
                         ui_state.tab = page;
@@ -1890,6 +1888,13 @@ pub fn show(
                         look_link,
                     ),
                     Page::Overlay => profile_look::overlay_page(
+                        ui,
+                        dc,
+                        profile_name,
+                        &mut ui_state.look,
+                        look_link,
+                    ),
+                    Page::Desktop => profile_look::desktop_page(
                         ui,
                         dc,
                         profile_name,
@@ -1986,12 +1991,14 @@ pub fn show(
 }
 
 /// The Control Center's pages, in sidebar order: the overview, the
-/// profile's RIGStats look, then its hardware.
+/// profile's RIGStats look, its Windows desktop, its hardware, then the
+/// app rules.
 const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Overview, Icon::Overview, "Overview"),
     (Page::Dashboard, Icon::Dashboard, "Dashboard"),
     (Page::Overlay, Icon::Overlay, "Overlay"),
     (Page::Alerts, Icon::Alerts, "Alerts"),
+    (Page::Desktop, Icon::Desktop, "Desktop"),
     (Page::Power, Icon::Power, "Power"),
     (Page::Fans, Icon::Fans, "Fans"),
     (Page::Cpu, Icon::Cpu, "CPU"),
@@ -1999,6 +2006,18 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Lighting, Icon::Lighting, "Lighting"),
     (Page::Rules, Icon::Rules, "App rules"),
 ];
+
+/// The sidebar section a page starts, if it starts one. The Overview's
+/// tile groups use the same names.
+fn nav_section(page: Page) -> Option<&'static str> {
+    match page {
+        Page::Dashboard => Some("RIGStats"),
+        Page::Desktop => Some("Windows"),
+        Page::Power => Some("Hardware"),
+        Page::Rules => Some("Automation"),
+        _ => None,
+    }
+}
 
 /// Which hardware pages this PC has (the service's capabilities);
 /// unsupported features are hidden, not greyed out.
@@ -2270,14 +2289,9 @@ fn overview_page(
             Icon::Dashboard,
             "Dashboard",
             format!(
-                "{} · {} panels{}",
+                "{} · {} panels",
                 profile_look::theme_name(&look.theme),
-                look.visible_panels.len(),
-                if look.desktop_background.is_some() {
-                    " · own background"
-                } else {
-                    ""
-                }
+                look.visible_panels.len()
             ),
             Some(theme::AppTheme::from_key(&look.theme).accent),
         ),
@@ -2300,6 +2314,13 @@ fn overview_page(
             None,
         ),
     ];
+    let windows_tiles = [(
+        Page::Desktop,
+        Icon::Desktop,
+        "Desktop",
+        profile_look::desktop_summary(look.desktop_background.as_ref()),
+        None,
+    )];
     let hardware_tiles = [
         (Page::Power, Icon::Power, "Power", power, None),
         (Page::Fans, Icon::Fans, "Fans", fans_summary(headers), None),
@@ -2339,6 +2360,7 @@ fn overview_page(
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
     for (title, tiles) in [
         ("RIGStats", &look_tiles[..]),
+        ("Windows", &windows_tiles[..]),
         ("Hardware", &hardware_tiles[..]),
         ("Automation", &automation_tiles[..]),
     ] {
