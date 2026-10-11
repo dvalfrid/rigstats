@@ -1,0 +1,53 @@
+name: Download stats
+
+# A weekly snapshot of download counts per release (tools/download-stats.ps1),
+# appended to downloads.csv on the `stats` branch. GitHub keeps only running
+# totals, so these snapshots are the history. `main` is protected, so the data
+# lives on its own branch and never touches main or a release.
+# Not triggered on release: releases are created with GITHUB_TOKEN, and GitHub
+# starts no workflow from a GITHUB_TOKEN-caused event (see release.yml).
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # push to the stats branch
+
+concurrency:
+  group: download-stats
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main (for the script)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+
+      - name: Check out the stats branch
+        run: |
+          if git fetch --depth 1 origin stats:stats; then
+            git worktree add "$RUNNER_TEMP/stats" stats
+          else
+            echo "No stats branch yet — starting it"
+            git worktree add --orphan -b stats "$RUNNER_TEMP/stats"
+          fi
+
+      - name: Append a snapshot
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pwsh -File tools/download-stats.ps1 -Repo $env:GITHUB_REPOSITORY -Append "$env:RUNNER_TEMP/stats/downloads.csv"
+
+      - name: Push the snapshot
+        working-directory: ${{ runner.temp }}/stats
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add downloads.csv
+          git commit -m "stats: download snapshot $(date -u +%Y-%m-%d)"
+          git push origin stats
