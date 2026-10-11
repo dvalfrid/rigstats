@@ -213,8 +213,65 @@ Leave the "Use workflow from" dropdown on `main`.
 
 1. Develop normally and merge PRs to `main`.
 2. Release Please keeps one release PR updated automatically.
-3. When ready to release, merge the release PR.
+3. When ready to release, go through the [release routine](#release-routine)
+   and merge the release PR.
 4. GitHub creates the tag/release and `release.yml` attaches the signed installer.
+
+## Release Routine
+
+**Before merging the release PR:**
+
+1. **Checks on `main`:** `cargo xtask verify`. While the dev sidecar
+   (`tools\dev-sidecar.ps1`) runs, it locks the sidecar's build, so the .NET
+   part can't run. If the sidecar hasn't changed since the last release
+   (`git diff --stat v<last>..main -- sensor-sidecar sensor-sidecar.Tests` is
+   empty), its tests passed for that release and the Rust part
+   (`cargo xtask fmt-check`, `clippy`, `test`) is enough. Otherwise stop the dev
+   sidecar first (Ctrl+C) and run the whole of `verify`.
+2. **Start-up smoke test:** `pwsh -File tools\smoke-app.ps1`, on a fresh debug
+   build of `main`. Close the debug app before building. A running app locks
+   `rigstats.exe`, so `cargo build` fails while the smoke test still runs the
+   older exe. Check that the build said `Finished`.
+3. **The [manual pre-release checklist](#manual-pre-release-checklist)** for
+   whatever this cycle touched.
+4. **Read the release PR's changelog** as a user would: each line is what they
+   get. A line that only makes sense to us can be reworded without touching
+   history. Put a `BEGIN_COMMIT_OVERRIDE` … `END_COMMIT_OVERRIDE` block, holding
+   the line as it should read (conventional-commit form), in the description of
+   the merged PR it came from. Release-please uses it on its next run (any push
+   to `main`).
+5. **Docs say what ships:** the README (the Control Center table, feature
+   sections, the dependency versions it names), the website's text and
+   screenshots (`assets/*.png`, copied to the site when it is deployed), and
+   `docs/troubleshooting.md` for every new feature that can go wrong.
+6. **`winget: hold`?** Only when testers should try it first (see
+   [Winget](#winget)).
+
+**After merging it:**
+
+7. **Wait for the Release workflow** until the installer and `latest.json` are
+   on the release.
+8. **The release text on GitHub.** `CHANGELOG.md` (written by release-please,
+   built into the app's "What's new") and the GitHub Release's text are two
+   different things. The release text can be edited at any time without
+   touching the tag, the code or the installer. Put a short **Highlights**
+   section, written for users, above the generated list: the big features,
+   anything optional, and where to report a problem (a diagnostics ZIP from
+   Status → Collect Diagnostics…). Either use **Edit release** on the release
+   page, or:
+
+   ```powershell
+   gh release view vX.Y.Z --json body --jq .body > generated.md
+   Get-Content highlights.md, generated.md | Set-Content notes.md
+   gh release edit vX.Y.Z --notes-file notes.md
+   ```
+
+   The upload step in `release.yml` only adds files, so it never overwrites the
+   text.
+9. **The signed installer** — the Control Center check in the manual checklist,
+   which only the released installer can show.
+10. **Screenshots that show a version** (the website's Status screenshot names
+    the built-in dependency versions): retake them from the installed release.
 
 ## Commit Style
 
