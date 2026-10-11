@@ -209,6 +209,7 @@ impl Screen {
 #[cfg(windows)]
 mod win {
     use super::{DesktopBackground, Fit, Screen, ScreenPicture};
+    use std::ptr::NonNull;
     use winapi::shared::windef::RECT;
     use winapi::shared::winerror::S_OK;
     use winapi::um::combaseapi::{
@@ -241,20 +242,25 @@ mod win {
     fn with_wallpaper<T>(f: impl FnOnce(&IDesktopWallpaper) -> T) -> Result<T, String> {
         unsafe {
             let init = CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED);
-            let mut p: *mut IDesktopWallpaper = std::ptr::null_mut();
+            let mut raw: *mut IDesktopWallpaper = std::ptr::null_mut();
             let hr = CoCreateInstance(
                 &CLSID_DesktopWallpaper,
                 std::ptr::null_mut(),
                 CLSCTX_ALL,
                 &IDesktopWallpaper::uuidof(),
-                (&mut p as *mut *mut IDesktopWallpaper).cast(),
+                (&mut raw as *mut *mut IDesktopWallpaper).cast(),
             );
-            let out = if hr >= 0 && !p.is_null() {
-                let r = f(&*p);
-                (*p).Release();
-                Ok(r)
-            } else {
-                Err(format!("no desktop wallpaper object (0x{hr:08x})"))
+            // Only a non-null pointer from a successful call is used.
+            let out = match NonNull::new(raw) {
+                Some(w) if hr >= 0 => {
+                    // SAFETY: a live COM object; we hold the one reference
+                    // CoCreateInstance gave us until the Release below.
+                    let w = w.as_ref();
+                    let r = f(w);
+                    w.Release();
+                    Ok(r)
+                }
+                _ => Err(format!("no desktop wallpaper object (0x{hr:08x})")),
             };
             // S_OK / S_FALSE: this call initialized (or re-counted) COM.
             if init >= 0 {
