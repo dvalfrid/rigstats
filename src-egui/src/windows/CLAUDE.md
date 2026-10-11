@@ -13,7 +13,7 @@ Every setting has exactly one home:
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval |
 
-Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor.
+Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears.
 
 ## Window lifecycle (mandatory for every dialog, #203)
 

@@ -286,7 +286,7 @@ pub fn show(
                                 draft, saved_at, ..
                             } = &mut *st;
                             match page {
-                                Page::General => general_page(ui, dc, draft, dir.as_ref()),
+                                Page::General => general_page(ui, dc, draft),
                                 Page::Display => {
                                     display_page(ui, dc, draft, &applied_layer, &gpu_names)
                                 }
@@ -394,7 +394,7 @@ fn control_center_row(
     page: control::Page,
 ) {
     g.row(title, Some(subtitle), |ui| {
-        if theme::dialog_btn_secondary(ui, "Control Center", dc).clicked() {
+        if theme::dialog_btn_secondary(ui, "Open Control Center", dc).clicked() {
             *requests.lock_safe() = Some(OpenRequest::Control(page));
         }
     });
@@ -402,7 +402,7 @@ fn control_center_row(
 
 // ── General ───────────────────────────────────────────────────────────────────
 
-fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings, dir: &Path) {
+fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
     ui_kit::page_header(ui, dc, "General", "Start-up, the header and recordings.");
     ui_kit::group(ui, dc, None, None, |g| {
         g.row(
@@ -430,7 +430,7 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
         ui,
         dc,
         Some("Session recording"),
-        Some("Start and stop a recording from the tray menu; browse past ones in Session History."),
+        Some("Start and stop a recording from the tray menu; browse past ones — and their files — in Session History."),
         |g| {
             g.row("Keep recordings for", None, |ui| {
                 let current = LOG_RETENTION_OPTIONS
@@ -442,11 +442,6 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
                         ui.selectable_value(&mut draft.log_retention_days, days, label);
                     }
                 });
-            });
-            g.row("Recordings and logs", None, |ui| {
-                if theme::dialog_btn_secondary(ui, "Open Folder", dc).clicked() {
-                    let _ = std::process::Command::new("explorer").arg(dir).spawn();
-                }
             });
         },
     );
