@@ -104,6 +104,8 @@ jobs:
           fi
           sed -i "s#<Program_Version>.*</Program_Version>#<Program_Version>${version}</Program_Version>#" website/pad.xml
           sed -i "s#<Primary_Download_URL>.*</Primary_Download_URL>#<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v${version}/RIGStats_${version}_x64-setup.exe</Primary_Download_URL>#" website/pad.xml
+          # The website's structured data names the version too (search engines).
+          sed -i -E "s#(\"softwareVersion\": )\"[^\"]*\"#\1\"${version}\"#" website/index.html
 
           expected_url="https://github.com/dvalfrid/rigstats/releases/download/v${version}/RIGStats_${version}_x64-setup.exe"
           if ! grep -qF "<Program_Version>${version}</Program_Version>" website/pad.xml || \
@@ -144,15 +146,15 @@ jobs:
             sed -i "s|<Program_Change_Info>.*</Program_Change_Info>|<Program_Change_Info>${changeInfo}</Program_Change_Info>|" website/pad.xml
           fi
 
-          if git diff --quiet -- website/pad.xml; then
+          if git diff --quiet -- website/pad.xml website/index.html; then
             echo "PAD file already up to date"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add website/pad.xml
-          git commit -m "chore(distribution): sync PAD release date and changelog"
+          git add website/pad.xml website/index.html
+          git commit -m "chore(distribution): sync PAD and website version, release date and changelog"
           git push origin HEAD:release-please--branches--main
 
   trigger-build:

@@ -4,8 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RIGStats — Hardware Monitor &amp; Control Center for Windows</title>
-  <meta name="description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
-  <meta name="keywords" content="hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, curve optimizer, undervolt, power profiles, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc">
+  <meta name="description" content="Free Windows hardware monitor &amp; control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.">
+  <meta name="keywords" content="hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc">
   <link rel="canonical" href="https://rigstats.app/">
   <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 
@@ -14,16 +14,17 @@
   <meta property="og:url" content="https://rigstats.app/">
   <meta property="og:site_name" content="RIGStats">
   <meta property="og:title" content="RIGStats — Hardware Monitor &amp; Control Center for Windows">
-  <meta property="og:description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
-  <meta property="og:image" content="https://rigstats.app/images/rigStats.png">
-  <meta property="og:image:width" content="450">
-  <meta property="og:image:height" content="800">
+  <meta property="og:description" content="Free Windows hardware monitor &amp; control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.">
+  <meta property="og:image" content="https://rigstats.app/images/feature-graphic-1024x500.png">
+  <meta property="og:image:width" content="1024">
+  <meta property="og:image:height" content="500">
+  <meta property="og:image:alt" content="The RIGStats dashboard: CPU and GPU load with temperatures, disks and motherboard fans">
 
   <!-- Twitter / X card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="RIGStats — Hardware Monitor &amp; Control Center for Windows">
-  <meta name="twitter:description" content="Free hardware monitor and control center for Windows gaming PCs. Live CPU &amp; GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.">
-  <meta name="twitter:image" content="https://rigstats.app/images/rigStats.png">
+  <meta name="twitter:description" content="Free Windows hardware monitor &amp; control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.">
+  <meta name="twitter:image" content="https://rigstats.app/images/feature-graphic-1024x500.png">
 
   <!-- Structured data -->
   <script type="application/ld+json">
@@ -31,19 +32,43 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "RIGStats",
-    "description": "Free hardware monitor and control center for Windows gaming PCs. Live CPU & GPU temps on a secondary display or as an in-game FPS overlay — plus fan curves, power profiles, Ryzen and Radeon tuning, and RGB lighting. No bloat, no telemetry.",
-    "keywords": "hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, curve optimizer, undervolt, power profiles, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc",
+    "description": "Free Windows hardware monitor & control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.",
+    "keywords": "hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc",
     "url": "https://rigstats.app/",
     "downloadUrl": "https://github.com/dvalfrid/rigstats/releases/latest",
     "applicationCategory": "UtilitiesApplication",
     "operatingSystem": "Windows 10, Windows 11",
-    "softwareVersion": "latest",
+    "softwareVersion": "1.47.0",
     "offers": {
       "@type": "Offer",
       "price": "0",
       "priceCurrency": "USD"
     },
-    "screenshot": "https://rigstats.app/images/rigStats.png",
+    "image": "https://rigstats.app/images/feature-graphic-1024x500.png",
+    "screenshot": [
+      "https://rigstats.app/images/rigStats.png",
+      "https://rigstats.app/images/control-center-overview.png",
+      "https://rigstats.app/images/control-center-desktop.png",
+      "https://rigstats.app/images/control-center-fans.png",
+      "https://rigstats.app/images/control-center-lighting.png"
+    ],
+    "featureList": [
+      "Live CPU, GPU, RAM, storage, network and power telemetry on a secondary display",
+      "In-game FPS and temperature overlay",
+      "Desktop wallpaper mode and floating panels",
+      "Profiles that bundle power plan, fans, limits, lighting and desktop",
+      "Automatic profile switching while a program runs",
+      "Desktop background per profile, one picture per screen",
+      "Wallpaper Engine per profile: wallpapers per screen, paused while gaming, or off",
+      "Fan curves per fan, running in a background service",
+      "AMD Ryzen 9000 power limits and Curve Optimizer",
+      "AMD Radeon and NVIDIA GeForce power limit",
+      "RGB lighting with ASUS Aura Sync and Windows Dynamic Lighting",
+      "Philips Hue rooms and zones",
+      "Wireless device battery levels",
+      "Session recording and history",
+      "Temperature and load alerts"
+    ],
     "author": {
       "@type": "Person",
       "name": "dvalfrid",
@@ -295,7 +320,7 @@
   <section class="section" id="control-center">
     <div class="container">
       <header class="section-head">
-        <h2>Control Center &amp; Fan Curves</h2>
+        <h2>Control Center — Profiles, Fans, Lighting &amp; Desktop</h2>
         <p>Profiles bundle your power plan and fan curves — and on supported hardware, CPU and GPU power limits and RGB lighting — together with how RIGStats itself looks: accent colour, panels, overlay and alert levels. They switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
       </header>
       <div class="cc-rows">

@@ -123,11 +123,11 @@ review + the `Verify (Windows)` check; the default `GITHUB_TOKEN` can't
 bypass that, only the repo's Admin role can).
 
 **Version + download URL** — `Program_Version` and `Primary_Download_URL` in
-`website/pad.xml` are marked with the same `x-release-please-version`
-comment used in `src-egui/Cargo.toml`, and the file is listed in
-`release-please-config.json`'s `extra-files`. Release-please bumps both the
-moment it opens/updates the release PR — same mechanism as the Cargo.toml
-version bump.
+`website/pad.xml` are set by the `Sync PAD version, release date and
+changelog` step in `release-please.yml`, from the version release-please wrote
+into `src-egui/Cargo.toml`, every time it opens or updates the release PR. The
+same step sets `softwareVersion` in the website's structured data
+(`website/index.html`, the JSON-LD block search engines read).
 
 **Release date + changelog text** — `Program_Release_Month/Day/Year` and
 `Program_Change_Info` aren't simple version substrings, so
