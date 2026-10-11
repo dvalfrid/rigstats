@@ -74,7 +74,7 @@ Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, t
 One rule, the same in every window:
 
 - **Save / Revert (or Cancel)** where a change is previewed or tried first, or can be risky — Settings, the Control Center's Dashboard, Overlay, Alerts, Fans, CPU, Graphics card and Lighting. Footer: "Unsaved changes to …" with Revert and Save.
-- **Saved at once** where nothing can go wrong — the Power plan and App rules (and Settings' click-through). The page subtitle says "Changes are saved at once." and the footer shows a green **Saved** for a few seconds after each change (`ControlUi::saved_at`), so a change never passes silently.
+- **Saved at once** where nothing can go wrong — the Power plan and App rules (and Settings' click-through). The page subtitle says "Changes are saved at once." and the footer shows a green **Saved** for a few seconds after each change (`ControlUi::saved_at`), so a change never passes silently. The same goes for one-off actions without a visible result: a Hue room switched ("Saved"), a profile reset ("Reset to its defaults"), a device's Dynamic Lighting switched ("Sent to the device"), and Settings' click-through ("Saved" beside Save/Cancel). Actions whose result shows by itself (rename, duplicate, delete, pairing) need none.
 
 ## Words
 

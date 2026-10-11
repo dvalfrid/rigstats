@@ -104,6 +104,9 @@ pub struct SettingsWindow {
     last_preview: settings::Settings,
     pub page: Page,
     pub error: Option<String>,
+    /// When click-through (applied at once) last changed — the footer
+    /// confirms it for a moment.
+    saved_at: Option<std::time::Instant>,
     /// Detected GPU adapter names for the Display page's GPU selector.
     gpu_names: Vec<String>,
 }
@@ -118,6 +121,7 @@ impl SettingsWindow {
             draft,
             page: Page::default(),
             error: None,
+            saved_at: None,
             gpu_names,
         }
     }
@@ -205,6 +209,16 @@ pub fn show(
                 if theme::dialog_btn_primary(ui, "Save").clicked() {
                     action_save = true;
                 }
+                let recent = state
+                    .lock_safe()
+                    .saved_at
+                    .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3));
+                if recent {
+                    ui.add_space(10.0);
+                    ui_kit::status(ui, ui_kit::C_GOOD, "Saved");
+                    ui.ctx()
+                        .request_repaint_after(std::time::Duration::from_millis(500));
+                }
             });
         });
 
@@ -268,7 +282,9 @@ pub fn show(
                                 wallpaper_notice(ui, dc);
                             }
                             let gpu_names = st.gpu_names.clone();
-                            let draft = &mut st.draft;
+                            let SettingsWindow {
+                                draft, saved_at, ..
+                            } = &mut *st;
                             match page {
                                 Page::General => general_page(ui, dc, draft, dir.as_ref()),
                                 Page::Display => {
@@ -283,6 +299,7 @@ pub fn show(
                                     dir.as_ref(),
                                     dcomp_available,
                                     requests,
+                                    saved_at,
                                 ),
                                 Page::Notifications => notifications_page(ui, dc, draft, requests),
                             }
@@ -648,6 +665,7 @@ fn overlay_page(
     dir: &Path,
     dcomp_available: bool,
     requests: &OpenRequests,
+    saved_at: &mut Option<std::time::Instant>,
 ) {
     ui_kit::page_header(
         ui,
@@ -735,6 +753,7 @@ fn overlay_page(
                         );
                     }
                     reload.store(true, Ordering::Relaxed);
+                    *saved_at = Some(std::time::Instant::now());
                 }
             },
         );

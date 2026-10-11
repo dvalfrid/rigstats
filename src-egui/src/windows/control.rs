@@ -175,7 +175,7 @@ pub struct ControlUi {
     look: LookEditor,
     /// When a page that saves at once (Power, App rules) last saved — the
     /// footer confirms it for a moment.
-    saved_at: Option<Instant>,
+    saved_at: Option<(Instant, &'static str)>,
     /// The App rules page's "Add a rule" form (#307).
     rule_form: crate::windows::rules_page::RulesPage,
 }
@@ -886,7 +886,15 @@ fn lighting_tab(
             });
         });
         if let Some(hue) = &hue {
-            hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+            hue_card(
+                ui,
+                dc,
+                control,
+                hue,
+                cmd_tx,
+                &mut ui_state.hue_ip,
+                &mut ui_state.saved_at,
+            );
         }
         return;
     };
@@ -1034,6 +1042,7 @@ fn lighting_tab(
                             .clicked()
                         {
                             let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
+                            ui_state.saved_at = Some((Instant::now(), "Sent to the device"));
                         }
                     });
                 } else if wdl_hint {
@@ -1068,7 +1077,15 @@ fn lighting_tab(
     }
     if let Some(hue) = &hue {
         ui.add_space(16.0);
-        hue_card(ui, dc, control, hue, cmd_tx, &mut ui_state.hue_ip);
+        hue_card(
+            ui,
+            dc,
+            control,
+            hue,
+            cmd_tx,
+            &mut ui_state.hue_ip,
+            &mut ui_state.saved_at,
+        );
     }
 }
 
@@ -1126,6 +1143,7 @@ fn hue_card(
     hue: &HueCaps,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     typed_ip: &mut String,
+    saved_at: &mut Option<(Instant, &'static str)>,
 ) {
     let busy = control.hue_busy;
     let paired = matches!((&hue.bridge, hue.paired), (Some(_), true));
@@ -1192,6 +1210,7 @@ fn hue_card(
                 }
                 if changed {
                     let _ = cmd_tx.try_send(ControlCmd::HueChoose(chosen));
+                    *saved_at = Some((Instant::now(), "Saved"));
                 }
             }
             _ => {
@@ -1765,12 +1784,12 @@ pub fn show(
                         .size(11.0)
                         .color(dc.muted),
                     );
-                } else if ui_state
+                } else if let Some((_, text)) = ui_state
                     .saved_at
-                    .is_some_and(|t| t.elapsed() < Duration::from_secs(3))
+                    .filter(|(t, _)| t.elapsed() < Duration::from_secs(3))
                 {
                     ui.add_space(10.0);
-                    ui_kit::status(ui, ui_kit::C_GOOD, "Saved");
+                    ui_kit::status(ui, ui_kit::C_GOOD, text);
                     ui.ctx().request_repaint_after(Duration::from_millis(500));
                 } else if control.preview_reverted {
                     ui.add_space(10.0);
@@ -1937,7 +1956,7 @@ pub fn show(
                             look_link,
                             &mut ui_state.rule_form,
                         ) {
-                            ui_state.saved_at = Some(Instant::now());
+                            ui_state.saved_at = Some((Instant::now(), "Saved"));
                         }
                     }
                     Page::Power | Page::Fans => {
@@ -1950,7 +1969,7 @@ pub fn show(
                             ),
                         );
                         if power_tab(ui, dc, control, cmd_tx) {
-                            ui_state.saved_at = Some(Instant::now());
+                            ui_state.saved_at = Some((Instant::now(), "Saved"));
                         }
                     }
                 });
@@ -2138,6 +2157,7 @@ fn profile_bar(
                             .clicked()
                         {
                             let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
+                            ui_state.saved_at = Some((Instant::now(), "Reset to its defaults"));
                         }
                     } else if ui.button(format!("Delete {}…", active.name)).clicked() {
                         ui_state.profile_edit = Some(ProfileEdit::ConfirmDelete {
