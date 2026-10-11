@@ -2270,9 +2270,14 @@ fn overview_page(
             Icon::Dashboard,
             "Dashboard",
             format!(
-                "{} · {} panels",
+                "{} · {} panels{}",
                 profile_look::theme_name(&look.theme),
-                look.visible_panels.len()
+                look.visible_panels.len(),
+                if look.desktop_background.is_some() {
+                    " · own background"
+                } else {
+                    ""
+                }
             ),
             Some(theme::AppTheme::from_key(&look.theme).accent),
         ),

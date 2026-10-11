@@ -9,16 +9,22 @@
 //! file, so the wallpaper host follows), Save keeps it for the profile,
 //! Revert or Close puts back what was there before.
 
+use crate::app_icons::pick_picture;
 use crate::lock_ext::LockSafe;
 use crate::overlay::ALL_OVERLAY_METRICS;
 use crate::theme::{self, AppTheme, DialogColors};
 use crate::windows::settings::{self as settings_win, ALL_PANELS};
 use crate::windows::ui_kit::{self, Group, C_CRIT, C_WARN};
 use crate::windows::{OpenRequest, OpenRequests};
+use rigstats_backend::desktop_background::{DesktopBackground, Fit};
 use rigstats_backend::settings::{self, ProfileLook, Settings};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Receiver;
 use std::sync::{Arc, Mutex};
+
+/// The Control Center's window title — the Open dialog's owner.
+const CONTROL_TITLE: &str = "RigStats — Control Center";
 
 /// What the pages need to read and save the settings.
 pub struct LookLink<'a> {
@@ -87,6 +93,8 @@ pub struct LookEditor {
     profile_id: Option<String>,
     look: Option<ProfileLook>,
     before: Option<ProfileLook>,
+    /// The answer to come from the "Choose a picture" dialog.
+    picking: Option<Receiver<Option<String>>>,
 }
 
 fn persist(link: &LookLink, s: &Settings) {
@@ -188,11 +196,22 @@ pub fn dashboard_page(
         ui,
         dc,
         "Dashboard",
-        &format!("How the dashboard looks in {profile}."),
+        &format!("How the dashboard and the desktop look in {profile}."),
     );
     let Some(look) = editor.look.as_mut() else {
         return;
     };
+    // A picture chosen in the Open dialog.
+    if let Some(answer) = editor.picking.as_ref().and_then(|rx| rx.try_recv().ok()) {
+        editor.picking = None;
+        if let Some(path) = answer {
+            let fit = look
+                .desktop_background
+                .as_ref()
+                .map_or(Fit::Fill, |b| b.fit);
+            look.desktop_background = Some(DesktopBackground { path, fit });
+        }
+    }
     ui_kit::group(ui, dc, Some("Appearance"), None, |g| {
         g.row("Accent colour", Some(theme_name(&look.theme)), |ui| {
             ui_kit::swatches(ui, dc, &mut look.theme, &theme_options());
@@ -217,6 +236,7 @@ pub fn dashboard_page(
             });
         },
     );
+    desktop_background_group(ui, dc, look, &mut editor.picking);
     ui_kit::group(ui, dc, None, None, |g| {
         open_settings_row(
             g,
@@ -228,6 +248,54 @@ pub fn dashboard_page(
         );
     });
     editor.preview(link);
+}
+
+/// The profile's desktop background (#306): a picture and how it fits, or
+/// Windows' own background.
+fn desktop_background_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    look: &mut ProfileLook,
+    picking: &mut Option<Receiver<Option<String>>>,
+) {
+    let ctx = ui.ctx().clone();
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Desktop background"),
+        Some("Without a picture, the profile shows Windows' own background."),
+        |g| {
+            let file = look.desktop_background.as_ref().map(|b| {
+                Path::new(&b.path)
+                    .file_name()
+                    .map_or_else(|| b.path.clone(), |n| n.to_string_lossy().into_owned())
+            });
+            let sub = file.as_deref().unwrap_or("Windows' own background");
+            g.row("Picture", Some(sub), |ui| {
+                let waiting = picking.is_some();
+                ui.add_enabled_ui(!waiting, |ui| {
+                    let label = if waiting { "Choosing…" } else { "Choose…" };
+                    if theme::dialog_btn_secondary(ui, label, dc).clicked() {
+                        *picking = Some(pick_picture(CONTROL_TITLE, ctx.clone()));
+                    }
+                });
+                if look.desktop_background.is_some()
+                    && theme::dialog_btn_secondary(ui, "Use Windows' own", dc).clicked()
+                {
+                    look.desktop_background = None;
+                }
+            });
+            if let Some(bg) = look.desktop_background.as_mut() {
+                g.row("Fit", Some("How the picture fills the screen"), |ui| {
+                    ui_kit::dropdown(ui, "desktop_fit", bg.fit.label(), |ui| {
+                        for fit in Fit::ALL {
+                            ui.selectable_value(&mut bg.fit, fit, fit.label());
+                        }
+                    });
+                });
+            }
+        },
+    );
 }
 
 /// What an overlay metric is, in words — the overlay itself shows short

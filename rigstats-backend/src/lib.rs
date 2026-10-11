@@ -1,6 +1,7 @@
 pub mod autostart;
 pub mod control;
 pub mod debug;
+pub mod desktop_background;
 pub mod hardware;
 pub mod lhm;
 pub mod lhm_process;

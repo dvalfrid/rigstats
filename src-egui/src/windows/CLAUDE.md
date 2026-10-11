@@ -9,7 +9,7 @@ Every setting has exactly one home:
 | A Control Center profile holds (`ProfileLook` + the service's profile) | Settings holds (applies to the whole app) |
 |---|---|
 | Power plan, fans, CPU/GPU limits, lighting | Start with Windows, model name, recordings |
-| Accent colour, opacity, panels and their order | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
+| Accent colour, opacity, panels and their order, desktop background | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval |
 

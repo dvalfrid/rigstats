@@ -1,7 +1,8 @@
 //! Program icons and names for the app rules (#307), and the "Choose a
 //! program" dialog. Windows only: the icon comes from `SHGetFileInfo`, the
 //! name from the file's version information ("Counter-Strike 2" rather than
-//! `cs2.exe`), the dialog is the common Open dialog on its own thread.
+//! `cs2.exe`), the dialog is the common Open dialog on its own thread
+//! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
 
 use std::collections::HashMap;
@@ -197,30 +198,60 @@ fn icon_image(_path: &str) -> Option<egui::ColorImage> {
     None
 }
 
-/// Opens the Open dialog for programs on its own thread (it blocks until
-/// closed), owned by the window titled `owner_title` so it stays on top of
-/// it. The chosen path arrives on the returned channel (`None` = cancelled).
+/// Opens the Open dialog for programs; see [`pick_file`].
 pub fn pick_program(
     owner_title: &'static str,
     ctx: egui::Context,
 ) -> std::sync::mpsc::Receiver<Option<String>> {
+    pick_file(
+        owner_title,
+        "Choose a program",
+        "Programs (*.exe)\0*.exe\0\0",
+        ctx,
+    )
+}
+
+/// Opens the Open dialog for pictures Windows can show as the desktop
+/// background (#306); see [`pick_file`].
+pub fn pick_picture(
+    owner_title: &'static str,
+    ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Option<String>> {
+    pick_file(
+        owner_title,
+        "Choose a picture",
+        "Pictures (*.jpg, *.png, *.bmp, *.webp)\0*.jpg;*.jpeg;*.png;*.bmp;*.webp\0\0",
+        ctx,
+    )
+}
+
+/// Opens the Open dialog on its own thread (it blocks until closed), owned
+/// by the window titled `owner_title` so it stays on top of it. `filter` is
+/// the dialog's NUL-separated filter list. The chosen path arrives on the
+/// returned channel (`None` = cancelled).
+fn pick_file(
+    owner_title: &'static str,
+    title: &'static str,
+    filter: &'static str,
+    ctx: egui::Context,
+) -> std::sync::mpsc::Receiver<Option<String>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = std::thread::Builder::new()
-        .name("pick-program".into())
+        .name("pick-file".into())
         .spawn(move || {
-            let _ = tx.send(open_dialog(owner_title));
+            let _ = tx.send(open_dialog(owner_title, title, filter));
             ctx.request_repaint();
         });
     rx
 }
 
 #[cfg(windows)]
-fn open_dialog(owner_title: &str) -> Option<String> {
+fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
     use winapi::um::commdlg::{
         GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
     };
-    let filter: Vec<u16> = "Programs (*.exe)\0*.exe\0\0".encode_utf16().collect();
-    let title = wide("Choose a program");
+    let filter: Vec<u16> = filter.encode_utf16().collect();
+    let title = wide(title);
     let mut file = vec![0u16; 2048];
     let owner = crate::win_opacity::find_hwnd(owner_title);
     let mut ofn: OPENFILENAMEW = unsafe { std::mem::zeroed() };
@@ -239,7 +270,7 @@ fn open_dialog(owner_title: &str) -> Option<String> {
 }
 
 #[cfg(not(windows))]
-fn open_dialog(_owner_title: &str) -> Option<String> {
+fn open_dialog(_owner_title: &str, _title: &str, _filter: &str) -> Option<String> {
     None
 }
 
