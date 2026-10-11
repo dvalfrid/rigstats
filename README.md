@@ -5,6 +5,7 @@
 [![Release](https://img.shields.io/github/v/release/dvalfrid/rigstats?label=release)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![License](https://img.shields.io/github/license/dvalfrid/rigstats)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
+[![winget](https://img.shields.io/winget/v/Codeby.RIGStats?label=winget&color=0078D4)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/Codeby/RIGStats)
 [![egui](https://img.shields.io/badge/egui-0.34-4A90D9?logo=rust&logoColor=white)](https://github.com/emilk/egui)
 
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
