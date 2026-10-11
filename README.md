@@ -226,7 +226,7 @@ Not yet: Intel CPU limits ([#209](https://github.com/dvalfrid/rigstats/issues/20
 
 ## Sensor Coverage
 
-Data is merged from three sources each tick: **LibreHardwareMonitor v0.9.6** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).
+Data is merged from three sources each tick: **LibreHardwareMonitor 0.9.7-pre749** (sensor telemetry via named pipe), **sysinfo** (OS-level counters), and **WMI** (static metadata at startup).
 
 <!-- TODO: panels-collage.png — composite grid of all 10 panels -->
 
