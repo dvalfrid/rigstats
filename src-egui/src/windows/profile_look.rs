@@ -74,13 +74,13 @@ const BATTERY_THRESHOLDS: &[(&str, &str, &str, Option<&str>)] = &[
         "battery",
         "Battery charge",
         "%",
-        Some("Alerts when it drops below"),
+        Some("The laptop and every wireless device — alerts when one drops below"),
     ),
     (
         "battery_power",
         "Battery power draw",
         "W",
-        Some("While running on battery"),
+        Some("The laptop only, while it runs on battery"),
     ),
 ];
 /// Width of the unit after each row's fields.
@@ -674,7 +674,7 @@ pub fn alerts_page(
         ui,
         dc,
         Some("Battery"),
-        Some("Laptop battery and wireless devices."),
+        Some("Each wireless device (headset, mouse, keyboard — see Peripherals) alerts on its own, and not while it is charging."),
         |g| {
             header(g, "Alert at");
             rows(g, BATTERY_THRESHOLDS);
