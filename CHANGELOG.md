@@ -8,6 +8,21 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.47.0](https://github.com/dvalfrid/rigstats/compare/v1.46.0...v1.47.0) (2026-10-11)
+
+
+### Features
+
+* **profiles:** desktop background picture per profile ([#316](https://github.com/dvalfrid/rigstats/issues/316)) ([c526451](https://github.com/dvalfrid/rigstats/commit/c52645128adbb17a963a98809685afce6e880f85))
+* **profiles:** switch profile automatically while a program runs ([#315](https://github.com/dvalfrid/rigstats/issues/315)) ([c650d09](https://github.com/dvalfrid/rigstats/commit/c650d09875252714cee2c35be04e5cb538c592c9))
+* **profiles:** Wallpaper Engine per profile ([#319](https://github.com/dvalfrid/rigstats/issues/319)) ([5552067](https://github.com/dvalfrid/rigstats/commit/5552067122c3527de38a5ea3b9e066f088351f56))
+
+
+### Bug Fixes
+
+* **profiles:** a program started after a hand pick still switches ([#318](https://github.com/dvalfrid/rigstats/issues/318)) ([5b84ee9](https://github.com/dvalfrid/rigstats/commit/5b84ee9bdb228deb747835612d69b2c5aee00982)), closes [#317](https://github.com/dvalfrid/rigstats/issues/317)
+* **status:** name the dependency versions that are actually built in ([#313](https://github.com/dvalfrid/rigstats/issues/313)) ([d959f5b](https://github.com/dvalfrid/rigstats/commit/d959f5ba3d1cb54f7b5ad857600754fc7d436323))
+
 ## [1.46.0](https://github.com/dvalfrid/rigstats/compare/v1.45.1...v1.46.0) (2026-10-10)
 
 
