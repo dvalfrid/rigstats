@@ -46,6 +46,26 @@ firmware and starts the installed service again. The full workflow is in
 pwsh -File tools\dev-sidecar.ps1 -Live
 ```
 
+## `download-stats.ps1`
+
+Download counts per release from GitHub's release assets: **installer**
+(`RIGStats_*_x64-setup.exe` — new installs, winget installs and upgrades, and
+the app's own updates, which all download from GitHub) and **checks**
+(`latest.json` — the app's update checks, about 10 s after start and then every
+6 h; the best measure of active installations). The table also shows each
+release per day while it was the newest, so short- and long-lived releases
+compare. Needs `gh`, logged in.
+
+```powershell
+pwsh -File tools\download-stats.ps1              # recent releases
+pwsh -File tools\download-stats.ps1 -Top 0       # every release
+pwsh -File tools\download-stats.ps1 -Append x.csv  # add a snapshot to a CSV
+```
+
+GitHub keeps only running totals, so `.github/workflows/download-stats.yml`
+appends a snapshot every Monday to `downloads.csv` on the `stats` branch (see
+"Download Statistics" in [docs/release.md](../docs/release.md)).
+
 ## `release-highlights.ps1`
 
 Puts the release's highlights (`release-highlights.md` in the repo root) into a

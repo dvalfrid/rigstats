@@ -276,6 +276,30 @@ touching the tag, the code or the installer. The app's Updates window doesn't
 read it, though: what users see there is fixed when the release is built, so
 the highlights belong in `release-highlights.md` before the release.
 
+## Download Statistics
+
+GitHub counts downloads per release asset, but keeps only running totals — no
+history, no unique users. `.github/workflows/download-stats.yml` takes a
+snapshot every Monday (and on **Run workflow**) with
+`tools/download-stats.ps1` and appends it to `downloads.csv` on the `stats`
+branch: one row per release with the snapshot date, tag, publish date,
+**installer** downloads and update **checks**. `main` is protected, so the
+data lives on its own branch and never touches `main` or a release; the
+workflow creates the branch on its first run. GitHub shows the CSV as a table:
+`https://github.com/dvalfrid/rigstats/blob/stats/downloads.csv`.
+
+- **installer** — `RIGStats_*_x64-setup.exe`: new installs from the website or
+  GitHub, winget installs and upgrades (winget fetches the file from GitHub),
+  the app's own updates — plus test installs and scanners.
+- **checks** — `latest.json`: the app's update checks (about 10 s after start,
+  then every 6 h). The app fetches `releases/latest/download/latest.json`, so a
+  check counts on the release that was newest at the time — the best measure
+  of active installations (roughly: checks per day ÷ 3–4).
+
+It isn't triggered by a release: releases are created with `GITHUB_TOKEN`, and
+GitHub starts no workflow from a `GITHUB_TOKEN`-caused event. For a quick look
+any time: `pwsh -File tools\download-stats.ps1`.
+
 ## Commit Style
 
 Use [Conventional Commits](https://www.conventionalcommits.org/) for best changelog quality:
