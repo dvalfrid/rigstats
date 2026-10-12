@@ -15,7 +15,8 @@ iGPU — so the dGPU couldn't power down, and tools that switch to Eco mode
 reads `available_adapters`.
 
 **Remove when** upstream egui no longer holds the enumerated adapters (upstream
-issue: _link_). To drop the patch: delete `third_party/egui-wgpu` and the
+issue: <https://github.com/emilk/egui/issues/8704>; status, planned upstream PR
+and notes in `docs/upstream/egui-8704.md`). To drop the patch: delete `third_party/egui-wgpu` and the
 `[patch.crates-io]` entry, then check with `nvidia-smi` on a hybrid laptop that
 `rigstats.exe` isn't listed.
 
