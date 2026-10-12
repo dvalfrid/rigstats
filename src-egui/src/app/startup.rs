@@ -9,6 +9,7 @@ use rigstats_egui::geometry::{
     compute_landscape_window_height, compute_window_height, pick_window_rect_for_profile,
     profile_is_landscape, profile_scale, profile_to_size, resolve_pinned_position,
 };
+use rigstats_egui::gpu_guard::render_power_preference;
 use rigstats_egui::tray::load_app_icon;
 #[cfg(windows)]
 use rigstats_egui::win32_dark_mode;
@@ -144,6 +145,7 @@ pub(crate) fn native_options(
                         },
                         ..eframe::wgpu::InstanceDescriptor::new_without_display_handle()
                     },
+                    power_preference: render_power_preference(),
                     ..eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle()
                 },
             ),
@@ -153,7 +155,15 @@ pub(crate) fn native_options(
         // No DX12 adapter — default backend selection, opaque swap chain.
         // Opacity falls back to WS_EX_LAYERED (see `RigStatsApp::clear_color`
         // and the `win_opacity::set_opacity` call sites gated on this flag).
-        eframe::egui_wgpu::WgpuConfiguration::default()
+        eframe::egui_wgpu::WgpuConfiguration {
+            wgpu_setup: eframe::egui_wgpu::WgpuSetup::CreateNew(
+                eframe::egui_wgpu::WgpuSetupCreateNew {
+                    power_preference: render_power_preference(),
+                    ..eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle()
+                },
+            ),
+            ..Default::default()
+        }
     };
 
     eframe::NativeOptions {

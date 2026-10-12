@@ -1,4 +1,10 @@
 [workspace]
 members = ["src-egui", "rigstats-backend", "xtask"]
 default-members = ["src-egui", "rigstats-backend"]
+exclude = ["third_party"]
 resolver = "2"
+
+# egui-wgpu with one fix: don't keep a device open on every GPU (holds the
+# dGPU of hybrid laptops awake). See third_party/egui-wgpu/RIGSTATS-PATCH.md.
+[patch.crates-io]
+egui-wgpu = { path = "third_party/egui-wgpu" }

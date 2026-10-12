@@ -237,8 +237,15 @@ impl RenderState {
         #[allow(clippy::allow_attributes, clippy::arc_with_non_send_sync)] // For wasm
         Ok(Self {
             adapter,
+            // RIGStats patch (see ../RIGSTATS-PATCH.md): on DX12 every
+            // enumerated adapter owns an ID3D12Device, so keeping the list
+            // holds a device on the dGPU of a hybrid laptop for the app's
+            // whole lifetime. Drop it once the adapter has been chosen.
             #[cfg(not(target_arch = "wasm32"))]
-            available_adapters,
+            available_adapters: {
+                drop(available_adapters);
+                Vec::new()
+            },
             device,
             queue,
             target_format,

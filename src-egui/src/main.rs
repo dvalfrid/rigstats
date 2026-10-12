@@ -16,7 +16,7 @@ use rigstats_egui::geometry::{
     is_position_on_screen, monitor_rect_at, pick_window_rect_for_profile, profile_is_landscape,
     profile_scale, profile_to_size, resolve_pinned_position,
 };
-use rigstats_egui::gpu_guard::install_gpu_loss_guard;
+use rigstats_egui::gpu_guard::{install_gpu_loss_guard, log_render_adapter};
 use rigstats_egui::hotkey;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
@@ -1262,6 +1262,7 @@ fn main() {
             // `gpu_guard`. `update()` checks this flag every frame.
             let gpu_lost = Arc::new(AtomicBool::new(false));
             if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+                log_render_adapter(render_state, &dir_arc);
                 install_gpu_loss_guard(
                     render_state,
                     cc.egui_ctx.clone(),
