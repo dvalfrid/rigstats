@@ -19,7 +19,9 @@ use rigstats_egui::geometry::{
     compute_landscape_window_height, compute_window_height, guard_panel_position,
     pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
-use rigstats_egui::gpu_guard::install_gpu_loss_guard;
+use rigstats_egui::gpu_guard::{
+    install_gpu_loss_guard, log_render_adapter, render_power_preference,
+};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
 use rigstats_egui::{theme, PollStats};
@@ -370,6 +372,7 @@ fn main() {
                     },
                     ..eframe::wgpu::InstanceDescriptor::new_without_display_handle()
                 },
+                power_preference: render_power_preference(),
                 ..eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle()
             },
         ),
@@ -412,6 +415,7 @@ fn main() {
 
             let gpu_lost = Arc::new(AtomicBool::new(false));
             if let Some(render_state) = cc.wgpu_render_state.as_ref() {
+                log_render_adapter(render_state, &dir_arc);
                 install_gpu_loss_guard(
                     render_state,
                     cc.egui_ctx.clone(),

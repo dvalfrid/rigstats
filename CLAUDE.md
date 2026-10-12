@@ -127,6 +127,7 @@ Module catalogues sit next to the code and load when you work there:
 | Backend (`rigstats-backend/src/`) | `rigstats-backend/CLAUDE.md` |
 | Control Center service side + **hardware-write safety rules** | `sensor-sidecar/Control/CLAUDE.md` |
 | Full architecture, design decisions | `docs/architecture.md`, `docs/control-architecture.md` |
+| Open upstream work (patched dependencies in `third_party/`, issues/PRs filed with other projects) — status, evidence, next step | `docs/upstream/` (one file per issue, e.g. `egui-8704.md`) |
 
 Profiles are named `portrait-<size>` / `landscape-<size>` (landscape = transpose); sizing lives in `geometry.rs`.
 
