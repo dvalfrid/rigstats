@@ -1,7 +1,9 @@
 //! PERIPHERALS panel (#290): the battery of wireless devices the sensor
-//! service reads — ROG headsets, and keyboards and mice on the ROG Omni
-//! receiver (`PollStats.peripherals`, about once a minute). One row per
-//! device: name, a charge bar, and the percentage.
+//! service reads — ROG headsets, keyboards and mice, and Bluetooth devices
+//! with a battery level in Windows (#291; Logitech ones also report
+//! charging, #349) — `PollStats.peripherals`, every 20 s. One row per
+//! device: name, a charge bar, and the percentage; a device that
+//! disconnected is greyed with its last level (#351).
 
 use egui::{
     pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Shape, Stroke, Ui, Vec2,
