@@ -46,6 +46,8 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     private readonly HashSet<string> _failureLogged = [];
     private readonly BluetoothBatteryTracker _bluetooth = new();
     private bool _bluetoothFailureLogged;
+    private readonly LogitechBatteryReader _logitech = new();
+    private bool _logitechFailureLogged;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -82,9 +84,23 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     {
         try
         {
-            var result = _bluetooth.Update(BluetoothBatteries.Read(), DateTime.UtcNow);
+            var nodes = BluetoothBatteries.Read();
+            var result = _bluetooth.Update(nodes, DateTime.UtcNow);
             _bluetoothFailureLogged = false;
-            return result;
+            // Logitech devices also report charging in HID++ (#349); its
+            // failure leaves the Windows readings as they are.
+            try
+            {
+                var connected = nodes.Where(n => n.Connected).Select(n => n.Address).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                return LogitechBattery.Apply(result, _logitech.Read(connected));
+            }
+            catch (Exception e)
+            {
+                if (!_logitechFailureLogged)
+                    SidecarLog.Log($"[rigstats-control] Battery: Logitech devices not read: {e.Message}");
+                _logitechFailureLogged = true;
+                return result;
+            }
         }
         catch (Exception e)
         {
