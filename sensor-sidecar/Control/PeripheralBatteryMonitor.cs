@@ -30,7 +30,8 @@ public sealed class PeripheralStatusStore
 /// reading for <see cref="StaleRounds"/> reads (10 minutes), then drops off
 /// until it answers again. Charging over a cable on a 2.4 GHz device shows
 /// only in the battery reply, so it appears within one read interval — plus
-/// however long the device takes to report it.
+/// however long the device takes to report it. Bluetooth devices come from
+/// Windows' own battery properties in the same round (`BluetoothBatteries`).
 public sealed class PeripheralBatteryMonitor(LightingProvider lighting, PeripheralStatusStore store) : BackgroundService
 {
     internal static readonly TimeSpan FirstDelay = TimeSpan.FromSeconds(10);
@@ -43,6 +44,8 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     private readonly Dictionary<string, PeripheralStatus> _lastKnown = [];
     private readonly Dictionary<string, int> _misses = [];
     private readonly HashSet<string> _failureLogged = [];
+    private readonly BluetoothBatteryTracker _bluetooth = new();
+    private bool _bluetoothFailureLogged;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -58,7 +61,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
                 var ids = devices.Select(d => d.Id).ToList();
                 if (ShouldRead(lastRead, DateTime.UtcNow, lastIds, ids))
                 {
-                    store.Set(ReadAll(devices));
+                    store.Set(BluetoothBatteries.Merge(ReadAll(devices), ReadBluetooth()));
                     lastRead = DateTime.UtcNow;
                     lastIds = ids;
                 }
@@ -72,6 +75,25 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     /// passed, or the device list changed (plugged, unplugged, switched).
     public static bool ShouldRead(DateTime lastRead, DateTime now, IReadOnlyList<string> lastIds, IReadOnlyList<string> ids) =>
         now - lastRead >= ReadInterval || !ids.SequenceEqual(lastIds);
+
+    /// The Bluetooth devices' levels Windows already holds (#291); a failure
+    /// costs only the Bluetooth entries.
+    private IReadOnlyList<PeripheralStatus> ReadBluetooth()
+    {
+        try
+        {
+            var result = _bluetooth.Update(BluetoothBatteries.Read(), DateTime.UtcNow);
+            _bluetoothFailureLogged = false;
+            return result;
+        }
+        catch (Exception e)
+        {
+            if (!_bluetoothFailureLogged)
+                SidecarLog.Log($"[rigstats-control] Battery: Bluetooth devices not read: {e.Message}");
+            _bluetoothFailureLogged = true;
+            return [];
+        }
+    }
 
     /// One read over `devices`: fresh readings, else the last known one for
     /// a device still connected and silent for fewer than <see cref="StaleRounds"/> reads. Each device is guarded on its own, so one

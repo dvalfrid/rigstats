@@ -50,7 +50,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Session history — record, browse, and visualize past sessions | ✅ Done (v1.38) |
 | Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), NVIDIA desktop GPU power limit (#210, untested on hardware), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210, #234 |
 | Peripherals — battery status of ROG wireless devices (panel, tray hover card, low-battery alerts, connection type) | ✅ Done (v1.45) — #290 |
-| Peripherals — battery status for Bluetooth devices | 🔲 Planned (3.0) — #291 |
+| Peripherals — battery status for Bluetooth devices | ✅ Done (3.0) — #291 |
 | Peripherals — device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned (3.0) — #292 |
 
 ---
@@ -126,7 +126,7 @@ script to refresh it.
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🚧 In progress — built, awaiting a desktop GeForce test |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
 | [#234](https://github.com/dvalfrid/rigstats/issues/234) | `control-asus-laptop` | Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits) | v3.0 | 🔲 Planned |
-| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | v3.0 | 🔲 Planned |
+| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | v3.0 | ✅ Done |
 | [#292](https://github.com/dvalfrid/rigstats/issues/292) | `peripheral-config` | Peripherals: device configuration (DPI, polling rate, sidetone, EQ) | v3.0 | 🔲 Planned |
 | [#296](https://github.com/dvalfrid/rigstats/issues/296) | `omni-multi-receiver` | Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
@@ -1595,7 +1595,9 @@ Full design detail and history are in the issue.
 
 ## Peripherals — battery status ✅ (v1.45)
 
-[#290](https://github.com/dvalfrid/rigstats/issues/290). The sensor service reads the battery of the ROG wireless devices it already drives for lighting — headsets (`12 07`/`12 08`), keyboards with power info (`12 01`), the mouse on the ROG Omni receiver (`12 07`) — every 20 s, and notices devices plugged in or switched within seconds. Commands from ASUS Gear Link's device modules, cross-checked with G-Helper; verified live on the ROG Azoth X, Harpe Ace Aim Lab Edition and Delta II. The app shows them in an opt-in PERIPHERALS panel and a hover card over the tray icon (connection icon, name, bar, percentage, charging), and raises the Battery-threshold alert per device. Details: `docs/control-architecture.md` ("Peripherals: battery and settings", "Battery status of wireless devices"). Next: Bluetooth devices (#291), more than one Omni receiver (#296), device configuration (#292).
+[#290](https://github.com/dvalfrid/rigstats/issues/290). The sensor service reads the battery of the ROG wireless devices it already drives for lighting — headsets (`12 07`/`12 08`), keyboards with power info (`12 01`), the mouse on the ROG Omni receiver (`12 07`) — every 20 s, and notices devices plugged in or switched within seconds. Commands from ASUS Gear Link's device modules, cross-checked with G-Helper; verified live on the ROG Azoth X, Harpe Ace Aim Lab Edition and Delta II. The app shows them in an opt-in PERIPHERALS panel and a hover card over the tray icon (connection icon, name, bar, percentage, charging), and raises the Battery-threshold alert per device. Details: `docs/control-architecture.md` ("Peripherals: battery and settings", "Battery status of wireless devices"). Next: more than one Omni receiver (#296), device configuration (#292).
+
+**Bluetooth devices ✅** ([#291](https://github.com/dvalfrid/rigstats/issues/291)): the battery level Windows itself reads from any paired Bluetooth device (Settings › Bluetooth & devices) joins the same list — read from the device node's properties, nothing sent to the device. Shown while connected and 10 minutes after; no charging state (Windows doesn't expose it). Verified on a Logitech MX Anywhere 3 for Mac and a Satechi M1 Mouse. Details: `docs/control-architecture.md` ("Battery status of Bluetooth devices").
 
 ## Control Center — hardware control 🔲 (Milestone 3.0)
 

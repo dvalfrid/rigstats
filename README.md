@@ -22,7 +22,7 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
-- **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
+- **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, and the battery of any Bluetooth device Windows knows it for, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
@@ -363,11 +363,12 @@ Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor 
 
 | Metric | Source |
 | --- | --- |
-| Battery level (%) per wireless device | Sensor service, read once a minute from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
-| Charging state | Same |
+| Battery level (%) per wireless device | Sensor service, read every 20 s from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
+| Battery level (%) of Bluetooth devices | The level Windows itself reads and shows in Settings › Bluetooth & devices — any mouse, keyboard or headset that reports it; nothing is sent to the device |
+| Charging state | ROG devices (Windows doesn't expose charging for Bluetooth devices) |
 | Connection (USB cable, Bluetooth, 2.4 GHz) | Windows HID path and product name — no device command; shown as a small icon |
 
-Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while discharging, one per device). Hovering the tray icon shows a small card with each device's battery in the same colours. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. Bluetooth devices come later (#291).
+Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while discharging, one per device). Hovering the tray icon shows a small card with each device's battery in the same colours. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. A Bluetooth device shows while connected and for 10 minutes after it disconnects (Bluetooth mice drop their link when idle), with its last level.
 
 ### Battery (opt-in)
 

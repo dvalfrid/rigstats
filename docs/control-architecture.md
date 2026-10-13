@@ -929,7 +929,48 @@ round, so the golden fixtures don't carry it. The field's shape is pinned by
 `sensor-sidecar.Tests/contract/telemetry-peripherals.json`, which the Rust
 reader checks too. Not covered yet: ROG mice on their own 2.4 GHz dongle or
 cable (driven as LampArray, no ASUS protocol path), devices while another
-program owns the lighting, Bluetooth (#291).
+program owns the lighting.
+
+### Battery status of Bluetooth devices (#291)
+
+No device protocol: Windows already reads the standard battery level of a
+paired device (GATT Battery Service on Bluetooth LE, the HFP battery report on
+headsets) and stores it as a device property — what Settings › Bluetooth &
+devices shows. `BluetoothBatteries.Read` lists the present `BTHLE` and
+`BTHENUM` device nodes (`CM_Get_Device_ID_ListW`, filter enumerator +
+present) and reads, with `CM_Get_DevNode_PropertyW`:
+
+| Property | Key | Note |
+|---|---|---|
+| Battery level | `{104EA319-6EE2-4701-BD47-8DDBF425BBE5}` 2 | `DEVPROP_TYPE_BYTE`, percent; nodes without it are skipped |
+| Address | `{2BD67D8B-8BEB-48D5-87E0-6CDA3428040A}` 1 | string; the id is `bt:<address>`, one entry per address (a classic device has a node per service) |
+| Name | `DEVPKEY_NAME` `{A45C254E-…}` 14 | |
+| Container category | `{78C34FC8-104A-4ACA-9EA4-524D52996E57}` 90 | string list, `Input.Mouse` → mouse, `Input.Keyboard` → keyboard, `Audio.*` → headset, else device |
+
+Connected is `CM_Get_DevNode_Status` without `DN_DEVICE_DISCONNECTED`
+(`0x02000000`). A paired device stays *present* when off, with its last
+level, so `BluetoothBatteryTracker` shows a device while connected and for
+10 minutes after (like a silent ROG device); one already disconnected when
+the service starts isn't shown. Merged after the ROG readings; a Bluetooth
+entry whose name matches a ROG one is dropped (the ROG protocol also knows
+charging). Read in the same 20 s round, logged when first shown and on a
+10-point change (`Battery: MX Anywhere 3 Mac 80 % (Bluetooth).`).
+
+Measured on the owner's rig with a Logitech MX Anywhere 3 for Mac
+(2026-10-13), comparing the device's properties connected, off and charging:
+
+- **No charging flag.** The level rose while charging (75 → 80 %), nothing
+  else changed; `{104EA319-…}` 3 is a bool that stayed False either way, so it
+  isn't charging. Bluetooth entries always send `charging: false`.
+- **Connected flag:** `{83DA6326-97A6-4088-9453-A1923F573B29}` 15 also flips
+  with the connection; `DN_DEVICE_DISCONNECTED` was used since it's documented.
+- **`LastConnectedTime`** (`{2BD67D8B-…}` 11) is a FILETIME holding *local*
+  time, not UTC — so it isn't used; the tracker keeps its own timestamps.
+- `{104EA319-…}` 7 is a FILETIME (UTC) of the last level update.
+
+Live-verified on the same rig: the MX Anywhere 3 for Mac and a Satechi M1
+Mouse, both in the PERIPHERALS panel and the tray hover card with the
+Bluetooth icon.
 
 ### Philips Hue (#215)
 
