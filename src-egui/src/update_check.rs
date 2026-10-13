@@ -559,9 +559,22 @@ Write them under the version:
     }
 
     #[test]
-    fn the_shipped_file_has_only_its_instructions() {
-        // The repo's file between releases: nothing to show.
-        assert_eq!(parse_highlights(BUNDLED_HIGHLIGHTS), None);
+    fn the_shipped_file_is_empty_or_a_well_formed_list() {
+        // Between releases the file holds only its instructions; before a
+        // release, one list for the version it publishes.
+        if let Some((version, items)) = parse_highlights(BUNDLED_HIGHLIGHTS) {
+            let parts: Vec<&str> = version.split('.').collect();
+            assert!(
+                parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok()),
+                "the heading must be '# X.Y.Z', got '{version}'"
+            );
+            for item in &items {
+                assert!(
+                    item.starts_with("- **") && item.contains("** — "),
+                    "each highlight reads '- **Title** — text': {item}"
+                );
+            }
+        }
     }
 
     #[test]
