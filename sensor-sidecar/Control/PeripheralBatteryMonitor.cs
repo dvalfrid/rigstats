@@ -4,7 +4,9 @@ using SensorSidecar.Control.Lighting;
 namespace SensorSidecar.Control;
 
 /// One wireless device's battery in the telemetry (`peripherals`, #290).
-public sealed record PeripheralStatus(string Id, string Name, string Kind, int Battery, bool Charging, string Connection);
+/// `Connected` is false while the device keeps showing its last reading
+/// after it stopped answering or disconnected (#351).
+public sealed record PeripheralStatus(string Id, string Name, string Kind, int Battery, bool Charging, string Connection, bool Connected = true);
 
 /// The latest battery readings, written by `PeripheralBatteryMonitor` and
 /// read by `HardwareHost` for every telemetry sample.
@@ -27,7 +29,8 @@ public sealed class PeripheralStatusStore
 /// full discovery only on a change) and reads at once when the device list
 /// changed. A device that doesn't answer (asleep, off, or still in a
 /// receiver's paired list after switching to its cable) keeps its last
-/// reading for <see cref="StaleRounds"/> reads (10 minutes), then drops off
+/// reading for <see cref="StaleRounds"/> reads (10 minutes), marked not
+/// connected, then drops off
 /// until it answers again. Charging over a cable on a 2.4 GHz device shows
 /// only in the battery reply, so it appears within one read interval — plus
 /// however long the device takes to report it. Bluetooth devices come from
@@ -147,7 +150,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
             if (misses >= StaleRounds)
                 _lastKnown.Remove(device.Id);
             if (_lastKnown.TryGetValue(device.Id, out var known))
-                result.Add(known);
+                result.Add(fresh ? known : known with { Charging = false, Connected = false });
         }
         foreach (var gone in _lastKnown.Keys.Concat(_misses.Keys).Where(id => !present.Contains(id)).ToList())
         {

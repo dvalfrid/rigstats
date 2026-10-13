@@ -36,10 +36,10 @@ public class BluetoothBatteryTests
         var tracker = new BluetoothBatteryTracker();
         tracker.Update([Mouse()], T0);
 
-        Assert.Single(tracker.Update([Mouse(connected: false)], T0.AddMinutes(9)));
+        Assert.False(Assert.Single(tracker.Update([Mouse(connected: false)], T0.AddMinutes(9))).Connected);
         Assert.Empty(tracker.Update([Mouse(connected: false)], T0.AddMinutes(10)));
         Assert.Empty(tracker.Update([Mouse(connected: false)], T0.AddMinutes(11)));
-        Assert.Single(tracker.Update([Mouse()], T0.AddMinutes(12))); // back on
+        Assert.True(Assert.Single(tracker.Update([Mouse()], T0.AddMinutes(12))).Connected); // back on
     }
 
     [Fact]

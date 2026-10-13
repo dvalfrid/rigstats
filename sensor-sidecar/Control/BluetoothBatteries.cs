@@ -117,7 +117,8 @@ public static class BluetoothBatteries
 /// Which Bluetooth readings the panel shows: connected devices, and one that
 /// disconnected (switched off, asleep, out of range — a Bluetooth mouse drops
 /// its link after a few idle minutes) with its last level for
-/// <see cref="KeepAfterDisconnect"/>, like a silent ROG device. A device
+/// <see cref="KeepAfterDisconnect"/>, marked not connected, like a silent ROG
+/// device. A device
 /// already disconnected when the service starts isn't shown: its level is old.
 public sealed class BluetoothBatteryTracker
 {
@@ -143,7 +144,7 @@ public sealed class BluetoothBatteryTracker
                 _logged[node.Address] = node.Battery;
             }
             result.Add(new PeripheralStatus($"bt:{node.Address}", node.Name, BluetoothBatteries.KindOf(node.Category),
-                node.Battery, false, Lighting.Connection.Bluetooth));
+                node.Battery, false, Lighting.Connection.Bluetooth, node.Connected));
         }
         foreach (var gone in _lastConnected.Where(e => now - e.Value >= KeepAfterDisconnect).Select(e => e.Key).ToList())
         {
