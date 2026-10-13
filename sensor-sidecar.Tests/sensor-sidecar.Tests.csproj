@@ -72,6 +72,7 @@
     <Compile Include="..\sensor-sidecar\Control\Lighting\HueLink.cs" Link="Control\Lighting\HueLink.cs" />
     <Compile Include="..\sensor-sidecar\Control\Lighting\Battery.cs" Link="Control\Lighting\Battery.cs" />
     <Compile Include="..\sensor-sidecar\Control\BluetoothBatteries.cs" Link="Control\BluetoothBatteries.cs" />
+    <Compile Include="..\sensor-sidecar\Control\LogitechBattery.cs" Link="Control\LogitechBattery.cs" />
     <Compile Include="..\sensor-sidecar\Control\PeripheralBatteryMonitor.cs" Link="Control\PeripheralBatteryMonitor.cs" />
   </ItemGroup>
 

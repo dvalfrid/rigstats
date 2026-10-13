@@ -365,7 +365,7 @@ Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor 
 | --- | --- |
 | Battery level (%) per wireless device | Sensor service, read every 20 s from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
 | Battery level (%) of Bluetooth devices | The level Windows itself reads and shows in Settings › Bluetooth & devices — any mouse, keyboard or headset that reports it; nothing is sent to the device |
-| Charging state | ROG devices (Windows doesn't expose charging for Bluetooth devices) |
+| Charging state | ROG devices, and Logitech devices on Bluetooth (asked in Logitech's HID++ protocol — Windows doesn't expose charging for Bluetooth devices) |
 | Connection (USB cable, Bluetooth, 2.4 GHz) | Windows HID path and product name — no device command; shown as a small icon |
 
 Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while discharging, one per device). Hovering the tray icon shows a small card with each device's battery in the same colours. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. A Bluetooth device shows while connected and for 10 minutes after it disconnects (Bluetooth mice drop their link when idle), with its last level.

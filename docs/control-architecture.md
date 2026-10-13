@@ -961,7 +961,8 @@ Measured on the owner's rig with a Logitech MX Anywhere 3 for Mac
 
 - **No charging flag.** The level rose while charging (75 → 80 %), nothing
   else changed; `{104EA319-…}` 3 is a bool that stayed False either way, so it
-  isn't charging. Bluetooth entries always send `charging: false`.
+  isn't charging. Bluetooth entries send `charging: false` — except Logitech
+  devices, which say it themselves (below).
 - **Connected flag:** `{83DA6326-97A6-4088-9453-A1923F573B29}` 15 also flips
   with the connection; `DN_DEVICE_DISCONNECTED` was used since it's documented.
 - **`LastConnectedTime`** (`{2BD67D8B-…}` 11) is a FILETIME holding *local*
@@ -971,6 +972,41 @@ Measured on the owner's rig with a Logitech MX Anywhere 3 for Mac
 Live-verified on the same rig: the MX Anywhere 3 for Mac and a Satechi M1
 Mouse, both in the PERIPHERALS panel and the tray hover card with the
 Bluetooth icon.
+
+### Charging of Logitech devices on Bluetooth (#349)
+
+Logitech devices answer in their own protocol, HID++ 2.0, on a vendor HID
+collection — on Bluetooth LE usage page `0xFF43` (usage `0x0202`), long
+reports only (20 bytes, report id `0x11`), device index `0xFF` (direct;
+a reply may carry `0x00`). `LogitechBattery` sends only documented reads
+(Logitech's feature specs as implemented by Solaar's `hidpp20.py`):
+
+| Request | Bytes | Reply parameters |
+|---|---|---|
+| Root `getFeature(0x1004)` | `11 FF 00 0B 10 04` | feature index (0 = absent) |
+| Root `getFeature(0x1000)` (only if no `0x1004`) | `11 FF 00 0B 10 00` | feature index |
+| Unified Battery `0x1004` get_status (function 1) | `11 FF <idx> 1B` | state of charge %, level flags (8 full, 4 good, 2 low, 1 critical), charging status (0 discharging, 1 charging, 2 slow, 3 full, 4 error), external power |
+| Battery Status `0x1000` (function 0) | `11 FF <idx> 0B` | level %, next level, status (0 discharging, 1 recharging, 2 almost full, 3 full, 4 slow recharge) |
+
+The low nibble `B` is our software id: replies echo it, the device's own
+notifications carry 0 and are skipped. An error reply (`FF`, or HID++ 1.0
+`8F`) counts as no answer. The feature index is remembered per device, so a
+round is one request. `LogitechBatteryReader` matches the HID collection to
+the Windows Bluetooth node by the address in the HID-over-GATT path
+(`…_pid&b025_rev&0015_de6768c18cf5&col02`) and `LogitechBattery.Apply`
+puts its percentage (when it has one — a 0 % state of charge means level
+flags only, then Windows' percentage stays) and charging on that entry.
+Only connected devices are asked; a failure keeps the Windows reading and is
+logged once.
+
+Measured on the owner's MX Anywhere 3 for Mac (PID `B025`, 2026-10-13):
+Unified Battery at index 8, 90 % — the same as Windows; plugging the cable in
+showed charging in the next read (≤ 20 s), and unplugging it cleared it in the
+same way. The MX Mechanical Mini for Mac keyboard (PID `B36D`, Bluetooth name
+"MX MCHNCL M", category `Input.Keyboard`) answers the same way: Unified Battery,
+100 %, and charging with the cable in — at 100 % it reports full on power,
+which counts as charging (status 3, like Solaar). Not covered: Bolt/Unifying
+receivers (device index 1–6 behind the receiver; no hardware to test on).
 
 ### Philips Hue (#215)
 
