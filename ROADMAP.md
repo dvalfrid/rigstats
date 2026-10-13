@@ -34,101 +34,99 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Desktop background — Level 1 (HWND_BOTTOM) | ✅ Done (v1.24) |
 | Desktop background — Level 2 (WorkerW) | ✅ Done |
 | Desktop wallpaper mode — per-pixel opacity (DirectComposition) | ✅ Done |
-| Desktop background — WE Application wallpaper | 🔲 Planned (3.0) |
-| Desktop background — independently positioned panels (floating + WorkerW) | 🔲 Planned (3.0), see #170 |
+| Desktop background — WE Application wallpaper | 🔲 Planned |
+| Desktop background — independently positioned panels (floating + WorkerW) | 🔲 Planned, see #170 |
 | Total system power consumption | ✅ Done (v1.34) |
 | Stream Deck integration | ⏭ Not planned — no Stream Deck to build and test against (#106) |
-| Cross-platform OS abstraction — Linux port | 🔲 Planned (3.0) |
+| Cross-platform OS abstraction — Linux port | 🔲 Planned |
 | Landscape monitor support | ✅ Done (v1.32) |
 | egui migration — replace Tauri/WebView2 with native egui | ✅ Done (v1.27) |
 | UI performance — lighter rendering strategy | ✅ Done (v1.27, via egui migration) |
 | Background-only transparency (per-pixel alpha) — main window | ✅ Done (Normal/Always-on-Top/Always-Behind) |
 | Background-only transparency (per-pixel alpha) — floating mode | ✅ Done (v1.40) — DComp reveal burst, no upstream fix needed, see #169 |
 | Floating mode — reduce multi-window rendering cost | ⏭ Investigated, dropped — not worth the cost for a sub-1% saving |
-| Test coverage — sidecar + sensor extraction | ✅ Done (v2.0) |
+| Test coverage — sidecar + sensor extraction | ✅ Done |
 | Remove Node.js / npm infrastructure | ✅ Done |
 | Session history — record, browse, and visualize past sessions | ✅ Done (v1.38) |
-| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress (3.0) — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), NVIDIA desktop GPU power limit (#210, untested on hardware), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210, #234 |
+| Control Center — hardware control (fans, CPU/GPU limits, Curve Optimizer, Aura, profiles) | 🚧 In progress — fan control (#188), AMD CPU limits (#189), AMD GPU power limit (#190), NVIDIA desktop GPU power limit (#210, untested on hardware), Curve Optimizer (#191), ASUS Aura lighting (#192) and Philips Hue (#215) done; phases #187–#193, #209, #210, #234 |
 | Peripherals — battery status of ROG wireless devices (panel, tray hover card, low-battery alerts, connection type) | ✅ Done (v1.45) — #290 |
-| Peripherals — battery status for Bluetooth devices | ✅ Done (3.0) — #291 |
-| Peripherals — device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned (3.0) — #292 |
+| Peripherals — battery status for Bluetooth devices | ✅ Done (v1.48) — #291 |
+| Peripherals — device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned — #292 |
+| Lighting — Logitech G devices via HID++ (mice, keyboards, headsets) | 🔲 Planned — #353 |
 
 ---
 
 ## GitHub issue tracking
 
 The whole roadmap is mirrored to
-[GitHub Issues](https://github.com/dvalfrid/rigstats/issues) across two
-milestones — **[v2.0](https://github.com/dvalfrid/rigstats/milestone/1)** for the
-current scope and **[v3.0](https://github.com/dvalfrid/rigstats/milestone/2)** for
-post-2.0 features (e.g. the Control Center phases, peripherals, and the
-cross-platform OS abstraction / Linux port) —
-with shipped features as closed issues, planned work as open issues, and
-investigated-and-dropped items closed as *not planned*.
+[GitHub Issues](https://github.com/dvalfrid/rigstats/issues): shipped features
+as closed issues, planned work as open issues, and investigated-and-dropped
+items closed as *not planned*. There are no milestones — the status table above
+and the issue states show the progress, and the release notes say what shipped
+in which version.
 
 Each issue is tied to its roadmap entry by a stable **hidden marker** in the
 issue body — `<!-- roadmap-id: <id> -->` (invisible in GitHub's rendered view).
 `tools/sync-roadmap-issues.ps1` uses that marker to **upsert** issues
 idempotently: re-running updates the matching issue in place (title, body,
-labels, milestone, open/closed) instead of creating duplicates. A feature's
-milestone defaults to `v2.0`; add a `milestone` key to its `$features` entry to
-target a later one. The table below is **auto-generated** by that script from its
+labels, open/closed) instead of creating duplicates. The table below is **auto-generated** by that script from its
 `$features` data and the live issue numbers — do not edit it by hand; re-run the
 script to refresh it.
 
 <!-- roadmap-table:start -->
-| Issue | roadmap-id | Feature | Milestone | Status |
-| --- | --- | --- | --- | --- |
-| [#81](https://github.com/dvalfrid/rigstats/issues/81) | `gpu-driver-warning` | GPU driver version + stale-driver warning | v2.0 | ✅ Done |
-| [#83](https://github.com/dvalfrid/rigstats/issues/83) | `fullscreen-mode` | Fullscreen (fill-screen) mode | v2.0 | ✅ Done |
-| [#84](https://github.com/dvalfrid/rigstats/issues/84) | `auto-update` | Auto-update | v2.0 | ✅ Done |
-| [#85](https://github.com/dvalfrid/rigstats/issues/85) | `nvme-ssd-temperatures` | NVMe / SSD temperatures | v2.0 | ✅ Done |
-| [#86](https://github.com/dvalfrid/rigstats/issues/86) | `temperature-threshold-alerts` | Temperature threshold alerts | v2.0 | ✅ Done |
-| [#87](https://github.com/dvalfrid/rigstats/issues/87) | `motherboard-panel` | Motherboard panel | v2.0 | ✅ Done |
-| [#88](https://github.com/dvalfrid/rigstats/issues/88) | `extended-gpu-panel` | Extended GPU panel | v2.0 | ✅ Done |
-| [#89](https://github.com/dvalfrid/rigstats/issues/89) | `customisable-themes` | Customisable themes / accent colours | v2.0 | ✅ Done |
-| [#90](https://github.com/dvalfrid/rigstats/issues/90) | `process-monitor-panel` | Process monitor panel | v2.0 | ✅ Done |
-| [#91](https://github.com/dvalfrid/rigstats/issues/91) | `floating-panel-layout` | Floating panel layout | v2.0 | ✅ Done |
-| [#92](https://github.com/dvalfrid/rigstats/issues/92) | `multi-gpu-selector` | Multi-GPU selector and pinning | v2.0 | ✅ Done |
-| [#93](https://github.com/dvalfrid/rigstats/issues/93) | `battery-panel` | Battery panel (laptop support) | v2.0 | ✅ Done |
-| [#94](https://github.com/dvalfrid/rigstats/issues/94) | `settings-redesign` | Settings redesign | v2.0 | ✅ Done |
-| [#95](https://github.com/dvalfrid/rigstats/issues/95) | `lhm-sensor-sidecar` | LHM stability - sensor sidecar | v2.0 | ✅ Done |
-| [#96](https://github.com/dvalfrid/rigstats/issues/96) | `desktop-background-l1` | Desktop background - Level 1 (HWND_BOTTOM) | v2.0 | ✅ Done |
-| [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | v2.0 | ✅ Done |
-| [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | v2.0 | ✅ Done |
-| [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | v2.0 | ✅ Done |
-| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | v2.0 | ✅ Done |
-| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | v2.0 | ✅ Done |
-| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | v2.0 | ✅ Done |
-| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | v2.0 | ✅ Done |
-| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | v2.0 | ✅ Done |
-| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | v2.0 | ✅ Done |
-| [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | v3.0 | ✅ Done |
-| [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | v2.0 | ✅ Done |
-| [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | v3.0 | ✅ Done |
-| [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC) | v3.0 | ✅ Done |
-| [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | v3.0 | ✅ Done |
-| [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | v3.0 | ✅ Done |
-| [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | v3.0 | ✅ Done |
-| [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | v3.0 | ✅ Done |
-| [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | v3.0 | ✅ Done |
-| [#290](https://github.com/dvalfrid/rigstats/issues/290) | `peripheral-battery` | Peripherals: battery status of ROG wireless devices (panel, tray card, alerts) | v3.0 | ✅ Done |
-| [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
-| [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
-| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | ⏭ Not planned |
-| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | v2.0 | ⏭ Not planned |
-| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | v3.0 | ⏭ Not planned |
-| [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | v3.0 | 🔲 Planned |
-| [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | v3.0 | 🔲 Planned |
-| [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | v3.0 | 🔲 Planned |
-| [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | v3.0 | 🔲 Planned |
-| [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | v3.0 | 🔲 Planned |
-| [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🚧 In progress — built, awaiting a desktop GeForce test |
-| [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
-| [#234](https://github.com/dvalfrid/rigstats/issues/234) | `control-asus-laptop` | Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits) | v3.0 | 🔲 Planned |
-| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | v3.0 | ✅ Done |
-| [#292](https://github.com/dvalfrid/rigstats/issues/292) | `peripheral-config` | Peripherals: device configuration (DPI, polling rate, sidetone, EQ) | v3.0 | 🔲 Planned |
-| [#296](https://github.com/dvalfrid/rigstats/issues/296) | `omni-multi-receiver` | Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check | v3.0 | 🔲 Planned |
+| Issue | roadmap-id | Feature | Status |
+| --- | --- | --- | --- |
+| [#81](https://github.com/dvalfrid/rigstats/issues/81) | `gpu-driver-warning` | GPU driver version + stale-driver warning | ✅ Done |
+| [#83](https://github.com/dvalfrid/rigstats/issues/83) | `fullscreen-mode` | Fullscreen (fill-screen) mode | ✅ Done |
+| [#84](https://github.com/dvalfrid/rigstats/issues/84) | `auto-update` | Auto-update | ✅ Done |
+| [#85](https://github.com/dvalfrid/rigstats/issues/85) | `nvme-ssd-temperatures` | NVMe / SSD temperatures | ✅ Done |
+| [#86](https://github.com/dvalfrid/rigstats/issues/86) | `temperature-threshold-alerts` | Temperature threshold alerts | ✅ Done |
+| [#87](https://github.com/dvalfrid/rigstats/issues/87) | `motherboard-panel` | Motherboard panel | ✅ Done |
+| [#88](https://github.com/dvalfrid/rigstats/issues/88) | `extended-gpu-panel` | Extended GPU panel | ✅ Done |
+| [#89](https://github.com/dvalfrid/rigstats/issues/89) | `customisable-themes` | Customisable themes / accent colours | ✅ Done |
+| [#90](https://github.com/dvalfrid/rigstats/issues/90) | `process-monitor-panel` | Process monitor panel | ✅ Done |
+| [#91](https://github.com/dvalfrid/rigstats/issues/91) | `floating-panel-layout` | Floating panel layout | ✅ Done |
+| [#92](https://github.com/dvalfrid/rigstats/issues/92) | `multi-gpu-selector` | Multi-GPU selector and pinning | ✅ Done |
+| [#93](https://github.com/dvalfrid/rigstats/issues/93) | `battery-panel` | Battery panel (laptop support) | ✅ Done |
+| [#94](https://github.com/dvalfrid/rigstats/issues/94) | `settings-redesign` | Settings redesign | ✅ Done |
+| [#95](https://github.com/dvalfrid/rigstats/issues/95) | `lhm-sensor-sidecar` | LHM stability - sensor sidecar | ✅ Done |
+| [#96](https://github.com/dvalfrid/rigstats/issues/96) | `desktop-background-l1` | Desktop background - Level 1 (HWND_BOTTOM) | ✅ Done |
+| [#97](https://github.com/dvalfrid/rigstats/issues/97) | `egui-migration` | egui migration - replace Tauri/WebView2 with native egui | ✅ Done |
+| [#98](https://github.com/dvalfrid/rigstats/issues/98) | `stats-logging` | Stats logging / data export | ✅ Done |
+| [#99](https://github.com/dvalfrid/rigstats/issues/99) | `remove-nodejs-npm` | Remove Node.js / npm infrastructure | ✅ Done |
+| [#101](https://github.com/dvalfrid/rigstats/issues/101) | `background-transparency` | Background-only transparency (per-pixel alpha) | ✅ Done |
+| [#105](https://github.com/dvalfrid/rigstats/issues/105) | `desktop-background-l2` | Desktop background - Level 2 (WorkerW) | ✅ Done |
+| [#107](https://github.com/dvalfrid/rigstats/issues/107) | `total-system-power` | Total system power consumption | ✅ Done |
+| [#108](https://github.com/dvalfrid/rigstats/issues/108) | `landscape-support` | Landscape monitor support | ✅ Done |
+| [#109](https://github.com/dvalfrid/rigstats/issues/109) | `post-update-notification` | Post-update success notification | ✅ Done |
+| [#110](https://github.com/dvalfrid/rigstats/issues/110) | `test-coverage-sidecar` | Test coverage - sidecar + sensor extraction | ✅ Done |
+| [#169](https://github.com/dvalfrid/rigstats/issues/169) | `background-transparency-floating` | Extend selective per-pixel transparency (DComp) to floating mode | ✅ Done |
+| [#175](https://github.com/dvalfrid/rigstats/issues/175) | `session-history` | Session history: record, browse, and visualize past sessions | ✅ Done |
+| [#188](https://github.com/dvalfrid/rigstats/issues/188) | `control-fans` | Control Center phase 1: fan control | ✅ Done |
+| [#189](https://github.com/dvalfrid/rigstats/issues/189) | `control-cpu-limits` | Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC) | ✅ Done |
+| [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | ✅ Done |
+| [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | ✅ Done |
+| [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | ✅ Done |
+| [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | ✅ Done |
+| [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | ✅ Done |
+| [#290](https://github.com/dvalfrid/rigstats/issues/290) | `peripheral-battery` | Peripherals: battery status of ROG wireless devices (panel, tray card, alerts) | ✅ Done |
+| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | ✅ Done |
+| [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | ⏭ Not planned |
+| [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | ⏭ Not planned |
+| [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | ⏭ Not planned |
+| [#104](https://github.com/dvalfrid/rigstats/issues/104) | `floating-mode-perf` | Floating mode - reduce multi-window rendering cost | ⏭ Not planned |
+| [#106](https://github.com/dvalfrid/rigstats/issues/106) | `streamdeck` | Stream Deck integration | ⏭ Not planned |
+| [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | 🔲 Planned |
+| [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | 🔲 Planned |
+| [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | 🔲 Planned |
+| [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | 🔲 Planned |
+| [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | 🔲 Planned |
+| [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | 🚧 In progress — built, awaiting a desktop GeForce test |
+| [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | 🔲 Planned |
+| [#234](https://github.com/dvalfrid/rigstats/issues/234) | `control-asus-laptop` | Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits) | 🔲 Planned |
+| [#292](https://github.com/dvalfrid/rigstats/issues/292) | `peripheral-config` | Peripherals: device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned |
+| [#296](https://github.com/dvalfrid/rigstats/issues/296) | `omni-multi-receiver` | Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check | 🔲 Planned |
+| [#353](https://github.com/dvalfrid/rigstats/issues/353) | `lighting-logitech` | Lighting: Logitech G devices via HID++ (mice, keyboards, headsets) | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
@@ -921,7 +919,7 @@ placement and Explorer-restart recovery. The host binary built for Level 2 is
 already the right artifact; this milestone adds a **32-bit build** of it (WE
 requires a 32-bit single-window app) and a hosted launch mode that fills the rect
 WE assigns instead of auto-targeting a monitor. WE-owners only; the two background
-modes are mutually exclusive (both target the same desktop layer). Target: **v3.0**.
+modes are mutually exclusive (both target the same desktop layer).
 
 ---
 
@@ -961,7 +959,7 @@ at once. This should be clearly communicated at setup time.
 
 ---
 
-## Cross-platform OS abstraction — Linux port 🔲 (Milestone 3.0)
+## Cross-platform OS abstraction — Linux port 🔲
 
 **Crates:** [`directories`](https://crates.io/crates/directories) (XDG ↔ Known Folders),
 [`interprocess`](https://crates.io/crates/interprocess) (named pipe ↔ Unix socket)
@@ -1599,7 +1597,7 @@ Full design detail and history are in the issue.
 
 **Bluetooth devices ✅** ([#291](https://github.com/dvalfrid/rigstats/issues/291)): the battery level Windows itself reads from any paired Bluetooth device (Settings › Bluetooth & devices) joins the same list — read from the device node's properties, nothing sent to the device. Shown while connected and 10 minutes after; no charging state (Windows doesn't expose it). Verified on a Logitech MX Anywhere 3 for Mac and a Satechi M1 Mouse. A device that disconnects or stops answering is greyed out as "Not connected" at once and raises no alert ([#351](https://github.com/dvalfrid/rigstats/issues/351)). Logitech devices also show charging, asked in their own HID++ protocol (verified on the MX Anywhere 3 for Mac and the MX Mechanical Mini for Mac keyboard) ([#349](https://github.com/dvalfrid/rigstats/issues/349); receivers not yet). Details: `docs/control-architecture.md` ("Battery status of Bluetooth devices", "Charging of Logitech devices on Bluetooth").
 
-## Control Center — hardware control 🔲 (Milestone 3.0)
+## Control Center — hardware control 🚧
 
 Extends RIGStats from monitoring to control — a "desktop G-Helper" focused on
 ASUS ROG desktop boards: fan curves, CPU power limits, AMD Curve Optimizer, GPU

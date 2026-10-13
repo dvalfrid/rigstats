@@ -1,37 +1,18 @@
-# Sync ROADMAP features to GitHub Issues + the v2.0 milestone.
+# Sync ROADMAP features to GitHub Issues.
 #
 # Idempotent UPSERT keyed by a hidden marker in each issue body:
 #     <!-- roadmap-id: <id> -->
 # Re-running never duplicates: issues are matched by marker (and, on the first
 # run after adopting the original ad-hoc issues, by exact title as a fallback),
-# then title/body/label/milestone/state are reconciled to match the data below.
+# then title/body/label/state are reconciled to match the data below. No
+# milestones: progress is the ROADMAP status table and the issue states.
 #
 # Source of truth = the $features array. ROADMAP.md stays the human-readable doc.
 # Run:  pwsh -NoProfile -File tools/sync-roadmap-issues.ps1
 $ErrorActionPreference = "Stop"
 $gh = "C:\Program Files\GitHub CLI\gh.exe"
-$defaultMs = "v2.0"
-# Milestones to ensure exist, with descriptions. Features default to $defaultMs;
-# a feature opts into a later milestone via its `milestone` key.
-$msDesc = [ordered]@{
-  "v2.0" = "RIGStats 2.0 - full roadmap (shipped + planned)"
-  "v3.0" = "RIGStats 3.0 - future scope (post-2.0 features)"
-}
 
 function Norm([string]$s) { if ($null -eq $s) { return "" } ($s -replace "`r`n", "`n").Trim() }
-
-# 1. Ensure every milestone exists; index by title.
-$msAll = & $gh api "repos/:owner/:repo/milestones?state=all" | ConvertFrom-Json
-$msByTitle = @{}
-foreach ($m in $msAll) { $msByTitle[$m.title] = $m }
-foreach ($t in $msDesc.Keys) {
-  if (-not $msByTitle.ContainsKey($t)) {
-    $obj = & $gh api "repos/:owner/:repo/milestones" -f title="$t" -f state="open" `
-      -f description="$($msDesc[$t])" | ConvertFrom-Json
-    $msByTitle[$t] = $obj
-    Write-Host "Created milestone '$t' (#$($obj.number))."
-  }
-}
 
 # 2. Feature data.  kind = done | dropped | planned.
 #    pin = adopt an existing issue by number WITHOUT rewriting its title/body
@@ -92,14 +73,14 @@ $features = @(
   @{ id="background-transparency"; kind="done"; label="enhancement"; title="Background-only transparency (per-pixel alpha)";
      summary="Transparent panel backgrounds with opaque text/graphs/bars/images, in the Normal/Always-on-Top/Always-Behind window layers (Settings/About/Updater dialogs stay fully opaque). Originally dropped as blocked - four approaches failed (wgpu/glow transparent, two LWA_COLORKEY variants). Unblocked by #131/#168: main.rs forces the DX12 backend with wgpu::Dx12SwapchainKind::DxgiFromVisual, applies WS_EX_NOREDIRECTIONBITMAP post-window-creation (win_opacity::set_no_redirection_bitmap), and premultiplies clear_color/panel fills by opacity instead of the old WS_EX_LAYERED whole-window dim. Verified visually in Normal/Always-on-Top/Always-Behind and confirmed live that Settings/About/Status/Updater dialogs stay fully opaque. Floating mode is a separate follow-up: see background-transparency-floating.";
      status="Shipped - main.rs 14da1ec07" }
-  @{ id="background-transparency-floating"; kind="done"; label="enhancement"; title="Extend selective per-pixel transparency (DComp) to floating mode"; milestone="v3.0";
+  @{ id="background-transparency-floating"; kind="done"; label="enhancement"; title="Extend selective per-pixel transparency (DComp) to floating mode";
      summary="Floating panels get real per-pixel DComp transparency (translucent background, crisp opaque text) instead of the old WS_EX_LAYERED whole-window dim. A single post-creation set_no_redirection_bitmap was not enough for secondary viewports (the earlier washed-out gray result); what works is the overlay's reveal burst: create hidden, force a genuine resize, reapply the style + force_repaint over several frames, then reveal - re-run on later content-driven resizes. Shared as dcomp_burst.rs (DcompRevealBurst) for the overlay and floating panels; no upstream egui fix needed.";
      status="Shipped in v1.40.0 - 8bd82fc6d" }
   @{ id="ui-performance-strategy"; kind="dropped"; label="wontfix"; title="UI performance - lighter rendering strategy";
      summary="The WebView2 DOM render cost this aimed to reduce is gone entirely after the egui migration; the egui binary sleeps between repaints and idles at ~0% CPU.";
      status="Not planned - superseded by the egui migration (v1.27)" }
 
-  @{ id="floating-panel-groups"; kind="dropped"; label="wontfix"; title="Floating panel groups"; milestone="v3.0";
+  @{ id="floating-panel-groups"; kind="dropped"; label="wontfix"; title="Floating panel groups";
      summary="Build on floating mode: magnetically snap panels into groups that move together (vertical or horizontal), with a flip-orientation context action and a 'Collect panels to screen' tray command.";
      status="Not planned - polish for floating mode nobody has asked for; reconsider if floating-mode users request it" }
   @{ id="floating-mode-perf"; kind="dropped"; label="wontfix"; title="Floating mode - reduce multi-window rendering cost";
@@ -108,13 +89,13 @@ $features = @(
   @{ id="desktop-background-l2"; kind="done"; label="enhancement"; title="Desktop background - Level 2 (WorkerW)";
      summary="True wallpaper-layer mode (Settings -> Window Layer -> Desktop Wallpaper). A separate rigstats-wallpaper host process reparents into the Progman/WorkerW hierarchy so the dashboard lives between wallpaper and icons and survives Win+D; the main app supervises it (relaunch on Explorer restart) and pauses its own polling to hand the sensor pipe over. Display-only in v1.";
      status="Shipped" }
-  @{ id="desktop-background-we-hosted"; kind="planned"; label="enhancement"; title="Desktop background - WE Application wallpaper"; milestone="v3.0";
+  @{ id="desktop-background-we-hosted"; kind="planned"; label="enhancement"; title="Desktop background - WE Application wallpaper";
      summary="Ship the rigstats-wallpaper host as a Wallpaper Engine Application wallpaper so WE handles the WorkerW reparenting, multi-monitor placement and Explorer-restart recovery. Adds a 32-bit build of the host (WE requires a 32-bit single-window app) and a hosted launch mode that fills the rect WE assigns. WE-owners only; mutually exclusive with the built-in WorkerW mode.";
      status="Planned (3.0)" }
-  @{ id="streamdeck"; kind="dropped"; label="wontfix"; title="Stream Deck integration"; milestone="v3.0";
+  @{ id="streamdeck"; kind="dropped"; label="wontfix"; title="Stream Deck integration";
      summary="Display live hardware stats (CPU/GPU load/temp, VRAM, fan RPM) on Stream Deck keys directly over USB HID via the elgato-streamdeck crate - no Elgato software or HTTP server. Opt-in; requires the Elgato app not be running.";
      status="Not planned - no Stream Deck to build and test against" }
-  @{ id="cross-platform-port"; kind="planned"; label="enhancement"; title="Cross-platform OS abstraction - Linux port"; milestone="v3.0";
+  @{ id="cross-platform-port"; kind="planned"; label="enhancement"; title="Cross-platform OS abstraction - Linux port";
      summary="Make the RIGStats core OS-agnostic (ports-and-adapters refactor) so it can be ported to Linux. Extract a win-free rigstats-core defining trait ports (SensorProvider, HardwareProbe, SystemPaths, Autostart, WindowPlatform) and a Platform facade; move WMI/registry/named-pipe/win32 code into a platform-windows adapter crate; add a platform-linux crate (sysfs/NVML/dbus/unix-socket). Replace hard-coded %APPDATA% with the directories crate and the named pipe with interprocess. LHM stays a Windows-only adapter. Per-OS packaging: NSIS/sc on Windows, .deb/AppImage + systemd on Linux.";
      status="Planned (3.0)" }
   @{ id="total-system-power"; kind="done"; label="enhancement"; title="Total system power consumption";
@@ -141,28 +122,29 @@ $features = @(
 
   # Control Center phases (docs/control-architecture.md). Pinned because their
   # bodies carry detailed task lists that the managed branch would overwrite.
-  @{ id="control-foundation"; kind="planned"; pin=187; milestone="v3.0"; title="Control Center phase 0: control foundation" }
-  @{ id="control-fans"; kind="done"; pin=188; milestone="v3.0"; title="Control Center phase 1: fan control" }
-  @{ id="control-cpu-limits"; kind="done"; pin=189; milestone="v3.0"; title="Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC)" }
-  @{ id="control-cpu-limits-intel"; kind="planned"; pin=209; milestone="v3.0"; title="Control Center phase 2b: Intel CPU power limits (PL1/PL2)" }
-  @{ id="control-gpu"; kind="done"; pin=190; milestone="v3.0"; title="Control Center phase 3: GPU power profiles (AMD, ADLX)" }
-  @{ id="control-gpu-nvidia"; kind="planned"; pin=210; milestone="v3.0"; title="Control Center phase 3b: NVIDIA GPU power limit (NVML)";
+  @{ id="control-foundation"; kind="planned"; pin=187; title="Control Center phase 0: control foundation" }
+  @{ id="control-fans"; kind="done"; pin=188; title="Control Center phase 1: fan control" }
+  @{ id="control-cpu-limits"; kind="done"; pin=189; title="Control Center phase 2: CPU power limits (AMD PPT/TDC/EDC)" }
+  @{ id="control-cpu-limits-intel"; kind="planned"; pin=209; title="Control Center phase 2b: Intel CPU power limits (PL1/PL2)" }
+  @{ id="control-gpu"; kind="done"; pin=190; title="Control Center phase 3: GPU power profiles (AMD, ADLX)" }
+  @{ id="control-gpu-nvidia"; kind="planned"; pin=210; title="Control Center phase 3b: NVIDIA GPU power limit (NVML)";
      tableStatus="🚧 In progress — built, awaiting a desktop GeForce test" }
-  @{ id="control-curve-optimizer"; kind="done"; pin=191; milestone="v3.0"; title="Control Center phase 4: AMD Curve Optimizer" }
-  @{ id="control-aura"; kind="done"; pin=192; milestone="v3.0"; title="Control Center phase 5: ASUS Aura RGB" }
-  @{ id="control-lighting-more"; kind="planned"; pin=212; milestone="v3.0"; title="Control Center: more lighting devices (ASUS monitors, peripherals, other vendors)" }
-  @{ id="control-desk-lamp"; kind="done"; pin=214; milestone="v3.0"; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
-  @{ id="control-lighting-hue"; kind="done"; pin=215; milestone="v3.0"; title="Lighting: Philips Hue via the Hue Bridge" }
-  @{ id="control-armoury-crate"; kind="planned"; pin=193; milestone="v3.0"; title="Control Center phase 6: Armoury Crate replacement" }
-  @{ id="peripheral-battery"; kind="done"; pin=290; milestone="v3.0"; title="Peripherals: battery status of ROG wireless devices (panel, tray card, alerts)" }
-  @{ id="peripheral-battery-bluetooth"; kind="done"; pin=291; milestone="v3.0"; title="Peripherals: battery status for Bluetooth devices" }
-  @{ id="peripheral-config"; kind="planned"; pin=292; milestone="v3.0"; title="Peripherals: device configuration (DPI, polling rate, sidetone, EQ)" }
-  @{ id="omni-multi-receiver"; kind="planned"; pin=296; milestone="v3.0"; title="Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check" }
-  @{ id="control-asus-laptop"; kind="planned"; pin=234; milestone="v3.0"; title="Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits)" }
+  @{ id="control-curve-optimizer"; kind="done"; pin=191; title="Control Center phase 4: AMD Curve Optimizer" }
+  @{ id="control-aura"; kind="done"; pin=192; title="Control Center phase 5: ASUS Aura RGB" }
+  @{ id="control-lighting-more"; kind="planned"; pin=212; title="Control Center: more lighting devices (ASUS monitors, peripherals, other vendors)" }
+  @{ id="control-desk-lamp"; kind="done"; pin=214; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
+  @{ id="control-lighting-hue"; kind="done"; pin=215; title="Lighting: Philips Hue via the Hue Bridge" }
+  @{ id="control-armoury-crate"; kind="planned"; pin=193; title="Control Center phase 6: Armoury Crate replacement" }
+  @{ id="peripheral-battery"; kind="done"; pin=290; title="Peripherals: battery status of ROG wireless devices (panel, tray card, alerts)" }
+  @{ id="peripheral-battery-bluetooth"; kind="done"; pin=291; title="Peripherals: battery status for Bluetooth devices" }
+  @{ id="peripheral-config"; kind="planned"; pin=292; title="Peripherals: device configuration (DPI, polling rate, sidetone, EQ)" }
+  @{ id="omni-multi-receiver"; kind="planned"; pin=296; title="Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check" }
+  @{ id="lighting-logitech"; kind="planned"; pin=353; title="Lighting: Logitech G devices via HID++ (mice, keyboards, headsets)" }
+  @{ id="control-asus-laptop"; kind="planned"; pin=234; title="Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits)" }
 )
 
 # 3. Fetch all issues once; index by marker and by title.
-$all = & $gh issue list --state all --limit 500 --json number,title,body,state,stateReason,labels,milestone | ConvertFrom-Json
+$all = & $gh issue list --state all --limit 500 --json number,title,body,state,stateReason,labels | ConvertFrom-Json
 $byMarker = @{}
 $byTitle = @{}
 $markerRe = [regex]'<!--\s*roadmap-id:\s*([a-z0-9-]+)\s*-->'
@@ -178,7 +160,6 @@ $rows = @()   # collected for the auto-generated ROADMAP.md table
 
 foreach ($f in $features) {
   $knownIds[$f.id] = $true
-  $fMs = if ($f.ContainsKey("milestone")) { $f.milestone } else { $defaultMs }
   $marker = "<!-- roadmap-id: $($f.id) -->"
   $desiredState = if ($f.kind -eq "planned") { "OPEN" } else { "CLOSED" }
   $closeReason = if ($f.kind -eq "dropped") { "not planned" } else { "completed" }
@@ -196,19 +177,19 @@ foreach ($f in $features) {
   # ---- create if missing ----
   if (-not $issue) {
     $body = "$($f.summary)`n`nStatus: $($f.status)`nSource: ROADMAP.md`n`n$marker"
-    $url = & $gh issue create --title $f.title --body $body --label $f.label --milestone $fMs
+    $url = & $gh issue create --title $f.title --body $body --label $f.label
     $num = ($url | Select-String -Pattern '(\d+)\s*$').Matches.Groups[1].Value
     if ($desiredState -eq "CLOSED") { & $gh issue close $num --reason $closeReason | Out-Null }
     Write-Host "CREATED  #$num  $($f.title)"
     $stats.created++
-    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs; status = $f.tableStatus }
+    $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; status = $f.tableStatus }
     continue
   }
 
   $num = $issue.number
-  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; ms = $fMs; status = $f.tableStatus }
+  $rows += @{ id = $f.id; num = [int]$num; kind = $f.kind; title = $f.title; status = $f.tableStatus }
 
-  # ---- pinned: ensure marker present + milestone + state only ----
+  # ---- pinned: ensure marker present + state only ----
   if ($f.ContainsKey("pin")) {
     if (-not $markerRe.Match([string]$issue.body).Success) {
       $newBody = (Norm $issue.body) + "`n`n$marker"
@@ -216,17 +197,15 @@ foreach ($f in $features) {
       Write-Host "STAMPED  #$num  (marker added)"
       $stats.adopted++
     }
-    if (($issue.milestone.title) -ne $fMs) { & $gh issue edit $num --milestone $fMs | Out-Null }
     continue
   }
 
-  # ---- managed issue: reconcile title/body/label/milestone/state ----
+  # ---- managed issue: reconcile title/body/label/state ----
   $adoptedNow = -not $markerRe.Match([string]$issue.body).Success
   $desiredBody = "$($f.summary)`n`nStatus: $($f.status)`nSource: ROADMAP.md`n`n$marker"
   $editArgs = @()
   if ($issue.title -ne $f.title) { $editArgs += @("--title", $f.title) }
   if ((Norm $issue.body) -ne (Norm $desiredBody)) { $editArgs += @("--body", $desiredBody) }
-  if (($issue.milestone.title) -ne $fMs) { $editArgs += @("--milestone", $fMs) }
   $hasLabel = @($issue.labels | Where-Object { $_.name -eq $f.label }).Count -gt 0
   if (-not $hasLabel) { $editArgs += @("--add-label", $f.label) }
 
@@ -275,11 +254,11 @@ $statusText = @{ done = "✅ Done"; dropped = "⏭ Not planned"; planned = "🔲
 $kindRank = @{ done = 0; dropped = 1; planned = 2 }
 $sorted = $rows | Sort-Object @{ Expression = { $kindRank[$_.kind] } }, @{ Expression = { $_.num } }
 $tableLines = @(
-  "| Issue | roadmap-id | Feature | Milestone | Status |"
-  "| --- | --- | --- | --- | --- |"
+  "| Issue | roadmap-id | Feature | Status |"
+  "| --- | --- | --- | --- |"
 )
 foreach ($r in $sorted) {
-  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $($r.ms) | $(if ($r.status) { $r.status } else { $statusText[$r.kind] }) |"
+  $tableLines += "| [#$($r.num)]($repo/$($r.num)) | ``$($r.id)`` | $($r.title) | $(if ($r.status) { $r.status } else { $statusText[$r.kind] }) |"
 }
 
 $roadmapPath = Join-Path $PSScriptRoot "..\ROADMAP.md"
