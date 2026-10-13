@@ -1002,7 +1002,10 @@ logged once.
 Measured on the owner's MX Anywhere 3 for Mac (PID `B025`, 2026-10-13):
 Unified Battery at index 8, 90 % — the same as Windows; plugging the cable in
 showed charging in the next read (≤ 20 s), and unplugging it cleared it in the
-same way. Not covered: Bolt/Unifying
+same way. The MX Mechanical Mini for Mac keyboard (PID `B36D`, Bluetooth name
+"MX MCHNCL M", category `Input.Keyboard`) answers the same way: Unified Battery,
+100 %, and charging with the cable in — at 100 % it reports full on power,
+which counts as charging (status 3, like Solaar). Not covered: Bolt/Unifying
 receivers (device index 1–6 behind the receiver; no hardware to test on).
 
 ### Philips Hue (#215)
