@@ -158,6 +158,7 @@ $features = @(
   @{ id="peripheral-battery-bluetooth"; kind="done"; pin=291; milestone="v3.0"; title="Peripherals: battery status for Bluetooth devices" }
   @{ id="peripheral-config"; kind="planned"; pin=292; milestone="v3.0"; title="Peripherals: device configuration (DPI, polling rate, sidetone, EQ)" }
   @{ id="omni-multi-receiver"; kind="planned"; pin=296; milestone="v3.0"; title="Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check" }
+  @{ id="lighting-logitech"; kind="planned"; pin=353; milestone="v3.0"; title="Lighting: Logitech G devices via HID++ (mice, keyboards, headsets)" }
   @{ id="control-asus-laptop"; kind="planned"; pin=234; milestone="v3.0"; title="Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits)" }
 )
 

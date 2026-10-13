@@ -52,6 +52,7 @@ Planned features in rough priority order. Each item is scoped as a self-containe
 | Peripherals — battery status of ROG wireless devices (panel, tray hover card, low-battery alerts, connection type) | ✅ Done (v1.45) — #290 |
 | Peripherals — battery status for Bluetooth devices | ✅ Done (3.0) — #291 |
 | Peripherals — device configuration (DPI, polling rate, sidetone, EQ) | 🔲 Planned (3.0) — #292 |
+| Lighting — Logitech G devices via HID++ (mice, keyboards, headsets) | 🔲 Planned (3.0) — #353 |
 
 ---
 
@@ -113,6 +114,7 @@ script to refresh it.
 | [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | v3.0 | ✅ Done |
 | [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | v3.0 | ✅ Done |
 | [#290](https://github.com/dvalfrid/rigstats/issues/290) | `peripheral-battery` | Peripherals: battery status of ROG wireless devices (panel, tray card, alerts) | v3.0 | ✅ Done |
+| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | v3.0 | ✅ Done |
 | [#100](https://github.com/dvalfrid/rigstats/issues/100) | `cpu-fan-speed` | CPU fan speed | v2.0 | ⏭ Not planned |
 | [#102](https://github.com/dvalfrid/rigstats/issues/102) | `ui-performance-strategy` | UI performance - lighter rendering strategy | v2.0 | ⏭ Not planned |
 | [#103](https://github.com/dvalfrid/rigstats/issues/103) | `floating-panel-groups` | Floating panel groups | v3.0 | ⏭ Not planned |
@@ -126,9 +128,9 @@ script to refresh it.
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | v3.0 | 🚧 In progress — built, awaiting a desktop GeForce test |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | v3.0 | 🔲 Planned |
 | [#234](https://github.com/dvalfrid/rigstats/issues/234) | `control-asus-laptop` | Control Center: ASUS laptops via ATKACPI (performance mode, fan curves, power limits) | v3.0 | 🔲 Planned |
-| [#291](https://github.com/dvalfrid/rigstats/issues/291) | `peripheral-battery-bluetooth` | Peripherals: battery status for Bluetooth devices | v3.0 | ✅ Done |
 | [#292](https://github.com/dvalfrid/rigstats/issues/292) | `peripheral-config` | Peripherals: device configuration (DPI, polling rate, sidetone, EQ) | v3.0 | 🔲 Planned |
 | [#296](https://github.com/dvalfrid/rigstats/issues/296) | `omni-multi-receiver` | Lighting: more than one ROG Omni receiver, safer receiver-vs-cable check | v3.0 | 🔲 Planned |
+| [#353](https://github.com/dvalfrid/rigstats/issues/353) | `lighting-logitech` | Lighting: Logitech G devices via HID++ (mice, keyboards, headsets) | v3.0 | 🔲 Planned |
 <!-- roadmap-table:end -->
 
 ---
