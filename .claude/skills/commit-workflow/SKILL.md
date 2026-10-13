@@ -60,6 +60,10 @@ Closes #N
 - **subject:** imperative, lower-case start, no trailing period
 - Breaking change: `feat!:` or `BREAKING CHANGE:` footer
 
+## 4a. Release highlights — every user-visible change
+
+A `feat` (or a fix users will notice) adds or updates its line in `release-highlights.md`, in the same PR, under `# <version>` of the next release — the open release-please PR's title says which (`gh pr list --label "autorelease: pending"`). Format `- **Title** — what it does for you`; most important first; merge it with an existing line on the same topic rather than adding a near-duplicate. `cargo test --manifest-path src-egui/Cargo.toml the_shipped_file` checks the format. The final check before a release is step 6 of "Release routine" in `docs/release.md`.
+
 ## 4b. Push and open a pull request
 
 ```powershell
