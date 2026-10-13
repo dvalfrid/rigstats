@@ -146,9 +146,13 @@ pub fn pending_alerts(stats: &PollStats, settings: &Settings) -> Vec<PendingAler
     }
 
     // Wireless devices' batteries (#290): the Battery panel's charge
-    // thresholds, only while discharging; each device has its own cooldown
-    // key so one low mouse doesn't silence a low headset.
-    for device in stats.peripherals.iter().filter(|d| !d.charging) {
+    // thresholds, only while connected and discharging; each device has its
+    // own cooldown key so one low mouse doesn't silence a low headset.
+    for device in stats
+        .peripherals
+        .iter()
+        .filter(|d| d.connected && !d.charging)
+    {
         if let Some(mut alert) = check_below(
             settings,
             "battery",
@@ -193,6 +197,7 @@ mod tests {
             battery,
             charging,
             connection: "2.4ghz".into(),
+            connected: true,
         }
     }
 
@@ -214,6 +219,20 @@ mod tests {
         assert_eq!(alerts[0].label, "Device mouse battery");
         assert_eq!(alerts[1].component, "peripheral_headset");
         assert_eq!(alerts[1].level, AlertLevel::Warn);
+    }
+
+    #[test]
+    fn disconnected_peripheral_does_not_alert() {
+        // Its level is the last one read, not news.
+        let s = settings_with(&[("battery", Some(20), Some(10))]);
+        let stats = PollStats {
+            peripherals: vec![rigstats_backend::lhm::Peripheral {
+                connected: false,
+                ..peripheral("mouse", 5, false)
+            }],
+            ..Default::default()
+        };
+        assert!(pending_alerts(&stats, &s).is_empty());
     }
 
     #[test]

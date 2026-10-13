@@ -217,7 +217,9 @@ public class PeripheralBatteryMonitorTests
         monitor.ReadAll([mouse]);
 
         next = null; // asleep
-        Assert.Equal(60, Assert.Single(monitor.ReadAll([mouse])).Battery);
+        var kept = Assert.Single(monitor.ReadAll([mouse]));
+        Assert.Equal(60, kept.Battery);
+        Assert.False(kept.Connected);
 
         Assert.Empty(monitor.ReadAll([]));      // unplugged
         Assert.Empty(monitor.ReadAll([mouse])); // back, still asleep: no stale value
@@ -233,11 +235,17 @@ public class PeripheralBatteryMonitorTests
 
         next = null; // switched to its cable: the receiver entry stops answering
         for (var round = 1; round < PeripheralBatteryMonitor.StaleRounds; round++)
-            Assert.Single(monitor.ReadAll([keyboard]));
+        {
+            var kept = Assert.Single(monitor.ReadAll([keyboard]));
+            Assert.False(kept.Connected);
+            Assert.False(kept.Charging); // not known any more
+        }
         Assert.Empty(monitor.ReadAll([keyboard]));
 
         next = new BatteryStatus(81, true); // answers again
-        Assert.Equal(81, Assert.Single(monitor.ReadAll([keyboard])).Battery);
+        var back = Assert.Single(monitor.ReadAll([keyboard]));
+        Assert.Equal(81, back.Battery);
+        Assert.True(back.Connected);
     }
 
     [Fact]

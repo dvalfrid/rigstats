@@ -75,6 +75,9 @@ pub struct Peripheral {
     /// How it reaches the PC: "usb", "bluetooth" or "2.4ghz" (empty from a
     /// sidecar that doesn't say).
     pub connection: String,
+    /// False while the device shows its last reading after it disconnected
+    /// or stopped answering (#351); the panel dims it and it doesn't alert.
+    pub connected: bool,
 }
 
 // --- Tests -----------------------------------------------------------------
@@ -119,6 +122,7 @@ mod tests {
                     battery: 82,
                     charging: false,
                     connection: "2.4ghz".into(),
+                    connected: true,
                 },
                 Peripheral {
                     id: "asus-headset-1afa-1".into(),
@@ -127,6 +131,7 @@ mod tests {
                     battery: 24,
                     charging: true,
                     connection: "2.4ghz".into(),
+                    connected: true,
                 },
             ]
         );
@@ -452,6 +457,13 @@ struct SidecarPeripheral {
     charging: bool,
     #[serde(default)]
     connection: String,
+    // Older sidecars leave it out and only send devices that answer.
+    #[serde(default = "connected_by_default")]
+    connected: bool,
+}
+
+fn connected_by_default() -> bool {
+    true
 }
 
 #[derive(serde::Deserialize)]
@@ -632,6 +644,7 @@ impl SidecarPayload {
                     battery: p.battery.min(100),
                     charging: p.charging,
                     connection: p.connection,
+                    connected: p.connected,
                 })
                 .collect(),
             active_profile: self.active_profile.map(|p| ActiveProfile {

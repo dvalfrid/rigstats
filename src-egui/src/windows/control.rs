@@ -1095,11 +1095,16 @@ fn lighting_tab(
 const WARN_TEXT: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
 
 /// A wireless device's charge (coloured by the battery alert levels, a
-/// triangle while charging) and how it is connected. For a row's
+/// triangle while charging) and how it is connected — greyed with "Not
+/// connected" while it shows its last reading (#351). For a row's
 /// right-to-left layout.
 fn battery_and_link(ui: &mut egui::Ui, dc: &DialogColors, p: &Peripheral, (warn, crit): (u8, u8)) {
     use crate::panels::peripherals::{link_label, link_of, paint_battery_glyph, paint_link_icon};
-    let color = crate::panels::battery::charge_color(p.battery, p.charging, warn, crit);
+    let color = if p.connected {
+        crate::panels::battery::charge_color(p.battery, p.charging, warn, crit)
+    } else {
+        dc.muted
+    };
     ui.add_sized(
         [40.0, 20.0],
         egui::Label::new(
@@ -1116,9 +1121,13 @@ fn battery_and_link(ui: &mut egui::Ui, dc: &DialogColors, p: &Peripheral, (warn,
     if let Some(link) = link_of(&p.connection) {
         ui.add_space(14.0);
         ui.label(
-            egui::RichText::new(link_label(link))
-                .size(12.0)
-                .color(dc.muted),
+            egui::RichText::new(if p.connected {
+                link_label(link)
+            } else {
+                "Not connected"
+            })
+            .size(12.0)
+            .color(dc.muted),
         );
         let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
         paint_link_icon(ui.painter(), rect.center(), 12.0, link, dc.muted);

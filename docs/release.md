@@ -244,8 +244,12 @@ Leave the "Use workflow from" dropdown on `main`.
    sections, the dependency versions it names), the website's text and
    screenshots (`assets/*.png`, copied to the site when it is deployed), and
    `docs/troubleshooting.md` for every new feature that can go wrong.
-6. **Highlights:** write `release-highlights.md` for the version the release
-   PR will publish: a few lines for users, `- **Title** — what it does for
+6. **Highlights — always, every release:** check `release-highlights.md`
+   against the release PR's changelog right before merging it. Every `feat`
+   (and every fix users will notice) that landed since the list was written
+   must be in it or deliberately left out; feature PRs add their line as
+   they go (see `/commit-workflow`), so this is a final check, not the first
+   time it's written. Write it for the version the release PR will publish: a few lines for users, `- **Title** — what it does for
    you`, under `# <version>` (the file's comment has an example). The big
    features, anything optional, and where to report a problem if something new
    can go wrong. The Release workflow (`tools/release-highlights.ps1`) puts

@@ -1,7 +1,9 @@
 //! PERIPHERALS panel (#290): the battery of wireless devices the sensor
-//! service reads — ROG headsets, and keyboards and mice on the ROG Omni
-//! receiver (`PollStats.peripherals`, about once a minute). One row per
-//! device: name, a charge bar, and the percentage.
+//! service reads — ROG headsets, keyboards and mice, and Bluetooth devices
+//! with a battery level in Windows (#291; Logitech ones also report
+//! charging, #349) — `PollStats.peripherals`, every 20 s. One row per
+//! device: name, a charge bar, and the percentage; a device that
+//! disconnected is greyed with its last level (#351).
 
 use egui::{
     pos2, vec2, Align2, Color32, FontId, Pos2, Rect, RichText, Sense, Shape, Stroke, Ui, Vec2,
@@ -19,6 +21,18 @@ const BAR_SHARE: f32 = 0.30;
 const MARK_W: f32 = 9.0;
 /// Slot for the connection icon in front of the name.
 const ICON_W: f32 = 16.0;
+/// A disconnected device's last level and name (#351).
+const DIM: Color32 = Color32::from_gray(105);
+
+/// The row colour: the charge colour while connected, dimmed grey for a
+/// device that shows its last reading after it disconnected.
+fn row_color(device: &Peripheral, charge_warn: u8, charge_crit: u8) -> Color32 {
+    if device.connected {
+        charge_color(device.battery, device.charging, charge_warn, charge_crit)
+    } else {
+        DIM
+    }
+}
 
 /// How a device reaches the PC, from the sidecar's `connection`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,7 +206,7 @@ pub fn paint_device_row(
     if !ui.is_rect_visible(rect) {
         return;
     }
-    let color = charge_color(device.battery, device.charging, charge_warn, charge_crit);
+    let color = row_color(device, charge_warn, charge_crit);
     let font = FontId::proportional(12.0 * sc);
     let cy = rect.center().y;
     let pct_w = ui
@@ -222,7 +236,7 @@ pub fn paint_device_row(
         Align2::LEFT_CENTER,
         &device.name,
         font.clone(),
-        theme::C_TEXT,
+        if device.connected { theme::C_TEXT } else { DIM },
     );
 
     let bar_h = (4.0 * sc).max(2.0);
@@ -265,7 +279,8 @@ pub fn paint_device_row(
 /// name left; then, in fixed columns so every row lines up, the connection
 /// (icon and "USB" / "Bluetooth" / "2.4 GHz"), a battery glyph and the
 /// percentage, coloured by the battery alert levels (accent while charging,
-/// with a small triangle).
+/// with a small triangle). A disconnected device is dimmed and says "Not
+/// connected" in place of its battery glyph.
 pub fn paint_card_row(
     ui: &mut Ui,
     inner_w: f32,
@@ -281,7 +296,7 @@ pub fn paint_card_row(
     let p = ui.painter();
     let font = FontId::proportional(12.0);
     let muted = Color32::from_gray(140);
-    let color = charge_color(device.battery, device.charging, charge_warn, charge_crit);
+    let color = row_color(device, charge_warn, charge_crit);
     let cy = rect.center().y;
     let width = |t: &str| p.layout_no_wrap(t.to_owned(), font.clone(), muted).size().x;
 
@@ -307,15 +322,26 @@ pub fn paint_card_row(
         ));
     }
     let glyph = Rect::from_min_size(pos2(mark_x - 8.0 - 22.0, cy - 6.0), vec2(22.0, 12.0));
-    paint_battery_glyph(p, glyph, device.battery, color, muted);
+    // A disconnected device says so where its battery glyph would be, in
+    // the same columns, and keeps its last level in grey.
+    if device.connected {
+        paint_battery_glyph(p, glyph, device.battery, color, muted);
+    }
     let link_w = width("Bluetooth") + 18.0;
     let link_x = glyph.min.x - 12.0 - link_w;
     if let Some(link) = link_of(&device.connection) {
         paint_link_icon(p, pos2(link_x + 6.0, cy), 11.0, link, muted);
+    }
+    let label = match (device.connected, link_of(&device.connection)) {
+        (false, _) => Some("Not connected"),
+        (true, Some(link)) => Some(link_label(link)),
+        (true, None) => None,
+    };
+    if let Some(label) = label {
         p.text(
             pos2(link_x + 16.0, cy),
             Align2::LEFT_CENTER,
-            link_label(link),
+            label,
             font.clone(),
             muted,
         );
@@ -326,7 +352,7 @@ pub fn paint_card_row(
         Align2::LEFT_CENTER,
         &device.name,
         FontId::proportional(13.0),
-        theme::C_TEXT,
+        if device.connected { theme::C_TEXT } else { DIM },
     );
 }
 
