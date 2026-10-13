@@ -968,6 +968,10 @@ Measured on the owner's rig with a Logitech MX Anywhere 3 for Mac
   time, not UTC — so it isn't used; the tracker keeps its own timestamps.
 - `{104EA319-…}` 7 is a FILETIME (UTC) of the last level update.
 
+Live-verified on the same rig: the MX Anywhere 3 for Mac and a Satechi M1
+Mouse, both in the PERIPHERALS panel and the tray hover card with the
+Bluetooth icon.
+
 ### Philips Hue (#215)
 
 Room lights through a Hue Bridge, on its official local API — no cloud
