@@ -4,7 +4,7 @@
 > limits, AMD part, #189), 3 (GPU power limit, AMD #190, NVIDIA desktop
 > #210), 4 (Curve
 > Optimizer, #191) and 5 (ASUS Aura lighting, #192) are implemented;
-> the rest is design / planned (Milestone 3.0). Tracked per phase in GitHub
+> the rest is design / planned. Tracked per phase in GitHub
 > Issues — see [Delivery phases](#delivery-phases).
 
 ## Contents
