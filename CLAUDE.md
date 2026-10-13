@@ -48,7 +48,7 @@ cargo xtask build
 cargo xtask setup
 ```
 
-> The installed `rigstats-sensor` service runs from `C:Program FilesRIGStats` and does not block builds. The dev sidecar (`toolsdev-sidecar.ps1`) runs `sensor-sidecarinDebug…igstats-sensor.exe` and locks it — building the sidecar fails until the owner stops it with Ctrl+C (a project hook blocks those commands meanwhile).
+> The installed `rigstats-sensor` service runs from `C:\Program Files\RIGStats` and does not block builds. The dev sidecar (`tools\dev-sidecar.ps1`) runs `sensor-sidecar\bin\Debug\…\rigstats-sensor.exe` and locks it — building the sidecar fails until the owner stops it with Ctrl+C (a project hook blocks those commands meanwhile).
 
 **Live-testing Control Center changes on real hardware:** the developer runs `pwsh -File tools\dev-sidecar.ps1 -Live` in an elevated window (debug sidecar in place of the service; Ctrl+C restores everything). Rebuild the sidecar only after Ctrl+C. Full loop and protocol-finding methods: "Live testing on real hardware" in `docs/control-architecture.md`.
 

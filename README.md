@@ -14,7 +14,9 @@
 
 </div>
 
-RIGStats is a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView, no telemetry.
+RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple program that does what it should, does it well, and stays out of your way. No bloat, no accounts, no telemetry — just your hardware, under your control.
+
+It's a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView.
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
@@ -37,6 +39,20 @@ For the full product overview, screenshots, and download, see [rigstats.app](htt
 - **Direct download:** grab the latest installer from the [Releases page](https://github.com/dvalfrid/rigstats/releases/latest)
 
 Both install the same signed NSIS installer, which also registers the sensor sidecar as a Windows Service. See [rigstats.app](https://rigstats.app/#download) for requirements and first-run guidance.
+
+## How You Can Help
+
+RIGStats is built by one person. Its sensor readings have been checked on seven machines — AMD and Intel desktops, an ASUS ROG Zephyrus G14 and a Razer Blade, Radeon and GeForce cards (see [the sensor fixtures](sensor-sidecar.Tests/fixtures/)) — but the hardware control (fans, power limits, lighting) has mostly been tested on one PC: a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
+
+- **Test it on your hardware — no programming needed.** Install it, try the Control Center, and tell us what works and what doesn't. Wanted in particular:
+  - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) takes two minutes
+  - ASUS laptops ([#234](https://github.com/dvalfrid/rigstats/issues/234)), Intel CPUs ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA graphics cards ([#210](https://github.com/dvalfrid/rigstats/issues/210)), Bluetooth headsets and mice ([#291](https://github.com/dvalfrid/rigstats/issues/291))
+
+  Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix. It holds your hardware details and RIGStats' logs and settings, including your computer and Windows user name (`environment.txt`); look through it before you share it, and remove anything you'd rather not.
+- **Ask, share, suggest** — in [Discussions](https://github.com/dvalfrid/rigstats/discussions): questions, ideas, or show your setup. Bugs go in [issues](https://github.com/dvalfrid/rigstats/issues/new/choose).
+- **Write code** — start with a [good first issue](https://github.com/dvalfrid/rigstats/labels/good%20first%20issue) or one marked [help wanted](https://github.com/dvalfrid/rigstats/labels/help%20wanted). [CONTRIBUTING.md](CONTRIBUTING.md) gets you building in a few minutes; a change to the app's UI needs only Rust.
+
+Contributions are welcome with or without AI tools.
 
 ## Repository Layout
 
@@ -444,13 +460,16 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 
 ## Contributing
 
-Open a GitHub issue first, fork the repo, branch from `main`, verify your change
-in the running app, then open a pull request with a [Conventional Commits](https://www.conventionalcommits.org/)
-message referencing the issue (`Closes #N`).
+Small fixes — a typo, a label, a broken link — can go straight to a pull request.
+For anything bigger, open an issue first so we can agree on the approach, then fork
+the repo, branch from `main`, verify your change in the running app, and open a pull
+request with a [Conventional Commits](https://www.conventionalcommits.org/) message
+referencing the issue (`Closes #N`).
 
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide — prerequisites,
-workflow, commit convention, code standards, and CI. [CLAUDE.md](CLAUDE.md) holds
-the documentation-update requirements and the AI-agent workflow.
+workflow, commit convention, code standards, and CI. The `CLAUDE.md` files are
+configuration for AI coding tools — a compact map of the code and its rules, handy
+to read, but not required.
 
 ## License
 

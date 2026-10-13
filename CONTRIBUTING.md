@@ -7,8 +7,15 @@ RIGStats is a **Windows-only** project — both the egui app and the .NET sensor
 sidecar depend on Windows APIs, WMI, and the PawnIO kernel driver. You will need
 a Windows 10/11 x64 machine to build and test.
 
+**New here?** You don't need to read all of this to help. Testing RIGStats on
+your hardware and reporting what works is just as valuable as code — see
+[How You Can Help](README.md#how-you-can-help). For code, [Start in five
+minutes](#start-in-five-minutes) is enough to get going; the rest of this guide is
+reference.
+
 ## Table of Contents
 
+- [Start in five minutes](#start-in-five-minutes)
 - [Code of Conduct](#code-of-conduct)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
@@ -20,6 +27,25 @@ a Windows 10/11 x64 machine to build and test.
 - [Opening a Pull Request](#opening-a-pull-request)
 - [Continuous Integration](#continuous-integration)
 - [Project Layout](#project-layout)
+
+## Start in five minutes
+
+What you need depends on what you change:
+
+| You change… | You need |
+| --- | --- |
+| The app — dashboard, panels, dialogs, tray (`src-egui/`, `rigstats-backend/`) | Rust and the Visual Studio C++ Build Tools (below). That's it: the app runs against the installed RIGStats service. |
+| The sensor service or Control Center hardware control (`sensor-sidecar/`) | Also the .NET 10 SDK, and the dev sidecar (`tools\dev-sidecar.ps1`, run elevated) — the installed service only accepts the signed release app, so a debug build talks to the dev sidecar instead. See "Live testing on real hardware" in [docs/control-architecture.md](docs/control-architecture.md). |
+| Docs or the website | Nothing to build. |
+
+Then: fork, clone, `cargo build --manifest-path src-egui/Cargo.toml`, run
+`target\debug\rigstats.exe`. Small fixes can go straight to a pull request;
+for anything bigger, open an issue first.
+
+**AI tools** are welcome. If one wrote a substantial part of a change, say so in
+the commit with a `Co-Authored-By:` line, as this project's own commits do. The
+`CLAUDE.md` files are configuration for AI coding tools — a compact map of the
+code and its rules; read them if they help, but nothing requires it.
 
 ## Code of Conduct
 
@@ -71,9 +97,9 @@ display profiles and installer builds.
    Verify the exe timestamp changed before launching — if not, the process was
    still running and the build was skipped.
 
-> The installed `rigstats-sensor` service runs from `C:Program FilesRIGStats`
-> and does not block builds. While `toolsdev-sidecar.ps1` runs, the debug
-> sidecar exe in `sensor-sidecarinDebug` is locked: stop it with Ctrl+C
+> The installed `rigstats-sensor` service runs from `C:\Program Files\RIGStats`
+> and does not block builds. While `tools\dev-sidecar.ps1` runs, the debug
+> sidecar exe in `sensor-sidecar\bin\Debug` is locked: stop it with Ctrl+C
 > before building the sidecar.
 
 ## Development Workflow
@@ -82,7 +108,8 @@ Every bug fix and feature follows this sequence:
 
 1. **Open a GitHub issue first** — describe the bug (incorrect behaviour, steps to
    reproduce, expected behaviour) or the feature (user-visible change and why it is
-   needed) before starting work.
+   needed) before starting work. Small fixes (a typo, a label, a broken link) can
+   skip this and go straight to a pull request.
 2. **Create a branch** from `main` in your fork.
 3. **Implement** the fix or feature.
 4. **Test in the running app** — see [Testing Your Change](#testing-your-change).
