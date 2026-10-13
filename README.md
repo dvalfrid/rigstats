@@ -42,13 +42,13 @@ Both install the same signed NSIS installer, which also registers the sensor sid
 
 ## How You Can Help
 
-RIGStats is built by one person, on one PC — a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
+RIGStats is built by one person. Its sensor readings have been checked on seven machines — AMD and Intel desktops, an ASUS ROG Zephyrus G14 and a Razer Blade, Radeon and GeForce cards (see [the sensor fixtures](sensor-sidecar.Tests/fixtures/)) — but the hardware control (fans, power limits, lighting) has mostly been tested on one PC: a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
 
 - **Test it on your hardware — no programming needed.** Install it, try the Control Center, and tell us what works and what doesn't. Wanted in particular:
   - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) takes two minutes
   - ASUS laptops ([#234](https://github.com/dvalfrid/rigstats/issues/234)), Intel CPUs ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA graphics cards ([#210](https://github.com/dvalfrid/rigstats/issues/210)), Bluetooth headsets and mice ([#291](https://github.com/dvalfrid/rigstats/issues/291))
 
-  Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix.
+  Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix. It holds your hardware details and RIGStats' logs and settings, including your computer and Windows user name (`environment.txt`); look through it before you share it, and remove anything you'd rather not.
 - **Ask, share, suggest** — in [Discussions](https://github.com/dvalfrid/rigstats/discussions): questions, ideas, or show your setup. Bugs go in [issues](https://github.com/dvalfrid/rigstats/issues/new/choose).
 - **Write code** — start with a [good first issue](https://github.com/dvalfrid/rigstats/labels/good%20first%20issue) or one marked [help wanted](https://github.com/dvalfrid/rigstats/labels/help%20wanted). [CONTRIBUTING.md](CONTRIBUTING.md) gets you building in a few minutes; a change to the app's UI needs only Rust.
 
