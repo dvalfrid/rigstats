@@ -1001,7 +1001,8 @@ logged once.
 
 Measured on the owner's MX Anywhere 3 for Mac (PID `B025`, 2026-10-13):
 Unified Battery at index 8, 90 % — the same as Windows; plugging the cable in
-showed charging in the next read (≤ 20 s). Not covered: Bolt/Unifying
+showed charging in the next read (≤ 20 s), and unplugging it cleared it in the
+same way. Not covered: Bolt/Unifying
 receivers (device index 1–6 behind the receiver; no hardware to test on).
 
 ### Philips Hue (#215)
