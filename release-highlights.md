@@ -12,3 +12,7 @@ Only a list for the version being released is used, so last release's list
 never shows up again; replace it for the next one. Everything inside this
 comment is ignored. See "Release routine" in docs/release.md.
 -->
+
+# 1.48.0
+- **Laptops: RIGStats survives Eco mode** — on laptops with switchable graphics it now draws on the integrated GPU, so switching the dedicated GPU off (G-Helper's or Armoury Crate's Eco mode, for example when you unplug the charger) no longer closes it.
+- **Highlights in the Updates window** — the most important news in a release, like this list, now shows first when an update is available.
