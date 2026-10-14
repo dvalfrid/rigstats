@@ -62,9 +62,13 @@ pub(crate) fn hover_step(
 /// window straight away through Win32 when it shouldn't show. The UI thread's
 /// own check can stall — its frames stop while the tray menu's modal loop
 /// runs, and repaint requests are lost around it (winit #4608, see #177) —
-/// which left the card standing after the menu closed.
+/// which left the card standing after the menu closed. The other way round,
+/// a menu closed without a choice left the UI thread idle with no repaint
+/// scheduled, so the card never showed again (#360): while it should show,
+/// this asks for a frame (`request_repaint` from this thread wakes winit;
+/// `force_repaint`'s `WM_PAINT` didn't).
 #[cfg(windows)]
-pub(crate) fn watchdog(anchor: &TrayAnchor) {
+pub(crate) fn watchdog(anchor: &TrayAnchor, ctx: &egui::Context) {
     let mut state = anchor.lock_safe();
     if state.icon.is_none() {
         return;
@@ -76,7 +80,9 @@ pub(crate) fn watchdog(anchor: &TrayAnchor) {
     );
     *state = next;
     drop(state);
-    if !open {
+    if open {
+        ctx.request_repaint();
+    } else {
         win_opacity::hide_window_async(win_opacity::find_hwnd(TITLE));
         // Let the UI thread catch up and tear the viewport down properly.
         win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));

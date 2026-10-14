@@ -277,7 +277,7 @@ pub(crate) fn spawn_tray_event_thread(
             // The tray hover card's guard, independent of the UI thread's
             // frames (see `tray_card::watchdog`).
             #[cfg(windows)]
-            crate::app::tray_card::watchdog(&card_watch);
+            crate::app::tray_card::watchdog(&card_watch, &ctx);
         }));
         if outcome.is_err() {
             debug::log_warn(
