@@ -6,5 +6,8 @@ resolver = "2"
 
 # egui-wgpu with one fix: don't keep a device open on every GPU (holds the
 # dGPU of hybrid laptops awake). See third_party/egui-wgpu/RIGSTATS-PATCH.md.
+# tray-icon registered in notify-icon version 4, so Windows 11 shows no empty
+# tooltip over the hover card. See third_party/tray-icon/RIGSTATS-PATCH.md.
 [patch.crates-io]
 egui-wgpu = { path = "third_party/egui-wgpu" }
+tray-icon = { path = "third_party/tray-icon" }
