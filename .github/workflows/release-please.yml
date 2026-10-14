@@ -127,11 +127,12 @@ jobs:
           month=${rest%%-*}
           day=${rest#*-}
 
-          # Turn "* **scope:** subject ([hash](url)), closes [#N](url)" bullets into
-          # "scope: subject; scope: subject" -- plain text, no markdown/links.
+          # Turn "* **scope:** subject ([#PR](url)) ([hash](url)), closes [#N](url)"
+          # bullets into "scope: subject; scope: subject" -- plain text, no
+          # markdown/links: the commit link with its "closes", then the PR link.
           changeInfo=$(echo "$section" \
             | grep '^\* ' \
-            | sed -E 's/^\* //; s/\*\*//g; s/ \(\[[0-9a-f]+\]\([^)]+\)\)(, closes \[#[0-9]+\]\([^)]+\))?//' \
+            | sed -E 's/^\* //; s/\*\*//g; s/ \(\[[0-9a-f]+\]\([^)]+\)\)(, closes \[#[0-9]+\]\([^)]+\))?//; s/ \(\[#[0-9]+\]\([^)]+\)\)//g' \
             | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g' \
             | paste -sd';' - \
             | sed 's/;/; /g')
