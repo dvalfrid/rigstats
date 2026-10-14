@@ -8,6 +8,23 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.48.0](https://github.com/dvalfrid/rigstats/compare/v1.47.0...v1.48.0) (2026-10-14)
+
+
+### Features
+
+* **peripherals:** show a disconnected device as not connected at once ([#352](https://github.com/dvalfrid/rigstats/issues/352)) ([e968532](https://github.com/dvalfrid/rigstats/commit/e9685328419733bf1f81abdb826abbb748bc1fc8))
+* **peripherals:** show charging of Logitech devices on Bluetooth ([#350](https://github.com/dvalfrid/rigstats/issues/350)) ([94e5dfb](https://github.com/dvalfrid/rigstats/commit/94e5dfb402024b58589e8e786d2a84c3c75b6bd3))
+* **peripherals:** show the battery of Bluetooth devices ([#348](https://github.com/dvalfrid/rigstats/issues/348)) ([193f659](https://github.com/dvalfrid/rigstats/commit/193f659e93a87398b8d9277badf16461db5f4b48))
+* **updates:** release highlights in the Updates window and on GitHub ([#325](https://github.com/dvalfrid/rigstats/issues/325)) ([5dd0090](https://github.com/dvalfrid/rigstats/commit/5dd00904536a032402e03a21e6ec0d3e11672b69)), closes [#324](https://github.com/dvalfrid/rigstats/issues/324)
+
+
+### Bug Fixes
+
+* **deps:** bump rustls to 0.23.46 for RUSTSEC-2026-0346..0349 ([#358](https://github.com/dvalfrid/rigstats/issues/358)) ([ff02a12](https://github.com/dvalfrid/rigstats/commit/ff02a123ad7d29680d951f5310946bccc9399516)), closes [#357](https://github.com/dvalfrid/rigstats/issues/357)
+* **gpu:** keep the app off the dGPU so Eco-mode switches don't kill it ([#339](https://github.com/dvalfrid/rigstats/issues/339)) ([e6d80c0](https://github.com/dvalfrid/rigstats/commit/e6d80c0b9936cc48908ddd9bef29df110a9faab2))
+* **release:** strip issue links from the PAD file's change info ([#356](https://github.com/dvalfrid/rigstats/issues/356)) ([e7ca71e](https://github.com/dvalfrid/rigstats/commit/e7ca71ef26865b620f62b1badc14d7b324940dde)), closes [#355](https://github.com/dvalfrid/rigstats/issues/355)
+
 ## [1.47.0](https://github.com/dvalfrid/rigstats/compare/v1.46.0...v1.47.0) (2026-10-11)
 
 
