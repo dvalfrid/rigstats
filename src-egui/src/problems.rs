@@ -8,7 +8,8 @@
 //! code: what happened, what still works, what to do.
 
 use rigstats_backend::control::{
-    ControlState, Problem, ProblemAction, ProblemActionKind, ProtocolMismatch, Severity,
+    ApplyResult, ControlState, Problem, ProblemAction, ProblemActionKind, ProtocolMismatch,
+    Severity,
 };
 
 pub const TROUBLESHOOTING_URL: &str =
@@ -259,6 +260,26 @@ pub fn dry_run() -> Problem {
     )
 }
 
+/// The notification for a profile switch that failed or only partly applied
+/// (#373) — a new result since `previous`, while the Control Center is closed
+/// (its footer shows it otherwise). Hotkey, app rules and the tray switch
+/// profiles without a window, so this is how a failure gets seen.
+pub fn apply_notification(
+    previous: Option<&ApplyResult>,
+    current: Option<&ApplyResult>,
+    control_open: bool,
+) -> Option<Problem> {
+    let current = current?;
+    if control_open || previous == Some(current) {
+        return None;
+    }
+    match (current.ok, current.message.as_deref()) {
+        (false, message) => Some(apply_failed(message.unwrap_or("Apply failed."))),
+        (true, Some(message)) => Some(apply_partial(message)),
+        (true, None) => None,
+    }
+}
+
 /// Every problem right now, most serious first — for Status. `service_running`
 /// is the service's state (`sc query`); `sensor_connected` whether its
 /// readings arrive.
@@ -326,6 +347,46 @@ mod tests {
 
     fn ids(problems: &[Problem]) -> Vec<&str> {
         problems.iter().map(|p| p.id.as_str()).collect()
+    }
+
+    fn result(ok: bool, message: Option<&str>) -> ApplyResult {
+        ApplyResult {
+            ok,
+            message: message.map(str::to_owned),
+            profile_id: Some("gaming".into()),
+        }
+    }
+
+    #[test]
+    fn a_failed_or_partial_switch_is_notified_once_while_the_control_center_is_closed() {
+        let failed = result(
+            false,
+            Some("Profile Gaming not applied: fan header control/1 did not accept 40 %"),
+        );
+        let partial = result(
+            true,
+            Some("Profile Gaming applied; gpu skipped: the graphics driver crashed"),
+        );
+        let fine = result(true, None);
+
+        let n = apply_notification(None, Some(&failed), false).unwrap();
+        assert_eq!(
+            (n.id.as_str(), n.severity),
+            ("apply_failed", Severity::Error)
+        );
+        assert!(n.detail.unwrap().contains("did not accept 40 %"));
+        assert_eq!(
+            apply_notification(None, Some(&partial), false).map(|n| n.severity),
+            Some(Severity::Attention)
+        );
+
+        assert_eq!(
+            apply_notification(Some(&failed), Some(&failed), false),
+            None
+        ); // already told
+        assert_eq!(apply_notification(None, Some(&failed), true), None); // the footer shows it
+        assert_eq!(apply_notification(None, Some(&fine), false), None);
+        assert_eq!(apply_notification(Some(&failed), None, false), None);
     }
 
     #[test]

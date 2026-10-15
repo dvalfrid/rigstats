@@ -149,6 +149,7 @@ rig-dashboard/
 │   │   ├── geometry.rs     Profile dimensions, monitor selection, pinned position
 │   │   ├── poll.rs         Poll thread (PollMode Full/Light), PollStats/DriveInfo/ProcessInfo
 │   │   ├── alerts.rs       Pure threshold-breach detection (pending_alerts); cooldowns/notify in main.rs
+│   │   ├── problems.rs     Every problem the app reports, one wording; active_problems for Status (#373)
 │   │   ├── dcomp_burst.rs  DcompRevealBurst — hidden reveal policy for per-pixel-transparent viewports
 │   │   ├── dialog_reveal.rs DialogReveal — dialogs hidden until rendered, hidden before torn down
 │   │   ├── gpu_process.rs  Per-process GPU engine % via PDH \GPU Engine counters + DXGI LUID→adapter map
@@ -231,6 +232,7 @@ rig-dashboard/
 | `geometry.rs` | Profile dimensions (`profile_to_size`), monitor enumeration/selection, pinned-position resolution (unit-tested) |
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping. `PollMode` (shared via `PollModeHandle`): `Full` normally; `Light` in wallpaper mode (the host is the dashboard's poller) — enough for the overlay, the tray hover card and the alerts the main app still owns; no per-app lists, no session recording. There is no paused mode: it froze the hover card and silenced every alert in wallpaper mode (#299) |
 | `alerts.rs` | `pending_alerts` — pure warn/crit threshold-breach detection (no I/O, unit-tested); `notify_on_*` checks, per-alert cooldowns and sending the notification are the caller's job in `main.rs`. Wireless devices' batteries (#290) use the `battery` charge thresholds while discharging, each with its own cooldown key (`peripheral_<id>`) |
+| `problems.rs` | One place for every problem the app reports itself and the control connection's state words (#373): `Problem` builders (service not answering / refused / version mismatch, sensor readings lost, profile not or partly applied, fan safety override, service error, dry-run, update / Wallpaper Engine failed), `active_problems` — the service's `CapabilitySet::problem`s and the app's own, most serious first, for Status's Problems group — and `apply_notification` (one toast for a failed profile switch while the Control Center is closed). All shown with `ui_kit::notice` / `row_problem` (rules in `src-egui/src/windows/CLAUDE.md`, "Problems") |
 | `dcomp_burst.rs` | `DcompRevealBurst` — decision logic for revealing a per-pixel-transparent (DComp) viewport only after its style/resize burst settles; used by the overlay and floating panels |
 | `dialog_reveal.rs` | `DialogReveal` — each dialog window is created hidden and revealed after it has rendered, and hidden for one frame before it's torn down (no white flash on open/close); see the dialog lifecycle under `windows/` below |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
