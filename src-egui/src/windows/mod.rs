@@ -31,7 +31,8 @@ pub enum OpenRequest {
 
 pub type OpenRequests = Arc<Mutex<Option<OpenRequest>>>;
 
-/// What a problem's button does — the same from every window (#370). Links
+/// What a problem's button does — the same from every window (#370). A
+/// `Retry` is the showing window's own (it checks for it first). Links
 /// open only when they are https: a problem's text comes from the service,
 /// and the app must not be made to open anything else.
 pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &OpenRequests) {
@@ -44,7 +45,10 @@ pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &Op
         ProblemActionKind::CollectDiagnostics => {
             *open.lock_safe() = Some(OpenRequest::Diagnostics);
         }
-        ProblemActionKind::Unknown => {}
+        // The debug log is in Status.
+        ProblemActionKind::OpenLog => *open.lock_safe() = Some(OpenRequest::Status),
+        // Only the window showing the problem knows what to try again.
+        ProblemActionKind::Retry | ProblemActionKind::Unknown => {}
     }
 }
 

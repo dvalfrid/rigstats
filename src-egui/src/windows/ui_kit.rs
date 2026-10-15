@@ -842,6 +842,18 @@ pub fn notice(ui: &mut Ui, dc: &DialogColors, problem: &Problem) -> Option<Probl
     clicked
 }
 
+/// A problem inside a row (a lighting device that needs attention): a dot and
+/// the text in the severity's colour, wrapping — the compact form of
+/// [`notice`] for where a card would be too much.
+pub fn row_problem(ui: &mut Ui, dc: &DialogColors, severity: Severity, text: &str) {
+    let color = severity_color(severity, dc);
+    ui.horizontal_top(|ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(10.0, 14.0), Sense::hover());
+        ui.painter().circle_filled(rect.center(), 3.5, color);
+        ui.add(egui::Label::new(RichText::new(text).size(11.0).color(color)).wrap());
+    });
+}
+
 /// A state as a coloured dot and text ("● Running"). For a row's control.
 pub fn status(ui: &mut Ui, color: Color32, text: &str) {
     // Right-to-left row: the text first, so the dot ends up before it.
