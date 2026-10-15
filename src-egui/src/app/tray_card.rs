@@ -62,11 +62,9 @@ pub(crate) fn hover_step(
 /// window straight away through Win32 when it shouldn't show. The UI thread's
 /// own check can stall — its frames stop while the tray menu's modal loop
 /// runs, and repaint requests are lost around it (winit #4608, see #177) —
-/// which left the card standing after the menu closed. The other way round,
-/// a menu closed without a choice left the UI thread idle with no repaint
-/// scheduled, so the card never showed again (#360): while it should show,
-/// this asks for a frame (`request_repaint` from this thread wakes winit;
-/// `force_repaint`'s `WM_PAINT` didn't).
+/// which left the card standing after the menu closed. While the card should
+/// show it asks for frames, so `render_tray_card` notices a window hidden
+/// here while its frames stood still (#360).
 #[cfg(windows)]
 pub(crate) fn watchdog(anchor: &TrayAnchor, ctx: &egui::Context) {
     let mut state = anchor.lock_safe();
@@ -101,6 +99,9 @@ const ROW_H: f32 = 24.0;
 pub(crate) struct TrayCard {
     pub(crate) anchor: TrayAnchor,
     reveal: DialogReveal,
+    /// Frames in a row drawn with the window visible — Windows only reports
+    /// it visible a frame or so after egui shows it.
+    shown_frames: u32,
 }
 
 /// Content height for `devices` rows (or the empty-state line).
@@ -126,6 +127,15 @@ impl RigStatsApp {
             *state = next;
             (open, next.icon)
         };
+        // The watchdog hides the window through Win32 while this thread draws
+        // no frames (the tray menu). If the pointer is back over the icon by
+        // the next frame, the card counts as open and visible all along and
+        // egui never shows the hidden window again (#360). Close it for one
+        // frame instead, so the next one opens a fresh window.
+        #[cfg(windows)]
+        let open = open
+            && !(self.tray_card.shown_frames >= 3
+                && !win_opacity::is_window_visible(win_opacity::find_hwnd(TITLE)));
         if icon.is_some() {
             // Keep checking the pointer while the icon counts as hovered —
             // `Leave` can't be relied on (see the module doc).
@@ -141,10 +151,16 @@ impl RigStatsApp {
             ctx.request_repaint();
         }
         let Some(icon) = icon.filter(|_| open) else {
+            self.tray_card.shown_frames = 0;
             return;
         };
 
         let visible = self.tray_card.reveal.visible(ID);
+        self.tray_card.shown_frames = if visible {
+            self.tray_card.shown_frames.saturating_add(1)
+        } else {
+            0
+        };
         let devices = self.runtime.latest.peripherals.clone();
         let recording = self.recording.active;
         let (warn, crit) = self.runtime.thresholds.battery;
