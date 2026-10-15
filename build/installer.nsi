@@ -46,6 +46,31 @@ RequestExecutionLevel admin
 
 Var /GLOBAL AutoUpdate
 
+; Stop the sensor service so its exe can be replaced or deleted (#370). A
+; crashing service would be restarted by its own recovery actions within
+; seconds and lock the file again, so those are cleared first (install puts
+; them back when it re-creates the service); then wait until the process is
+; really gone, and force it as a last resort.
+!macro StopSensorService
+  nsExec::ExecToLog 'cmd /C sc failure rigstats-sensor reset= 0 actions= "" >NUL 2>&1'
+  nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
+  StrCpy $R1 0
+  ${Do}
+    nsExec::Exec 'cmd /C tasklist /FI "IMAGENAME eq rigstats-sensor.exe" /NH | find /I "rigstats-sensor.exe" >NUL'
+    Pop $R2
+    ${If} $R2 != 0
+      ${Break}
+    ${EndIf}
+    IntOp $R1 $R1 + 1
+    ${If} $R1 >= 30
+      nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats-sensor.exe >NUL 2>&1'
+      Sleep 1000
+      ${Break}
+    ${EndIf}
+    Sleep 500
+  ${Loop}
+!macroend
+
 !define MUI_ICON "assets\icon.ico"
 !define MUI_UNICON "assets\icon.ico"
 !define MUI_ABORTWARNING
@@ -83,8 +108,7 @@ Function .onInit
 
   ; Stop the running app and sensor service before overwriting files.
   nsExec::ExecToLog 'cmd /C taskkill /F /IM rigstats.exe >NUL 2>&1'
-  nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
-  Sleep 3000
+  !insertmacro StopSensorService
   ; Kill old LHM artefacts from pre-sidecar versions (< 1.20).
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "RIGStats\LibreHardwareMonitor" >NUL 2>&1'
   nsExec::ExecToLog 'cmd /C schtasks /End /TN "RigStats\LibreHardwareMonitor" >NUL 2>&1'
@@ -237,8 +261,7 @@ SectionEnd
 
 ; ── Uninstaller ────────────────────────────────────────────────────────────────
 Section "Uninstall"
-  nsExec::ExecToLog 'cmd /C sc stop rigstats-sensor >NUL 2>&1'
-  Sleep 2000
+  !insertmacro StopSensorService
   nsExec::ExecToLog 'cmd /C sc delete rigstats-sensor >NUL 2>&1'
 
   ; Kill the main app if running.

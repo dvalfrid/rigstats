@@ -156,7 +156,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         var (result, snapshots) = Apply(profile, affected);
         var domains = string.Join(", ", affected.Select(p => p.Domain));
         SidecarLog.Log(result.Ok
-            ? $"[rigstats-control] Applied profile '{profile.Id}' ({domains})."
+            ? $"[rigstats-control] Applied profile '{profile.Id}' ({domains}){(result.Message is { } note ? $" — {note}" : ".")}"
             : $"[rigstats-control] Profile '{profile.Id}' not applied ({domains}), rolled back: {result.Message}");
         return (result, snapshots);
     }
@@ -180,12 +180,19 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         //    failure partway through can be fully rolled back.
         //    Capture reads hardware and can fail too (an SMU that doesn't
         //    answer) — nothing is written yet, so that's a plain failure.
+        //    A domain that is down for a known reason (#370) is skipped: the
+        //    rest of the profile still applies.
         var snapshots = new List<(IControlProvider Provider, Snapshot Snapshot)>();
+        var skipped = new List<(string Domain, string Reason)>();
         foreach (var provider in affected)
         {
             try
             {
                 snapshots.Add((provider, provider.Capture()));
+            }
+            catch (DomainUnavailableException e)
+            {
+                skipped.Add((provider.Domain, e.Message));
             }
             catch (Exception e)
             {
@@ -205,9 +212,19 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             foreach (var (provider, snapshot) in snapshots)
             {
                 applied.Add((provider, snapshot));
-                provider.Apply(profile.Part);
-                if (!provider.Verify(profile.Part))
-                    throw new ControlApplyException($"{provider.Domain} did not take effect after applying.");
+                try
+                {
+                    provider.Apply(profile.Part);
+                    if (!provider.Verify(profile.Part))
+                        throw new ControlApplyException($"{provider.Domain} did not take effect after applying.");
+                }
+                catch (DomainUnavailableException e)
+                {
+                    // Went down while applying: nothing more can be written
+                    // or restored there; the rest goes on.
+                    applied.RemoveAt(applied.Count - 1);
+                    skipped.Add((provider.Domain, e.Message));
+                }
             }
         }
         catch (Exception e)
@@ -216,7 +233,12 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {e.Message}"), []);
         }
 
-        return (ApplyResult.Success(profile.Id), snapshots);
+        if (skipped.Count == 0)
+            return (ApplyResult.Success(profile.Id), applied);
+        var note = string.Join(" ", skipped.Select(s => $"{s.Domain} skipped: {s.Reason}"));
+        if (applied.Count == 0)
+            return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {note}"), []);
+        return (ApplyResult.Success(profile.Id, $"Profile {profile.Name} applied; {note}"), applied);
     }
 
     /// Restores in reverse order. Best-effort: a restore failure must not

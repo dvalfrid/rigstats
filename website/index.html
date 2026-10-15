@@ -1055,6 +1055,8 @@
                 <tr><td><code>sysinfo.json</code></td><td>sysinfo snapshot: CPU, disk, network, RAM</td></tr>
                 <tr><td><code>displays.json</code></td><td>Connected monitors and which one was auto-selected</td></tr>
                 <tr><td><code>gpu-engine.txt</code></td><td>Windows GPU Engine counters and the adapter list — behind the GPU Apps panel</td></tr>
+                <tr><td><code>driver-updates.txt</code></td><td>The graphics drivers now, and the drivers Windows Update installed lately</td></tr>
+                <tr><td><code>gpu-worker.txt</code></td><td>Whether the graphics driver crashed or hung, and why</td></tr>
               </tbody>
             </table>
           </div>
@@ -1105,7 +1107,7 @@
             <li>If a RIGStats update failed, run the installer again.</li>
           </ol>
           <p><strong>To keep it from happening again,</strong> stop Windows from replacing drivers on its own: <em>Settings → System → About → Advanced system settings → Hardware → Device Installation Settings → No</em>. Security updates still install as usual.</p>
-          <p>A coming version keeps the service running even if a graphics driver crashes (<a href="https://github.com/dvalfrid/rigstats/issues/370" target="_blank" rel="noopener">#370</a>). Still stuck? <a href="https://github.com/dvalfrid/rigstats/issues/new/choose" target="_blank" rel="noopener">Open an issue</a> with a diagnostics ZIP (Status → Collect Diagnostics).</p>
+          <p>From version 1.48.1 the service keeps running even if a graphics driver crashes: the Control Center's <strong>Graphics card</strong> page then says what happened, with a button for the driver download and <strong>Collect diagnostics…</strong> (<a href="https://github.com/dvalfrid/rigstats/issues/370" target="_blank" rel="noopener">#370</a>). Still stuck? <a href="https://github.com/dvalfrid/rigstats/issues/new/choose" target="_blank" rel="noopener">Open an issue</a> with a diagnostics ZIP (Status → Collect Diagnostics).</p>
         </details>
       </div>
     </div>

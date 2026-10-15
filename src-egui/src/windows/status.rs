@@ -332,10 +332,20 @@ fn collect_and_open_diagnostics_impl(
     let ts = rigstats_backend::debug::unix_now_secs();
     let default_name = format!("rigstats-diag-{ts}.zip");
 
-    // Show native save-file dialog.
-    let out_path = rfd::FileDialog::new()
+    // Show native save-file dialog — in Downloads, where a file to attach to
+    // an issue is looked for, not the folder another dialog used last
+    // (Windows remembers one per app: it opened in the desktop backgrounds).
+    let mut dialog = rfd::FileDialog::new()
         .set_file_name(&default_name)
-        .add_filter("ZIP Archive", &["zip"])
+        .add_filter("ZIP Archive", &["zip"]);
+    if let Some(folder) = diagnostics_folder(
+        std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .as_deref(),
+    ) {
+        dialog = dialog.set_directory(folder);
+    }
+    let out_path = dialog
         .save_file()
         .ok_or_else(|| std::io::Error::other("cancelled"))?;
 
@@ -587,6 +597,38 @@ fn collect_and_open_diagnostics_impl(
         }",
     );
 
+    // The graphics drivers now, and every driver Windows Update installed
+    // lately (#370): a driver replaced behind the user's back made AMD's
+    // ADLX crash the service, and only Windows Update's own log showed it.
+    let driver_updates_txt = run_ps_capture(
+        "'== Graphics drivers now'; \
+        try { Get-CimInstance Win32_VideoController -EA Stop | \
+            Select-Object Name,DriverVersion,@{n='DriverDate';e={if ($_.DriverDate) { $_.DriverDate.ToString('yyyy-MM-dd') }}} | \
+            Format-Table -AutoSize | Out-String -Width 300 } catch { \"Query failed: $_\" }; \
+        '== Drivers installed by Windows Update, last 60 days'; \
+        try { \
+          $u = Get-WinEvent -FilterHashtable @{LogName='System'; \
+            ProviderName='Microsoft-Windows-WindowsUpdateClient'; Id=19,20; \
+            StartTime=(Get-Date).AddDays(-60)} -EA Stop | \
+            Where-Object { $_.Message -match 'Driver' } | \
+            Select-Object TimeCreated,@{n='Result';e={if ($_.Id -eq 19) {'installed'} else {'failed'}}}, \
+              @{n='Update';e={($_.Message -split ': ')[-1].Trim().TrimEnd('.')}}; \
+          if ($u) { $u | Format-Table -AutoSize -Wrap | Out-String -Width 300 } \
+          else { 'None.' } \
+        } catch { 'None.' }",
+    );
+    let gpu_worker_txt = gpu_worker_status(
+        std::fs::read_to_string(
+            PathBuf::from(
+                std::env::var_os("PROGRAMDATA").unwrap_or_else(|| "C:\\ProgramData".into()),
+            )
+            .join("se.codeby.rigstats")
+            .join("gpu-worker-crash.marker"),
+        )
+        .ok()
+        .as_deref(),
+    );
+
     // Raw PDH `\GPU Engine(*)` instances + DXGI adapter list — the exact input
     // `gpu_process::parse_instance`/`aggregate` consume, so a capture doubles as
     // a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README).
@@ -622,6 +664,8 @@ fn collect_and_open_diagnostics_impl(
         ("displays.json", displays_json.as_bytes()),
         ("gpu-engine.txt", gpu_engine_txt.as_bytes()),
         ("wallpaper-engine.txt", wallpaper_engine_txt.as_bytes()),
+        ("driver-updates.txt", driver_updates_txt.as_bytes()),
+        ("gpu-worker.txt", gpu_worker_txt.as_bytes()),
     ];
 
     for (name, data) in entries {
@@ -640,6 +684,33 @@ fn collect_and_open_diagnostics_impl(
         .spawn();
 
     Ok(out_path)
+}
+
+/// Where the diagnostics ZIP is saved by default: the user's Downloads, else
+/// the Desktop, else Windows' own choice (None).
+fn diagnostics_folder(user_profile: Option<&Path>) -> Option<PathBuf> {
+    let profile = user_profile?;
+    ["Downloads", "Desktop"]
+        .iter()
+        .map(|name| profile.join(name))
+        .find(|folder| folder.is_dir())
+}
+
+/// The GPU worker's crash memory (#370) in words for `gpu-worker.txt`:
+/// the service's marker is "boot time|driver files|reason".
+fn gpu_worker_status(marker: Option<&str>) -> String {
+    match marker.map(str::trim).filter(|m| !m.is_empty()) {
+        None => "No GPU worker crash recorded: the graphics driver library ran normally, or hasn't been used since the last restart.\n".to_owned(),
+        Some(m) => match m.splitn(3, '|').collect::<Vec<_>>()[..] {
+            [boot, drivers, reason] => format!(
+                "The GPU worker crashed or hung in the Windows session that started {boot} (UTC).\n\
+                 Driver files: {drivers}\n\
+                 Reason: {reason}\n\
+                 GPU power limits stay off until Windows restarts or the driver is updated.\n"
+            ),
+            _ => format!("Unreadable GPU worker crash marker: {m}\n"),
+        },
+    }
 }
 
 pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
@@ -822,9 +893,62 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::{
-        driver_age_label, gpu_driver_support, C_GOOD, C_WARN, DEP_LHM_VER, DEP_SYSINFO_VER,
-        DEP_WMI_VER, DRIVER_STALE_DAYS,
+        driver_age_label, gpu_driver_support, gpu_worker_status, C_GOOD, C_WARN, DEP_LHM_VER,
+        DEP_SYSINFO_VER, DEP_WMI_VER, DRIVER_STALE_DAYS,
     };
+
+    #[test]
+    fn diagnostics_are_saved_in_downloads_else_the_desktop() {
+        let dir = std::env::temp_dir().join(format!("rigstats-diag-folder-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        struct Home(std::path::PathBuf);
+        impl Home {
+            fn path(&self) -> &std::path::Path {
+                &self.0
+            }
+        }
+        impl Drop for Home {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let home = Home(dir);
+        assert_eq!(super::diagnostics_folder(None), None);
+        assert_eq!(super::diagnostics_folder(Some(home.path())), None); // neither exists
+
+        std::fs::create_dir(home.path().join("Desktop")).unwrap();
+        assert_eq!(
+            super::diagnostics_folder(Some(home.path())),
+            Some(home.path().join("Desktop"))
+        );
+
+        std::fs::create_dir(home.path().join("Downloads")).unwrap();
+        assert_eq!(
+            super::diagnostics_folder(Some(home.path())),
+            Some(home.path().join("Downloads"))
+        );
+    }
+
+    #[test]
+    fn gpu_worker_txt_says_whether_and_why_the_driver_library_was_turned_off() {
+        assert!(gpu_worker_status(None).starts_with("No GPU worker crash recorded"));
+        assert!(gpu_worker_status(Some(
+            "  
+"
+        ))
+        .starts_with("No GPU worker crash recorded"));
+
+        let text = gpu_worker_status(Some(
+            "2026-10-15T16:31:35.0000000+00:00|amdadlx64.dll 1.5.0.124; nvml.dll -|GPU power limits are off: the graphics driver crashed (exit code 0xC0000005). They are tried again | later.",
+        ));
+        assert!(text.contains("session that started 2026-10-15T16:31:35"));
+        assert!(text.contains("Driver files: amdadlx64.dll 1.5.0.124; nvml.dll -"));
+        assert!(text.contains("exit code 0xC0000005). They are tried again | later.")); // a '|' in the reason survives
+
+        assert!(
+            gpu_worker_status(Some("garbage")).starts_with("Unreadable GPU worker crash marker")
+        );
+    }
 
     #[test]
     fn the_build_found_every_dependency_version() {

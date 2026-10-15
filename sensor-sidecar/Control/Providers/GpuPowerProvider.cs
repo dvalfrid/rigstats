@@ -17,7 +17,10 @@ namespace SensorSidecar.Control.Providers;
 /// "Custom"; when the GPU was at factory settings before RIGStats, going
 /// back to the original value is a factory reset, so Adrenalin shows
 /// "Default" again instead of "Custom" with default values.
-public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? originalsPath) : IControlProvider, IAffectsPart
+/// `driverFiles` names the installed driver libraries for the problem's
+/// buttons (`GpuCrashGuard.DriverFiles` unless a test gives its own).
+public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? originalsPath, Func<string>? driverFiles = null)
+    : IControlProvider, IAffectsPart
 {
     private readonly object _lock = new();
     /// The value in force before RIGStats first changed an adapter, and
@@ -59,6 +62,17 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
             }).ToArray());
             return new CapabilitySet { Domain = Domain, Supported = true, Details = new JsonObject { ["adapters"] = list } };
         }
+        catch (GpuDriverCrashedException e)
+        {
+            // Logged once by the worker client; the page shows what to do (#370).
+            return new CapabilitySet
+            {
+                Domain = Domain,
+                Supported = false,
+                Reason = e.Message,
+                Problem = GpuProblems.DriverDown(e, Drivers(), LimitChanged()),
+            };
+        }
         catch (Exception e)
         {
             SidecarLog.Log($"[rigstats-control] GPU power: probe failed: {e.Message}");
@@ -67,8 +81,18 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
                 Domain = Domain,
                 Supported = false,
                 Reason = "GPU power limits are unavailable: the GPU driver did not answer.",
+                Problem = GpuProblems.DriverFailed(e.Message, Drivers(), LimitChanged()),
             };
         }
+    }
+
+    private string Drivers() => (driverFiles ?? GpuCrashGuard.DriverFiles)();
+
+    /// Whether RIGStats changed a power limit it can't put back right now.
+    private bool LimitChanged()
+    {
+        lock (_lock)
+            return _originals.Count > 0;
     }
 
     // Adapter ids that aren't present (a swapped GPU) are skipped, not

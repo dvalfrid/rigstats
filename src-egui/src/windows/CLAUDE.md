@@ -61,7 +61,8 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
-| A summary that opens a page | `tile` |
+| A summary that opens a page | `tile` (a failed domain: the problem's title, `dot` = `severity_color`) |
+| A problem (something failed, with what to do) | `notice` — never a hand-made frame or coloured label |
 | A picture (desktop background) | `Group::row_picture` — a 16:9 preview leading the row, cropped to fill; previews from `app_icons::PictureCache` |
 | Content that scrolls (release notes, a log) | `fixed_card` — exact size, content clipped inside, so it can never widen the page (a `ScrollArea` inside a `group` puts its scrollbar beside the given width and pushes the card past the margin) |
 | Main / other action | `theme::dialog_btn_primary` / `theme::dialog_btn_secondary` |
@@ -69,6 +70,12 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
 
 Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
+
+## Problems (#370)
+
+Every problem the user should know about — from the service or the app — is a `rigstats_backend::control::Problem` (id, severity, title, message, actions, detail) and is shown with **`ui_kit::notice`**, the same card everywhere: tinted by severity (`severity_color`: info = accent, attention = `C_ATTENTION`, error = `C_BAD` — no other reds or ambers), the title, what happened / what still works / what to do in plain words, the technical detail (selectable, for a bug report) and a button per action. Clicks go to `windows::run_problem_action`: `open_url` (https only — the text can come from the service) or `collect_diagnostics` (`OpenRequest::Diagnostics`: Status opens and collects the ZIP). Words: say what happened and that the rest keeps working before saying what to do; offer diagnostics whenever the user may not be able to fix it alone.
+
+A page whose domain *failed* stays visible with its problem (`ControlState::domain_problem`); only a domain this PC doesn't have is hidden. Still to move to `notice` (#370, step 2): lighting device problems, Hue, the fan safety trip, the footer's apply/service errors, Settings' errors, a problem list in Status.
 
 ## Saving
 

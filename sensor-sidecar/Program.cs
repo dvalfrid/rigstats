@@ -16,6 +16,16 @@ TaskScheduler.UnobservedTaskException += (_, e) =>
     e.SetObserved();
 };
 
+// The GPU driver libraries run in a child process of the service (#370): a
+// native fault in a vendor DLL then ends the child, not the service. The
+// child logs on stderr, which the service writes to its log.
+if (args.Contains("--gpu-worker"))
+{
+    SidecarLog.FileEnabled = false;
+    GpuWorkerHost.Run(args, DataDirectory.DefaultPath);
+    return;
+}
+
 var dryRun = args.Contains("--dry-run");
 
 // Before anything reads or writes the service's state: the data folder is
@@ -127,20 +137,26 @@ builder.Services.AddSingleton<IControlProvider>(sp => new CurveOptimizerProvider
     CpuLimitProvider.CurrentBootTime()));
 
 // Control Center phase 3 (#190, #210): GPU power limit — AMD via ADLX (the
-// Adrenalin driver's own SDK), NVIDIA desktop GPUs via NVML.
+// Adrenalin driver's own SDK), NVIDIA desktop GPUs via NVML. Both run in the
+// GPU worker process (#370); the worker writes gpu-power.json.
 builder.Services.AddSingleton<IControlProvider>(_ =>
 {
-    var adlx = AdlxGpuPower.TryLoad();
-    var nvml = NvmlGpuPower.TryLoad();
-    // For the diagnostics export: what NVML reports from the service. ADLX
-    // isn't opened for it (#241); its adapters are in the capabilities.
-    LightingDiagnostics.Write(Path.Combine(programData, "gpu-power.json"), new System.Text.Json.Nodes.JsonObject
-    {
-        ["written_utc"] = DateTimeOffset.UtcNow.ToString("O"),
-        ["adlx_installed"] = adlx is not null,
-        ["nvml"] = nvml?.Diagnostics(),
-    });
-    return new GpuPowerProvider(GpuPowerApis.Of(adlx, nvml), dryRun, Path.Combine(programData, "gpu-power-original.json"));
+    if (!GpuCrashGuard.AnyDriverInstalled())
+        return new GpuPowerProvider(null, dryRun, Path.Combine(programData, "gpu-power-original.json"));
+    var workerArgs = "--gpu-worker";
+#if DEBUG
+    // Live tests: prove the service survives a crashing or hanging driver.
+    if (args.Contains("--gpu-worker-crash-test"))
+        workerArgs += " --crash-test";
+    else if (args.Contains("--gpu-worker-hang-test"))
+        workerArgs += " --hang-test";
+#endif
+    var worker = new GpuWorkerClient(
+        () => ProcessGpuWorker.Start(Environment.ProcessPath!, workerArgs),
+        Path.Combine(programData, "gpu-worker-crash.marker"),
+        CpuLimitProvider.CurrentBootTime(),
+        GpuCrashGuard.DriverFiles());
+    return new GpuPowerProvider(worker, dryRun, Path.Combine(programData, "gpu-power-original.json"));
 });
 
 // The paired Hue Bridge (#215): its chosen rooms and zones are lighting

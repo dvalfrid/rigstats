@@ -116,6 +116,26 @@ public sealed class GpuPowerProviderTests : IDisposable
         Assert.Contains("did not answer", caps.Reason);
     }
 
+    /// ADLX after it crashed an earlier service process this boot (#370).
+    private sealed class CrashedGpu : IGpuPowerApi
+    {
+        public IReadOnlyList<GpuPowerAdapter> Adapters() =>
+            throw new GpuDriverCrashedException("GPU power limits are off: the graphics driver crashed (exit code 0xC0000005).");
+        public int GetPowerLimit(string adapterId) => throw new NotSupportedException();
+        public void SetPowerLimit(string adapterId, int percent) => throw new NotSupportedException();
+        public bool IsAtFactory(string adapterId) => throw new NotSupportedException();
+        public void ResetToFactory(string adapterId) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void A_driver_that_crashed_the_service_says_so_in_the_gpu_tab()
+    {
+        var caps = Provider(new CrashedGpu()).Probe();
+
+        Assert.False(caps.Supported);
+        Assert.Contains("graphics driver crashed (exit code 0xC0000005)", caps.Reason);
+    }
+
     [Fact]
     public async Task A_broken_driver_doesnt_block_a_profile_that_asks_nothing_of_the_gpu()
     {
