@@ -78,6 +78,39 @@
     "license": "https://opensource.org/licenses/MIT"
   }
   </script>
+  <!-- The Common questions section, for search results. Keep in step with #faq. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "My ASUS / ROG mouse or keyboard is listed in the RIGStats Control Center, but doesn't change colour",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The device has its own lighting mode, saved in the device. For ROG mice on the ROG Omni receiver the Control Center's Lighting tab offers a Let RIGStats control it button. For other devices, set the device's Cross-device Lighting Toggle to Aura Sync & Windows Dynamic Lighting in Gear Link or Armoury Crate. Keep Windows' own Use Dynamic Lighting on my devices turned off."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "The RIGStats Control Center says Not connected or changes don't apply",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The rigstats-sensor service must be running. Only the installed, signed RIGStats may control hardware; a copied or self-built rigstats.exe is refused by design."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "AMD graphics: the RIGStats sensor service keeps stopping, or the update fails with Error opening file for writing rigstats-sensor.exe",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Windows Update can replace the driver AMD Software (Adrenalin) installed with an older one, so the driver's parts no longer fit: AMD Software says Update Required, and AMD's driver library (ADLX) crashes the RIGStats sensor service when asked about the graphics card. Open AMD Software and choose Download & Install (or get the latest driver from amd.com), restart Windows or run sc start rigstats-sensor as administrator, and run a failed RIGStats update again. To prevent it, set Device Installation Settings to No under Settings > System > About > Advanced system settings > Hardware."
+        }
+      }
+    ]
+  }
+  </script>
 
   <link rel="icon" type="image/png" href="images/icon-256.png">
   <link rel="stylesheet" href="style.css">
@@ -1063,6 +1096,18 @@
         <details>
           <summary>The Control Center says "Not connected" or changes don't apply</summary>
           <p>The <code>rigstats-sensor</code> service must be running. Only the installed, signed RIGStats may control hardware — a copied or self-built <code>rigstats.exe</code> is refused by design.</p>
+        </details>
+        <details id="faq-amd-driver">
+          <summary>AMD graphics: the sensor service keeps stopping, or the update fails with "Error opening file for writing … rigstats-sensor.exe"</summary>
+          <p>Windows Update can replace the driver that AMD Software (Adrenalin) installed with an older one. The driver's parts then no longer fit together: AMD Software says <strong>"Update Required"</strong> when you open it, and RIGStats' sensor service stops every time RIGStats starts, because AMD's driver library (ADLX) crashes when it is asked about the graphics card. Windows restarts the service a few times and then gives up, and while it keeps restarting, a RIGStats update can't replace the service's file. Seen in October 2026, after Windows Update installed <em>"AMD Display Driver Update (32.0.21042.62)"</em>.</p>
+          <p><strong>Fix:</strong></p>
+          <ol>
+            <li>Open AMD Software. If it says "Update Required", click <strong>Download &amp; Install</strong> (or download the latest driver from <a href="https://www.amd.com/en/support/download/drivers.html" target="_blank" rel="noopener">amd.com</a>) and restart if it asks.</li>
+            <li>Restart Windows, or start the service from a terminal opened as administrator: <code>sc start rigstats-sensor</code>.</li>
+            <li>If a RIGStats update failed, run the installer again.</li>
+          </ol>
+          <p><strong>To keep it from happening again,</strong> stop Windows from replacing drivers on its own: <em>Settings → System → About → Advanced system settings → Hardware → Device Installation Settings → No</em>. Security updates still install as usual.</p>
+          <p>A coming version keeps the service running even if a graphics driver crashes (<a href="https://github.com/dvalfrid/rigstats/issues/370" target="_blank" rel="noopener">#370</a>). Still stuck? <a href="https://github.com/dvalfrid/rigstats/issues/new/choose" target="_blank" rel="noopener">Open an issue</a> with a diagnostics ZIP (Status → Collect Diagnostics).</p>
         </details>
       </div>
     </div>

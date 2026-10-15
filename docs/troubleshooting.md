@@ -149,6 +149,21 @@ The PERIPHERALS panel (switch it on under **Control Center → Dashboard → Pan
 - **Bluetooth devices keep disconnecting**: usually the signal, not RIGStats. A desktop board's Wi-Fi/Bluetooth module (for example ASUS boards with "AX" or "WIFI" in the name) needs its antenna screwed onto **both** connectors on the back panel; without it, Bluetooth reaches only a metre or two and drops in and out. Stand the antenna on the desk, not behind the case, and away from USB 3 hubs. Seen on the owner's rig: the mice dropped constantly until the antenna was connected.
 - **A ROG device doesn't show or keeps its old level**: see "A lighting device isn't listed" under [Control Center](#control-center); its battery is read through the same connection.
 
+## AMD Graphics: The Sensor Service Keeps Stopping
+
+**Symptoms:** the dashboard loses its sensors and the Control Center says "Connecting" a few seconds after RIGStats starts; a RIGStats update stops with *"Error opening file for writing: C:\Program Files\RIGStats\rigstats-sensor.exe"*; AMD Software says **"Update Required"** when opened.
+
+**Cause:** Windows Update replaced the driver AMD Software (Adrenalin) installed with an older one, so the driver's parts no longer match. AMD's driver library (ADLX) then crashes the service when it is asked about the graphics card (for the GPU power limit), each time RIGStats connects. Windows restarts the service a few times and gives up; while it is restarting, the installer can't replace its file. In the log (`%ProgramData%\se.codeby.rigstats\rigstats-sensor.log`): `An earlier run crashed … at SensorSidecar.Control.Providers.AdlxGpuPower.System()`; in Windows' Application log, *Application Error* 1000 for `rigstats-sensor.exe` with exception code `0xc0000005`. Seen in October 2026 after Windows Update installed *"AMD Display Driver Update (32.0.21042.62)"* over a newer Adrenalin driver.
+
+**Fix:**
+1. Open AMD Software and choose **Download & Install**, or install the latest driver from [amd.com](https://www.amd.com/en/support/download/drivers.html). Restart if it asks.
+2. Restart Windows, or start the service from an administrator terminal: `sc start rigstats-sensor`.
+3. Run a failed RIGStats update again.
+
+**Prevent it:** *Settings → System → About → Advanced system settings → Hardware → Device Installation Settings → No* stops Windows from replacing drivers on its own; security updates still install.
+
+A coming version runs the graphics-driver calls in a separate process, so a crashing driver can't stop the service ([#370](https://github.com/dvalfrid/rigstats/issues/370)).
+
 ## Wallpaper Engine
 
 The Control Center's **Desktop** page can switch [Wallpaper Engine](https://www.wallpaperengine.io/) per profile: leave it alone, show a wallpaper on each screen, pause it (the frame freezes), or turn it **Off** for that profile (the Windows background shows, and the profiles that use it start it again). RIGStats doesn't draw live wallpapers itself; it sends Wallpaper Engine the commands of its [command line](https://help.wallpaperengine.io/en/functionality/cli.html). Every change of state is written to the log (**Status → Log**, lines starting with `wallpaper engine:`), and **Status → Health** has a Wallpaper Engine row.

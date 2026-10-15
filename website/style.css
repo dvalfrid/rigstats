@@ -683,12 +683,15 @@ code {
 .faq details { border-top: 1px solid var(--border); padding: 14px 0; }
 .faq details:last-child { padding-bottom: 0; }
 .faq summary { cursor: pointer; font-weight: 600; font-size: .95rem; }
-.faq details p {
+.faq details p,
+.faq details ol {
   margin-top: 10px;
   font-size: .9rem;
   color: var(--text-muted);
   line-height: 1.6;
 }
+.faq details ol { list-style: decimal; padding-left: 1.4em; }
+.faq details li + li { margin-top: 4px; }
 .diag-table-wrap {
   overflow-x: auto;
   margin-top: 24px;
