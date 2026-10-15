@@ -299,6 +299,33 @@ public class SensorWorkerTests
     }
 
     [Fact]
+    public async Task Clients_that_close_before_they_are_served_never_stop_the_worker()
+    {
+        var host = new FakeTelemetryHost();
+        var name = NewPipeName();
+        var worker = await StartAsync(host, name);
+        try
+        {
+            // Connect and close at once, over and over (#378): one of them
+            // lands before the server accepts, which Windows reports as
+            // "The pipe is being closed" — that must not end the worker.
+            for (var i = 0; i < 50; i++)
+            {
+                using var pipe = new NamedPipeClientStream(".", name, PipeDirection.In, PipeOptions.Asynchronous);
+                await pipe.ConnectAsync((int)TimeSpan.FromSeconds(15).TotalMilliseconds);
+            }
+
+            using var client = await ConnectAsync(name, TimeSpan.FromSeconds(15));
+            Assert.NotNull(await client.ReadLineAsync());
+            Assert.False(worker.ExecuteTask!.IsCompleted);
+        }
+        finally
+        {
+            await StopAsync(worker);
+        }
+    }
+
+    [Fact]
     public async Task A_sampling_failure_ends_only_that_client()
     {
         var host = new FakeTelemetryHost();

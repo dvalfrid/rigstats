@@ -14,10 +14,17 @@ namespace SensorSidecar;
 public sealed class SensorWorker(
     IHardwareHost hardwareHost,
     string pipeName = "rigstats-sensors",
-    TimeSpan? writeTimeout = null) : BackgroundService
+    TimeSpan? writeTimeout = null) : GuardedBackgroundService
 {
     private readonly IHardwareHost _hardwareHost = hardwareHost;
     private readonly string _pipeName = pipeName;
+
+    protected override string LogTag => "[rigstats-sensor]";
+
+    // A sample that keeps failing drops every client, the app reconnects
+    // every second, and each round would log three lines (#378): the failure
+    // is logged once per reason, and connects/disconnects not while it lasts.
+    private readonly RepeatLog _clientErrors = new("[rigstats-sensor] Telemetry failed, clients are dropped until it works again", "failed");
 
     /// A client that hasn't read a line within this is dropped (#232): the
     /// pipe is unbuffered, so its write would block, holding the instance
@@ -80,7 +87,7 @@ public sealed class SensorWorker(
     // the dashboard without data (#232).
     internal const int MaxClients = 8;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         // Log a run of busy-instance failures once, not every 2 s retry.
         var unavailableLogged = false;
@@ -133,6 +140,14 @@ public sealed class SensorWorker(
                 await pipe.DisposeAsync();
                 break;
             }
+            catch (IOException)
+            {
+                // A client that connected and closed before this instance
+                // accepted it ("The pipe is being closed", #378) — nothing to
+                // serve; offer the next instance.
+                await pipe.DisposeAsync();
+                continue;
+            }
 
             // Serve this client in the background and immediately offer the
             // next pipe instance to another client.
@@ -144,7 +159,8 @@ public sealed class SensorWorker(
 
     private async Task ServeClientAsync(NamedPipeServerStream pipe, CancellationToken stoppingToken)
     {
-        SidecarLog.Log("[rigstats-sensor] Client connected.");
+        if (!_clientErrors.Active)
+            SidecarLog.Log("[rigstats-sensor] Client connected.");
         try
         {
             using var writer = new StreamWriter(pipe) { AutoFlush = true };
@@ -166,6 +182,8 @@ public sealed class SensorWorker(
                         break;
                     }
                 }
+                if (_clientErrors.Reset())
+                    SidecarLog.Log("[rigstats-sensor] Telemetry works again.");
                 await Task.Delay(1000, stoppingToken);
             }
         }
@@ -173,13 +191,15 @@ public sealed class SensorWorker(
         catch (OperationCanceledException) { }
         catch (Exception e)
         {
-            SidecarLog.Log($"[rigstats-sensor] Client error: {e.Message}");
+            if (_clientErrors.Line(e.Message, DateTimeOffset.Now) is { } line)
+                SidecarLog.Log(line);
         }
         finally
         {
             await pipe.DisposeAsync();
         }
-        SidecarLog.Log("[rigstats-sensor] Client disconnected.");
+        if (!_clientErrors.Active)
+            SidecarLog.Log("[rigstats-sensor] Client disconnected.");
     }
 
     public override async Task StopAsync(CancellationToken cancellationToken)

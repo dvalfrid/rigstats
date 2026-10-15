@@ -27,7 +27,7 @@ public sealed class ControlPipeWorker(
     Lighting.HueLink hue,
     // Only overridden by tests, which must not collide with an installed
     // service's pipe (same seam as SensorWorker).
-    string pipeName = "rigstats-control") : BackgroundService
+    string pipeName = "rigstats-control") : GuardedBackgroundService
 {
     /// The service's own version — the same as the app's (sensor-sidecar.csproj
     /// `<Version>`, bumped by release-please).
@@ -66,7 +66,11 @@ public sealed class ControlPipeWorker(
 
     private readonly PipeSecurity _pipeSecurity = BuildPipeSecurity();
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    /// The longest request line accepted — the app's own cap on a frame
+    /// (`MAX_PIPE_LINE_BYTES`); a profile is a few KB.
+    internal const int MaxLineBytes = 256 * 1024;
+
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         SidecarLog.Log($"[rigstats-control] Listening on \\\\.\\pipe\\{pipeName}");
         try
@@ -80,6 +84,8 @@ public sealed class ControlPipeWorker(
             _listening = null;
         }
     }
+
+    private readonly RepeatLog _acceptFailures = new("[rigstats-control] Accepting a client failed", "failed");
 
     private async Task AcceptLoopAsync(CancellationToken stoppingToken)
     {
@@ -95,13 +101,11 @@ public sealed class ControlPipeWorker(
             }
             catch (Exception e)
             {
-                // A BackgroundService that throws out of ExecuteAsync stops
-                // the whole host (the default BackgroundServiceExceptionBehavior
-                // is StopHost) — without this catch, any exception here (e.g.
-                // pipe/ACL construction failing) would take telemetry and fan
-                // control down with it. Back off briefly so a persistent
-                // failure doesn't spin the loop.
-                SidecarLog.Log($"[rigstats-control] ExecuteAsync error: {e}");
+                // Handled here rather than by GuardedBackgroundService, so the
+                // listening instance stays open and the pipe name stays ours.
+                // Back off so a persistent failure doesn't spin the loop.
+                if (_acceptFailures.Line(e.Message, DateTimeOffset.Now) is { } line)
+                    SidecarLog.Log($"{line}{Environment.NewLine}{e}");
                 try
                 {
                     await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
@@ -121,7 +125,7 @@ public sealed class ControlPipeWorker(
     // second one waits on this instance until the first has left.
     private NamedPipeServerStream? _listening;
     private bool _nameTakenLogged;
-    private readonly RefusalLog _refusals = new();
+    private readonly RepeatLog _refusals = new("Client rejected", "refused");
 
     /// `first`: no instance of ours exists, so creating one must also create
     /// the pipe name — it fails when another process already holds the name.
@@ -159,11 +163,19 @@ public sealed class ControlPipeWorker(
         {
             await pipe.WaitForConnectionAsync(stoppingToken);
         }
+        catch (IOException)
+        {
+            // A client that connected and closed before it was accepted
+            // ("The pipe is being closed", #378): nothing to serve.
+            await pipe.DisposeAsync();
+            return;
+        }
         catch
         {
             await pipe.DisposeAsync();
             throw;
         }
+        _acceptFailures.Reset();
 
         try
         {
@@ -183,14 +195,14 @@ public sealed class ControlPipeWorker(
             // rigstats.exe being rejected (e.g. after a signer mismatch)
             // would be undiagnosable in the field. Throttled: a refused app
             // keeps retrying (#231).
-            var line = _refusals.Refused(verdict.Reason ?? "", DateTimeOffset.Now);
+            var line = _refusals.Line(verdict.Reason ?? "", DateTimeOffset.Now);
             if (line is not null)
                 SidecarLog.Log($"[rigstats-control] {line}");
             await pipe.DisposeAsync();
             return;
         }
 
-        _refusals.Accepted();
+        _refusals.Reset();
         SidecarLog.Log("[rigstats-control] Client connected.");
         // Control is deliberately single-client (doc: "one client at a
         // time") — serve fully before accepting the next connection, unlike
@@ -241,7 +253,7 @@ public sealed class ControlPipeWorker(
         var ct = connectionCts.Token;
         try
         {
-            using var reader = new StreamReader(pipe);
+            var reader = new BoundedLineReader(pipe, MaxLineBytes);
             await using var writer = new StreamWriter(pipe) { AutoFlush = true };
             using var connection = new Connection(writer);
 
@@ -278,6 +290,11 @@ public sealed class ControlPipeWorker(
                 connectionCts.Cancel();
                 await pump;
             }
+        }
+        catch (LineTooLongException e)
+        {
+            // Not a request the app sends: no answer, the connection ends.
+            SidecarLog.Log($"[rigstats-control] Client sent {e.Message} — disconnecting it.");
         }
         catch (IOException) { }
         catch (OperationCanceledException) { }
@@ -353,15 +370,75 @@ public sealed class ControlPipeWorker(
                 _ => ControlResponse.Fail(request.Id, "unknown_method", $"unknown method '{request.Method}'."),
             };
         }
+        catch (BadRequestException e)
+        {
+            // The request itself is wrong (a parameter missing or of the wrong
+            // kind): said to the client, logged without a stack (#378).
+            SidecarLog.Log($"[rigstats-control] '{Printable(request.Method)}' refused: {e.Message}");
+            return ControlResponse.Fail(request.Id, "bad_request", e.Message);
+        }
         catch (Exception e)
         {
             // In the service log too, so a diagnostics export shows it — with the
             // stack when it isn't one of our own explained failures.
             var detail = e is InvalidOperationException or JsonException or Lighting.HueUnreachableException ? e.Message : e.ToString();
-            SidecarLog.Log($"[rigstats-control] '{request.Method}' failed: {detail}");
+            SidecarLog.Log($"[rigstats-control] '{Printable(request.Method)}' failed: {detail}");
             return ControlResponse.Fail(request.Id, "internal_error", e.Message);
         }
     }
+
+    /// A client's string as it may go into the log: no line breaks or other
+    /// control characters (which would forge log lines in a diagnostics
+    /// export), at most 64 characters.
+    internal static string Printable(string text)
+    {
+        const int max = 64;
+        var clean = new string(text.Where(c => !char.IsControl(c)).ToArray());
+        return clean.Length > max ? clean[..max] + "…" : clean;
+    }
+
+    // ── Parameters ──────────────────────────────────────────────────────
+    // A parameter that is missing or of the wrong kind is a `bad_request`,
+    // not an `internal_error` with a stack trace (#378).
+
+    private static JsonElement Param(ControlRequest request, string name) =>
+        request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty(name, out var value)
+            && value.ValueKind != JsonValueKind.Null
+            ? value
+            : throw new BadRequestException($"missing '{name}'.");
+
+    private static string StringParam(ControlRequest request, string name) =>
+        Param(request, name) is { ValueKind: JsonValueKind.String } value
+            ? value.GetString()!
+            : throw new BadRequestException($"'{name}' must be a string.");
+
+    private static T ObjectParam<T>(JsonElement value, string name)
+    {
+        try
+        {
+            return value.Deserialize<T>(ControlJson.Options) ?? throw new BadRequestException($"missing '{name}'.");
+        }
+        catch (JsonException e)
+        {
+            throw new BadRequestException($"'{name}' is not valid: {e.Message}");
+        }
+    }
+
+    private static T ObjectParam<T>(ControlRequest request, string name) => ObjectParam<T>(Param(request, name), name);
+
+    /// The whole `params` object as `T` (save_profile sends the profile itself).
+    private static T ParamsAs<T>(ControlRequest request, string what) =>
+        request.Params is { ValueKind: JsonValueKind.Object } p
+            ? ObjectParam<T>(p, what)
+            : throw new BadRequestException($"missing {what}.");
+
+    /// An IP address from the client (#378): parsed, so nothing but an address
+    /// becomes the host of an HTTPS request or goes into the log.
+    private static string IpParam(string text) =>
+        System.Net.IPAddress.TryParse(text.Trim(), out var address)
+            && address.AddressFamily is System.Net.Sockets.AddressFamily.InterNetwork or System.Net.Sockets.AddressFamily.InterNetworkV6
+            ? address.ToString()
+            : throw new BadRequestException($"'{Printable(text)}' is not an IP address.");
 
     /// One domain's capability; a provider that throws is reported as
     /// unavailable instead of failing the whole list (and with it every tab
@@ -398,16 +475,14 @@ public sealed class ControlPipeWorker(
 
     private async Task<ControlResponse> HandleSaveProfileAsync(ControlRequest request, CancellationToken ct)
     {
-        var profile = request.Params?.Deserialize<Profile>(ControlJson.Options)
-            ?? throw new JsonException("missing profile.");
+        var profile = ParamsAs<Profile>(request, "profile");
         await profiles.SaveProfileAsync(profile, ct);
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
 
     private async Task<ControlResponse> HandleDeleteProfileAsync(ControlRequest request, CancellationToken ct)
     {
-        var id = request.Params?.GetProperty("id").GetString()
-            ?? throw new JsonException("missing id.");
+        var id = StringParam(request, "id");
         var wasActive = await profiles.GetActiveIdAsync(ct) == id;
         if (!await profiles.DeleteProfileAsync(id, ct))
             return ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
@@ -422,8 +497,7 @@ public sealed class ControlPipeWorker(
     /// it is the active profile.
     private async Task<ControlResponse> HandleResetProfileAsync(ControlRequest request, CancellationToken ct)
     {
-        var id = request.Params?.GetProperty("id").GetString()
-            ?? throw new JsonException("missing id.");
+        var id = StringParam(request, "id");
         if (await profiles.ResetBuiltinAsync(id, ct) is null)
             return ControlResponse.Fail(request.Id, "not_builtin", $"profile '{id}' is not a built-in profile.");
         var result = await profiles.GetActiveIdAsync(ct) == id
@@ -442,8 +516,7 @@ public sealed class ControlPipeWorker(
 
     private async Task<ControlResponse> HandleApplyProfileAsync(ControlRequest request, CancellationToken ct)
     {
-        var id = request.Params?.GetProperty("id").GetString()
-            ?? throw new JsonException("missing id.");
+        var id = StringParam(request, "id");
         var profile = await profiles.GetAsync(id, ct);
         if (profile is null)
             return ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
@@ -462,10 +535,10 @@ public sealed class ControlPipeWorker(
     /// reverts it when the time is up.
     private async Task<ControlResponse> HandlePreviewAsync(ControlRequest request, CancellationToken ct)
     {
-        var profile = request.Params?.GetProperty("profile").Deserialize<Profile>(ControlJson.Options)
-            ?? throw new JsonException("missing profile.");
+        var profile = ObjectParam<Profile>(request, "profile");
         var duration = DefaultPreviewDuration;
-        if (request.Params?.TryGetProperty("seconds", out var seconds) == true && seconds.TryGetInt32(out var s) && s > 0)
+        if (request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("seconds", out var seconds)
+            && seconds.ValueKind == JsonValueKind.Number && seconds.TryGetInt32(out var s) && s > 0)
             duration = TimeSpan.FromSeconds(Math.Min(s, MaxPreviewDuration.TotalSeconds));
 
         var result = await broker.PreviewAsync(profile, duration, ct);
@@ -481,7 +554,13 @@ public sealed class ControlPipeWorker(
     /// `{"keep": true}` (default) or `{"keep": false}` to revert now.
     private async Task<ControlResponse> HandleConfirmAsync(ControlRequest request, CancellationToken ct)
     {
-        var keep = request.Params?.TryGetProperty("keep", out var k) != true || k.GetBoolean();
+        var keep = request.Params is not { ValueKind: JsonValueKind.Object } p || !p.TryGetProperty("keep", out var k)
+            || k.ValueKind switch
+            {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => throw new BadRequestException("'keep' must be true or false."),
+            };
         var profile = await broker.EndPreviewAsync(keep, ct);
         if (profile is null)
             return ControlResponse.Fail(request.Id, "no_preview", "The preview already ended and was reverted.");
@@ -499,8 +578,7 @@ public sealed class ControlPipeWorker(
     /// Harmless, so it skips the broker transaction.
     private ControlResponse HandleAuraPreview(ControlRequest request)
     {
-        var aura = request.Params?.GetProperty("aura").Deserialize<AuraPart>(ControlJson.Options)
-            ?? throw new JsonException("missing aura.");
+        var aura = ObjectParam<AuraPart>(request, "aura");
         lighting.Preview(aura);
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
@@ -517,8 +595,7 @@ public sealed class ControlPipeWorker(
     /// user's request from the Lighting tab.
     private ControlResponse HandleAuraEnableWdl(ControlRequest request)
     {
-        var id = request.Params?.GetProperty("id").GetString()
-            ?? throw new JsonException("missing id.");
+        var id = StringParam(request, "id");
         lighting.EnableWdl(id);
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
@@ -528,10 +605,17 @@ public sealed class ControlPipeWorker(
     private async Task<ControlResponse> HandleHueDiscoverAsync(ControlRequest request, CancellationToken ct)
     {
         string? ip = null;
-        if (request.Params?.TryGetProperty("ip", out var value) == true)
-            ip = value.GetString();
-        var bridges = await hue.DiscoverAsync(string.IsNullOrWhiteSpace(ip) ? null : ip.Trim(), ct);
-        SidecarLog.Log($"[rigstats-control] Hue: search{(string.IsNullOrWhiteSpace(ip) ? "" : $" at {ip.Trim()}")} found " +
+        if (request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("ip", out var value)
+            && value.ValueKind != JsonValueKind.Null)
+        {
+            var text = value.ValueKind == JsonValueKind.String
+                ? value.GetString()!
+                : throw new BadRequestException("'ip' must be a string.");
+            if (!string.IsNullOrWhiteSpace(text))
+                ip = IpParam(text);
+        }
+        var bridges = await hue.DiscoverAsync(ip, ct);
+        SidecarLog.Log($"[rigstats-control] Hue: search{(ip is null ? "" : $" at {ip}")} found " +
             (bridges.Count == 0 ? "no bridge." : string.Join(", ", bridges.Select(b => $"{b.Name} ({b.Model}, {b.Ip})")) + "."));
         return ControlResponse.Ok(request.Id, new
         {
@@ -542,8 +626,7 @@ public sealed class ControlPipeWorker(
     /// `{"ip": "..."}` — pairs once the bridge's link button was pressed.
     private async Task<ControlResponse> HandleHuePairAsync(ControlRequest request, CancellationToken ct)
     {
-        var ip = request.Params?.GetProperty("ip").GetString()
-            ?? throw new JsonException("missing ip.");
+        var ip = IpParam(StringParam(request, "ip"));
         if (!await hue.PairAsync(ip, ct))
             return ControlResponse.Fail(request.Id, "link_button", "Press the round link button on the Hue Bridge, then Pair again.");
         lighting.Rediscover();
@@ -560,8 +643,7 @@ public sealed class ControlPipeWorker(
     /// `{"groups": ["<room or zone id>", ...]}` — what follows the rig.
     private ControlResponse HandleHueChoose(ControlRequest request)
     {
-        var groups = request.Params?.GetProperty("groups").Deserialize<List<string>>(ControlJson.Options)
-            ?? throw new JsonException("missing groups.");
+        var groups = ObjectParam<List<string>>(request, "groups");
         hue.Choose(groups);
         lighting.Rediscover();
         return ControlResponse.Ok(request.Id, new { ok = true });
@@ -590,8 +672,7 @@ public sealed class ControlPipeWorker(
     /// pipe serves one request at a time, so awaiting it would stall the UI.
     private ControlResponse HandleIdentifyFan(ControlRequest request, Connection connection)
     {
-        var header = request.Params?.GetProperty("header").GetString()
-            ?? throw new JsonException("missing header.");
+        var header = StringParam(request, "header");
         if (!fanProvider.HasHeader(header))
             return ControlResponse.Fail(request.Id, "not_found", $"fan header '{header}' not found.");
 

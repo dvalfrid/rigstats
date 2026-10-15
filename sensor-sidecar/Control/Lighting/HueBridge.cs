@@ -228,10 +228,10 @@ public sealed class HueBridge : IDisposable
     /// What the certificate check saw on the last connection: the CN, and
     /// why the certificate was refused (null when it wasn't) — HttpClient
     /// itself only says "the SSL connection could not be established".
-    private sealed class TlsCheck
+    internal sealed class TlsCheck
     {
-        public string? CommonName;
-        public string? Refusal;
+        public volatile string? CommonName;
+        public volatile string? Refusal;
     }
 
     /// `bridgeId` (or, when null, any bridge id — left in `check` for the
@@ -246,13 +246,23 @@ public sealed class HueBridge : IDisposable
             SslOptions = new SslClientAuthenticationOptions
             {
                 RemoteCertificateValidationCallback = (_, certificate, presented, _) =>
-                {
-                    check.Refusal = CertificateRefusal(certificate as X509Certificate2, presented, bridgeId, out check.CommonName);
-                    return check.Refusal is null;
-                },
+                    Accept(check, certificate as X509Certificate2, presented, bridgeId),
             },
         };
         return new HttpClient(handler) { Timeout = RequestTimeout };
+    }
+
+    /// The certificate check of one TLS handshake. The verdict comes from this
+    /// call alone; `check` only records it for the error message. One client
+    /// can run two handshakes at once (the pipe asking for rooms while a room
+    /// sends a command), so returning what `check` holds could return the
+    /// other handshake's verdict — and accept a refused certificate (#378).
+    internal static bool Accept(TlsCheck check, X509Certificate2? certificate, X509Chain? presented, string? bridgeId)
+    {
+        var refusal = CertificateRefusal(certificate, presented, bridgeId, out var commonName);
+        check.Refusal = refusal;
+        check.CommonName = commonName;
+        return refusal is null;
     }
 
     /// Why a bridge's certificate is refused, or null when it is accepted.

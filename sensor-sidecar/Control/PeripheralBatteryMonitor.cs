@@ -35,7 +35,7 @@ public sealed class PeripheralStatusStore
 /// only in the battery reply, so it appears within one read interval — plus
 /// however long the device takes to report it. Bluetooth devices come from
 /// Windows' own battery properties in the same round (`BluetoothBatteries`).
-public sealed class PeripheralBatteryMonitor(LightingProvider lighting, PeripheralStatusStore store) : BackgroundService
+public sealed class PeripheralBatteryMonitor(LightingProvider lighting, PeripheralStatusStore store) : GuardedBackgroundService
 {
     internal static readonly TimeSpan FirstDelay = TimeSpan.FromSeconds(10);
     internal static readonly TimeSpan ScanInterval = TimeSpan.FromSeconds(5);
@@ -52,7 +52,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     private readonly LogitechBatteryReader _logitech = new();
     private bool _logitechFailureLogged;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         try
         {

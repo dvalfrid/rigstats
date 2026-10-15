@@ -263,6 +263,60 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_line_longer_than_the_cap_ends_that_client_and_the_next_is_served()
+    {
+        using (var client = await ConnectAsync())
+        {
+            // No newline, past the cap: the service stops reading and hangs
+            // up instead of buffering it (#378).
+            var flood = client.SendAsync(new string('x', ControlPipeWorker.MaxLineBytes + 10_000));
+            Assert.Null(await client.ReadLineAsync(TimeSpan.FromSeconds(10)));
+            try
+            {
+                await flood;
+            }
+            catch (IOException)
+            {
+                // The rest of the flood hit the closed pipe.
+            }
+        }
+
+        using var next = await ConnectAsync();
+        var hello = await next.RequestAsync("hello");
+        Assert.True(hello.TryGetProperty("result", out _));
+    }
+
+    [Theory]
+    [InlineData("apply_profile", null)]
+    [InlineData("apply_profile", """{"id":5}""")]
+    [InlineData("delete_profile", """{"name":"x"}""")]
+    [InlineData("preview", """{"profile":"not an object"}""")]
+    [InlineData("confirm", """{"keep":"yes"}""")]
+    [InlineData("hue_pair", """{"ip":"bridge.local\n[fake] line"}""")]
+    [InlineData("hue_discover", """{"ip":"not-an-ip"}""")]
+    [InlineData("identify_fan", "[]")]
+    public async Task A_wrong_or_missing_parameter_is_a_bad_request(string method, string? parameters)
+    {
+        using var client = await ConnectAsync();
+
+        await client.SendAsync($$"""{"id":7,"method":"{{method}}"{{(parameters is null ? "" : $",\"params\":{parameters}")}}}""");
+        var response = await client.ReadJsonAsync();
+
+        Assert.Equal(7, response.GetProperty("id").GetInt64());
+        Assert.Equal("bad_request", response.GetProperty("error").GetProperty("code").GetString());
+        // The connection stays usable.
+        Assert.True((await client.RequestAsync("hello")).TryGetProperty("result", out _));
+    }
+
+    [Fact]
+    public void Client_text_goes_into_the_log_without_line_breaks_and_bounded()
+    {
+        Assert.Equal("hue_pair[fake] line", ControlPipeWorker.Printable("hue_pair\r\n[fake] line"));
+        Assert.Equal(new string('a', 64) + "…", ControlPipeWorker.Printable(new string('a', 500)));
+        Assert.Equal("hello", ControlPipeWorker.Printable("hello"));
+    }
+
+    [Fact]
     public async Task A_second_client_waits_until_the_first_leaves()
     {
         var first = await ConnectAsync();
