@@ -611,6 +611,14 @@ What phase 3 (#190) shipped for AMD, and #210 for NVIDIA desktop GPUs:
     as a requested setting that can't be applied should.
   - AMD's ADLX server is restarted (#230) at most once per service process;
     after a failed `ADLXInitialize` it is not tried again for a minute.
+  - **A profile skips a domain that is down** (#370): a provider throwing
+    `DomainUnavailableException` (the GPU worker's `GpuDriverCrashedException`)
+    in `Capture` or `Apply` is skipped by `ControlBroker`; the rest of the
+    profile applies (`ApplyResult` ok, with "gpu skipped: …" as its message,
+    logged). Before, a crashed driver rolled back the whole profile — fans,
+    CPU and lighting too. Skipping is the safe direction: the card keeps its
+    current limit. Any other failure still rolls everything back; a profile
+    whose only affected domain is down is not applied.
   - **What the user sees** (#370): `Probe` turns a worker crash or hang
     into an error `Problem` and a driver error into an attention one
     (`GpuProblems`): what happened, that sensors, fans and lighting keep
@@ -632,14 +640,18 @@ What phase 3 (#190) shipped for AMD, and #210 for NVIDIA desktop GPUs:
     native fault ends only the child: its output closes, the client logs the
     exit code (`0xC0000005`) and throws `GpuDriverCrashedException`, whose
     text the GPU tab shows ("GPU power limits are off: the graphics driver
-    crashed …"). A call with no answer within 8 s (the app gives up on a request after 5 s; ADLX's start takes 2–3 s) kills the child (tree)
+    crashed …"). A call with no answer within 8 s (the app gives up on a request after 5 s; ADLX's start takes 2–3 s; a new worker's first call gets 20 s, since right after boot the driver and AMD's ADLX server can be slow) kills the child (tree)
     the same way; a garbled answer restarts it without blaming the driver.
-    A crash or hang is remembered in `gpu-worker-crash.marker`
+    A crash is remembered in `gpu-worker-crash.marker`
     (`GpuCrashGuard`: boot time + the driver files' versions, read without
     loading them), so the worker isn't started again — not even by a
-    restarted service — until Windows restarts or a driver changes. The
-    child inherits the service's account and session, exits when its stdin
-    closes (the service went away), logs on stderr (the service writes those
+    restarted service — until Windows restarts or a driver changes. A hang
+    is only paused for 10 minutes, in memory: a slow driver right after boot
+    must not cost the power limits for the whole day. The
+    child inherits the service's account and session, is put in a
+    kill-on-close job object (`KillOnCloseJob`) so Windows ends it the
+    moment the service ends — even stuck inside a driver call — and also
+    exits when its stdin closes, logs on stderr (the service writes those
     lines to its log; two processes appending one file would collide) and
     writes `gpu-power.json`. Each worker has its own output-reader thread,
     so calls don't depend on the thread pool. Debug builds take

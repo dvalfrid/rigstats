@@ -230,6 +230,73 @@ public class ControlBrokerTests
         Assert.Null(await broker.EndPreviewAsync(keep: true, CancellationToken.None));
     }
 
+    // A domain that is down for a known reason (#370 — the graphics driver
+    // crashed) must not cost the rest of the profile: skipping it is safe, the
+    // hardware keeps what it has.
+
+    [Fact]
+    public async Task A_domain_that_is_down_is_skipped_and_the_rest_applies()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        var gpu = FakeProvider("gpu");
+        gpu.Capture().Returns(_ => throw new DomainUnavailableException("the graphics driver crashed"));
+        var broker = new ControlBroker([powerPlan, gpu]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced", Gpu = new GpuPart() }), CancellationToken.None);
+
+        Assert.True(result.Ok);
+        Assert.Contains("gpu skipped: the graphics driver crashed", result.Message);
+        powerPlan.Received(1).Apply(Arg.Any<ProfilePart>());
+        gpu.DidNotReceive().Apply(Arg.Any<ProfilePart>());
+        powerPlan.DidNotReceive().Restore(Arg.Any<Snapshot>());
+    }
+
+    [Fact]
+    public async Task A_domain_that_goes_down_while_applying_is_skipped_without_rolling_back_the_rest()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        var gpu = FakeProvider("gpu");
+        gpu.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ => throw new DomainUnavailableException("the graphics driver crashed"));
+        var broker = new ControlBroker([powerPlan, gpu]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced", Gpu = new GpuPart() }), CancellationToken.None);
+
+        Assert.True(result.Ok);
+        powerPlan.DidNotReceive().Restore(Arg.Any<Snapshot>());
+        gpu.DidNotReceive().Restore(Arg.Any<Snapshot>()); // can't be reached; nothing to restore
+    }
+
+    [Fact]
+    public async Task A_profile_whose_only_domain_is_down_is_not_applied()
+    {
+        var gpu = FakeProvider("gpu");
+        gpu.Capture().Returns(_ => throw new DomainUnavailableException("the graphics driver crashed"));
+        var broker = new ControlBroker([gpu]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { Gpu = new GpuPart() }), CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.Contains("gpu skipped: the graphics driver crashed", result.Message);
+    }
+
+    [Fact]
+    public async Task Any_other_failure_still_rolls_everything_back()
+    {
+        var powerPlan = FakeProvider("power_plan");
+        var gpu = FakeProvider("gpu");
+        gpu.When(p => p.Apply(Arg.Any<ProfilePart>())).Do(_ => throw new InvalidOperationException("ADLX_FAIL"));
+        var broker = new ControlBroker([powerPlan, gpu]);
+
+        var result = await broker.ApplyProfileAsync(
+            ProfileWith(new ProfilePart { PowerPlan = "balanced", Gpu = new GpuPart() }), CancellationToken.None);
+
+        Assert.False(result.Ok);
+        powerPlan.Received(1).Restore(Arg.Any<Snapshot>());
+    }
+
     [Fact]
     public async Task A_capture_that_throws_fails_the_profile_without_touching_anything()
     {

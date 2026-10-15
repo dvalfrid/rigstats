@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -20,7 +21,7 @@ namespace SensorSidecar.Control.Providers;
 /// The GPU driver can't be used: its worker crashed or hung (#370). The
 /// message says why and when it is tried again (the service log and the
 /// capability's reason); `GpuProblems` turns it into what the user sees.
-public sealed class GpuDriverCrashedException(string message) : InvalidOperationException(message)
+public sealed class GpuDriverCrashedException(string message) : DomainUnavailableException(message)
 {
     /// The driver stopped answering rather than crashing.
     public bool Hung => Message.Contains("did not answer", StringComparison.Ordinal);
@@ -48,7 +49,7 @@ public static class GpuProblems
         Message = $"RIGStats asked the graphics driver for its power limit and the driver {(e.Hung ? "stopped answering" : "crashed")}. "
             + "Sensors, fans and lighting keep working — only the GPU power limit is off. "
             + "This usually happens after Windows Update replaced the graphics driver: install the latest driver, then restart Windows. "
-            + "RIGStats tries again after a restart or a driver update."
+            + (e.Hung ? "RIGStats tries again in a few minutes." : "RIGStats tries again after a restart or a driver update.")
             + (limitChanged ? LimitChangedNote : ""),
         Actions = Actions(drivers),
         Detail = $"{e.Message} Drivers: {drivers}.",
@@ -282,9 +283,11 @@ public interface IGpuWorker : IDisposable
 /// The service's side: `IGpuPowerApi` over the worker. The worker starts on
 /// the first call and stays for the next. Every call has a time limit; a
 /// worker that crashes, hangs or answers nonsense is ended, logged with its
-/// exit code, and — for a crash or a hang — remembered for this boot and
-/// these drivers, so it isn't started again until Windows restarts or a
-/// driver changes. Nothing here lets a driver fault reach the service.
+/// exit code. A crash is remembered for this boot and these drivers (also
+/// across a service restart, through the marker), so it isn't started again
+/// until Windows restarts or a driver changes; a hang only for
+/// `DefaultHangRetry` — right after boot a driver can just be slow. Nothing
+/// here lets a driver fault reach the service.
 public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
 {
     /// The app gives up on a request after 5 s; ADLX's start (even with its
@@ -292,28 +295,55 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     /// for this long once, then the worker is off.
     public static readonly TimeSpan DefaultCallTimeout = TimeSpan.FromSeconds(8);
 
-    private const string RetryNote = "They are tried again after Windows restarts or the graphics driver is updated.";
+    /// The first call of a new worker also starts it and ADLX — slow right
+    /// after boot, while the driver and AMD's ADLX server come up.
+    public static readonly TimeSpan DefaultStartTimeout = TimeSpan.FromSeconds(20);
+
+    /// How long a hang turns the GPU power limits off before a new try.
+    public static readonly TimeSpan DefaultHangRetry = TimeSpan.FromMinutes(10);
+
+    private const string CrashRetryNote = "They are tried again after Windows restarts or the graphics driver is updated.";
 
     private readonly Func<IGpuWorker> _start;
     private readonly string? _markerPath;
     private readonly DateTimeOffset _bootTime;
     private readonly string _drivers;
     private readonly TimeSpan _timeout;
+    private readonly TimeSpan _startTimeout;
+    private readonly TimeSpan _hangRetry;
+    private readonly Func<long> _now;
     private readonly object _lock = new();
     private IGpuWorker? _worker;
     // The worker's output lines, read by its own thread — calls wait here with
     // their time limit, so nothing depends on the thread pool.
     private BlockingCollection<string?>? _lines;
     private string? _down;
+    // When a hang's pause ends (Environment.TickCount64 ms); 0 = until restart.
+    private long _downUntil;
+    // The running worker has answered once: later calls get the short limit.
+    private bool _answered;
     private int _nextId;
 
-    public GpuWorkerClient(Func<IGpuWorker> start, string? markerPath, DateTimeOffset bootTime, string drivers, TimeSpan? timeout = null)
+    /// `timeout` / `startTimeout` / `hangRetry` / `clock` (milliseconds,
+    /// like Environment.TickCount64) are for tests.
+    public GpuWorkerClient(
+        Func<IGpuWorker> start,
+        string? markerPath,
+        DateTimeOffset bootTime,
+        string drivers,
+        TimeSpan? timeout = null,
+        TimeSpan? startTimeout = null,
+        TimeSpan? hangRetry = null,
+        Func<long>? clock = null)
     {
         _start = start;
         _markerPath = markerPath;
         _bootTime = bootTime;
         _drivers = drivers;
         _timeout = timeout ?? DefaultCallTimeout;
+        _startTimeout = startTimeout ?? DefaultStartTimeout;
+        _hangRetry = hangRetry ?? DefaultHangRetry;
+        _now = clock ?? (() => Environment.TickCount64);
     }
 
     public IReadOnlyList<GpuPowerAdapter> Adapters() =>
@@ -370,13 +400,14 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
             var worker = Worker();
             var lines = _lines!;
             var request = new GpuWorkerRequest(++_nextId, op, adapter, value);
+            var limit = _answered ? _timeout : _startTimeout;
             string? line;
             var timedOut = false;
             try
             {
                 worker.Input.WriteLine(GpuWorkerProtocol.Encode(request));
                 worker.Input.Flush();
-                (var answered, line) = ReadLine(lines, _timeout);
+                (var answered, line) = ReadLine(lines, limit);
                 timedOut = !answered;
             }
             catch (IOException)
@@ -384,7 +415,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
                 line = null; // the pipe broke: the worker is gone
             }
             if (line is null)
-                throw Down(worker, op, timedOut);
+                throw Down(worker, op, timedOut, limit);
 
             GpuWorkerResponse response;
             try
@@ -404,6 +435,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
                 worker.Dispose();
                 throw new InvalidOperationException("The GPU driver's worker answered something unexpected.");
             }
+            _answered = true;
             if (!response.Ok)
                 throw new InvalidOperationException(response.Error ?? "The GPU driver failed.");
             try
@@ -423,12 +455,18 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     private IGpuWorker Worker()
     {
         if (_down is not null)
-            throw new GpuDriverCrashedException(_down);
+        {
+            if (_downUntil == 0 || _now() < _downUntil)
+                throw new GpuDriverCrashedException(_down);
+            SidecarLog.Log("[rigstats-control] GPU power: trying the GPU worker again after it stopped answering (#370).");
+            _down = null;
+            _downUntil = 0;
+        }
         if (_worker is { } running)
         {
             if (!running.HasExited)
                 return running;
-            throw Down(running, "idle", timedOut: false); // died between calls
+            throw Down(running, "idle", timedOut: false, _timeout); // died between calls
         }
         if (GpuCrashGuard.CrashedBefore(ReadMarker(), _bootTime, _drivers) is { } earlier)
         {
@@ -440,6 +478,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
         {
             _worker = _start();
             _lines = StartReader(_worker);
+            _answered = false;
         }
         catch (Exception e)
         {
@@ -449,8 +488,10 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
         return _worker;
     }
 
-    /// Ends a worker that crashed or hung, logs it and remembers it.
-    private GpuDriverCrashedException Down(IGpuWorker worker, string op, bool timedOut)
+    /// Ends a worker that crashed or hung and logs it. A crash is remembered
+    /// until a restart or a driver change (the marker), a hang for
+    /// `_hangRetry` in this process only.
+    private GpuDriverCrashedException Down(IGpuWorker worker, string op, bool timedOut, TimeSpan limit)
     {
         _worker = null;
         _lines = null;
@@ -459,10 +500,17 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
         var exited = worker.WaitForExit(TimeSpan.FromSeconds(2));
         var code = exited ? worker.ExitCode : null;
         worker.Dispose();
-        var what = timedOut
-            ? $"did not answer within {_timeout.TotalSeconds:0} s"
-            : $"crashed (exit code {FormatExitCode(code)})";
-        _down = $"GPU power limits are off: the graphics driver {what}. {RetryNote}";
+        if (timedOut)
+        {
+            var minutes = Math.Max(1, (int)Math.Round(_hangRetry.TotalMinutes));
+            _down = $"GPU power limits are off: the graphics driver did not answer within {limit.TotalSeconds:0} s. They are tried again in {minutes} minutes.";
+            _downUntil = _now() + (long)_hangRetry.TotalMilliseconds;
+            SidecarLog.Log($"[rigstats-control] GPU power: the GPU worker did not answer within {limit.TotalSeconds:0} s during '{op}' ({_drivers}) — GPU power limits off for {minutes} minutes; the service keeps running (#370).");
+            return new GpuDriverCrashedException(_down);
+        }
+        var what = $"crashed (exit code {FormatExitCode(code)})";
+        _down = $"GPU power limits are off: the graphics driver {what}. {CrashRetryNote}";
+        _downUntil = 0;
         SidecarLog.Log($"[rigstats-control] GPU power: the GPU worker {what} during '{op}' ({_drivers}) — GPU power limits off until a restart or a driver update; the service keeps running (#370).");
         WriteMarker(GpuCrashGuard.Marker(_bootTime, _drivers, _down));
         return new GpuDriverCrashedException(_down);
@@ -583,6 +631,10 @@ public sealed class ProcessGpuWorker : IGpuWorker
         };
         if (!process.Start())
             throw new InvalidOperationException($"{exe} did not start.");
+        // Tied to the service: if the service ends — however it ends — so
+        // does the worker, even one stuck inside a driver call.
+        if (KillOnCloseJob.Shared?.Add(process) != true)
+            SidecarLog.Log("[rigstats-control] GPU power: the GPU worker could not be tied to the service (job object); it still ends when the service closes its input.");
         process.BeginErrorReadLine();
         return worker;
     }
@@ -609,6 +661,116 @@ public sealed class ProcessGpuWorker : IGpuWorker
         }
         _process.Dispose();
     }
+}
+
+/// A Windows job object that ends every process in it when its last handle
+/// closes — which happens when the service process ends, however it ends
+/// (stopped, crashed, killed). The GPU worker joins it, so it can't outlive
+/// the service, even while it is stuck inside a driver call (#370).
+internal sealed class KillOnCloseJob : IDisposable
+{
+    private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JobObjectLimitKillOnJobClose = 0x2000;
+
+    private static readonly Lazy<KillOnCloseJob?> SharedJob = new(() =>
+    {
+        try
+        {
+            return new KillOnCloseJob();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] GPU power: job object not created: {e.Message}");
+            return null;
+        }
+    });
+
+    private IntPtr _handle;
+
+    /// One job for the service's lifetime; null if Windows refused it.
+    public static KillOnCloseJob? Shared => SharedJob.Value;
+
+    public KillOnCloseJob()
+    {
+        _handle = CreateJobObjectW(IntPtr.Zero, null);
+        if (_handle == IntPtr.Zero)
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+        var info = new ExtendedLimitInformation();
+        info.BasicLimitInformation.LimitFlags = JobObjectLimitKillOnJobClose;
+        if (!SetInformationJobObject(_handle, JobObjectExtendedLimitInformation, ref info, (uint)Marshal.SizeOf<ExtendedLimitInformation>()))
+        {
+            var error = Marshal.GetLastWin32Error();
+            CloseHandle(_handle);
+            _handle = IntPtr.Zero;
+            throw new System.ComponentModel.Win32Exception(error);
+        }
+    }
+
+    /// Puts `process` in the job; false if Windows refused.
+    public bool Add(Process process)
+    {
+        try
+        {
+            return _handle != IntPtr.Zero && AssignProcessToJobObject(_handle, process.Handle);
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // already exited
+        }
+    }
+
+    /// Closing the handle ends every process in the job.
+    public void Dispose()
+    {
+        if (_handle == IntPtr.Zero)
+            return;
+        CloseHandle(_handle);
+        _handle = IntPtr.Zero;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BasicLimitInformation
+    {
+        public long PerProcessUserTimeLimit;
+        public long PerJobUserTimeLimit;
+        public uint LimitFlags;
+        public UIntPtr MinimumWorkingSetSize;
+        public UIntPtr MaximumWorkingSetSize;
+        public uint ActiveProcessLimit;
+        public UIntPtr Affinity;
+        public uint PriorityClass;
+        public uint SchedulingClass;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct IoCounters
+    {
+        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
+        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ExtendedLimitInformation
+    {
+        public BasicLimitInformation BasicLimitInformation;
+        public IoCounters IoInfo;
+        public UIntPtr ProcessMemoryLimit;
+        public UIntPtr JobMemoryLimit;
+        public UIntPtr PeakProcessMemoryUsed;
+        public UIntPtr PeakJobMemoryUsed;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateJobObjectW(IntPtr attributes, string? name);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref ExtendedLimitInformation info, uint length);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
 }
 
 /// `rigstats-sensor.exe --gpu-worker`: loads the GPU driver libraries and

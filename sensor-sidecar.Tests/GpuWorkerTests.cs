@@ -71,7 +71,7 @@ public sealed class GpuWorkerTests : IDisposable
     }
 
     /// What the scripted worker does with one request.
-    private sealed record Reply(string? Line = null, bool Crash = false, bool Hang = false, int ExitCode = AccessViolation)
+    private sealed record Reply(string? Line = null, bool Crash = false, bool Hang = false, int ExitCode = AccessViolation, TimeSpan Delay = default)
     {
         public static Reply From(GpuWorkerResponse response) => new(GpuWorkerProtocol.Encode(response));
     }
@@ -132,6 +132,8 @@ public sealed class GpuWorkerTests : IDisposable
             var reply = _answer(request);
             if (reply.Crash)
                 Exit(reply.ExitCode);
+            else if (reply.Delay > TimeSpan.Zero)
+                Task.Delay(reply.Delay).ContinueWith(_ => _output.Add(reply.Line));
             else if (!reply.Hang)
                 _output.Add(reply.Line);
             if (request.Op == GpuWorkerProtocol.OpEnd && !reply.Crash && !reply.Hang)
@@ -167,8 +169,15 @@ public sealed class GpuWorkerTests : IDisposable
 
     private static Func<GpuWorkerRequest, Reply> Real(IGpuPowerApi api) => r => Reply.From(GpuWorkerLoop.Handle(api, r));
 
-    private GpuWorkerClient Client(Starter starter, DateTimeOffset? boot = null, string drivers = Drivers, TimeSpan? timeout = null) =>
-        new(starter.Start, Marker, boot ?? Boot, drivers, timeout);
+    /// `timeout` sets both limits unless `startTimeout` is given.
+    private GpuWorkerClient Client(
+        Starter starter,
+        DateTimeOffset? boot = null,
+        string drivers = Drivers,
+        TimeSpan? timeout = null,
+        TimeSpan? startTimeout = null,
+        Func<long>? clock = null) =>
+        new(starter.Start, Marker, boot ?? Boot, drivers, timeout, startTimeout ?? timeout, clock: clock);
 
     // ---- protocol -------------------------------------------------------
 
@@ -388,9 +397,59 @@ public sealed class GpuWorkerTests : IDisposable
 
         var e = Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
 
-        Assert.Contains("did not answer within 0 s", e.Message.Replace("0.3", "0")); // rounded to whole seconds
+        Assert.Contains("did not answer within 0 s", e.Message); // 0.3 s, rounded
+        Assert.Contains("tried again in 10 minutes", e.Message);
+        Assert.True(e.Hung);
         Assert.True(starter.Started[0].Killed);
-        Assert.NotNull(GpuCrashGuard.CrashedBefore(File.ReadAllText(Marker), Boot, Drivers));
+        Assert.False(File.Exists(Marker)); // a hang isn't remembered past this process
+    }
+
+    [Fact]
+    public void After_a_hang_the_worker_is_tried_again_ten_minutes_later()
+    {
+        long now = 1_000_000;
+        var hang = true;
+        var api = new FakeApi(Rx9070Xt);
+        var starter = new Starter(r => hang ? new Reply(Hang: true) : Reply.From(GpuWorkerLoop.Handle(api, r)));
+        using var client = Client(starter, timeout: TimeSpan.FromMilliseconds(200), clock: () => now);
+        Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
+        hang = false;
+
+        now += (long)TimeSpan.FromMinutes(9).TotalMilliseconds;
+        Assert.Throws<GpuDriverCrashedException>(() => client.Adapters()); // still paused
+        Assert.Single(starter.Started);
+
+        now += (long)TimeSpan.FromMinutes(2).TotalMilliseconds;
+        Assert.Equal([Rx9070Xt], client.Adapters()); // a new worker, and it answers
+        Assert.Equal(2, starter.Started.Count);
+    }
+
+    [Fact]
+    public void A_crash_is_not_retried_after_ten_minutes()
+    {
+        long now = 1_000_000;
+        var starter = new Starter(_ => new Reply(Crash: true));
+        using var client = Client(starter, clock: () => now);
+        Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
+
+        now += (long)TimeSpan.FromHours(5).TotalMilliseconds;
+
+        Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
+        Assert.Single(starter.Started);
+    }
+
+    [Fact]
+    public void The_first_call_of_a_new_worker_gets_the_longer_start_limit()
+    {
+        var api = new FakeApi(Rx9070Xt);
+        // Every answer takes 400 ms: fine while the worker starts, too slow after.
+        var starter = new Starter(r => new Reply(GpuWorkerProtocol.Encode(GpuWorkerLoop.Handle(api, r)), Delay: TimeSpan.FromMilliseconds(400)));
+        using var client = Client(starter, timeout: TimeSpan.FromMilliseconds(150), startTimeout: TimeSpan.FromSeconds(5));
+
+        Assert.Equal([Rx9070Xt], client.Adapters()); // 400 ms is within the start limit
+
+        var e = Assert.Throws<GpuDriverCrashedException>(() => client.Adapters()); // but not the normal one
+        Assert.True(e.Hung);
     }
 
     [Fact]
@@ -542,7 +601,7 @@ public sealed class GpuWorkerTests : IDisposable
         new("GPU power limits are off: the graphics driver crashed (exit code 0xC0000005). They are tried again after Windows restarts or the graphics driver is updated.");
 
     private static GpuDriverCrashedException Hung() =>
-        new("GPU power limits are off: the graphics driver did not answer within 8 s. They are tried again after Windows restarts or the graphics driver is updated.");
+        new("GPU power limits are off: the graphics driver did not answer within 20 s. They are tried again in 10 minutes.");
 
     [Fact]
     public void A_crash_explains_itself_and_offers_the_driver_diagnostics_and_help()
@@ -574,6 +633,8 @@ public sealed class GpuWorkerTests : IDisposable
         Assert.Equal("gpu_driver_hung", problem.Id);
         Assert.Equal("The graphics driver stopped answering", problem.Title);
         Assert.Contains("the driver stopped answering", problem.Message);
+        Assert.Contains("tries again in a few minutes", problem.Message);
+        Assert.DoesNotContain("after a restart", problem.Message);
     }
 
     [Fact]
@@ -741,12 +802,34 @@ public sealed class GpuWorkerTests : IDisposable
                 pid = worker.Id;
                 return worker;
             },
-            Marker, Boot, Drivers, TimeSpan.FromSeconds(1));
+            Marker, Boot, Drivers, TimeSpan.FromSeconds(1), startTimeout: TimeSpan.FromSeconds(1));
 
         var e = Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
 
         Assert.Contains("did not answer within 1 s", e.Message);
         Assert.True(SpinWait.SpinUntil(() => !IsRunning(pid), TimeSpan.FromSeconds(5)), $"worker {pid} still running");
+    }
+
+    [Fact]
+    public void A_worker_in_the_job_ends_the_moment_the_service_lets_go()
+    {
+        // The service's job handle closes when the service ends, however it
+        // ends; closing it here stands in for that.
+        var job = new KillOnCloseJob();
+        using var worker = ProcessGpuWorker.Start(Cmd, "/d /c ping -n 30 127.0.0.1 >nul", _ => { });
+        var process = System.Diagnostics.Process.GetProcessById(worker.Id);
+        Assert.True(job.Add(process));
+        Assert.False(worker.HasExited);
+
+        job.Dispose();
+
+        Assert.True(worker.WaitForExit(TimeSpan.FromSeconds(5)), "the worker outlived the job");
+    }
+
+    [Fact]
+    public void The_shared_job_is_created()
+    {
+        Assert.NotNull(KillOnCloseJob.Shared);
     }
 
     [Fact]

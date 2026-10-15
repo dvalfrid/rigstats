@@ -295,11 +295,21 @@ public sealed class ApplyResult
     public static ApplyResult Success(string profileId) =>
         new() { Ok = true, ProfileId = profileId };
 
+    /// Applied, with a note — e.g. a domain that was down and skipped.
+    public static ApplyResult Success(string profileId, string message) =>
+        new() { Ok = true, ProfileId = profileId, Message = message };
+
     public static ApplyResult Failure(string profileId, string message) =>
         new() { Ok = false, ProfileId = profileId, Message = message };
 }
 
 // ── Pipe envelope ───────────────────────────────────────────────────────
+
+/// A domain is down for a known reason (its driver crashed, #370): a profile
+/// applies the rest and skips it, instead of rolling everything back. Skipping
+/// is the safe direction — the hardware keeps what it has. Any other
+/// exception still rolls the whole profile back.
+public class DomainUnavailableException(string message) : InvalidOperationException(message);
 
 /// One incoming NDJSON line: `{"id":1,"method":"hello","params":{...}}`.
 public sealed class ControlRequest
