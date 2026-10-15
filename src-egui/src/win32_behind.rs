@@ -10,23 +10,20 @@
 //!    (primary button released) to re-add `WS_EX_NOACTIVATE` and push the
 //!    window back to `HWND_BOTTOM`.
 //!
-//! All operations are idempotent; `FindWindowW` lookup is O(windows) but
+//! All operations are idempotent; the window lookup is O(windows) but
 //! harmless at the frequency we call it (once on drag-start, then once per
 //! frame while idle in behind-mode).
 
 #![allow(unsafe_code)]
 
-use std::ffi::OsStr;
-use std::os::windows::ffi::OsStrExt;
 use winapi::um::winuser::{
-    FindWindowW, GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos,
-    GWL_EXSTYLE, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
+    GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
+    HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
 };
 
+/// This process's window with the title — never another program's (#366).
 fn find_hwnd(title: &str) -> winapi::shared::windef::HWND {
-    let title_w: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
-    // SAFETY: title_w is null-terminated, first arg NULL means any class.
-    unsafe { FindWindowW(std::ptr::null(), title_w.as_ptr()) }
+    crate::win_opacity::find_hwnd(title) as winapi::shared::windef::HWND
 }
 
 /// Enforce "always behind" on the window whose title matches `title`.

@@ -10,10 +10,9 @@
 use winapi::{
     shared::windef::HWND,
     um::winuser::{
-        FindWindowW, GetWindowLongW, IsIconic, SetForegroundWindow, SetLayeredWindowAttributes,
-        SetWindowLongW, SetWindowPos, ShowWindow, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED,
-        SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, WS_EX_LAYERED,
-        WS_EX_NOREDIRECTIONBITMAP,
+        GetWindowLongW, IsIconic, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowLongW,
+        SetWindowPos, ShowWindow, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
     },
 };
 
@@ -102,11 +101,34 @@ pub fn window_size(hwnd: isize) -> Option<[i32; 2]> {
     (ok != 0).then_some([rect.right - rect.left, rect.bottom - rect.top])
 }
 
-/// Find the HWND for the top-level window with the given title.
-/// Returns 0 if not found.
+/// Find the HWND of this process's top-level window with the given title.
+/// Returns 0 if not found. Other programs' windows don't count: the title
+/// match ignores case, and an editor or Explorer window showing a "rigstats"
+/// folder was found instead of ours — so repaints, focus and window styles
+/// went to that window, and the app stopped reacting to the tray menu (#366).
 pub fn find_hwnd(title: &str) -> isize {
     let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe { FindWindowW(std::ptr::null(), wide.as_ptr()) as isize }
+    let own = unsafe { winapi::um::processthreadsapi::GetCurrentProcessId() };
+    let mut after: HWND = std::ptr::null_mut();
+    loop {
+        let hwnd = unsafe {
+            winapi::um::winuser::FindWindowExW(
+                std::ptr::null_mut(),
+                after,
+                std::ptr::null(),
+                wide.as_ptr(),
+            )
+        };
+        if hwnd.is_null() {
+            return 0;
+        }
+        let mut pid = 0u32;
+        unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid) };
+        if pid == own {
+            return hwnd as isize;
+        }
+        after = hwnd;
+    }
 }
 
 /// Post WM_PAINT to the window so its render loop runs on the next event loop tick,

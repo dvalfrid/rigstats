@@ -9,8 +9,10 @@
 //!    could otherwise both slip past a `FindWindowW` check.
 //! 2. `FindWindowW` on the main window's title (`"RigStats"`, set in
 //!    `main.rs`, unchanged even when hidden off-screen in wallpaper mode or
-//!    behind other windows in "Always Behind" mode) to actually bring the
-//!    running instance to the foreground.
+//!    behind other windows in "Always Behind" mode) and winit's window class
+//!    to actually bring the running instance to the foreground. The class
+//!    matters: the title match ignores case, so an editor or Explorer window
+//!    showing a "rigstats" folder matched too (#366).
 
 #![allow(unsafe_code)]
 
@@ -27,6 +29,8 @@ use winapi::um::winuser::{
 
 const MUTEX_NAME: &str = "Local\\se.codeby.rigstats.SingleInstance";
 const MAIN_WINDOW_TITLE: &str = "RigStats";
+/// winit's window class, which every RigStats window has.
+const MAIN_WINDOW_CLASS: &str = "Window Class";
 
 /// Enforces a single running `rigstats` instance. If another instance is
 /// already running, brings its window to the foreground and returns `true`
@@ -65,12 +69,11 @@ fn acquire_instance_mutex() -> bool {
 /// A no-op if the window hasn't been created yet (the other process is still
 /// early in startup) — that instance will simply finish starting on its own.
 fn focus_existing_instance() {
-    let title_w: Vec<u16> = OsStr::new(MAIN_WINDOW_TITLE)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
-    // SAFETY: title_w is null-terminated, first arg NULL means any class.
-    let hwnd = unsafe { FindWindowW(std::ptr::null(), title_w.as_ptr()) };
+    let wide = |s: &str| -> Vec<u16> { OsStr::new(s).encode_wide().chain(Some(0)).collect() };
+    let class_w = wide(MAIN_WINDOW_CLASS);
+    let title_w = wide(MAIN_WINDOW_TITLE);
+    // SAFETY: both strings are null-terminated.
+    let hwnd = unsafe { FindWindowW(class_w.as_ptr(), title_w.as_ptr()) };
     if hwnd.is_null() {
         return;
     }
