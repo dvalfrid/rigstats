@@ -345,6 +345,9 @@ public class LightingProviderTests
         Assert.False(caps.Supported);
         Assert.Contains("Armoury Crate", caps.Reason);
         Assert.True(caps.Details!["conflict"]!.GetValue<bool>()); // shown, not hidden
+        Assert.Equal("aura_conflict", caps.Problem?.Id);
+        Assert.Equal("Armoury Crate controls the lighting", caps.Problem?.Title);
+        Assert.Contains("Close Armoury Crate", caps.Problem!.Message);
         Assert.Empty(board.Applied);
     }
 
@@ -356,6 +359,7 @@ public class LightingProviderTests
         Assert.False(caps.Supported);
         Assert.Equal("No lighting controller found.", caps.Reason);
         Assert.Null(caps.Details); // no conflict flag → the tab stays hidden
+        Assert.Null(caps.Problem); // absent, not failed
     }
 
     [Fact]

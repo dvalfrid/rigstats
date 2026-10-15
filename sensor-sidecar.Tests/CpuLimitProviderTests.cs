@@ -237,6 +237,8 @@ public sealed class CpuLimitProviderTests : IDisposable
 
         Assert.False(caps.Supported);
         Assert.Contains("SMU did not answer", caps.Reason);
+        Assert.Equal(("cpu_limit_smu", ProblemSeverity.Attention), (caps.Problem?.Id, caps.Problem?.Severity));
+        Assert.Contains(caps.Problem!.Actions, a => a.Kind == ProblemActionKind.CollectDiagnostics);
     }
 
     [Fact]

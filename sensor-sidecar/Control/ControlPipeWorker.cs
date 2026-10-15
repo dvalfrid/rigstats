@@ -380,6 +380,7 @@ public sealed class ControlPipeWorker(
                 Domain = provider.Domain,
                 Supported = false,
                 Reason = $"Unavailable: the {provider.Domain} hardware did not answer.",
+                Problem = ControlProblems.DidNotAnswer(provider.Domain, e.Message),
             };
         }
     }

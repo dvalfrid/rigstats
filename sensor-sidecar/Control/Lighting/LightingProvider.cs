@@ -224,6 +224,7 @@ public sealed class LightingProvider : IControlProvider
                 Domain = Domain,
                 Supported = false,
                 Reason = $"{other} controls the lighting. Close it (or turn off its lighting) to control lighting here.",
+                Problem = ControlProblems.LightingTakenBy(other),
                 Details = new JsonObject { ["conflict"] = true },
             };
         }

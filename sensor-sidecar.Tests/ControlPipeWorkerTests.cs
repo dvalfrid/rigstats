@@ -147,6 +147,14 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
         var power = caps.Single(c => c.GetProperty("domain").GetString() == "power_plan");
         Assert.False(power.GetProperty("supported").GetBoolean());
         Assert.Contains(caps, c => c.GetProperty("domain").GetString() == "fan");
+
+        // A failure, not an absence: the page shows the problem (#373).
+        var problem = power.GetProperty("problem");
+        Assert.Equal("power_plan_unavailable", problem.GetProperty("id").GetString());
+        Assert.Equal("error", problem.GetProperty("severity").GetString());
+        Assert.Equal("Power plans didn't answer", problem.GetProperty("title").GetString());
+        Assert.Equal("driver gone", problem.GetProperty("detail").GetString());
+        Assert.Equal("collect_diagnostics", problem.GetProperty("actions")[0].GetProperty("kind").GetString());
     }
 
     private static Profile PreviewProfile() =>

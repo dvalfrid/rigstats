@@ -54,6 +54,7 @@ public sealed class CpuLimitProvider(
                 Domain = Domain,
                 Supported = false,
                 Reason = "CPU power limits are unavailable: the SMU did not answer.",
+                Problem = ControlProblems.SmuDidNotAnswer(e.Message),
             };
         }
         var min = MinFor(baseline);
