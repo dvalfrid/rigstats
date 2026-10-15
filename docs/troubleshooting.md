@@ -162,7 +162,7 @@ The PERIPHERALS panel (switch it on under **Control Center → Dashboard → Pan
 
 **Prevent it:** *Settings → System → About → Advanced system settings → Hardware → Device Installation Settings → No* stops Windows from replacing drivers on its own; security updates still install.
 
-A coming version runs the graphics-driver calls in a separate process, so a crashing driver can't stop the service ([#370](https://github.com/dvalfrid/rigstats/issues/370)).
+From 1.48.1 the graphics-driver calls run in a separate process, so a crashing driver can't stop the service: the Control Center's **Graphics card** page says "The graphics driver crashed" instead, with a button for the driver download and **Collect diagnostics…** ([#370](https://github.com/dvalfrid/rigstats/issues/370)).
 
 ## Wallpaper Engine
 
