@@ -68,8 +68,61 @@ public sealed class CapabilitySet
     public bool Supported { get; init; }
     /// Human-readable reason when `Supported` is false (e.g. "locked by BIOS").
     public string? Reason { get; init; }
+    /// Set when the domain is unavailable because something went wrong
+    /// (not because this PC simply lacks it): the app then shows the page
+    /// with the problem instead of hiding it.
+    public Problem? Problem { get; init; }
     /// Free-form per-domain detail (available power schemes, fan header ids, ...).
     public JsonNode? Details { get; init; }
+}
+
+/// Something the user should know about and may be able to fix (#370) — the
+/// one shape every kind of problem takes on its way to the app, which shows
+/// them all the same way (`ui_kit::notice`). Written for someone who has
+/// never seen the code: what happened, what still works, what to do.
+public sealed class Problem
+{
+    /// Stable, for tests and to tell one problem from another ("gpu_driver_crashed").
+    public required string Id { get; init; }
+
+    /// One of the <see cref="ProblemSeverity"/> values.
+    public required string Severity { get; init; }
+
+    /// Short, in sentence case ("The graphics driver crashed").
+    public required string Title { get; init; }
+
+    /// What happened, what still works and what to do — plain words.
+    public required string Message { get; init; }
+
+    /// What the user can do from the app, in order of usefulness.
+    public IReadOnlyList<ProblemAction> Actions { get; init; } = [];
+
+    /// The technical detail for a bug report (exit code, driver files).
+    public string? Detail { get; init; }
+}
+
+public static class ProblemSeverity
+{
+    public const string Info = "info";
+    public const string Attention = "attention";
+    public const string Error = "error";
+}
+
+/// A button on a problem: open a web page, or collect a diagnostics ZIP.
+public sealed class ProblemAction
+{
+    /// One of the <see cref="ProblemActionKind"/> values.
+    public required string Kind { get; init; }
+    public required string Label { get; init; }
+
+    /// The URL for <see cref="ProblemActionKind.OpenUrl"/>.
+    public string? Target { get; init; }
+}
+
+public static class ProblemActionKind
+{
+    public const string OpenUrl = "open_url";
+    public const string CollectDiagnostics = "collect_diagnostics";
 }
 
 public sealed class ValidationResult

@@ -725,6 +725,8 @@ thread). Produces a self-contained ZIP for bug reports.
 | `sysinfo.json` | sysinfo snapshot + WMI probe + RAM shell probe | See sysinfo diagnostics below |
 | `displays.json` | `geometry::win_monitor::list()` + `pick_window_rect_for_profile()` | Each monitor's position/resolution, `is_primary`, and `is_selected` for the active dashboard profile |
 | `gpu-engine.txt` | `gpu_process::dump_diagnostics()` | Raw PDH `\GPU Engine(*)` instance names/values + the full DXGI adapter list. The exact input `gpu_process::parse_instance`/`aggregate` consume — doubles as a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README, and `/gpu-engine-fixture`). Blocks ~1s (PDH needs two collects spaced in time). |
+| `driver-updates.txt` | PowerShell `Get-CimInstance` + `Get-WinEvent` (System, WindowsUpdateClient 19/20) | The graphics drivers installed now, and every driver Windows Update installed or failed to install in the last 60 days — the clue to #370, where Windows Update replaced the Adrenalin driver and AMD's ADLX crashed the service |
+| `gpu-worker.txt` | `%PROGRAMDATA%\se.codeby.rigstats\gpu-worker-crash.marker` via `status::gpu_worker_status` | Whether the GPU worker crashed or hung this boot, the driver files and the reason (#370) |
 
 ### `sysinfo.json` — key fields
 

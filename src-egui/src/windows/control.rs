@@ -16,11 +16,12 @@ use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::windows::profile_look::{self, LookEditor, LookLink};
 use crate::windows::ui_kit::{self, Icon};
+use crate::windows::OpenRequests;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
     FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HueCaps, LampPart,
-    PowerScheme, Profile,
+    PowerScheme, Problem, Profile,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -532,57 +533,28 @@ fn limit_slider(
     }
 }
 
-/// The boot-crash guard's notice, on its own above the CPU tab's cards — so
-/// it shows whichever of CPU limits / Curve Optimizer this CPU supports, and
-/// can't be mistaken for the Curve Optimizer's standing risk warning.
-fn crash_guard_banner(ui: &mut egui::Ui, control: &ControlState) {
-    let Some(notice) = &control.crash_guard_notice else {
-        return;
-    };
-    let red = egui::Color32::from_rgb(0xff, 0x77, 0x77);
-    egui::Frame::new()
-        .fill(red.gamma_multiply(0.12))
-        .stroke(egui::Stroke::new(1.0_f32, red))
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(
-                egui::RichText::new("Reverted after a restart")
-                    .size(12.0)
-                    .strong()
-                    .color(red),
-            );
-            ui.add_space(2.0);
-            ui.label(egui::RichText::new(notice).size(11.0).color(red));
-        });
-    ui.add_space(10.0);
+/// A problem and its buttons, the same in every window (#370):
+/// `ui_kit::notice` shows it, `run_problem_action` does what was clicked.
+fn problem_notice(ui: &mut egui::Ui, dc: &DialogColors, problem: &Problem, open: &OpenRequests) {
+    if let Some(action) = ui_kit::notice(ui, dc, problem) {
+        crate::windows::run_problem_action(ui.ctx(), &action, open);
+    }
 }
 
-/// The service couldn't read profiles.json and recovered it (#221) — above
-/// every tab, until profiles are saved again.
-fn profiles_notice_banner(ui: &mut egui::Ui, control: &ControlState) {
-    let Some(notice) = &control.profiles_notice else {
-        return;
-    };
-    let amber = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
-    egui::Frame::new()
-        .fill(amber.gamma_multiply(0.12))
-        .stroke(egui::Stroke::new(1.0_f32, amber))
-        .corner_radius(egui::CornerRadius::same(6))
-        .inner_margin(egui::Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label(
-                egui::RichText::new("Profiles recovered")
-                    .size(12.0)
-                    .strong()
-                    .color(amber),
-            );
-            ui.add_space(2.0);
-            ui.label(egui::RichText::new(notice).size(11.0).color(amber));
-        });
-    ui.add_space(10.0);
+/// An Overview tile's summary and dot: the problem's title in its colour
+/// when the domain failed, else what the profile does.
+fn tile_summary(
+    problem: Option<&Problem>,
+    dc: &DialogColors,
+    ok: String,
+) -> (String, Option<egui::Color32>) {
+    match problem {
+        Some(p) => (
+            p.title.clone(),
+            Some(ui_kit::severity_color(p.severity, dc)),
+        ),
+        None => (ok, None),
+    }
 }
 
 /// An empty per-core map means the same as none.
@@ -1574,10 +1546,13 @@ pub fn show(
     let hue_caps = control.hue_caps();
     let lighting_shown = aura_caps.is_some() || aura_blocked.is_some() || hue_caps.is_some();
     let gpu_caps = control.gpu_caps();
+    // A GPU domain that failed (the driver crashed, #370) keeps its page, to
+    // say so; one this PC doesn't have stays hidden.
+    let gpu_problem = control.domain_problem("gpu").cloned();
     match ui_state.tab {
         Page::Fans if fan_caps.is_none() => ui_state.tab = Page::Overview,
         Page::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Page::Overview,
-        Page::Gpu if gpu_caps.is_none() => ui_state.tab = Page::Overview,
+        Page::Gpu if gpu_caps.is_none() && gpu_problem.is_none() => ui_state.tab = Page::Overview,
         Page::Lighting if !lighting_shown => ui_state.tab = Page::Overview,
         _ => {}
     }
@@ -1817,7 +1792,7 @@ pub fn show(
     let shown = PageShown {
         fans: fan_caps.is_some(),
         cpu: cpu_tab_shown,
-        gpu: gpu_caps.is_some(),
+        gpu: gpu_caps.is_some() || gpu_problem.is_some(),
         lighting: lighting_shown,
     };
     egui::SidePanel::left("control_nav")
@@ -1850,7 +1825,10 @@ pub fn show(
             bottom: 8,
         }))
         .show(ctx, |ui| {
-            profiles_notice_banner(ui, control);
+            // Profiles restored from a backup: above every page.
+            if let Some(problem) = control.profiles_problem() {
+                problem_notice(ui, dc, &problem, look_link.open);
+            }
             let profile_name = active.map_or("this profile", |p| p.name.as_str());
             // The fan curve editor sizes itself to the page: no scrolling.
             if let (Page::Fans, Some(caps)) = (ui_state.tab, &fan_caps) {
@@ -1924,7 +1902,11 @@ pub fn show(
                             "CPU",
                             &format!("The processor's power limits in {profile_name}."),
                         );
-                        crash_guard_banner(ui, control);
+                        // CPU limits kept at BIOS values after a crash: on its own
+                        // above the CPU cards, whichever of them this CPU has.
+                        if let Some(problem) = control.crash_guard_problem() {
+                            problem_notice(ui, dc, &problem, look_link.open);
+                        }
                         if let Some(caps) = &cpu_caps {
                             cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
                             ui.add_space(10.0);
@@ -1958,7 +1940,9 @@ pub fn show(
                             "Graphics card",
                             &format!("The graphics card's power limit in {profile_name}."),
                         );
-                        if let Some(caps) = &gpu_caps {
+                        if let Some(problem) = &gpu_problem {
+                            problem_notice(ui, dc, problem, look_link.open);
+                        } else if let Some(caps) = &gpu_caps {
                             gpu_tab(ui, dc, control, caps, &saved_gpu, ui_state);
                         }
                     }
@@ -2337,13 +2321,10 @@ fn overview_page(
         (Page::Power, Icon::Power, "Power", power, None),
         (Page::Fans, Icon::Fans, "Fans", fans_summary(headers), None),
         (Page::Cpu, Icon::Cpu, "CPU", cpu_summary(cpu, co), None),
-        (
-            Page::Gpu,
-            Icon::Gpu,
-            "Graphics card",
-            gpu_summary(gpu),
-            None,
-        ),
+        {
+            let (summary, dot) = tile_summary(control.domain_problem("gpu"), dc, gpu_summary(gpu));
+            (Page::Gpu, Icon::Gpu, "Graphics card", summary, dot)
+        },
         (
             Page::Lighting,
             Icon::Lighting,
@@ -3942,5 +3923,26 @@ mod tests {
         ui.aura_pending = Some(AuraPart::default());
         assert!(ui.flush_aura_preview(&tx)); // within 100 ms: held back
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn a_failed_domains_tile_shows_the_problem_in_its_colour() {
+        let dc = DialogColors::dark();
+        let crashed = Problem {
+            id: "gpu_driver_crashed".into(),
+            severity: rigstats_backend::control::Severity::Error,
+            title: "The graphics driver crashed".into(),
+            message: "…".into(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            tile_summary(Some(&crashed), &dc, "Stock power limit".into()),
+            ("The graphics driver crashed".into(), Some(ui_kit::C_BAD))
+        );
+        assert_eq!(
+            tile_summary(None, &dc, "Stock power limit".into()),
+            ("Stock power limit".into(), None)
+        );
     }
 }

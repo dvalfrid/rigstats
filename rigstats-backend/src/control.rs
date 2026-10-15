@@ -446,8 +446,65 @@ pub struct CapabilitySet {
     pub supported: bool,
     #[serde(default)]
     pub reason: Option<String>,
+    /// Set when the domain is unavailable because something went wrong, not
+    /// because the PC lacks it: the page is shown with the problem (#370).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<Problem>,
     #[serde(default)]
     pub details: Option<serde_json::Value>,
+}
+
+/// Something the user should know about and may be able to fix (#370) — the
+/// one shape every problem takes, from the service or the app itself, shown
+/// the same way everywhere (`ui_kit::notice`). Mirrors the service's
+/// `Problem` (`sensor-sidecar/Control/ControlProtocol.cs`), pinned by the
+/// shared contract example.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Problem {
+    /// Stable ("gpu_driver_crashed"), to tell problems apart.
+    pub id: String,
+    pub severity: Severity,
+    /// Short, in sentence case.
+    pub title: String,
+    /// What happened, what still works, what to do.
+    pub message: String,
+    #[serde(default)]
+    pub actions: Vec<ProblemAction>,
+    /// The technical detail for a bug report (exit code, driver files).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Severity {
+    Info,
+    Error,
+    /// Also what a newer service's unknown severity reads as (`serde(other)`
+    /// has to be the last variant).
+    #[default]
+    #[serde(other)]
+    Attention,
+}
+
+/// A button on a problem.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProblemAction {
+    pub kind: ProblemActionKind,
+    pub label: String,
+    /// The URL for `OpenUrl`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProblemActionKind {
+    OpenUrl,
+    CollectDiagnostics,
+    /// A kind this app doesn't know (a newer service): not shown.
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -615,6 +672,40 @@ impl ControlState {
                         == Some(true)
             })
             .and_then(|c| c.reason.clone())
+    }
+
+    /// The problem that makes `domain` unavailable, if it failed rather than
+    /// being absent (#370). Its page is shown with the problem.
+    pub fn domain_problem(&self, domain: &str) -> Option<&Problem> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == domain && !c.supported)
+            .and_then(|c| c.problem.as_ref())
+    }
+
+    /// The service's notices, as problems: CPU limits kept at BIOS values
+    /// after a crash (shown on the CPU page), and profiles restored from a
+    /// backup (shown above every page).
+    pub fn crash_guard_problem(&self) -> Option<Problem> {
+        self.crash_guard_notice.as_ref().map(|notice| Problem {
+            id: "crash_guard".into(),
+            severity: Severity::Attention,
+            title: "Reverted after a restart".into(),
+            message: notice.clone(),
+            actions: Vec::new(),
+            detail: None,
+        })
+    }
+
+    pub fn profiles_problem(&self) -> Option<Problem> {
+        self.profiles_notice.as_ref().map(|notice| Problem {
+            id: "profiles_restored".into(),
+            severity: Severity::Attention,
+            title: "Profiles recovered".into(),
+            message: notice.clone(),
+            actions: Vec::new(),
+            detail: None,
+        })
     }
 
     /// The power schemes a profile can choose from.
@@ -1631,6 +1722,137 @@ fn log_pipe_trouble_throttled(dir: &Path, msg: &str) {
 mod tests {
     use super::*;
 
+    /// The problem's wire shape against the example the service's
+    /// `GpuWorkerTests.Capability_problem_serializes_as_the_shared_contract_example`
+    /// writes — neither side can rename a field alone (#370).
+    #[test]
+    fn capability_problem_contract_parses() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/contract/control-capability-problem.json");
+        let text = std::fs::read_to_string(&path).expect("read the contract example");
+        let caps: CapabilitySet = serde_json::from_str(&text).expect("parse the contract example");
+
+        assert_eq!(caps.domain, "gpu");
+        assert!(!caps.supported);
+        let problem = caps.problem.expect("the problem");
+        assert_eq!(problem.id, "gpu_driver_crashed");
+        assert_eq!(problem.severity, Severity::Error);
+        assert_eq!(problem.title, "The graphics driver crashed");
+        assert!(problem
+            .message
+            .contains("Sensors, fans and lighting keep working"));
+        assert_eq!(
+            problem
+                .actions
+                .iter()
+                .map(|a| (a.kind, a.label.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                (ProblemActionKind::OpenUrl, "Get the AMD driver"),
+                (
+                    ProblemActionKind::CollectDiagnostics,
+                    "Collect diagnostics…"
+                ),
+                (ProblemActionKind::OpenUrl, "Read more"),
+            ]
+        );
+        assert_eq!(
+            problem.actions[0].target.as_deref(),
+            Some("https://www.amd.com/en/support/download/drivers.html")
+        );
+        assert!(problem.detail.unwrap().contains("0xC0000005"));
+    }
+
+    #[test]
+    fn a_newer_services_unknown_severity_and_action_still_parse() {
+        let problem: Problem = serde_json::from_str(
+            r#"{"id":"x","severity":"catastrophic","title":"T","message":"M",
+                "actions":[{"kind":"reboot_now","label":"Reboot"}]}"#,
+        )
+        .unwrap();
+
+        assert_eq!(problem.severity, Severity::Attention);
+        assert_eq!(problem.actions[0].kind, ProblemActionKind::Unknown);
+    }
+
+    #[test]
+    fn an_older_service_without_problems_still_parses() {
+        let caps: CapabilitySet = serde_json::from_str(
+            r#"{"domain":"gpu","supported":false,"reason":"GPU power limits are unavailable."}"#,
+        )
+        .unwrap();
+
+        assert_eq!(caps.problem, None);
+    }
+
+    fn problem(id: &str) -> Problem {
+        Problem {
+            id: id.into(),
+            severity: Severity::Error,
+            title: "T".into(),
+            message: "M".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_domain_problem_counts_only_when_the_domain_is_unavailable() {
+        let mut state = ControlState {
+            capabilities: vec![
+                CapabilitySet {
+                    domain: "gpu".into(),
+                    supported: false,
+                    problem: Some(problem("gpu_driver_crashed")),
+                    ..Default::default()
+                },
+                CapabilitySet {
+                    domain: "fan".into(),
+                    supported: false,
+                    reason: Some("No writable fan headers found.".into()),
+                    problem: None,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            state.domain_problem("gpu").map(|p| p.id.as_str()),
+            Some("gpu_driver_crashed")
+        );
+        assert_eq!(state.domain_problem("fan"), None); // absent, not failed: hidden
+        assert_eq!(state.domain_problem("aura"), None);
+
+        state.capabilities[0].supported = true; // a stale problem on a working domain
+        assert_eq!(state.domain_problem("gpu"), None);
+    }
+
+    #[test]
+    fn the_services_notices_read_as_problems() {
+        let state = ControlState {
+            crash_guard_notice: Some("The PC restarted shortly after …".into()),
+            profiles_notice: Some("Profiles could not be read …".into()),
+            ..Default::default()
+        };
+
+        let crash = state.crash_guard_problem().unwrap();
+        assert_eq!(
+            (crash.id.as_str(), crash.severity, crash.title.as_str()),
+            (
+                "crash_guard",
+                Severity::Attention,
+                "Reverted after a restart"
+            )
+        );
+        assert_eq!(crash.message, "The PC restarted shortly after …");
+        assert_eq!(
+            state.profiles_problem().map(|p| p.title),
+            Some("Profiles recovered".into())
+        );
+        assert_eq!(ControlState::default().crash_guard_problem(), None);
+        assert_eq!(ControlState::default().profiles_problem(), None);
+    }
+
     #[test]
     fn a_failed_apply_is_written_to_the_debug_log() {
         let dir = tempfile::tempdir().unwrap();
@@ -1952,6 +2174,7 @@ mod tests {
                 domain: "aura".into(),
                 supported: false,
                 reason: Some("No lighting controller found.".into()),
+                problem: None,
                 details: Some(serde_json::json!({
                     "hue": {
                         "paired": true,
@@ -1997,6 +2220,7 @@ mod tests {
                 domain: "fan".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(details),
             }],
             ..ControlState::default()
@@ -2061,6 +2285,7 @@ mod tests {
                 domain: "fan".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(details),
             }],
             ..ControlState::default()
@@ -2109,6 +2334,7 @@ mod tests {
                 domain: "cpu_limit".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(details),
             }],
             ..ControlState::default()
@@ -2222,6 +2448,7 @@ mod tests {
                 domain: "gpu".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(details),
             }],
             profiles: vec![Profile {
@@ -2297,6 +2524,7 @@ mod tests {
                 domain: "curve_opt".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(details),
             }],
             ..ControlState::default()
@@ -2314,6 +2542,7 @@ mod tests {
                 domain: "power_plan".into(),
                 supported: true,
                 reason: None,
+                problem: None,
                 details: Some(serde_json::json!({
                     "schemes": [{"id": "balanced", "name": "Balanced"}, {"id": "e9a42b02", "name": "Ultimate"}],
                 })),
@@ -2350,6 +2579,7 @@ mod tests {
                 domain: "aura".into(),
                 supported,
                 reason: reason.map(str::to_owned),
+                problem: None,
                 details: Some(details),
             };
         let supported = ControlState {

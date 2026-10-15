@@ -31,6 +31,7 @@ impl RigStatsApp {
             Some(windows::OpenRequest::Status) => self.tray_open_status(ctx),
             Some(windows::OpenRequest::Updates) => self.tray_open_updater(),
             Some(windows::OpenRequest::History) => self.tray_open_history(ctx),
+            Some(windows::OpenRequest::Diagnostics) => self.collect_diagnostics(ctx),
             None => {}
         }
         while let Ok(cmd) = self.tray_rx.try_recv() {
@@ -83,6 +84,21 @@ impl RigStatsApp {
             self.dir.as_ref().clone(),
             self.runtime.latest.lhm_connected,
             self.wallpaper.is_active(),
+            ctx.clone(),
+        );
+    }
+
+    /// A problem's "Collect diagnostics…" (#370): Status opens — where the
+    /// result and the log are — and the ZIP is collected straight away, the
+    /// same as its own button.
+    fn collect_diagnostics(&mut self, ctx: &egui::Context) {
+        self.tray_open_status(ctx);
+        let capabilities_json =
+            serde_json::to_string_pretty(&self.runtime.control.capabilities).unwrap_or_default();
+        windows::status::spawn_collect(
+            self.dialogs.status_collecting.clone(),
+            self.dir.as_ref().clone(),
+            capabilities_json,
             ctx.clone(),
         );
     }

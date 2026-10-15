@@ -443,6 +443,8 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | `sysinfo.json` | sysinfo snapshot: CPU, memory, disks, network, ping target | Verify what sysinfo sees on the machine |
 | `displays.json` | Connected monitors (position, resolution) and which one was auto-selected for the current dashboard profile | Diagnose window placement and wrong-monitor issues |
 | `gpu-engine.txt` | Raw Windows `\GPU Engine(*)` performance-counter instances (per-process, per physical GPU) plus the DXGI adapter list | Diagnose the GPU Apps panel — which app is attributed to which engine/GPU. Doubles as a ready-made regression fixture (`src-egui/fixtures/gpu-engine/`) |
+| `driver-updates.txt` | The graphics drivers installed now, and every driver Windows Update installed (or failed to) in the last 60 days | A driver Windows replaced behind your back — the cause of a crashing graphics driver (#370) |
+| `gpu-worker.txt` | Whether the graphics driver library crashed or hung this Windows session, with the driver files and the reason | Why the GPU power limits are off |
 
 ---
 

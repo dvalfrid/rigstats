@@ -10,12 +10,13 @@
 //! lists a [`dropdown`], on/off a [`toggle`]. Colours come from
 //! [`DialogColors`], so everything follows Windows' light/dark mode.
 
-use crate::theme::DialogColors;
+use crate::theme::{self, DialogColors};
 use egui::text::{LayoutJob, TextFormat};
 use egui::{
     pos2, vec2, Align, Color32, CornerRadius, FontId, Layout, Pos2, Rect, Response, RichText,
     Sense, Shape, Stroke, StrokeKind, Ui, Vec2,
 };
+use rigstats_backend::control::{Problem, ProblemAction, ProblemActionKind, Severity};
 use std::ops::RangeInclusive;
 
 /// Row height without and with a subtitle.
@@ -778,6 +779,68 @@ pub fn nav_item(
 pub const C_GOOD: Color32 = Color32::from_rgb(48, 209, 88);
 pub const C_ATTENTION: Color32 = Color32::from_rgb(255, 179, 71);
 pub const C_BAD: Color32 = Color32::from_rgb(255, 99, 88);
+
+/// The colour of a problem's severity — the same three as [`status`].
+pub fn severity_color(severity: Severity, dc: &DialogColors) -> Color32 {
+    match severity {
+        Severity::Info => dc.tab_active,
+        Severity::Attention => C_ATTENTION,
+        Severity::Error => C_BAD,
+    }
+}
+
+/// A problem, shown the same way in every window (#370): a card tinted by
+/// its severity with the title, what happened and what to do, the technical
+/// detail (selectable, for a bug report) and a button per action. Returns
+/// the action clicked; [`super::run_problem_action`] carries it out.
+pub fn notice(ui: &mut Ui, dc: &DialogColors, problem: &Problem) -> Option<ProblemAction> {
+    let color = severity_color(problem.severity, dc);
+    let mut clicked = None;
+    egui::Frame::new()
+        .fill(color.gamma_multiply(0.10))
+        .stroke(Stroke::new(1.0_f32, color.gamma_multiply(0.8)))
+        .corner_radius(CornerRadius::same(CARD_RADIUS))
+        .inner_margin(egui::Margin::symmetric(16, 12))
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(vec2(10.0, 14.0), Sense::hover());
+                ui.painter().circle_filled(rect.center(), 4.0, color);
+                ui.label(
+                    RichText::new(&problem.title)
+                        .size(13.0)
+                        .strong()
+                        .color(color),
+                );
+            });
+            ui.add_space(4.0);
+            ui.label(RichText::new(&problem.message).size(12.0).color(dc.text));
+            if let Some(detail) = &problem.detail {
+                ui.add_space(4.0);
+                ui.add(
+                    egui::Label::new(RichText::new(detail).size(11.0).color(dc.muted))
+                        .selectable(true),
+                );
+            }
+            let actions: Vec<_> = problem
+                .actions
+                .iter()
+                .filter(|a| a.kind != ProblemActionKind::Unknown)
+                .collect();
+            if !actions.is_empty() {
+                ui.add_space(8.0);
+                ui.horizontal_wrapped(|ui| {
+                    for action in actions {
+                        if theme::dialog_btn_secondary(ui, &action.label, dc).clicked() {
+                            clicked = Some(action.clone());
+                        }
+                    }
+                });
+            }
+        });
+    ui.add_space(10.0);
+    clicked
+}
 
 /// A state as a coloured dot and text ("● Running"). For a row's control.
 pub fn status(ui: &mut Ui, color: Color32, text: &str) {
