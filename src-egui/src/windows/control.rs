@@ -1652,14 +1652,15 @@ pub fn show(
 
     // ── Hero ─────────────────────────────────────────────────────────────
     ui_kit::hero(ctx, dc, "control", "Control Center", |ui| {
+        use crate::problems::{STATE_CONNECTED, STATE_CONNECTING, STATE_MISMATCH, STATE_REFUSED};
         let (dot, text) = if control.protocol_mismatch.is_some() {
-            (ui_kit::C_BAD, "Version mismatch")
+            (ui_kit::C_BAD, STATE_MISMATCH)
         } else if control.connected {
-            (ui_kit::C_GOOD, "Connected")
+            (ui_kit::C_GOOD, STATE_CONNECTED)
         } else if control.refused {
-            (ui_kit::C_BAD, "Refused by the service")
+            (ui_kit::C_BAD, STATE_REFUSED)
         } else {
-            (dc.muted, "Connecting…")
+            (ui_kit::C_ATTENTION, STATE_CONNECTING)
         };
         ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
         // Painted dot: the embedded font has no bullet glyph.

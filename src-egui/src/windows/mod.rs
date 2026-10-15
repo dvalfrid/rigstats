@@ -37,11 +37,7 @@ pub type OpenRequests = Arc<Mutex<Option<OpenRequest>>>;
 /// and the app must not be made to open anything else.
 pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &OpenRequests) {
     match action.kind {
-        ProblemActionKind::OpenUrl => {
-            if let Some(url) = action.target.as_deref().filter(|u| is_safe_link(u)) {
-                ctx.open_url(egui::OpenUrl::new_tab(url));
-            }
-        }
+        ProblemActionKind::OpenUrl => open_problem_link(ctx, action),
         ProblemActionKind::CollectDiagnostics => {
             *open.lock_safe() = Some(OpenRequest::Diagnostics);
         }
@@ -49,6 +45,14 @@ pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &Op
         ProblemActionKind::OpenLog => *open.lock_safe() = Some(OpenRequest::Status),
         // Only the window showing the problem knows what to try again.
         ProblemActionKind::Retry | ProblemActionKind::Unknown => {}
+    }
+}
+
+/// A problem's link, opened only when it is https — for windows without
+/// [`OpenRequests`] (Updates).
+pub fn open_problem_link(ctx: &egui::Context, action: &ProblemAction) {
+    if let Some(url) = action.target.as_deref().filter(|u| is_safe_link(u)) {
+        ctx.open_url(egui::OpenUrl::new_tab(url));
     }
 }
 

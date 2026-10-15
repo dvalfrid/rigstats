@@ -19,6 +19,13 @@ pub const DOWNLOAD_URL: &str = "https://rigstats.app/#download";
 /// a page waits for it.
 pub const WAITING_FOR_SERVICE: &str = "Waiting for the RIGStats service…";
 
+/// The control connection's state in a word — the Control Center's title bar
+/// and Status's Health row say the same.
+pub const STATE_CONNECTED: &str = "Connected";
+pub const STATE_CONNECTING: &str = "Connecting…";
+pub const STATE_REFUSED: &str = "Refused by the service";
+pub const STATE_MISMATCH: &str = "Version mismatch";
+
 fn action(kind: ProblemActionKind, label: &str, target: Option<&str>) -> ProblemAction {
     ProblemAction {
         kind,
@@ -192,6 +199,50 @@ pub fn service_error(message: &str) -> Problem {
             .to_owned(),
         vec![diagnostics()],
         Some(message.to_owned()),
+    )
+}
+
+/// An update check or download failed.
+pub fn update_failed(error: &str) -> Problem {
+    problem(
+        "update_failed",
+        Severity::Error,
+        "Couldn't update",
+        "RIGStats couldn't check for or download the update. It tries again by itself; you can \
+         also try again now, or download the latest version from rigstats.app."
+            .to_owned(),
+        // "Try Again" is the Updates window's own footer button.
+        vec![action(
+            ProblemActionKind::OpenUrl,
+            "Download RIGStats",
+            Some(DOWNLOAD_URL),
+        )],
+        Some(error.to_owned()),
+    )
+}
+
+/// Wallpaper Engine's last command failed.
+pub fn wallpaper_engine_failed(error: &str) -> Problem {
+    problem(
+        "wallpaper_engine_failed",
+        Severity::Attention,
+        "Wallpaper Engine didn't do what was asked",
+        "The last command to Wallpaper Engine failed. The details are in the log.".to_owned(),
+        vec![action(ProblemActionKind::OpenLog, "Open log", None)],
+        Some(error.to_owned()),
+    )
+}
+
+/// Settings while the dashboard is in the desktop wallpaper.
+pub fn wallpaper_saves_only() -> Problem {
+    problem(
+        "wallpaper_saves_only",
+        Severity::Info,
+        "Changes show when you click Save",
+        "The dashboard is in the desktop wallpaper, so it picks up a change once it is saved."
+            .to_owned(),
+        Vec::new(),
+        None,
     )
 }
 
@@ -402,6 +453,9 @@ mod tests {
             safety_tripped("CPU 97°C above the critical threshold (95°C)"),
             service_error("m"),
             dry_run(),
+            update_failed("m"),
+            wallpaper_engine_failed("m"),
+            wallpaper_saves_only(),
         ];
         for p in &all {
             assert!(!p.id.is_empty() && !p.title.is_empty(), "{p:?}");

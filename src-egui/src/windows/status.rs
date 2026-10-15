@@ -151,6 +151,39 @@ fn gpu_driver_support(name: &str) -> Option<(&'static str, &'static str)> {
 
 // ── Groups ────────────────────────────────────────────────────────────────────
 
+/// Everything wrong right now, the same way as in the Control Center (#373):
+/// the service's problems and the app's own, most serious first. Nothing when
+/// all is well — Health says so. Returns the action clicked.
+fn problems_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    st: &StatusState,
+    control: &ControlState,
+) -> Option<rigstats_backend::control::ProblemAction> {
+    let sensor_connected = st.pipe_connected || st.wallpaper_active;
+    // Before the first check the service's state isn't known yet.
+    let service_running = st.service_running || st.last_refresh.is_empty();
+    let problems = crate::problems::active_problems(control, sensor_connected, service_running);
+    if problems.is_empty() {
+        return None;
+    }
+    ui.label(
+        egui::RichText::new("Problems")
+            .size(12.0)
+            .strong()
+            .color(dc.label),
+    );
+    ui.add_space(6.0);
+    let mut clicked = None;
+    for problem in &problems {
+        if let Some(action) = ui_kit::notice(ui, dc, problem) {
+            clicked = Some(action);
+        }
+    }
+    ui.add_space(4.0);
+    clicked
+}
+
 /// One row per part RIGStats depends on, with its state on the right.
 fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control: &ControlState) {
     let checked = if st.last_refresh.is_empty() {
@@ -196,14 +229,17 @@ fn health_group(ui: &mut egui::Ui, dc: &DialogColors, st: &StatusState, control:
             None => "Control pipe · protocol v1".to_owned(),
         };
         g.row("Control Center", Some(&protocol), |ui| {
+            use crate::problems::{
+                STATE_CONNECTED, STATE_CONNECTING, STATE_MISMATCH, STATE_REFUSED,
+            };
             if control.protocol_mismatch.is_some() {
-                ui_kit::status(ui, ui_kit::C_BAD, "Version mismatch");
+                ui_kit::status(ui, ui_kit::C_BAD, STATE_MISMATCH);
             } else if control.refused {
-                ui_kit::status(ui, ui_kit::C_ATTENTION, "Not allowed");
+                ui_kit::status(ui, ui_kit::C_BAD, STATE_REFUSED);
             } else if control.connected {
-                ui_kit::status(ui, ui_kit::C_GOOD, "Connected");
+                ui_kit::status(ui, ui_kit::C_GOOD, STATE_CONNECTED);
             } else {
-                ui_kit::status(ui, ui_kit::C_BAD, "Disconnected");
+                ui_kit::status(ui, ui_kit::C_ATTENTION, STATE_CONNECTING);
             }
         });
         g.row(
@@ -713,8 +749,31 @@ fn gpu_worker_status(marker: Option<&str>) -> String {
     }
 }
 
+/// How the last diagnostics collection ended, for Status to show (#373).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DiagnosticsResult {
+    Saved(PathBuf),
+    Failed(String),
+}
+
+static LAST_DIAGNOSTICS: std::sync::Mutex<Option<DiagnosticsResult>> = std::sync::Mutex::new(None);
+
+/// The last collection's outcome this session (a cancelled save dialog isn't one).
+pub fn last_diagnostics() -> Option<DiagnosticsResult> {
+    LAST_DIAGNOSTICS.lock().ok().and_then(|r| r.clone())
+}
+
+fn diagnostics_outcome(result: &std::io::Result<PathBuf>) -> Option<DiagnosticsResult> {
+    match result {
+        Ok(path) => Some(DiagnosticsResult::Saved(path.clone())),
+        Err(err) if err.to_string() == "cancelled" => None,
+        Err(err) => Some(DiagnosticsResult::Failed(err.to_string())),
+    }
+}
+
 pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
-    match collect_and_open_diagnostics_impl(dir, capabilities_json) {
+    let result = collect_and_open_diagnostics_impl(dir, capabilities_json);
+    match &result {
         Ok(path) => debug::append_debug_log(
             dir,
             &format!("status: diagnostics collected at {}", path.display()),
@@ -723,6 +782,11 @@ pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
             dir,
             &format!("status: diagnostics collection failed: {err}"),
         ),
+    }
+    if let Some(outcome) = diagnostics_outcome(&result) {
+        if let Ok(mut last) = LAST_DIAGNOSTICS.lock() {
+            *last = Some(outcome);
+        }
     }
 }
 
@@ -774,6 +838,7 @@ pub fn show(
 
     let mut action_refresh = false;
     let mut action_collect_diag = false;
+    let mut problem_action: Option<rigstats_backend::control::ProblemAction> = None;
     let mut action_open_folder = false;
     let mut action_close = false;
 
@@ -819,6 +884,28 @@ pub fn show(
                 }
                 if collect_busy {
                     ui.spinner();
+                } else {
+                    match last_diagnostics() {
+                        Some(DiagnosticsResult::Saved(path)) => {
+                            let name = path.file_name().map_or_else(
+                                || path.display().to_string(),
+                                |n| n.to_string_lossy().into_owned(),
+                            );
+                            ui.label(
+                                egui::RichText::new(format!("Saved {name}"))
+                                    .size(11.0)
+                                    .color(ui_kit::C_GOOD),
+                            )
+                            .on_hover_text(path.display().to_string());
+                        }
+                        Some(DiagnosticsResult::Failed(err)) => ui_kit::row_problem(
+                            ui,
+                            dc,
+                            rigstats_backend::control::Severity::Error,
+                            &format!("Couldn't collect diagnostics: {err}"),
+                        ),
+                        None => {}
+                    }
                 }
                 ui.add_space(4.0);
                 if theme::dialog_btn_secondary(ui, "Open Log Folder", dc).clicked() {
@@ -853,6 +940,7 @@ pub fn show(
                         })
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
+                            problem_action = problems_group(ui, dc, &st, control);
                             health_group(ui, dc, &st, control);
                             drivers_group(ui, dc, &st);
                             log_group(ui, dc, &st);
@@ -875,6 +963,16 @@ pub fn show(
             .arg(dir.as_ref())
             .spawn();
     }
+    // A problem's button: diagnostics here, links in the browser; the log is
+    // already on this page.
+    if let Some(action) = problem_action {
+        match action.kind {
+            rigstats_backend::control::ProblemActionKind::CollectDiagnostics => {
+                action_collect_diag = true
+            }
+            _ => crate::windows::open_problem_link(ctx, &action),
+        }
+    }
     if action_collect_diag {
         let capabilities_json =
             serde_json::to_string_pretty(&control.capabilities).unwrap_or_default();
@@ -896,6 +994,25 @@ mod tests {
         driver_age_label, gpu_driver_support, gpu_worker_status, C_GOOD, C_WARN, DEP_LHM_VER,
         DEP_SYSINFO_VER, DEP_WMI_VER, DRIVER_STALE_DAYS,
     };
+
+    #[test]
+    fn a_cancelled_save_is_not_an_outcome_but_a_failure_is() {
+        use super::{diagnostics_outcome, DiagnosticsResult};
+        let saved = std::path::PathBuf::from("C:/Users/x/Downloads/rigstats-diag-1.zip");
+
+        assert_eq!(
+            diagnostics_outcome(&Ok(saved.clone())),
+            Some(DiagnosticsResult::Saved(saved))
+        );
+        assert_eq!(
+            diagnostics_outcome(&Err(std::io::Error::other("cancelled"))),
+            None
+        );
+        assert_eq!(
+            diagnostics_outcome(&Err(std::io::Error::other("disk full"))),
+            Some(DiagnosticsResult::Failed("disk full".into()))
+        );
+    }
 
     #[test]
     fn diagnostics_are_saved_in_downloads_else_the_desktop() {
