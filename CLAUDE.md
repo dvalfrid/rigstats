@@ -103,6 +103,15 @@ For the full issue → implement → test → commit → roadmap-sync workflow, 
 
 Prefer the simplest solution that solves the problem. Before implementing, ask: is there a direct approach that avoids the complexity entirely? Flag files, shared state, and extra IPC are often signs that a simpler path exists. Question existing plans — a plan being written down is not a reason to follow it if a cleaner alternative is obvious.
 
+## Evidence, not guesses
+
+The owner wants to know how sure you are — every time, in every session, on every machine. A confident wrong cause costs more than an honest "I don't know yet".
+
+- **Label every cause, diagnosis and "fixed" claim** as **verifierat** (verified — say what was observed: a log line, a reproduced failure, a test, a value read back) or **hypotes** (hypothesis — say what would confirm or rule it out). Never present a hypothesis as the cause.
+- **"Fixed" means:** the failure was reproduced (or seen in a trace), one thing was changed, and the failure was then gone in the same scenario — ideally also back when the change is removed. Until then say "should fix — not yet verified" and name the test that would show it.
+- **A failure that only shows sometimes:** its absence in one run is weak evidence; say so.
+- **When an earlier explanation turns out wrong,** say so plainly, retract it where it was stated (issue, PR body, commit message), and don't stack a new guess on top — gather evidence first (trace, stack dump, A/B test).
+
 ## Architecture Overview
 
 Windows-only egui desktop app ("RIGStats") displaying hardware telemetry on a secondary monitor (portrait or landscape), as a floating overlay, or reparented into the desktop wallpaper (WorkerW). No web frontend — all UI is native Rust/egui.
