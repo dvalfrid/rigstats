@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.48.1](https://github.com/dvalfrid/rigstats/compare/v1.48.0...v1.48.1) (2026-10-15)
+
+
+### Bug Fixes
+
+* **control:** a crashing graphics driver can't take the service down ([#372](https://github.com/dvalfrid/rigstats/issues/372)) ([baf9005](https://github.com/dvalfrid/rigstats/commit/baf90059ea30504e925b1122cb9edbe155205d45))
+
 ## [1.48.0](https://github.com/dvalfrid/rigstats/compare/v1.47.0...v1.48.0) (2026-10-14)
 
 
