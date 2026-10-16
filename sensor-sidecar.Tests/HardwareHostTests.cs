@@ -122,30 +122,30 @@ public class HardwareHostTests
     public async Task Many_concurrent_callers_share_one_sample_per_interval()
     {
         // #208: however many telemetry clients and service-side consumers ask,
-        // the hardware is read at most once per SampleMaxAgeMs (900 ms).
+        // the hardware is read at most once per SampleMaxAgeMs (900 ms). The
+        // clock is the test's: a wall-clock version wanted 160 calls in 3 s
+        // and got 152 on a busy CI runner, which says nothing about sharing.
+        long now = 10_000;
         var hardware = new FakeHardware();
-        var host = new HardwareHost(hardware);
-        const int callers = 8;
-        var until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
-        var calls = 0;
+        var host = new HardwareHost(hardware, clock: () => now);
+        const int callers = 8, rounds = 4, callsEach = 10;
 
-        await Task.WhenAll(Enumerable.Range(0, callers).Select(i => Task.Run(async () =>
+        for (var round = 1; round <= rounds; round++)
         {
-            while (DateTime.UtcNow < until)
+            // One interval: 80 concurrent calls, one read of the hardware.
+            await Task.WhenAll(Enumerable.Range(0, callers).Select(i => Task.Run(async () =>
             {
-                if (i % 2 == 0)
-                    await host.GetTelemetryLineAsync(CancellationToken.None);
-                else
-                    await host.GetSampleAsync(CancellationToken.None);
-                Interlocked.Increment(ref calls);
-                await Task.Delay(50);
-            }
-        })));
-
-        // ~3 s / 900 ms → 4 samples (the first is immediate); far fewer than
-        // the hundreds of calls made.
-        Assert.InRange(hardware.Samples, 3, 5);
-        Assert.True(calls > callers * 20, $"only {calls} calls");
+                for (var n = 0; n < callsEach; n++)
+                {
+                    if (i % 2 == 0)
+                        await host.GetTelemetryLineAsync(CancellationToken.None);
+                    else
+                        await host.GetSampleAsync(CancellationToken.None);
+                }
+            })));
+            Assert.Equal(round, hardware.Samples);
+            now += 1_000; // past SampleMaxAgeMs: the next round reads again
+        }
     }
 
     [Fact]
