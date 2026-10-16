@@ -40,6 +40,8 @@ public sealed class BootCrashGuard : IDisposable
     public void AcknowledgeNotice() => _noticeShown = true;
 
     /// Call right before a risky write. (Re)starts the stable-uptime clock.
+    /// Throws when the marker can't be written: an unguarded risky write is
+    /// not made (#390) — the provider stops and the broker rolls back.
     public void Arm()
     {
         lock (_lock)
@@ -47,11 +49,12 @@ public sealed class BootCrashGuard : IDisposable
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(_markerPath)!);
-                File.WriteAllText(_markerPath, DateTimeOffset.UtcNow.ToString("O"));
+                File.WriteAllText(_markerPath, DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
             }
-            catch (Exception e)
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
-                SidecarLog.Log($"[rigstats-control] Boot-crash guard: marker not written: {e.Message}");
+                SidecarLog.Log($"[rigstats-control] Boot-crash guard: marker not written, so the change is not made: {e.Message}");
+                throw new InvalidOperationException($"The boot-crash guard's marker could not be written ({e.Message}), so the change was not made.", e);
             }
             _clearTimer?.Dispose();
             _clearTimer = new Timer(_ => Clear(), null, _stableAfter, Timeout.InfiniteTimeSpan);

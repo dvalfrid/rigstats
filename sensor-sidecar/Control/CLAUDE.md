@@ -6,7 +6,7 @@ Loaded when working in this folder. Everything here runs as **LocalSystem** and 
 
 - **One way in.** Hardware is written only by an `IControlProvider`, driven by `ControlBroker` (apply, `preview` with auto-revert, `confirm`). Nothing else writes to hardware.
 - **Clamp in the service, at write time.** Never trust a value from the pipe. Fan duty is clamped to the header's probed min/max in `FanProvider` on every write; CPU limits to `[floor, BIOS baseline]` (they can only lower); Curve Optimizer to its Min/Max; the GPU power limit to the adapter's own range.
-- **Arm before a risky write.** CPU limits and Curve Optimizer call `BootCrashGuard.Arm()` *before* writing, so a crash mid-change leaves the marker and the next boot stays at BIOS values.
+- **Arm before a risky write.** CPU limits and Curve Optimizer call `BootCrashGuard.Arm()` *before* writing, so a crash mid-change leaves the marker and the next boot stays at BIOS values. `Arm()` throws when the marker can't be written: no marker, no risky write (#390).
 - **Always a way back.** Every provider implements `ReleaseToFirmware()` — best-effort, never throws. `SafetyGuard` calls it on service stop and `Program.cs` from a top-level `finally`.
 - **Only verified hardware.** SMU access only on PM table versions known to `AmdSmuMap.Layout` and command ids verified per CPU generation; anything else is not offered (log the table head for a future fixture). Lighting models have `Verified` flags that drive `docs/supported-devices.md`.
 - **Never probe with unknown commands.** Send only documented/observed command numbers to a device — not even a "get". A command sweep once broke a keyboard (Falchion Ace HFX).

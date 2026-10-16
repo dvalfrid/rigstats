@@ -155,6 +155,22 @@ public sealed class CpuLimitProviderTests : IDisposable
     }
 
     [Fact]
+    public void Without_a_crash_guard_marker_no_risky_smu_write_is_made()
+    {
+        // #390: a parent that is a file — the guard can't write its marker.
+        var blocked = Path.Combine(_dir, "a-file");
+        File.WriteAllText(blocked, "x");
+        var smu = new FakeSmu(Stock);
+        var provider = new CpuLimitProvider(smu, "not supported",
+            new BootCrashGuard(Path.Combine(blocked, "pending-apply"), TimeSpan.FromMinutes(3)),
+            dryRun: false, Path.Combine(_dir, "baseline.json"), Boot);
+
+        Assert.Throws<InvalidOperationException>(() => provider.Apply(Limit(ppt: 88)));
+
+        Assert.Empty(smu.Writes);
+    }
+
+    [Fact]
     public void Release_returns_to_bios_values_only_after_a_change()
     {
         var smu = new FakeSmu(Stock);
@@ -385,6 +401,18 @@ public sealed class BootCrashGuardTests : IDisposable
 
         for (var i = 0; i < 50 && guard.IsArmed; i++)
             await Task.Delay(20);
+        Assert.False(guard.IsArmed);
+    }
+
+    [Fact]
+    public void Arm_throws_when_the_marker_cannot_be_written()
+    {
+        // #390: a parent that is a file — the marker can't be created.
+        var blocked = Path.Combine(_dir, "a-file");
+        File.WriteAllText(blocked, "x");
+        using var guard = new BootCrashGuard(Path.Combine(blocked, "pending-apply"), TimeSpan.FromMinutes(3));
+
+        Assert.Throws<InvalidOperationException>(guard.Arm);
         Assert.False(guard.IsArmed);
     }
 
