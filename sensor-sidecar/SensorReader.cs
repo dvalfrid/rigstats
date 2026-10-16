@@ -25,7 +25,12 @@ public sealed record SensorPayload(
     // worker restarting (#374). Left out of a live sample; the app takes one
     // older than 5 s as no data.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    long? SampleAgeMs = null);
+    long? SampleAgeMs = null,
+    // Hardware the hardware worker no longer reads because it crashed the
+    // worker again and again (#374) — what happened and what to do, shown in
+    // the app's Status. Left out when there is none.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    List<SensorSidecar.Control.Problem>? HardwareProblems = null);
 
 public sealed record GpuDevice(
     string Name,
@@ -55,7 +60,11 @@ public static class SensorReader
     private static readonly string[] CpuTempNames =
         ["Core (Tctl/Tdie)", "CPU Package", "Core Average"];
 
-    public static SensorPayload Extract(IComputer computer)
+    public static SensorPayload Extract(IComputer computer) => Extract(computer.Hardware);
+
+    /// From `hardware` only — the hardware worker leaves out what it no
+    /// longer reads (#374).
+    public static SensorPayload Extract(IEnumerable<IHardware> hardware)
     {
         float? cpuTemp = null, cpuPower = null, ramTemp = null;
         var gpuDevices = new List<GpuDevice>();
@@ -65,7 +74,7 @@ public static class SensorReader
         var mbVoltages = new List<MbVoltage>();
         string? mbChip = null;
 
-        foreach (var hw in computer.Hardware)
+        foreach (var hw in hardware)
         {
             switch (hw.HardwareType)
             {

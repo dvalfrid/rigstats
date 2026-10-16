@@ -451,7 +451,7 @@ public sealed class ControlPipeWorker(
         }
         catch (Exception e)
         {
-            SidecarLog.Log($"[rigstats-control] {provider.Domain}: capability probe failed: {e}");
+            SidecarLog.Log($"[rigstats-control] {provider.Domain}: capability probe failed: {(e is Workers.HardwareWorkerDownException ? e.Message : e.ToString())}");
             return new CapabilitySet
             {
                 Domain = provider.Domain,

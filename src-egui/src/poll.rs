@@ -126,6 +126,8 @@ pub struct PollStats {
     pub gpu_processes: Vec<GpuProcessInfo>,
     // Wireless devices' batteries from the sidecar (PERIPHERALS panel, #290)
     pub peripherals: Vec<rigstats_backend::lhm::Peripheral>,
+    // Hardware the sensor service no longer reads (#374) — Status's Problems
+    pub hardware_problems: Vec<rigstats_backend::control::Problem>,
     // Active Control Center profile from the sensor service (#302) — the
     // header chip's source in the wallpaper host, which has no control pipe
     pub service_profile: Option<rigstats_backend::lhm::ActiveProfile>,
@@ -661,6 +663,10 @@ pub async fn poll_loop(
             peripherals: lhm_data
                 .as_ref()
                 .map(|l| l.peripherals.clone())
+                .unwrap_or_default(),
+            hardware_problems: lhm_data
+                .as_ref()
+                .map(|l| l.hardware_problems.clone())
                 .unwrap_or_default(),
             service_profile: lhm_data.as_ref().and_then(|l| l.active_profile.clone()),
             uptime_secs,

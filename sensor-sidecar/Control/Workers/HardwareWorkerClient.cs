@@ -36,7 +36,12 @@ public sealed class HardwareWorkerClient : ISensorHardware
     /// A worker that ran this long without failing resets the backoff.
     public static readonly TimeSpan StableAfter = TimeSpan.FromMinutes(1);
 
-    private readonly Func<IWorker> _start;
+    /// Crashes while reading the same hardware before it is left out — until
+    /// Windows restarts (#374, #338). Once can be bad luck; three is the
+    /// hardware or its driver.
+    public const int SkipAfter = 3;
+
+    private readonly Func<IReadOnlyCollection<string>, IWorker> _start;
     private readonly TimeSpan _timeout;
     private readonly TimeSpan _startTimeout;
     private readonly IReadOnlyList<TimeSpan> _backoff;
@@ -48,11 +53,18 @@ public sealed class HardwareWorkerClient : ISensorHardware
     private string? _down;
     private long _retryAt;
     private int _nextId;
+    // The hardware the running worker said it is reading, until its answer.
+    private HardwareWorkerProgress? _reading;
+    private readonly Dictionary<string, int> _crashes = [];
+    // Left out, in the order it happened: id → (name, what happened).
+    private readonly Dictionary<string, (string Name, string Detail)> _skipped = [];
+    private volatile IReadOnlyList<Problem> _problems = [];
 
-    /// `timeout` / `startTimeout` / `backoff` / `clock` (milliseconds, like
+    /// `start` gets the hardware to leave out (`--skip`). `timeout` /
+    /// `startTimeout` / `backoff` / `clock` (milliseconds, like
     /// Environment.TickCount64) are for tests.
     public HardwareWorkerClient(
-        Func<IWorker> start,
+        Func<IReadOnlyCollection<string>, IWorker> start,
         TimeSpan? timeout = null,
         TimeSpan? startTimeout = null,
         IReadOnlyList<TimeSpan>? backoff = null,
@@ -80,6 +92,10 @@ public sealed class HardwareWorkerClient : ISensorHardware
 
     public FanReadback ReadFan(string id) =>
         Call(HardwareWorkerProtocol.OpFanRead, id, 0, HardwareWorkerProtocol.FromJson<FanReadback>);
+
+    /// One problem per hardware left out — for the telemetry line, so the
+    /// app's Status shows it (#374).
+    public IReadOnlyList<Problem> Problems => _problems;
 
     /// Ends the running worker — the fan watchdog's action when the fan loop
     /// stalls (#374). Without the lock, which a hung call holds: killing the
@@ -147,13 +163,21 @@ public sealed class HardwareWorkerClient : ISensorHardware
     private HardwareWorkerResponse Request(WorkerChannel channel, string op, string? header, double duty, TimeSpan limit)
     {
         var request = new HardwareWorkerRequest(++_nextId, op, header, duty);
-        string? line;
+        string? line = null;
         var hung = false;
         try
         {
             channel.Send(HardwareWorkerProtocol.Encode(request));
-            (var answered, line) = channel.Receive(limit);
-            hung = !answered;
+            // Progress lines (the hardware being read) come before the answer.
+            var until = Environment.TickCount64 + (long)limit.TotalMilliseconds;
+            while (true)
+            {
+                (var answered, line) = channel.Receive(TimeSpan.FromMilliseconds(Math.Max(0, until - Environment.TickCount64)));
+                hung = !answered;
+                if (hung || line is null || Progress(line) is not { } progress)
+                    break;
+                _reading = progress;
+            }
         }
         catch (IOException)
         {
@@ -164,9 +188,10 @@ public sealed class HardwareWorkerClient : ISensorHardware
         try
         {
             var response = HardwareWorkerProtocol.DecodeResponse(line);
-            return response.Id == request.Id
-                ? response
-                : throw new JsonException($"answer {response.Id} to request {request.Id}");
+            if (response.Id != request.Id)
+                throw new JsonException($"answer {response.Id} to request {request.Id}");
+            _reading = null;
+            return response;
         }
         catch (JsonException e)
         {
@@ -189,7 +214,7 @@ public sealed class HardwareWorkerClient : ISensorHardware
         WorkerChannel channel;
         try
         {
-            channel = new WorkerChannel(_start(), "hardware-worker-output");
+            channel = new WorkerChannel(_start(_skipped.Keys.ToList()), "hardware-worker-output");
         }
         catch (Exception e)
         {
@@ -223,7 +248,46 @@ public sealed class HardwareWorkerClient : ISensorHardware
         var ranFor = TimeSpan.FromMilliseconds(_now() - _startedAt);
         if (ranFor >= StableAfter)
             _failures = 0;
-        return Failed($"The hardware worker {what} (exit code {GpuWorkerClientExitCode(code)}) after {ranFor.TotalSeconds:0} s");
+        var happened = $"The hardware worker {what} (exit code {GpuWorkerClientExitCode(code)}) after {ranFor.TotalSeconds:0} s";
+        if (_reading is { } reading)
+        {
+            _reading = null;
+            happened += $" while reading {reading.Name} ({reading.Updating})";
+            if (Count(reading) && Skip(reading, happened))
+                _failures = 0; // the cause is out: start again at once
+        }
+        return Failed(happened);
+    }
+
+    private bool Count(HardwareWorkerProgress reading)
+    {
+        var crashes = _crashes[reading.Updating] = _crashes.GetValueOrDefault(reading.Updating) + 1;
+        return crashes >= SkipAfter;
+    }
+
+    /// Leaves `reading` out of every worker from now on, until Windows
+    /// restarts. True when it wasn't out already.
+    private bool Skip(HardwareWorkerProgress reading, string happened)
+    {
+        if (!_skipped.TryAdd(reading.Updating, (reading.Name, happened)))
+            return false;
+        _problems = [.. _skipped.Select(s => HardwareProblems.Off(s.Key, s.Value.Name, s.Value.Detail))];
+        SidecarLog.Log($"[rigstats-sensor] {reading.Name} ({reading.Updating}) crashed the hardware worker {SkipAfter} times — it is no longer read until Windows restarts; the rest of the sensors keep working (#374).");
+        return true;
+    }
+
+    /// A progress line, or null for anything else (an answer, or garbage the
+    /// answer's decoding then reports).
+    private static HardwareWorkerProgress? Progress(string line)
+    {
+        try
+        {
+            return HardwareWorkerProtocol.DecodeProgress(line);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private HardwareWorkerDownException Failed(string what)
@@ -237,4 +301,38 @@ public sealed class HardwareWorkerClient : ISensorHardware
     }
 
     private static string GpuWorkerClientExitCode(int? code) => Providers.GpuWorkerClient.FormatExitCode(code);
+}
+
+/// What the user sees when hardware is no longer read because it kept
+/// crashing the hardware worker (#374) — in the app's Status, from the
+/// telemetry line. What happened, that the rest works, what to do.
+public static class HardwareProblems
+{
+    public const string ReadMoreAnchor = "#gpu-sensors-missing-temp--clock--power--fan-or-sidecar-crashes";
+
+    /// `id` is LHM's hardware id (`/gpu-nvidia/0`), `name` its name.
+    public static Problem Off(string id, string name, string detail) => new()
+    {
+        Id = "hardware_off",
+        Severity = ProblemSeverity.Attention,
+        Title = $"{name} isn't read any more",
+        Message = $"Reading {name} crashed RIGStats' sensor reader {HardwareWorkerClient.SkipAfter} times, so RIGStats stopped reading it. "
+            + "Fans, the CPU, lighting and the other sensors keep working — only its values are missing. "
+            + "A graphics card can do this when the PC switches it off to save power, or after a driver update: "
+            + "install the latest driver. RIGStats reads it again after Windows restarts.",
+        Actions = Actions(id),
+        Detail = detail,
+    };
+
+    private static IReadOnlyList<ProblemAction> Actions(string id)
+    {
+        var actions = new List<ProblemAction>();
+        if (id.StartsWith("/gpu-nvidia/", StringComparison.Ordinal))
+            actions.Add(new ProblemAction { Kind = ProblemActionKind.OpenUrl, Label = "Get the NVIDIA driver", Target = Providers.GpuProblems.NvidiaDriverUrl });
+        else if (id.StartsWith("/gpu-amd/", StringComparison.Ordinal))
+            actions.Add(new ProblemAction { Kind = ProblemActionKind.OpenUrl, Label = "Get the AMD driver", Target = Providers.GpuProblems.AmdDriverUrl });
+        actions.Add(ControlProblems.Diagnostics());
+        actions.Add(ControlProblems.ReadMore(ReadMoreAnchor));
+        return actions;
+    }
 }

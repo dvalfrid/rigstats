@@ -148,8 +148,21 @@ installer migration cost; "rigstats-service" is used here as the concept name.
   `--hardware-worker-hang-after <s>` (passed through `dev-sidecar.ps1
   -SidecarArgs`): the worker crashes or hangs on its first sample after
   that many seconds, to prove the service survives and restarts it.
-- **Not yet (#374 part 3):** hardware that keeps crashing the worker is not
-  turned off yet; the restarts just get slower.
+- **Hardware that keeps crashing the worker is left out** (#374, #338).
+  Before reading each top-level hardware item the worker writes a progress
+  line (`{"updating":"/gpu-nvidia/0","name":"…"}`, ahead of its answer), so
+  when it dies the client knows which hardware it was reading. After
+  `SkipAfter` (3) crashes or hangs in the same hardware, every new worker is
+  started with `--skip <id>,…`: that hardware is neither read nor reported
+  (`LhmHardware`), the sensor tree notes it, and the rest is read as
+  before. It stays out until Windows restarts (or the service restarts —
+  then it takes 3 crashes again; nothing is stored). The telemetry line
+  carries a `Problem` per hardware left out (`hardware_problems`,
+  `HardwareProblems.Off`: the vendor's driver download, "Collect
+  diagnostics…", the troubleshooting page), shown in the app's Status under
+  Problems. Pinned by `contract/telemetry-hardware-problem.json` on both
+  sides. A crash while nothing was being read (opening the hardware) is
+  not put on any hardware: the restarts just get slower.
 
 ### Start-up
 

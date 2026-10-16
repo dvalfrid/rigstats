@@ -56,6 +56,14 @@ System.AccessViolationException: Attempted to read or write protected memory.
 
 (or a crash in `atiadlxx.dll`).
 
+**Since 1.49:** LibreHardwareMonitor runs in a worker process of the
+service. A crash there restarts the worker within seconds; sensors, fans and
+lighting keep working. If the same graphics card crashes it three times,
+RIGStats stops reading that card until Windows restarts and says so in
+**Status → Problems** ("… isn't read any more"), with a link to the driver
+and **Collect diagnostics…**. A laptop that switches its NVIDIA GPU off to
+save power (Eco mode, #338) can do this; the other sensors are unaffected.
+
 **Cause:** This is an **outdated GPU driver**, not a RIGStats bug. The core GPU
 sensors (temp, clock, power, fan) come from AMD's ADL library (`atiadlxx.dll`)
 via LibreHardwareMonitor. Some AMD driver builds return invalid data — or

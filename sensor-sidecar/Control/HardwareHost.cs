@@ -251,12 +251,18 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         var payload = _hardware.Sample() with
         {
             Peripherals = _peripherals?.Latest?.ToList(),
+            HardwareProblems = Problems(),
             ActiveProfile = _profiles?.ActiveProfile,
         };
         _latest = new Latest(payload, Serialize(payload), now);
     }
 
-    private string Aged(Latest last) => Serialize(last.Payload with { SampleAgeMs = _now() - last.AtMs });
+    // With the problems as they are now: a hardware just left out is news
+    // exactly while the samples are old.
+    private string Aged(Latest last) =>
+        Serialize(last.Payload with { SampleAgeMs = _now() - last.AtMs, HardwareProblems = Problems() });
+
+    private List<Problem>? Problems() => _hardware.Problems is { Count: > 0 } problems ? [.. problems] : null;
 
     private static string Serialize(SensorPayload payload) =>
         System.Text.Json.JsonSerializer.Serialize(payload, TelemetryJsonOptions);

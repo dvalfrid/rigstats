@@ -80,6 +80,9 @@ public class HardwareWorkerTests
         }
 
         public bool Crash { get; set; }
+
+        /// When set, the hardware the worker says it reads before each sample.
+        public HardwareWorkerProgress? Reading { get; set; }
         public bool Hang { get; set; }
         public TextWriter Input { get; }
         public TextReader Output { get; }
@@ -98,6 +101,8 @@ public class HardwareWorkerTests
 
         private void BeforeSample()
         {
+            if (Reading is { } reading)
+                _workerOutput.WriteLine(HardwareWorkerProtocol.Encode(reading));
             if (Crash)
                 End(unchecked((int)0xC0000005));
             if (Hang)
@@ -127,14 +132,16 @@ public class HardwareWorkerTests
     {
         public FakeHardware Hardware { get; } = new();
         public List<LoopWorker> Started { get; } = [];
+        public List<IReadOnlyCollection<string>> SkipLists { get; } = [];
         public long Now { get; set; }
         public bool FailOpen { get; set; }
         public HardwareWorkerClient Client { get; }
 
         public Rig(TimeSpan? timeout = null) =>
             Client = new HardwareWorkerClient(
-                () =>
+                skip =>
                 {
+                    SkipLists.Add(skip);
                     var worker = new LoopWorker(Hardware, FailOpen);
                     Started.Add(worker);
                     return worker;
@@ -300,5 +307,81 @@ public class HardwareWorkerTests
         rig.Client.Dispose();
 
         Assert.True(SpinWait.SpinUntil(() => rig.Current.HasExited, TimeSpan.FromSeconds(5)));
+    }
+
+    // ── #374 part 3, #338: hardware that keeps crashing the worker is left
+    // out — only that hardware — and shown as a problem.
+
+    private static readonly HardwareWorkerProgress Nvidia = new("/gpu-nvidia/0", "NVIDIA GeForce RTX 5070 Ti Laptop GPU");
+
+    [Fact]
+    public void Hardware_that_crashes_the_worker_three_times_is_left_out_and_shown()
+    {
+        var rig = new Rig();
+        for (var i = 0; i < HardwareWorkerClient.SkipAfter; i++)
+        {
+            rig.Client.Sample();
+            rig.Current.Reading = Nvidia;
+            rig.Current.Crash = true;
+            Assert.Throws<HardwareWorkerDownException>(() => rig.Client.Sample());
+            rig.Now += 60_000; // past any pause
+        }
+
+        Assert.Equal(61, rig.Client.Sample().CpuTemp);
+        Assert.Equal(["/gpu-nvidia/0"], rig.SkipLists[^1]);
+        var problem = Assert.Single(rig.Client.Problems);
+        Assert.Equal("hardware_off", problem.Id);
+        Assert.Equal(ProblemSeverity.Attention, problem.Severity);
+        Assert.Equal("NVIDIA GeForce RTX 5070 Ti Laptop GPU isn't read any more", problem.Title);
+        Assert.Contains("keep working", problem.Message);
+        Assert.Equal(["Get the NVIDIA driver", "Collect diagnostics…", "Read more"], problem.Actions.Select(a => a.Label));
+        Assert.Contains("exit code 0xC0000005", problem.Detail);
+    }
+
+    [Fact]
+    public void Fewer_crashes_leave_everything_in()
+    {
+        var rig = new Rig();
+        for (var i = 0; i < HardwareWorkerClient.SkipAfter - 1; i++)
+        {
+            rig.Client.Sample();
+            rig.Current.Reading = Nvidia;
+            rig.Current.Crash = true;
+            Assert.Throws<HardwareWorkerDownException>(() => rig.Client.Sample());
+            rig.Now += 60_000;
+        }
+
+        rig.Client.Sample();
+        Assert.All(rig.SkipLists, skip => Assert.Empty(skip));
+        Assert.Empty(rig.Client.Problems);
+    }
+
+    [Fact]
+    public void A_crash_while_nothing_was_being_read_is_not_put_on_any_hardware()
+    {
+        var rig = new Rig();
+        for (var i = 0; i < HardwareWorkerClient.SkipAfter + 1; i++)
+        {
+            rig.Client.Sample();
+            rig.Current.Crash = true; // no progress line: not attributable
+            Assert.Throws<HardwareWorkerDownException>(() => rig.Client.Sample());
+            rig.Now += 60_000;
+        }
+
+        Assert.Empty(rig.Client.Problems);
+    }
+
+    [Fact]
+    public void Progress_before_a_normal_answer_is_read_past_and_never_counted()
+    {
+        var rig = new Rig();
+        rig.Client.Sample();
+        rig.Current.Reading = Nvidia;
+
+        for (var i = 0; i < 5; i++)
+            Assert.Equal(61, rig.Client.Sample().CpuTemp);
+
+        Assert.Single(rig.Started);
+        Assert.Empty(rig.Client.Problems);
     }
 }
