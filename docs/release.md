@@ -225,7 +225,7 @@ up in shell history.
 | Secret | Used by | What it is | Expires |
 | --- | --- | --- | --- |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration `rigstats-github-action`, which may sign with the Artifact Signing account (below) | — |
-| `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | Set in Azure when the secret was made. See Entra ID → App registrations → the app → Certificates & secrets |
+| `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | 2028-03-22 (24 months; the client secret "github-actions", made 2026-03-22). See Entra ID → App registrations → `rigstats-github-action` → Certificates & secrets |
 | `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one (renewed 2026-10-16) ends 2027-01-14; the date is in the owner's calendar |
 
 `GITHUB_TOKEN` is GitHub's own token for each run; it needs no setup beyond the
