@@ -224,7 +224,7 @@ up in shell history.
 
 | Secret | Used by | What it is | Expires |
 | --- | --- | --- | --- |
-| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration that may sign with the Trusted Signing account (below) | — |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration `rigstats-github-action`, which may sign with the Artifact Signing account (below) | — |
 | `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | Set in Azure when the secret was made. See Entra ID → App registrations → the app → Certificates & secrets |
 | `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one (renewed 2026-10-16) ends 2027-01-14; the date is in the owner's calendar |
 
@@ -257,11 +257,12 @@ group `rigstats-codesign`, and its certificate profile is `RIGStats`. The
 endpoint is `https://neu.codesigning.azure.net/` (North Europe). The account,
 profile and endpoint are written in `release.yml`.
 
-The app registration above needs the *Certificate Profile Signer* role, on the
-account or on the profile. To find which app registration it is: open the
-account → Access control (IAM) → Role assignments, and look for the entry of
-type "App" with that role. Its client secrets are under Entra ID → App
-registrations → that app → Certificates & secrets.
+The app registration above is **`rigstats-github-action`**. It has the role
+**Artifact Signing Certificate Profile Signer** on the whole account (Access
+control (IAM) → Role assignments: a service principal, scope "This resource").
+Its client secrets are under Entra ID → App registrations → All applications
+→ `rigstats-github-action` → Certificates & secrets. The owner has *Artifact
+Signing Identity Verifier* on the account, for the identity validation.
 
 **The signer's name must not change.** Today it is `CN=Code By AB, O=Code By
 AB, L=Vendelsö, S=Stockholm, C=SE`, from the profile's identity validation.
