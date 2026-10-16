@@ -226,7 +226,7 @@ up in shell history.
 | --- | --- | --- | --- |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration that may sign with the Trusted Signing account (below) | — |
 | `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | Set in Azure when the secret was made. See Entra ID → App registrations → the app → Certificates & secrets |
-| `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one ends 2026-10-17; the date is in the owner's calendar |
+| `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one (renewed 2026-10-16) ends 2027-01-14; the date is in the owner's calendar |
 
 `GITHUB_TOKEN` is GitHub's own token for each run; it needs no setup beyond the
 workflow permissions below.
