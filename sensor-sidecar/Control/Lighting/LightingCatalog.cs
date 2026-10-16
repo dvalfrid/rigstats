@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 
+using SensorSidecar.Control;
+
 namespace SensorSidecar.Control.Lighting;
 
 /// One row of the supported-devices list.
@@ -98,29 +100,34 @@ public static class LightingCatalog
     public static string Markdown()
     {
         var md = new StringBuilder();
-        md.Append("# Supported lighting devices\n\n");
+        md.Append("# Supported devices\n\n");
         md.Append("<!-- Generated from the sensor sidecar's model tables by LightingCatalog — do not edit by hand.\n");
         md.Append("     Regenerate: $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices -->\n\n");
-        md.Append("RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. ");
+        md.Append("RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or other software needed. ");
         md.Append(CultureInfo.InvariantCulture, $"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
         md.Append("listed from OpenRGB's device list (read as documentation) — it should work; ");
         md.Append(CultureInfo.InvariantCulture, $"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
         md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
+        md.Append("## Lighting\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())
             md.Append(CultureInfo.InvariantCulture, $"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
         md.Append("\nNot supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong ");
         md.Append("write can damage the hardware). A device that isn't listed: the diagnostics export's ");
         md.Append("`lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers ");
-        md.Append("and the mice paired to them — attach it to a [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml).\n");
+        md.Append("and the mice paired to them — attach it to a [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml).\n\n");
+        md.Append(BatteryCatalog.Markdown());
         return md.ToString();
     }
 
     /// The website's table body, between the supported-devices markers.
-    public static string HtmlRows()
+    public static string HtmlRows() => HtmlRows(All());
+
+    /// Table rows for the website, for this list or `BatteryCatalog`'s.
+    public static string HtmlRows(IEnumerable<SupportedDevice> rows)
     {
         var html = new StringBuilder();
-        foreach (var row in All())
+        foreach (var row in rows)
         {
             var status = row.Status.StartsWith(Verified, StringComparison.Ordinal) ? "status-verified" : "status-openrgb";
             html.Append("                <tr>")

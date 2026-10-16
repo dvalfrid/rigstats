@@ -25,8 +25,9 @@ public static class LogitechBattery
     private const byte LongReport = 0x11;
     private const byte ReportLength = 20;
 
-    /// A device connected directly (Bluetooth, not through a receiver).
-    private const byte DirectDevice = 0xFF;
+    /// A device connected directly (Bluetooth, not through a receiver);
+    /// behind a receiver a device is addressed by its slot, 1–6 (#407).
+    public const byte DirectDevice = 0xFF;
 
     /// Our software id in the low nibble of the function byte, so replies
     /// can be told from the device's own notifications (software id 0).
@@ -51,11 +52,15 @@ public static class LogitechBattery
             && h.Path.Contains("{00001812-0000-1000-8000-00805f9b34fb}", StringComparison.OrdinalIgnoreCase));
 
     /// One long HID++ request to the directly connected device.
-    public static byte[] Request(byte featureIndex, byte function, params byte[] args)
+    public static byte[] Request(byte featureIndex, byte function, params byte[] args) =>
+        RequestTo(DirectDevice, featureIndex, function, args);
+
+    /// One long HID++ request to `device` (`DirectDevice` or a slot).
+    public static byte[] RequestTo(byte device, byte featureIndex, byte function, params byte[] args)
     {
         var report = new byte[ReportLength];
         report[0] = LongReport;
-        report[1] = DirectDevice;
+        report[1] = device;
         report[2] = featureIndex;
         report[3] = (byte)((function << 4) | SoftwareId);
         args.CopyTo(report, 4);
@@ -64,11 +69,12 @@ public static class LogitechBattery
 
     /// The reply's parameters when it answers this request, else null (a
     /// notification or another program's reply). An error reply (HID++ 2.0
-    /// `FF`, 1.0 `8F`) for this request throws.
-    public static byte[]? Payload(byte[] reply, byte featureIndex, byte function)
+    /// `FF`, 1.0 `8F` — from a receiver for a device that is asleep or gone)
+    /// for this request throws.
+    public static byte[]? Payload(byte[] reply, byte featureIndex, byte function, byte device = DirectDevice)
     {
         var functionByte = (byte)((function << 4) | SoftwareId);
-        if (reply.Length < 5 || (reply[1] != DirectDevice && reply[1] != 0x00))
+        if (reply.Length < 5 || (reply[1] != device && !(device == DirectDevice && reply[1] == 0x00)))
             return null;
         if ((reply[2] == 0xFF || reply[2] == 0x8F) && reply[3] == featureIndex && reply[4] == functionByte)
             throw new InvalidOperationException($"HID++ error {(reply.Length > 5 ? reply[5] : 0):X2}");
@@ -89,27 +95,27 @@ public static class LogitechBattery
 
     /// The feature's index on the device (Root `getFeature`), or null when
     /// it doesn't have it.
-    public static byte? FeatureIndex(IHidDevice device, ushort feature) =>
-        Ask(device, 0x00, 0x00, (byte)(feature >> 8), (byte)feature) is [var index, ..] && index != 0 ? index : null;
+    public static byte? FeatureIndex(IHidDevice device, ushort feature, byte slot = DirectDevice) =>
+        Ask(device, slot, 0x00, 0x00, (byte)(feature >> 8), (byte)feature) is [var index, ..] && index != 0 ? index : null;
 
-    /// The battery, finding the feature first unless `known` gives it.
-    /// Returns the feature used, for the caller to remember.
-    public static (LogitechReading? Reading, (ushort Feature, byte Index)? Found) Read(IHidDevice device, (ushort Feature, byte Index)? known)
+    /// The battery of the device at `slot`, finding the feature first unless
+    /// `known` gives it. Returns the feature used, for the caller to remember.
+    public static (LogitechReading? Reading, (ushort Feature, byte Index)? Found) Read(IHidDevice device, (ushort Feature, byte Index)? known, byte slot = DirectDevice)
     {
         var found = known;
         if (found is null)
         {
-            if (FeatureIndex(device, UnifiedBattery) is { } unified)
+            if (FeatureIndex(device, UnifiedBattery, slot) is { } unified)
                 found = (UnifiedBattery, unified);
-            else if (FeatureIndex(device, BatteryStatusFeature) is { } status)
+            else if (FeatureIndex(device, BatteryStatusFeature, slot) is { } status)
                 found = (BatteryStatusFeature, status);
             else
                 return (null, null);
         }
         var (feature, index) = found.Value;
         var reading = feature == UnifiedBattery
-            ? Ask(device, index, 0x01) is { Length: >= 3 } u ? Unified(u) : (LogitechReading?)null
-            : Ask(device, index, 0x00) is { Length: >= 3 } s ? Status(s) : null;
+            ? Ask(device, slot, index, 0x01) is { Length: >= 3 } u ? Unified(u) : (LogitechReading?)null
+            : Ask(device, slot, index, 0x00) is { Length: >= 3 } s ? Status(s) : null;
         return (reading, found);
     }
 
@@ -120,15 +126,15 @@ public static class LogitechBattery
             ? p with { Battery = r.Percent ?? p.Battery, Charging = r.Charging }
             : p)];
 
-    private static byte[]? Ask(IHidDevice device, byte featureIndex, byte function, params byte[] args)
+    private static byte[]? Ask(IHidDevice device, byte slot, byte featureIndex, byte function, params byte[] args)
     {
-        device.Write(Request(featureIndex, function, args));
+        device.Write(RequestTo(slot, featureIndex, function, args));
         var deadline = DateTime.UtcNow + ReplyTimeout;
         while (DateTime.UtcNow < deadline)
         {
             if (device.Read(deadline - DateTime.UtcNow) is not { } reply)
                 return null;
-            if (Payload(reply, featureIndex, function) is { } payload)
+            if (Payload(reply, featureIndex, function, slot) is { } payload)
                 return payload;
         }
         return null;
