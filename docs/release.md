@@ -193,9 +193,10 @@ ready: Actions → Submit to Winget → Run workflow → the tag (e.g. `v1.45.0`
 
 ### Signing
 
-| Key | Purpose | Where stored |
-| --- | --- | --- |
-| Azure Trusted Signing | Authenticode (SmartScreen trust, Windows installer) | GitHub Actions secrets: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` |
+Azure Trusted Signing (Authenticode: SmartScreen trust, the Control Center's
+signer check, the updater's publisher check). The account, the secrets and
+what must never change are under
+[Accounts, Secrets And Settings](#accounts-secrets-and-settings).
 
 ### Manual re-run
 
@@ -208,6 +209,84 @@ If the release build fails or needs to be re-run for an existing tag:
 5. Run
 
 Leave the "Use workflow from" dropdown on `main`.
+
+## Accounts, Secrets And Settings
+
+Everything the pipeline needs that is not in the repo. This is the list to set
+up again if the repo, an account or a secret is lost. It was checked against
+the repo's GitHub settings on 2026-10-16.
+
+### Secrets
+
+Settings → Secrets and variables → Actions → Repository secrets. `gh secret
+set <NAME> --repo dvalfrid/rigstats` prompts for the value, so it doesn't end
+up in shell history.
+
+| Secret | Used by | What it is | Expires |
+| --- | --- | --- | --- |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration that may sign with the Trusted Signing account (below) | — |
+| `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | Set in Azure when the secret was made. See Entra ID → App registrations → the app → Certificates & secrets |
+| `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one ends 2026-10-17; the date is in the owner's calendar |
+
+`GITHUB_TOKEN` is GitHub's own token for each run; it needs no setup beyond the
+workflow permissions below.
+
+**Renewing:**
+
+- **`WINGET_TOKEN`:** github.com/settings/tokens → the token → **Regenerate
+  token**. The scope stays; the old value stops working at once. Then `gh
+  secret set WINGET_TOKEN`, and put the new expiry date in the calendar.
+- **`AZURE_CLIENT_SECRET`:** add a new client secret on the app registration,
+  `gh secret set AZURE_CLIENT_SECRET`, and delete the old one in Azure after a
+  release has signed with the new one.
+
+**When one has run out:**
+
+- `WINGET_TOKEN`: only the winget job fails. Renew it, then Actions → Submit to
+  Winget → Run workflow → the tag.
+- An Azure secret: the release fails at **Sign binaries**. The release page
+  exists, but has no installer and no `latest.json`, so the app sees no
+  update. Renew it, then do a [manual re-run](#manual-re-run).
+
+### Azure Trusted Signing
+
+The account is `rigstats-codesign`, the certificate profile is `RIGStats`, and
+the endpoint is `https://neu.codesigning.azure.net/` (North Europe). All three
+are written in `release.yml`. The app registration above needs the signer role
+on the certificate profile.
+
+**The signer's name must not change.** Today it is `CN=Code By AB, O=Code By
+AB, L=Vendelsö, S=Stockholm, C=SE`, from the profile's identity validation.
+
+- The app installs an update only if the installer's signer subject equals its
+  own (`update_check.rs`, `signer_accepted`). A new legal name, or a new
+  validation that gives a different subject, makes every installed copy refuse
+  the update; users would have to install the next version by hand.
+- The certificates themselves last about three days and are renewed by Azure.
+  That's why nothing compares thumbprints across releases. The service
+  compares only its own thumbprint with `rigstats.exe`'s, and both are signed
+  in one step of the same run.
+
+### GitHub settings
+
+- **Ruleset "Protect Main"** (Settings → Rules) on `refs/heads/main`:
+  - no deletion, no force push, linear history;
+  - a pull request with 1 approval, and stale approvals dismissed on push;
+  - the status check **`Verify (Windows)`** from GitHub Actions must pass.
+  - The Repository admin role may bypass it. That is how the owner merges
+    their own PRs.
+- **Actions → General → Workflow permissions:** "Allow GitHub Actions to
+  create and approve pull requests" is on. Release Please opens its release PR
+  with `GITHUB_TOKEN` and needs this. Every workflow declares its own
+  `permissions:`, so the default (currently read and write) is not relied on.
+- **Pages:** source "GitHub Actions" (`deploy-website.yml`, environment
+  `github-pages`), custom domain `rigstats.app` (`website/CNAME`), HTTPS
+  enforced. The domain's DNS records point to GitHub Pages; they live with the
+  domain registrar, not here.
+- **Label `winget: hold`:** read by `release-please.yml` (see
+  [Winget](#winget)). If it is missing, every release goes to winget.
+- **Fork `dvalfrid/winget-pkgs`** of `microsoft/winget-pkgs`, in the account
+  that owns `WINGET_TOKEN`.
 
 ## Day-To-Day Process
 
