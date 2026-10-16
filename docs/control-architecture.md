@@ -140,6 +140,20 @@ installer migration cost; "rigstats-service" is used here as the concept name.
 - Providers receive `IHardwareHost`, never a raw `Computer`, which keeps them
   testable.
 
+### Start-up
+
+The service manager gives a starting service 30 s to connect, and it connects
+inside `host.Run()` (`WindowsServiceLifetime.WaitForStartAsync`) — before the
+host builds any hosted service or provider (verified with a scratch host on
+Microsoft.Extensions.Hosting 10.0.12, #383). So `Program.cs` only registers:
+nothing is resolved before `Run()`, and slow work runs after it — the
+hardware opens and the lighting devices are discovered as the hosted
+services start, and the event log is read for earlier crashes in the
+background (`BackgroundStartupTask`). Only the data folder's ACL
+(`DataDirectory.EnsureSecure`, which decides dry-run) comes first. The
+top-level `finally` reaches `SafetyGuard` through the instance the host
+built, not by resolving it early.
+
 ### IControlProvider
 
 ```csharp
