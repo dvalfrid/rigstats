@@ -64,10 +64,7 @@ public sealed class SensorWorker(
     }
 
     private static readonly string SensorTreePath =
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "se.codeby.rigstats",
-            "sensor-tree.txt");
+        Path.Combine(DataDirectory.DefaultPath, "sensor-tree.txt");
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {

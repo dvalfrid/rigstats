@@ -129,10 +129,7 @@ builder.Services.AddHostedService<ControlPipeWorker>();
 builder.Services.AddSingleton(sp => new FanProvider(
     sp.GetRequiredService<IHardwareHost>(),
     dryRun,
-    Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-        "se.codeby.rigstats",
-        "fan-channels.json")));
+    Path.Combine(DataDirectory.DefaultPath, "fan-channels.json")));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<FanProvider>());
 builder.Services.AddSingleton<FanCurveLoop>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanCurveLoop>());
@@ -144,9 +141,7 @@ if (!dryRun)
 // Control Center phase 2 (#189): CPU package limits through the SMU. The
 // boot-crash guard reads (and consumes) the previous run's marker when it is
 // constructed — before ActiveProfileApplier decides what to re-apply.
-var programData = Path.Combine(
-    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-    "se.codeby.rigstats");
+var programData = DataDirectory.DefaultPath;
 builder.Services.AddSingleton(_ => new BootCrashGuard(
     Path.Combine(programData, "pending-apply"),
     BootCrashGuard.DefaultStableAfter));

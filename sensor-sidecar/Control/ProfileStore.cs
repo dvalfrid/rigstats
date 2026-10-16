@@ -40,16 +40,10 @@ public sealed class ProfileStore
     private string BackupPath => _path + ".bak";
     private string CorruptPath => _path + ".corrupt";
 
-    public ProfileStore() : this(DefaultPath()) { }
+    public ProfileStore() : this(Path.Combine(DataDirectory.DefaultPath, "profiles.json")) { }
 
     // Seam for tests: a fresh temp path per test, never the real ProgramData one.
     public ProfileStore(string path) => _path = path;
-
-    private static string DefaultPath() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "se.codeby.rigstats",
-            "profiles.json");
 
     // Built-ins carry explicit, empty fan, CPU-limit, Curve Optimizer and
     // GPU parts ("BIOS / driver control") rather than none: a missing part
