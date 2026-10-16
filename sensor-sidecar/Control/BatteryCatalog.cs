@@ -45,7 +45,7 @@ public static class BatteryCatalog
 
         rows.Add(new SupportedDevice(
             "Logitech devices on Bluetooth", "Mouse, keyboard", "— (Bluetooth)",
-            LightingCatalog.Verified + " (MX Anywhere 3 for Mac, MX Mechanical Mini for Mac)",
+            LightingCatalog.Verified + " (MX Anywhere 3 for Mac, MX Keys Mini, MX Mechanical Mini for Mac)",
             "Battery and charging, asked in Logitech's HID++ protocol"));
 
         rows.AddRange(new[] { LogitechReceiver.Family.Bolt, LogitechReceiver.Family.Unifying }

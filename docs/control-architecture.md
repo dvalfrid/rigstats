@@ -1135,8 +1135,10 @@ showed charging in the next read (≤ 20 s), and unplugging it cleared it in the
 same way. The MX Mechanical Mini for Mac keyboard (PID `B36D`, Bluetooth name
 "MX MCHNCL M", category `Input.Keyboard`) answers the same way: Unified Battery,
 100 %, and charging with the cable in — at 100 % it reports full on power,
-which counts as charging (status 3, like Solaar). Devices behind a receiver:
-next section.
+which counts as charging (status 3, like Solaar). The MX Keys Mini (PID
+`B369`, 2026-10-16) as well: Unified Battery, 95 %, the same as Windows
+(`Battery: Logitech B369 (d8a82ea667ef) 95 % (HID++ 0x1004).`); charging not
+tried. Devices behind a receiver: next section.
 
 ### Logitech devices behind a Bolt or Unifying receiver (#407)
 

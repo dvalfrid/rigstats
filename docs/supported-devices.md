@@ -116,7 +116,7 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | ROG Keris II Origin (KJP) | Mouse | 1D4E | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Spatha X 65K | Mouse | 1DE0 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | Any Bluetooth device whose battery Windows shows (Settings › Bluetooth & devices), any brand | Mouse, keyboard, headset, other | — (Bluetooth) | Verified on hardware (Logitech MX Anywhere 3 for Mac, Satechi M1 Mouse) | Battery only: Windows has no charging state for Bluetooth devices. Nothing is sent to the device |
-| Logitech devices on Bluetooth | Mouse, keyboard | — (Bluetooth) | Verified on hardware (MX Anywhere 3 for Mac, MX Mechanical Mini for Mac) | Battery and charging, asked in Logitech's HID++ protocol |
+| Logitech devices on Bluetooth | Mouse, keyboard | — (Bluetooth) | Verified on hardware (MX Anywhere 3 for Mac, MX Keys Mini, MX Mechanical Mini for Mac) | Battery and charging, asked in Logitech's HID++ protocol |
 | Logitech devices on a Bolt receiver | Mouse, keyboard | C548 (receiver) | Verified on hardware (Logi M650) | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
 | Logitech devices on a Unifying receiver | Mouse, keyboard | C52B, C532 (receiver) | From Solaar, not yet verified | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
 
