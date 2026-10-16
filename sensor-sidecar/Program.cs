@@ -5,6 +5,7 @@ using SensorSidecar;
 using SensorSidecar.Control;
 using SensorSidecar.Control.Lighting;
 using SensorSidecar.Control.Providers;
+using SensorSidecar.Control.Workers;
 
 // A crash anywhere — a worker thread, a timer — is logged before the process
 // ends. The service manager restarts the service; without this the reason
@@ -167,7 +168,7 @@ builder.Services.AddSingleton<IControlProvider>(_ =>
         workerArgs += " --hang-test";
 #endif
     var worker = new GpuWorkerClient(
-        () => ProcessGpuWorker.Start(Environment.ProcessPath!, workerArgs),
+        () => WorkerProcess.Start(Environment.ProcessPath!, workerArgs, "gpu-worker"),
         Path.Combine(programData, "gpu-worker-crash.marker"),
         CpuLimitProvider.CurrentBootTime(),
         GpuCrashGuard.DriverFiles());

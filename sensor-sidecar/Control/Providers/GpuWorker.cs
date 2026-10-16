@@ -1,11 +1,9 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
+using SensorSidecar.Control.Workers;
 
 namespace SensorSidecar.Control.Providers;
 
@@ -265,21 +263,6 @@ public static class GpuWorkerLoop
     }
 }
 
-/// The running worker, as the client sees it — a seam so the client is
-/// testable without a real process.
-public interface IGpuWorker : IDisposable
-{
-    TextWriter Input { get; }
-    TextReader Output { get; }
-    bool HasExited { get; }
-
-    /// The exit code once it has exited, else null.
-    int? ExitCode { get; }
-
-    bool WaitForExit(TimeSpan timeout);
-    void Kill();
-}
-
 /// The service's side: `IGpuPowerApi` over the worker. The worker starts on
 /// the first call and stays for the next. Every call has a time limit; a
 /// worker that crashes, hangs or answers nonsense is ended, logged with its
@@ -287,7 +270,8 @@ public interface IGpuWorker : IDisposable
 /// across a service restart, through the marker), so it isn't started again
 /// until Windows restarts or a driver changes; a hang only for
 /// `DefaultHangRetry` — right after boot a driver can just be slow. Nothing
-/// here lets a driver fault reach the service.
+/// here lets a driver fault reach the service. The process and its output
+/// are in `Workers/` (#374); this is the GPU worker's policy.
 public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
 {
     /// The app gives up on a request after 5 s; ADLX's start (even with its
@@ -304,7 +288,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
 
     private const string CrashRetryNote = "They are tried again after Windows restarts or the graphics driver is updated.";
 
-    private readonly Func<IGpuWorker> _start;
+    private readonly Func<IWorker> _start;
     private readonly string? _markerPath;
     private readonly DateTimeOffset _bootTime;
     private readonly string _drivers;
@@ -313,10 +297,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     private readonly TimeSpan _hangRetry;
     private readonly Func<long> _now;
     private readonly object _lock = new();
-    private IGpuWorker? _worker;
-    // The worker's output lines, read by its own thread — calls wait here with
-    // their time limit, so nothing depends on the thread pool.
-    private BlockingCollection<string?>? _lines;
+    private WorkerChannel? _channel;
     private string? _down;
     // When a hang's pause ends (Environment.TickCount64 ms); 0 = until restart.
     private long _downUntil;
@@ -327,7 +308,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     /// `timeout` / `startTimeout` / `hangRetry` / `clock` (milliseconds,
     /// like Environment.TickCount64) are for tests.
     public GpuWorkerClient(
-        Func<IGpuWorker> start,
+        Func<IWorker> start,
         string? markerPath,
         DateTimeOffset bootTime,
         string drivers,
@@ -363,30 +344,27 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     {
         lock (_lock)
         {
-            if (_worker is not { } worker)
+            if (_channel is not { } channel)
                 return;
-            var lines = _lines!;
-            _worker = null;
-            _lines = null;
+            _channel = null;
             try
             {
-                if (!worker.HasExited)
+                if (!channel.Worker.HasExited)
                 {
-                    worker.Input.WriteLine(GpuWorkerProtocol.Encode(new GpuWorkerRequest(++_nextId, GpuWorkerProtocol.OpEnd)));
-                    worker.Input.Flush();
-                    ReadLine(lines, TimeSpan.FromSeconds(5));
-                    if (!worker.WaitForExit(TimeSpan.FromSeconds(3)))
-                        worker.Kill();
+                    channel.Send(GpuWorkerProtocol.Encode(new GpuWorkerRequest(++_nextId, GpuWorkerProtocol.OpEnd)));
+                    channel.Receive(TimeSpan.FromSeconds(5));
+                    if (!channel.Worker.WaitForExit(TimeSpan.FromSeconds(3)))
+                        channel.Worker.Kill();
                 }
             }
             catch (Exception e)
             {
                 SidecarLog.Log($"[rigstats-control] GPU power: the GPU worker didn't end cleanly: {e.Message}");
-                TryKill(worker);
+                channel.Kill();
             }
             finally
             {
-                worker.Dispose();
+                channel.Dispose();
             }
         }
     }
@@ -397,17 +375,15 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     {
         lock (_lock)
         {
-            var worker = Worker();
-            var lines = _lines!;
+            var channel = Channel();
             var request = new GpuWorkerRequest(++_nextId, op, adapter, value);
             var limit = _answered ? _timeout : _startTimeout;
             string? line;
             var timedOut = false;
             try
             {
-                worker.Input.WriteLine(GpuWorkerProtocol.Encode(request));
-                worker.Input.Flush();
-                (var answered, line) = ReadLine(lines, limit);
+                channel.Send(GpuWorkerProtocol.Encode(request));
+                (var answered, line) = channel.Receive(limit);
                 timedOut = !answered;
             }
             catch (IOException)
@@ -415,7 +391,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
                 line = null; // the pipe broke: the worker is gone
             }
             if (line is null)
-                throw Down(worker, op, timedOut, limit);
+                throw Down(channel, op, timedOut, limit);
 
             GpuWorkerResponse response;
             try
@@ -429,10 +405,9 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
                 // Not a driver crash, but the worker can't be trusted any more:
                 // end it; the next call starts a new one.
                 SidecarLog.Log($"[rigstats-control] GPU power: the GPU worker answered something unexpected to '{op}' ({e.Message}) — restarting it.");
-                _worker = null;
-                _lines = null;
-                TryKill(worker);
-                worker.Dispose();
+                _channel = null;
+                channel.Kill();
+                channel.Dispose();
                 throw new InvalidOperationException("The GPU driver's worker answered something unexpected.");
             }
             _answered = true;
@@ -452,7 +427,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     /// The running worker, starting one when there is none — unless a crash
     /// this boot (this process's or, through the marker, an earlier one's)
     /// says not to.
-    private IGpuWorker Worker()
+    private WorkerChannel Channel()
     {
         if (_down is not null)
         {
@@ -462,9 +437,9 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
             _down = null;
             _downUntil = 0;
         }
-        if (_worker is { } running)
+        if (_channel is { } running)
         {
-            if (!running.HasExited)
+            if (!running.Worker.HasExited)
                 return running;
             throw Down(running, "idle", timedOut: false, _timeout); // died between calls
         }
@@ -476,8 +451,7 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
         }
         try
         {
-            _worker = _start();
-            _lines = StartReader(_worker);
+            _channel = new WorkerChannel(_start(), "gpu-worker-output");
             _answered = false;
         }
         catch (Exception e)
@@ -485,21 +459,20 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
             SidecarLog.Log($"[rigstats-control] GPU power: the GPU worker could not be started: {e.Message}");
             throw new InvalidOperationException($"The GPU driver's worker could not be started: {e.Message}");
         }
-        return _worker;
+        return _channel;
     }
 
     /// Ends a worker that crashed or hung and logs it. A crash is remembered
     /// until a restart or a driver change (the marker), a hang for
     /// `_hangRetry` in this process only.
-    private GpuDriverCrashedException Down(IGpuWorker worker, string op, bool timedOut, TimeSpan limit)
+    private GpuDriverCrashedException Down(WorkerChannel channel, string op, bool timedOut, TimeSpan limit)
     {
-        _worker = null;
-        _lines = null;
+        _channel = null;
         if (timedOut)
-            TryKill(worker);
-        var exited = worker.WaitForExit(TimeSpan.FromSeconds(2));
-        var code = exited ? worker.ExitCode : null;
-        worker.Dispose();
+            channel.Kill();
+        var exited = channel.Worker.WaitForExit(TimeSpan.FromSeconds(2));
+        var code = exited ? channel.Worker.ExitCode : null;
+        channel.Dispose();
         if (timedOut)
         {
             var minutes = Math.Max(1, (int)Math.Round(_hangRetry.TotalMinutes));
@@ -517,52 +490,6 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
     }
 
     public static string FormatExitCode(int? code) => code is { } c ? $"0x{unchecked((uint)c):X8}" : "unknown";
-
-    /// One thread per worker reads its output into a queue; null marks the
-    /// end (the worker closed its output, exited or the stream broke).
-    private static BlockingCollection<string?> StartReader(IGpuWorker worker)
-    {
-        var lines = new BlockingCollection<string?>();
-        var reader = new Thread(() =>
-        {
-            try
-            {
-                while (worker.Output.ReadLine() is { } line)
-                    lines.Add(line);
-            }
-            catch
-            {
-                // The stream broke: the worker is gone.
-            }
-            finally
-            {
-                lines.Add(null);
-            }
-        })
-        {
-            IsBackground = true,
-            Name = "gpu-worker-output",
-        };
-        reader.Start();
-        return lines;
-    }
-
-    /// The next line (null when the worker's output ended); `Answered` is
-    /// false when nothing came within `timeout` — a hang, not a crash.
-    private static (bool Answered, string? Line) ReadLine(BlockingCollection<string?> lines, TimeSpan timeout) =>
-        lines.TryTake(out var line, timeout) ? (true, line) : (false, null);
-
-    private static void TryKill(IGpuWorker worker)
-    {
-        try
-        {
-            worker.Kill();
-        }
-        catch
-        {
-            // Already gone.
-        }
-    }
 
     private string? ReadMarker()
     {
@@ -589,188 +516,6 @@ public sealed class GpuWorkerClient : IGpuPowerApi, IDisposable
             SidecarLog.Log($"[rigstats-control] GPU power: crash marker not written: {e.Message}");
         }
     }
-}
-
-/// The worker as a real child process: the service's own exe with
-/// `--gpu-worker`, stdio redirected (UTF-8 without a byte-order mark, so the
-/// first line is plain JSON), no window. It inherits the service's account.
-/// Its log lines arrive on stderr and go into the service's log — two
-/// processes appending to one file would collide.
-public sealed class ProcessGpuWorker : IGpuWorker
-{
-    private const int MaxForwardedLines = 200;
-    private static readonly Regex Timestamp = new(@"^\[\d{4}-\d{2}-\d{2} [^\]]+\] ", RegexOptions.Compiled);
-
-    private readonly Process _process;
-    private int _forwarded;
-
-    private ProcessGpuWorker(Process process) => _process = process;
-
-    public static ProcessGpuWorker Start(string exe, string arguments, Action<string>? log = null)
-    {
-        var utf8 = new UTF8Encoding(false);
-        var info = new ProcessStartInfo(exe, arguments)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = utf8,
-            StandardOutputEncoding = utf8,
-            StandardErrorEncoding = utf8,
-        };
-        var process = new Process { StartInfo = info };
-        var worker = new ProcessGpuWorker(process);
-        var forward = log ?? (line => SidecarLog.Log($"[gpu-worker] {line}"));
-        process.ErrorDataReceived += (_, e) =>
-        {
-            if (string.IsNullOrWhiteSpace(e.Data) || Interlocked.Increment(ref worker._forwarded) > MaxForwardedLines)
-                return;
-            forward(Timestamp.Replace(e.Data, "").TrimEnd());
-        };
-        if (!process.Start())
-            throw new InvalidOperationException($"{exe} did not start.");
-        // Tied to the service: if the service ends — however it ends — so
-        // does the worker, even one stuck inside a driver call.
-        if (KillOnCloseJob.Shared?.Add(process) != true)
-            SidecarLog.Log("[rigstats-control] GPU power: the GPU worker could not be tied to the service (job object); it still ends when the service closes its input.");
-        process.BeginErrorReadLine();
-        return worker;
-    }
-
-    /// The process id, for logs and tests.
-    public int Id => _process.Id;
-    public TextWriter Input => _process.StandardInput;
-    public TextReader Output => _process.StandardOutput;
-    public bool HasExited => _process.HasExited;
-    public int? ExitCode => _process.HasExited ? _process.ExitCode : null;
-    public bool WaitForExit(TimeSpan timeout) => _process.WaitForExit(timeout);
-    public void Kill() => _process.Kill(entireProcessTree: true);
-
-    public void Dispose()
-    {
-        try
-        {
-            if (!_process.HasExited)
-                _process.Kill(entireProcessTree: true);
-        }
-        catch
-        {
-            // Already gone.
-        }
-        _process.Dispose();
-    }
-}
-
-/// A Windows job object that ends every process in it when its last handle
-/// closes — which happens when the service process ends, however it ends
-/// (stopped, crashed, killed). The GPU worker joins it, so it can't outlive
-/// the service, even while it is stuck inside a driver call (#370).
-internal sealed class KillOnCloseJob : IDisposable
-{
-    private const int JobObjectExtendedLimitInformation = 9;
-    private const uint JobObjectLimitKillOnJobClose = 0x2000;
-
-    private static readonly Lazy<KillOnCloseJob?> SharedJob = new(() =>
-    {
-        try
-        {
-            return new KillOnCloseJob();
-        }
-        catch (Exception e)
-        {
-            SidecarLog.Log($"[rigstats-control] GPU power: job object not created: {e.Message}");
-            return null;
-        }
-    });
-
-    private IntPtr _handle;
-
-    /// One job for the service's lifetime; null if Windows refused it.
-    public static KillOnCloseJob? Shared => SharedJob.Value;
-
-    public KillOnCloseJob()
-    {
-        _handle = CreateJobObjectW(IntPtr.Zero, null);
-        if (_handle == IntPtr.Zero)
-            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-        var info = new ExtendedLimitInformation();
-        info.BasicLimitInformation.LimitFlags = JobObjectLimitKillOnJobClose;
-        if (!SetInformationJobObject(_handle, JobObjectExtendedLimitInformation, ref info, (uint)Marshal.SizeOf<ExtendedLimitInformation>()))
-        {
-            var error = Marshal.GetLastWin32Error();
-            CloseHandle(_handle);
-            _handle = IntPtr.Zero;
-            throw new System.ComponentModel.Win32Exception(error);
-        }
-    }
-
-    /// Puts `process` in the job; false if Windows refused.
-    public bool Add(Process process)
-    {
-        try
-        {
-            return _handle != IntPtr.Zero && AssignProcessToJobObject(_handle, process.Handle);
-        }
-        catch (InvalidOperationException)
-        {
-            return false; // already exited
-        }
-    }
-
-    /// Closing the handle ends every process in the job.
-    public void Dispose()
-    {
-        if (_handle == IntPtr.Zero)
-            return;
-        CloseHandle(_handle);
-        _handle = IntPtr.Zero;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct BasicLimitInformation
-    {
-        public long PerProcessUserTimeLimit;
-        public long PerJobUserTimeLimit;
-        public uint LimitFlags;
-        public UIntPtr MinimumWorkingSetSize;
-        public UIntPtr MaximumWorkingSetSize;
-        public uint ActiveProcessLimit;
-        public UIntPtr Affinity;
-        public uint PriorityClass;
-        public uint SchedulingClass;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct IoCounters
-    {
-        public ulong ReadOperationCount, WriteOperationCount, OtherOperationCount;
-        public ulong ReadTransferCount, WriteTransferCount, OtherTransferCount;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct ExtendedLimitInformation
-    {
-        public BasicLimitInformation BasicLimitInformation;
-        public IoCounters IoInfo;
-        public UIntPtr ProcessMemoryLimit;
-        public UIntPtr JobMemoryLimit;
-        public UIntPtr PeakProcessMemoryUsed;
-        public UIntPtr PeakJobMemoryUsed;
-    }
-
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern IntPtr CreateJobObjectW(IntPtr attributes, string? name);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetInformationJobObject(IntPtr job, int infoClass, ref ExtendedLimitInformation info, uint length);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool CloseHandle(IntPtr handle);
 }
 
 /// `rigstats-sensor.exe --gpu-worker`: loads the GPU driver libraries and

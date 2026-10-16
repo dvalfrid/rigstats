@@ -683,6 +683,12 @@ What phase 3 (#190) shipped for AMD, and #210 for NVIDIA desktop GPUs:
     `--gpu-worker-crash-test` / `--gpu-worker-hang-test` to prove the
     service survives both. Tests: `GpuWorkerTests` (scripted workers and
     real `cmd.exe` children for pipes, exit codes, killing, UTF-8).
+    The process plumbing is shared with the coming sensor worker (#374) in
+    `Control/Workers/`: `WorkerProcess` (the child, its stdio and log
+    forwarding), `KillOnCloseJob`, and `WorkerChannel` (the reader thread;
+    a call's answer, a hang or the end of output). What to do after a crash
+    or a hang stays with each client — `GpuWorkerClient` turns the GPU limits
+    off; the sensor worker will be restarted. Tests: `WorkerChannelTests`.
 
     Why (2026-10-15, owner's rig): Windows Update installed "AMD Display
     Driver Update (32.0.21042.62)" over the newer Adrenalin driver
