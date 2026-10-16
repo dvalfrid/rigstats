@@ -1,0 +1,83 @@
+name: Device — confirm or request support
+description: A lighting device, a wireless device's battery, or your board's or graphics card's sensors — works, doesn't, or isn't listed
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Many devices in the [supported devices list](https://github.com/dvalfrid/rigstats/blob/main/docs/supported-devices.md)
+        are marked **not yet verified**: they use the same commands as a tested device, but nobody has tried them.
+        A report from you, working or not, moves a device to **Verified** or gets it fixed. The same form is for a
+        board or graphics card whose sensors are missing or wrong — that becomes a test fixture.
+
+        The diagnostics ZIP (tray → **Status** → **Collect Diagnostics…**) has what's needed in nearly every case:
+        - **Lighting:** `lighting-devices.json` — every lighting device found, read-only replies from ASUS receivers
+          and the mice paired to them, and a list of all USB HID devices (no paths or serial numbers).
+        - **Battery:** `sidecar-log.txt` — one `Battery:` line per device the service found, and what it answered.
+        - **Sensors:** `sensor-tree.txt` and `hardware.json` — every sensor the service sees, with its identifier.
+        - **GPU Apps panel:** `gpu-engine.txt`.
+
+        It also holds your computer and Windows user name (`environment.txt`); look through it before attaching.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you reporting?
+      options:
+        - "Lighting: a listed device works (please mark it verified)"
+        - "Lighting: a listed device is found but doesn't change colour"
+        - "Lighting: a device isn't listed in the Control Center at all"
+        - "Battery: a listed device shows correctly (please mark it verified)"
+        - "Battery: a device doesn't show, or shows the wrong level or charging state"
+        - "Sensors: a reading is missing or wrong for my board or graphics card"
+        - "GPU Apps: an app or GPU is shown wrong"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Brand and exact model, and how it is connected (cable, 2.4 GHz dongle / receiver, Bluetooth). For sensors, the board or graphics card.
+      placeholder: ROG Keris II Ace via the ROG Omni receiver · Logitech MX Master 3S via Bolt receiver · ASUS TUF B650-PLUS
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What did you try, and what happened?
+      description: |
+        Lighting: the effect and colour you picked, what the device showed. For ASUS mice, also whether the Lighting tab offered "Let RIGStats control it".
+        Battery: what the Peripherals panel shows, and what Windows or the maker's own app shows for the same device.
+        Sensors: which reading, and what another tool (HWiNFO, the BIOS) says it should be.
+    validations:
+      required: true
+
+  - type: textarea
+    id: gearlink
+    attributes:
+      label: Gear Link console log (optional, ASUS lighting devices)
+      description: |
+        For an ASUS device that RIGStats doesn't drive yet: open https://gearlink.asus.com in Chrome or Edge,
+        press F12 → Console, type `HID` in the filter box, connect the device and change its lighting once.
+        Paste the `HID OUT` / `HID IN` lines here.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics ZIP
+      description: Drag and drop the ZIP file here.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: RIGStats version
+      description: Shown in the About window (tray → About).
+    validations:
+      required: true

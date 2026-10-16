@@ -3,7 +3,7 @@
 <!-- Generated from the sensor sidecar's model tables by LightingCatalog — do not edit by hand.
      Regenerate: $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices -->
 
-RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; **From Gear Link, not yet verified**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; [report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.
+RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; **From Gear Link, not yet verified**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; [report it](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.
 
 ## Lighting
 
@@ -73,7 +73,7 @@ RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or
 | Other ROG mice on the ROG Omni receiver (ProArt Mouse MD301, ROG Gladius IV Ace, ROG Gladius IV Ace Max, ROG Harpe II Ace, ROG Harpe II Ace (PBZ), ROG Harpe II Ace Mini, ROG Harpe II Ace Mini Demon1 Edition, ROG Harpe II Extreme Edition 20, ROG Keris II Origin, ROG Keris II Origin (KJP), ROG Spatha X 65K) | Mouse | 1C0E, 1C6B, 1CD3, 1D4E, 1D7C, 1DBF, 1DE0, 1E32, 1E4B, 1E4F, 1E52 | From Gear Link, not yet verified | Named in the Lighting tab; lit through the receiver's Dynamic Lighting (no toggle needed) |
 | Philips Hue lights, through a Hue Bridge (square, v2) | Room lights | — (network) | Verified on hardware | Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second) |
 
-Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong write can damage the hardware). A device that isn't listed: the diagnostics export's `lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers and the mice paired to them — attach it to a [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml).
+Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong write can damage the hardware). A device that isn't listed: the diagnostics export's `lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers and the mice paired to them — attach it to a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).
 
 ## Battery
 
@@ -120,4 +120,4 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | Logitech devices on a Bolt receiver | Mouse, keyboard | C548 (receiver) | Verified on hardware (Logi M650) | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
 | Logitech devices on a Unifying receiver | Mouse, keyboard | C52B, C532 (receiver) | From Solaar, not yet verified | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
 
-Not read: ROG mice on their own 2.4 GHz dongle or cable, Logitech Nano and Lightspeed receivers, and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show: the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found.
+Not read: ROG mice on their own 2.4 GHz dongle or cable, Logitech Nano and Lightspeed receivers, and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show, or one that works: the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found — send it with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).

@@ -1024,8 +1024,8 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   list, and each paired device its device info, presence and WDL state —
   only read commands Gear Link itself sends while idle, no serial numbers —
   so a report names a new mouse and shows whether it has the WDL toggle.
-  Reports come in through the "Lighting device" issue form
-  (`.github/ISSUE_TEMPLATE/lighting_device.yml`), which also asks for Gear
+  Reports come in through the "Device" issue form
+  (`.github/ISSUE_TEMPLATE/device.yml`), which also asks for Gear
   Link's console log (its `HID OUT`/`HID IN` lines name every command).
 - **Per-device blockers.** While Windows Dynamic Lighting is on for a
   signed-in user (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\

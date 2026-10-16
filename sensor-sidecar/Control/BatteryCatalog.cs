@@ -72,8 +72,9 @@ public static class BatteryCatalog
         foreach (var row in All())
             md.Append(CultureInfo.InvariantCulture, $"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
         md.Append("\nNot read: ROG mice on their own 2.4 GHz dongle or cable, Logitech Nano and Lightspeed receivers, ");
-        md.Append("and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show: ");
-        md.Append("the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found.\n");
+        md.Append("and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show, or one that works: ");
+        md.Append("the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found — ");
+        md.Append("send it with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).\n");
         return md.ToString();
     }
 
