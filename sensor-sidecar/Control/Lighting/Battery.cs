@@ -3,11 +3,19 @@ namespace SensorSidecar.Control.Lighting;
 /// A wireless device's battery, as the device reports it (#290).
 public readonly record struct BatteryStatus(int Percent, bool Charging);
 
-/// A lighting device that can also report its battery. Read-only: one
-/// documented "get" per device type — see docs/control-architecture.md,
-/// "Peripherals: battery and settings".
+/// A device that can report its battery — a lighting device, or a Logitech
+/// device behind a receiver (#407). Read-only: one documented "get" per
+/// device type — see docs/control-architecture.md, "Peripherals: battery and
+/// settings".
 public interface IBatteryDevice
 {
+    /// Stable while the device stays where it is, e.g. "aura-usb-19af".
+    string Id { get; }
+    string Name { get; }
+
+    /// "mouse", "keyboard", "headset" or "device", for the panel's icon.
+    string Kind { get; }
+
     /// Whether this model has a battery, from the model tables. False means
     /// the question is never sent.
     bool HasBattery { get; }

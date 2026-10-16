@@ -1135,8 +1135,52 @@ showed charging in the next read (≤ 20 s), and unplugging it cleared it in the
 same way. The MX Mechanical Mini for Mac keyboard (PID `B36D`, Bluetooth name
 "MX MCHNCL M", category `Input.Keyboard`) answers the same way: Unified Battery,
 100 %, and charging with the cable in — at 100 % it reports full on power,
-which counts as charging (status 3, like Solaar). Not covered: Bolt/Unifying
-receivers (device index 1–6 behind the receiver; no hardware to test on).
+which counts as charging (status 3, like Solaar). Devices behind a receiver:
+next section.
+
+### Logitech devices behind a Bolt or Unifying receiver (#407)
+
+A device on a Logitech USB receiver isn't a Windows Bluetooth device, so it
+has no Windows battery. `LogitechReceivers` finds the receivers among the HID
+collections: Bolt `046D:C548`, and Unifying `C52B`/`C532`, from Solaar's
+`base_usb` table. Nano and Lightspeed receivers aren't read. The battery
+monitor reads each one every round (`LogitechReceiverDevice`, Connection
+`2.4ghz`).
+
+**Two collections.** Windows splits the receiver's HID++ interface (interface 2,
+usage page `FF00`) into a short-report collection (usage `0001`, 7 bytes) and a
+long one (usage `0002`, 20 bytes). A request goes to the collection of its
+length, and the answer can come on either: a long register's answer comes on
+the long one, an error on the short one. `ReceiverHid` writes to the right one
+and reads from both. The two are paired by their Windows instance
+(`HID\VID_046D&PID_C548&MI_02&COL01\B&6FD059D&0&0000` and `…COL02\…&0001`).
+
+**Requests.** All are documented reads (Solaar's `receiver.py`, `base.py`):
+
+| Request | Bytes | Answer |
+|---|---|---|
+| Connection count, register `0x02` | `10 FF 81 02 00 00 00` | 2nd parameter = connected devices |
+| Pairing information, receiver info `0xB5` | Bolt `10 FF 83 B5 5N 00 00`, Unifying `… 2(N-1) …` | kind in the low nibble: Bolt byte 1, Unifying byte 7 (1 keyboard, 2 mouse, 8 trackball, 9 touchpad); an error (`10 FF 8F 83 B5 …`) = empty slot |
+| Name | Bolt `10 FF 83 B5 6N 01 00` (`sub 01 length name`), Unifying `… 4(N-1) 00 00` (`sub length name`) | ASCII name |
+| Battery | the HID++ 2.0 reads above, device index N instead of `FF` | as above |
+
+The paired list (slots 1–6) is read again only when the connection count
+changes or a receiver appears. Each round costs one register read plus each
+device's battery read. A device that is asleep or off gets an error from the
+receiver (`10 0N 8F …`). It is logged once and keeps its last reading for 10
+minutes, like any device that doesn't answer.
+
+**Measured on the owner's rig (2026-10-16).** A Logitech M650 on a Bolt
+receiver:
+- Log: `Battery: Logitech Bolt receiver C548: slot 2 Logi M650 (mouse).`, then
+  `Battery: Logi M650 60 %.`
+- It shows in Peripherals with the 2.4 GHz icon.
+- The M650 runs on an AA battery, so charging wasn't seen.
+
+Not verified:
+- Unifying receivers: built from the same source, with no hardware to test on.
+- Devices that report only a coarse level (Unified Battery with a 0 % state of
+  charge): they show no reading, because no percentage is guessed.
 
 ### Philips Hue (#215)
 

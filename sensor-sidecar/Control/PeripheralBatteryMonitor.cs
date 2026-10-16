@@ -51,6 +51,8 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     private bool _bluetoothFailureLogged;
     private readonly LogitechBatteryReader _logitech = new();
     private bool _logitechFailureLogged;
+    private readonly LogitechReceivers _receivers = new();
+    private bool _receiversFailureLogged;
 
     protected override async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -66,7 +68,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
                 var ids = devices.Select(d => d.Id).ToList();
                 if (ShouldRead(lastRead, DateTime.UtcNow, lastIds, ids))
                 {
-                    store.Set(BluetoothBatteries.Merge(ReadAll(devices), ReadBluetooth()));
+                    store.Set(BluetoothBatteries.Merge(ReadAll([.. devices.OfType<IBatteryDevice>(), .. ReceiverDevices()]), ReadBluetooth()));
                     lastRead = DateTime.UtcNow;
                     lastIds = ids;
                 }
@@ -80,6 +82,25 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     /// passed, or the device list changed (plugged, unplugged, switched).
     public static bool ShouldRead(DateTime lastRead, DateTime now, IReadOnlyList<string> lastIds, IReadOnlyList<string> ids) =>
         now - lastRead >= ReadInterval || !ids.SequenceEqual(lastIds);
+
+    /// Logitech devices behind a Bolt or Unifying receiver (#407); a failure
+    /// costs only them.
+    private IReadOnlyList<IBatteryDevice> ReceiverDevices()
+    {
+        try
+        {
+            var devices = _receivers.Devices();
+            _receiversFailureLogged = false;
+            return devices;
+        }
+        catch (Exception e)
+        {
+            if (!_receiversFailureLogged)
+                SidecarLog.Log($"[rigstats-control] Battery: Logitech receivers not read: {e.Message}");
+            _receiversFailureLogged = true;
+            return [];
+        }
+    }
 
     /// The Bluetooth devices' levels Windows already holds (#291); a failure
     /// costs only the Bluetooth entries.
@@ -117,13 +138,13 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     /// One read over `devices`: fresh readings, else the last known one for
     /// a device still connected and silent for fewer than <see cref="StaleRounds"/> reads. Each device is guarded on its own, so one
     /// failing can't hide the others.
-    public IReadOnlyList<PeripheralStatus> ReadAll(IEnumerable<ILightingDevice> devices)
+    public IReadOnlyList<PeripheralStatus> ReadAll(IEnumerable<IBatteryDevice> devices)
     {
         var result = new List<PeripheralStatus>();
         var present = new HashSet<string>();
         foreach (var device in devices)
         {
-            if (device is not IBatteryDevice { HasBattery: true } battery)
+            if (device is not { HasBattery: true } battery)
                 continue;
             present.Add(device.Id);
             var fresh = false;
