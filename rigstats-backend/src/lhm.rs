@@ -365,6 +365,22 @@ mod tests {
         assert_eq!(data.net_down, 0.0);
     }
 
+    /// #374: while the service's hardware worker restarts it serves the last
+    /// sample with its age; past 5 s that is no data, not live values.
+    #[test]
+    fn a_sample_older_than_five_seconds_is_stale() {
+        let payload = |age: &str| {
+            serde_json::from_str::<SidecarPayload>(&format!(
+                r#"{{"cpu_temp": 65.0, "cpu_power": null, "gpu_devices": [], "disk_temps": {{}},
+                   "ram_temp": null, "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null{age}}}"#
+            ))
+            .unwrap()
+        };
+        assert!(!payload("").is_stale());
+        assert!(!payload(r#", "sample_age_ms": 4000"#).is_stale());
+        assert!(payload(r#", "sample_age_ms": 6000"#).is_stale());
+    }
+
     #[test]
     fn sidecar_payload_no_gpus_yields_none_fields() {
         let json = r#"{
@@ -438,6 +454,20 @@ struct SidecarPayload {
     // Left out by the sidecar when no profile is active, and by older ones.
     #[serde(default)]
     active_profile: Option<SidecarActiveProfile>,
+    // How old the sample is when the service couldn't get a fresh one — its
+    // hardware worker restarting (#374). Left out of a live sample.
+    #[serde(default)]
+    sample_age_ms: Option<u64>,
+}
+
+/// A sample older than this is no data: the service samples once a second,
+/// so 5 s without a fresh one means its hardware worker is restarting (#374).
+const STALE_SAMPLE_MS: u64 = 5_000;
+
+impl SidecarPayload {
+    fn is_stale(&self) -> bool {
+        self.sample_age_ms.is_some_and(|age| age > STALE_SAMPLE_MS)
+    }
 }
 
 #[derive(serde::Deserialize)]
@@ -720,6 +750,10 @@ pub async fn fetch_lhm_pipe(
                     return None;
                 }
                 return match serde_json::from_str::<SidecarPayload>(line.trim()) {
+                    Ok(p) if p.is_stale() => {
+                        log_pipe_trouble_throttled(dir, "pipe: no fresh sample — the sensor service is restarting its hardware worker");
+                        None
+                    }
                     Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
                     Err(e) => {
                         let preview = line.trim().chars().take(120).collect::<String>();
@@ -793,6 +827,10 @@ pub async fn fetch_lhm_pipe(
                 return None;
             }
             let data = match serde_json::from_str::<SidecarPayload>(line.trim()) {
+                Ok(p) if p.is_stale() => {
+                    log_pipe_trouble_throttled(dir, "pipe: no fresh sample — the sensor service is restarting its hardware worker");
+                    None
+                }
                 Ok(p) => Some(p.into_lhm_data(preferred_gpu)),
                 Err(e) => {
                     let preview = line.trim().chars().take(120).collect::<String>();

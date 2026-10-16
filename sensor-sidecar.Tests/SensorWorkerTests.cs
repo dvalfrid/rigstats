@@ -30,9 +30,14 @@ public class SensorWorkerTests
         public TaskCompletionSource? BlockNext { get; set; }
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        /// How long each request takes (a busy hardware worker).
+        public TimeSpan Delay { get; set; }
+
         public async Task<string> GetTelemetryLineAsync(CancellationToken ct)
         {
             ct.ThrowIfCancellationRequested();
+            if (Delay > TimeSpan.Zero)
+                await Task.Delay(Delay, ct);
             var n = Interlocked.Increment(ref _calls);
             if (Interlocked.Exchange(ref _failNext, 0) == 1)
                 throw new InvalidOperationException("LHM failed");
@@ -47,8 +52,11 @@ public class SensorWorkerTests
 
         public Task<SensorPayload> GetSampleAsync(CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct) =>
-            throw new NotSupportedException();
+        public IReadOnlyList<FanHeaderInfo> FanHeaders() => throw new NotSupportedException();
+        public void SetFan(string id, double duty) => throw new NotSupportedException();
+        public void SetFanDefault(string id) => throw new NotSupportedException();
+        public FanReadback ReadFan(string id) => throw new NotSupportedException();
+        public void RestartHardware(string reason) => throw new NotSupportedException();
 
         public void WriteSensorTree(string path) { }
     }
@@ -247,6 +255,34 @@ public class SensorWorkerTests
         {
             foreach (var c in clients)
                 c.Dispose();
+            await StopAsync(worker);
+        }
+    }
+
+    [Fact]
+    public async Task A_slow_sample_still_gives_one_line_a_second()
+    {
+        // #374: the app gives up on a read after 1.2 s. With the hardware busy
+        // (300 ms) the next line must still come about a second after the last.
+        var host = new FakeTelemetryHost { Delay = TimeSpan.FromMilliseconds(300) };
+        var name = NewPipeName();
+        var worker = await StartAsync(host, name);
+        try
+        {
+            using var client = await ConnectAsync(name);
+            Assert.NotNull(await client.ReadLineAsync());
+            var gaps = new List<TimeSpan>();
+            for (var i = 0; i < 4; i++)
+            {
+                var started = DateTime.UtcNow;
+                Assert.NotNull(await client.ReadLineAsync());
+                gaps.Add(DateTime.UtcNow - started);
+            }
+
+            Assert.All(gaps, gap => Assert.True(gap < TimeSpan.FromMilliseconds(1150), $"a line took {gap.TotalMilliseconds:0} ms"));
+        }
+        finally
+        {
             await StopAsync(worker);
         }
     }

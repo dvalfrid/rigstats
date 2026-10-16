@@ -1,98 +1,129 @@
+using System.Text.Json;
 using SensorSidecar.Control;
 using Xunit;
 
 namespace SensorSidecar.Tests;
 
 /// <summary>
-/// <see cref="HardwareHost.WithHardwareLockAsync{T}"/> is the async-safe
-/// replacement for <c>SensorWorker</c>'s old <c>lock (_sampleLock)</c> — the
-/// one property that actually matters is that it still serializes concurrent
-/// callers (a fan write must never interleave with a Super I/O read). This
-/// doesn't touch real hardware: the action delegate never calls
-/// <c>Accept</c>/reads real sensors, so it's safe to run without
-/// <c>HardwareHost.StartAsync</c> ever having opened the underlying
-/// <c>Computer</c>.
+/// <see cref="HardwareHost"/> over a fake <see cref="ISensorHardware"/> (the
+/// hardware worker in the service, #374): every call one at a time — a fan
+/// write must never interleave with a Super I/O read — one sample per
+/// interval for every consumer, a stop that waits for an in-flight call, and
+/// a telemetry line that carries its age when no fresh sample can be had.
 /// </summary>
 public class HardwareHostTests
 {
-    [Fact]
-    public async Task WithHardwareLockAsync_serializes_concurrent_callers()
+    private sealed class FakeHardware : ISensorHardware
     {
-        var host = new HardwareHost();
-        var concurrent = 0;
-        var maxConcurrent = 0;
-        var gate = new object();
+        private int _concurrent;
+        private int _samples;
+        public int MaxConcurrent;
+        public int Samples => Volatile.Read(ref _samples);
+        public bool Disposed { get; private set; }
+        public Func<Exception?> SampleFails { get; set; } = () => null;
+        public ManualResetEventSlim? Gate { get; set; }
+        public ManualResetEventSlim Entered { get; } = new();
 
-        async Task<int> Slow(LibreHardwareMonitor.Hardware.IComputer _)
+        public SensorPayload Sample()
         {
-            lock (gate)
-            {
-                concurrent++;
-                maxConcurrent = Math.Max(maxConcurrent, concurrent);
-            }
-            await Task.Delay(20);
-            lock (gate) { concurrent--; }
-            return 0;
+            using var _ = Enter();
+            Interlocked.Increment(ref _samples);
+            if (SampleFails() is { } e)
+                throw e;
+            return FanSamples.Temps(cpu: 50);
         }
 
-        var tasks = Enumerable.Range(0, 8)
-            .Select(_ => host.WithHardwareLockAsync(c => Slow(c).GetAwaiter().GetResult(), CancellationToken.None))
-            .ToArray();
+        public string SensorTree() => "# tree";
+        public IReadOnlyList<FanHeaderInfo> FanHeaders() => [];
 
-        await Task.WhenAll(tasks);
+        public void SetFan(string id, double duty)
+        {
+            using var _ = Enter();
+            Thread.Sleep(20);
+        }
 
-        Assert.Equal(1, maxConcurrent);
+        public void SetFanDefault(string id) { }
+        public FanReadback ReadFan(string id) => new(true, true, 50);
+        public void Dispose() => Disposed = true;
+
+        private Scope Enter()
+        {
+            var now = Interlocked.Increment(ref _concurrent);
+            InterlockedMax(ref MaxConcurrent, now);
+            Entered.Set();
+            Gate?.Wait();
+            return new Scope(() => Interlocked.Decrement(ref _concurrent));
+        }
+
+        private static void InterlockedMax(ref int target, int value)
+        {
+            int seen;
+            while ((seen = Volatile.Read(ref target)) < value && Interlocked.CompareExchange(ref target, value, seen) != seen) { }
+        }
+
+        private sealed class Scope(Action end) : IDisposable
+        {
+            public void Dispose() => end();
+        }
+    }
+
+    [Fact]
+    public async Task Samples_and_fan_writes_never_run_at_the_same_time()
+    {
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware);
+
+        await Task.WhenAll(Enumerable.Range(0, 8).Select(i => Task.Run(async () =>
+        {
+            if (i % 2 == 0)
+                host.SetFan("/lpc/x/0/control/0", 40);
+            else
+                await host.GetSampleAsync(CancellationToken.None);
+        })));
+
+        Assert.Equal(1, hardware.MaxConcurrent);
     }
 
     [Fact]
     public async Task StopAsync_waits_for_an_in_flight_call_before_closing()
     {
-        var host = new HardwareHost();
-        using var entered = new ManualResetEventSlim();
-        using var release = new ManualResetEventSlim();
+        using var gate = new ManualResetEventSlim();
+        var hardware = new FakeHardware { Gate = gate };
+        var host = new HardwareHost(hardware);
 
-        var inFlight = Task.Run(() => host.WithHardwareLockAsync(_ =>
-        {
-            entered.Set();
-            release.Wait();
-            return 0;
-        }, CancellationToken.None));
-        entered.Wait();
+        var inFlight = Task.Run(() => host.SetFan("/lpc/x/0/control/0", 40));
+        hardware.Entered.Wait();
 
         var stop = host.StopAsync(CancellationToken.None);
         await Task.Delay(200);
         Assert.False(stop.IsCompleted);
+        Assert.False(hardware.Disposed);
 
-        release.Set();
+        gate.Set();
         await inFlight;
         await stop;
+        Assert.True(hardware.Disposed);
     }
 
     [Fact]
-    public async Task Calls_after_StopAsync_throw_instead_of_touching_the_closed_computer()
+    public async Task Calls_after_StopAsync_throw_instead_of_touching_the_closed_hardware()
     {
-        var host = new HardwareHost();
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware);
         await host.StopAsync(CancellationToken.None);
 
-        var touched = false;
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            host.WithHardwareLockAsync(_ => touched = true, CancellationToken.None));
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            host.GetTelemetryLineAsync(CancellationToken.None));
-        Assert.False(touched);
+        Assert.Throws<InvalidOperationException>(() => host.SetFan("/lpc/x/0/control/0", 40));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.GetTelemetryLineAsync(CancellationToken.None));
+        Assert.Equal(0, hardware.Samples);
     }
 
     [Fact]
     public async Task Many_concurrent_callers_share_one_sample_per_interval()
     {
         // #208: however many telemetry clients and service-side consumers ask,
-        // LHM is read at most once per SampleMaxAgeMs (900 ms).
-        var samples = 0;
-        var host = new HardwareHost(() =>
-        {
-            Interlocked.Increment(ref samples);
-            return new SensorPayload(null, null, [], [], null, [], [], [], null);
-        });
+        // the hardware is read at most once per SampleMaxAgeMs (900 ms).
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware);
         const int callers = 8;
         var until = DateTime.UtcNow + TimeSpan.FromSeconds(3);
         var calls = 0;
@@ -112,7 +143,97 @@ public class HardwareHostTests
 
         // ~3 s / 900 ms → 4 samples (the first is immediate); far fewer than
         // the hundreds of calls made.
-        Assert.InRange(samples, 3, 5);
+        Assert.InRange(hardware.Samples, 3, 5);
         Assert.True(calls > callers * 20, $"only {calls} calls");
+    }
+
+    [Fact]
+    public async Task Without_a_fresh_sample_telemetry_carries_the_last_one_with_its_age_and_fans_get_none()
+    {
+        // #374: the hardware worker restarting. The app sees how old the
+        // sample is (and takes > 5 s as no data); the fan loop never decides
+        // on an old temperature.
+        long now = 10_000;
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.False(live.TryGetProperty("sample_age_ms", out _));
+
+        hardware.SampleFails = () => new InvalidOperationException("The hardware worker is restarting.");
+        now += 6_000;
+
+        var stale = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.Equal(6_000, stale.GetProperty("sample_age_ms").GetInt64());
+        Assert.Equal(50, stale.GetProperty("cpu_temp").GetDouble());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.GetSampleAsync(CancellationToken.None));
+
+        hardware.SampleFails = () => null;
+        var back = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.False(back.TryGetProperty("sample_age_ms", out _));
+    }
+
+    [Fact]
+    public async Task A_hung_call_holding_the_hardware_does_not_hold_up_telemetry()
+    {
+        // Seen live (#374): a hung worker held the lock for its 8 s limit and
+        // the app reconnected every 1.2 s meanwhile. Now telemetry gets the
+        // last sample, with its age, right away.
+        long now = 10_000;
+        using var gate = new ManualResetEventSlim();
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        await host.GetTelemetryLineAsync(CancellationToken.None);
+
+        hardware.Gate = gate;
+        hardware.Entered.Reset();
+        var hung = Task.Run(() => host.SetFan("/lpc/x/0/control/0", 40));
+        hardware.Entered.Wait();
+        now += 2_000;
+
+        var started = DateTime.UtcNow;
+        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(2), "telemetry waited for the hung call");
+        Assert.Equal(2_000, line.GetProperty("sample_age_ms").GetInt64());
+        gate.Set();
+        await hung;
+    }
+
+    [Fact]
+    public async Task The_client_whose_request_starts_a_hanging_sample_still_gets_a_line()
+    {
+        // Seen live (#374): with one app connected, its own request is the
+        // one that samples — and it hung with the worker. The sample now runs
+        // in the background; the request gets the last line with its age.
+        long now = 10_000;
+        using var gate = new ManualResetEventSlim();
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        await host.GetTelemetryLineAsync(CancellationToken.None);
+
+        hardware.Gate = gate; // the next sample hangs
+        now += 1_500;
+        var started = DateTime.UtcNow;
+        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1), "the request waited for the hanging sample");
+        Assert.Equal(1_500, line.GetProperty("sample_age_ms").GetInt64());
+
+        // The worker answers again: the next request gets a live line.
+        gate.Set();
+        hardware.Gate = null;
+        now += 1_000;
+        await Task.Delay(100);
+        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.False(live.TryGetProperty("sample_age_ms", out _));
+    }
+
+    [Fact]
+    public async Task Without_any_sample_yet_telemetry_fails()
+    {
+        var hardware = new FakeHardware { SampleFails = () => new InvalidOperationException("not started") };
+        var host = new HardwareHost(hardware);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.GetTelemetryLineAsync(CancellationToken.None));
     }
 }

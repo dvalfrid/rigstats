@@ -20,7 +20,12 @@ public sealed record SensorPayload(
     // The active Control Center profile (#302), filled in by HardwareHost
     // from ProfileStore — left out when there is none.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    SensorSidecar.Control.ActiveProfileStatus? ActiveProfile = null);
+    SensorSidecar.Control.ActiveProfileStatus? ActiveProfile = null,
+    // How old a sample is when no fresh one could be had — the hardware
+    // worker restarting (#374). Left out of a live sample; the app takes one
+    // older than 5 s as no data.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    long? SampleAgeMs = null);
 
 public sealed record GpuDevice(
     string Name,
