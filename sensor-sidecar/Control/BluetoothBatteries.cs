@@ -17,27 +17,36 @@ public static class BluetoothBatteries
     /// address (a classic device has a node per service).
     public static IReadOnlyList<Node> Read()
     {
-        var result = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
+        var nodes = new List<(uint Inst, string Address, int Level)>();
+        // A classic device's battery sits on a service node (Hands-Free),
+        // which stays without the disconnected flag when the device goes —
+        // only its BTHENUM\DEV_ node gets it. So an address is disconnected
+        // when any of its nodes is.
+        var disconnected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var enumerator in new[] { "BTHLE", "BTHENUM" })
         {
             foreach (var id in DeviceIds(enumerator))
             {
                 if (CM_Locate_DevNodeW(out var inst, id, 0) != 0)
                     continue;
-                if (Property(inst, BatteryLevel) is not [var level, ..] || level > 100)
-                    continue;
                 var address = Text(Property(inst, Address)) is { Length: > 0 } a ? a : id;
-                if (result.ContainsKey(address))
-                    continue;
-                var connected = CM_Get_DevNode_Status(out var status, out _, inst, 0) == 0
-                    && (status & DnDeviceDisconnected) == 0;
-                result[address] = new Node(
-                    address,
-                    Text(Property(inst, FriendlyName)) is { Length: > 0 } n ? n : "Bluetooth device",
-                    Text(Property(inst, Category)),
-                    level,
-                    connected);
+                if (CM_Get_DevNode_Status(out var status, out _, inst, 0) != 0 || (status & DnDeviceDisconnected) != 0)
+                    disconnected.Add(address);
+                if (Property(inst, BatteryLevel) is [var level, ..] && level <= 100)
+                    nodes.Add((inst, address, level));
             }
+        }
+        var result = new Dictionary<string, Node>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (inst, address, level) in nodes)
+        {
+            if (result.ContainsKey(address))
+                continue;
+            result[address] = new Node(
+                address,
+                Text(Property(inst, FriendlyName)) is { Length: > 0 } n ? n : "Bluetooth device",
+                Text(Property(inst, Category)),
+                level,
+                !disconnected.Contains(address));
         }
         return [.. result.Values];
     }
