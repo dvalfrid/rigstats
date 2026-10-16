@@ -359,9 +359,13 @@ pub fn build_tray(
     // No native tooltip: hovering the icon shows the app's own card instead
     // (`app/tray_card.rs`, #290) — name, recording state and wireless
     // batteries in colour — which a plain-text tooltip would sit on top of.
+    // The patched tray-icon registers in notify-icon version 4, where the tip
+    // is never shown as a tooltip; it only names the icon for screen readers.
+    // Without a tip Windows 11 draws an empty tooltip box over the card (#359).
     let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu.clone()))
         .with_icon(icon)
+        .with_tooltip("RIGStats")
         .build()
         .expect("tray icon");
 
