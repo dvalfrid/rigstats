@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using SensorSidecar;
 using SensorSidecar.Control;
 using SensorSidecar.Control.Lighting;
@@ -54,6 +55,9 @@ builder.Services.AddWindowsService(options =>
 {
     options.ServiceName = "RIGStats Sensor";
 });
+// The host's own warnings and errors (a worker that failed, a slow stop) in
+// rigstats-sensor.log too, not only the Windows event log (#378).
+builder.Logging.AddProvider(new SidecarLoggerProvider());
 
 // HardwareHost owns the single LHM Computer instance and its lock — resolved
 // as IHardwareHost by SensorWorker/providers, and separately started/stopped

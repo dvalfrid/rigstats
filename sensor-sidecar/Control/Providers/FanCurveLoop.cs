@@ -21,7 +21,7 @@ public abstract record FanEvent
 /// what the dashboard displays, and keep updating with no client connected),
 /// evaluates every header `FanProvider` currently has active, and enforces
 /// the critical-temperature override before writing anything.
-public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : BackgroundService
+public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : GuardedBackgroundService
 {
     private static readonly TimeSpan TickInterval = TimeSpan.FromSeconds(1);
 
@@ -42,7 +42,7 @@ public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : 
     /// stops moving (#222). Starts at construction, so start-up isn't a stall.
     internal long LastTickMs => Volatile.Read(ref _lastTickMs);
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(TickInterval);
         while (await timer.WaitForNextTickAsync(stoppingToken))

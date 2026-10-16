@@ -337,7 +337,7 @@ escalation vector:
   an administrator can put a file there; the signer comparison catches a
   mismatched install, it does not validate the signature.
   A refused client is just closed. The service logs a refusal when its reason
-  changes or every 10 minutes, with the count in between (`RefusalLog`); the
+  changes or every 10 minutes, with the count in between (`RepeatLog`); the
   app treats a close before `hello` is answered as a refusal, backs off
   2 s → 60 s, and the Control Center says "Refused by the service" (#231).
 - Pipe names can't be taken over: the service creates each name with
@@ -352,9 +352,20 @@ escalation vector:
   by the service-side clamps (CPU limits only lower, Curve Optimizer within its
   range behind the boot-crash guard, fan curves with the critical-temperature
   override intact); no request takes a file path.
-- Strict method allowlist; requests are deserialized into typed parts.
+- Strict method allowlist; requests are deserialized into typed parts. A
+  parameter that is missing or of the wrong kind is answered `bad_request`
+  (#378). A request line is at most 256 KB (`BoundedLineReader`, the same cap
+  the app puts on a frame); a longer one ends the connection. An IP address
+  from the client (`hue_discover`, `hue_pair`) must parse as one, and client
+  text goes into the log without control characters (`Printable`).
   Unknown JSON fields are **ignored**, not rejected (System.Text.Json's
   default in `ControlJson.Options`) — the app and service ship together.
+- Debug builds of the service accept any client (`PipeClientVerifier`), so
+  while `dev-sidecar.ps1 -Live` runs, any process of the interactive user can
+  drive the hardware through the pipe. Only on a developer's own machine.
+- The Hue Bridge's certificate check returns each TLS handshake's own verdict
+  (`HueBridge.Accept`); one client can run two handshakes at once, and a
+  verdict read back from shared state could be the other one's (#378).
 - All numeric values clamped against probed limits in the service.
 - State writable only by the service: `DataDirectory.EnsureSecure` runs first
   thing at start-up and gives `%ProgramData%\se.codeby.rigstats` protected

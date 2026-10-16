@@ -180,6 +180,31 @@ public class HueTests
     }
 
     [Fact]
+    public void Each_handshake_returns_its_own_verdict_not_the_shared_record()
+    {
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var forged = new CertificateRequest("CN=001788fffe000001", key, HashAlgorithmName.SHA256)
+            .CreateSelfSigned(DateTimeOffset.UtcNow.AddDays(-1), DateTimeOffset.UtcNow.AddYears(1));
+        var check = new HueBridge.TlsCheck();
+
+        // Many handshakes on one client at once (#378): every forged one is
+        // refused, whatever another handshake last wrote into the record.
+        var accepted = 0;
+        Parallel.For(0, 200, i =>
+        {
+            if (i % 2 == 0)
+            {
+                check.Refusal = null; // what an accepted handshake leaves behind
+                return;
+            }
+            if (HueBridge.Accept(check, forged, null, "001788fffe000001"))
+                Interlocked.Increment(ref accepted);
+        });
+
+        Assert.Equal(0, accepted);
+    }
+
+    [Fact]
     public void Unpaired_link_has_no_devices_and_says_so()
     {
         var link = new HueLink(Path.Combine(Path.GetTempPath(), $"rigstats-hue-{Guid.NewGuid():N}.json"));

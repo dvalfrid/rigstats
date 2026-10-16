@@ -128,7 +128,7 @@ Do not run `dotnet format` yet: `.editorconfig` has no `[*.cs]` section, so it w
 
 ### C# error handling and logging
 
-- A `BackgroundService` must never let an exception escape `ExecuteAsync` — the default `StopHost` behaviour takes telemetry and fan control down with it. Catch, log, back off (see `ControlPipeWorker.AcceptLoopAsync`).
+- A background worker derives from `GuardedBackgroundService` (`RunAsync`), not `BackgroundService`: an exception escaping `ExecuteAsync` stops the host (the default `StopHost`), taking telemetry and fan control down with it. The base class logs it (throttled by `RepeatLog`) and starts the worker again. Expected failures are still handled where they happen (see `ControlPipeWorker.AcceptLoopAsync`, which keeps its listening pipe instance open).
 - A broad `catch` needs a comment saying why (typically: best-effort release, one provider must not stop the rest).
 - Log through `SidecarLog.Log("[area] …")`: the message for an explained failure, `e.ToString()` (with stack) for an unexpected one.
 - P/Invoke: `SafeHandle`, `SetLastError = true`, and a comment on what the call is for. Keep FFI in its own class (`HidDevice`, `PawnIoModule`, `AdlxGpuPower`).

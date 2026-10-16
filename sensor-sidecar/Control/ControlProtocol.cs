@@ -344,3 +344,7 @@ public sealed class ControlEventMessage
     public string Event { get; init; } = "";
     public object? Data { get; init; }
 }
+
+/// A control-pipe request that is wrong in itself — a parameter missing or of
+/// the wrong kind: answered `bad_request`, logged without a stack (#378).
+public sealed class BadRequestException(string message) : Exception(message);
