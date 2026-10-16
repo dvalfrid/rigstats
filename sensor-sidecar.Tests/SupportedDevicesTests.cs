@@ -1,3 +1,4 @@
+using SensorSidecar.Control;
 using SensorSidecar.Control.Lighting;
 using Xunit;
 
@@ -41,23 +42,39 @@ public class SupportedDevicesTests
     }
 
     [Fact]
-    public void SupportedDevices_website_table_matches_the_model_tables()
+    public void SupportedDevices_website_table_matches_the_model_tables() =>
+        WebsiteTableMatches(Start, End, LightingCatalog.HtmlRows());
+
+    [Fact]
+    public void Battery_website_table_matches_the_code_that_reads_them() =>
+        WebsiteTableMatches("<!-- battery-devices:start -->\n", "<!-- battery-devices:end -->", BatteryCatalog.HtmlRows());
+
+    private static void WebsiteTableMatches(string startMarker, string endMarker, string expected)
     {
         var path = Path.Combine(RepoRoot(), "website", "index.html");
         var html = Normalize(File.ReadAllText(path));
-        var start = html.IndexOf(Start, StringComparison.Ordinal);
-        var end = html.IndexOf(End, StringComparison.Ordinal);
-        Assert.True(start >= 0 && end > start, "website/index.html lacks the supported-devices markers.");
+        var start = html.IndexOf(startMarker, StringComparison.Ordinal);
+        var end = html.IndexOf(endMarker, StringComparison.Ordinal);
+        Assert.True(start >= 0 && end > start, $"website/index.html lacks the {startMarker.Trim()} markers.");
 
-        var current = html[(start + Start.Length)..end];
-        var expected = LightingCatalog.HtmlRows();
+        var current = html[(start + startMarker.Length)..end];
         if (Update && current != expected)
         {
-            File.WriteAllText(path, html[..(start + Start.Length)] + expected + html[end..]);
+            File.WriteAllText(path, html[..(start + startMarker.Length)] + expected + html[end..]);
             current = expected;
         }
 
         Assert.Equal(expected, current);
+    }
+
+    [Fact]
+    public void Battery_list_marks_only_verified_receivers_as_verified()
+    {
+        var rows = BatteryCatalog.All();
+
+        Assert.Contains(rows, r => r.Name == "Logitech devices on a Bolt receiver" && r.Status == LightingCatalog.Verified + " (Logi M650)");
+        Assert.Contains(rows, r => r.Name == "Logitech devices on a Unifying receiver" && r.Status == BatteryCatalog.FromSolaar);
+        Assert.Contains(rows, r => r.Name == "ROG Delta II" && r.Status == LightingCatalog.Verified);
     }
 
     [Fact]

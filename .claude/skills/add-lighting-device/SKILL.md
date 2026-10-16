@@ -30,7 +30,7 @@ Add the product id to the family's model table (`AsusMonitorDevice.Models`, `Asu
 $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices; Remove-Item Env:RIGSTATS_UPDATE_SUPPORTED_DEVICES
 ```
 
-This rewrites `docs/supported-devices.md` and the table in `website/index.html`; commit both. Without it `SupportedDevicesTests` fails.
+This rewrites `docs/supported-devices.md` and the two tables in `website/index.html` (lighting, and battery from `BatteryCatalog` — a model with a battery shows there too); commit both. Without it `SupportedDevicesTests` fails.
 
 ## Finish
 

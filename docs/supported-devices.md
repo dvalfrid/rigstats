@@ -1,9 +1,11 @@
-# Supported lighting devices
+# Supported devices
 
 <!-- Generated from the sensor sidecar's model tables by LightingCatalog — do not edit by hand.
      Regenerate: $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices -->
 
-RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; **From Gear Link, not yet verified**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; [report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.
+RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or other software needed. **Verified on hardware**: seen working on real hardware. **From OpenRGB, not yet verified**: same protocol as a verified device, listed from OpenRGB's device list (read as documentation) — it should work; **From Gear Link, not yet verified**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; [report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.
+
+## Lighting
 
 | Device | Type | USB id | Status | Notes |
 |---|---|---|---|---|
@@ -72,3 +74,50 @@ RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other so
 | Philips Hue lights, through a Hue Bridge (square, v2) | Room lights | — (network) | Verified on hardware | Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second) |
 
 Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong write can damage the hardware). A device that isn't listed: the diagnostics export's `lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers and the mice paired to them — attach it to a [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml).
+
+## Battery
+
+The PERIPHERALS panel and the tray icon's hover card show the battery of these devices, read every 20 s. **From Solaar, not yet verified**: built from Solaar's implementation of Logitech's protocol, read as documentation.
+
+| Device | Type | USB id | Status | Notes |
+|---|---|---|---|---|
+| ROG Delta II | Headset | 1AFA | Verified on hardware | Battery and charging, through its 2.4 GHz dongle |
+| ROG Delta II (KJP) | Headset | 1D41 | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
+| ROG Delta II (PBZ) | Headset | 1E6B | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
+| ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
+| ROG Azoth | Keyboard | 1A83 | Verified on hardware | Battery and charging |
+| ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Battery and charging |
+| ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Battery and charging |
+| ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Battery and charging |
+| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From OpenRGB, not yet verified | Battery and charging |
+| ROG Azoth 96 HE / Lite | Keyboard | 1C10, 1C11, 1C12 | From Gear Link, not yet verified | Battery and charging |
+| ROG Azoth Extreme | Keyboard | 1B3F, 1B40, 1B42 | From Gear Link, not yet verified | Battery and charging |
+| ROG Azoth Extreme Edition 20 | Keyboard | 1DA2, 1DA3, 1DA4 | From Gear Link, not yet verified | Battery and charging |
+| ROG Azoth Extreme Special Edition | Keyboard | 1CEF, 1CF0, 1CF1 | From Gear Link, not yet verified | Battery and charging |
+| ROG Azoth X | Keyboard | 1C25 | From Gear Link, not yet verified | Battery and charging |
+| ROG Falcata | Keyboard | 1C2F, 1C31 | From Gear Link, not yet verified | Battery and charging |
+| ROG Strix Morph 96 Wireless | Keyboard | 1CE8, 1CE9, 1CEA | From Gear Link, not yet verified | Battery and charging |
+| ROG Strix Morph 96 Wireless (PBZ) | Keyboard | 1E5B, 1E5C, 1E5D | From Gear Link, not yet verified | Battery and charging |
+| ROG Strix Morph 96 X Wireless | Keyboard | 1E0A, 1E0B, 1E0C | From Gear Link, not yet verified | Battery and charging |
+| ROG Strix Scope II 96 Wireless | Keyboard | 1AAE, 1AAF, 1AB0 | From Gear Link, not yet verified | Battery and charging |
+| ROG Harpe Ace Aim Lab Edition | Mouse | 1A94 | Verified on hardware | Battery and charging, through the ROG Omni receiver |
+| ProArt Mouse MD301 | Mouse | 1CD3 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Gladius IV Ace | Mouse | 1DBF | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Gladius IV Ace Max | Mouse | 1E4F | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe Ace Extreme | Mouse | 1B69 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe Ace Mini | Mouse | 1B65 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe II Ace | Mouse | 1C6B | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe II Ace (PBZ) | Mouse | 1E4B | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe II Ace Mini | Mouse | 1E32 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe II Ace Mini Demon1 Edition | Mouse | 1E52 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe II Extreme Edition 20 | Mouse | 1D7C | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Keris II Ace | Mouse | 1B18 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Keris II Origin | Mouse | 1C0E | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Keris II Origin (KJP) | Mouse | 1D4E | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| ROG Spatha X 65K | Mouse | 1DE0 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
+| Any Bluetooth device whose battery Windows shows (Settings › Bluetooth & devices), any brand | Mouse, keyboard, headset, other | — (Bluetooth) | Verified on hardware (Logitech MX Anywhere 3 for Mac, Satechi M1 Mouse) | Battery only: Windows has no charging state for Bluetooth devices. Nothing is sent to the device |
+| Logitech devices on Bluetooth | Mouse, keyboard | — (Bluetooth) | Verified on hardware (MX Anywhere 3 for Mac, MX Mechanical Mini for Mac) | Battery and charging, asked in Logitech's HID++ protocol |
+| Logitech devices on a Bolt receiver | Mouse, keyboard | C548 (receiver) | Verified on hardware (Logi M650) | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
+| Logitech devices on a Unifying receiver | Mouse, keyboard | C52B, C532 (receiver) | From Solaar, not yet verified | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
+
+Not read: ROG mice on their own 2.4 GHz dongle or cable, Logitech Nano and Lightspeed receivers, and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show: the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found.

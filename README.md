@@ -363,10 +363,7 @@ Vendor-neutral (NVIDIA / AMD / Intel) and reads without elevation — no sensor 
 
 | Metric | Source |
 | --- | --- |
-| Battery level (%) per wireless device | Sensor service, read every 20 s from the device: ROG headsets (Delta II, Pelta), and ROG keyboards and mice on the ROG Omni receiver |
-| Battery level (%) of Logitech devices on a Bolt receiver | Sensor service, read every 20 s from the device in Logitech's HID++ protocol (Unifying receivers built the same way, not yet tried) |
-| Battery level (%) of Bluetooth devices | The level Windows itself reads and shows in Settings › Bluetooth & devices — any mouse, keyboard or headset that reports it; nothing is sent to the device |
-| Charging state | ROG devices, and Logitech devices on Bluetooth or a Bolt receiver (asked in Logitech's HID++ protocol — Windows doesn't expose charging for Bluetooth devices) |
+| Battery level (%) and charging per wireless device | Sensor service, every 20 s: from the device in its own protocol, or the level Windows shows for a Bluetooth device. Which devices: [supported devices › Battery](docs/supported-devices.md#battery) |
 | Connection (USB cable, Bluetooth, 2.4 GHz) | Windows HID path and product name — no device command; shown as a small icon |
 
 Colours follow the Battery panel's charge thresholds, and so does the low-battery notification (only while connected and discharging, one per device). Hovering the tray icon shows a small card with each device's battery in the same colours. Commands come from ASUS Gear Link's device data, cross-checked with G-Helper; devices nobody has tested yet are read the same way. A device that disconnects or stops answering is shown dimmed as "Not connected" at once, with its last level, for 10 minutes (Bluetooth mice drop their link when idle, so it doesn't flicker in and out), then drops off.
@@ -457,7 +454,7 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | [Setup Guide](docs/setup.md) | Full local dev setup, display profiles, installer build |
 | [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
 | [Control Center](docs/control-architecture.md) | Hardware control design, protocols, live testing |
-| [Supported lighting devices](docs/supported-devices.md) | Every lighting device RIGStats drives, verified or from OpenRGB |
+| [Supported devices](docs/supported-devices.md) | Every lighting device RIGStats drives and every device whose battery it shows, verified or not yet |
 | [Troubleshooting](docs/troubleshooting.md) | Common issues, sensor diagnostics |
 | [Changelog](CHANGELOG.md) | Full version history |
 | [Roadmap](ROADMAP.md) | Planned features and status |

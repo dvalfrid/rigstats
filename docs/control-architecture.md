@@ -1177,10 +1177,9 @@ receiver:
 - It shows in Peripherals with the 2.4 GHz icon.
 - The M650 runs on an AA battery, so charging wasn't seen.
 
-Not verified:
-- Unifying receivers: built from the same source, with no hardware to test on.
-- Devices that report only a coarse level (Unified Battery with a 0 % state of
-  charge): they show no reading, because no percentage is guessed.
+A device that reports only a coarse level (Unified Battery with a 0 % state
+of charge) shows no reading: no percentage is guessed. Which receivers are
+verified: [supported-devices.md](supported-devices.md#battery).
 
 ### Philips Hue (#215)
 

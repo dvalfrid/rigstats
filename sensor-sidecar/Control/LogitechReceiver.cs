@@ -44,12 +44,25 @@ public static class LogitechReceiver
 
     /// Solaar's `base_usb` receiver table: Bolt `C548`, Unifying `C52B` and
     /// `C532`. Other receivers (Nano, Lightspeed) aren't read.
-    public static Family? FamilyOf(ushort productId) => productId switch
+    private static readonly Dictionary<ushort, Family> Families = new()
     {
-        0xC548 => Family.Bolt,
-        0xC52B or 0xC532 => Family.Unifying,
-        _ => null,
+        [0xC548] = Family.Bolt,
+        [0xC52B] = Family.Unifying,
+        [0xC532] = Family.Unifying,
     };
+
+    public static IEnumerable<ushort> ProductIds => Families.Keys;
+
+    public static Family? FamilyOf(ushort productId) => Families.TryGetValue(productId, out var family) ? family : null;
+
+    /// Receivers seen working on real hardware, and with what — they drive
+    /// docs/supported-devices.md (`BatteryCatalog`).
+    public static readonly IReadOnlyDictionary<ushort, string> VerifiedWith = new Dictionary<ushort, string>
+    {
+        [0xC548] = "Logi M650",
+    };
+
+    public static IReadOnlySet<ushort> Verified { get; } = VerifiedWith.Keys.ToHashSet();
 
     /// A receiver's two HID++ collections, paired by their Windows instance
     /// (`…&mi_02&col01#b&6fd059d&0&0000#…` and `…&col02#b&6fd059d&0&0001#…`).
