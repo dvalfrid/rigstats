@@ -173,6 +173,62 @@ public class HardwareHostTests
     }
 
     [Fact]
+    public async Task A_hung_call_holding_the_hardware_does_not_hold_up_telemetry()
+    {
+        // Seen live (#374): a hung worker held the lock for its 8 s limit and
+        // the app reconnected every 1.2 s meanwhile. Now telemetry gets the
+        // last sample, with its age, right away.
+        long now = 10_000;
+        using var gate = new ManualResetEventSlim();
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        await host.GetTelemetryLineAsync(CancellationToken.None);
+
+        hardware.Gate = gate;
+        hardware.Entered.Reset();
+        var hung = Task.Run(() => host.SetFan("/lpc/x/0/control/0", 40));
+        hardware.Entered.Wait();
+        now += 2_000;
+
+        var started = DateTime.UtcNow;
+        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(2), "telemetry waited for the hung call");
+        Assert.Equal(2_000, line.GetProperty("sample_age_ms").GetInt64());
+        gate.Set();
+        await hung;
+    }
+
+    [Fact]
+    public async Task The_client_whose_request_starts_a_hanging_sample_still_gets_a_line()
+    {
+        // Seen live (#374): with one app connected, its own request is the
+        // one that samples — and it hung with the worker. The sample now runs
+        // in the background; the request gets the last line with its age.
+        long now = 10_000;
+        using var gate = new ManualResetEventSlim();
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        await host.GetTelemetryLineAsync(CancellationToken.None);
+
+        hardware.Gate = gate; // the next sample hangs
+        now += 1_500;
+        var started = DateTime.UtcNow;
+        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1), "the request waited for the hanging sample");
+        Assert.Equal(1_500, line.GetProperty("sample_age_ms").GetInt64());
+
+        // The worker answers again: the next request gets a live line.
+        gate.Set();
+        hardware.Gate = null;
+        now += 1_000;
+        await Task.Delay(100);
+        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.False(live.TryGetProperty("sample_age_ms", out _));
+    }
+
+    [Fact]
     public async Task Without_any_sample_yet_telemetry_fails()
     {
         var hardware = new FakeHardware { SampleFails = () => new InvalidOperationException("not started") };

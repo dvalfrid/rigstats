@@ -87,6 +87,9 @@ public sealed class SensorWorker(
     // the dashboard without data (#232).
     internal const int MaxClients = 8;
 
+    /// One telemetry line per client per second.
+    internal const int LineIntervalMs = 1000;
+
     protected override async Task RunAsync(CancellationToken stoppingToken)
     {
         // Log a run of busy-instance failures once, not every 2 s retry.
@@ -168,7 +171,9 @@ public sealed class SensorWorker(
             {
                 // Cancellable: a client that stopped reading blocks the write
                 // (unbuffered pipe) and must not hold up service shutdown.
+                var sampleStarted = Environment.TickCount64;
                 var line = await _hardwareHost.GetTelemetryLineAsync(stoppingToken);
+                var sampleMs = Environment.TickCount64 - sampleStarted;
                 using (var write = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
                 {
                     write.CancelAfter(_writeTimeout);
@@ -184,7 +189,13 @@ public sealed class SensorWorker(
                 }
                 if (_clientErrors.Reset())
                     SidecarLog.Log("[rigstats-sensor] Telemetry works again.");
-                await Task.Delay(1000, stoppingToken);
+                // A second between lines, less the time the sample took: the
+                // app gives up on a read after 1.2 s, and the hardware being
+                // busy (telemetry's 300 ms wait, a restarting worker) must not
+                // push the next line past that (seen live, #374). The time the
+                // write waited for the client still counts, so a client that
+                // reads slower than a line a second sets the pace (#232).
+                await Task.Delay(TimeSpan.FromMilliseconds(Math.Max(0, LineIntervalMs - sampleMs)), stoppingToken);
             }
         }
         catch (IOException) { }

@@ -61,9 +61,16 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     // hardware anyway — a call stuck in a driver must not hang the stop.
     private static readonly TimeSpan CloseLockTimeout = TimeSpan.FromSeconds(5);
 
-    private SensorPayload? _latestPayload;
-    private string? _latestLine;
-    private long _latestAtMs;
+    // The last good sample, its line and when it was taken — one immutable
+    // snapshot, so telemetry can read it without the lock (#374).
+    private sealed record Latest(SensorPayload Payload, string Line, long AtMs);
+    private volatile Latest? _latest;
+
+    /// How long telemetry waits for the hardware before it serves the last
+    /// sample instead: a hung or restarting worker holds the lock for up to
+    /// its time limit, and the app gives up on a read after 1.2 s — it would
+    /// reconnect over and over meanwhile (seen live, #374).
+    internal static readonly TimeSpan TelemetryBusyWait = TimeSpan.FromMilliseconds(300);
 
     // Set under _hardwareLock by StopAsync; every locked path checks it so a
     // straggler (a telemetry client mid-request, the identify spin, the
@@ -117,26 +124,61 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         }
     }
 
+    /// The sample runs in the background: a telemetry client starts it (or
+    /// joins the one running) and waits at most `TelemetryBusyWait`. A hung or
+    /// restarting worker would otherwise hold the very client that asked —
+    /// the app gives up on a read after 1.2 s and reconnects (seen live,
+    /// #374). Until the first sample there is nothing older to send, so the
+    /// first request waits for it.
     public async Task<string> GetTelemetryLineAsync(CancellationToken ct)
     {
-        await _hardwareLock.WaitAsync(ct);
-        try
+        ThrowIfClosed();
+        var refresh = StartRefresh();
+        if (_latest is { } last)
         {
-            try
-            {
-                RefreshIfStale();
-                return _latestLine!;
-            }
-            catch (Exception) when (!_closed && _latestPayload is not null)
-            {
-                // No fresh sample (the worker is restarting): the last one,
-                // with its age, so the app can tell it isn't live (#374).
-                return Serialize(_latestPayload with { SampleAgeMs = _now() - _latestAtMs });
-            }
+            if (!refresh.IsCompleted)
+                await Task.WhenAny(refresh, Task.Delay(TelemetryBusyWait, ct));
+            ct.ThrowIfCancellationRequested();
+            ThrowIfClosed();
+            var latest = _latest!;
+            // Fresh, or the last one with its age — the app tells them apart.
+            return refresh.IsCompletedSuccessfully && _now() - latest.AtMs < SampleMaxAgeMs ? latest.Line : Aged(latest);
         }
-        finally
+        await refresh.WaitAsync(ct);
+        ThrowIfClosed();
+        return _latest!.Line;
+    }
+
+    private readonly object _refreshGate = new();
+    private Task _refresh = Task.CompletedTask;
+
+    /// The sample running now, or a new one when the cached one is stale; a
+    /// completed task when it is fresh. Its failure is the caller's to see
+    /// (the first request) — later ones send the last sample instead.
+    private Task StartRefresh()
+    {
+        lock (_refreshGate)
         {
-            _hardwareLock.Release();
+            if (!_refresh.IsCompleted)
+                return _refresh;
+            if (_latest is { } latest && _now() - latest.AtMs < SampleMaxAgeMs)
+                return Task.CompletedTask;
+            _refresh = Task.Run(async () =>
+            {
+                await _hardwareLock.WaitAsync();
+                try
+                {
+                    RefreshIfStale();
+                }
+                finally
+                {
+                    _hardwareLock.Release();
+                }
+            });
+            // Observed here: a failure nobody awaits must not surface as an
+            // unobserved task exception.
+            _ = _refresh.ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+            return _refresh;
         }
     }
 
@@ -146,7 +188,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         try
         {
             RefreshIfStale();
-            return _latestPayload!;
+            return _latest!.Payload;
         }
         finally
         {
@@ -204,16 +246,17 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     {
         ThrowIfClosed();
         var now = _now();
-        if (_latestPayload is not null && now - _latestAtMs < SampleMaxAgeMs)
+        if (_latest is { } latest && now - latest.AtMs < SampleMaxAgeMs)
             return;
-        _latestPayload = _hardware.Sample() with
+        var payload = _hardware.Sample() with
         {
             Peripherals = _peripherals?.Latest?.ToList(),
             ActiveProfile = _profiles?.ActiveProfile,
         };
-        _latestLine = Serialize(_latestPayload);
-        _latestAtMs = now;
+        _latest = new Latest(payload, Serialize(payload), now);
     }
+
+    private string Aged(Latest last) => Serialize(last.Payload with { SampleAgeMs = _now() - last.AtMs });
 
     private static string Serialize(SensorPayload payload) =>
         System.Text.Json.JsonSerializer.Serialize(payload, TelemetryJsonOptions);
