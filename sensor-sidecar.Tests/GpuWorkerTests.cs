@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using SensorSidecar.Control;
 using SensorSidecar.Control.Providers;
+using SensorSidecar.Control.Workers;
 using Xunit;
 
 namespace SensorSidecar.Tests;
@@ -79,7 +80,7 @@ public sealed class GpuWorkerTests : IDisposable
     /// A worker without a process: each request line is answered by
     /// `answer` — a line, a crash (output closes, exit code set) or nothing
     /// (a hang, until killed).
-    private sealed class ScriptedWorker : IGpuWorker
+    private sealed class ScriptedWorker : IWorker
     {
         private readonly BlockingCollection<string?> _output = new();
         private readonly Func<GpuWorkerRequest, Reply> _answer;
@@ -157,7 +158,7 @@ public sealed class GpuWorkerTests : IDisposable
         public List<ScriptedWorker> Started { get; } = [];
         public Exception? StartFailure { get; set; }
 
-        public IGpuWorker Start()
+        public IWorker Start()
         {
             if (StartFailure is not null)
                 throw StartFailure;
@@ -769,7 +770,7 @@ public sealed class GpuWorkerTests : IDisposable
     public async Task A_real_worker_process_carries_utf8_lines_without_a_byte_order_mark()
     {
         // findstr "^" echoes every line it reads: what we write comes back as is.
-        using var worker = ProcessGpuWorker.Start(Cmd, "/d /c findstr \"^\"", _ => { });
+        using var worker = WorkerProcess.Start(Cmd, "/d /c findstr \"^\"", "gpu-worker", _ => { });
         const string line = "{\"name\":\"AMD Radeon™ RX 9070 XT\"}";
 
         worker.Input.WriteLine(line);
@@ -782,7 +783,7 @@ public sealed class GpuWorkerTests : IDisposable
     [Fact]
     public void A_real_worker_that_exits_is_reported_with_its_exit_code()
     {
-        using var client = new GpuWorkerClient(() => ProcessGpuWorker.Start(Cmd, "/d /c exit 3", _ => { }), Marker, Boot, Drivers);
+        using var client = new GpuWorkerClient(() => WorkerProcess.Start(Cmd, "/d /c exit 3", "gpu-worker", _ => { }), Marker, Boot, Drivers);
 
         var e = Assert.Throws<GpuDriverCrashedException>(() => client.Adapters());
 
@@ -797,7 +798,7 @@ public sealed class GpuWorkerTests : IDisposable
         using var client = new GpuWorkerClient(
             () =>
             {
-                var worker = ProcessGpuWorker.Start(Cmd, "/d /c ping -n 30 127.0.0.1 >nul", _ => { });
+                var worker = WorkerProcess.Start(Cmd, "/d /c ping -n 30 127.0.0.1 >nul", "gpu-worker", _ => { });
                 pid = worker.Id;
                 return worker;
             },
@@ -815,7 +816,7 @@ public sealed class GpuWorkerTests : IDisposable
         // The service's job handle closes when the service ends, however it
         // ends; closing it here stands in for that.
         var job = new KillOnCloseJob();
-        using var worker = ProcessGpuWorker.Start(Cmd, "/d /c ping -n 30 127.0.0.1 >nul", _ => { });
+        using var worker = WorkerProcess.Start(Cmd, "/d /c ping -n 30 127.0.0.1 >nul", "gpu-worker", _ => { });
         var process = System.Diagnostics.Process.GetProcessById(worker.Id);
         Assert.True(job.Add(process));
         Assert.False(worker.HasExited);
@@ -835,7 +836,7 @@ public sealed class GpuWorkerTests : IDisposable
     public void A_real_worker_forwards_its_log_lines_without_their_timestamp()
     {
         var lines = new ConcurrentQueue<string>();
-        using var worker = ProcessGpuWorker.Start(Cmd, "/d /c echo [2026-10-15 19:00:00 +02:00] hello from the worker 1>&2", lines.Enqueue);
+        using var worker = WorkerProcess.Start(Cmd, "/d /c echo [2026-10-15 19:00:00 +02:00] hello from the worker 1>&2", "gpu-worker", lines.Enqueue);
 
         Assert.True(worker.WaitForExit(TimeSpan.FromSeconds(5)));
         SpinWait.SpinUntil(() => !lines.IsEmpty, TimeSpan.FromSeconds(2));
