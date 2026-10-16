@@ -19,7 +19,7 @@ Loaded when working in this folder. Everything here runs as **LocalSystem** and 
 
 ## Testing without hardware
 
-Claude never runs anything against real hardware. Tests use fakes behind interfaces (`FakeFanHeader`, `IPawnIoModule`, `ILightingDevice`); `--dry-run` makes applies log-only. Live testing is done by the owner with `tools\dev-sidecar.ps1 -Live` in an elevated window — see "Live testing on real hardware" in `docs/control-architecture.md`. For new lighting devices run `/add-lighting-device`, for new providers `/add-control-provider`. A new `.cs` file must also be added to the `<Compile Include=…>` list in `sensor-sidecar.Tests/sensor-sidecar.Tests.csproj`.
+Claude never runs anything against real hardware. Tests use fakes behind interfaces (`FakeFanHeader`, `IPawnIoModule`, `ILightingDevice`); `--dry-run` makes applies log-only. Live testing is done by the owner with `tools\dev-sidecar.ps1 -Live` in an elevated window — see "Live testing on real hardware" in `docs/control-architecture.md`. For new lighting devices run `/add-lighting-device`, for new providers `/add-control-provider`.
 
 ## What lives here
 

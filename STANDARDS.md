@@ -116,8 +116,9 @@ Every dialog is built from the design system in `src-egui/src/windows/ui_kit.rs`
 |---|---|
 | Build | `dotnet build sensor-sidecar/sensor-sidecar.csproj` |
 | Test (xUnit + NSubstitute) | `dotnet test sensor-sidecar.Tests/sensor-sidecar.Tests.csproj` (also part of `cargo xtask verify`) |
+| Format | `cargo xtask fmt` (Rust and C#; `dotnet format whitespace` per `.editorconfig`); `cargo xtask fmt-check` in `verify` |
 
-Do not run `dotnet format` yet: `.editorconfig` has no `[*.cs]` section, so it would re-indent the 4-space C# code to the 2-space default.
+Analyzers (#381): both projects build with the SDK's `latest-recommended` rule set and **warnings as errors** (`Directory.Build.props`), like clippy's `-D warnings`. A rule that is wrong for this code is turned off in `.editorconfig` with the reason beside it, not suppressed at the call site. Compare strings with an explicit `StringComparison` and format or parse numbers and dates with `CultureInfo.InvariantCulture` — the service runs with the machine's locale.
 
 ### C# style
 
@@ -141,8 +142,7 @@ Do not run `dotnet format` yet: `.editorconfig` has no `[*.cs]` section, so it w
 ### C# tests
 
 - Hardware sits behind an interface (`IPawnIoModule`, `ILightingDevice`, `FakeFanHeader`) so providers are tested without it. Never call real hardware from a test.
-- The test project compiles the sidecar's sources from an explicit list (the sidecar is a single-file exe a test project can't reference): **a new `.cs` file in `sensor-sidecar/` must be added to `sensor-sidecar.Tests.csproj`'s `<Compile Include=…>` list**, or the tests fail with "type not found" while the sidecar itself builds.
-- Data shared with the Rust side goes in `sensor-sidecar.Tests/contract/`, checked by a test on each side.
+- The test project compiles every `.cs` file of `sensor-sidecar/` except `Program.cs` by glob (the sidecar is a single-file exe a test project can't reference, #381) — a new file needs nothing more.- Data shared with the Rust side goes in `sensor-sidecar.Tests/contract/`, checked by a test on each side.
 - Real-hardware captures go in `sensor-sidecar.Tests/fixtures/` (auto-discovered by `FixtureTests`; see `/sensor-fixture`). Lighting models' `Verified` flags generate `docs/supported-devices.md`; `SupportedDevicesTests` fails on drift — regenerate with `RIGSTATS_UPDATE_SUPPORTED_DEVICES=1`.
 
 ---

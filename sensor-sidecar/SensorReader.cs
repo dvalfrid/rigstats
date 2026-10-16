@@ -176,8 +176,8 @@ public static class SensorReader
     private static void ExtractDisk(IHardware hw, Dictionary<string, float> diskTemps)
     {
         var id = hw.Identifier.ToString();
-        if (!id.StartsWith("/nvme/") && !id.StartsWith("/hdd/") && !id.StartsWith("/ata/") &&
-            !id.StartsWith("/scsi/") && !id.StartsWith("/ssd/"))
+        if (!id.StartsWith("/nvme/", StringComparison.Ordinal) && !id.StartsWith("/hdd/", StringComparison.Ordinal) && !id.StartsWith("/ata/", StringComparison.Ordinal) &&
+            !id.StartsWith("/scsi/", StringComparison.Ordinal) && !id.StartsWith("/ssd/", StringComparison.Ordinal))
             return;
 
         float? highest = null;
@@ -199,7 +199,7 @@ public static class SensorReader
         foreach (var s in hw.Sensors)
         {
             var id = s.Identifier.ToString();
-            if (!id.StartsWith("/memory/") || !id.EndsWith("/temperature/0")) continue;
+            if (!id.StartsWith("/memory/", StringComparison.Ordinal) || !id.EndsWith("/temperature/0", StringComparison.Ordinal)) continue;
             if (s.Value is null) continue;
             if (s.Value > (max ?? float.MinValue)) max = s.Value;
         }
@@ -213,7 +213,7 @@ public static class SensorReader
     {
         foreach (var sub in hw.SubHardware)
         {
-            if (!sub.Identifier.ToString().StartsWith("/lpc/")) continue;
+            if (!sub.Identifier.ToString().StartsWith("/lpc/", StringComparison.Ordinal)) continue;
             mbChip ??= sub.Name;
 
             foreach (var s in sub.Sensors)
@@ -229,7 +229,7 @@ public static class SensorReader
                         break;
                     case SensorType.Voltage:
                         // Exclude generic unmapped slots — only named rails
-                        if (s.Value > 0.1f && !s.Name.StartsWith("Voltage #"))
+                        if (s.Value > 0.1f && !s.Name.StartsWith("Voltage #", StringComparison.Ordinal))
                             voltages.Add(new MbVoltage(s.Name, s.Value.Value));
                         break;
                 }

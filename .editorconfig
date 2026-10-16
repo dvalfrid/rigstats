@@ -13,3 +13,25 @@ trim_trailing_whitespace = false
 
 [*.toml]
 indent_size = 2
+
+[*.cs]
+indent_size = 4
+end_of_line = lf
+
+# Analyzer rules that don't fit this code (#381) — the rest of the recommended
+# set is on, and every warning fails the build (Directory.Build.props).
+# CA1859 asks for concrete types instead of IReadOnlyList/IEnumerable for
+#   speed; the interfaces are the intended contracts, the code runs at ~1 Hz.
+dotnet_diagnostic.CA1859.severity = none
+# CA1001 wants IDisposable on types holding a SemaphoreSlim or MemoryStream;
+#   neither holds an OS handle unless AvailableWaitHandle is used (it isn't),
+#   and the owners live as long as the service.
+dotnet_diagnostic.CA1001.severity = none
+# CA1716 flags names that are keywords in other .NET languages (a parameter
+#   called `on`); nothing here is consumed from Visual Basic.
+dotnet_diagnostic.CA1716.severity = none
+
+[sensor-sidecar.Tests/**.cs]
+# Test names are sentences with underscores
+# (`A_crash_turns_the_gpu_off_with_the_exit_code_and_is_remembered`).
+dotnet_diagnostic.CA1707.severity = none

@@ -20,8 +20,8 @@ fn main() {
             eprintln!("  build      — publish sidecar + build egui release binary");
             eprintln!("  test       — run Rust tests (backend + egui)");
             eprintln!("  clippy     — clippy with -D warnings");
-            eprintln!("  fmt        — format Rust code (modifies files)");
-            eprintln!("  fmt-check  — check Rust formatting without modifying");
+            eprintln!("  fmt        — format Rust and C# code (modifies files)");
+            eprintln!("  fmt-check  — check Rust and C# formatting without modifying");
             eprintln!("  setup      — install lefthook git hooks (run once after cloning)");
             eprintln!(
                 "  verify     — full pipeline (sidecar + tests + clippy + fmt-check + audit)"
@@ -100,6 +100,19 @@ fn task_fmt(check: bool) -> Result<(), String> {
         cmd.args(["fmt", "--manifest-path", manifest]);
         if check {
             cmd.args(["--", "--check"]);
+        }
+        run(&mut cmd)?;
+    }
+    // C# layout (#381): indentation, spacing and LF line ends per .editorconfig.
+    // Code rules are checked by the build itself (analyzers, warnings as errors).
+    for project in [
+        "sensor-sidecar/sensor-sidecar.csproj",
+        "sensor-sidecar.Tests/sensor-sidecar.Tests.csproj",
+    ] {
+        let mut cmd = Command::new("dotnet");
+        cmd.args(["format", "whitespace", project]);
+        if check {
+            cmd.arg("--verify-no-changes");
         }
         run(&mut cmd)?;
     }

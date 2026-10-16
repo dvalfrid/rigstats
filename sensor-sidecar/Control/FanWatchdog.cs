@@ -115,7 +115,8 @@ public sealed class FanWatchdog : IHostedService, IDisposable
             {
                 SidecarLog.Log($"[rigstats-control] Releasing fans after the stall failed: {e.Message}");
             }
-        }) { IsBackground = true, Name = "FanWatchdog release" };
+        })
+        { IsBackground = true, Name = "FanWatchdog release" };
         releasing.Start();
         if (!releasing.Join(_releaseLimit))
             SidecarLog.Log($"[rigstats-control] Releasing fans did not finish within {_releaseLimit.TotalSeconds:0} s.");

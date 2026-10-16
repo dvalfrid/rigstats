@@ -59,7 +59,7 @@ public static class SensorTreeLoader
                 if (currentHwSub is null)
                     continue;
                 var (type, id, name, _) = ParseFields(trimmed, "SUB");
-                Enum.TryParse<HardwareType>(type, out var ht);
+                var ht = Enum.TryParse<HardwareType>(type, out var parsed) ? parsed : default;
                 currentSubSensors = [];
                 currentHwSub.Add(BuildHardware(ht, name, id, currentSubSensors, []));
             }

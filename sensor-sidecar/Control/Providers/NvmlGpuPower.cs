@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -371,7 +372,7 @@ public sealed class NvmlGpuPower : IGpuPowerApi, IDisposable
         17 => "NVML_ERROR_OPERATING_SYSTEM",
         18 => "NVML_ERROR_LIB_RM_VERSION_MISMATCH",
         999 => "NVML_ERROR_UNKNOWN",
-        _ => result.ToString(),
+        _ => result.ToString(CultureInfo.InvariantCulture),
     };
 
     public void EndSession()
