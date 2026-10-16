@@ -39,22 +39,30 @@ if (DataDirectory.EnsureSecure(DataDirectory.DefaultPath) is { } insecure)
     SidecarLog.Log($"[rigstats-sensor] The data folder could not be secured ({insecure}) — running without hardware control.");
 }
 
-// Earlier crashes Windows recorded but this log couldn't (a native fault ends
-// the process before any handler runs, #242) — copied in once, with the
-// crash dumps written for them (#220). The dump folder is locked to
-// administrators before Windows ever writes into it.
-if (SidecarLog.FileEnabled)
-{
-    if (DataDirectory.EnsureDumpFolder(DataDirectory.DumpPath) is { } dumpFolderProblem)
-        SidecarLog.Log($"[rigstats-sensor] The crash dump folder could not be secured ({dumpFolderProblem}).");
-    LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath);
-}
+// The crash dump folder (#220) is locked to administrators before Windows
+// ever writes into it.
+if (SidecarLog.FileEnabled && DataDirectory.EnsureDumpFolder(DataDirectory.DumpPath) is { } dumpFolderProblem)
+    SidecarLog.Log($"[rigstats-sensor] The crash dump folder could not be secured ({dumpFolderProblem}).");
+
+// Nothing slow may run before host.Run() (#383): the service manager gives a
+// starting service 30 s to connect, and it connects inside Run(), before the
+// hosted services below are built. So the hardware is opened, the lighting
+// devices discovered and the event log read only after that.
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddWindowsService(options =>
 {
     options.ServiceName = "RIGStats Sensor";
 });
+
+// Earlier crashes Windows recorded but this log couldn't, read in the
+// background once the service has started (#242, #383).
+if (SidecarLog.FileEnabled)
+{
+    builder.Services.AddHostedService(_ => new BackgroundStartupTask("Reading earlier crashes",
+        () => LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath)));
+}
+
 // The host's own warnings and errors (a worker that failed, a slow stop) in
 // rigstats-sensor.log too, not only the Windows event log (#378).
 builder.Logging.AddProvider(new SidecarLoggerProvider());
@@ -79,7 +87,10 @@ builder.Services.AddSingleton<IControlProvider, PowerPlanProvider>();
 builder.Services.AddSingleton<ControlBroker>();
 builder.Services.AddSingleton<ProfileStore>();
 builder.Services.AddSingleton<IPipeClientVerifier, PipeClientVerifier>();
-builder.Services.AddSingleton(sp => new SafetyGuard(sp.GetServices<IControlProvider>(), dryRun));
+// Kept for the top-level finally below, once the host has built it — never
+// resolved before Run() (#383): building it builds every provider.
+SafetyGuard? safetyGuard = null;
+builder.Services.AddSingleton(sp => safetyGuard = new SafetyGuard(sp.GetServices<IControlProvider>(), dryRun));
 builder.Services.AddHostedService(sp => sp.GetRequiredService<SafetyGuard>());
 builder.Services.AddHostedService<ControlPipeWorker>();
 
@@ -167,43 +178,16 @@ builder.Services.AddSingleton<IControlProvider>(_ =>
 // devices like any other; the control pipe pairs it.
 builder.Services.AddSingleton(_ => new HueLink(Path.Combine(programData, "hue.json")));
 
-// Control Center phase 5 (#192): lighting — ASUS Aura USB controllers. Also
-// registered as itself for the control pipe's live preview, like FanProvider.
+// Control Center phase 5 (#192): lighting — every device LightingDiscovery
+// finds. Also registered as itself for the control pipe's live preview, like
+// FanProvider.
 builder.Services.AddSingleton(sp => new LightingProvider(
     Hid.Enumerate,
-    hid =>
-    {
-        // Every lighting device found; looked for again when devices change.
-        var devices = new List<ILightingDevice>();
-        if (AuraController.TryOpen(out var reason) is { } motherboard)
-            devices.Add(motherboard);
-        // ASUS Aura monitors and the monitor light bar (#212).
-        devices.AddRange(AsusMonitorDevice.Discover(hid));
-        // ASUS TUF-protocol keyboards — the ROG Azoth X via the Omni receiver
-        // or cable, the ROG Falchion Ace HFX (#213).
-        var keyboards = AsusKeyboardDevice.Discover(hid);
-        devices.AddRange(keyboards);
-        // ASUS headsets on the GearLink protocol — the ROG Delta II via its
-        // dongle. A headset switched off is asked again on later rescans.
-        var silent = new List<HidDeviceInfo>();
-        devices.AddRange(AsusHeadsetDevice.Discover(hid, silent));
-        // Any HID LampArray device (Windows Dynamic Lighting standard), any
-        // brand — except keyboards already driven by their own protocol above.
-        devices.AddRange(LampArrayDevice.Discover(
-            AsusKeyboardDevice.WithoutDirectKeyboards(hid, keyboards), LampArrayDevice.WindowsDynamicLightingOn));
-        // Philips Hue rooms and zones chosen to follow the rig — over the
-        // network, from the paired bridge.
-        devices.AddRange(sp.GetRequiredService<HueLink>().Devices());
-        return new LightingScan(devices, devices.Count > 0 ? "" : reason, RetryHeadsets(silent));
-    },
+    hid => LightingDiscovery.Scan(hid, sp.GetRequiredService<HueLink>()),
     LightingProvider.DetectConflict,
     dryRun,
-    // For the diagnostics export: what was found, and every HID collection
-    // seen, so unknown devices can be supported from a user's export.
-    (hid, devices, reason) => LightingDiagnostics.Write(
-        Path.Combine(programData, "lighting-devices.json"),
-        LightingDiagnostics.Build(hid, devices, reason, LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn(),
-            ProbeAsus(hid))),
+    (hid, devices, reason) => LightingDiscovery.WriteDiagnostics(
+        Path.Combine(programData, "lighting-devices.json"), hid, devices, reason),
     hue: sp.GetRequiredService<HueLink>()));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
@@ -214,22 +198,13 @@ builder.Services.AddHostedService<ActiveProfileApplier>();
 builder.Services.AddHostedService<PeripheralBatteryMonitor>();
 
 IHost host;
-SafetyGuard safetyGuard;
 try
 {
+    // Builds nothing yet: services are created when Run() starts them.
     host = builder.Build();
-    // Doc: "Release on stop | StopAsync and a top-level finally call
-    // ReleaseToFirmware() on all providers." StopAsync is covered by
-    // SafetyGuard's own IHostedService registration above; the finally below
-    // is the backstop for an unhandled exception escaping host.Run() itself.
-    // Resolved up front: Run() disposes the host's service provider on the
-    // way out.
-    safetyGuard = host.Services.GetRequiredService<SafetyGuard>();
 }
 catch (Exception e)
 {
-    // A provider that can't even be constructed: say which, then fail the
-    // start (the service manager retries).
     SidecarLog.Log($"[rigstats-sensor] Service failed to start: {e}");
     throw;
 }
@@ -239,17 +214,24 @@ try
 }
 catch (Exception e)
 {
-    // E.g. the hardware (LHM/PawnIO) not opening in a hosted service's start.
+    // E.g. a provider that can't be constructed, or the hardware (LHM/PawnIO)
+    // not opening in a hosted service's start.
     SidecarLog.Log($"[rigstats-sensor] Service stopped by an error: {e}");
     throw;
 }
 finally
 {
-    safetyGuard.ReleaseAllToFirmware();
+    // Doc: "Release on stop | StopAsync and a top-level finally call
+    // ReleaseToFirmware() on all providers." StopAsync is covered by
+    // SafetyGuard's own hosted-service registration; this is the backstop
+    // for an exception escaping Run() itself. Null when the host never got
+    // as far as building it — then no provider was built either.
+    safetyGuard?.ReleaseAllToFirmware();
 }
 
 // Reads ".NET Runtime" 1026 / "Application Error" 1000 entries since the last
-// one logged and writes this service's into its log; never fails the start.
+// one logged and writes this service's into its log. Here rather than in
+// Control/: the event log API is only referenced by the service itself.
 static void LogEarlierCrashes(string markPath, string dumpFolder)
 {
     try
@@ -295,26 +277,3 @@ static void LogEarlierCrashes(string markPath, string dumpFolder)
         SidecarLog.Log($"[rigstats-sensor] Earlier crashes not read from the event log: {e.Message}");
     }
 }
-
-// The ASUS receivers' read-only replies for the diagnostics file; never
-// fails the discovery it is written after.
-static System.Text.Json.Nodes.JsonArray? ProbeAsus(IReadOnlyList<HidDeviceInfo> hid)
-{
-    try
-    {
-        return OmniMouse.Probe(hid);
-    }
-    catch (Exception e)
-    {
-        SidecarLog.Log($"[rigstats-control] Lighting: ASUS receiver probe failed: {e.Message}");
-        return null;
-    }
-}
-
-// Asks the silent headset dongles again, until every headset has answered.
-static Func<LightingScan>? RetryHeadsets(List<HidDeviceInfo> silent) => silent.Count == 0 ? null : () =>
-{
-    var stillSilent = new List<HidDeviceInfo>();
-    var found = AsusHeadsetDevice.Discover(silent, stillSilent);
-    return new LightingScan(found, "", RetryHeadsets(stillSilent));
-};
