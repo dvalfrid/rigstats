@@ -250,10 +250,18 @@ workflow permissions below.
 
 ### Azure Trusted Signing
 
-The account is `rigstats-codesign`, the certificate profile is `RIGStats`, and
-the endpoint is `https://neu.codesigning.azure.net/` (North Europe). All three
-are written in `release.yml`. The app registration above needs the signer role
-on the certificate profile.
+Azure now calls it **Artifact Signing**: the portal shows the account as an
+"Artifact Signing Account", while `release.yml` still uses
+`azure/trusted-signing-action`. The account is `rigstats-codesign`, in resource
+group `rigstats-codesign`, and its certificate profile is `RIGStats`. The
+endpoint is `https://neu.codesigning.azure.net/` (North Europe). The account,
+profile and endpoint are written in `release.yml`.
+
+The app registration above needs the *Certificate Profile Signer* role, on the
+account or on the profile. To find which app registration it is: open the
+account → Access control (IAM) → Role assignments, and look for the entry of
+type "App" with that role. Its client secrets are under Entra ID → App
+registrations → that app → Certificates & secrets.
 
 **The signer's name must not change.** Today it is `CN=Code By AB, O=Code By
 AB, L=Vendelsö, S=Stockholm, C=SE`, from the profile's identity validation.
