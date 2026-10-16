@@ -50,7 +50,7 @@ whose `# 1.98.0` comment names the branch it came from — plus
 
 ### Supply chain
 
-`release.yml` holds the signing credentials, so what CI runs is pinned (#224):
+`release.yml`'s sign job holds the signing credentials, so what CI runs is pinned (#224):
 
 - **Actions** are pinned to full commit SHAs with the version as a comment
   (`uses: owner/repo@<sha> # v4.4.0`). A tag can be moved by its owner; a SHA
@@ -166,15 +166,28 @@ GitHub Release. They re-crawl/re-approve on their own schedule after that.
 
 Installer publishing is handled by `.github/workflows/release.yml`.
 
-It runs when a GitHub Release is published (or manually via `workflow_dispatch` with an existing tag) and:
+Release Please starts it with a dispatch on `main` once it has created the
+release: a release created with `GITHUB_TOKEN` triggers no workflow (#246). It
+also runs when a release, or a pre-release, is published by hand, and from Run
+workflow with an existing tag. It has three jobs, each with only
+what it needs (#249). They run on separate runners, so nothing the build runs
+can stay behind to read the signing secrets.
 
-- runs `cargo xtask verify`
-- runs `cargo xtask build`
-- **signs `rigstats.exe`, `rigstats-wallpaper.exe` and `rigstats-sensor.exe`** with Azure Trusted Signing in one step, **before** packaging, and checks that the app and the service share one signer. This is not just for SmartScreen: the service accepts Control Center connections only from the installed `rigstats.exe` signed by its own signer (`PipeClientVerifier`), so unsigned binaries in the installer would leave the Control Center dead for every user
-- builds the NSIS installer
-- **signs the installer with Azure Trusted Signing** (Authenticode / SmartScreen)
-- **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
-- uploads the `.exe` and `latest.json` to the GitHub Release
+1. **Build** — no secrets, read-only token. Runs `cargo xtask verify` and
+   `cargo xtask build` (the third-party code: crates, NuGet packages, build
+   scripts), then uploads the unsigned binaries as an artifact.
+2. **Sign And Package** — runs in the `release-signing` environment, the only
+   place the Azure secrets are, and **waits for the owner's approval** (the run
+   shows "Review deployments"). It:
+   - **signs `rigstats.exe`, `rigstats-wallpaper.exe` and `rigstats-sensor.exe`** in one step, **before** packaging, and checks that the app and the service share one signer. This is not just for SmartScreen: the service accepts Control Center connections only from the installed `rigstats.exe` signed by its own signer (`PipeClientVerifier`), so unsigned binaries in the installer would leave the Control Center dead for every user
+   - builds the NSIS installer from the signed binaries
+   - **signs the installer** (Authenticode / SmartScreen) and checks the signature
+3. **Publish** — the only job that may write to the release. It:
+   - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
+   - uploads the `.exe` and `latest.json` to the GitHub Release, puts the highlights on it, and starts the winget submission
+
+Until the approval, the release exists without an installer or `latest.json`,
+so the app offers no update yet.
 
 ### Winget
 
@@ -206,7 +219,7 @@ If the release build fails or needs to be re-run for an existing tag:
 2. Click `Run workflow`
 3. Enter the existing tag (e.g. `v1.27.0`)
 4. Untick "Submit this release to winget" if winget already has it or should wait
-5. Run
+5. Run, and approve the signing job when it asks
 
 Leave the "Use workflow from" dropdown on `main`.
 
@@ -218,14 +231,17 @@ the repo's GitHub settings on 2026-10-16.
 
 ### Secrets
 
-Settings → Secrets and variables → Actions → Repository secrets. `gh secret
-set <NAME> --repo dvalfrid/rigstats` prompts for the value, so it doesn't end
+The three `AZURE_*` secrets are **environment secrets** of `release-signing`
+(Settings → Environments → `release-signing`); only the signing job can read
+them. `WINGET_TOKEN` is a repository secret (Settings → Secrets and variables →
+Actions). `gh secret set <NAME> --repo dvalfrid/rigstats` (add `--env
+release-signing` for the Azure ones) prompts for the value, so it doesn't end
 up in shell history.
 
 | Secret | Used by | What it is | Expires |
 | --- | --- | --- | --- |
-| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml` (both sign steps) | Entra ID tenant and the app registration `rigstats-github-action`, which may sign with the Artifact Signing account (below) | — |
-| `AZURE_CLIENT_SECRET` | `release.yml` | A client secret of that app registration | 2028-03-22 (24 months; the client secret "github-actions", made 2026-03-22). See Entra ID → App registrations → `rigstats-github-action` → Certificates & secrets |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` | `release.yml`, the sign job | Entra ID tenant and the app registration `rigstats-github-action`, which may sign with the Artifact Signing account (below) | — |
+| `AZURE_CLIENT_SECRET` | `release.yml`, the sign job | A client secret of that app registration | 2028-03-22 (24 months; the client secret "github-actions", made 2026-03-22). See Entra ID → App registrations → `rigstats-github-action` → Certificates & secrets |
 | `WINGET_TOKEN` | `winget-submit.yml` | A classic personal access token of the owner's account with scope `public_repo`. `wingetcreate` pushes the manifest to the owner's fork `dvalfrid/winget-pkgs` and opens the PR against `microsoft/winget-pkgs` | 90 days. The current one (renewed 2026-10-16) ends 2027-01-14; the date is in the owner's calendar |
 
 `GITHUB_TOKEN` is GitHub's own token for each run; it needs no setup beyond the
@@ -237,7 +253,7 @@ workflow permissions below.
   token**. The scope stays; the old value stops working at once. Then `gh
   secret set WINGET_TOKEN`, and put the new expiry date in the calendar.
 - **`AZURE_CLIENT_SECRET`:** add a new client secret on the app registration,
-  `gh secret set AZURE_CLIENT_SECRET`, and delete the old one in Azure after a
+  `gh secret set AZURE_CLIENT_SECRET --env release-signing`, and delete the old one in Azure after a
   release has signed with the new one.
 
 **When one has run out:**
@@ -278,6 +294,17 @@ AB, L=Vendelsö, S=Stockholm, C=SE`, from the profile's identity validation.
 
 ### GitHub settings
 
+- **Environment `release-signing`** (Settings → Environments):
+  - required reviewer: the owner;
+  - deployment branches and tags: "Selected branches and tags" with the
+    branch `main` and the tag rule `v*`. Release Please starts every normal
+    release, and a manual re-run, as a dispatch on `main`
+    (`release-please.yml`); a release published by hand, such as a test
+    pre-release, runs on its tag. With `main` only, as #249 first said, a
+    hand-published release would be refused;
+  - the three `AZURE_*` secrets.
+  - If the environment is missing, GitHub creates an empty one on the first
+    run: no approval and no secrets, so **Sign binaries** fails.
 - **Ruleset "Protect Main"** (Settings → Rules) on `refs/heads/main`:
   - no deletion, no force push, linear history;
   - a pull request with 1 approval, and stale approvals dismissed on push;
