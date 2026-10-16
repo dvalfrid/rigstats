@@ -49,6 +49,11 @@ pub fn hide_window_async(hwnd: isize) {
     }
 }
 
+/// Whether the window exists and is visible. False if hwnd is 0.
+pub fn is_window_visible(hwnd: isize) -> bool {
+    hwnd != 0 && unsafe { winapi::um::winuser::IsWindowVisible(hwnd as HWND) } != 0
+}
+
 /// Whether one of this process's popup menus is open — the tray context
 /// menu (`TrackPopupMenu` windows have the system class `#32768`). Other
 /// apps' menus don't count.
