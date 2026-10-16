@@ -93,8 +93,11 @@ public class HardwareWorkerTests
 
         public void Kill()
         {
-            _killed.Set();
+            // Output closed first, like a killed process: released first, a
+            // hanging sample could still answer before the pipe closed — the
+            // caller then got a reading from a "killed" worker (seen on CI).
             End(-1);
+            _killed.Set();
         }
 
         public void Dispose() => Kill();
