@@ -13,6 +13,8 @@
 Hardware sensor data (GPU temp, CPU temp, fan speeds, voltages, disk temps) is
 collected by `rigstats-sensor.exe` — a self-contained .NET 10 executable that
 embeds `LibreHardwareMonitorLib` and streams readings over a Windows named pipe.
+LibreHardwareMonitor runs in a worker process of the service (the same exe with
+`--hardware-worker`), which the service restarts if a driver crashes it.
 
 The sidecar is installed and managed as a **Windows Service** (`rigstats-sensor`,
 LocalSystem, auto-start at boot). The NSIS installer registers it with `sc create`

@@ -144,9 +144,11 @@ Profiles are named `portrait-<size>` / `landscape-<size>` (landscape = transpose
 
 ```text
 rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
-    └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
-            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON,
-                several clients share one ≤1 Hz sample — SensorWorker.GetFreshLine)
+    ├─► rigstats-sensor.exe --hardware-worker  (child, restarted after a crash or hang, #374)
+    │       └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
+    ├─► rigstats-sensor.exe --gpu-worker  (child: ADLX/NVML for the GPU power limit, #370)
+    └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON,
+                several clients share one ≤1 Hz sample — HardwareHost.GetTelemetryLineAsync)
                     └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
 sysinfo crate (CPU load/freq, RAM, disk, network, processes)
 wmi crate (startup: GPU names, RAM spec/details, board, model, brand, ping target; per tick: battery)

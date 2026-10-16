@@ -42,7 +42,7 @@ Both install the same signed NSIS installer, which also registers the sensor sid
 
 ## How You Can Help
 
-RIGStats is built by one person. Its sensor readings have been checked on seven machines — AMD and Intel desktops, an ASUS ROG Zephyrus G14 and a Razer Blade, Radeon and GeForce cards (see [the sensor fixtures](sensor-sidecar.Tests/fixtures/)) — but the hardware control (fans, power limits, lighting) has mostly been tested on one PC: a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
+RIGStats' sensor readings have been checked on seven machines — AMD and Intel desktops, an ASUS ROG Zephyrus G14 and a Razer Blade, Radeon and GeForce cards (see [the sensor fixtures](sensor-sidecar.Tests/fixtures/)) — but the hardware control (fans, power limits, lighting) has mostly been tested on one PC: a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
 
 - **Test it on your hardware — no programming needed.** Install it, try the Control Center, and tell us what works and what doesn't. Wanted in particular:
   - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) takes two minutes
@@ -143,7 +143,7 @@ RIGStats is developed by one person with AI assistance (Anthropic's Claude) — 
 
 ## Architecture
 
-The sensor sidecar (`rigstats-sensor.exe`, .NET 10, LocalSystem Windows Service) embeds LibreHardwareMonitor and streams one JSON line per second over `\\.\pipe\rigstats-sensors`. The Rust backend reads that pipe alongside sysinfo (CPU/RAM/disk/network) and WMI (static hardware metadata at startup), then sends a `StatsPayload` to the egui UI thread each tick. The egui binary renders all panels and dialog windows natively — no WebView, no JavaScript at runtime.
+The sensor service (`rigstats-sensor.exe`, .NET 10, LocalSystem Windows Service) reads the hardware through LibreHardwareMonitor and streams one JSON line per second over `\\.\pipe\rigstats-sensors`. LibreHardwareMonitor and the graphics-driver libraries run in worker processes of the service, so a driver that crashes costs a restarted worker, not the service. The Rust backend reads that pipe alongside sysinfo (CPU/RAM/disk/network) and WMI (static hardware metadata at startup), then sends a `PollStats` to the egui UI thread each tick. The egui binary renders all panels and dialog windows natively — no WebView, no JavaScript at runtime.
 
 See [docs/architecture.md](docs/architecture.md) for module-level detail and [docs/setup.md](docs/setup.md) for the full local development setup. The lighting devices the Control Center drives are listed in [docs/supported-devices.md](docs/supported-devices.md).
 

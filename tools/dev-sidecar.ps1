@@ -3,8 +3,13 @@
 # Curve Optimizer, lighting). Run in an ELEVATED PowerShell:
 #   pwsh -File tools\dev-sidecar.ps1         -> dry-run: UI works, no hardware writes
 #   pwsh -File tools\dev-sidecar.ps1 -Live   -> real writes to the hardware
-#   ... -SidecarArgs --gpu-worker-crash-test -> extra sidecar arguments (debug:
-#       --gpu-worker-crash-test / --gpu-worker-hang-test, #370)
+#   ... -SidecarArgs --gpu-worker-crash-test -> extra sidecar arguments (debug
+#       builds): --gpu-worker-crash-test / --gpu-worker-hang-test (#370),
+#       --hardware-worker-crash-after <s> / --hardware-worker-hang-after <s> /
+#       --hardware-worker-crash-reading <hardware id prefix> (#374).
+#       An argument with a value is a list — run the script from a PowerShell
+#       prompt, not through `pwsh -File` (which passes 'a','b' as one string):
+#       .\tools\dev-sidecar.ps1 -Live -SidecarArgs '--hardware-worker-crash-after','30'
 # Use the DEBUG app with it: the release app only talks to the real service.
 # Stop with Ctrl+C: the dev sidecar hands everything back to the firmware, then
 # the installed rigstats-sensor service is started again. While it runs the
