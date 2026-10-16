@@ -8,6 +8,28 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.49.0](https://github.com/dvalfrid/rigstats/compare/v1.48.1...v1.49.0) (2026-10-16)
+
+
+### Features
+
+* **control:** log what is handed back to the firmware, and why ([#386](https://github.com/dvalfrid/rigstats/issues/386)) ([9dce146](https://github.com/dvalfrid/rigstats/commit/9dce1467d56fb6a610d5139af918484f34b70c20)), closes [#385](https://github.com/dvalfrid/rigstats/issues/385)
+* **peripherals:** battery of Logitech devices behind a Bolt or Unifying receiver ([#408](https://github.com/dvalfrid/rigstats/issues/408)) ([17f9236](https://github.com/dvalfrid/rigstats/commit/17f9236129a43e78a537428758354e5d1e651d67))
+* **problems:** every problem reported one way ([#377](https://github.com/dvalfrid/rigstats/issues/377)) ([57d5787](https://github.com/dvalfrid/rigstats/commit/57d5787035964c6321cc2b22a7c973654afb2acf))
+* **sidecar:** leave out hardware that keeps crashing the sensor reader, and say so ([#389](https://github.com/dvalfrid/rigstats/issues/389)) ([d0d7698](https://github.com/dvalfrid/rigstats/commit/d0d769802c3383bab0988c6d9151cbab5ac555c8))
+* **sidecar:** run LibreHardwareMonitor in a worker process the service restarts ([#388](https://github.com/dvalfrid/rigstats/issues/388)) ([f8654e3](https://github.com/dvalfrid/rigstats/commit/f8654e3430f7d0d4c758308fbaf8ae5d4a7e604f))
+
+
+### Bug Fixes
+
+* **control:** don't make a risky SMU write when the boot-crash marker can't be written ([#391](https://github.com/dvalfrid/rigstats/issues/391)) ([33de361](https://github.com/dvalfrid/rigstats/commit/33de36100742adcd9050f192363edb8c6ee390b8)), closes [#390](https://github.com/dvalfrid/rigstats/issues/390)
+* **peripherals:** show a disconnected Bluetooth headset as not connected ([#412](https://github.com/dvalfrid/rigstats/issues/412)) ([558fecb](https://github.com/dvalfrid/rigstats/commit/558fecb1b555d1256c212318aae68219d89c76cf)), closes [#411](https://github.com/dvalfrid/rigstats/issues/411)
+* **sidecar:** one client or one failure can no longer take the whole service down ([#379](https://github.com/dvalfrid/rigstats/issues/379)) ([f6d1e3b](https://github.com/dvalfrid/rigstats/commit/f6d1e3b0fc2efea870743c03586e0e9838189dc9)), closes [#378](https://github.com/dvalfrid/rigstats/issues/378)
+* **sidecar:** open the hardware after the service has started, not before ([#384](https://github.com/dvalfrid/rigstats/issues/384)) ([b0cee04](https://github.com/dvalfrid/rigstats/commit/b0cee040dc56441ac05cc6af5b5581978b5c56b6)), closes [#383](https://github.com/dvalfrid/rigstats/issues/383)
+* **tray:** no empty tooltip box over the tray hover card ([#362](https://github.com/dvalfrid/rigstats/issues/362)) ([bffaf97](https://github.com/dvalfrid/rigstats/commit/bffaf970d24b3931865e3c38ac405fcfd232d8e0)), closes [#359](https://github.com/dvalfrid/rigstats/issues/359)
+* **tray:** only find RigStats' own windows, not other programs' ([#367](https://github.com/dvalfrid/rigstats/issues/367)) ([1e94c83](https://github.com/dvalfrid/rigstats/commit/1e94c836f01d1bc46a636775b74cef0a1e4aa0dd)), closes [#366](https://github.com/dvalfrid/rigstats/issues/366)
+* **tray:** show the hover card again after the menu closes ([#361](https://github.com/dvalfrid/rigstats/issues/361)) ([bee0d0e](https://github.com/dvalfrid/rigstats/commit/bee0d0ede65f3987345d6bdf151ffb098fdb1523))
+
 ## [1.48.1](https://github.com/dvalfrid/rigstats/compare/v1.48.0...v1.48.1) (2026-10-15)
 
 
