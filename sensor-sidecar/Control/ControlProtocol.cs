@@ -23,11 +23,13 @@ public interface IControlProvider
     /// `"power_plan"`, `"fan"`, `"cpu_limit"`, `"curve_opt"`, `"gpu"`, `"aura"`.
     string Domain { get; }
 
-    /// Probed once at start-up: what this provider can do on this machine.
+    /// What this provider can do on this machine — probed on every
+    /// `capabilities` request.
     CapabilitySet Probe();
 
-    /// Clamp/reject `part`'s value for this provider's domain against the
-    /// probed hard limits. Never trust UI-supplied values as-is.
+    /// Reject `part`'s value for this provider's domain if it can't be
+    /// applied. Never trust UI-supplied values as-is: `Apply` clamps what
+    /// passes to the probed hard limits at write time.
     ValidationResult Validate(ProfilePart part);
 
     /// Current hardware state for this domain, so a failed transaction can
@@ -196,11 +198,8 @@ public sealed class ValidationResult
 {
     public bool Ok { get; init; }
     public string? Reason { get; init; }
-    /// The value actually clamped to hard limits — may differ from what was requested.
-    public JsonNode? ClampedValue { get; init; }
 
-    public static ValidationResult Success(JsonNode? clampedValue = null) =>
-        new() { Ok = true, ClampedValue = clampedValue };
+    public static ValidationResult Success() => new() { Ok = true };
 
     public static ValidationResult Failure(string reason) =>
         new() { Ok = false, Reason = reason };
@@ -228,8 +227,8 @@ public sealed class FanHeaderConfig
     public required string Source { get; init; }
 
     /// `[[tempC, dutyPct], ...]`, sorted ascending by temperature.
-    /// `FanProvider.Validate` clamps duty values to the probed hardware
-    /// min/max and rejects an unsorted curve.
+    /// `FanProvider.Validate` rejects an unsorted curve; duty values are
+    /// clamped to the probed hardware min/max at write time.
     public required List<List<double>> Curve { get; init; }
 
     /// Minimum temperature swing (°C) before the evaluated duty is allowed

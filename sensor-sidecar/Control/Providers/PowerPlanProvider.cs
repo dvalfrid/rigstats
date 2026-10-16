@@ -192,7 +192,7 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
             return ValidationResult.Success(); // domain untouched — not this provider's concern.
 
         // Always fine: a missing plan resolves to a stand-in or is skipped.
-        return ValidationResult.Success(JsonValue.Create(part.PowerPlan));
+        return ValidationResult.Success();
     }
 
     public Snapshot Capture() =>
