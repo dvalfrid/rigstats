@@ -23,6 +23,7 @@ pub mod menu_icons;
 pub mod overlay;
 pub mod panels;
 pub mod poll;
+pub mod problems;
 pub mod ring;
 #[cfg(windows)]
 pub mod single_instance;

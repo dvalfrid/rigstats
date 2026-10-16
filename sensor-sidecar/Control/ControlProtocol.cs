@@ -127,6 +127,71 @@ public static class ProblemActionKind
     public const string CollectDiagnostics = "collect_diagnostics";
 }
 
+/// The service's problems for a domain that failed (#373), in the same plain
+/// words as the app's own (`src-egui/src/problems.rs`).
+public static class ControlProblems
+{
+    public const string TroubleshootingUrl = "https://github.com/dvalfrid/rigstats/blob/main/docs/troubleshooting.md";
+
+    public static ProblemAction Diagnostics() =>
+        new() { Kind = ProblemActionKind.CollectDiagnostics, Label = "Collect diagnostics…" };
+
+    public static ProblemAction ReadMore(string anchor) =>
+        new() { Kind = ProblemActionKind.OpenUrl, Label = "Read more", Target = TroubleshootingUrl + anchor };
+
+    /// What a domain is called on its page ("Fan control didn't answer").
+    public static string Name(string domain) => domain switch
+    {
+        "fan" => "Fan control",
+        "cpu_limit" => "CPU power limits",
+        "curve_opt" => "Curve Optimizer",
+        "gpu" => "The graphics card's power limit",
+        "aura" => "Lighting",
+        "power_plan" => "Power plans",
+        _ => domain,
+    };
+
+    /// A provider threw while asked what it can do.
+    public static Problem DidNotAnswer(string domain, string error) => new()
+    {
+        Id = $"{domain}_unavailable",
+        Severity = ProblemSeverity.Error,
+        Title = $"{Name(domain)} didn't answer",
+        Message = "RIGStats asked the hardware behind this page and got no answer, so it is off for now. "
+            + "Everything else keeps working. Restarting Windows usually brings it back; if it doesn't, send diagnostics.",
+        Actions = [Diagnostics()],
+        Detail = error,
+    };
+
+    /// The AMD SMU didn't answer a CPU power-limit read.
+    public static Problem SmuDidNotAnswer(string error) => new()
+    {
+        Id = "cpu_limit_smu",
+        Severity = ProblemSeverity.Attention,
+        Title = "The CPU didn't answer",
+        Message = "RIGStats couldn't read the CPU's power limits from its management unit (SMU), so CPU limits are off for now. "
+            + "Everything else keeps working. It usually answers again after a restart; if not, send diagnostics.",
+        Actions = [Diagnostics()],
+        Detail = error,
+    };
+
+    /// Another program owns the lighting ("Armoury Crate (LightingService)",
+    /// "OpenRGB"): the title names the program, the message the full name.
+    public static Problem LightingTakenBy(string other)
+    {
+        var program = other.Split(" (")[0];
+        return new()
+        {
+            Id = "aura_conflict",
+            Severity = ProblemSeverity.Attention,
+            Title = $"{program} controls the lighting",
+            Message = $"Only one program can drive the lighting at a time, and {other} has it. "
+                + $"Close {program} — or turn off its lighting — then reopen the Control Center to control the lighting here.",
+            Actions = [ReadMore("#control-center")],
+        };
+    }
+}
+
 public sealed class ValidationResult
 {
     public bool Ok { get; init; }

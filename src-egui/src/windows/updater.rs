@@ -504,13 +504,15 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, kind: Sect
 
 // ── Version group ─────────────────────────────────────────────────────────────
 
-/// The installed version and where an update stands, as rows.
+/// The installed version and where an update stands, as rows — a failed
+/// check or download as a problem above them (#373).
 fn version_group(ui: &mut egui::Ui, dc: &DialogColors, status: &UpdateStatus) {
-    let error_note = match status {
-        UpdateStatus::Error(e) => Some(e.as_str()),
-        _ => None,
-    };
-    ui_kit::group(ui, dc, None, error_note, |g| {
+    if let UpdateStatus::Error(e) = status {
+        if let Some(action) = ui_kit::notice(ui, dc, &crate::problems::update_failed(e)) {
+            crate::windows::open_problem_link(ui.ctx(), &action);
+        }
+    }
+    ui_kit::group(ui, dc, None, None, |g| {
         let installed = match status {
             UpdateStatus::JustUpdated { version } => version.clone(),
             _ => VERSION.to_owned(),

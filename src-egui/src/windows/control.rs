@@ -21,7 +21,7 @@ use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
     FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HueCaps, LampPart,
-    PowerScheme, Problem, Profile,
+    PowerScheme, Problem, Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -541,6 +541,32 @@ fn problem_notice(ui: &mut egui::Ui, dc: &DialogColors, problem: &Problem, open:
     }
 }
 
+/// Why the Control Center can't change anything, when it's a problem rather
+/// than a moment of connecting: refused (not the installed RIGStats), or the
+/// app and the service are different versions.
+fn connection_problem(control: &ControlState) -> Option<Problem> {
+    match (&control.protocol_mismatch, control.refused) {
+        (Some(mismatch), _) => Some(crate::problems::version_mismatch(mismatch)),
+        (None, true) => Some(crate::problems::service_refused()),
+        (None, false) => None,
+    }
+}
+
+/// Why lighting is unavailable, when it failed rather than being absent: the
+/// service's problem, or — from an older service that only flags the
+/// conflict — one built from its reason.
+fn lighting_problem(control: &ControlState) -> Option<Problem> {
+    control.domain_problem("aura").cloned().or_else(|| {
+        control.aura_unavailable().map(|reason| Problem {
+            id: "aura_conflict".into(),
+            severity: Severity::Attention,
+            title: "Another program controls the lighting".into(),
+            message: reason,
+            ..Default::default()
+        })
+    })
+}
+
 /// An Overview tile's summary and dot: the problem's title in its colour
 /// when the domain failed, else what the profile does.
 fn tile_summary(
@@ -641,7 +667,7 @@ fn curve_opt_card(
                              start small (−5 … −15) and test under load.",
                         )
                         .size(11.0)
-                        .color(WARN_TEXT),
+                        .color(ui_kit::C_ATTENTION),
                     )
                     .wrap(),
                 );
@@ -842,22 +868,25 @@ fn lighting_tab(
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     ui_state: &mut ControlUi,
     peripherals: &[Peripheral],
+    open: &OpenRequests,
 ) {
     let hue = control.hue_caps();
     let Some(caps) = caps else {
-        // Present but taken by another app — explained, not hidden.
-        let reason = match (control.aura_unavailable().as_deref(), &hue) {
-            (Some(blocked), _) => blocked.to_owned(),
-            (None, Some(_)) => {
-                "No RGB device found. Pair a Hue Bridge below to light the room.".to_owned()
-            }
-            (None, None) => "Lighting is unavailable.".to_owned(),
-        };
-        ui_kit::group(ui, dc, None, None, |g| {
-            g.block(|ui| {
-                ui.label(egui::RichText::new(reason).size(12.0).color(WARN_TEXT));
+        // Present but taken by another app — explained, not hidden (#373).
+        if let Some(problem) = lighting_problem(control) {
+            problem_notice(ui, dc, &problem, open);
+        } else {
+            let reason = if hue.is_some() {
+                "No RGB device found. Pair a Hue Bridge below to light the room."
+            } else {
+                "Lighting is unavailable."
+            };
+            ui_kit::group(ui, dc, None, None, |g| {
+                g.block(|ui| {
+                    ui.label(egui::RichText::new(reason).size(12.0).color(dc.muted));
+                });
             });
-        });
+        }
         if let Some(hue) = &hue {
             hue_card(
                 ui,
@@ -964,12 +993,9 @@ fn lighting_tab(
             let wireless = peripherals.iter().find(|p| p.id == device.id);
             g.row(&device.name, Some(&format!("{kind} · {zones}")), |ui| {
                 if device.blocked.is_some() || device.problem.is_some() {
-                    ui.label(
-                        egui::RichText::new("Needs attention")
-                            .size(12.0)
-                            .color(WARN_TEXT),
-                    )
-                    .on_hover_text(about);
+                    ui_kit::status(ui, ui_kit::C_ATTENTION, "Needs attention");
+                    ui.allocate_response(egui::Vec2::ZERO, egui::Sense::hover())
+                        .on_hover_text(about);
                 } else if let Some(p) = wireless {
                     battery_and_link(ui, dc, p, battery_levels);
                 }
@@ -994,18 +1020,17 @@ fn lighting_tab(
             }
             g.block(|ui| {
                 for w in &warnings {
-                    ui.label(egui::RichText::new(*w).size(11.0).color(WARN_TEXT));
+                    ui_kit::row_problem(ui, dc, Severity::Attention, w);
                 }
                 if wdl_off {
+                    ui_kit::row_problem(
+                        ui,
+                        dc,
+                        Severity::Attention,
+                        "Ignores lighting changes: its Cross-device Lighting Toggle is set to \
+                         \"Device Lighting\".",
+                    );
                     ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new(
-                                "Ignores lighting changes: its Cross-device Lighting Toggle is \
-                                 set to \"Device Lighting\".",
-                            )
-                            .size(11.0)
-                            .color(WARN_TEXT),
-                        );
                         if theme::dialog_btn_secondary(ui, "Let RIGStats control it", dc)
                             .on_hover_text(
                                 "Switches the device to \"Aura Sync & Windows Dynamic Lighting\" \
@@ -1061,10 +1086,6 @@ fn lighting_tab(
         );
     }
 }
-
-/// Amber text for something that needs the user (a device taken by another
-/// app, a setting on the device that blocks us).
-const WARN_TEXT: egui::Color32 = egui::Color32::from_rgb(0xff, 0xb3, 0x47);
 
 /// A wireless device's charge (coloured by the battery alert levels, a
 /// triangle while charging) and how it is connected — greyed with "Not
@@ -1248,7 +1269,7 @@ fn hue_card(
             });
         } else if let Some(message) = &control.hue_message {
             g.block(|ui| {
-                ui.label(egui::RichText::new(message).size(11.0).color(WARN_TEXT));
+                ui_kit::row_problem(ui, dc, Severity::Attention, message);
             });
         }
     });
@@ -1544,14 +1565,26 @@ pub fn show(
     let aura_caps = control.aura_caps();
     let aura_blocked = control.aura_unavailable();
     let hue_caps = control.hue_caps();
-    let lighting_shown = aura_caps.is_some() || aura_blocked.is_some() || hue_caps.is_some();
+    let lighting_shown = aura_caps.is_some()
+        || aura_blocked.is_some()
+        || hue_caps.is_some()
+        || control.domain_problem("aura").is_some();
+    // A domain that failed keeps its page, to say so (#373); one this PC
+    // doesn't have stays hidden.
+    let fan_problem = control.domain_problem("fan").cloned();
+    let cpu_problem = control
+        .domain_problem("cpu_limit")
+        .or_else(|| control.domain_problem("curve_opt"))
+        .cloned();
     let gpu_caps = control.gpu_caps();
     // A GPU domain that failed (the driver crashed, #370) keeps its page, to
     // say so; one this PC doesn't have stays hidden.
     let gpu_problem = control.domain_problem("gpu").cloned();
     match ui_state.tab {
-        Page::Fans if fan_caps.is_none() => ui_state.tab = Page::Overview,
-        Page::Cpu if cpu_caps.is_none() && co_caps.is_none() => ui_state.tab = Page::Overview,
+        Page::Fans if fan_caps.is_none() && fan_problem.is_none() => ui_state.tab = Page::Overview,
+        Page::Cpu if cpu_caps.is_none() && co_caps.is_none() && cpu_problem.is_none() => {
+            ui_state.tab = Page::Overview
+        }
         Page::Gpu if gpu_caps.is_none() && gpu_problem.is_none() => ui_state.tab = Page::Overview,
         Page::Lighting if !lighting_shown => ui_state.tab = Page::Overview,
         _ => {}
@@ -1619,20 +1652,15 @@ pub fn show(
 
     // ── Hero ─────────────────────────────────────────────────────────────
     ui_kit::hero(ctx, dc, "control", "Control Center", |ui| {
+        use crate::problems::{STATE_CONNECTED, STATE_CONNECTING, STATE_MISMATCH, STATE_REFUSED};
         let (dot, text) = if control.protocol_mismatch.is_some() {
-            (
-                egui::Color32::from_rgb(0xff, 0x55, 0x55),
-                "Version mismatch",
-            )
+            (ui_kit::C_BAD, STATE_MISMATCH)
         } else if control.connected {
-            (egui::Color32::from_rgb(0x30, 0xd1, 0x58), "Connected")
+            (ui_kit::C_GOOD, STATE_CONNECTED)
         } else if control.refused {
-            (
-                egui::Color32::from_rgb(0xff, 0x55, 0x55),
-                "Refused by the service",
-            )
+            (ui_kit::C_BAD, STATE_REFUSED)
         } else {
-            (dc.muted, "Connecting…")
+            (ui_kit::C_ATTENTION, STATE_CONNECTING)
         };
         ui.label(egui::RichText::new(text).size(11.0).color(dc.muted));
         // Painted dot: the embedded font has no bullet glyph.
@@ -1663,14 +1691,24 @@ pub fn show(
         }))
         .show_separator_line(true)
         .show(ctx, |ui| {
+            // The last apply: failed (red) or partly applied (amber), in the
+            // service's words — the same colours as every problem (#373).
             if let Some(result) = &control.last_apply_result {
-                if !result.ok {
-                    ui.label(
-                        egui::RichText::new(result.message.as_deref().unwrap_or("Apply failed."))
-                            .size(11.0)
-                            .color(egui::Color32::from_rgb(0xff, 0x77, 0x77)),
-                    );
-                    ui.add_space(6.0);
+                match (result.ok, result.message.as_deref()) {
+                    (false, message) => {
+                        ui_kit::row_problem(
+                            ui,
+                            dc,
+                            Severity::Error,
+                            message.unwrap_or("Apply failed."),
+                        );
+                        ui.add_space(6.0);
+                    }
+                    (true, Some(message)) => {
+                        ui_kit::row_problem(ui, dc, Severity::Attention, message);
+                        ui.add_space(6.0);
+                    }
+                    (true, None) => {}
                 }
             }
             // A request the service turned down (save, delete, reset, ...) —
@@ -1680,11 +1718,8 @@ pub fn show(
                     && control.hue_message.as_ref() != Some(*e)
             }) {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!("The service reported an error: {error}"))
-                            .size(11.0)
-                            .color(egui::Color32::from_rgb(0xff, 0x77, 0x77)),
-                    );
+                    let title = crate::problems::service_error(error).title;
+                    ui_kit::row_problem(ui, dc, Severity::Attention, &format!("{title}: {error}"));
                     if ui.small_button("✕").on_hover_text("Dismiss").clicked() {
                         ui_state.dismissed_errors = control.errors;
                     }
@@ -1788,9 +1823,9 @@ pub fn show(
         });
 
     // ── Sidebar: the profile's pages ─────────────────────────────────────
-    let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some();
+    let cpu_tab_shown = cpu_caps.is_some() || co_caps.is_some() || cpu_problem.is_some();
     let shown = PageShown {
-        fans: fan_caps.is_some(),
+        fans: fan_caps.is_some() || fan_problem.is_some(),
         cpu: cpu_tab_shown,
         gpu: gpu_caps.is_some() || gpu_problem.is_some(),
         lighting: lighting_shown,
@@ -1825,6 +1860,11 @@ pub fn show(
             bottom: 8,
         }))
         .show(ctx, |ui| {
+            // Why nothing can be changed — refused, or another version — above
+            // every page (#373). Still connecting is normal for a moment.
+            if let Some(problem) = connection_problem(control) {
+                problem_notice(ui, dc, &problem, look_link.open);
+            }
             // Profiles restored from a backup: above every page.
             if let Some(problem) = control.profiles_problem() {
                 problem_notice(ui, dc, &problem, look_link.open);
@@ -1910,9 +1950,13 @@ pub fn show(
                         if let Some(caps) = &cpu_caps {
                             cpu_tab(ui, dc, control, caps, &saved_cpu, ui_state);
                             ui.add_space(10.0);
+                        } else if let Some(problem) = control.domain_problem("cpu_limit") {
+                            problem_notice(ui, dc, problem, look_link.open);
                         }
                         if let Some(caps) = &co_caps {
                             curve_opt_card(ui, dc, control, caps, &saved_co, ui_state);
+                        } else if let Some(problem) = control.domain_problem("curve_opt") {
+                            problem_notice(ui, dc, problem, look_link.open);
                         }
                     }
                     Page::Lighting => {
@@ -1931,6 +1975,7 @@ pub fn show(
                             cmd_tx,
                             ui_state,
                             peripherals,
+                            look_link.open,
                         );
                     }
                     Page::Gpu => {
@@ -1957,7 +2002,20 @@ pub fn show(
                             ui_state.saved_at = Some((Instant::now(), "Saved"));
                         }
                     }
-                    Page::Power | Page::Fans => {
+                    // Here only when the fan domain failed: the curve editor
+                    // takes the page above otherwise.
+                    Page::Fans => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Fans",
+                            &format!("How fast each fan runs in {profile_name}."),
+                        );
+                        if let Some(problem) = &fan_problem {
+                            problem_notice(ui, dc, problem, look_link.open);
+                        }
+                    }
+                    Page::Power => {
                         ui_kit::page_header(
                             ui,
                             dc,
@@ -1966,7 +2024,7 @@ pub fn show(
                                 "The Windows power plan in {profile_name}. Changes are saved at once."
                             ),
                         );
-                        if power_tab(ui, dc, control, cmd_tx) {
+                        if power_tab(ui, dc, control, cmd_tx, look_link.open) {
                             ui_state.saved_at = Some((Instant::now(), "Saved"));
                         }
                     }
@@ -2247,11 +2305,15 @@ fn overview_page(
 ) {
     let Some(profile) = active else {
         ui_kit::page_header(ui, dc, "Overview", "");
-        ui.label(
-            egui::RichText::new("Waiting for the RIGStats service…")
-                .size(12.0)
-                .color(dc.muted),
-        );
+        // Refused or another version is explained above; only a real wait
+        // says "waiting".
+        if connection_problem(control).is_none() {
+            ui.label(
+                egui::RichText::new(crate::problems::WAITING_FOR_SERVICE)
+                    .size(12.0)
+                    .color(dc.muted),
+            );
+        }
         return;
     };
     ui_kit::page_header(
@@ -2319,19 +2381,35 @@ fn overview_page(
     )];
     let hardware_tiles = [
         (Page::Power, Icon::Power, "Power", power, None),
-        (Page::Fans, Icon::Fans, "Fans", fans_summary(headers), None),
-        (Page::Cpu, Icon::Cpu, "CPU", cpu_summary(cpu, co), None),
+        {
+            let (summary, dot) =
+                tile_summary(control.domain_problem("fan"), dc, fans_summary(headers));
+            (Page::Fans, Icon::Fans, "Fans", summary, dot)
+        },
+        {
+            let problem = control
+                .domain_problem("cpu_limit")
+                .or_else(|| control.domain_problem("curve_opt"));
+            let (summary, dot) = tile_summary(problem, dc, cpu_summary(cpu, co));
+            (Page::Cpu, Icon::Cpu, "CPU", summary, dot)
+        },
         {
             let (summary, dot) = tile_summary(control.domain_problem("gpu"), dc, gpu_summary(gpu));
             (Page::Gpu, Icon::Gpu, "Graphics card", summary, dot)
         },
-        (
-            Page::Lighting,
-            Icon::Lighting,
-            "Lighting",
-            lighting.0,
-            lighting.1,
-        ),
+        match lighting_problem(control) {
+            Some(problem) => {
+                let (summary, dot) = tile_summary(Some(&problem), dc, String::new());
+                (Page::Lighting, Icon::Lighting, "Lighting", summary, dot)
+            }
+            None => (
+                Page::Lighting,
+                Icon::Lighting,
+                "Lighting",
+                lighting.0,
+                lighting.1,
+            ),
+        },
     ];
     let starts_with: Vec<&str> = rules
         .iter()
@@ -2425,6 +2503,7 @@ fn power_tab(
     dc: &DialogColors,
     control: &ControlState,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    open: &OpenRequests,
 ) -> bool {
     let mut saved = false;
     let power = control
@@ -2432,13 +2511,14 @@ fn power_tab(
         .iter()
         .find(|c| c.domain == "power_plan");
     match power {
+        // Refused or another version is explained above every page.
+        None if !control.connected && connection_problem(control).is_some() => {}
         None if !control.connected => {
-            let text = if control.refused {
-                "The sensor service refused this app (see the service log)."
-            } else {
-                "Waiting for the RIGStats service…"
-            };
-            ui.label(egui::RichText::new(text).size(12.0).color(dc.muted));
+            ui.label(
+                egui::RichText::new(crate::problems::WAITING_FOR_SERVICE)
+                    .size(12.0)
+                    .color(dc.muted),
+            );
         }
         None => {
             ui.label(
@@ -2447,17 +2527,20 @@ fn power_tab(
                     .color(dc.muted),
             );
         }
-        Some(cap) if !cap.supported => {
-            ui.label(
-                egui::RichText::new(
-                    cap.reason
-                        .as_deref()
-                        .unwrap_or("Power plan control unavailable."),
-                )
-                .size(12.0)
-                .color(dc.muted),
-            );
-        }
+        Some(cap) if !cap.supported => match &cap.problem {
+            Some(problem) => problem_notice(ui, dc, problem, open),
+            None => {
+                ui.label(
+                    egui::RichText::new(
+                        cap.reason
+                            .as_deref()
+                            .unwrap_or("Power plan control unavailable."),
+                    )
+                    .size(12.0)
+                    .color(dc.muted),
+                );
+            }
+        },
         Some(_) => {
             let Some(active) = control.active() else {
                 return false;
@@ -2621,13 +2704,7 @@ fn power_plan_name(plan: &str) -> String {
 fn dry_run_note(ui: &mut egui::Ui, dc: &DialogColors, control: &ControlState) {
     if control.dry_run {
         ui.add_space(6.0);
-        ui.label(
-            egui::RichText::new(
-                "Dry-run mode — the service is logging changes instead of applying them.",
-            )
-            .size(11.0)
-            .color(dc.muted),
-        );
+        ui_kit::notice(ui, dc, &crate::problems::dry_run());
     }
 }
 
@@ -2675,11 +2752,7 @@ fn fans_tab(
     let group = curve_group(&shown, &header.id);
 
     if let Some(notice) = &ui_state.notice {
-        ui.label(
-            egui::RichText::new(notice)
-                .size(11.0)
-                .color(egui::Color32::from_rgb(0xff, 0x99, 0x55)),
-        );
+        ui_kit::row_problem(ui, dc, Severity::Attention, notice);
         ui.add_space(6.0);
     }
 
@@ -2900,13 +2973,7 @@ fn fans_tab(
 
     if let Some(reason) = &control.safety_tripped {
         ui.add_space(8.0);
-        ui.label(
-            egui::RichText::new(format!(
-                "Last safety override: {reason} — all fans ran at 100 %."
-            ))
-            .size(11.0)
-            .color(egui::Color32::from_rgb(0xff, 0x99, 0x55)),
-        );
+        ui_kit::notice(ui, dc, &crate::problems::safety_tripped(reason));
     }
     dry_run_note(ui, dc, control);
 }
@@ -3923,6 +3990,60 @@ mod tests {
         ui.aura_pending = Some(AuraPart::default());
         assert!(ui.flush_aura_preview(&tx)); // within 100 ms: held back
         assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn refused_or_another_version_is_explained_but_connecting_is_not() {
+        let mut control = ControlState::default();
+        assert_eq!(connection_problem(&control), None); // a moment of connecting
+
+        control.refused = true;
+        assert_eq!(
+            connection_problem(&control).map(|p| p.id),
+            Some("service_refused".into())
+        );
+
+        control.protocol_mismatch = Some(rigstats_backend::control::ProtocolMismatch {
+            expected: 1,
+            got: 2,
+        });
+        assert_eq!(
+            connection_problem(&control).map(|p| p.id),
+            Some("version_mismatch".into())
+        );
+    }
+
+    #[test]
+    fn lighting_taken_by_another_app_is_a_problem_from_any_service() {
+        let conflict = |problem: Option<Problem>| ControlState {
+            capabilities: vec![rigstats_backend::control::CapabilitySet {
+                domain: "aura".into(),
+                supported: false,
+                reason: Some("Armoury Crate (LightingService) controls the lighting.".into()),
+                problem,
+                details: Some(serde_json::json!({ "conflict": true })),
+            }],
+            ..Default::default()
+        };
+
+        // This service: its own problem.
+        let own = Problem {
+            id: "aura_conflict".into(),
+            title: "Armoury Crate controls the lighting".into(),
+            ..Default::default()
+        };
+        assert_eq!(lighting_problem(&conflict(Some(own.clone()))), Some(own));
+
+        // An older service: built from its reason.
+        let built = lighting_problem(&conflict(None)).unwrap();
+        assert_eq!(built.severity, Severity::Attention);
+        assert_eq!(
+            built.message,
+            "Armoury Crate (LightingService) controls the lighting."
+        );
+
+        // No controller at all: not a problem.
+        assert_eq!(lighting_problem(&ControlState::default()), None);
     }
 
     #[test]

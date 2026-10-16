@@ -197,11 +197,7 @@ pub fn show(
         .show(ctx, |ui| {
             let err = state.lock_safe().error.clone();
             if let Some(ref e) = err {
-                ui.label(
-                    egui::RichText::new(e.as_str())
-                        .size(11.0)
-                        .color(egui::Color32::from_rgb(220, 80, 80)),
-                );
+                ui_kit::row_problem(ui, dc, rigstats_backend::control::Severity::Error, e);
                 ui.add_space(4.0);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -364,27 +360,11 @@ pub fn show(
     }
 }
 
-/// Amber notice on every page while the dashboard is in the desktop
-/// wallpaper: changes show when Save writes them to disk.
+/// On every page while the dashboard is in the desktop wallpaper: changes
+/// show when Save writes them to disk.
 fn wallpaper_notice(ui: &mut egui::Ui, dc: &DialogColors) {
-    const AMBER: egui::Color32 = egui::Color32::from_rgb(0xE5, 0xC0, 0x7B);
-    ui_kit::card_frame(dc)
-        .stroke(egui::Stroke::new(1.0_f32, AMBER.gamma_multiply(0.6)))
-        .inner_margin(egui::Margin::symmetric(14, 10))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.add(
-                egui::Label::new(
-                    egui::RichText::new(
-                        "The dashboard is in the desktop wallpaper, so changes show when you click Save.",
-                    )
-                    .size(12.0)
-                    .color(AMBER),
-                )
-                .wrap(),
-            );
-        });
-    ui.add_space(14.0);
+    ui_kit::notice(ui, dc, &crate::problems::wallpaper_saves_only());
+    ui.add_space(4.0);
 }
 
 /// A "where it is now" row that opens the Control Center on `page`.

@@ -13,6 +13,5 @@ never shows up again; replace it for the next one. Everything inside this
 comment is ignored. See "Release routine" in docs/release.md.
 -->
 
-# 1.48.1
-- **A crashing graphics driver can't take RIGStats down** — the AMD and NVIDIA driver libraries now run in their own process. If one crashes or hangs (as AMD's did after Windows Update replaced the Adrenalin driver), sensors, fans and lighting keep working, the GPU tab says what happened, and the GPU power limits come back after a restart or a driver update.
-- **Updates install even when the service is in trouble** — the installer now stops the sensor service for real before replacing it, instead of failing with "Error opening file for writing".
+# 1.49.0
+- **Clear messages when something goes wrong** — every problem now looks and reads the same: what happened, what still works and what to do, with a button for the fix, for collecting diagnostics or for reading more. A page that stops working says so instead of disappearing, Status lists everything that is wrong in one place, and a profile switch from the hotkey or an app rule that fails shows a notification.

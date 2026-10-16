@@ -418,7 +418,7 @@ pub fn desktop_page(
     }
     picker.take_library();
     if editor.background.we.is_some() {
-        wallpaper_engine_group(ui, dc, look, &mut editor.background, link.we);
+        wallpaper_engine_group(ui, dc, look, &mut editor.background, link.we, link.open);
     } else if editor.background.we_missing {
         wallpaper_engine_missing(ui, dc);
     }
@@ -486,6 +486,7 @@ fn wallpaper_engine_group(
     look: &mut ProfileLook,
     picker: &mut BackgroundPicker,
     we_link: &crate::we_link::WeLink,
+    open: &OpenRequests,
 ) {
     let ctx = ui.ctx().clone();
     let state = {
@@ -529,9 +530,19 @@ fn wallpaper_engine_group(
                 }
                 ui_kit::status(ui, state_colour, state_text);
             });
+            // The last failed command, the same way as every problem (#373),
+            // with the log a click away.
             if let Some(err) = &last_error {
-                g.row("Last problem", Some("Details in the log (Status → Log)"), |ui| {
-                    ui_kit::status(ui, ui_kit::C_BAD, err);
+                let problem = crate::problems::wallpaper_engine_failed(err);
+                g.block(|ui| {
+                    ui_kit::row_problem(ui, dc, problem.severity, &format!("{}: {err}", problem.title));
+                    ui.horizontal(|ui| {
+                        for action in &problem.actions {
+                            if theme::dialog_btn_secondary(ui, &action.label, dc).clicked() {
+                                crate::windows::run_problem_action(ui.ctx(), action, open);
+                            }
+                        }
+                    });
                 });
             }
             let sub = if running {

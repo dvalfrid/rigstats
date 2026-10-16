@@ -502,6 +502,11 @@ pub struct ProblemAction {
 pub enum ProblemActionKind {
     OpenUrl,
     CollectDiagnostics,
+    /// App-only: try the failed thing again (the window that shows the
+    /// problem handles it — an update check, a save).
+    Retry,
+    /// App-only: open the debug log (Status).
+    OpenLog,
     /// A kind this app doesn't know (a newer service): not shown.
     #[serde(other)]
     Unknown,

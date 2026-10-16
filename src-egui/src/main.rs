@@ -20,6 +20,7 @@ use rigstats_egui::gpu_guard::{install_gpu_loss_guard, log_render_adapter};
 use rigstats_egui::hotkey;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
+use rigstats_egui::problems;
 use rigstats_egui::tray::{build_tray, Tray, TrayCmd};
 use rigstats_egui::wallpaper_supervisor::{self, ChildHost, WallpaperSupervisor};
 use rigstats_egui::{alerts, theme, windows, PollStats};
@@ -62,6 +63,8 @@ struct RigStatsApp {
     dialogs: DialogStates,
     /// `runtime.control.safety_trips` already notified about.
     seen_safety_trips: u32,
+    /// `runtime.control.last_apply_result` already notified about (#373).
+    seen_apply_result: Option<control::ApplyResult>,
     // Shared settings (updated on save, applied each frame)
     current_settings: Arc<Mutex<settings::Settings>>,
     settings_reload: Arc<AtomicBool>,
@@ -207,6 +210,7 @@ impl RigStatsApp {
                 updater_focus,
             ),
             seen_safety_trips: 0,
+            seen_apply_result: None,
             current_settings,
             settings_reload,
             preferred_gpu,
@@ -554,6 +558,35 @@ impl RigStatsApp {
         });
     }
 
+    /// A profile switch that failed or only partly applied while the Control
+    /// Center is closed — from the hotkey, an app rule or the tray — raises one
+    /// toast in the same words as the Control Center (#373).
+    fn notify_profile_result(&mut self) {
+        let current = self.runtime.control.last_apply_result.clone();
+        let control_open = self.dialogs.control_open.load(Ordering::Relaxed);
+        let notification = problems::apply_notification(
+            self.seen_apply_result.as_ref(),
+            current.as_ref(),
+            control_open,
+        );
+        self.seen_apply_result = current;
+        let Some(problem) = notification else {
+            return;
+        };
+        let icon = match problem.severity {
+            control::Severity::Error => windows::settings::NotifyIcon::Error,
+            _ => windows::settings::NotifyIcon::Warning,
+        };
+        let body = problem.detail.unwrap_or(problem.message);
+        std::thread::spawn(move || {
+            windows::settings::send_notification(
+                &format!("RIGStats — {}", problem.title),
+                &body,
+                icon,
+            );
+        });
+    }
+
     /// Works around lost font-atlas uploads, seen on a hybrid-GPU laptop at
     /// 175 % scaling after Win+D / minimize: random characters in the overlay
     /// rendered as blank gaps — a digit, `.`, `%` or `°` missing in one place
@@ -789,6 +822,7 @@ impl eframe::App for RigStatsApp {
                 .collect();
             self.follow_profile_look();
             self.notify_fan_safety_trip();
+            self.notify_profile_result();
         }
 
         // Apply settings saved from the settings window.

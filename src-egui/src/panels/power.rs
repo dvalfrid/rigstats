@@ -169,7 +169,7 @@ pub fn draw(
             }
             if !stats.lhm_connected {
                 ui.label(
-                    RichText::new("LibreHardwareMonitor not running.")
+                    RichText::new(crate::problems::WAITING_FOR_SERVICE)
                         .size(10.0 * sc)
                         .color(theme::C_DIM),
                 );
