@@ -44,6 +44,7 @@ public class HardwareHostTests
 
         public void SetFanDefault(string id) { }
         public FanReadback ReadFan(string id) => new(true, true, 50);
+        public IReadOnlyList<Problem> Problems { get; set; } = [];
         public void Dispose() => Disposed = true;
 
         private Scope Enter()
@@ -226,6 +227,29 @@ public class HardwareHostTests
         await Task.Delay(100);
         var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
         Assert.False(live.TryGetProperty("sample_age_ms", out _));
+    }
+
+    [Fact]
+    public async Task Hardware_left_out_is_on_the_telemetry_line_live_and_aged()
+    {
+        // #374: the app's Status shows it, from any telemetry line.
+        long now = 10_000;
+        var hardware = new FakeHardware();
+        var host = new HardwareHost(hardware, clock: () => now);
+        var clean = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.False(clean.TryGetProperty("hardware_problems", out _));
+
+        hardware.Problems = [Control.Workers.HardwareProblems.Off("/gpu-nvidia/0", "RTX", "crashed 3 times")];
+        hardware.SampleFails = () => new InvalidOperationException("restarting");
+        now += 2_000;
+        var aged = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.Equal("hardware_off", aged.GetProperty("hardware_problems")[0].GetProperty("id").GetString());
+
+        hardware.SampleFails = () => null;
+        now += 1_000;
+        await Task.Delay(100);
+        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.Equal("RTX isn't read any more", live.GetProperty("hardware_problems")[0].GetProperty("title").GetString());
     }
 
     [Fact]

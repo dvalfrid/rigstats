@@ -289,6 +289,23 @@ public class TelemetryContractTests
         Assert.Equal(expected, json);
     }
 
+    /// #374: hardware the hardware worker no longer reads, as the app's
+    /// Status gets it — the Rust reader checks the same example. Regenerate
+    /// with RIGSTATS_UPDATE_CONTRACT=1 after a deliberate change.
+    [Fact]
+    public void Hardware_problems_serialize_as_the_shared_contract_example()
+    {
+        var payload = new SensorPayload(null, null, [], [], null, [], [], [], null,
+            HardwareProblems: [Control.Workers.HardwareProblems.Off("/gpu-nvidia/0", "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+                "The hardware worker ended during 'sample' (exit code 0xC0000005) after 35 s while reading NVIDIA GeForce RTX 5070 Ti Laptop GPU (/gpu-nvidia/0)")]);
+        var path = Path.Combine(RepoRoot(), "sensor-sidecar.Tests", "contract", "telemetry-hardware-problem.json");
+        var json = JsonSerializer.Serialize(payload, HardwareHost.TelemetryJsonOptions);
+        if (Environment.GetEnvironmentVariable("RIGSTATS_UPDATE_CONTRACT") == "1")
+            File.WriteAllText(path, json + "\n");
+
+        Assert.Equal(File.ReadAllText(path).Trim(), json);
+    }
+
     [Fact]
     public void Without_peripherals_the_field_is_left_out()
     {

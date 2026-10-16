@@ -36,29 +36,53 @@ public interface ISensorHardware : IDisposable
 
     /// Updates the header's hardware and reads the PWM register back.
     FanReadback ReadFan(string id);
+
+    /// Hardware no longer read because it kept crashing the worker (#374).
+    IReadOnlyList<Problem> Problems => [];
 }
 
-/// `ISensorHardware` on an LHM `IComputer` — in the sensor worker process
-/// over the real, opened `Computer`; in tests over a fake tree.
-public sealed class LhmHardware(IComputer computer) : ISensorHardware
+/// `ISensorHardware` on an LHM `IComputer` — in the hardware worker process
+/// over the real, opened `Computer`; in tests over a fake tree. `skip` is the
+/// top-level hardware (`/gpu-nvidia/0`) the worker leaves alone because it
+/// kept crashing it; `updating` hears which hardware is about to be read, so
+/// the service knows what was being read when the worker died (#374).
+public sealed class LhmHardware(IComputer computer, IReadOnlySet<string>? skip = null, Action<IHardware>? updating = null)
+    : ISensorHardware
 {
     private readonly UpdateVisitor _visitor = new();
 
     public SensorPayload Sample()
     {
-        computer.Accept(_visitor);
-        return SensorReader.Extract(computer);
+        Update();
+        return SensorReader.Extract(Visible());
     }
+
+    /// Every hardware read, except what is skipped.
+    private void Update()
+    {
+        foreach (var hardware in Visible())
+        {
+            updating?.Invoke(hardware);
+            hardware.Accept(_visitor);
+        }
+    }
+
+    private IEnumerable<IHardware> Visible() =>
+        skip is null || skip.Count == 0
+            ? computer.Hardware
+            : computer.Hardware.Where(h => !skip.Contains(h.Identifier.ToString()));
 
     public string SensorTree()
     {
-        computer.Accept(_visitor);
+        Update();
         var lines = new StringBuilder();
         lines.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
         // Data sensors are in bytes since LHM 0.9.7; older dumps (MB/GB,
         // with SmallData) have no such line — SensorTreeLoader converts them.
         lines.AppendLine("# data-unit: bytes");
-        foreach (var hw in computer.Hardware)
+        foreach (var id in skip ?? new HashSet<string>())
+            lines.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"# skipped: {id} (it kept crashing the hardware worker)");
+        foreach (var hw in Visible())
         {
             lines.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
             foreach (var s in hw.Sensors)

@@ -86,7 +86,7 @@ builder.Logging.AddProvider(new SidecarLoggerProvider());
 var hardwareWorkerArgs = "--hardware-worker";
 #if DEBUG
 // Live tests: prove the service survives a crashing or hanging worker.
-foreach (var test in new[] { "--crash-after", "--hang-after" })
+foreach (var test in new[] { "--crash-after", "--hang-after", "--crash-reading" })
 {
     var at = Array.IndexOf(args, "--hardware-worker" + test[1..]);
     if (at >= 0 && at + 1 < args.Length)
@@ -95,7 +95,8 @@ foreach (var test in new[] { "--crash-after", "--hang-after" })
 #endif
 builder.Services.AddSingleton<PeripheralStatusStore>();
 builder.Services.AddSingleton(sp => new HardwareHost(
-    new HardwareWorkerClient(() => WorkerProcess.Start(Environment.ProcessPath!, hardwareWorkerArgs, "hardware-worker")),
+    new HardwareWorkerClient(skip => WorkerProcess.Start(Environment.ProcessPath!,
+        skip.Count == 0 ? hardwareWorkerArgs : $"{hardwareWorkerArgs} {HardwareWorkerProtocol.SkipArgument} {string.Join(',', skip)}", "hardware-worker")),
     sp.GetRequiredService<PeripheralStatusStore>(), sp.GetRequiredService<ProfileStore>()));
 builder.Services.AddSingleton<IHardwareHost>(sp => sp.GetRequiredService<HardwareHost>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HardwareHost>());

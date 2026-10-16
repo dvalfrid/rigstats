@@ -20,6 +20,11 @@ public sealed record HardwareWorkerRequest(int Id, string Op, string? Header = n
 /// not a crash).
 public sealed record HardwareWorkerResponse(int Id, bool Ok, JsonNode? Result = null, string? Error = null);
 
+/// Written before each hardware is read (`{"updating":"/gpu-nvidia/0","name":"…"}`),
+/// ahead of the answer: when the worker dies mid-sample, the last one names
+/// the hardware it was reading (#374).
+public sealed record HardwareWorkerProgress(string Updating, string Name);
+
 /// One JSON line per request and per answer, over the worker's stdin/stdout.
 public static class HardwareWorkerProtocol
 {
@@ -39,6 +44,17 @@ public static class HardwareWorkerProtocol
     public static string Encode(HardwareWorkerRequest request) => JsonSerializer.Serialize(request, Options);
 
     public static string Encode(HardwareWorkerResponse response) => JsonSerializer.Serialize(response, Options);
+
+    public static string Encode(HardwareWorkerProgress progress) => JsonSerializer.Serialize(progress, Options);
+
+    /// A progress line rather than an answer — null for an answer.
+    public static HardwareWorkerProgress? DecodeProgress(string line) =>
+        line.StartsWith("{\"updating\"", StringComparison.Ordinal)
+            ? JsonSerializer.Deserialize<HardwareWorkerProgress>(line, Options)
+            : null;
+
+    /// The worker argument naming hardware to leave alone.
+    public const string SkipArgument = "--skip";
 
     public static HardwareWorkerRequest DecodeRequest(string line) =>
         JsonSerializer.Deserialize<HardwareWorkerRequest>(line, Options) ?? throw new JsonException("empty request");
@@ -141,13 +157,42 @@ public static class HardwareWorkerHost
         computer.Open();
         try
         {
-            using var hardware = new LhmHardware(computer);
+            var skip = Skipped(args);
+            var crashReading = CrashReading(args);
+            using var hardware = new LhmHardware(computer, skip, h =>
+            {
+                output.WriteLine(HardwareWorkerProtocol.Encode(new HardwareWorkerProgress(h.Identifier.ToString(), h.Name)));
+                if (crashReading is not null && h.Identifier.ToString().StartsWith(crashReading, StringComparison.Ordinal))
+                    Environment.FailFast($"Hardware worker crash test while reading {h.Identifier} (#374)");
+            });
             HardwareWorkerLoop.Run(hardware, input, output, TestHook(args));
         }
         finally
         {
             computer.Close();
         }
+    }
+
+    /// Debug builds: `--crash-reading /gpu-amd` crashes while reading the
+    /// first hardware whose id starts so — to see it left out (#374).
+    private static string? CrashReading(string[] args)
+    {
+#if DEBUG
+        var at = Array.IndexOf(args, "--crash-reading");
+        return at >= 0 && at + 1 < args.Length ? args[at + 1] : null;
+#else
+        _ = args;
+        return null;
+#endif
+    }
+
+    /// `--skip /gpu-nvidia/0,/gpu-amd/1`: hardware not to read.
+    private static HashSet<string> Skipped(string[] args)
+    {
+        var at = Array.IndexOf(args, HardwareWorkerProtocol.SkipArgument);
+        return at >= 0 && at + 1 < args.Length
+            ? args[at + 1].Split(',', StringSplitOptions.RemoveEmptyEntries).ToHashSet(StringComparer.Ordinal)
+            : [];
     }
 
     private static Action? TestHook(string[] args)

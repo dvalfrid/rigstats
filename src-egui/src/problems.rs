@@ -287,6 +287,7 @@ pub fn active_problems(
     control: &ControlState,
     sensor_connected: bool,
     service_running: bool,
+    hardware: &[Problem],
 ) -> Vec<Problem> {
     if !service_running {
         // Everything else follows from it.
@@ -303,6 +304,9 @@ pub fn active_problems(
     if !sensor_connected {
         out.push(sensor_data_lost());
     }
+    // Hardware the sensor service stopped reading (#374): on the telemetry
+    // line, so only while readings arrive.
+    out.extend(hardware.iter().cloned());
     out.extend(
         control
             .capabilities
@@ -391,7 +395,7 @@ mod tests {
 
     #[test]
     fn all_well_is_no_problems() {
-        assert!(active_problems(&connected(), true, true).is_empty());
+        assert!(active_problems(&connected(), true, true, &[]).is_empty());
     }
 
     #[test]
@@ -399,7 +403,7 @@ mod tests {
         let mut control = connected();
         control.last_error = Some("x".into());
         assert_eq!(
-            ids(&active_problems(&control, false, false)),
+            ids(&active_problems(&control, false, false, &[])),
             ["service_unreachable"]
         );
     }
@@ -411,7 +415,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            ids(&active_problems(&control, true, true)),
+            ids(&active_problems(&control, true, true, &[])),
             ["service_refused"]
         );
 
@@ -419,13 +423,13 @@ mod tests {
             expected: 1,
             got: 2,
         });
-        let problems = active_problems(&control, true, true);
+        let problems = active_problems(&control, true, true, &[]);
         assert_eq!(ids(&problems), ["version_mismatch"]);
         assert!(problems[0].detail.as_deref().unwrap().contains("v1"));
 
         let waiting = ControlState::default();
         assert_eq!(
-            ids(&active_problems(&waiting, true, true)),
+            ids(&active_problems(&waiting, true, true, &[])),
             ["service_unreachable"]
         );
     }
@@ -451,7 +455,7 @@ mod tests {
             profile_id: Some("gaming".into()),
         });
 
-        let problems = active_problems(&control, false, true);
+        let problems = active_problems(&control, false, true, &[]);
 
         assert_eq!(
             ids(&problems),
@@ -476,7 +480,7 @@ mod tests {
             profile_id: None,
         });
 
-        let problems = active_problems(&control, true, true);
+        let problems = active_problems(&control, true, true, &[]);
 
         assert_eq!(ids(&problems), ["apply_partial"]);
         assert_eq!(problems[0].severity, Severity::Attention);
@@ -496,7 +500,7 @@ mod tests {
             problem: Some(Problem::default()),
             ..Default::default()
         }];
-        assert!(active_problems(&control, true, true).is_empty());
+        assert!(active_problems(&control, true, true, &[]).is_empty());
     }
 
     #[test]

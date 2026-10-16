@@ -51,6 +51,9 @@ pub struct LhmData {
     /// Wireless devices' batteries (headset, keyboard, mouse — #290), read by
     /// the sidecar about once a minute. Empty from sidecars without it.
     pub peripherals: Vec<Peripheral>,
+    /// Hardware the sensor service no longer reads because it kept crashing
+    /// the service's hardware worker (#374) — shown in Status's Problems.
+    pub hardware_problems: Vec<crate::control::Problem>,
     /// The active Control Center profile as the sensor service reports it
     /// (#302) — what the wallpaper host, which has no control pipe, shows.
     pub active_profile: Option<ActiveProfile>,
@@ -97,6 +100,36 @@ mod tests {
     /// The `peripherals` field against the example the sidecar's
     /// `TelemetryContractTests` serializes to — so neither side can rename a
     /// field alone.
+    /// #374: hardware the service no longer reads, against the example the
+    /// sidecar's `TelemetryContractTests` serializes to.
+    #[test]
+    fn sidecar_contract_example_with_a_hardware_problem_parses() {
+        use crate::control::{ProblemActionKind, Severity};
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/contract/telemetry-hardware-problem.json");
+        let text = std::fs::read_to_string(&path).expect("read the contract example");
+        let data = serde_json::from_str::<SidecarPayload>(&text)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+            .into_lhm_data(None);
+        let [problem] = data.hardware_problems.as_slice() else {
+            panic!("one hardware problem expected");
+        };
+        assert_eq!(problem.id, "hardware_off");
+        assert_eq!(problem.severity, Severity::Attention);
+        assert_eq!(
+            problem.title,
+            "NVIDIA GeForce RTX 5070 Ti Laptop GPU isn't read any more"
+        );
+        assert_eq!(
+            problem.actions.iter().map(|a| a.kind).collect::<Vec<_>>(),
+            vec![
+                ProblemActionKind::OpenUrl,
+                ProblemActionKind::CollectDiagnostics,
+                ProblemActionKind::OpenUrl
+            ]
+        );
+    }
+
     #[test]
     fn sidecar_contract_example_with_peripherals_parses() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -458,6 +491,9 @@ struct SidecarPayload {
     // hardware worker restarting (#374). Left out of a live sample.
     #[serde(default)]
     sample_age_ms: Option<u64>,
+    // Left out by the sidecar when nothing is, and by older ones (#374).
+    #[serde(default)]
+    hardware_problems: Vec<crate::control::Problem>,
 }
 
 /// A sample older than this is no data: the service samples once a second,
@@ -677,6 +713,7 @@ impl SidecarPayload {
                     connected: p.connected,
                 })
                 .collect(),
+            hardware_problems: self.hardware_problems,
             active_profile: self.active_profile.map(|p| ActiveProfile {
                 id: p.id,
                 name: p.name,

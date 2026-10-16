@@ -285,6 +285,7 @@ impl RigStatsApp {
             let wants_focus = focus.load(Ordering::Relaxed);
             let mut found_hwnd: isize = 0;
             let lhm_connected = self.runtime.latest.lhm_connected;
+            let hardware_problems = self.runtime.latest.hardware_problems.clone();
             let wallpaper_active = self.wallpaper.is_active();
             let control_state = self.runtime.control.clone();
             let visible = self.dialogs.dialog_reveal.visible("status");
@@ -315,6 +316,7 @@ impl RigStatsApp {
                         lhm_connected,
                         wallpaper_active,
                         &control_state,
+                        &hardware_problems,
                         &dc,
                     );
                 },

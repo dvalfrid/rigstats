@@ -159,11 +159,17 @@ fn problems_group(
     dc: &DialogColors,
     st: &StatusState,
     control: &ControlState,
+    hardware_problems: &[rigstats_backend::control::Problem],
 ) -> Option<rigstats_backend::control::ProblemAction> {
     let sensor_connected = st.pipe_connected || st.wallpaper_active;
     // Before the first check the service's state isn't known yet.
     let service_running = st.service_running || st.last_refresh.is_empty();
-    let problems = crate::problems::active_problems(control, sensor_connected, service_running);
+    let problems = crate::problems::active_problems(
+        control,
+        sensor_connected,
+        service_running,
+        hardware_problems,
+    );
     if problems.is_empty() {
         return None;
     }
@@ -829,6 +835,7 @@ pub fn show(
     pipe_connected: bool,
     wallpaper_active: bool,
     control: &ControlState,
+    hardware_problems: &[rigstats_backend::control::Problem],
     dc: &DialogColors,
 ) {
     dc.apply_to_ctx(ctx);
@@ -940,7 +947,8 @@ pub fn show(
                         })
                         .show(ui, |ui| {
                             ui.set_width(ui.available_width());
-                            problem_action = problems_group(ui, dc, &st, control);
+                            problem_action =
+                                problems_group(ui, dc, &st, control, hardware_problems);
                             health_group(ui, dc, &st, control);
                             drivers_group(ui, dc, &st);
                             log_group(ui, dc, &st);
