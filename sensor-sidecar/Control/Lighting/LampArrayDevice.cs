@@ -259,16 +259,17 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
     public void EnableWdl() =>
         (_omni ?? throw new InvalidOperationException($"{Name} has no lighting mode to switch.")).SetWdl(true);
 
-    /// Back to the device's own effect.
-    public void Release()
+    /// Back to the device's own effect — true when RIGStats had taken it.
+    public bool Release()
     {
         _loop.Stop();
         lock (_lock)
         {
             if (!_hostControlled)
-                return;
+                return false;
             SetAutonomous(true);
             _hostControlled = false;
+            return true;
         }
     }
 

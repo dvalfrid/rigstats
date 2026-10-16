@@ -137,15 +137,21 @@ public sealed class CurveOptimizerProvider(
     }
 
     /// Back to the BIOS values — only if this service changed anything.
-    public void ReleaseToFirmware()
+    /// Once back, the next release says nothing until an offset changes again.
+    public string? ReleaseToFirmware()
     {
         if (smu is null)
-            return;
+            return null;
         bool touched;
         lock (_lock)
             touched = _touched;
-        if (touched)
-            Write(Baseline());
+        if (!touched)
+            return null;
+        var bios = Baseline();
+        Write(bios);
+        lock (_lock)
+            _touched = false;
+        return $"the BIOS offsets [{string.Join(", ", bios)}]";
     }
 
     private int[] Read()

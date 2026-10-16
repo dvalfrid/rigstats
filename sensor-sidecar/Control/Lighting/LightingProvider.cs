@@ -300,19 +300,22 @@ public sealed class LightingProvider : IControlProvider
 
     /// Each device goes back to its own effect where it has one (LampArray
     /// devices); the Aura controllers keep the last effect until a cold boot.
-    public void ReleaseToFirmware()
+    public string? ReleaseToFirmware()
     {
+        var handedBack = new List<string>();
         foreach (var device in _devices)
         {
             try
             {
-                device.Release();
+                if (device.Release())
+                    handedBack.Add(device.Name);
             }
             catch (Exception e)
             {
                 SidecarLog.Log($"[rigstats-control] Lighting release on {device.Name} failed: {e.Message}");
             }
         }
+        return handedBack.Count == 0 ? null : $"{string.Join(", ", handedBack)} back on {(handedBack.Count == 1 ? "its" : "their")} own effect";
     }
 
     /// Applies `aura` at once, outside any transaction — the Lighting tab's

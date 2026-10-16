@@ -176,7 +176,7 @@ public sealed class GpuPowerProviderTests : IDisposable
         public void Apply(ProfilePart part) => Applies++;
         public bool Verify(ProfilePart part) => true;
         public void Restore(Snapshot snapshot) { }
-        public void ReleaseToFirmware() { }
+        public string? ReleaseToFirmware() => null;
     }
 
     [Fact]
@@ -232,6 +232,19 @@ public sealed class GpuPowerProviderTests : IDisposable
 
         Assert.Equal(0, gpu.Limits[Id]);
         Assert.False(File.Exists(OriginalsPath));
+    }
+
+    [Fact]
+    public void Release_says_which_card_went_back_to_what()
+    {
+        // #385: for the service log.
+        var gpu = new FakeGpu(Rx9070Xt);
+        var provider = Provider(gpu);
+        Assert.Null(provider.ReleaseToFirmware());
+
+        provider.Apply(Limit(-20));
+        Assert.Matches(@"back to 0 %", provider.ReleaseToFirmware());
+        Assert.Null(provider.ReleaseToFirmware());
     }
 
     [Fact]

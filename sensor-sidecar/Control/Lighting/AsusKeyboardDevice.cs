@@ -377,7 +377,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
 
     /// The keyboard keeps its last effect; its own saved one returns after
     /// it sleeps or reconnects.
-    public void Release() { }
+    public bool Release() => false;
 
     public JsonObject Diagnostics() => new()
     {

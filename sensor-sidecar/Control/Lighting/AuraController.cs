@@ -29,7 +29,9 @@ public interface ILightingDevice
     void Apply(AuraEffect effect, byte red, byte green, byte blue);
 
     /// Hands the device back to its own effect (service stop, release).
-    void Release();
+    /// True when it did; false for a device that just keeps the last effect
+    /// (#385, for the service log).
+    bool Release();
 
     /// Everything a test fixture or bug fix needs (ids, firmware, raw
     /// config) for the diagnostics export's `lighting-devices.json`.
@@ -188,7 +190,7 @@ public sealed class AuraController : ILightingDevice, IDisposable
 
     /// Nothing to hand back: the controller keeps the last effect until the
     /// next cold boot restores its saved one.
-    public void Release() { }
+    public bool Release() => false;
 
     private void Send(IReadOnlyList<byte[]> reports)
     {
