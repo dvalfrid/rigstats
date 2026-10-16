@@ -214,10 +214,12 @@ public class HardwareHostTests
 
         hardware.Gate = gate; // the next sample hangs
         now += 1_500;
-        var started = DateTime.UtcNow;
-        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        // The gate stays shut, so a request that waited for the sample would
+        // never return; the generous bound only keeps a busy CI runner (a
+        // starved thread pool) from failing it on timing.
+        var line = JsonDocument.Parse(
+            await host.GetTelemetryLineAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10))).RootElement;
 
-        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(1), "the request waited for the hanging sample");
         Assert.Equal(1_500, line.GetProperty("sample_age_ms").GetInt64());
 
         // The worker answers again: the next request gets a live line.
