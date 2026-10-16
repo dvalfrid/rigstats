@@ -71,10 +71,22 @@ public sealed class FakeHardwareHost(IComputer computer) : IHardwareHost
 
     public Task<SensorPayload> GetSampleAsync(CancellationToken ct) => Task.FromResult(SampleSource?.Invoke() ?? Sample);
 
-    public Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct) =>
-        Task.FromResult(action(computer));
+    // Fan headers through the same LHM code the hardware worker runs.
+    private readonly LhmHardware _hardware = new(computer);
+
+    public List<string> Restarts { get; } = [];
 
     public void WriteSensorTree(string path) { }
+
+    public IReadOnlyList<FanHeaderInfo> FanHeaders() => _hardware.FanHeaders();
+
+    public void SetFan(string id, double duty) => _hardware.SetFan(id, duty);
+
+    public void SetFanDefault(string id) => _hardware.SetFanDefault(id);
+
+    public FanReadback ReadFan(string id) => _hardware.ReadFan(id);
+
+    public void RestartHardware(string reason) => Restarts.Add(reason);
 }
 
 public static class FanSamples

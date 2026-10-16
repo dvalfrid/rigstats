@@ -47,8 +47,11 @@ public class SensorWorkerTests
 
         public Task<SensorPayload> GetSampleAsync(CancellationToken ct) => throw new NotSupportedException();
 
-        public Task<T> WithHardwareLockAsync<T>(Func<IComputer, T> action, CancellationToken ct) =>
-            throw new NotSupportedException();
+        public IReadOnlyList<FanHeaderInfo> FanHeaders() => throw new NotSupportedException();
+        public void SetFan(string id, double duty) => throw new NotSupportedException();
+        public void SetFanDefault(string id) => throw new NotSupportedException();
+        public FanReadback ReadFan(string id) => throw new NotSupportedException();
+        public void RestartHardware(string reason) => throw new NotSupportedException();
 
         public void WriteSensorTree(string path) { }
     }

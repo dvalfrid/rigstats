@@ -116,29 +116,40 @@ installer migration cost; "rigstats-service" is used here as the concept name.
 
 ### HardwareHost
 
-- Owns the one `LibreHardwareMonitor.Hardware.Computer` instance already opened
-  by `SensorWorker`.
-- Exposes a single `SemaphoreSlim` hardware lock. The telemetry sample and every
-  provider write take the same lock, so a fan write never interleaves with a
-  Super I/O read.
-- **Current telemetry model (since #196), which HardwareHost must absorb:**
-  - There is no fixed telemetry tick. The telemetry pipe accepts several clients
-    at once (`MaxClients = 8`, one task per client). Each client asks
-    `SensorWorker.GetFreshLine()` once per second. A client that hasn't read
-    a line within 10 s is dropped, so one that connects and never reads
-    can't hold an instance forever (#232).
-  - That method re-samples LHM (`Computer.Accept` + `SensorReader.Extract`) only
-    when the cached JSON line is older than 900 ms, so LHM is still read at
-    most ~1 Hz no matter how many clients are connected. It is idle when no
-    client is connected.
-  - The sample is guarded by a plain C# `lock (_sampleLock)`. That lock
-    becomes the HardwareHost lock. It has to change to the `SemaphoreSlim`
-    above, because a `lock`/`Monitor` can't be held across `await`, and
-    provider writes are async.
-  - The telemetry wire format must stay byte-for-byte unchanged. Only the
-    locking moves.
-- Providers receive `IHardwareHost`, never a raw `Computer`, which keeps them
+- **LibreHardwareMonitor runs in the hardware worker** (#374):
+  `rigstats-sensor.exe --hardware-worker`, a child of the service on the
+  shared worker plumbing (`Control/Workers/`, see the GPU worker). It owns
+  the one LHM `Computer` and the vendor libraries LHM loads for the GPU
+  sensors (NVAPI, NVML, ADL). A native fault there — #338, NVML when a
+  laptop switches its NVIDIA GPU off — ends the worker, not the service.
+  Fan writes go through LHM's `IControl`, so they run in the worker too.
+- **The boundary is `ISensorHardware`**: `Sample`, `SensorTree`,
+  `FanHeaders`, `SetFan`, `SetFanDefault`, `ReadFan` — one JSON line each
+  way per call (`HardwareWorkerProtocol`). `LhmHardware` implements it on an
+  `IComputer` (in the worker, and in tests over fake trees);
+  `HardwareWorkerClient` implements it over the worker.
+- **`HardwareWorkerClient` restarts the worker.** Every call has a time
+  limit (8 s; the first call of a new worker, which opens the hardware,
+  60 s). A crash, a hang or a garbled answer ends the worker and is logged
+  with its exit code. The first restart is at once, then after 1, 2, 5, 15
+  and 60 s while it keeps failing; a worker that ran for a minute starts
+  the count over. During a pause, calls fail at once
+  (`HardwareWorkerDownException`).
+- **`HardwareHost`** keeps one `SemaphoreSlim` for every call, so a fan
+  write never interleaves with a Super I/O read. It caches one sample per
+  900 ms for every telemetry client and `FanCurveLoop` (#196, #208). When
+  no fresh sample can be had, the telemetry line is the last one with
+  `sample_age_ms`, and the app takes one older than 5 s as no data. The
+  fan loop gets no sample at all and runs every curve header at full speed
+  (sensor loss).
+- Providers receive `IHardwareHost`, never LHM types, which keeps them
   testable.
+- Debug builds take `--hardware-worker-crash-after <s>` /
+  `--hardware-worker-hang-after <s>` (passed through `dev-sidecar.ps1
+  -SidecarArgs`): the worker crashes or hangs on its first sample after
+  that many seconds, to prove the service survives and restarts it.
+- **Not yet (#374 part 3):** hardware that keeps crashing the worker is not
+  turned off yet; the restarts just get slower.
 
 ### Start-up
 
@@ -282,7 +293,7 @@ built-ins — saved right away, logged, and announced by `get_state`'s
 | Critical temperature override | CPU or GPU above a hard threshold → all controlled fans to 100 % regardless of profile, event `safety_tripped`. |
 | Sensor loss | If a curve's source sensor disappears or goes stale, that header goes to 100 %. |
 | Release on stop | `StopAsync` and a top-level `finally` call `ReleaseToFirmware()` on all providers. What was handed back is logged in one line with why (service stop, the Control Center's release, the fan watchdog), e.g. `Handed back to the firmware because the service stops: fan: 2 headers to the BIOS (Fan #1, Fan #2); cpu_limit: the BIOS limits (…)` — nothing when there was nothing to hand back; a provider that fails is logged and the rest still get their turn (#385). |
-| Service hung or killed | `FanWatchdog`, on its own thread: while a curve is active and the fan loop hasn't completed a tick for 10 s (a hung LHM/PawnIO call, a deadlock, a starved thread pool), it hands the fans back to firmware (given 3 s — the release may hang on the same lock) and fails fast. The service manager restarts the service (the installer sets 5 s, 10 s and 30 s for the first three failures within a minute) and the active profile is re-applied. A gap in the watchdog's own checks (the PC slept) restarts its 10 s window instead. A service that dies hard is restarted the same way. Known limit: if the service can't start again, the fans keep their last duty until a reboot hands them to the BIOS. Off in dry-run. |
+| Service hung or killed | `FanWatchdog`, on its own thread: while a curve is active and the fan loop hasn't completed a tick for 10 s (a hung LHM/PawnIO call, a deadlock, a starved thread pool), it first ends the hardware worker (#374) — a hung LHM or driver call lives there; the next call starts a new worker and the curves carry on, nothing to re-apply. Only after 2 such restarts within 2 minutes (the hang is in the service itself) does it hand the fans back to firmware (given 3 s — the release may hang on the same lock) and fail fast. The service manager restarts the service (the installer sets 5 s, 10 s and 30 s for the first three failures within a minute) and the active profile is re-applied. A gap in the watchdog's own checks (the PC slept) restarts its 10 s window instead. A service that dies hard is restarted the same way. Known limit: if the service can't start again, the fans keep their last duty until a reboot hands them to the BIOS. Off in dry-run. |
 | Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied: they are applied as BIOS values (a no-op after a reboot; when only the service went down, it puts the SMU back) and the Control Center shows a red "Reverted after a restart" notice until a profile is applied again. A service stop inside the window keeps the marker. |
 | Hard limits | The service always clamps against probed limits; UI values are never trusted. |
 | Preview | Risky changes default to `preview` with auto-revert. |

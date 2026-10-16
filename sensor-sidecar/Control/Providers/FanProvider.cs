@@ -2,14 +2,8 @@ using System.Globalization;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using LibreHardwareMonitor.Hardware;
 
 namespace SensorSidecar.Control.Providers;
-
-/// One controllable fan header, as discovered by enumerating `/lpc/`
-/// `SensorType.Control` sensors (siblings of the read-only `SensorType.Fan`
-/// RPM sensors `SensorReader` already extracts).
-internal readonly record struct FanHeaderInfo(string Id, string Label, double Min, double Max);
 
 /// One RPM sensor that sped up while a header was being identified.
 public sealed record FanResponder(string Label, double BeforeRpm, double PeakRpm);
@@ -167,26 +161,23 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
         lock (_writeLock)
             commanded = new Dictionary<string, double>(_commanded);
 
-        var failure = host.WithHardwareLockAsync(computer =>
+        string? failure = null;
+        foreach (var id in part.Fan.Headers.Keys)
         {
-            var controlSensors = FindControlSensors(computer).ToDictionary(s => s.Identifier.ToString());
-            foreach (var id in part.Fan.Headers.Keys)
-            {
-                if (!controlSensors.TryGetValue(id, out var sensor) || sensor.Control is null)
-                    return $"{id} not found";
-                if (sensor.Control.ControlMode != ControlMode.Software)
-                    return $"{id} mode={sensor.Control.ControlMode}, expected Software";
-                // ControlMode is only LHM's own bookkeeping — re-read the
-                // PWM register itself, so firmware that silently overrides
-                // the write is reported as not controllable.
-                sensor.Hardware.Update();
-                if (!commanded.TryGetValue(id, out var duty))
-                    return $"{id} was never commanded";
-                if (sensor.Value is not { } actual || Math.Abs(actual - duty) > VerifyTolerancePct)
-                    return $"{id} commanded={duty:F0}% readback={sensor.Value?.ToString("F0", CultureInfo.InvariantCulture) ?? "none"}% (firmware override?)";
-            }
-            return null;
-        }, CancellationToken.None).GetAwaiter().GetResult();
+            // The PWM register itself is re-read (`ReadFan`), so firmware
+            // that silently overrides the write is reported as not controllable.
+            var readback = host.ReadFan(id);
+            if (!readback.Found)
+                failure = $"{id} not found";
+            else if (!readback.Software)
+                failure = $"{id} is not under software control";
+            else if (!commanded.TryGetValue(id, out var duty))
+                failure = $"{id} was never commanded";
+            else if (readback.Value is not { } actual || Math.Abs(actual - duty) > VerifyTolerancePct)
+                failure = $"{id} commanded={duty:F0}% readback={readback.Value?.ToString("F0", CultureInfo.InvariantCulture) ?? "none"}% (firmware override?)";
+            if (failure is not null)
+                break;
+        }
 
         if (failure is not null)
             SidecarLog.Log($"[rigstats-control] Fan verify failed: {failure}");
@@ -411,37 +402,21 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
     {
         if (dryRun)
             return;
-        host.WithHardwareLockAsync(computer =>
-        {
-            FindControlSensor(computer, id)?.Control?.SetSoftware((float)duty);
-            return 0;
-        }, CancellationToken.None).GetAwaiter().GetResult();
+        host.SetFan(id, duty);
     }
 
     private void WriteDefault(string id)
     {
         if (dryRun)
             return;
-        host.WithHardwareLockAsync(computer =>
-        {
-            FindControlSensor(computer, id)?.Control?.SetDefault();
-            return 0;
-        }, CancellationToken.None).GetAwaiter().GetResult();
+        host.SetFanDefault(id);
     }
 
     private List<FanHeaderInfo> Headers(bool forceRefresh = false)
     {
         if (!forceRefresh && _headerCache is not null)
             return _headerCache;
-
-        var headers = host.WithHardwareLockAsync(computer => FindControlSensors(computer)
-            .Select(s => new FanHeaderInfo(
-                s.Identifier.ToString(),
-                s.Name,
-                s.Control!.MinSoftwareValue,
-                s.Control!.MaxSoftwareValue))
-            .ToList(), CancellationToken.None).GetAwaiter().GetResult();
-
+        var headers = host.FanHeaders().ToList();
         _headerCache = headers;
         return headers;
     }
@@ -450,21 +425,6 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
         source is FanCurveEvaluator.CpuSource or FanCurveEvaluator.GpuSource
         || (source.StartsWith(FanCurveEvaluator.MotherboardSourcePrefix, StringComparison.Ordinal)
             && source.Length > FanCurveEvaluator.MotherboardSourcePrefix.Length);
-
-    /// `/lpc/<chip>/0/control/<n>` sensors — the writable siblings of the
-    /// read-only `/lpc/<chip>/0/fan/<n>` RPM sensors `SensorReader` already
-    /// extracts (same Super I/O sub-hardware, different `SensorType`).
-    private static IEnumerable<ISensor> FindControlSensors(IComputer computer) =>
-        computer.Hardware
-            .Where(hw => hw.HardwareType == HardwareType.Motherboard)
-            .SelectMany(hw => hw.SubHardware)
-            .SelectMany(sub => sub.Sensors)
-            .Where(s => s.SensorType == SensorType.Control
-                && s.Identifier.ToString().StartsWith("/lpc/", StringComparison.Ordinal)
-                && s.Control is not null);
-
-    private static ISensor? FindControlSensor(IComputer computer, string id) =>
-        FindControlSensors(computer).FirstOrDefault(s => s.Identifier.ToString() == id);
 
     private static JsonNode SerializeHeader(FanHeaderConfig config) => new JsonObject
     {

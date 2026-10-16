@@ -72,7 +72,7 @@ public sealed class SensorWorker(
     public override Task StartAsync(CancellationToken cancellationToken)
     {
         SidecarLog.TruncateIfNeeded();
-        SidecarLog.Log($"[rigstats-sensor] Hardware opened. Listening on \\\\.\\pipe\\{_pipeName}");
+        SidecarLog.Log($"[rigstats-sensor] Listening on \\\\.\\pipe\\{_pipeName}");
         _hardwareHost.WriteSensorTree(SensorTreePath);
         return base.StartAsync(cancellationToken);
     }

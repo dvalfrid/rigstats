@@ -28,6 +28,16 @@ if (args.Contains("--gpu-worker"))
     return;
 }
 
+// LibreHardwareMonitor, with the vendor libraries it loads for the GPU
+// sensors, runs in a child process too (#374): a native fault there ends the
+// child, which the service starts again.
+if (args.Contains("--hardware-worker"))
+{
+    SidecarLog.FileEnabled = false;
+    HardwareWorkerHost.Run(args);
+    return;
+}
+
 var dryRun = args.Contains("--dry-run");
 
 // Before anything reads or writes the service's state: the data folder is
@@ -68,12 +78,24 @@ if (SidecarLog.FileEnabled)
 // rigstats-sensor.log too, not only the Windows event log (#378).
 builder.Logging.AddProvider(new SidecarLoggerProvider());
 
-// HardwareHost owns the single LHM Computer instance and its lock — resolved
-// as IHardwareHost by SensorWorker/providers, and separately started/stopped
-// via its own IHostedService registration (must run before SensorWorker, so
-// register it first: hosted services start in registration order).
+// HardwareHost is the one way to the hardware LibreHardwareMonitor reads and
+// writes — in the hardware worker process (#374) — with the shared sample;
+// resolved as IHardwareHost by SensorWorker/providers, and separately
+// stopped via its own IHostedService registration (registered first: hosted
+// services stop in reverse order, so the worker ends last).
+var hardwareWorkerArgs = "--hardware-worker";
+#if DEBUG
+// Live tests: prove the service survives a crashing or hanging worker.
+foreach (var test in new[] { "--crash-after", "--hang-after" })
+{
+    var at = Array.IndexOf(args, "--hardware-worker" + test[1..]);
+    if (at >= 0 && at + 1 < args.Length)
+        hardwareWorkerArgs += $" {test} {args[at + 1]}";
+}
+#endif
 builder.Services.AddSingleton<PeripheralStatusStore>();
 builder.Services.AddSingleton(sp => new HardwareHost(
+    new HardwareWorkerClient(() => WorkerProcess.Start(Environment.ProcessPath!, hardwareWorkerArgs, "hardware-worker")),
     sp.GetRequiredService<PeripheralStatusStore>(), sp.GetRequiredService<ProfileStore>()));
 builder.Services.AddSingleton<IHardwareHost>(sp => sp.GetRequiredService<HardwareHost>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HardwareHost>());

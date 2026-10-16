@@ -31,6 +31,9 @@ public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : 
     private readonly Dictionary<string, (FanHeaderConfig Config, FanCurveEvaluator.HeaderDecision Decision)> _state = new();
     private bool _criticalActive;
 
+    private static readonly SensorPayload NoSample = new(null, null, [], [], null, [], [], [], null);
+    private readonly RepeatLog _sampleFailures = new("[rigstats-control] Fan curves have no temperatures, every curve header at full speed", "failed");
+
     /// Raised synchronously on the loop's thread — handlers must not block
     /// (the pipe just queues the event for its own writer).
     public event Action<FanEvent>? EventRaised;
@@ -78,7 +81,22 @@ public sealed class FanCurveLoop(IHardwareHost host, FanProvider fanProvider) : 
             return;
         }
 
-        var sample = await host.GetSampleAsync(ct);
+        SensorPayload sample;
+        try
+        {
+            sample = await host.GetSampleAsync(ct);
+            if (_sampleFailures.Reset())
+                SidecarLog.Log("[rigstats-control] Fan curves have temperatures again.");
+        }
+        catch (Exception e) when (!ct.IsCancellationRequested)
+        {
+            // No sample (the hardware worker restarting, an LHM error): every
+            // source counts as lost, so every header goes to full speed —
+            // never a decision on an old temperature (#374).
+            if (_sampleFailures.Line(e.Message, DateTimeOffset.Now) is { } line)
+                SidecarLog.Log(line);
+            sample = NoSample;
+        }
 
         var criticalReason = FanCurveEvaluator.CriticalReason(sample);
         var critical = criticalReason is not null;

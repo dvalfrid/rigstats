@@ -4,8 +4,10 @@ using Xunit;
 namespace SensorSidecar.Tests;
 
 /// <summary>
-/// #222: a fan loop that stops ticking while curves are active hands the fans
-/// back to firmware and fails the service, so the service manager restarts it.
+/// #222, #374: a fan loop that stops ticking while curves are active first gets
+/// the hardware worker restarted; only when that keeps not helping are the
+/// fans handed back to firmware and the service failed, so the service
+/// manager restarts it.
 /// </summary>
 public class FanWatchdogTests
 {
@@ -27,6 +29,10 @@ public class FanWatchdogTests
                 {
                     lock (Calls) Calls.Add("release");
                     Release();
+                },
+                reason =>
+                {
+                    lock (Calls) Calls.Add("restart");
                 },
                 message =>
                 {
@@ -68,14 +74,42 @@ public class FanWatchdogTests
     }
 
     [Fact]
-    public void A_stall_releases_the_fans_then_fails_fast()
+    public void A_stall_restarts_the_hardware_worker_and_watches_on()
     {
         var rig = new Rig();
 
         Assert.False(rig.Advance(FanWatchdog.StallLimit - TimeSpan.FromSeconds(2), loopTicks: false));
-        Assert.True(rig.Advance(TimeSpan.FromSeconds(2), loopTicks: false));
+        Assert.False(rig.Advance(TimeSpan.FromSeconds(2), loopTicks: false));
 
-        Assert.Equal(["release", "fail-fast"], rig.Calls);
+        Assert.Equal(["restart"], rig.Calls);
+        // The new worker gets a full window; the loop ticks again.
+        Assert.False(rig.Advance(TimeSpan.FromSeconds(30), loopTicks: true));
+        Assert.Equal(["restart"], rig.Calls);
+    }
+
+    [Fact]
+    public void Restarts_that_dont_help_end_in_release_and_fail_fast()
+    {
+        var rig = new Rig();
+
+        // Never ticks again: each window ends in a restart, until the budget is spent.
+        Assert.True(rig.Advance(FanWatchdog.StallLimit * (FanWatchdog.MaxRestarts + 1), loopTicks: false));
+
+        Assert.Equal(["restart", "restart", "release", "fail-fast"], rig.Calls);
+    }
+
+    [Fact]
+    public void Restarts_long_ago_dont_count()
+    {
+        var rig = new Rig();
+        for (var i = 0; i < FanWatchdog.MaxRestarts + 2; i++)
+        {
+            Assert.False(rig.Advance(FanWatchdog.StallLimit, loopTicks: false));
+            // Healthy for longer than the window before the next stall.
+            Assert.False(rig.Advance(FanWatchdog.RestartWindow + TimeSpan.FromSeconds(10), loopTicks: true));
+        }
+
+        Assert.All(rig.Calls, c => Assert.Equal("restart", c));
     }
 
     [Fact]
@@ -84,9 +118,9 @@ public class FanWatchdogTests
         using var hang = new ManualResetEventSlim();
         var rig = new Rig(releaseLimit: TimeSpan.FromMilliseconds(200)) { Release = () => hang.Wait() };
 
-        Assert.True(rig.Advance(FanWatchdog.StallLimit, loopTicks: false));
+        Assert.True(rig.Advance(FanWatchdog.StallLimit * (FanWatchdog.MaxRestarts + 1), loopTicks: false));
 
-        Assert.Equal(["release", "fail-fast"], rig.Calls);
+        Assert.Equal(["restart", "restart", "release", "fail-fast"], rig.Calls);
         hang.Set();
     }
 
@@ -112,7 +146,7 @@ public class FanWatchdogTests
         rig.Now += (long)TimeSpan.FromHours(1).TotalMilliseconds;
         Assert.False(rig.Watchdog.Check());
 
-        Assert.True(rig.Advance(FanWatchdog.StallLimit, loopTicks: false));
-        Assert.Equal(["release", "fail-fast"], rig.Calls);
+        Assert.False(rig.Advance(FanWatchdog.StallLimit, loopTicks: false));
+        Assert.Equal(["restart"], rig.Calls);
     }
 }
