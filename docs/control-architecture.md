@@ -195,8 +195,8 @@ built, not by resolving it early.
 public interface IControlProvider
 {
     string Domain { get; }                          // "fan", "cpu_limit", ...
-    CapabilitySet Probe();                          // once at start-up
-    ValidationResult Validate(ProfilePart part);    // clamp to hard limits
+    CapabilitySet Probe();                          // on every `capabilities` request
+    ValidationResult Validate(ProfilePart part);    // reject what can't be applied
     Snapshot Capture();                             // current hardware state
     void Apply(ProfilePart part);
     bool Verify(ProfilePart part);                  // read back registers
@@ -209,7 +209,8 @@ public interface IControlProvider
 
 Every profile change is a **transaction**:
 
-1. `Validate` every part (reject or clamp against probed hard limits).
+1. `Validate` every part (reject what can't be applied; values are clamped to
+   the probed hard limits when they are written).
 2. `Capture` a snapshot from every affected provider.
 3. `Apply` in a fixed order: power plan → CPU limits → Curve Optimizer → GPU →
    fans → Aura.

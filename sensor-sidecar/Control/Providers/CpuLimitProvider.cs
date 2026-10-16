@@ -87,10 +87,7 @@ public sealed class CpuLimitProvider(
         // Unsupported (e.g. a BIOS update changed the PM table version):
         // skipped in Apply rather than failing the whole profile — fans and
         // the power plan should still switch.
-        if (smu is null)
-            return ValidationResult.Success();
-        var target = Resolve(amd, Baseline());
-        return ValidationResult.Success(LimitsJson(target));
+        return ValidationResult.Success();
     }
 
     public Snapshot Capture() => new()
