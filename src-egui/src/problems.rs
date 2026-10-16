@@ -289,7 +289,10 @@ pub fn active_problems(
     service_running: bool,
     hardware: &[Problem],
 ) -> Vec<Problem> {
-    if !service_running {
+    // Readings arriving (once a second) are the service answering, whatever
+    // Windows says about it — e.g. the development sidecar running in its
+    // place (#374, seen live: "isn't answering" hid every other problem).
+    if !service_running && !sensor_connected {
         // Everything else follows from it.
         return vec![service_unreachable()];
     }
@@ -405,6 +408,25 @@ mod tests {
         assert_eq!(
             ids(&active_problems(&control, false, false, &[])),
             ["service_unreachable"]
+        );
+    }
+
+    #[test]
+    fn readings_arriving_mean_the_service_answers_whatever_windows_says() {
+        // #374: the sensor service's hardware problems must show, not a
+        // "isn't answering" that contradicts the live readings.
+        let hardware = Problem {
+            id: "hardware_off".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            ids(&active_problems(
+                &connected(),
+                true,
+                false,
+                std::slice::from_ref(&hardware)
+            )),
+            ["hardware_off"]
         );
     }
 
