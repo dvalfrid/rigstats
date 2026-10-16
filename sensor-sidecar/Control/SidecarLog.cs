@@ -7,10 +7,7 @@ namespace SensorSidecar.Control;
 public static class SidecarLog
 {
     private static readonly LogFile Sink = new(
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "se.codeby.rigstats",
-            "rigstats-sensor.log"));
+        Path.Combine(DataDirectory.DefaultPath, "rigstats-sensor.log"));
 
     /// Off when the data folder could not be secured (`DataDirectory`): a
     /// SYSTEM process must not append to a file someone else may redirect.

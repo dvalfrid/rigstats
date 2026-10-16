@@ -16,7 +16,7 @@ Loaded when working in this folder. Everything here runs as **LocalSystem** and 
 - **Problems are `Problem`s.** A domain that is unavailable because something failed (a crashed driver, a refused device) reports `CapabilitySet.Problem` (`ControlProtocol.cs`: severity, title, message in plain words, actions — a download link, "Collect diagnostics…", a help page — and the technical detail); the app shows it the same way everywhere. A domain the PC simply lacks has only `Reason` and stays hidden. Pinned by `contract/control-capability-problem.json` on both sides.
 - **Pipe:** new methods go in `ControlPipeWorker.DispatchAsync`, behind `PipeClientVerifier`. Never take a file path from a client. A background worker derives from `GuardedBackgroundService` (implement `RunAsync`), never `BackgroundService` directly: an exception out of `ExecuteAsync` stops the whole host, the base class logs it and starts the worker again (#378). Handle the failures you expect yourself; it is the backstop.
 - **Start-up:** nothing slow before `host.Run()` and nothing resolved from the container before it — the service must connect to the service manager within 30 s, and building a provider opens hardware (#383). Slow one-off work goes in a `BackgroundStartupTask`.
-- **Data folder:** anything read from `%ProgramData%\se.codeby.rigstats` is trusted only because `DataDirectory.EnsureSecure` ran first. Secrets (Hue key) are DPAPI-encrypted.
+- **Data folder:** anything read from `%ProgramData%\se.codeby.rigstats` is trusted only because `DataDirectory.EnsureSecure` ran first — so build every path in it from `DataDirectory.DefaultPath`, never compute the folder again. Secrets (Hue key) are DPAPI-encrypted.
 
 ## Testing without hardware
 
