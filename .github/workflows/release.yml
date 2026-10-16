@@ -31,7 +31,6 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.tag }}
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -39,15 +38,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4dfd137a5aecc12897f37a01818006f58cf58347 # 1.98.0
-        with:
-          toolchain: 1.98.0
 
       - name: Cache Rust build output
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -55,7 +52,7 @@ jobs:
           workspaces: src-egui
 
       - name: Cache NuGet packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
@@ -74,7 +71,7 @@ jobs:
       # The whole publish folder: installer.nsi takes two of its DLLs with
       # /nonfatal, so a missing one would not stop the installer build.
       - name: Upload unsigned binaries
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unsigned-binaries
           path: |
@@ -93,13 +90,13 @@ jobs:
     steps:
       # installer.nsi, assets\icon.ico, build\pawnio\, CHANGELOG.md.
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
 
       - name: Download unsigned binaries
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: unsigned-binaries
 
@@ -107,15 +104,15 @@ jobs:
       # service only accepts control-pipe clients signed by its own signer
       # (PipeClientVerifier), so an unsigned rigstats.exe / rigstats-sensor.exe
       # in the installer leaves the Control Center dead for every user. One
-      # step = one Trusted Signing session = the same signing certificate.
+      # step = one Artifact Signing session = the same signing certificate.
       - name: Sign binaries
-        uses: azure/trusted-signing-action@1d365fec12862c4aa68fcac418143d73f0cea293 # v0.5.11
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
           endpoint: https://neu.codesigning.azure.net/
-          trusted-signing-account-name: rigstats-codesign
+          signing-account-name: rigstats-codesign
           certificate-profile-name: RIGStats
           files: |
             ${{ github.workspace }}\target\release\rigstats.exe
@@ -158,13 +155,13 @@ jobs:
           "INSTALLER_PATH=$env:GITHUB_WORKSPACE\target\release\RIGStats_${version}_x64-setup.exe" >> $env:GITHUB_ENV
 
       - name: Sign installer
-        uses: azure/trusted-signing-action@1d365fec12862c4aa68fcac418143d73f0cea293 # v0.5.11
+        uses: Azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82 # v2.0.0
         with:
           azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
           azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
           endpoint: https://neu.codesigning.azure.net/
-          trusted-signing-account-name: rigstats-codesign
+          signing-account-name: rigstats-codesign
           certificate-profile-name: RIGStats
           files: ${{ env.INSTALLER_PATH }}
           file-digest: SHA256
@@ -179,7 +176,7 @@ jobs:
           if ($s.Status -ne 'Valid') { throw "Installer not validly signed ($($s.Status))." }
 
       - name: Upload signed installer
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-installer
           path: ${{ env.INSTALLER_PATH }}
@@ -196,13 +193,13 @@ jobs:
     steps:
       # CHANGELOG.md and tools\release-highlights.ps1.
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_TAG }}
           persist-credentials: false
 
       - name: Download signed installer
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: signed-installer
           path: target\release
@@ -244,7 +241,7 @@ jobs:
           Write-Host "Generated latest.json for v$version"
 
       - name: Publish GitHub release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           fail_on_unmatched_files: true
@@ -274,7 +271,7 @@ jobs:
       # release PR carried `winget: hold` (winget_submit = false).
       - name: Dispatch winget submission
         if: ${{ github.event.inputs.winget_submit != 'false' }}
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

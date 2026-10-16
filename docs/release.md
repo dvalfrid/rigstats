@@ -37,16 +37,19 @@ change. Nothing to fix.
 ### Pinned Rust toolchain
 
 `build.yml`, `verify.yml`, and `release.yml` all install Rust via
-`dtolnay/rust-toolchain` pinned by commit SHA with `toolchain: 1.98.0` — a
-specific version, not `@stable`. `@stable`
+`dtolnay/rust-toolchain` pinned to the commit of its `1.98.0` branch — a
+specific version, not `@stable`. The branch fixes the version: the action
+there has no `toolchain` input (only `targets`, `target`, `components`), and
+passing one only gives an "Unexpected input" warning. `@stable`
 floated to whatever Rust shipped that day, which twice broke CI on an
 unrelated push (a new clippy lint, then a new rustc future-incompat lint)
 with no code change to blame. `rust-toolchain.toml` at the repo root pins the
 same version for local development, so `rustup` auto-installs it the first
 time `cargo` runs in the repo — no drift between a contributor's machine and
-CI. Bumping the pin (the workflows' `toolchain:` inputs — and the action SHA,
-whose `# 1.98.0` comment names the branch it came from — plus
-`rust-toolchain.toml`) is a deliberate, standalone commit.
+CI. Bumping the pin is a deliberate, standalone commit with two parts:
+- the action SHA, taken from the new version's branch, with the `# 1.98.0`
+  comment naming that branch;
+- `rust-toolchain.toml`.
 
 ### Supply chain
 
@@ -206,7 +209,7 @@ ready: Actions → Submit to Winget → Run workflow → the tag (e.g. `v1.45.0`
 
 ### Signing
 
-Azure Trusted Signing (Authenticode: SmartScreen trust, the Control Center's
+Azure Artifact Signing (Authenticode: SmartScreen trust, the Control Center's
 signer check, the updater's publisher check). The account, the secrets and
 what must never change are under
 [Accounts, Secrets And Settings](#accounts-secrets-and-settings).
@@ -264,11 +267,11 @@ workflow permissions below.
   exists, but has no installer and no `latest.json`, so the app sees no
   update. Renew it, then do a [manual re-run](#manual-re-run).
 
-### Azure Trusted Signing
+### Azure Artifact Signing
 
-Azure now calls it **Artifact Signing**: the portal shows the account as an
-"Artifact Signing Account", while `release.yml` still uses
-`azure/trusted-signing-action`. The account is `rigstats-codesign`, in resource
+Formerly "Trusted Signing". `release.yml` signs with
+`Azure/artifact-signing-action` (before v1: `azure/trusted-signing-action`).
+The account is `rigstats-codesign`, in resource
 group `rigstats-codesign`, and its certificate profile is `RIGStats`. The
 endpoint is `https://neu.codesigning.azure.net/` (North Europe). The account,
 profile and endpoint are written in `release.yml`.
