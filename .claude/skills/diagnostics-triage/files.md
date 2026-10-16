@@ -4,7 +4,7 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 
 | Question | File (ZIP name / on the owner's machine) | Look for |
 |---|---|---|
-| Was a lighting device discovered at each start? | `sidecar-log.txt` / `%ProgramData%\…\rigstats-sensor.log` | `Lighting: <model> 0x<pid> …` lines just before `Hardware opened`; `Lighting devices changed: + … - …`; `receiver channel … is not a keyboard (layout reply …)` |
+| Was a lighting device discovered at each start? | `sidecar-log.txt` / `%ProgramData%\…\rigstats-sensor.log` | `Lighting: <model> 0x<pid> …` lines just before `Listening on \\.\pipe\rigstats-sensors` (`Hardware opened. Listening on …` up to 1.48); `Lighting devices changed: + … - …`; `receiver channel … is not a keyboard (layout reply …)` |
 | Did writes fail, and with what reply? | same | `Lighting on <device> failed: … (read back <hex>)`; `Applied profile …` / rollback lines |
 | Is the hardware visible to Windows at all? | `lighting-devices.json` | `hid_scan`: VID/PID, usage page, product, `known_as` (null = not supported yet) |
 | What sits behind an ASUS receiver? | `lighting-devices.json` → `asus_probes` | `paired_reply` (`01 a0 00 <count> 00` + 4 bytes per device: pid lo, pid hi, report id, type), `paired[]` with `device_info` (version reply) |
@@ -14,6 +14,7 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | Missing or wrong sensor values | `sensor-tree.txt`, `hardware.json` | the raw LHM tree → `/sensor-fixture` |
 | GPU Apps panel | `gpu-engine.txt` | → `/gpu-engine-fixture` |
 | App crashed or misbehaved | `debug.log`, `debug-prev.log`, `event-log.txt` | missing `shutdown: clean` = crash; .NET 1026 / Application Error 1000 |
+| Sensors gone or a hardware item missing | `sidecar-log.txt` | `The hardware worker ended during … (exit code …) while reading <hardware> (<id>)`, `did not answer … within 8 s`, `… crashed the hardware worker 3 times — it is no longer read` (#374); `[hardware-worker]` lines = the worker's own stack |
 | Service crashed | `sidecar-log.txt` | copied event-log entries, `crash dump` lines (dumps themselves stay on the machine) |
 | Installer / service config | `install.log` / `rigstats-install.log`, `sidecar-service.txt` | PawnIO exit codes, `BINARY_PATH_NAME` (quoted since #277) |
 

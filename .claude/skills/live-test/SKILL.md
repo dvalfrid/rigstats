@@ -17,7 +17,7 @@ Claude never starts the dev sidecar or writes to hardware. The owner runs `tools
 
 ## 2. Hand over
 
-Tell the owner: start `pwsh -File tools\dev-sidecar.ps1 -Live` (elevated), then — if the test needs the Control Center — quit the installed RIGStats; Claude starts `target\debug\rigstats.exe`. List the exact log lines that prove the change and what to do (e.g. change a colour in the Lighting tab).
+Tell the owner: start `pwsh -File tools\dev-sidecar.ps1 -Live` (elevated) — or, for a debug test argument with a value, `.\tools\dev-sidecar.ps1 -Live -SidecarArgs '--hardware-worker-crash-after','30'` from the elevated PowerShell prompt (`pwsh -File` passes the list as one string, so the sidecar never sees it) — then — if the test needs the Control Center — quit the installed RIGStats; Claude starts `target\debug\rigstats.exe`. List the exact log lines that prove the change and what to do (e.g. change a colour in the Lighting tab).
 
 ## 3. Check
 

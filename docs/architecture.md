@@ -76,10 +76,14 @@ shell embeds one instance and keeps only its own concerns on top.
 
 ```text
 rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
-    └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
-            └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
-                    └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
-    └─► Control Center (same service, same LHM Computer + hardware lock):
+    ├─► rigstats-sensor.exe --hardware-worker  (child process, restarted after a crash or hang)
+    │       └─► LibreHardwareMonitor NuGet → PawnIO kernel driver
+    ├─► rigstats-sensor.exe --gpu-worker  (child process: ADLX / NVML for the GPU power limit)
+    ├─► HardwareHost: one shared ≤1 Hz sample for every client
+    │       └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON)
+    │               └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
+    └─► Control Center (same service; fan writes go through the hardware worker,
+        under the same hardware lock as the sample):
             ControlBroker + providers (power plan, fans, CPU limits, Curve Optimizer, GPU power, lighting), FanCurveLoop (~1 Hz)
             └─► named pipe \\.\pipe\rigstats-control  (duplex, request/response + events)
                     └─► control.rs (rigstats-backend): control_task → ControlState
@@ -95,6 +99,8 @@ wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
 
 **Tick rate:** 1 second. The sidecar pushes one JSON line per second; on
 failure the last successful sample is reused so the UI never resets to `--`.
+While the service's hardware worker restarts, the service sends its last
+sample with `sample_age_ms`; one older than 5 s is no data to the app.
 
 **Floating mode:** Each visible panel is rendered in its own `egui` deferred
 viewport (a separate OS window). The main window is moved off-screen (`-32000,
@@ -186,10 +192,12 @@ rig-dashboard/
 │       └── debug.rs        Debug log helpers
 ├── sensor-sidecar/         .NET 10 C# sidecar (rigstats-sensor.exe)
 │   ├── Program.cs          Entry point (Windows service host)
-│   ├── SensorWorker.cs     LHM Computer, multi-client telemetry pipe server, shared ≤1 Hz sample
+│   ├── SensorWorker.cs     Multi-client telemetry pipe server (a line a second per client)
 │   ├── SensorReader.cs     SensorPayload model + Extract() mapping
 │   ├── Control/            Control Center service side: control pipe, ControlBroker, providers,
-│   │                       Lighting/, safety (see docs/control-architecture.md)
+│   │                       Lighting/, safety; HardwareHost + SensorHardware (the shared sample,
+│   │                       the one way to LHM); Workers/ (the hardware and GPU worker processes)
+│   │                       — see docs/control-architecture.md
 │   └── sensor-sidecar.csproj
 ├── sensor-sidecar.Tests/   xUnit tests: Extract rules, fixtures corpus, Control providers + protocol
 ├── docs/
@@ -343,6 +351,12 @@ The incoming JSON deserialises into `SidecarPayload`, which mirrors the
 `SensorPayload` record from `SensorReader.cs`. All extraction logic (sensor-name
 matching, SensorId-prefix filtering) is implemented by the sidecar; `lhm.rs`
 handles GPU selection and assembles `LhmData` from the payload.
+
+A sample the service couldn't refresh (its hardware worker restarting)
+carries `sample_age_ms`; `fetch_lhm_pipe` treats one older than 5 s
+(`STALE_SAMPLE_MS`) as no data and keeps the connection. `hardware_problems`
+— hardware the service no longer reads because it kept crashing the worker
+(#374) — goes through `LhmData` and `PollStats` to Status's Problems group.
 
 **GPU selection:** `SidecarPayload.gpu_devices` carries one `SidecarGpuDevice`
 per detected GPU (name, VRAM total, core load). `select_gpu_idx` picks the
@@ -714,7 +728,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `rigstats-settings.json` read from disk | All persisted user settings |
-| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, per-client connect/disconnect, and Control Center outcomes (#207): every profile apply/rollback with its reason, failed fan verifies (header, commanded vs. read-back duty), fan identify results (`control/1 -> Fan #2 (...), Fan #5 (...)`), safety overrides. Since #219 also fatal unhandled exceptions, start failures and unexpected pipe errors with stack traces; since #242 also earlier crashes no handler could log (a native access violation inside a driver call): at start the service copies its ".NET Runtime" 1026 / "Application Error" 1000 entries since the last one logged (`crash-report-mark.txt`) from the Windows event log, with the stack — plus a line per new crash dump (#220: WER `LocalDumps`, set by the installer, writes minidumps of `rigstats-sensor.exe` to `%PROGRAMDATA%\se.codeby.rigstats\dumps`, newest 3; the service locks that folder to SYSTEM/Administrators, so the dump itself is not in the ZIP). Local time with UTC offset. No parsed sensor values. |
+| `sidecar-log.txt` | `%PROGRAMDATA%\se.codeby.rigstats\rigstats-sensor.log` | Sidecar file log: start/stop, per-client connect/disconnect, and Control Center outcomes (#207): every profile apply/rollback with its reason, failed fan verifies (header, commanded vs. read-back duty), fan identify results (`control/1 -> Fan #2 (...), Fan #5 (...)`), safety overrides. Since #219 also fatal unhandled exceptions, start failures and unexpected pipe errors with stack traces; since #242 also earlier crashes no handler could log (a native access violation inside a driver call): at start the service copies its ".NET Runtime" 1026 / "Application Error" 1000 entries since the last one logged (`crash-report-mark.txt`) from the Windows event log, with the stack — plus a line per new crash dump (#220: WER `LocalDumps`, set by the installer, writes minidumps of `rigstats-sensor.exe` to `%PROGRAMDATA%\se.codeby.rigstats\dumps`, newest 3; the service locks that folder to SYSTEM/Administrators, so the dump itself is not in the ZIP). Local time with UTC offset. No parsed sensor values. Since #374 also the hardware worker's crashes and hangs (with the hardware it was reading), its restarts, and hardware left out after repeated crashes. |
 | `control-capabilities.json` | `ControlState.capabilities` (UI snapshot) | What the board supports: writable fan channels with min/max and their measured `drives` (channel→fan mapping, persisted in `fan-channels.json`), available curve sources, power schemes, CPU limit support (generation, PM table version, BIOS/min/current limits — or why unsupported), GPU power-limit adapters (name, PNP id, driver range, default/original/current), Curve Optimizer support (cores, per-core, BIOS/current offsets), lighting controller (firmware, zones — or why unavailable, e.g. Armoury Crate), the paired Hue Bridge (id, name, model, firmware, IP) with its rooms/zones and which follow the rig — never the key — and each device's `problem` (why its last background write failed, e.g. a Hue room whose bridge doesn't answer) |
 | `lighting-devices.json` | `%PROGRAMDATA%\se.codeby.rigstats\lighting-devices.json` (written by the service after every device discovery — at start and when devices change) | Lighting devices RIGStats drives (Aura USB firmware + config table, Aura monitor config reply, LampArray kind/lamp count/update interval/report layout), conflict state (OpenRGB, Armoury Crate, Windows Dynamic Lighting), chosen Hue rooms with the bridge's id, model and firmware, and a scan of every HID collection (VID/PID, interface, usage page/usage, report lengths, product name; `known_as` null = not supported yet). No HID paths or serials. Enough to add or fix a device from a user's export (#212) |
 | `profiles.json` | `%PROGRAMDATA%\se.codeby.rigstats\profiles.json` | The service-owned profile store (power plan, fan curves, CPU limits, Curve Optimizer, GPU power limit, lighting incl. desk lamp) |

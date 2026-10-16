@@ -274,18 +274,31 @@ The file is overwritten on every service start, so it always reflects the curren
 
 ### What To Look For In `sidecar-log.txt`
 
-The file is the raw log written by the `rigstats-sensor` Windows Service
-itself — lifecycle events only: `Hardware opened. Listening on
-\\.\pipe\rigstats-sensors`, `Client connected.` / `Client disconnected.`, and
-`Stopped.`. It does **not** contain parsed sensor values.
+The file is the log written by the `rigstats-sensor` Windows Service itself:
+each start (`Listening on \\.\pipe\rigstats-sensors`, then `The hardware
+worker has opened the hardware.`), clients (`Client connected.` / `Client
+disconnected.`), lighting devices found, profiles applied, wireless
+batteries, and `Stopped.`. It does **not** contain sensor values.
 
 Use it to tell whether the sidecar is running and accepting a pipe
 connection at all. If the service never logs "Client connected", the Rust
 backend isn't reaching the pipe — check `sidecar-service.txt` for the service
 state first.
 
-**Crashes.** A crash inside a driver call (a native access violation) ends
-the service before it can log anything itself. At its next start it copies
+**The hardware worker.** The service reads the hardware through a worker
+process of its own, which it restarts when a driver crashes or hangs it.
+`The hardware worker ended during 'sample' (exit code 0xC0000005) after 35 s
+while reading <hardware> (<id>) — starting it again …` is such a crash, with
+the hardware it was reading; `did not answer 'sample' within 8 s` is a hang;
+`The hardware worker is running again.` follows. After three crashes in the
+same hardware, `<hardware> (<id>) crashed the hardware worker 3 times — it is
+no longer read until Windows restarts`: only that hardware's values are
+missing, and Status lists it under Problems. Lines starting
+`[hardware-worker]` or `[gpu-worker]` are a worker's own output — after a
+crash, its stack.
+
+**Crashes.** A crash of the service itself (a native access violation
+outside the workers) ends the service before it can log anything itself. At its next start it copies
 what Windows recorded into the log: `An earlier run crashed at …` with the
 stack, and `Crash dump written at …: C:\ProgramData\se.codeby.rigstats\dumps\rigstats-sensor.exe.<pid>.dmp (… MB, administrators only)`.
 The dump (a minidump; Windows keeps the newest 3) is **not** in the ZIP: it

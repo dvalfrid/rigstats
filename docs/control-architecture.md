@@ -87,20 +87,27 @@ stable.** Not a bundle of tools glued together.
 ┌──────────────── rigstats.exe (egui, user mode) ───────────────────┐
 │ Dashboard panels ── Control Center ── Tray / Hotkey ── Overlay    │
 │        └────────────── ControlState (in DashboardRuntime) ────────┘│
-│ rigstats-backend:  lhm.rs (telemetry)    control.rs (new client)  │
+│ rigstats-backend:  lhm.rs (telemetry)    control.rs (control)     │
 └────────────┬──────────────────────────────────┬───────────────────┘
-  \\.\pipe\rigstats-sensors (unchanged)   \\.\pipe\rigstats-control (new, duplex)
+  \\.\pipe\rigstats-sensors (read-only)   \\.\pipe\rigstats-control (duplex)
 ┌────────────┴──────────────────────────────────┴───────────────────┐
-│ rigstats-service.exe (LocalSystem, .NET 10)                        │
-│  HardwareHost   — single LHM Computer + single hardware lock      │
+│ rigstats-sensor.exe ("rigstats-service", LocalSystem, .NET 10)    │
+│  HardwareHost   — shared ≤1 Hz sample + single hardware lock      │
 │  ControlBroker  — validate → snapshot → apply → verify → commit   │
-│  SafetyGuard    — critical temp, boot-crash guard                  │
-│  FanWatchdog    — restarts the service if the fan loop hangs       │
+│  SafetyGuard    — release to firmware on stop (logged, #385)      │
+│  BootCrashGuard — a marker before every risky CPU/CO write        │
+│  FanCurveLoop   — curves at ~1 Hz, critical-temperature override  │
+│  FanWatchdog    — restarts the hardware worker if the loop hangs; │
+│                   the service only if that doesn't help           │
 │  ProfileStore   — %ProgramData%\se.codeby.rigstats\profiles.json  │
 │  Providers (IControlProvider):                                    │
 │    PowerPlanProvider   FanProvider         CpuLimitProvider       │
-│    CurveOptimizerProvider  GpuProvider     AuraProvider           │
-└────────────────────────────────────────────────────────────────────┘
+│    CurveOptimizerProvider  GpuPowerProvider  LightingProvider     │
+├───────────────────────────────────────────────────────────────────┤
+│  --hardware-worker child: LibreHardwareMonitor (sensors, fan      │
+│    writes); restarted after a crash or hang, #374                 │
+│  --gpu-worker child: ADLX / NVML for the GPU power limit, #370    │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 The wallpaper host (`rigstats-wallpaper`) never talks to the control pipe; only
@@ -145,9 +152,13 @@ installer migration cost; "rigstats-service" is used here as the concept name.
 - Providers receive `IHardwareHost`, never LHM types, which keeps them
   testable.
 - Debug builds take `--hardware-worker-crash-after <s>` /
-  `--hardware-worker-hang-after <s>` (passed through `dev-sidecar.ps1
-  -SidecarArgs`): the worker crashes or hangs on its first sample after
-  that many seconds, to prove the service survives and restarts it.
+  `--hardware-worker-hang-after <s>`: the worker crashes or hangs on its
+  first sample after that many seconds, to prove the service survives and
+  restarts it; `--hardware-worker-crash-reading <id prefix>` crashes it
+  while it reads that hardware, to see it left out. Each takes a value, so
+  run the script from a PowerShell prompt, not through `pwsh -File` (which
+  passes `'a','b'` as one string): `.\tools\dev-sidecar.ps1 -Live
+  -SidecarArgs '--hardware-worker-crash-reading','/gpu-amd/0'`.
 - **Hardware that keeps crashing the worker is left out** (#374, #338).
   Before reading each top-level hardware item the worker writes a progress
   line (`{"updating":"/gpu-nvidia/0","name":"…"}`, ahead of its answer), so
@@ -1299,8 +1310,8 @@ Clavis, Strix Go 2.4); GearLink 99 ids (see "More lighting devices").
   unknown); whether the voltage actually follows is not measured yet.
 - ADLX power tuning is verified on one card (RX 9070 XT, ADLX 1.5). Which
   other Radeon generations, Pro drivers and AMD laptops report it, and do
-  any misbehave? A native crash inside ADLX would take the service down —
-  if that ever shows up in the field, move ADLX into a small helper process.
+  any misbehave? A native crash inside ADLX costs only the GPU worker
+  (#370), which the GPU tab then explains.
 - NVML power limits are built from NVIDIA's documentation and unit-tested
   but not yet checked on a desktop GeForce: that it works from session 0 as
   SYSTEM, the readback after a write, and whether the limit survives a
