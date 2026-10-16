@@ -484,6 +484,21 @@ src-egui/Cargo.toml`) before merging the release PR:
   RUNNING, and CPU temp/package power show in the dashboard without a reboot.
   Recovery if it fails: `winget install namazso.PawnIO`.
 
+## Release Candidates
+
+A **GitHub pre-release** (tag `v<X.Y.Z>-rc.<N>`) gets a signed installer from
+`release.yml`, the same way a release does, and testers download it from its
+release page. It is not offered to users, because the app's update check reads
+`releases/latest` and that never points at a pre-release. It is not sent to
+winget either: the publish job skips the dispatch for a pre-release. Anyone can
+see it, marked **Pre-release**, and **Latest** stays on the last real release.
+
+The app itself shows `Cargo.toml`'s version (the last release's), not `-rc.N`,
+so it offers the real release when it ships. The installer's file name, its
+window and Windows' "Installed apps" show the RC version. The steps, including
+the checks afterwards, are in the `/pre-release` skill
+(`.claude/skills/pre-release/SKILL.md`).
+
 ## Testing an Installer Before Release
 
 Before merging the release PR, test the full installer flow using the artifact
