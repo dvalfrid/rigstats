@@ -16,27 +16,33 @@ on:
         type: boolean
         default: true
 
+# Three jobs, least privilege each (#249): `build` runs third-party code
+# (crates, NuGet packages, build scripts) with no secrets and a read-only
+# token; `sign` alone sees the Azure signing secrets, in the
+# `release-signing` environment, which waits for the owner's approval;
+# `publish` alone may write to the release. Jobs run on separate runners, so
+# nothing `build` runs can stay behind to read what `sign` gets.
 permissions:
-  contents: write
-  actions: write # starts winget-submit.yml
+  contents: read
 
 concurrency:
   group: release-${{ github.workflow }}-${{ github.event.release.tag_name }}
   cancel-in-progress: true
 
-jobs:
-  release:
-    name: Build And Publish Release (Windows)
-    runs-on: windows-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.tag }}
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+env:
+  RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.tag }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+jobs:
+  build:
+    name: Build (Windows)
+    runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@4dfd137a5aecc12897f37a01818006f58cf58347 # 1.98.0
@@ -64,6 +70,38 @@ jobs:
 
       - name: Build release binary + sidecar
         run: cargo xtask build
+
+      # The whole publish folder: installer.nsi takes two of its DLLs with
+      # /nonfatal, so a missing one would not stop the installer build.
+      - name: Upload unsigned binaries
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: unsigned-binaries
+          path: |
+            target\release\rigstats.exe
+            target\release\rigstats-wallpaper.exe
+            sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\
+          if-no-files-found: error
+          retention-days: 1
+
+  sign:
+    name: Sign And Package (Windows)
+    needs: build
+    runs-on: windows-latest
+    # Holds the AZURE_* secrets; a run waits here for the owner's approval.
+    environment: release-signing
+    steps:
+      # installer.nsi, assets\icon.ico, build\pawnio\, CHANGELOG.md.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Download unsigned binaries
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: unsigned-binaries
 
       # The binaries must be signed BEFORE makensis packs them: the sensor
       # service only accepts control-pipe clients signed by its own signer
@@ -116,6 +154,7 @@ jobs:
         run: |
           $version = ($env:RELEASE_TAG -replace '^v', '')
           & makensis /DVERSION=$version build\installer.nsi
+          if ($LASTEXITCODE -ne 0) { throw "makensis failed ($LASTEXITCODE)." }
           "INSTALLER_PATH=$env:GITHUB_WORKSPACE\target\release\RIGStats_${version}_x64-setup.exe" >> $env:GITHUB_ENV
 
       - name: Sign installer
@@ -131,6 +170,42 @@ jobs:
           file-digest: SHA256
           timestamp-rfc3161: http://timestamp.acs.microsoft.com
           timestamp-digest: SHA256
+
+      - name: Check installer signature
+        shell: pwsh
+        run: |
+          $s = Get-AuthenticodeSignature $env:INSTALLER_PATH
+          "$($s.Path): $($s.Status) $($s.SignerCertificate.Subject)"
+          if ($s.Status -ne 'Valid') { throw "Installer not validly signed ($($s.Status))." }
+
+      - name: Upload signed installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-installer
+          path: ${{ env.INSTALLER_PATH }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish (Windows)
+    needs: sign
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      actions: write # starts winget-submit.yml
+    steps:
+      # CHANGELOG.md and tools\release-highlights.ps1.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+
+      - name: Download signed installer
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signed-installer
+          path: target\release
 
       - name: Generate latest.json update manifest
         shell: pwsh
