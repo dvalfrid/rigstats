@@ -47,4 +47,4 @@ gh release create v<X.Y.Z>-rc.<N> --target <sha> --prerelease \
 
 Only when the owner says so (deleting can't be undone): `gh release delete <tag> --cleanup-tag --yes`. A kept RC does no harm — it stays marked Pre-release. `download-stats.yml` counts its downloads like any release.
 
-Not yet seen in practice: whether Release Please ever reads an `-rc` tag when it picks the next version. Its version comes from `.release-please-manifest.json`, so it shouldn't. Check the next release PR's number after the first RC, and note the result here.
+An `-rc` tag doesn't move Release Please: its version comes from `.release-please-manifest.json`. Seen 2026-10-16 — `v1.49.0-rc.1` was created, Release Please ran on `main` an hour later and the release PR still said 1.49.0.
