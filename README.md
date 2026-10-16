@@ -45,7 +45,7 @@ Both install the same signed NSIS installer, which also registers the sensor sid
 RIGStats' sensor readings have been checked on seven machines — AMD and Intel desktops, an ASUS ROG Zephyrus G14 and a Razer Blade, Radeon and GeForce cards (see [the sensor fixtures](sensor-sidecar.Tests/fixtures/)) — but the hardware control (fans, power limits, lighting) has mostly been tested on one PC: a Ryzen 7 9800X3D, a Radeon RX 9070 XT, an ASUS B650M board and ROG peripherals. What helps most is hardware it hasn't met yet.
 
 - **Test it on your hardware — no programming needed.** Install it, try the Control Center, and tell us what works and what doesn't. Wanted in particular:
-  - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [lighting device report](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) takes two minutes
+  - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) takes two minutes
   - ASUS laptops ([#234](https://github.com/dvalfrid/rigstats/issues/234)), Intel CPUs ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA graphics cards ([#210](https://github.com/dvalfrid/rigstats/issues/210)), Bluetooth headsets and mice ([#291](https://github.com/dvalfrid/rigstats/issues/291))
 
   Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix. It holds your hardware details and RIGStats' logs and settings, including your computer and Windows user name (`environment.txt`); look through it before you share it, and remove anything you'd rather not.
