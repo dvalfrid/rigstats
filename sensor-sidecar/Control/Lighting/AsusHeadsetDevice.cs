@@ -175,7 +175,7 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDispos
     }
 
     /// The headset keeps its last lighting.
-    public void Release() { }
+    public bool Release() => false;
 
     public JsonObject Diagnostics() => new()
     {

@@ -35,7 +35,12 @@ public sealed class FanWatchdog : IHostedService, IDisposable
             () => Environment.TickCount64,
             () => loop.LastTickMs,
             () => fans.GetActiveConfig().Count > 0,
-            fans.ReleaseToFirmware,
+            () =>
+            {
+                // The watchdog's own release, outside SafetyGuard: logged here (#385).
+                if (fans.ReleaseToFirmware() is { } what)
+                    SidecarLog.Log($"[rigstats-control] Handed back to the firmware because the fan loop stalled: fan: {what}.");
+            },
             Environment.FailFast,
             DefaultReleaseLimit)
     {

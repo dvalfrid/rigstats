@@ -658,7 +658,7 @@ public sealed class ControlPipeWorker(
 
     private ControlResponse HandleReleaseToFirmware(ControlRequest request)
     {
-        safetyGuard.ReleaseAllToFirmware();
+        safetyGuard.ReleaseAllToFirmware(SafetyGuard.AskedFromControlCenter);
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
 

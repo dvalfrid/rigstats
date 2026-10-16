@@ -214,14 +214,22 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
         Activate(restored);
     }
 
-    public void ReleaseToFirmware()
+    public string? ReleaseToFirmware()
     {
         List<string> ids;
         lock (_writeLock)
             ids = _active.Keys.Union(_identifying.Keys).ToList();
         foreach (var id in ids)
             ReleaseHeader(id);
+        if (ids.Count == 0)
+            return null;
+        var names = ids.Order(StringComparer.Ordinal).Select(HeaderName);
+        return $"{ids.Count} header{(ids.Count == 1 ? "" : "s")} to the BIOS ({string.Join(", ", names)})";
     }
+
+    /// A header's name for the log: its LHM label ("Fan #2"), else its id.
+    private string HeaderName(string id) =>
+        _headerCache?.FirstOrDefault(h => h.Id == id).Label is { Length: > 0 } label ? label : id;
 
     public bool HasHeader(string headerId) => Headers().Any(h => h.Id == headerId);
 

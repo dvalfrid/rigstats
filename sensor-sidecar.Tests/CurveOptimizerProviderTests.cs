@@ -152,6 +152,20 @@ public sealed class CurveOptimizerProviderTests : IDisposable
     }
 
     [Fact]
+    public void Release_says_it_went_back_to_the_bios_offsets_once()
+    {
+        // #385: for the service log; a second release has nothing to say.
+        var smu = new FakeCo(bios: -5);
+        var provider = Provider(smu);
+        Assert.Null(provider.ReleaseToFirmware());
+
+        provider.Apply(Co(allCore: -20));
+
+        Assert.StartsWith("the BIOS offsets [-5, -5", provider.ReleaseToFirmware());
+        Assert.Null(provider.ReleaseToFirmware());
+    }
+
+    [Fact]
     public void Release_never_writes_when_nothing_was_changed()
     {
         var smu = new FakeCo();

@@ -178,7 +178,13 @@ public class LightingProviderTests
         public void Dispose() => Disposed = true;
         public string? Blocked => blocked;
         public int Releases { get; private set; }
-        public void Release() => Releases++;
+        public bool Release()
+        {
+            Releases++;
+            return HandsBack;
+        }
+
+        public bool HandsBack { get; init; }
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new() { ["product_id"] = "19AF", ["config_table"] = "1E9F" };
         public string Id => id;
         public string Name => $"Device {id}";
@@ -207,7 +213,7 @@ public class LightingProviderTests
         public IReadOnlyList<AuraZone> Zones { get; } = [new("lamps", "1 lamp", true, 0, 1)];
         public List<(AuraEffect Effect, byte R, byte G, byte B)> Applied { get; } = [];
         public void Apply(AuraEffect effect, byte red, byte green, byte blue) => Applied.Add((effect, red, green, blue));
-        public void Release() { }
+        public bool Release() => false;
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
         public bool HasWdl => verified;
         public bool KnownModel => true;
@@ -324,6 +330,18 @@ public class LightingProviderTests
 
         Assert.Equal(1, board.Releases);
         Assert.Equal(1, mouse.Releases);
+    }
+
+    [Fact]
+    public void Release_names_only_the_devices_that_went_back_on_their_own_effect()
+    {
+        // #385: a LampArray mouse goes back to its own effect; the board just
+        // keeps the last one and isn't named.
+        var board = new FakeDevice();
+        var mouse = new FakeDevice("mouse") { HandsBack = true };
+
+        Assert.Equal("Device mouse back on its own effect", Provider(board, mouse).ReleaseToFirmware());
+        Assert.Null(Provider(board).ReleaseToFirmware());
     }
 
     [Fact]
@@ -539,7 +557,7 @@ public class LightingProviderTests
         public bool Lit { get; set; }
         public bool LampOn() => Lit;
         public void SwitchLamp(bool on) => Lit = on;
-        public void Release() { }
+        public bool Release() => false;
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
     }
 
@@ -1047,7 +1065,7 @@ public class LightingDiagnosticsTests
         public string? Blocked => null;
         public IReadOnlyList<AuraZone> Zones { get; } = [new("argb1", "ARGB header 1", true, 0, 1)];
         public void Apply(AuraEffect effect, byte red, byte green, byte blue) { }
-        public void Release() { }
+        public bool Release() => false;
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new() { ["config_table"] = "1E9F03" };
     }
 

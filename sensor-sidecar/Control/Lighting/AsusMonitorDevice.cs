@@ -165,7 +165,11 @@ public sealed class AsusMonitorDevice : ILightingDevice, ILampDevice, IDisposabl
     };
 
     /// Stops a running animation; the monitor keeps its last frame.
-    public void Release() => _loop.Stop();
+    public bool Release()
+    {
+        _loop.Stop();
+        return false;
+    }
 
     public bool HasLamp => Kind == "light_bar";
 

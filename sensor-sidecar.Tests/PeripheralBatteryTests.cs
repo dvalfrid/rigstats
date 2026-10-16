@@ -174,7 +174,7 @@ public class PeripheralBatteryMonitorTests
         public string? Blocked => null;
         public IReadOnlyList<AuraZone> Zones { get; } = [];
         public void Apply(AuraEffect effect, byte red, byte green, byte blue) { }
-        public void Release() { }
+        public bool Release() => false;
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
         public bool HasBattery => hasBattery;
         public string Connection => SensorSidecar.Control.Lighting.Connection.Radio;

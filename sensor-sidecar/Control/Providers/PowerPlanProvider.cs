@@ -236,5 +236,5 @@ public sealed class PowerPlanProvider(IPowerPlanApi api) : IControlProvider
 
     // Power plan is always OS-owned — there is nothing to "hand back to
     // firmware" the way a fan override or undervolt would need to be.
-    public void ReleaseToFirmware() { }
+    public string? ReleaseToFirmware() => null;
 }

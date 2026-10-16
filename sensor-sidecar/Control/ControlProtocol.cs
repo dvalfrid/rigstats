@@ -47,8 +47,10 @@ public interface IControlProvider
 
     /// Hand control back to firmware/BIOS — the panic-button and
     /// stop/crash-safety path. Must be safe to call even if nothing was
-    /// ever applied.
-    void ReleaseToFirmware();
+    /// ever applied. Returns what was handed back, in a few words for the
+    /// service log ("2 headers to the BIOS (Fan #1, Fan #2)"), or null when
+    /// there was nothing to hand back (#385).
+    string? ReleaseToFirmware();
 }
 
 /// Optional for an `IControlProvider`: whether applying `part` could change

@@ -187,6 +187,19 @@ public class FanProviderTests
     }
 
     [Fact]
+    public void Release_says_which_headers_went_back_and_then_nothing()
+    {
+        // #385: the service log names what was handed back.
+        var (provider, _, _) = Setup();
+        Assert.Null(provider.ReleaseToFirmware()); // nothing active
+
+        provider.Apply(Part((1, Curve()), (0, Curve())));
+
+        Assert.Equal("2 headers to the BIOS (Fan #1, Fan #2)", provider.ReleaseToFirmware());
+        Assert.Null(provider.ReleaseToFirmware());
+    }
+
+    [Fact]
     public void Dry_run_never_writes_and_verifies_the_request()
     {
         var (provider, _, computer) = Setup(dryRun: true);

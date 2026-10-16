@@ -67,7 +67,7 @@ public sealed class HueRoomDevice : ILightingDevice, IDisposable
     }
 
     /// The lights stay as they are; a running animation stops.
-    public void Release()
+    public bool Release()
     {
         lock (_gate)
         {
@@ -75,6 +75,7 @@ public sealed class HueRoomDevice : ILightingDevice, IDisposable
             _version++;
             Monitor.PulseAll(_gate);
         }
+        return false;
     }
 
     public JsonObject Diagnostics() => new()

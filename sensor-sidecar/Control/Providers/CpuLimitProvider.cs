@@ -139,15 +139,21 @@ public sealed class CpuLimitProvider(
 
     /// Back to the BIOS values — only if this service changed anything, so
     /// a machine where nobody uses CPU limits never sees an SMU write.
-    public void ReleaseToFirmware()
+    /// Once back, the next release says nothing until a limit changes again.
+    public string? ReleaseToFirmware()
     {
         if (smu is null)
-            return;
+            return null;
         bool touched;
         lock (_lock)
             touched = _touched;
-        if (touched)
-            Write(Baseline());
+        if (!touched)
+            return null;
+        var bios = Baseline();
+        Write(bios);
+        lock (_lock)
+            _touched = false;
+        return $"the BIOS limits ({Describe(bios)})";
     }
 
     private void Write(AmdLimits target)

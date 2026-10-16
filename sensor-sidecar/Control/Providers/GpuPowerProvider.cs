@@ -174,13 +174,13 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
 
     /// Every adapter RIGStats changed goes back to its original value, and
     /// the record of originals is cleared.
-    public void ReleaseToFirmware()
+    public string? ReleaseToFirmware()
     {
         if (api is null)
-            return;
+            return null;
         try
         {
-            RestoreOriginals();
+            return RestoreOriginals();
         }
         finally
         {
@@ -188,24 +188,30 @@ public sealed class GpuPowerProvider(IGpuPowerApi? api, bool dryRun, string? ori
         }
     }
 
-    private void RestoreOriginals()
+    /// What was put back, e.g. "AMD Radeon RX 9070 XT back to 0 %"; null
+    /// when RIGStats had changed nothing.
+    private string? RestoreOriginals()
     {
         Dictionary<string, GpuOriginal> originals;
         lock (_lock)
             originals = new Dictionary<string, GpuOriginal>(_originals);
         if (originals.Count == 0)
-            return;
-        var present = api!.Adapters().Select(a => a.Id).ToHashSet(); // only called after an `api is null` check
+            return null;
+        var present = api!.Adapters().ToDictionary(a => a.Id, a => a.Name); // only called after an `api is null` check
+        var restored = new List<string>();
         foreach (var (id, original) in originals)
         {
-            if (present.Contains(id))
-                Write(id, original.PowerLimitPct);
+            if (!present.TryGetValue(id, out var name))
+                continue;
+            Write(id, original.PowerLimitPct);
+            restored.Add($"{name} back to {original.PowerLimitPct} %{(original.AtFactory ? " (factory settings)" : "")}");
         }
         lock (_lock)
         {
             _originals.Clear();
             SaveOriginals();
         }
+        return restored.Count == 0 ? null : string.Join(", ", restored);
     }
 
     private void Write(string id, int target)

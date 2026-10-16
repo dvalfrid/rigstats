@@ -169,6 +169,19 @@ public sealed class CpuLimitProviderTests : IDisposable
     }
 
     [Fact]
+    public void Release_says_it_went_back_to_the_bios_limits_once()
+    {
+        // #385: for the service log; a second release has nothing to say.
+        var provider = Provider(new FakeSmu(Stock));
+        Assert.Null(provider.ReleaseToFirmware());
+
+        provider.Apply(Limit(ppt: 88));
+
+        Assert.Equal("the BIOS limits (PPT 162 W, TDC 120 A, EDC 180 A)", provider.ReleaseToFirmware());
+        Assert.Null(provider.ReleaseToFirmware());
+    }
+
+    [Fact]
     public void A_restart_in_the_same_boot_keeps_the_bios_baseline()
     {
         var smu = new FakeSmu(Stock);
