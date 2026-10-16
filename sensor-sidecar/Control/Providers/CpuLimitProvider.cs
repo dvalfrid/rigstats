@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace SensorSidecar.Control.Providers;
@@ -190,7 +191,7 @@ public sealed class CpuLimitProvider(
         try
         {
             var node = JsonNode.Parse(File.ReadAllText(baselinePath));
-            var boot = DateTimeOffset.Parse(node!["boot_utc"]!.GetValue<string>());
+            var boot = DateTimeOffset.Parse(node!["boot_utc"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             if ((boot - bootTime).Duration() > SameBootTolerance)
                 return null; // an earlier boot — the SMU has reset since.
             return ParseLimits(node["limits"]!);

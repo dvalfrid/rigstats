@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -182,7 +183,7 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
                 if (!commanded.TryGetValue(id, out var duty))
                     return $"{id} was never commanded";
                 if (sensor.Value is not { } actual || Math.Abs(actual - duty) > VerifyTolerancePct)
-                    return $"{id} commanded={duty:F0}% readback={sensor.Value?.ToString("F0") ?? "none"}% (firmware override?)";
+                    return $"{id} commanded={duty:F0}% readback={sensor.Value?.ToString("F0", CultureInfo.InvariantCulture) ?? "none"}% (firmware override?)";
             }
             return null;
         }, CancellationToken.None).GetAwaiter().GetResult();
@@ -305,6 +306,8 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
         return new ConcurrentDictionary<string, string[]>();
     }
 
+    private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
+
     private void SaveDrives()
     {
         if (channelMapPath is null)
@@ -313,7 +316,7 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
         {
             Directory.CreateDirectory(Path.GetDirectoryName(channelMapPath)!);
             File.WriteAllText(channelMapPath, JsonSerializer.Serialize(
-                new SortedDictionary<string, string[]>(_drives), new JsonSerializerOptions { WriteIndented = true }));
+                new SortedDictionary<string, string[]>(_drives), IndentedJson));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

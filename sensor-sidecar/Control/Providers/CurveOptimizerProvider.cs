@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 
@@ -204,7 +205,7 @@ public sealed class CurveOptimizerProvider(
         try
         {
             var node = JsonNode.Parse(File.ReadAllText(baselinePath));
-            var boot = DateTimeOffset.Parse(node!["boot_utc"]!.GetValue<string>());
+            var boot = DateTimeOffset.Parse(node!["boot_utc"]!.GetValue<string>(), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             if ((boot - bootTime).Duration() > SameBootTolerance)
                 return null; // an earlier boot — the SMU has reset since.
             var offsets = node["offsets"]!.AsArray().Select(v => v!.GetValue<int>()).ToArray();
@@ -251,7 +252,7 @@ public sealed class CurveOptimizerProvider(
         for (var i = 0; i < baseline.Length; i++)
         {
             int? requested = null;
-            if (perCore && part.PerCore is { } map && map.TryGetValue(i.ToString(), out var own))
+            if (perCore && part.PerCore is { } map && map.TryGetValue(i.ToString(CultureInfo.InvariantCulture), out var own))
                 requested = own;
             requested ??= part.AllCore;
             targets[i] = requested is { } v ? Math.Clamp(v, Min, Max) : baseline[i];

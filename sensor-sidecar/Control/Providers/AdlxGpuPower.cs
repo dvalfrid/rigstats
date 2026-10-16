@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace SensorSidecar.Control.Providers;
@@ -369,7 +370,7 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
         16 => "ADLX_TIMEOUT_OPERATION",
         17 => "ADLX_NOT_ACTIVE",
         18 => "ADLX_RESET_NEEDED",
-        _ => result.ToString(),
+        _ => result.ToString(CultureInfo.InvariantCulture),
     };
 
     public void EndSession()

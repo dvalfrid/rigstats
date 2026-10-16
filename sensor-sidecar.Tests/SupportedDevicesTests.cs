@@ -68,7 +68,7 @@ public class SupportedDevicesTests
         Assert.Contains(rows, r => r.Name == "ROG Falchion Ace HFX" && r.Status == LightingCatalog.Verified);
         Assert.Contains(rows, r => r.Name == "ROG Strix Scope II" && r.Status == LightingCatalog.FromOpenRgb);
         Assert.Contains(rows, r => r.Name == "ROG Aura Monitor Light Bar" && r.Notes.Contains("Desk lamp"));
-        Assert.Contains(rows, r => r.Type == "Motherboard" && r.Status.StartsWith(LightingCatalog.Verified + " (19AF)"));
+        Assert.Contains(rows, r => r.Type == "Motherboard" && r.Status.StartsWith(LightingCatalog.Verified + " (19AF)", StringComparison.Ordinal));
         Assert.Equal(
             AuraUsb.Families.Count,
             rows.Where(r => r.Type == "Motherboard").Sum(r => r.UsbIds.Split(", ").Length));

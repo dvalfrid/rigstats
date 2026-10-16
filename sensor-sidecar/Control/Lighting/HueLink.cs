@@ -84,7 +84,7 @@ public sealed class HueLink : IDisposable
         }
     }
 
-    public Task<IReadOnlyList<HueBridgeInfo>> DiscoverAsync(string? ip, CancellationToken ct) =>
+    public static Task<IReadOnlyList<HueBridgeInfo>> DiscoverAsync(string? ip, CancellationToken ct) =>
         HueBridge.DiscoverAsync(ip, ct);
 
     /// Pairs with the bridge at `ip`, or returns false while its link button

@@ -1,3 +1,4 @@
+using System.Globalization;
 using LibreHardwareMonitor.Hardware;
 using Microsoft.Extensions.Hosting;
 using SensorSidecar; // UpdateVisitor, SensorReader
@@ -131,20 +132,20 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         {
             _computer.Accept(_visitor);
             var lines = new System.Text.StringBuilder();
-            lines.AppendLine($"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
+            lines.AppendLine(CultureInfo.InvariantCulture, $"# sensor-tree — {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss}Z");
             // Data sensors are in bytes since LHM 0.9.7; older dumps (MB/GB,
             // with SmallData) have no such line — SensorTreeLoader converts them.
             lines.AppendLine("# data-unit: bytes");
             foreach (var hw in _computer.Hardware)
             {
-                lines.AppendLine($"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
+                lines.AppendLine(CultureInfo.InvariantCulture, $"HW  {hw.HardwareType,-20} id={hw.Identifier} name={hw.Name}");
                 foreach (var s in hw.Sensors)
-                    lines.AppendLine($"  S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                    lines.AppendLine(CultureInfo.InvariantCulture, $"  S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
                 foreach (var sub in hw.SubHardware)
                 {
-                    lines.AppendLine($"  SUB {sub.HardwareType,-18} id={sub.Identifier} name={sub.Name}");
+                    lines.AppendLine(CultureInfo.InvariantCulture, $"  SUB {sub.HardwareType,-18} id={sub.Identifier} name={sub.Name}");
                     foreach (var s in sub.Sensors)
-                        lines.AppendLine($"    S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
+                        lines.AppendLine(CultureInfo.InvariantCulture, $"    S  {s.SensorType,-15} id={s.Identifier} name={s.Name} val={s.Value}");
                 }
             }
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);

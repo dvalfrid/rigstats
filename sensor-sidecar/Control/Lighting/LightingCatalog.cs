@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text;
 
@@ -101,13 +102,13 @@ public static class LightingCatalog
         md.Append("<!-- Generated from the sensor sidecar's model tables by LightingCatalog — do not edit by hand.\n");
         md.Append("     Regenerate: $env:RIGSTATS_UPDATE_SUPPORTED_DEVICES=1; dotnet test sensor-sidecar.Tests --filter SupportedDevices -->\n\n");
         md.Append("RIGStats drives these devices natively — no Armoury Crate, OpenRGB or other software needed. ");
-        md.Append($"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
+        md.Append(CultureInfo.InvariantCulture, $"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
         md.Append("listed from OpenRGB's device list (read as documentation) — it should work; ");
-        md.Append($"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
+        md.Append(CultureInfo.InvariantCulture, $"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
         md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=lighting_device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())
-            md.Append($"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
+            md.Append(CultureInfo.InvariantCulture, $"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
         md.Append("\nNot supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong ");
         md.Append("write can damage the hardware). A device that isn't listed: the diagnostics export's ");
         md.Append("`lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers ");
@@ -123,10 +124,10 @@ public static class LightingCatalog
         {
             var status = row.Status.StartsWith(Verified, StringComparison.Ordinal) ? "status-verified" : "status-openrgb";
             html.Append("                <tr>")
-                .Append($"<td>{Enc(row.Name)}</td>")
-                .Append($"<td>{Enc(row.Type)}</td>")
-                .Append($"<td class=\"{status}\">{Enc(row.Status)}</td>")
-                .Append($"<td>{Enc(row.Notes)}</td>")
+                .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Name)}</td>")
+                .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Type)}</td>")
+                .Append(CultureInfo.InvariantCulture, $"<td class=\"{status}\">{Enc(row.Status)}</td>")
+                .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Notes)}</td>")
                 .Append("</tr>\n");
         }
         return html.ToString();

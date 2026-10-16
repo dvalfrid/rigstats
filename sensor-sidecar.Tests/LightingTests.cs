@@ -1321,7 +1321,7 @@ public class LightingDiscoveryFailureTests
             _ =>
             {
                 calls++;
-                return fail ? throw new NullReferenceException("driver bug") : new LightingScan([], "none");
+                return fail ? throw new InvalidOperationException("driver bug") : new LightingScan([], "none");
             },
             () => null,
             dryRun: true);

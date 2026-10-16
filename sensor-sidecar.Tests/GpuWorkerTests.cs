@@ -766,7 +766,7 @@ public sealed class GpuWorkerTests : IDisposable
     private static string Cmd => Path.Combine(Environment.SystemDirectory, "cmd.exe");
 
     [Fact]
-    public void A_real_worker_process_carries_utf8_lines_without_a_byte_order_mark()
+    public async Task A_real_worker_process_carries_utf8_lines_without_a_byte_order_mark()
     {
         // findstr "^" echoes every line it reads: what we write comes back as is.
         using var worker = ProcessGpuWorker.Start(Cmd, "/d /c findstr \"^\"", _ => { });
@@ -775,9 +775,8 @@ public sealed class GpuWorkerTests : IDisposable
         worker.Input.WriteLine(line);
         worker.Input.Close(); // findstr buffers its output until its input ends
 
-        var read = Task.Run(worker.Output.ReadLine);
-        Assert.True(read.Wait(TimeSpan.FromSeconds(10)), "no echo within 10 s");
-        Assert.Equal(line, read.Result);
+        var read = await Task.Run(worker.Output.ReadLine).WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(line, read);
     }
 
     [Fact]

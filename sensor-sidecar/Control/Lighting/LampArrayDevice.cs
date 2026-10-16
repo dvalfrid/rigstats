@@ -171,7 +171,8 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
         var ok = false;
         try
         {
-            HidP_GetCaps(preparsed, out var caps);
+            if (HidP_GetCaps(preparsed, out var caps) != HidpStatusSuccess)
+                return null;
             var fields = Fields(preparsed, caps);
             if (!fields.TryGetValue(LampCount, out var attributes)
                 || !fields.TryGetValue(LampIdStart, out var rangeUpdate)
@@ -390,7 +391,7 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
     {
         try
         {
-            foreach (var sid in Registry.Users.GetSubKeyNames().Where(s => s.StartsWith("S-1-5-21-") && !s.EndsWith("_Classes")))
+            foreach (var sid in Registry.Users.GetSubKeyNames().Where(s => s.StartsWith("S-1-5-21-", StringComparison.Ordinal) && !s.EndsWith("_Classes", StringComparison.Ordinal)))
             {
                 using var key = Registry.Users.OpenSubKey($@"{sid}\Software\Microsoft\Lighting");
                 if (key?.GetValue("AmbientLightingEnabled") is int enabled && enabled != 0)

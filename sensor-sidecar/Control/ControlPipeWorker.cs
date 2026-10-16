@@ -602,7 +602,7 @@ public sealed class ControlPipeWorker(
 
     /// `{"ip": "192.168.1.20"}` (optional) — the Hue Bridges on the network
     /// (mDNS), or only the one at `ip`.
-    private async Task<ControlResponse> HandleHueDiscoverAsync(ControlRequest request, CancellationToken ct)
+    private static async Task<ControlResponse> HandleHueDiscoverAsync(ControlRequest request, CancellationToken ct)
     {
         string? ip = null;
         if (request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("ip", out var value)
@@ -614,7 +614,7 @@ public sealed class ControlPipeWorker(
             if (!string.IsNullOrWhiteSpace(text))
                 ip = IpParam(text);
         }
-        var bridges = await hue.DiscoverAsync(ip, ct);
+        var bridges = await Lighting.HueLink.DiscoverAsync(ip, ct);
         SidecarLog.Log($"[rigstats-control] Hue: search{(ip is null ? "" : $" at {ip}")} found " +
             (bridges.Count == 0 ? "no bridge." : string.Join(", ", bridges.Select(b => $"{b.Name} ({b.Model}, {b.Ip})")) + "."));
         return ControlResponse.Ok(request.Id, new

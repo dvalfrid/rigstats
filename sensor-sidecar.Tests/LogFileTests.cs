@@ -74,7 +74,7 @@ public sealed class LogFileTests : IDisposable
         // each writer is an unbroken run ending with its last line.
         for (var w = 0; w < writers; w++)
         {
-            var kept = lines.Where(l => l.StartsWith($"w{w} ")).Select(l => int.Parse(l[(l.IndexOf(' ') + 1)..])).ToList();
+            var kept = lines.Where(l => l.StartsWith($"w{w} ", StringComparison.Ordinal)).Select(l => int.Parse(l[(l.IndexOf(' ') + 1)..], System.Globalization.CultureInfo.InvariantCulture)).ToList();
             if (kept.Count == 0)
                 continue;
             Assert.Equal(Enumerable.Range(perWriter - kept.Count, kept.Count), kept);
