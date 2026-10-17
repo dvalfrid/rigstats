@@ -58,6 +58,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | 2–5 short options | `segmented` |
 | A longer list | `dropdown` (`CONTROL_W` wide, so rows line up), or `combo` for another width — never a raw `egui::ComboBox`, it comes out lower than the buttons beside it |
 | A percentage | `slider_pct` (value shown beside it) |
+| A live level (the microphone) | `meter` — segments lit in green, smooth fall; `SLIDER_PCT_W` wide under a slider |
 | A colour from a few | `swatches` |
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
 | Warn/crit number | `threshold_field` |

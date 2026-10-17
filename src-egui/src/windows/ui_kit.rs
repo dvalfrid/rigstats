@@ -28,6 +28,12 @@ pub const CONTROL_W: f32 = 210.0;
 /// segmented controls — so they line up.
 pub const CONTROL_H: f32 = 28.0;
 pub const SIDEBAR_W: f32 = 200.0;
+/// [`slider_pct`]'s track and its value label, side by side.
+const SLIDER_W: f32 = 150.0;
+const PCT_LABEL_W: f32 = 40.0;
+/// The whole width [`slider_pct`] takes in a row (its 6 px row spacing
+/// included) — a control under it, like a [`meter`], lines up with it.
+pub const SLIDER_PCT_W: f32 = SLIDER_W + PCT_LABEL_W + 6.0;
 const CARD_RADIUS: u8 = 10;
 
 // Semantic alert colours — independent of light/dark mode.
@@ -539,14 +545,14 @@ pub fn slider_pct(
     range: RangeInclusive<f64>,
 ) -> bool {
     ui.add_sized(
-        [40.0, 20.0],
+        [PCT_LABEL_W, 20.0],
         egui::Label::new(
             RichText::new(format!("{:.0} %", *value * 100.0))
                 .size(12.0)
                 .color(dc.text),
         ),
     );
-    ui.spacing_mut().slider_width = 150.0;
+    ui.spacing_mut().slider_width = SLIDER_W;
     // Whole percents, and only an actual drag writes the value: a stepped
     // float slider snaps a stored 0.87 to 0.85 the moment it is drawn,
     // which reads as an edit (an "Unsaved changes" nobody made).
@@ -580,6 +586,40 @@ pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     if resp.changed() {
         *value = text.trim().parse::<u8>().ok();
     }
+}
+
+/// A live level meter (#427): a row of rounded segments, lit in green up to
+/// `level` (0–1), the rest in the switch's off colour. The lit part falls
+/// back smoothly instead of flickering with every peak, and the meter keeps
+/// repainting itself while shown. `id_salt` keeps the smoothing apart when
+/// several meters are on screen.
+pub fn meter(ui: &mut Ui, dc: &DialogColors, id_salt: &str, level: f32, width: f32) -> Response {
+    const SEGMENTS: usize = 24;
+    const GAP: f32 = 2.0;
+    const FALL_PER_SEC: f32 = 1.2;
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 8.0), Sense::hover());
+    let id = ui.id().with(("meter", id_salt));
+    let now = ui.input(|i| i.time);
+    let (prev, at) = ui
+        .data(|d| d.get_temp::<(f32, f64)>(id))
+        .unwrap_or((0.0, now));
+    let fallen = prev - FALL_PER_SEC * (now - at) as f32;
+    let shown = level.clamp(0.0, 1.0).max(fallen).max(0.0);
+    ui.data_mut(|d| d.insert_temp(id, (shown, now)));
+    if ui.is_rect_visible(rect) {
+        let seg_w = (rect.width() - GAP * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
+        let lit = (shown * SEGMENTS as f32).round() as usize;
+        let p = ui.painter();
+        for i in 0..SEGMENTS {
+            let x = rect.left() + i as f32 * (seg_w + GAP);
+            let seg = egui::Rect::from_min_size(pos2(x, rect.top()), vec2(seg_w, rect.height()));
+            let color = if i < lit { C_GOOD } else { dc.toggle_off };
+            p.rect_filled(seg, CornerRadius::same(2), color);
+        }
+    }
+    ui.ctx()
+        .request_repaint_after(std::time::Duration::from_millis(50));
+    resp
 }
 
 /// Small clickable reorder button with a painted triangle arrow.
