@@ -1494,6 +1494,16 @@ the `mouse` profile domain (`Control/Mice/`):
   own stored values) depend on G-Helper and aren't offered. **Verified
   2026-10-18** on the Harpe Ace (Omni): double click, disabled and back to
   default each read back as written and worked on the buttons.
+- **The drawing (#435).** The Buttons group shows the mouse from the top
+  (`windows/mouse_drawing.rs`, our own outline — no ASUS artwork, see the
+  decision on #435) with each button's choice at its side and a leader line
+  to it; hovering a choice lights its button in its own shape. Only the
+  buttons every ROG mouse has in the same place are drawn (left, right, the
+  wheel up / click / down, the two thumb buttons). The DPI button differs per
+  model, so it is a row below with its place from `MouseCatalog`'s
+  `DpiButtonPlace` — known only where seen on the hardware or in an ASUS
+  manual (the Harpe Ace Aim Lab Edition: underside, owner 2026-10-18); web
+  pages rarely say it in words.
 
 **Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen

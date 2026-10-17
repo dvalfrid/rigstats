@@ -198,6 +198,9 @@ pub struct MouseSpec {
     /// What a button can be bound to.
     #[serde(default)]
     pub actions: Option<Vec<MouseAction>>,
+    /// Where the DPI button sits when known (#435): "underside" or "top".
+    #[serde(default)]
+    pub dpi_button: Option<String>,
 }
 
 /// A connected ROG mouse with known settings (`mouse_settings`).

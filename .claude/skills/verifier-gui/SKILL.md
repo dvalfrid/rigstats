@@ -47,7 +47,7 @@ Then `Read` the saved PNG to view it.
 Debug builds read `RIGSTATS_OPEN` at start-up and open that dialog themselves — no tray clicking:
 
 ```powershell
-$env:RIGSTATS_OPEN = "control:overview"   # or control:dashboard|overlay|alerts|power|fans|cpu|gpu|lighting
+$env:RIGSTATS_OPEN = "control:overview"   # or control:dashboard|overlay|alerts|power|fans|cpu|gpu|lighting|headset|mouse
                                           # or settings:general|display|overlay|notifications
                                           # or about | status | updates | history
 Start-Process .\target\debug\rigstats.exe
