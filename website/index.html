@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RIGStats — Hardware Monitor &amp; Control Center for Windows</title>
   <meta name="description" content="Free Windows hardware monitor &amp; control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.">
-  <meta name="keywords" content="hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc">
+  <meta name="keywords" content="hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, rog mouse settings, mouse dpi, polling rate, button bindings, headset sidetone, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc">
   <link rel="canonical" href="https://rigstats.app/">
   <link rel="sitemap" type="application/xml" href="/sitemap.xml">
 
@@ -33,7 +33,7 @@
     "@type": "SoftwareApplication",
     "name": "RIGStats",
     "description": "Free Windows hardware monitor & control center: live temps on a second screen or in-game overlay, fan curves, RGB, and profiles that switch by themselves.",
-    "keywords": "hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc",
+    "keywords": "hardware monitor, control center, fan control, fan curve, rgb lighting, asus aura sync, philips hue, rog mouse settings, mouse dpi, polling rate, button bindings, headset sidetone, curve optimizer, undervolt, ryzen, radeon, power profiles, automatic profile switching, game mode, wallpaper engine, desktop background, game overlay, fps overlay, cpu temperature, gpu temperature, system monitor, gaming pc",
     "url": "https://rigstats.app/",
     "downloadUrl": "https://github.com/dvalfrid/rigstats/releases/latest",
     "applicationCategory": "UtilitiesApplication",
@@ -142,7 +142,7 @@
       <div class="hero-text">
         <span class="badge">Windows 10 / 11 &nbsp;·&nbsp; Free &nbsp;·&nbsp; Open Source</span>
         <h1>Your rig.<br>Always in view.</h1>
-        <p class="hero-sub">Real-time hardware monitoring built for a dedicated secondary display — portrait or landscape — scatter individual panels freely in floating mode, or overlay a compact, click-through FPS-style strip directly on top of your game. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, live process monitor, and a built-in multi-GPU selector for stable tracking. The Control Center adds fan curves, power profiles, Ryzen and Radeon power tuning, and RGB lighting.</p>
+        <p class="hero-sub">Real-time hardware monitoring built for a dedicated secondary display — portrait or landscape — scatter individual panels freely in floating mode, or overlay a compact, click-through FPS-style strip directly on top of your game. CPU, GPU, RAM, network, disk, NVMe/SSD temperatures, motherboard sensors, live process monitor, and a built-in multi-GPU selector for stable tracking. The Control Center adds fan curves, power profiles, Ryzen and Radeon power tuning, RGB lighting, and the settings of ROG headsets and mice.</p>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">Download</a>
           <a href="https://github.com/dvalfrid/rigstats" class="btn-ghost" target="_blank" rel="noopener">View on GitHub →</a>
@@ -228,7 +228,7 @@
         <li class="feature-card">
           <div class="feature-dot"></div>
           <h3>Control Center &amp; fan curves</h3>
-          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000 they can also lower the CPU power limits and undervolt with Curve Optimizer, on AMD Radeon and desktop NVIDIA GeForce cards set the GPU power limit, and set the lighting — ASUS Aura, ROG peripherals and Philips Hue room lights.</p>
+          <p>Switch between Silent, Balanced, Gaming and Eco profiles from the tray, and give every fan its own curve — evaluated by the service, so it keeps working with the app closed. On Ryzen 9000 they can also lower the CPU power limits and undervolt with Curve Optimizer, on AMD Radeon and desktop NVIDIA GeForce cards set the GPU power limit, and set the lighting — ASUS Aura, ROG peripherals and Philips Hue room lights. ROG headsets get sidetone and noise reduction, ROG mice DPI, polling rate and button bindings — and each profile can pick one of the mouse's own profiles.</p>
         </li>
       </ul>
     </div>
@@ -354,7 +354,7 @@
   <section class="section" id="control-center">
     <div class="container">
       <header class="section-head">
-        <h2>Control Center — Profiles, Fans, Lighting &amp; Desktop</h2>
+        <h2>Control Center — Profiles, Fans, Lighting, Mouse &amp; Desktop</h2>
         <p>Profiles bundle your power plan and fan curves — and on supported hardware, CPU and GPU power limits and RGB lighting — together with how RIGStats itself looks: accent colour, panels, overlay and alert levels. They switch with one click from the tray. Fan curves run inside the RIGStats service, so they keep working with the app closed and come back after a reboot.</p>
       </header>
       <div class="cc-rows">
@@ -473,8 +473,38 @@
             <ul class="floating-features">
               <li>Off, static, breathing or spectrum cycle per profile, with colour (or one-click quick-pick colours) and brightness and a live preview</li>
               <li><strong>Desk lamp</strong>: the Aura Monitor Light Bar's white lamp gets its own on/off, brightness and colour temperature (2700–6500 K) per profile, independent of the RGB</li>
-              <li><strong>Headset</strong>: sidetone (hear your own voice during calls) and microphone noise reduction on ROG Delta II and Pelta headsets — no GearLink needed</li>
-              <li><strong>Mouse</strong>: DPI levels, polling rate, button response, lift-off, angle snapping, acceleration, button bindings and energy on ROG mice — and each profile can pick one of the mouse's own profiles</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-mouse.png" alt="Control Center, Mouse page: the onboard profile the RIGStats profile uses, DPI level chips with a slider for the level in use, polling rate and button response, and a drawing of the mouse seen from above with each button's binding beside it" class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>ROG mice — without Armoury Crate</h3>
+            <p>Everything is kept in the mouse itself, so it works on any PC afterwards. Each profile picks one of the mouse's own onboard profiles — low DPI and 500 Hz for work, high polling for games.</p>
+            <ul class="floating-features">
+              <li><strong>DPI levels</strong> as chips, with one slider for the level in use</li>
+              <li>Polling rate, button response, lift-off distance, angle snapping, acceleration and motion sync</li>
+              <li><strong>Button bindings</strong> on a drawing of the mouse — hover a choice and its button lights up</li>
+              <li>Energy: auto power-off and the mouse's own low-battery warning</li>
+              <li>Wired, on its dongle or on the ROG Omni receiver; only the commands GearLink itself sends, every change read back</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="cc-row">
+          <div class="cc-shot screen-wrap">
+            <img src="images/control-center-headset.png" alt="Control Center, Headset page: the ROG Delta II with a switch and level for sidetone, and a switch and Low, Medium or High strength for microphone noise reduction"class="hero-img" loading="lazy">
+          </div>
+          <div class="cc-text">
+            <h3>Headset and microphone</h3>
+            <p>ROG Delta II and Pelta — no GearLink needed.</p>
+            <ul class="floating-features">
+              <li><strong>Sidetone</strong>: hear your own voice during calls, with its level</li>
+              <li><strong>Noise reduction</strong> on the microphone — Low, Medium or High</li>
+              <li><strong>Ctrl+Alt+M</strong> mutes the microphone from anywhere, shown in the tray and on the dashboard; its level and a live meter are in Settings</li>
             </ul>
           </div>
         </div>
