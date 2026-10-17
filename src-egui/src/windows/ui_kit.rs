@@ -572,6 +572,23 @@ pub fn slider_pct(
     changed
 }
 
+/// A whole-number slider 0–`max` with its value beside it, the same look and
+/// width as [`slider_pct`] — for a device's own scale (sidetone 0–20). The
+/// response says when a drag ends, for values that are sent to a device
+/// once rather than on every step.
+pub fn slider_steps(ui: &mut Ui, dc: &DialogColors, value: &mut u8, max: u8) -> Response {
+    ui.add_sized(
+        [PCT_LABEL_W, 20.0],
+        egui::Label::new(RichText::new(value.to_string()).size(12.0).color(dc.text)),
+    );
+    ui.spacing_mut().slider_width = SLIDER_W;
+    ui.add(
+        egui::Slider::new(value, 0..=max)
+            .show_value(false)
+            .trailing_fill(true),
+    )
+}
+
 /// Text field for an optional threshold value; hint "—" when None.
 pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     let mut text = value.map(|v| v.to_string()).unwrap_or_default();
@@ -1109,6 +1126,7 @@ pub enum Icon {
     Cpu,
     Gpu,
     Lighting,
+    Headset,
     General,
     Display,
     Rules,
@@ -1131,6 +1149,7 @@ impl Icon {
             Icon::Cpu => Color32::from_rgb(255, 149, 0),
             Icon::Gpu => Color32::from_rgb(94, 92, 230),
             Icon::Lighting => Color32::from_rgb(255, 55, 95),
+            Icon::Headset => Color32::from_rgb(88, 86, 214),
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
             Icon::Rules => Color32::from_rgb(255, 159, 10),
@@ -1239,6 +1258,20 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
             p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
             p.circle_stroke(at(0.14, -0.04), s * 0.15, stroke);
             p.line_segment([at(-0.38, 0.24), at(-0.38, 0.44)], stroke);
+        }
+        Icon::Headset => {
+            // Headband over two ear cups.
+            let band: Vec<Pos2> = (0..=16)
+                .map(|k| {
+                    let a = std::f32::consts::PI * (1.0 + k as f32 / 16.0);
+                    c + vec2(a.cos(), a.sin()) * s * 0.36 + vec2(0.0, s * 0.06)
+                })
+                .collect();
+            p.add(egui::Shape::line(band, stroke));
+            for x in [-0.36, 0.36] {
+                let cup = Rect::from_center_size(c + vec2(x * s, s * 0.2), vec2(s * 0.2, s * 0.34));
+                p.rect_filled(cup, CornerRadius::same((s * 0.07) as u8), color);
+            }
         }
         Icon::Lighting => {
             p.circle_filled(c, s * 0.18, color);

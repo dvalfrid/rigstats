@@ -93,6 +93,7 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "cpu" => control::Page::Cpu,
             "gpu" => control::Page::Gpu,
             "lighting" => control::Page::Lighting,
+            "headset" => control::Page::Headset,
             "rules" => control::Page::Rules,
             _ => control::Page::Overview,
         })),

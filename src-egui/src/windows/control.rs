@@ -20,8 +20,8 @@ use crate::windows::OpenRequests;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
-    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HueCaps, LampPart,
-    PowerScheme, Problem, Profile, Severity,
+    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HeadsetSettings,
+    HueCaps, LampPart, PowerScheme, Problem, Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -93,6 +93,7 @@ pub enum Page {
     Cpu,
     Gpu,
     Lighting,
+    Headset,
     Rules,
 }
 
@@ -180,6 +181,12 @@ pub struct ControlUi {
     saved_at: Option<(Instant, &'static str)>,
     /// The App rules page's "Add a rule" form (#307).
     rule_form: crate::windows::rules_page::RulesPage,
+    /// The Headset page asked the service for the headsets' settings since
+    /// it was opened (#428).
+    headsets_asked: bool,
+    /// A headset's settings as just changed here, shown until the service's
+    /// read-back arrives (a slider would otherwise jump back meanwhile).
+    headset_pending: Option<(String, HeadsetSettings)>,
 }
 
 #[derive(Debug)]
@@ -908,11 +915,7 @@ fn lighting_tab(
         .as_ref()
         .map_or_else(|| saved.cloned(), |d| d.part.clone());
     let before = part.clone();
-    let battery_levels = ui_state
-        .look
-        .current()
-        .and_then(|l| l.thresholds.get("battery").cloned())
-        .map_or((20, 10), |t| (t.warn.unwrap_or(20), t.crit.unwrap_or(10)));
+    let battery_levels = battery_levels(ui_state);
 
     // ── The effect ───────────────────────────────────────────────────────
     ui_kit::group(
@@ -1124,6 +1127,165 @@ fn battery_and_link(ui: &mut egui::Ui, dc: &DialogColors, p: &Peripheral, (warn,
         );
         let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
         paint_link_icon(ui.painter(), rect.center(), 12.0, link, dc.muted);
+    }
+}
+
+/// The battery alert levels (warn, crit) of the profile being looked at.
+fn battery_levels(ui_state: &ControlUi) -> (u8, u8) {
+    ui_state
+        .look
+        .current()
+        .and_then(|l| l.thresholds.get("battery").cloned())
+        .map_or((20, 10), |t| (t.warn.unwrap_or(20), t.crit.unwrap_or(10)))
+}
+
+/// The Headset page (#428): each connected headset with settings RIGStats
+/// knows — sidetone and microphone noise reduction — read from the headset
+/// when the page opens and sent to it as soon as one changes (they are kept
+/// in the headset, like GearLink's, not in a profile).
+fn headset_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
+    peripherals: &[Peripheral],
+    battery_levels: (u8, u8),
+) {
+    if !ui_state.headsets_asked {
+        ui_state.headsets_asked = true;
+        ui_state.headset_pending = None;
+        let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
+    }
+    // The read-back arrived: show the headset's own values again.
+    if let Some((id, pending)) = &ui_state.headset_pending {
+        let landed = control
+            .headsets
+            .iter()
+            .any(|h| &h.id == id && h.settings.as_ref() == Some(pending));
+        if landed || !control.headset_busy {
+            ui_state.headset_pending = None;
+        }
+    }
+    if control.headsets.is_empty() {
+        ui_kit::group(ui, dc, None, None, |g| {
+            g.row(
+                if control.headset_busy {
+                    "Reading the headset…"
+                } else {
+                    "No headset answered"
+                },
+                Some("Switch the headset on, then open this page again"),
+                |ui| {
+                    if !control.headset_busy
+                        && theme::dialog_btn_secondary(ui, "Try again", dc).clicked()
+                    {
+                        let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
+                    }
+                },
+            );
+        });
+        return;
+    }
+    let mut send: Option<(String, HeadsetSettings)> = None;
+    for headset in &control.headsets {
+        let wireless = peripherals.iter().find(|p| p.id == headset.id);
+        let subtitle = if headset.verified {
+            "Headset"
+        } else {
+            "Headset · settings not yet verified on this model"
+        };
+        ui_kit::group(ui, dc, None, None, |g| {
+            g.row(&headset.name, Some(subtitle), |ui| {
+                if let Some(p) = wireless {
+                    battery_and_link(ui, dc, p, battery_levels);
+                }
+            });
+        });
+        let Some(read) = headset.settings else {
+            ui_kit::group(ui, dc, None, None, |g| {
+                g.row(
+                    "The headset doesn't answer",
+                    Some("Switch it on or bring it closer to its dongle"),
+                    |ui| {
+                        if theme::dialog_btn_secondary(ui, "Try again", dc).clicked() {
+                            let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
+                        }
+                    },
+                );
+            });
+            continue;
+        };
+        let mut s = match &ui_state.headset_pending {
+            Some((id, pending)) if id == &headset.id => *pending,
+            _ => read,
+        };
+        let before = s;
+        let mut release = false;
+        ui_kit::group(
+            ui,
+            dc,
+            Some("Sidetone"),
+            Some("Hear your own voice in the headset while you talk, so you don't raise it. The headset plays it only while a program uses the microphone — a call, a recording, or the level meter in Settings."),
+            |g| {
+                g.row("Sidetone", None, |ui| {
+                    ui_kit::toggle(ui, dc, &mut s.sidetone_on);
+                });
+                g.row("Level", Some("How loud your voice comes back"), |ui| {
+                    ui.add_enabled_ui(s.sidetone_on, |ui| {
+                        let resp = ui_kit::slider_steps(
+                            ui,
+                            dc,
+                            &mut s.sidetone_level,
+                            headset.sidetone_max,
+                        );
+                        release |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                    });
+                });
+            },
+        );
+        ui_kit::group(
+            ui,
+            dc,
+            Some("Noise reduction"),
+            Some("Filters background noise — keyboard, fans — out of what your microphone sends; what you hear in the headset is unchanged."),
+            |g| {
+                g.row("Noise reduction", None, |ui| {
+                    ui_kit::toggle(ui, dc, &mut s.noise_reduction_on);
+                });
+                if headset.noise_levels == 3 {
+                    g.row("Strength", None, |ui| {
+                        ui.add_enabled_ui(s.noise_reduction_on, |ui| {
+                            ui_kit::segmented(
+                                ui,
+                                dc,
+                                &mut s.noise_reduction_level,
+                                &[(0, "Low"), (1, "Medium"), (2, "High")],
+                            );
+                        });
+                    });
+                }
+            },
+        );
+        if s != before {
+            // A slider shows its value while dragging and is sent when let go;
+            // a switch or a choice is sent at once.
+            let dragging = s.sidetone_level != before.sidetone_level && !release;
+            ui_state.headset_pending = Some((headset.id.clone(), s));
+            if !dragging {
+                send = Some((headset.id.clone(), s));
+            }
+        } else if release {
+            send = Some((headset.id.clone(), s));
+        }
+    }
+    if let Some((id, settings)) = send {
+        if cmd_tx
+            .try_send(ControlCmd::SetHeadset { id, settings })
+            .is_ok()
+        {
+            ui_state.saved_at = Some((Instant::now(), "Sent to the headset"));
+        }
     }
 }
 
@@ -1580,6 +1742,10 @@ pub fn show(
     // A GPU domain that failed (the driver crashed, #370) keeps its page, to
     // say so; one this PC doesn't have stays hidden.
     let gpu_problem = control.domain_problem("gpu").cloned();
+    // The Headset page reads the headsets each time it is opened (#428).
+    if ui_state.tab != Page::Headset {
+        ui_state.headsets_asked = false;
+    }
     match ui_state.tab {
         Page::Fans if fan_caps.is_none() && fan_problem.is_none() => ui_state.tab = Page::Overview,
         Page::Cpu if cpu_caps.is_none() && co_caps.is_none() && cpu_problem.is_none() => {
@@ -1587,6 +1753,7 @@ pub fn show(
         }
         Page::Gpu if gpu_caps.is_none() && gpu_problem.is_none() => ui_state.tab = Page::Overview,
         Page::Lighting if !lighting_shown => ui_state.tab = Page::Overview,
+        Page::Headset if !control.has_headset() => ui_state.tab = Page::Overview,
         _ => {}
     }
     let active = control.active();
@@ -1829,6 +1996,7 @@ pub fn show(
         cpu: cpu_tab_shown,
         gpu: gpu_caps.is_some() || gpu_problem.is_some(),
         lighting: lighting_shown,
+        headset: control.has_headset(),
     };
     egui::SidePanel::left("control_nav")
         .resizable(false)
@@ -1978,6 +2146,15 @@ pub fn show(
                             look_link.open,
                         );
                     }
+                    Page::Headset => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Headset",
+                            "Settings kept in the headset itself, for every profile. Changes are sent at once.",
+                        );
+                        headset_page(ui, dc, control, cmd_tx, ui_state, peripherals, battery_levels(ui_state));
+                    }
                     Page::Gpu => {
                         ui_kit::page_header(
                             ui,
@@ -2055,6 +2232,7 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Cpu, Icon::Cpu, "CPU"),
     (Page::Gpu, Icon::Gpu, "Graphics card"),
     (Page::Lighting, Icon::Lighting, "Lighting"),
+    (Page::Headset, Icon::Headset, "Headset"),
     (Page::Rules, Icon::Rules, "App rules"),
 ];
 
@@ -2077,6 +2255,7 @@ struct PageShown {
     cpu: bool,
     gpu: bool,
     lighting: bool,
+    headset: bool,
 }
 
 impl PageShown {
@@ -2086,6 +2265,7 @@ impl PageShown {
             Page::Cpu => self.cpu,
             Page::Gpu => self.gpu,
             Page::Lighting => self.lighting,
+            Page::Headset => self.headset,
             _ => true,
         }
     }

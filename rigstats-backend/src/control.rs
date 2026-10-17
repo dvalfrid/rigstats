@@ -221,6 +221,33 @@ pub struct HueGroupCap {
     pub chosen: bool,
 }
 
+/// A headset's own settings (#428): sidetone and microphone noise
+/// reduction, kept in the headset (`headset_settings` / `headset_set`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeadsetSettings {
+    pub sidetone_on: bool,
+    pub sidetone_level: u8,
+    pub noise_reduction_on: bool,
+    pub noise_reduction_level: u8,
+}
+
+/// A connected headset with settings RIGStats knows (`headset_settings`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct HeadsetInfo {
+    /// The lighting device id — the same id as its battery in the telemetry.
+    pub id: String,
+    pub name: String,
+    /// Settings seen working on this model.
+    #[serde(default)]
+    pub verified: bool,
+    pub sidetone_max: u8,
+    /// Noise-reduction levels; 0 = on/off only.
+    #[serde(default)]
+    pub noise_levels: u8,
+    /// `None` while the headset doesn't answer (off behind its dongle).
+    pub settings: Option<HeadsetSettings>,
+}
+
 /// A bridge found on the network (`hue_discover`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct HueBridgeFound {
@@ -263,6 +290,10 @@ pub struct AuraDeviceCap {
     /// follow Dynamic Lighting directly) — `None` when the model is unknown.
     #[serde(default)]
     pub wdl_toggle: Option<bool>,
+    /// A headset with sidetone / noise-reduction settings (#428): the
+    /// Control Center shows its Headset page.
+    #[serde(default)]
+    pub headset_settings: bool,
     #[serde(default)]
     pub zones: Vec<AuraZoneCap>,
 }
@@ -572,6 +603,10 @@ pub struct ControlState {
     pub hue_found: Vec<HueBridgeFound>,
     /// Why the last Hue request failed ("press the link button", ...).
     pub hue_message: Option<String>,
+    /// Headsets with settings (#428), as last read from the service.
+    pub headsets: Vec<HeadsetInfo>,
+    /// A headset request is in flight.
+    pub headset_busy: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -654,6 +689,13 @@ impl ControlState {
             .find(|c| c.domain == "aura")
             .and_then(|c| c.details.as_ref()?.get("hue").cloned())
             .and_then(|h| serde_json::from_value(h).ok())
+    }
+
+    /// A headset with settings RIGStats knows is connected (#428) — the
+    /// Control Center's Headset page.
+    pub fn has_headset(&self) -> bool {
+        self.aura_caps()
+            .is_some_and(|c| c.devices.iter().any(|d| d.headset_settings))
     }
 
     /// A lighting device with a desk lamp is connected (the tray toggle).
@@ -813,6 +855,18 @@ impl ControlState {
                 self.hue_busy = busy;
             }
             ControlEvent::HueFound(found) => self.hue_found = found,
+            ControlEvent::Headsets(list) => {
+                self.headsets = list;
+                self.headset_busy = false;
+            }
+            ControlEvent::HeadsetUpdated(headset) => {
+                match self.headsets.iter_mut().find(|h| h.id == headset.id) {
+                    Some(known) => *known = headset,
+                    None => self.headsets.push(headset),
+                }
+                self.headset_busy = false;
+            }
+            ControlEvent::HeadsetBusy(busy) => self.headset_busy = busy,
             ControlEvent::FanDuty(duty) => {
                 // Arrives every second while curves run — only a change is
                 // worth a repaint.
@@ -894,6 +948,12 @@ pub enum ControlEvent {
     HueBusy(bool),
     /// The bridges a search found.
     HueFound(Vec<HueBridgeFound>),
+    /// Every headset with settings, freshly read (#428).
+    Headsets(Vec<HeadsetInfo>),
+    /// One headset after a change, as it read back.
+    HeadsetUpdated(HeadsetInfo),
+    /// A headset request started (`true`) or ended without an answer.
+    HeadsetBusy(bool),
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -945,6 +1005,13 @@ pub enum ControlCmd {
     HueChoose(Vec<String>),
     /// Forget the paired bridge.
     HueUnpair,
+    /// Read every headset's settings (#428) — when the Headset page opens.
+    ReadHeadsets,
+    /// Change one headset's settings; saved in the headset.
+    SetHeadset {
+        id: String,
+        settings: HeadsetSettings,
+    },
 }
 
 // ── The task ────────────────────────────────────────────────────────────
@@ -1411,6 +1478,60 @@ async fn handle_cmd(
             request(writer, reader, next_id, "lamp_toggle", None, event_tx, dir).await?;
             Ok(())
         }
+        ControlCmd::ReadHeadsets => {
+            let _ = event_tx.send(ControlEvent::HeadsetBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "headset_settings",
+                None,
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("headsets").cloned())
+            {
+                Some(list) => {
+                    let list = serde_json::from_value(list).unwrap_or_default();
+                    let _ = event_tx.send(ControlEvent::Headsets(list));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::HeadsetBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
+        ControlCmd::SetHeadset { id, settings } => {
+            let _ = event_tx.send(ControlEvent::HeadsetBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "headset_set",
+                Some(serde_json::json!({ "id": id, "settings": settings })),
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("headset").cloned())
+                .and_then(|h| serde_json::from_value(h).ok())
+            {
+                Some(headset) => {
+                    let _ = event_tx.send(ControlEvent::HeadsetUpdated(headset));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::HeadsetBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
         ControlCmd::EnableWdl(id) => {
             request(
                 writer,
@@ -1726,6 +1847,42 @@ fn log_pipe_trouble_throttled(dir: &Path, msg: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `headset_settings`' answer as `LightingProvider.Headsets` writes it,
+    /// and `headset_set`'s settings as `HeadsetSettingsTests` reads them (#428).
+    #[test]
+    fn headset_wire_shapes_match_the_service() {
+        let list: Vec<HeadsetInfo> = serde_json::from_value(serde_json::json!([
+            {"id": "asus-headset-1afa-1", "name": "ROG Delta II", "verified": false,
+             "sidetone_max": 20, "noise_levels": 3,
+             "settings": {"sidetone_on": true, "sidetone_level": 8,
+                          "noise_reduction_on": false, "noise_reduction_level": 1}},
+            {"id": "asus-headset-1afa-2", "name": "ROG Delta II (2)", "verified": false,
+             "sidetone_max": 20, "noise_levels": 3, "settings": null}
+        ]))
+        .unwrap();
+        let settings = HeadsetSettings {
+            sidetone_on: true,
+            sidetone_level: 8,
+            noise_reduction_on: false,
+            noise_reduction_level: 1,
+        };
+        assert_eq!(list[0].settings, Some(settings));
+        assert_eq!(list[1].settings, None);
+        assert_eq!(
+            serde_json::to_value(settings).unwrap(),
+            serde_json::json!({"sidetone_on": true, "sidetone_level": 8,
+                               "noise_reduction_on": false, "noise_reduction_level": 1})
+        );
+
+        let mut state = ControlState::default();
+        state.apply(ControlEvent::Headsets(list));
+        let mut changed = state.headsets[1].clone();
+        changed.settings = Some(settings);
+        state.apply(ControlEvent::HeadsetUpdated(changed));
+        assert_eq!(state.headsets.len(), 2);
+        assert_eq!(state.headsets[1].settings, Some(settings));
+    }
 
     /// The problem's wire shape against the example the service's
     /// `GpuWorkerTests.Capability_problem_serializes_as_the_shared_contract_example`
