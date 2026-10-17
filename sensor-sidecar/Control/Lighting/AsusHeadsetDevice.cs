@@ -11,7 +11,7 @@ namespace SensorSidecar.Control.Lighting;
 /// four header bytes. Lighting: set key 40 / get key 3 with `effectId,
 /// brightness (0–100), R, G, B` — so unlike other lighting devices, every
 /// write is verified by reading it back.
-public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDisposable
+public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadsetSettingsDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(800);
 
@@ -67,6 +67,75 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IDispos
     public static readonly IReadOnlySet<ushort> VerifiedModels = new HashSet<ushort> { 0x1AFA };
 
     public static string? Model(ushort productId) => Models.GetValueOrDefault(productId);
+
+    /// Headsets whose sidetone and noise-reduction settings are documented
+    /// (#428), with their limits — every model in <see cref="Models"/>, each
+    /// read from its own GearLink schema (2026-10-17): all five carry
+    /// `sideToneStatus` (get 36 / set 65·17) and `sideToneConfig` (get 25 /
+    /// set 97·17) with a 0–20 sidetone slider, and `ecnrStatus` (65·32 /
+    /// 65·2). The Delta II family also has `ecnrConfig` (65·16) and three
+    /// noise levels (also in the owner's GearLink UI); the Pelta's
+    /// `ecnrStatus` answers the status alone and it has no `ecnrConfig`, so
+    /// on/off only. G-Helper's `Pelta` gives sidetone 0–100; GearLink's 0–20
+    /// is used (ASUS's own, and valid under both).
+    public static readonly IReadOnlyDictionary<ushort, HeadsetLimits> SettingsModels = new Dictionary<ushort, HeadsetLimits>
+    {
+        [0x1AFA] = new(SidetoneMax: 20, NoiseLevels: 3),
+        [0x1D41] = new(SidetoneMax: 20, NoiseLevels: 3),
+        [0x1E6B] = new(SidetoneMax: 20, NoiseLevels: 3),
+        [0x1B82] = new(SidetoneMax: 20, NoiseLevels: 0),
+        [0x1B84] = new(SidetoneMax: 20, NoiseLevels: 0),
+    };
+
+    /// Settings seen working on hardware: the Delta II on its 2.4 GHz dongle
+    /// (2026-10-17 — every sidetone and noise-reduction change read back as
+    /// written; sidetone heard while the microphone was in use).
+    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1AFA };
+
+    public HeadsetLimits? Limits => SettingsModels.GetValueOrDefault(_info.ProductId);
+
+    public bool SettingsVerified => VerifiedSettingsModels.Contains(_info.ProductId);
+
+    public HeadsetSettings? ReadSettings()
+    {
+        if (Limits is not { } limits)
+            return null;
+        lock (_lock)
+            return ReadSettingsLocked(limits);
+    }
+
+    public HeadsetSettings WriteSettings(HeadsetSettings wanted)
+    {
+        var limits = Limits ?? throw new InvalidOperationException($"{Name} has no settings RIGStats knows.");
+        wanted = HeadsetCommands.Clamp(wanted, limits);
+        lock (_lock)
+        {
+            var now = ReadSettingsLocked(limits) ?? throw new IOException($"{Name} didn't answer.");
+            foreach (var (command, key, data) in HeadsetCommands.Writes(now, wanted, limits))
+            {
+                Send(Frame(_reportId, _info.OutputReportLength, command, key, data));
+                ReadReply(command, key); // the acknowledgement; the read-back below decides
+            }
+            var back = ReadSettingsLocked(limits) ?? throw new IOException($"{Name} didn't answer after the change.");
+            if (back != wanted)
+                throw new IOException($"{Name} did not take the settings (read back {back}).");
+            return back;
+        }
+    }
+
+    // Caller holds _lock.
+    private HeadsetSettings? ReadSettingsLocked(HeadsetLimits limits)
+    {
+        var replies = new List<byte[]>();
+        foreach (var (command, key) in HeadsetCommands.Reads)
+        {
+            Send(Frame(_reportId, _info.OutputReportLength, command, key, []));
+            if (ReadReply(command, key) is not { } reply)
+                return null;
+            replies.Add(reply);
+        }
+        return HeadsetCommands.Parse(replies[0], replies[1], replies[2], limits);
+    }
 
     /// Every headset that answers. A dongle whose headset is off or out of
     /// range goes to `silent`, to be asked again later.

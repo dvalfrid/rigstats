@@ -250,6 +250,9 @@ public sealed class LightingProvider : IControlProvider
                     ["wdl_on"] = d is IWdlDevice { HasWdl: true } wdl ? wdl.WdlOn() : null,
                     // false: a known model without that setting — no hint about it.
                     ["wdl_toggle"] = d is IWdlDevice { KnownModel: true } known ? known.HasWdl : null,
+                    // Has sidetone / noise-reduction settings (#428) — read by
+                    // `headset_settings` when the Headset page opens, not here.
+                    ["headset_settings"] = d is IHeadsetSettingsDevice { Limits: not null },
                     ["zones"] = new JsonArray(d.Zones.Select(z => (JsonNode)new JsonObject
                     {
                         ["id"] = z.Id,
@@ -388,6 +391,66 @@ public sealed class LightingProvider : IControlProvider
             lamp.SwitchLamp(on);
         return on;
     }
+
+    /// Every connected headset with settings RIGStats knows (#428), with its
+    /// limits and current settings (null when it doesn't answer — a headset
+    /// switched off behind its dongle). Read from the headsets each call.
+    public JsonArray Headsets()
+    {
+        Rescan();
+        return new JsonArray(_devices.OfType<IHeadsetSettingsDevice>()
+            .Where(h => h.Limits is not null)
+            .Select(h => (JsonNode)HeadsetJson(h, SafeRead(h)))
+            .ToArray());
+    }
+
+    /// Changes one headset's settings (#428) and returns it as
+    /// <see cref="Headsets"/> does, with what it read back. Saved in the
+    /// headset, like GearLink's; asked for from the Headset page.
+    public JsonObject SetHeadset(string deviceId, HeadsetSettings wanted)
+    {
+        if (_devices.FirstOrDefault(d => d.Id == deviceId) is not IHeadsetSettingsDevice { Limits: { } limits } headset)
+            throw new InvalidOperationException($"No headset '{deviceId}' with settings to change.");
+        wanted = HeadsetCommands.Clamp(wanted, limits);
+        if (_dryRun)
+        {
+            SidecarLog.Log($"[rigstats-control] dry-run: {headset.Name} settings -> {wanted}");
+            return HeadsetJson(headset, wanted);
+        }
+        var back = headset.WriteSettings(wanted);
+        SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} sidetone {(back.SidetoneOn ? "on" : "off")} {back.SidetoneLevel}, "
+            + $"noise reduction {(back.NoiseReductionOn ? "on" : "off")} {back.NoiseReductionLevel}.");
+        return HeadsetJson(headset, back);
+    }
+
+    private static HeadsetSettings? SafeRead(IHeadsetSettingsDevice headset)
+    {
+        try
+        {
+            return headset.ReadSettings();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} settings not read: {e.Message}");
+            return null;
+        }
+    }
+
+    private static JsonObject HeadsetJson(IHeadsetSettingsDevice headset, HeadsetSettings? settings) => new()
+    {
+        ["id"] = headset.Id,
+        ["name"] = headset.Name,
+        ["verified"] = headset.SettingsVerified,
+        ["sidetone_max"] = headset.Limits!.SidetoneMax,
+        ["noise_levels"] = headset.Limits.NoiseLevels,
+        ["settings"] = settings is null ? null : new JsonObject
+        {
+            ["sidetone_on"] = settings.SidetoneOn,
+            ["sidetone_level"] = settings.SidetoneLevel,
+            ["noise_reduction_on"] = settings.NoiseReductionOn,
+            ["noise_reduction_level"] = settings.NoiseReductionLevel,
+        },
+    };
 
     /// Switches a device's own lighting mode so it follows lighting writes
     /// ("Aura Sync & Windows Dynamic Lighting"), then gives it the current

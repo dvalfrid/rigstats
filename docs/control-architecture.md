@@ -1381,6 +1381,36 @@ latency key 82 (`0x52`); aura sync key 51 (`0x33`); reset to defaults `50 40`;
 reset device `50 60`. G-Helper also uses `41 08`, `41 0C`/`41 0D`, `41 05`
 on other headset models (not in the Delta II schema).
 
+**Headset settings as built (#428).** Sidetone and noise reduction are
+offered on the Control Center's **Headset** page, for every profile (they
+live in the headset, like GearLink's; nothing is stored by RIGStats).
+`HeadsetCommands` sends only: `12 24` / `12 19` / `41 20` to read (sidetone
+on, sidetone level at byte 5; noise reduction on at 5, level at 6), and
+`41 11 <on>`, `61 11 <level>`, `41 02 <on>`, `41 10 <level>` to write —
+only what differs, then all three are read again and must equal what was
+sent, or the request fails. Limits per model (`AsusHeadsetDevice.SettingsModels`),
+each from that model's own GearLink schema: Delta II `1AFA` / KJP `1D41` /
+PBZ `1E6B` sidetone 0–20, noise reduction three levels (`ecnrConfig`; Low /
+Medium / High in GearLink's UI, seen by the owner; G-Helper reads the level
+as 0–2); Pelta `1B82` / `1B84` sidetone 0–20, noise reduction on/off (its
+`ecnrStatus` answers only the status and there is no `ecnrConfig`).
+G-Helper's `Pelta` says sidetone 0–100 — GearLink's 0–20 is used: ASUS's
+own scale, and valid under both. Only the Delta II `1AFA` is verified; the
+others show "settings not yet verified on this model". ROG Cetra, Clavis and
+Strix Go have no sidetone or noise reduction (G-Helper overrides both off)
+and aren't driven at all. GearLink's `supportFunctions` capability query is marked
+unavailable on the Delta II and has no key, so models are listed rather
+than asked. The page appears when a lighting capability device carries
+`headset_settings: true` (no device I/O in the capabilities); the settings
+themselves are read when the page opens (`headset_settings`) and written by
+`headset_set`. **Verified 2026-10-17 on the Delta II (2.4 GHz):** 18 changes
+covering both switches, sidetone 0–20 and all three noise levels, each read
+back as written; sidetone is heard **only while a program uses the
+microphone** (a call, a recording, the Settings level meter) — with nothing
+recording it is silent, which is the headset's behaviour, not a failed
+write. Noise reduction filters what the microphone sends, not what plays
+in the headset.
+
 **Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
 config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04
 02` on models with separate X/Y DPI (else `12 04 00`), DPI colours `12 04 03`, acceleration `12 04

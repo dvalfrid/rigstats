@@ -356,6 +356,8 @@ public sealed class ControlPipeWorker(
                 "aura_preview" => HandleAuraPreview(request),
                 "lamp_toggle" => HandleLampToggle(request),
                 "aura_enable_wdl" => HandleAuraEnableWdl(request),
+                "headset_settings" => ControlResponse.Ok(request.Id, new { headsets = lighting.Headsets() }),
+                "headset_set" => HandleHeadsetSet(request),
                 "hue_discover" => await HandleHueDiscoverAsync(request, ct),
                 "hue_pair" => await HandleHuePairAsync(request, ct),
                 "hue_refresh" => await HandleHueRefreshAsync(request, ct),
@@ -594,6 +596,17 @@ public sealed class ControlPipeWorker(
     /// `{"id": "lamparray-0b05-1ace-2"}` — lets the device follow lighting
     /// writes (#236). Changes a setting saved in the device, so only on the
     /// user's request from the Lighting tab.
+    /// `{id, settings}`: change a headset's sidetone and noise reduction
+    /// (#428) — answered with the headset as read back.
+    private ControlResponse HandleHeadsetSet(ControlRequest request)
+    {
+        var id = StringParam(request, "id");
+        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
+            ? ObjectParam<Lighting.HeadsetSettings>(value, "settings")
+            : throw new BadRequestException("'settings' must be an object.");
+        return ControlResponse.Ok(request.Id, new { headset = lighting.SetHeadset(id, settings) });
+    }
+
     private ControlResponse HandleAuraEnableWdl(ControlRequest request)
     {
         var id = StringParam(request, "id");
