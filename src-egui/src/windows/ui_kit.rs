@@ -589,6 +589,35 @@ pub fn slider_steps(ui: &mut Ui, dc: &DialogColors, value: &mut u8, max: u8) -> 
     )
 }
 
+/// A whole-number slider over `range` in steps of `step`, its value and
+/// `unit` beside it ("−5°", "20 %") — the same look and width as
+/// [`slider_pct`], for a device's own scale that can go below zero. The
+/// response says when a drag ends (send to a device then).
+pub fn slider_range(
+    ui: &mut Ui,
+    dc: &DialogColors,
+    value: &mut i32,
+    range: RangeInclusive<i32>,
+    step: i32,
+    unit: &str,
+) -> Response {
+    ui.add_sized(
+        [PCT_LABEL_W, 20.0],
+        egui::Label::new(
+            RichText::new(format!("{value}{unit}"))
+                .size(12.0)
+                .color(dc.text),
+        ),
+    );
+    ui.spacing_mut().slider_width = SLIDER_W;
+    ui.add(
+        egui::Slider::new(value, range)
+            .step_by(f64::from(step.max(1)))
+            .show_value(false)
+            .trailing_fill(true),
+    )
+}
+
 /// Text field for an optional threshold value; hint "—" when None.
 pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     let mut text = value.map(|v| v.to_string()).unwrap_or_default();
@@ -1127,6 +1156,7 @@ pub enum Icon {
     Gpu,
     Lighting,
     Headset,
+    Mouse,
     General,
     Display,
     Rules,
@@ -1150,6 +1180,7 @@ impl Icon {
             Icon::Gpu => Color32::from_rgb(94, 92, 230),
             Icon::Lighting => Color32::from_rgb(255, 55, 95),
             Icon::Headset => Color32::from_rgb(88, 86, 214),
+            Icon::Mouse => Color32::from_rgb(52, 120, 246),
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
             Icon::Rules => Color32::from_rgb(255, 159, 10),
@@ -1258,6 +1289,21 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
             p.rect_stroke(r, CornerRadius::same(2), stroke, StrokeKind::Inside);
             p.circle_stroke(at(0.14, -0.04), s * 0.15, stroke);
             p.line_segment([at(-0.38, 0.24), at(-0.38, 0.44)], stroke);
+        }
+        Icon::Mouse => {
+            // Rounded body, a centre line and the wheel.
+            let body = Rect::from_center_size(c + vec2(0.0, s * 0.04), vec2(s * 0.5, s * 0.78));
+            p.rect_stroke(
+                body,
+                CornerRadius::same((s * 0.25) as u8),
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            p.line_segment([body.center_top(), c + vec2(0.0, -s * 0.06)], stroke);
+            p.line_segment(
+                [c + vec2(0.0, -s * 0.24), c + vec2(0.0, -s * 0.14)],
+                Stroke::new(s * 0.1, color),
+            );
         }
         Icon::Headset => {
             // Headband over two ear cups.

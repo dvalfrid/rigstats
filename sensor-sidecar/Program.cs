@@ -219,6 +219,11 @@ builder.Services.AddSingleton(sp => new LightingProvider(
     hue: sp.GetRequiredService<HueLink>()));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
+// ROG mice (#431): the onboard profile per RIGStats profile, and the Mouse
+// page's settings. Found lazily (nothing opened before host.Run(), #383).
+builder.Services.AddSingleton(_ => new SensorSidecar.Control.Mice.MouseProvider(Hid.Enumerate, SensorSidecar.Control.Mice.MouseProvider.Discover, dryRun));
+builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<SensorSidecar.Control.Mice.MouseProvider>());
+
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();

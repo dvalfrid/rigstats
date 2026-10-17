@@ -25,6 +25,7 @@ public sealed class ControlPipeWorker(
     BootCrashGuard crashGuard,
     Lighting.LightingProvider lighting,
     Lighting.HueLink hue,
+    Mice.MouseProvider mice,
     // Only overridden by tests, which must not collide with an installed
     // service's pipe (same seam as SensorWorker).
     string pipeName = "rigstats-control") : GuardedBackgroundService
@@ -358,6 +359,8 @@ public sealed class ControlPipeWorker(
                 "aura_enable_wdl" => HandleAuraEnableWdl(request),
                 "headset_settings" => ControlResponse.Ok(request.Id, new { headsets = lighting.Headsets() }),
                 "headset_set" => HandleHeadsetSet(request),
+                "mouse_settings" => ControlResponse.Ok(request.Id, new { mice = mice.List() }),
+                "mouse_set" => HandleMouseSet(request),
                 "hue_discover" => await HandleHueDiscoverAsync(request, ct),
                 "hue_pair" => await HandleHuePairAsync(request, ct),
                 "hue_refresh" => await HandleHueRefreshAsync(request, ct),
@@ -596,6 +599,17 @@ public sealed class ControlPipeWorker(
     /// `{"id": "lamparray-0b05-1ace-2"}` — lets the device follow lighting
     /// writes (#236). Changes a setting saved in the device, so only on the
     /// user's request from the Lighting tab.
+    /// `{id, settings}`: change a mouse's settings in its active onboard
+    /// profile (#431) — answered with the mouse as read back.
+    private ControlResponse HandleMouseSet(ControlRequest request)
+    {
+        var id = StringParam(request, "id");
+        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
+            ? ObjectParam<Mice.MouseSettings>(value, "settings")
+            : throw new BadRequestException("'settings' must be an object.");
+        return ControlResponse.Ok(request.Id, new { mouse = mice.Set(id, settings) });
+    }
+
     /// `{id, settings}`: change a headset's sidetone and noise reduction
     /// (#428) — answered with the headset as read back.
     private ControlResponse HandleHeadsetSet(ControlRequest request)

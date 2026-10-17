@@ -98,6 +98,97 @@ pub struct ProfilePart {
     pub gpu: Option<GpuPart>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub aura: Option<AuraPart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mouse: Option<MousePart>,
+}
+
+/// A profile's mouse part (#431): which of the mouse's own onboard profiles
+/// it uses (1-based); `None` leaves the mouse as it is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MousePart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<u8>,
+}
+
+/// One DPI stage: its value and, on models with stage colours, "#rrggbb".
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DpiStage {
+    pub dpi: u32,
+    #[serde(default)]
+    pub color: String,
+}
+
+/// A ROG mouse's settings in its active onboard profile (#431) — kept in
+/// the mouse (`mouse_settings` / `mouse_set`). A setting the model lacks is
+/// `None`. `debounce` is the button-response code (ms = 4 × code + 4),
+/// `lift_off` 0 low / 1 high, `power_off` the auto-power-off code (0–4 =
+/// 1, 2, 3, 5, 10 min; 255 = never).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MouseSettings {
+    pub profile: u8,
+    pub active_stage: u8,
+    pub stages: Vec<DpiStage>,
+    pub polling_hz: Option<u32>,
+    pub debounce: Option<u8>,
+    pub angle_snapping: Option<bool>,
+    pub angle_tuning: Option<i16>,
+    pub acceleration: Option<u8>,
+    pub deceleration: Option<u8>,
+    pub motion_sync: Option<bool>,
+    pub lift_off: Option<u8>,
+    pub power_off: Option<u8>,
+    pub low_battery_warning: Option<u8>,
+}
+
+/// What a mouse model offers (`MouseCatalog` in the service).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct MouseSpec {
+    pub profiles: u8,
+    pub dpi_stages: u8,
+    pub dpi_min: u32,
+    pub dpi_max: u32,
+    pub dpi_step: u32,
+    #[serde(default)]
+    pub dpi_colors: bool,
+    #[serde(default)]
+    pub polling_hz: Vec<u32>,
+    /// Button-response codes (min, max).
+    #[serde(default)]
+    pub debounce: Option<(u8, u8)>,
+    #[serde(default)]
+    pub lift_off: bool,
+    #[serde(default)]
+    pub angle_snapping: bool,
+    /// Degrees (min, max, step).
+    #[serde(default)]
+    pub angle_tuning: Option<(i16, i16, i16)>,
+    /// Maximum, 0 = not offered.
+    #[serde(default)]
+    pub acceleration: u8,
+    #[serde(default)]
+    pub deceleration: u8,
+    #[serde(default)]
+    pub motion_sync: bool,
+    #[serde(default)]
+    pub auto_power_off: bool,
+    /// Percent (step, max).
+    #[serde(default)]
+    pub low_battery_warning: Option<(u8, u8)>,
+}
+
+/// A connected ROG mouse with known settings (`mouse_settings`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct MouseInfo {
+    pub id: String,
+    pub name: String,
+    /// "wired", "dongle" or "omni".
+    #[serde(default)]
+    pub link: String,
+    #[serde(default)]
+    pub verified: bool,
+    pub spec: MouseSpec,
+    /// `None` while the mouse doesn't answer (asleep, out of range).
+    pub settings: Option<MouseSettings>,
 }
 
 /// A profile's fan part (#188). Headers missing from `headers` are on BIOS
@@ -603,6 +694,10 @@ pub struct ControlState {
     pub hue_found: Vec<HueBridgeFound>,
     /// Why the last Hue request failed ("press the link button", ...).
     pub hue_message: Option<String>,
+    /// ROG mice with settings (#431), as last read from the service.
+    pub mice: Vec<MouseInfo>,
+    /// A mouse request is in flight.
+    pub mouse_busy: bool,
     /// Headsets with settings (#428), as last read from the service.
     pub headsets: Vec<HeadsetInfo>,
     /// A headset request is in flight.
@@ -689,6 +784,14 @@ impl ControlState {
             .find(|c| c.domain == "aura")
             .and_then(|c| c.details.as_ref()?.get("hue").cloned())
             .and_then(|h| serde_json::from_value(h).ok())
+    }
+
+    /// A ROG mouse with known settings is connected (#431) — the Control
+    /// Center's Mouse page.
+    pub fn has_mouse(&self) -> bool {
+        self.capabilities
+            .iter()
+            .any(|c| c.domain == "mouse" && c.supported)
     }
 
     /// A headset with settings RIGStats knows is connected (#428) — the
@@ -867,6 +970,18 @@ impl ControlState {
                 self.headset_busy = false;
             }
             ControlEvent::HeadsetBusy(busy) => self.headset_busy = busy,
+            ControlEvent::Mice(list) => {
+                self.mice = list;
+                self.mouse_busy = false;
+            }
+            ControlEvent::MouseUpdated(mouse) => {
+                match self.mice.iter_mut().find(|m| m.id == mouse.id) {
+                    Some(known) => *known = mouse,
+                    None => self.mice.push(mouse),
+                }
+                self.mouse_busy = false;
+            }
+            ControlEvent::MouseBusy(busy) => self.mouse_busy = busy,
             ControlEvent::FanDuty(duty) => {
                 // Arrives every second while curves run — only a change is
                 // worth a repaint.
@@ -952,6 +1067,12 @@ pub enum ControlEvent {
     Headsets(Vec<HeadsetInfo>),
     /// One headset after a change, as it read back.
     HeadsetUpdated(HeadsetInfo),
+    /// Every ROG mouse with settings, freshly read (#431).
+    Mice(Vec<MouseInfo>),
+    /// One mouse after a change, as it read back.
+    MouseUpdated(MouseInfo),
+    /// A mouse request started (`true`) or ended without an answer.
+    MouseBusy(bool),
     /// A headset request started (`true`) or ended without an answer.
     HeadsetBusy(bool),
 }
@@ -1005,6 +1126,13 @@ pub enum ControlCmd {
     HueChoose(Vec<String>),
     /// Forget the paired bridge.
     HueUnpair,
+    /// Read every ROG mouse's settings (#431) — when the Mouse page opens.
+    ReadMice,
+    /// Change one mouse's settings in its active onboard profile.
+    SetMouse {
+        id: String,
+        settings: Box<MouseSettings>,
+    },
     /// Read every headset's settings (#428) — when the Headset page opens.
     ReadHeadsets,
     /// Change one headset's settings; saved in the headset.
@@ -1478,6 +1606,60 @@ async fn handle_cmd(
             request(writer, reader, next_id, "lamp_toggle", None, event_tx, dir).await?;
             Ok(())
         }
+        ControlCmd::ReadMice => {
+            let _ = event_tx.send(ControlEvent::MouseBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "mouse_settings",
+                None,
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("mice").cloned())
+            {
+                Some(list) => {
+                    let list = serde_json::from_value(list).unwrap_or_default();
+                    let _ = event_tx.send(ControlEvent::Mice(list));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::MouseBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
+        ControlCmd::SetMouse { id, settings } => {
+            let _ = event_tx.send(ControlEvent::MouseBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "mouse_set",
+                Some(serde_json::json!({ "id": id, "settings": settings })),
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("mouse").cloned())
+                .and_then(|m| serde_json::from_value(m).ok())
+            {
+                Some(mouse) => {
+                    let _ = event_tx.send(ControlEvent::MouseUpdated(mouse));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::MouseBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
         ControlCmd::ReadHeadsets => {
             let _ = event_tx.send(ControlEvent::HeadsetBusy(true));
             let result = request(
@@ -1847,6 +2029,56 @@ fn log_pipe_trouble_throttled(dir: &Path, msg: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `mouse_settings`' answer as `MouseProvider.List` writes it, and the
+    /// settings `mouse_set` sends as `MouseProtocolTests` reads them (#431).
+    #[test]
+    fn mouse_wire_shapes_match_the_service() {
+        let mouse: MouseInfo = serde_json::from_value(serde_json::json!({
+            "id": "asus-mouse-1a94-omni", "name": "ROG Harpe Ace Aim Lab Edition",
+            "link": "omni", "verified": false,
+            "spec": {"profiles": 5, "dpi_stages": 4, "dpi_min": 50, "dpi_max": 36000, "dpi_step": 50,
+                     "dpi_colors": true, "polling_hz": [125, 250, 500, 1000], "debounce": [2, 7],
+                     "lift_off": true, "angle_snapping": true, "angle_tuning": [-30, 30, 1],
+                     "acceleration": 9, "deceleration": 9, "motion_sync": false,
+                     "auto_power_off": true, "low_battery_warning": [10, 50]},
+            "settings": {"profile": 2, "active_stage": 3,
+                         "stages": [{"dpi": 400, "color": "#ff0000"}, {"dpi": 800, "color": "#ff00ff"}],
+                         "polling_hz": 1000, "debounce": 2, "angle_snapping": false, "angle_tuning": -5,
+                         "acceleration": 2, "deceleration": 1, "motion_sync": null, "lift_off": 1,
+                         "power_off": 2, "low_battery_warning": 20}
+        }))
+        .unwrap();
+        assert_eq!(mouse.spec.angle_tuning, Some((-30, 30, 1)));
+        assert_eq!(mouse.spec.low_battery_warning, Some((10, 50)));
+        let settings = mouse.settings.clone().unwrap();
+        assert_eq!(settings.stages[1].dpi, 800);
+        assert_eq!(settings.angle_tuning, Some(-5));
+        let sent = serde_json::to_value(&settings).unwrap();
+        assert_eq!(sent["active_stage"], 3);
+        assert_eq!(sent["stages"][0]["color"], "#ff0000");
+        assert_eq!(sent["motion_sync"], serde_json::Value::Null);
+
+        let mut state = ControlState::default();
+        state.apply(ControlEvent::Mice(vec![mouse.clone()]));
+        let mut changed = mouse;
+        changed.settings.as_mut().unwrap().polling_hz = Some(500);
+        state.apply(ControlEvent::MouseUpdated(changed));
+        assert_eq!(state.mice.len(), 1);
+        assert_eq!(
+            state.mice[0].settings.as_ref().unwrap().polling_hz,
+            Some(500)
+        );
+
+        // A profile's mouse part round-trips; a profile without one stays without.
+        let part: ProfilePart =
+            serde_json::from_value(serde_json::json!({"mouse": {"profile": 3}})).unwrap();
+        assert_eq!(part.mouse, Some(MousePart { profile: Some(3) }));
+        assert!(serde_json::to_value(ProfilePart::default())
+            .unwrap()
+            .get("mouse")
+            .is_none());
+    }
 
     /// `headset_settings`' answer as `LightingProvider.Headsets` writes it,
     /// and `headset_set`'s settings as `HeadsetSettingsTests` reads them (#428).

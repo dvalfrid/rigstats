@@ -143,6 +143,11 @@ public sealed class OmniMouse
         return null;
     }
 
+    /// The receiver's channel for the device on `reportId` (the mouse's settings
+    /// and WDL questions, #431), or null.
+    public static HidDeviceInfo? Channel(IReadOnlyList<HidDeviceInfo> hid, byte reportId) =>
+        Channels(hid).FirstOrDefault(c => c.OutputReportId == reportId);
+
     private static List<HidDeviceInfo> Channels(IReadOnlyList<HidDeviceInfo> hid) => hid
         .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == ReceiverProductId
             && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)

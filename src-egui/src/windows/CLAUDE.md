@@ -13,7 +13,8 @@ Every setting has exactly one home:
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval, the microphone mute toast |
 | — | Which microphone Ctrl+Alt+M mutes (#425) |
-| — | A device's own settings (headset sidetone, noise reduction, #428) — kept in the device, edited on the Control Center's Headset page for every profile, sent at once |
+| — | A device's own settings (headset sidetone, noise reduction, #428; mouse DPI, polling, energy …, #431) — kept in the device, edited on the Control Center's Headset / Mouse page, sent at once |
+| Which onboard mouse profile a profile uses (#431) | — |
 
 Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears, and its row sits next to the settings it belongs with (in the page's first group, or first on the page), never at the bottom under a long list.
 
@@ -60,6 +61,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | A longer list | `dropdown` (`CONTROL_W` wide, so rows line up), or `combo` for another width — never a raw `egui::ComboBox`, it comes out lower than the buttons beside it |
 | A percentage | `slider_pct` (value shown beside it) |
 | A device's own scale (sidetone 0–20) | `slider_steps` — same look; send on `drag_stopped` |
+| A device's own scale below zero, or with a unit (angle −30…30°, 10–50 %) | `slider_range` |
 | A live level (the microphone) | `meter` — segments lit in green, smooth fall; `SLIDER_PCT_W` wide under a slider |
 | A colour from a few | `swatches` |
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |

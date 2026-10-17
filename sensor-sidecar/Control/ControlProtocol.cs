@@ -315,6 +315,14 @@ public sealed class AuraPart
     public LampPart? Lamp { get; init; }
 }
 
+/// A profile's mouse part (#431): which of the mouse's own onboard profiles
+/// it uses (1-based). The settings inside an onboard profile are kept in the
+/// mouse and edited on the Mouse page.
+public sealed class MousePart
+{
+    public int? Profile { get; init; }
+}
+
 /// A white lamp: on or off, how bright and how warm.
 public sealed class LampPart
 {
@@ -368,6 +376,7 @@ public sealed class ProfilePart
     public CurveOptPart? CurveOpt { get; init; }
     public GpuPart? Gpu { get; init; }
     public AuraPart? Aura { get; init; }
+    public MousePart? Mouse { get; init; }
 }
 
 public sealed class Profile

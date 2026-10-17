@@ -1422,6 +1422,59 @@ energy `51 37 00 00 <powerOff> 00 <lowBattery%>`; lighting get `12 03 <zone>` /
 set `51 28 <zone> …`; save profile `50 03`. Per-model limits (DPI range,
 polling rates, which settings exist) are in each model file.
 
+**Mouse settings as built (#431).** The Control Center's **Mouse** page and
+the `mouse` profile domain (`Control/Mice/`):
+
+- **Which mice.** `MouseCatalog` lists every ROG mouse on the common protocol
+  — 45 rows (model × link: cable, own dongle, ROG Omni receiver) transcribed
+  as facts from G-Helper's 72 mouse model classes by a resolver that follows
+  each class's constructor chain and merges its overrides with
+  `AsusMouse`'s defaults; the Omni ids are G-Helper's `MouseFromOmniPid`.
+  Families whose packets or replies differ (Gladius II, Strix Impact I/II,
+  Pugio I/II, Chakram / Core, Keris Wireless, Strix Carry, TUF M5) are left
+  for #432. Found by id only: the mouse's own collection (interface, report
+  id and a vendor usage page as the row names) or the Omni receiver's paired
+  list (`OmniMouse.PairedDevices` / `Channel`) — nothing is sent to an
+  unknown device.
+- **Cross-checked with GearLink** (its module for the Harpe Ace Aim Lab
+  Edition, `1A94`): the same frames for DPI (`setDPI` 81·49·stage−1), DPI
+  stage count (81·49·10), active stage (`switchDPI` 81·49·9, 1-based), polling
+  (`setPollingRate` 81·49·4), button response (81·49·5), angle snapping
+  (81·49·6), angle tuning (81·49·11), motion sync (81·49·18), profile
+  (`setProfile` 80·2·profile−1), save (80·3) and every read; the booster
+  question `7D 20 02` too. Acceleration / deceleration (`51 31 07` / `08`)
+  are written as G-Helper documents them — GearLink's module reads them
+  (`12 04 01`) but has no writer.
+- **Where GearLink is safer, it is followed.** Energy `51 37 00 00 <sleep> 00
+  <low> <battery type> <full-charge effect>` (`setPowerConfig`) — the last
+  two written back as `12 07` read them, where G-Helper sends 0. Lift-off
+  `51 35 <type> 00 <material> <height> 00 <k0 k1 k2>` (`setCalibration`) —
+  type, material and k-values written back as `12 06` read them, where
+  G-Helper sends `FF`.
+- **Every change:** read → write only what differs (`MouseProtocol.Writes`)
+  → `50 03` → read back → equal, or the request fails. A profile's mouse
+  part switches the onboard profile (`50 02`), verified by `12 00 00` byte 11;
+  a missing mouse skips the domain (`DomainUnavailableException`).
+- **Booster.** Mice whose G-Helper class offers 2000–8000 Hz only "if
+  Booster" get them only when the Omni receiver answers `7D 20 02` with 1;
+  on a cable or own dongle they get 125–1000 Hz, as in G-Helper. With
+  booster the polling code is the high nibble of `12 04 00` byte 13.
+- **Verified 2026-10-17 on the ROG Harpe Ace Aim Lab Edition on the Omni
+  receiver:** every setting read as G-Helper showed it (400/800/1600/3200,
+  stage colours, 1000 Hz, 12 ms, lift-off low, 3 min, 20 %); DPI, stage
+  colours, active stage, polling 500 ↔ 1000 Hz, lift-off, angle snapping and
+  tuning, acceleration, deceleration each read back as written. The first
+  `12 04 00` of a change sometimes goes unanswered over the Omni link
+  (3 of ~15 changes); asked once more it always answered, so every question
+  is repeated once before a request fails. The onboard-profile switch per
+  RIGStats profile was checked too (Balanced → profile 2 and back).
+- **No stage colours on the page.** A stage colour is stored in the mouse
+  (written and read back as `#ffbc0c` etc.), but its light kept the Lighting
+  page's colour: RIGStats drives it through Dynamic Lighting, so the colour
+  never shows — hypothesis: it shows only while the mouse runs its own
+  lighting. The owner chose to leave colours out; the protocol still writes
+  each stage's colour back as it was read.
+
 **Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen
 commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
