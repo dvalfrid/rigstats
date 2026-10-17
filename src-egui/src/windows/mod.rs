@@ -1,6 +1,7 @@
 pub mod about;
 pub mod control;
 pub mod history;
+pub mod mouse_drawing;
 pub mod profile_look;
 pub mod rules_page;
 pub mod settings;

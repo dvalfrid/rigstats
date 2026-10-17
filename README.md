@@ -21,7 +21,7 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
 - **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
-- **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
+- **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), and the settings of ROG headsets (sidetone, noise reduction) and ROG mice (DPI, polling rate, button bindings, energy — and which of the mouse's own profiles each profile uses), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
 - **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, and the battery of any Bluetooth device Windows knows it for, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.
 - **Session history** — record a session and chart it afterwards.
@@ -244,6 +244,12 @@ Each tab appears only when this PC's hardware supports it.
 | CPU | PPT/TDC/EDC power limits, and **Curve Optimizer** (−30…0, all-core or per core) | AMD Ryzen 9000, on hardware-verified SMU tables |
 | GPU | Power limit, the same setting as Adrenalin's or Afterburner's | AMD Radeon (ADLX), desktop NVIDIA GeForce (NVML) |
 | Lighting | Aura Sync: one effect and colour for every device, live preview, the light bar's desk lamp | ASUS Aura motherboards, ROG monitors and light bar, ROG keyboards and headsets, any Windows Dynamic Lighting device, Philips Hue rooms and zones via the Hue Bridge — see [supported devices](docs/supported-devices.md) |
+| Headset | Sidetone (hear your own voice) and microphone noise reduction, kept in the headset — no GearLink needed | ROG Delta II and Pelta, through their 2.4 GHz dongle |
+| Mouse | Which of the mouse's own onboard profiles the profile uses, and that profile's DPI levels, polling rate, button response, lift-off, angle snapping, acceleration, button bindings (on a drawing of the mouse) and energy — kept in the mouse | ROG mice on the common ROG protocol, wired, on their dongle or on the ROG Omni receiver (ROG Harpe Ace Aim Lab Edition verified, the rest unverified) |
+
+<p align="center">
+  <img src="assets/control-center-mouse.png" width="560" alt="The Control Center's Mouse page: the onboard profile the RIGStats profile uses, DPI level chips with a slider, performance settings, and a drawing of the mouse seen from above with each button's binding beside it">
+</p>
 
 Safety, all in the service:
 
@@ -251,6 +257,7 @@ Safety, all in the service:
 - New CPU limit, Curve Optimizer and GPU settings are **tried for 15 seconds** and revert by themselves unless you keep them; if the PC goes down right after a change, it is not re-applied at the next start.
 - Never above what the BIOS or driver allows; stopping the service hands fans and limits back to the firmware.
 - Lighting yields to Armoury Crate or OpenRGB when they run, and to Windows Dynamic Lighting per device.
+- Headsets and mice get only the commands GearLink itself sends; every change is read back from the device.
 - Philips Hue: only the rooms and zones you choose follow the rig. The bridge is reached on the local network only (no Hue account, no cloud); its key is stored encrypted and readable by the service only, and RIGStats only talks to a bridge whose certificate is signed by Philips Hue / Signify.
 
 Not yet: Intel CPU limits ([#209](https://github.com/dvalfrid/rigstats/issues/209)), laptop GPU power — it follows the laptop's own performance modes (ASUS: [#234](https://github.com/dvalfrid/rigstats/issues/234)). Design and protocol notes: [docs/control-architecture.md](docs/control-architecture.md).

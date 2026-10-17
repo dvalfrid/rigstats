@@ -33,6 +33,11 @@ public sealed record MouseSpec(
     /// Its buttons can be bound (#433): the eight of G-Helper's default
     /// layout (`MouseProtocol.Buttons`). False for models whose layout differs.
     public bool Buttons { get; init; } = true;
+
+    /// Where the DPI button sits, when known from the hardware or an ASUS
+    /// manual (#435): "underside" or "top"; null = not known, so the Mouse
+    /// page doesn't place it in its drawing.
+    public string? DpiButton { get; init; }
 }
 
 /// One mouse as it appears to the PC: its id (the Omni receiver's paired-list
@@ -59,8 +64,24 @@ public static class MouseCatalog
     /// that layout is built (#433). Declared before `Entries`, which reads it.
     private static readonly HashSet<ushort> OwnButtonLayout = [0x1A1A, 0x1A18, 0x1979, 0x1977];
 
-    public static readonly IReadOnlyList<MouseEntry> Entries = Rows().Select(e =>
-        OwnButtonLayout.Contains(e.ProductId) ? e with { Spec = e.Spec with { Buttons = false } } : e).ToList();
+    /// Where each model's DPI button sits, seen on the hardware or in an ASUS
+    /// manual (#435) — the Harpe Ace Aim Lab Edition (wireless 1A94, wired
+    /// 1A92) on its underside, beside PAIR and the BT / off / 2.4 GHz switch
+    /// (owner, 2026-10-18).
+    private static readonly Dictionary<ushort, string> DpiButtonPlace = new()
+    {
+        [0x1A94] = "underside",
+        [0x1A92] = "underside",
+    };
+
+    public static readonly IReadOnlyList<MouseEntry> Entries = Rows().Select(e => e with
+    {
+        Spec = e.Spec with
+        {
+            Buttons = !OwnButtonLayout.Contains(e.ProductId),
+            DpiButton = DpiButtonPlace.GetValueOrDefault(e.ProductId),
+        },
+    }).ToList();
 
     private static IReadOnlyList<MouseEntry> Rows() =>
     [

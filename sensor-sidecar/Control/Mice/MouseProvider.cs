@@ -202,6 +202,7 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                 ["buttons"] = spec.Buttons
                     ? new JsonArray(MouseProtocol.Buttons.Select(b => (JsonNode)new JsonObject { ["source"] = b.Source, ["name"] = b.Name }).ToArray())
                     : null,
+                ["dpi_button"] = spec.DpiButton,
                 ["actions"] = spec.Buttons
                     ? new JsonArray(MouseProtocol.Actions.Select(a => (JsonNode)new JsonObject { ["code"] = a.Code, ["name"] = a.Name }).ToArray())
                     : null,
