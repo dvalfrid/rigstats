@@ -198,6 +198,13 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                 ["motion_sync"] = spec.MotionSync,
                 ["auto_power_off"] = spec.AutoPowerOff,
                 ["low_battery_warning"] = spec.LowBatteryWarning is { } lb ? new JsonArray(lb.Step, lb.Max) : null,
+                // Bindable buttons and what they can do (#433).
+                ["buttons"] = spec.Buttons
+                    ? new JsonArray(MouseProtocol.Buttons.Select(b => (JsonNode)new JsonObject { ["source"] = b.Source, ["name"] = b.Name }).ToArray())
+                    : null,
+                ["actions"] = spec.Buttons
+                    ? new JsonArray(MouseProtocol.Actions.Select(a => (JsonNode)new JsonObject { ["code"] = a.Code, ["name"] = a.Name }).ToArray())
+                    : null,
             },
             ["settings"] = settings is null ? null : new JsonObject
             {
@@ -214,6 +221,7 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                 ["lift_off"] = settings.LiftOff,
                 ["power_off"] = settings.PowerOff,
                 ["low_battery_warning"] = settings.LowBatteryWarning,
+                ["buttons"] = settings.Buttons is { } buttons ? new JsonArray(buttons.Select(b => (JsonNode)b).ToArray()) : null,
             },
         };
     }

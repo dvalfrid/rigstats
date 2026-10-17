@@ -46,6 +46,12 @@ public class MouseProtocolTests
             ["120401"] = Reply(0x12, 0x04, 0x01, (5, 2), (7, 1)),
             ["120600"] = Reply(0x12, 0x06, 0x00, (5, 1), (6, 0x0A), (7, 0x0B), (8, 1), (9, 7), (10, 8), (11, 9)),
             ["120700"] = Reply(0x12, 0x07, 0x00, (5, 72), (6, 2), (7, 20), (11, 0x05), (12, 0x06)),
+            // Default bindings, except side back on "Double click" (0x01E3).
+            ["120500"] = Reply(0x12, 0x05, 0x00, MouseProtocol.Buttons.SelectMany((b, i) =>
+            {
+                var code = i == 3 ? 0x01E3 : b.Source;
+                return new (int, byte)[] { (5 + 2 * i, (byte)(code & 0xFF)), (6 + 2 * i, (byte)(code >> 8)) };
+            }).ToArray()),
         };
     }
 
@@ -86,9 +92,9 @@ public class MouseProtocolTests
     [Fact]
     public void Only_documented_reads_are_asked_and_only_for_what_the_model_has()
     {
-        Assert.Equal(["120000", "120400", "120402", "120403", "120401", "120600", "120700"],
+        Assert.Equal(["120000", "120400", "120402", "120403", "120401", "120600", "120700", "120500"],
             MouseProtocol.Reads(HarpeAce).Select(MouseProtocol.Key));
-        var plain = HarpeAce with { XyDpi = false, DpiColors = false, Acceleration = 0, Deceleration = 0, LiftOff = false, AutoPowerOff = false, LowBatteryWarning = null };
+        var plain = HarpeAce with { XyDpi = false, DpiColors = false, Acceleration = 0, Deceleration = 0, LiftOff = false, AutoPowerOff = false, LowBatteryWarning = null, Buttons = false };
         Assert.Equal(["120000", "120400"], MouseProtocol.Reads(plain).Select(MouseProtocol.Key));
     }
 
@@ -196,6 +202,41 @@ public class MouseProtocolTests
         Assert.Equal(2, c.PowerOff);
         Assert.Equal(50, c.LowBatteryWarning);
         Assert.Equal(8000, MouseProtocol.Clamp(HarpeAce, now, wanted, booster: true).PollingHz);
+    }
+
+    [Fact]
+    public void Bindings_parse_from_12_05_and_only_changed_buttons_are_written()
+    {
+        var now = HarpeSettings();
+        Assert.Equal([0x01F0, 0x01F1, 0x01F2, 0x01E3, 0x01E5, 0x01E6, 0x01E8, 0x01E9], now.Buttons);
+
+        var wanted = now with { Buttons = [0x01F0, 0x01F1, 0x01F2, 0x01E4, 0x01E5, 0x0000, 0x01E8, 0x01E9] };
+        var writes = MouseProtocol.Writes(HarpeAce, now, wanted, null, null);
+
+        // 51 21 00 00 <button lo hi> <action lo hi> — G-Helper and GearLink's mapButton.
+        Assert.Equal(["51210000E401E401", "51210000E6010000"], writes.Select(w => Convert.ToHexString(w)));
+    }
+
+    [Fact]
+    public void A_button_takes_only_a_known_action_or_its_own_default()
+    {
+        var now = HarpeSettings();
+        var wanted = now with { Buttons = [0x0004, 0x01E3, 0x01F2, 0x01E4, 0x01E6, 0x01E6, 0x00F6, 0x0000] };
+
+        var c = MouseProtocol.Clamp(HarpeAce, now, wanted, booster: false);
+
+        // A key (0x0004) and media (0x00F6) aren't offered yet; the DPI button
+        // may go back to its own 0x01E6, side forward may not take it.
+        Assert.Equal([0x01F0, 0x01E3, 0x01F2, 0x01E4, 0x01E5, 0x01E6, 0x01E8, 0x0000], c.Buttons);
+    }
+
+    [Fact]
+    public void Models_with_their_own_button_layout_get_no_bindings()
+    {
+        Assert.False(MouseCatalog.Find(0x1A1A, MouseLink.Dongle)!.Spec.Buttons); // Chakram X
+        Assert.False(MouseCatalog.Find(0x1979, MouseLink.Dongle)!.Spec.Buttons); // Spatha X
+        Assert.True(HarpeAce.Buttons);
+        Assert.DoesNotContain(MouseProtocol.Reads(MouseCatalog.Find(0x1A1A, MouseLink.Dongle)!.Spec), r => r[1] == 0x05);
     }
 
     [Fact]

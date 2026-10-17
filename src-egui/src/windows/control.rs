@@ -1301,6 +1301,22 @@ fn headset_page(
     }
 }
 
+/// A bindable button's own function and where it sits, by its action code
+/// (#433) — the place only where it is the same on every ROG mouse.
+fn mouse_button_help(source: u16) -> (&'static str, Option<&'static str>) {
+    match source {
+        0x01F0 => ("Left click", Some("The main left button")),
+        0x01F1 => ("Right click", Some("The main right button")),
+        0x01F2 => ("Middle click", Some("Pressing the scroll wheel")),
+        0x01E4 => ("Back", Some("Thumb button nearest your wrist")),
+        0x01E5 => ("Forward", Some("Thumb button nearest the front")),
+        0x01E6 => ("DPI switch", None),
+        0x01E8 => ("Scroll up", Some("Rolling the wheel up")),
+        0x01E9 => ("Scroll down", Some("Rolling the wheel down")),
+        _ => ("Its own function", None),
+    }
+}
+
 /// Auto-power-off codes the mice use, with their words.
 const MOUSE_POWER_OFF: [(u8, &str); 6] = [
     (0, "1 minute"),
@@ -1518,7 +1534,7 @@ fn mouse_card(
         ui,
         dc,
         Some(&format!("DPI — mouse profile {}", s.profile)),
-        Some("Picking a level uses it now; the button under the scroll wheel steps through the same levels."),
+        Some("Picking a level uses it now; the mouse's DPI button steps through the same levels."),
         |g| {
             if spec.dpi_stages > 1 {
                 g.row("DPI levels", Some("The levels stored in the mouse"), |ui| {
@@ -1540,19 +1556,23 @@ fn mouse_card(
                 } else {
                     "DPI".to_owned()
                 };
-                g.row(&title, Some("The level in use — how far the pointer moves"), |ui| {
-                    let mut v = stage.dpi as i32;
-                    let resp = ui_kit::slider_range(
-                        ui,
-                        dc,
-                        &mut v,
-                        spec.dpi_min as i32..=spec.dpi_max as i32,
-                        spec.dpi_step as i32,
-                        "",
-                    );
-                    stage.dpi = v as u32;
-                    track(&resp);
-                });
+                g.row(
+                    &title,
+                    Some("The level in use — how far the pointer moves"),
+                    |ui| {
+                        let mut v = stage.dpi as i32;
+                        let resp = ui_kit::slider_range(
+                            ui,
+                            dc,
+                            &mut v,
+                            spec.dpi_min as i32..=spec.dpi_max as i32,
+                            spec.dpi_step as i32,
+                            "",
+                        );
+                        stage.dpi = v as u32;
+                        track(&resp);
+                    },
+                );
             }
         },
     );
@@ -1649,6 +1669,54 @@ fn mouse_card(
             );
         }
     });
+
+    // ── Buttons ─────────────────────────────────────────────────────────
+    if let (Some(slots), Some(actions), Some(bound)) = (
+        spec.buttons.as_ref(),
+        spec.actions.as_ref(),
+        s.buttons.as_mut(),
+    ) {
+        ui_kit::group(
+            ui,
+            dc,
+            Some(&format!("Buttons — mouse profile {}", s.profile)),
+            Some("What each button does in this mouse profile. Default is what the button does out of the box."),
+            |g| {
+                for (slot, code) in slots.iter().zip(bound.iter_mut()) {
+                    let (own, place) = mouse_button_help(slot.source);
+                    let default = format!("Default ({own})");
+                    let name_of = |c: u16| {
+                        if c == slot.source {
+                            default.clone()
+                        } else {
+                            actions
+                                .iter()
+                                .find(|a| a.code == c)
+                                .map_or_else(|| format!("Other (0x{c:04X})"), |a| a.name.clone())
+                        }
+                    };
+                    g.row(&slot.name, place, |ui| {
+                        let id = format!("mouse_button_{}", slot.source);
+                        ui_kit::dropdown(ui, &id, name_of(*code), |ui| {
+                            ui.selectable_value(code, slot.source, &default);
+                            for action in actions.iter().filter(|a| a.code != slot.source) {
+                                ui.selectable_value(code, action.code, &action.name);
+                            }
+                        });
+                    });
+                }
+                if bound.iter().zip(slots).any(|(c, s)| *c != s.source) {
+                    g.row("All buttons", Some("Back to their own functions"), |ui| {
+                        if theme::dialog_btn_secondary(ui, "Reset to defaults", dc).clicked() {
+                            for (c, s) in bound.iter_mut().zip(slots) {
+                                *c = s.source;
+                            }
+                        }
+                    });
+                }
+            },
+        );
+    }
 
     // ── Energy ──────────────────────────────────────────────────────────
     if s.power_off.is_some() || s.low_battery_warning.is_some() {
