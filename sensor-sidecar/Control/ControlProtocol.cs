@@ -141,6 +141,17 @@ public static class ControlProblems
     public static ProblemAction ReadMore(string anchor) =>
         new() { Kind = ProblemActionKind.OpenUrl, Label = "Read more", Target = TroubleshootingUrl + anchor };
 
+    /// ASUS's FAQ with its Armoury Crate Uninstall Tool — the supported way
+    /// to remove Armoury Crate and its services (#193); a reinstall brings
+    /// it back, so the step is reversible.
+    public const string ArmouryCrateUninstallUrl = "https://rog.asus.com/support/FAQ/1041654";
+
+    public static ProblemAction ArmouryCrateUninstallTool() =>
+        new() { Kind = ProblemActionKind.OpenUrl, Label = "ASUS uninstall tool", Target = ArmouryCrateUninstallUrl };
+
+    /// The program's own name from "Armoury Crate (LightingService)".
+    private static string ProgramOf(string other) => other.Split(" (")[0];
+
     /// What a domain is called on its page ("Fan control didn't answer").
     public static string Name(string domain) => domain switch
     {
@@ -181,7 +192,7 @@ public static class ControlProblems
     /// "OpenRGB"): the title names the program, the message the full name.
     public static Problem LightingTakenBy(string other)
     {
-        var program = other.Split(" (")[0];
+        var program = ProgramOf(other);
         return new()
         {
             Id = "aura_conflict",
@@ -189,7 +200,33 @@ public static class ControlProblems
             Title = $"{program} controls the lighting",
             Message = $"Only one program can drive the lighting at a time, and {other} has it. "
                 + $"Close {program} — or turn off its lighting — then reopen the Control Center to control the lighting here.",
-            Actions = [ReadMore("#control-center")],
+            Actions = program == "Armoury Crate"
+                ? [ArmouryCrateUninstallTool(), ReadMore("#control-center")]
+                : [ReadMore("#control-center")],
+        };
+    }
+
+    /// Another program sets the fan speeds ("Armoury Crate
+    /// (AsusFanControlService)", #193): RIGStats leaves the fans to it. A
+    /// service can't be closed like an app, so the way forward is ASUS's
+    /// uninstall tool.
+    public static Problem FansTakenBy(string other)
+    {
+        var program = ProgramOf(other);
+        var fix = program == "Armoury Crate"
+            ? "Armoury Crate runs as a Windows service, so closing it isn't enough: remove it with ASUS's uninstall tool (a reinstall brings it back), then reopen the Control Center."
+            : $"Close {program}, then reopen the Control Center.";
+        return new()
+        {
+            Id = "fan_conflict",
+            Severity = ProblemSeverity.Attention,
+            Title = $"{program} controls the fans",
+            Message = $"Only one program can set the fan speeds at a time, and {other} has them — two would fight over every fan. "
+                + "RIGStats leaves the fans to it, so fan curves are off here; everything else keeps working. "
+                + fix,
+            Actions = program == "Armoury Crate"
+                ? [ArmouryCrateUninstallTool(), ReadMore("#control-center")]
+                : [ReadMore("#control-center")],
         };
     }
 }

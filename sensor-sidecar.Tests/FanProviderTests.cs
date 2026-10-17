@@ -418,4 +418,47 @@ public class FanProviderTests
         Assert.True(provider.HasHeader(FanSamples.HeaderId(1)));
         Assert.False(provider.HasHeader("/gpu-amd/0/control/0"));
     }
+
+    [Fact]
+    public void Armoury_crate_takes_the_fans_with_a_problem_and_an_apply_skips_them()
+    {
+        var computer = FanSamples.Board(2);
+        var other = "Armoury Crate (AsusFanControlService)";
+        var provider = new FanProvider(new FakeHardwareHost(computer), dryRun: false, conflict: () => other);
+
+        var caps = provider.Probe();
+        var skipped = Assert.Throws<DomainUnavailableException>(() => provider.Apply(Part((0, Curve()))));
+
+        Assert.False(caps.Supported);
+        Assert.Contains("Armoury Crate", caps.Reason);
+        Assert.True(caps.Details!["conflict"]!.GetValue<bool>()); // shown, not hidden
+        Assert.Equal("fan_conflict", caps.Problem?.Id);
+        Assert.Equal("Armoury Crate controls the fans", caps.Problem?.Title);
+        Assert.Contains("controls the fans", skipped.Message); // the broker's note
+        Assert.Empty(provider.GetActiveConfig());
+        Assert.Empty(FanSamples.Header(computer, 0).Writes); // never fought over
+    }
+
+    [Fact]
+    public void Another_program_gone_gives_the_fans_back_without_a_restart()
+    {
+        string? other = "Armoury Crate (AsusFanControlService)";
+        var (provider, _, _) = Setup();
+        var withConflict = new FanProvider(new FakeHardwareHost(FanSamples.Board(2)), dryRun: false, conflict: () => other);
+
+        Assert.False(withConflict.Probe().Supported);
+        other = null;
+        Assert.True(withConflict.Probe().Supported);
+        Assert.Null(withConflict.Probe().Problem);
+        _ = provider; // the default (no conflict delegate) is the plain provider
+    }
+
+    [Fact]
+    public void A_board_without_headers_stays_hidden_even_with_armoury_crate_running()
+    {
+        var caps = new FanProvider(new FakeHardwareHost(FanSamples.Board(0)), dryRun: false, conflict: () => "Armoury Crate (AsusFanControlService)").Probe();
+
+        Assert.False(caps.Supported);
+        Assert.Null(caps.Problem); // absent, not taken
+    }
 }

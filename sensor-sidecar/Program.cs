@@ -72,6 +72,11 @@ if (SidecarLog.FileEnabled)
 {
     builder.Services.AddHostedService(_ => new BackgroundStartupTask("Reading earlier crashes",
         () => LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath)));
+    // Which other hardware software runs here (Armoury Crate's services,
+    // OpenRGB) — the evidence, in users' diagnostics, for what owns the fans
+    // and the lighting on boards we don't have (#193).
+    builder.Services.AddHostedService(_ => new BackgroundStartupTask("Looking for other hardware software",
+        () => SidecarLog.Log($"[rigstats-control] {OtherSoftware.Summary()}")));
 }
 
 // The host's own warnings and errors (a worker that failed, a slow stop) in
@@ -129,7 +134,8 @@ builder.Services.AddHostedService<ControlPipeWorker>();
 builder.Services.AddSingleton(sp => new FanProvider(
     sp.GetRequiredService<IHardwareHost>(),
     dryRun,
-    Path.Combine(DataDirectory.DefaultPath, "fan-channels.json")));
+    Path.Combine(DataDirectory.DefaultPath, "fan-channels.json"),
+    OtherSoftware.FansTaken));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<FanProvider>());
 builder.Services.AddSingleton<FanCurveLoop>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<FanCurveLoop>());
@@ -203,7 +209,7 @@ builder.Services.AddSingleton(_ => new HueLink(Path.Combine(programData, "hue.js
 builder.Services.AddSingleton(sp => new LightingProvider(
     Hid.Enumerate,
     hid => LightingDiscovery.Scan(hid, sp.GetRequiredService<HueLink>()),
-    LightingProvider.DetectConflict,
+    OtherSoftware.LightingTaken,
     dryRun,
     (hid, devices, reason) => LightingDiscovery.WriteDiagnostics(
         Path.Combine(programData, "lighting-devices.json"), hid, devices, reason),

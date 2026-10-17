@@ -21,7 +21,10 @@ public sealed record FanIdentifyResult(string Header, IReadOnlyList<FanResponder
 /// `IControl` directly (through `IHardwareHost`, never a raw `Computer`).
 /// With `dryRun`, every write is skipped and `Verify` trusts the request.
 /// `channelMapPath` persists which fans each header drives (null in tests).
-public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channelMapPath = null) : IControlProvider
+/// `conflict` names another program that sets the fans (Armoury Crate's fan
+/// service, `OtherSoftware.FansTaken`), or null: while it runs the domain is
+/// reported as taken and an apply skips the fans rather than fight it (#193).
+public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channelMapPath = null, Func<string?>? conflict = null) : IControlProvider
 {
     // Which RPM sensors each header drives, as last measured by identify
     // (#207) — persisted so the Motherboard panel can open the right curve
@@ -66,6 +69,18 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
     public CapabilitySet Probe()
     {
         var headers = Headers(forceRefresh: true);
+        if (headers.Count > 0 && conflict?.Invoke() is { } other)
+        {
+            // Flagged, so the Fans page explains it instead of disappearing.
+            return new CapabilitySet
+            {
+                Domain = Domain,
+                Supported = false,
+                Reason = $"{other} controls the fans. Uninstall it to control the fans here.",
+                Problem = ControlProblems.FansTakenBy(other),
+                Details = new JsonObject { ["conflict"] = true },
+            };
+        }
         var sample = host.GetSampleAsync(CancellationToken.None).GetAwaiter().GetResult();
         var details = new JsonObject
         {
@@ -143,6 +158,13 @@ public sealed class FanProvider(IHardwareHost host, bool dryRun, string? channel
     {
         if (part.Fan?.Headers is null)
             return;
+        if (conflict?.Invoke() is { } other)
+        {
+            // The rest of the profile applies; the fans stay with the other
+            // program (and with the BIOS, as far as RIGStats is concerned).
+            SidecarLog.Log($"[rigstats-control] Fan curves skipped: {other} controls the fans");
+            throw new DomainUnavailableException($"{other} controls the fans, so the fan curves were skipped.");
+        }
 
         // Headers no longer present in the new profile are released back to
         // firmware rather than left spinning at their last commanded duty.

@@ -40,7 +40,7 @@ public static class LightingDiscovery
     public static void WriteDiagnostics(string path, IReadOnlyList<HidDeviceInfo> hid,
         IReadOnlyList<ILightingDevice> devices, string reason) =>
         LightingDiagnostics.Write(path, LightingDiagnostics.Build(hid, devices, reason,
-            LightingProvider.DetectConflict(), LampArrayDevice.WindowsDynamicLightingOn(), ProbeAsus(hid)));
+            OtherSoftware.LightingTaken(), LampArrayDevice.WindowsDynamicLightingOn(), ProbeAsus(hid)));
 
     /// Asks the silent headset dongles again, until every headset has answered.
     private static Func<LightingScan>? RetryHeadsets(List<HidDeviceInfo> silent) => silent.Count == 0 ? null : () =>

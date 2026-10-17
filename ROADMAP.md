@@ -107,6 +107,7 @@ script to refresh it.
 | [#190](https://github.com/dvalfrid/rigstats/issues/190) | `control-gpu` | Control Center phase 3: GPU power profiles (AMD, ADLX) | ✅ Done |
 | [#191](https://github.com/dvalfrid/rigstats/issues/191) | `control-curve-optimizer` | Control Center phase 4: AMD Curve Optimizer | ✅ Done |
 | [#192](https://github.com/dvalfrid/rigstats/issues/192) | `control-aura` | Control Center phase 5: ASUS Aura RGB | ✅ Done |
+| [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | ✅ Done |
 | [#214](https://github.com/dvalfrid/rigstats/issues/214) | `control-desk-lamp` | Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness) | ✅ Done |
 | [#215](https://github.com/dvalfrid/rigstats/issues/215) | `control-lighting-hue` | Lighting: Philips Hue via the Hue Bridge | ✅ Done |
 | [#290](https://github.com/dvalfrid/rigstats/issues/290) | `peripheral-battery` | Peripherals: battery status of ROG wireless devices (panel, tray card, alerts) | ✅ Done |
@@ -119,7 +120,6 @@ script to refresh it.
 | [#117](https://github.com/dvalfrid/rigstats/issues/117) | `cross-platform-port` | Cross-platform OS abstraction - Linux port | 🔲 Planned |
 | [#123](https://github.com/dvalfrid/rigstats/issues/123) | `desktop-background-we-hosted` | Desktop background - WE Application wallpaper | 🔲 Planned |
 | [#187](https://github.com/dvalfrid/rigstats/issues/187) | `control-foundation` | Control Center phase 0: control foundation | 🔲 Planned |
-| [#193](https://github.com/dvalfrid/rigstats/issues/193) | `control-armoury-crate` | Control Center phase 6: Armoury Crate replacement | 🔲 Planned |
 | [#209](https://github.com/dvalfrid/rigstats/issues/209) | `control-cpu-limits-intel` | Control Center phase 2b: Intel CPU power limits (PL1/PL2) | 🔲 Planned |
 | [#210](https://github.com/dvalfrid/rigstats/issues/210) | `control-gpu-nvidia` | Control Center phase 3b: NVIDIA GPU power limit (NVML) | 🚧 In progress — built, awaiting a desktop GeForce test |
 | [#212](https://github.com/dvalfrid/rigstats/issues/212) | `control-lighting-more` | Control Center: more lighting devices (ASUS monitors, peripherals, other vendors) | 🔲 Planned |
@@ -1710,3 +1710,22 @@ and off are one command; breathing and spectrum cycle are slow 2 s fades, since
 the bridge takes about one command a second. The key is stored encrypted for
 the service only, and only a bridge with a Philips Hue / Signify certificate is
 talked to. Verified on the dev rig's bridge.
+
+### Phase 6 — Armoury Crate coexistence ✅
+
+Most of the goal was met by the phases before it — fans, CPU limits, GPU power
+limit, lighting and profiles work without Armoury Crate. Phase 6 makes RIGStats
+live beside it when it is still installed: if Armoury Crate's fan service
+(`AsusFanControlService`) is running, the Fans page says "Armoury Crate controls
+the fans" and RIGStats leaves them to it — the rest of a profile applies with a
+"fan skipped" note — instead of two programs fighting over every fan, the same
+way the Lighting page already yields to its LightingService (and OpenRGB). The
+message links to ASUS's own Armoury Crate Uninstall Tool; a reinstall brings it
+back. Nothing is stopped or changed behind the user's back: RIGStats never
+stops another vendor's service (the issue's "guided stop" was dropped for that
+reason), and the service logs which such programs run at start-up so users'
+diagnostics show what owns what on boards we don't have. Which ASUS component
+writes the fans is a hypothesis until a user with Armoury Crate confirms it;
+the validated-boards list is deferred to the fixtures users send in.
+Details: `docs/control-architecture.md` ("Phase 6 — Armoury Crate coexistence
+as built").
