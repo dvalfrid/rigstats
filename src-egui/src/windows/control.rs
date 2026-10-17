@@ -1752,6 +1752,7 @@ fn mouse_card(
     }
 
     // ── Energy ──────────────────────────────────────────────────────────
+    let mut open_alerts = false;
     if s.power_off.is_some() || s.low_battery_warning.is_some() {
         ui_kit::group(ui, dc, Some("Energy"), None, |g| {
             if let Some(code) = s.power_off.as_mut() {
@@ -1770,21 +1771,39 @@ fn mouse_card(
             if let (Some(level), Some((step, max))) =
                 (s.low_battery_warning.as_mut(), spec.low_battery_warning)
             {
-                g.row("Low-battery warning at", None, |ui| {
-                    let mut v = i32::from(*level);
-                    let resp = ui_kit::slider_range(
-                        ui,
-                        dc,
-                        &mut v,
-                        i32::from(step)..=i32::from(max),
-                        i32::from(step),
-                        " %",
-                    );
-                    *level = v as u8;
-                    track(&resp);
-                });
+                g.row(
+                    "Low-battery warning at",
+                    Some("The mouse's own warning, kept in the mouse"),
+                    |ui| {
+                        let mut v = i32::from(*level);
+                        let resp = ui_kit::slider_range(
+                            ui,
+                            dc,
+                            &mut v,
+                            i32::from(step)..=i32::from(max),
+                            i32::from(step),
+                            " %",
+                        );
+                        *level = v as u8;
+                        track(&resp);
+                    },
+                );
             }
+            // RIGStats' own notifications are a separate setting (#437).
+            g.row(
+                "Low-battery notifications",
+                Some("RIGStats' own, for this profile — set under Alerts"),
+                |ui| {
+                    if theme::dialog_btn_secondary(ui, "Open Alerts", dc).clicked() {
+                        open_alerts = true;
+                    }
+                },
+            );
         });
+    }
+
+    if open_alerts {
+        ui_state.tab = Page::Alerts;
     }
 
     // An open dropdown counts as held until it closes.
