@@ -1477,6 +1477,23 @@ the `mouse` profile domain (`Control/Mice/`):
   never shows — hypothesis: it shows only while the mouse runs its own
   lighting. The owner chose to leave colours out; the protocol still writes
   each stage's colour back as it was read.
+- **Button bindings (#433).** Read `12 05 00` (button i's action code at
+  5 + 2·i, little-endian — G-Helper; GearLink reads `12 05 <group>`), write
+  `51 21 00 00 <button> <action>` (G-Helper and GearLink's `mapButton`,
+  identical), then save and read back. The eight buttons of G-Helper's default
+  layout; Chakram X and Spatha X have their own layout with write-only slots
+  and get none yet. Actions offered: the mouse functions whose codes both
+  sources agree on (GearLink's `MS_…` table = G-Helper's `MouseBindings`:
+  left 0x1F0, right 0x1F1, middle 0x1F2, double click 0x1E3, back 0x1E4,
+  forward 0x1E5, scroll up 0x1E8 / down 0x1E9), Disabled (0, G-Helper) and
+  each button's own default (the DPI button's 0x1E6). **Not yet:** keys
+  (G-Helper uses HID usages, A = 0x04; GearLink maps through its own table)
+  and media (G-Helper 0x00F0–0x00F6, GearLink's table 180–188 — perhaps two
+  code spaces, unknown) — added once a code is seen working on a mouse.
+  G-Helper's combos (F13–F24 caught by G-Helper itself) and rapid-fire (its
+  own stored values) depend on G-Helper and aren't offered. **Verified
+  2026-10-18** on the Harpe Ace (Omni): double click, disabled and back to
+  default each read back as written and worked on the buttons.
 
 **Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen

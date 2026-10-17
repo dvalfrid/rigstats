@@ -28,7 +28,12 @@ public sealed record MouseSpec(
     int Deceleration,
     bool MotionSync,
     bool AutoPowerOff,
-    (int Step, int Max)? LowBatteryWarning);
+    (int Step, int Max)? LowBatteryWarning)
+{
+    /// Its buttons can be bound (#433): the eight of G-Helper's default
+    /// layout (`MouseProtocol.Buttons`). False for models whose layout differs.
+    public bool Buttons { get; init; } = true;
+}
 
 /// One mouse as it appears to the PC: its id (the Omni receiver's paired-list
 /// id for `Omni`), link, the HID interface and report id of its settings
@@ -49,7 +54,15 @@ public static class MouseCatalog
     private static MouseEntry Row(ushort productId, MouseLink link, string endpoint, byte reportId, MouseSpec spec) =>
         new(productId, link, endpoint, reportId, spec);
 
-    public static readonly IReadOnlyList<MouseEntry> Entries =
+    /// Models whose G-Helper class has its own button layout with write-only
+    /// slots (Chakram X joystick, Spatha X side buttons) — not bound until
+    /// that layout is built (#433). Declared before `Entries`, which reads it.
+    private static readonly HashSet<ushort> OwnButtonLayout = [0x1A1A, 0x1A18, 0x1979, 0x1977];
+
+    public static readonly IReadOnlyList<MouseEntry> Entries = Rows().Select(e =>
+        OwnButtonLayout.Contains(e.ProductId) ? e with { Spec = e.Spec with { Buttons = false } } : e).ToList();
+
+    private static IReadOnlyList<MouseEntry> Rows() =>
     [
         Row(0x1A1A, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Chakram X", Profiles: 5, DpiStages: 4, Dpi: (100, 36000, 50), XyDpi: true, DpiColors: true, PollingHz: [250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: (-20, 20, 1), Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50))), // G-Helper ChakramX
         Row(0x1A18, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Chakram X", Profiles: 5, DpiStages: 4, Dpi: (100, 36000, 50), XyDpi: true, DpiColors: true, PollingHz: [250, 500, 1000, 2000, 4000, 8000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: (-20, 20, 1), Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50))), // G-Helper ChakramXWired
@@ -100,7 +113,8 @@ public static class MouseCatalog
 
     /// Mice whose settings were seen working on hardware, by id and link: the
     /// Harpe Ace Aim Lab Edition on the Omni receiver (2026-10-17 — every
-    /// setting and the onboard-profile switch read back as written).
+    /// setting and the onboard-profile switch read back as written; 2026-10-18
+    /// the button bindings too: double click, disabled, back to default).
     public static readonly IReadOnlySet<(ushort ProductId, MouseLink Link)> Verified =
         new HashSet<(ushort, MouseLink)> { (0x1A94, MouseLink.Omni) };
 

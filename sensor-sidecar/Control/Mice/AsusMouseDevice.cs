@@ -108,7 +108,8 @@ public sealed class AsusMouseDevice : IMouseDevice, IDisposable
         + (s.LiftOff is { } l ? $", lift-off {(l == 0 ? "low" : "high")}" : "")
         + (s.PowerOff is { } p ? $", power off {p}" : "")
         + (s.LowBatteryWarning is { } lb ? $", low battery {lb} %" : "")
-        + (s.Stages.Any(x => x.Color.Length > 0) ? $", colours {string.Join("/", s.Stages.Select(x => x.Color))}" : "");
+        + (s.Stages.Any(x => x.Color.Length > 0) ? $", colours {string.Join("/", s.Stages.Select(x => x.Color))}" : "")
+        + (s.Buttons is { } b ? $", buttons {string.Join(" ", b.Select(x => $"{x:X4}"))}" : "");
 
     // Caller holds _lock.
     private (MouseSettings? Settings, Dictionary<string, byte[]> Replies) ReadLocked()

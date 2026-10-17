@@ -20,11 +20,14 @@ public sealed record MouseSettings(
     bool? MotionSync,
     int? LiftOff,
     int? PowerOff,
-    int? LowBatteryWarning)
+    int? LowBatteryWarning,
+    IReadOnlyList<int>? Buttons = null)
 {
     /// Value equality including the stages (a record compares lists by reference).
     public bool SameAs(MouseSettings other) =>
-        this with { Stages = [] } == other with { Stages = [] } && Stages.SequenceEqual(other.Stages);
+        this with { Stages = [], Buttons = null } == other with { Stages = [], Buttons = null }
+        && Stages.SequenceEqual(other.Stages)
+        && (Buttons ?? []).SequenceEqual(other.Buttons ?? []);
 }
 
 /// The common ROG mouse protocol (#431) — pure, so every frame is unit-tested.
@@ -43,6 +46,7 @@ public sealed record MouseSettings(
 /// | `12 04 04` | 5 motion sync |
 /// | `12 06` | 6 type, 7 material, 8 lift-off height, 9–11 k-values (GearLink `getCalibrationInfo`) |
 /// | `12 07` | 6 auto power off, 7 low-battery warning, 11 battery type, 12 full-charge effect |
+/// | `12 05 00` | button bindings: button i's action code at 5 + 2·i (#433; GearLink reads `12 05 <group>`) |
 ///
 /// Writes: `51 31 <stage−1> 00 <dpi lo hi> [R G B]`, `51 31 09 00 <stage>`,
 /// `51 31 04 00 <rate>`, `05` debounce, `06` angle snapping, `0B` angle
@@ -52,7 +56,9 @@ public sealed record MouseSettings(
 /// `setCalibration`: what was read, with the new height — G-Helper sends
 /// `FF` instead), `51 37 00 00 <sleep> 00 <low> <battery type> <full-charge>`
 /// (GearLink's `setPowerConfig`: the last two as read — G-Helper leaves them
-/// 0), `50 02 <profile−1>` to switch profile and `50 03` to save.
+/// 0), `51 21 00 00 <button lo hi> <action lo hi>` to bind a button (G-Helper
+/// and GearLink's `mapButton`, #433), `50 02 <profile−1>` to switch profile
+/// and `50 03` to save.
 public static class MouseProtocol
 {
     public const byte Get = 0x12;
@@ -79,6 +85,32 @@ public static class MouseProtocol
 
     public static readonly byte[] Save = [Profile, 0x03];
 
+    /// The buttons that can be bound (#433), in the order `12 05 00` reports
+    /// them (code at 5 + 2·i, little-endian) — G-Helper's default layout. Each
+    /// is identified by its own action code, which is also its default.
+    public static readonly IReadOnlyList<(int Source, string Name)> Buttons =
+    [
+        (0x01F0, "Left click"), (0x01F1, "Right click"), (0x01F2, "Scroll click"),
+        (0x01E4, "Side back"), (0x01E5, "Side forward"), (0x01E6, "DPI button"),
+        (0x01E8, "Scroll up"), (0x01E9, "Scroll down"),
+    ];
+
+    /// What a button can be bound to — the mouse functions whose codes
+    /// GearLink's `MS_…` table and G-Helper's `MouseBindings` agree on, and
+    /// "disabled" (G-Helper's 0). Keys and media come once a code is seen
+    /// working (#433).
+    public static readonly IReadOnlyList<(int Code, string Name)> Actions =
+    [
+        (0x01F0, "Left click"), (0x01F1, "Right click"), (0x01F2, "Middle click"),
+        (0x01E3, "Double click"), (0x01E4, "Back"), (0x01E5, "Forward"),
+        (0x01E8, "Scroll up"), (0x01E9, "Scroll down"), (0x0000, "Disabled"),
+    ];
+
+    /// Whether button `slot` may be bound to `code`: a known action, or the
+    /// button's own default (the DPI button's 0x01E6 is not an action).
+    public static bool IsAction(int slot, int code) =>
+        Actions.Any(a => a.Code == code) || (slot < Buttons.Count && Buttons[slot].Source == code);
+
     /// The questions that read `spec`'s settings, as `[command, key, index]`.
     public static IReadOnlyList<byte[]> Reads(MouseSpec spec)
     {
@@ -95,6 +127,8 @@ public static class MouseProtocol
             reads.Add([Get, 0x06, 0x00]);
         if (spec.AutoPowerOff || spec.LowBatteryWarning is not null)
             reads.Add([Get, 0x07, 0x00]);
+        if (spec.Buttons)
+            reads.Add([Get, 0x05, 0x00]);
         return reads;
     }
 
@@ -149,6 +183,14 @@ public static class MouseProtocol
             || (spec.AutoPowerOff || spec.LowBatteryWarning is not null) && power is null)
             return null;
 
+        IReadOnlyList<int>? buttons = null;
+        if (spec.Buttons)
+        {
+            if (R(0x05, 0x00) is not { } b)
+                return null;
+            buttons = Enumerable.Range(0, Buttons.Count).Select(i => b[5 + 2 * i] | (b[6 + 2 * i] << 8)).ToList();
+        }
+
         return new MouseSettings(
             Profile: profile[11] + 1,
             ActiveStage: Math.Clamp((int)profile[12], 1, spec.DpiStages),
@@ -162,7 +204,8 @@ public static class MouseProtocol
             MotionSync: spec.MotionSync ? motion![5] == 1 : null,
             LiftOff: spec.LiftOff ? lift![8] : null,
             PowerOff: spec.AutoPowerOff ? power![6] : null,
-            LowBatteryWarning: spec.LowBatteryWarning is not null ? power![7] : null);
+            LowBatteryWarning: spec.LowBatteryWarning is not null ? power![7] : null,
+            Buttons: buttons);
     }
 
     /// `wanted` kept inside `spec`'s limits; settings the model lacks stay as
@@ -193,6 +236,9 @@ public static class MouseProtocol
             PowerOff = spec.AutoPowerOff && wanted.PowerOff is { } p && PowerOffMinutes.ContainsKey(p) ? p : now.PowerOff,
             LowBatteryWarning = spec.LowBatteryWarning is { } lb && wanted.LowBatteryWarning is { } l
                 ? Math.Clamp((int)Math.Round(l / (double)lb.Step) * lb.Step, lb.Step, lb.Max) : now.LowBatteryWarning,
+            Buttons = spec.Buttons && now.Buttons is { } nowButtons && wanted.Buttons is { } wantedButtons
+                ? nowButtons.Select((b, i) => i < wantedButtons.Count && i < Buttons.Count && IsAction(i, wantedButtons[i]) ? wantedButtons[i] : b).ToList()
+                : now.Buttons,
         };
     }
 
@@ -233,6 +279,16 @@ public static class MouseProtocol
         if ((wanted.PowerOff != now.PowerOff || wanted.LowBatteryWarning != now.LowBatteryWarning) && powerReply is { Length: >= 13 } power)
             writes.Add([Set, 0x37, 0x00, 0x00, (byte)(wanted.PowerOff ?? power[6]), 0x00,
                 (byte)(wanted.LowBatteryWarning ?? power[7]), power[11], power[12]]);
+        if (wanted.Buttons is { } wantedButtons && now.Buttons is { } nowButtons)
+        {
+            for (var i = 0; i < Math.Min(Buttons.Count, Math.Min(wantedButtons.Count, nowButtons.Count)); i++)
+            {
+                if (wantedButtons[i] == nowButtons[i])
+                    continue;
+                var (source, dest) = (Buttons[i].Source, wantedButtons[i]);
+                writes.Add([Set, 0x21, 0x00, 0x00, (byte)(source & 0xFF), (byte)(source >> 8), (byte)(dest & 0xFF), (byte)(dest >> 8)]);
+            }
+        }
         return writes;
     }
 

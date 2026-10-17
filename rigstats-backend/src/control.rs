@@ -138,6 +138,23 @@ pub struct MouseSettings {
     pub lift_off: Option<u8>,
     pub power_off: Option<u8>,
     pub low_battery_warning: Option<u8>,
+    /// Each button's action code, in `MouseSpec::buttons` order (#433).
+    #[serde(default)]
+    pub buttons: Option<Vec<u16>>,
+}
+
+/// A mouse button that can be bound (#433): its own action code and name.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct MouseButton {
+    pub source: u16,
+    pub name: String,
+}
+
+/// Something a mouse button can do.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct MouseAction {
+    pub code: u16,
+    pub name: String,
 }
 
 /// What a mouse model offers (`MouseCatalog` in the service).
@@ -174,6 +191,13 @@ pub struct MouseSpec {
     /// Percent (step, max).
     #[serde(default)]
     pub low_battery_warning: Option<(u8, u8)>,
+    /// Bindable buttons (#433): each by its own action code, which is also
+    /// its default. `None` for models whose layout isn't built.
+    #[serde(default)]
+    pub buttons: Option<Vec<MouseButton>>,
+    /// What a button can be bound to.
+    #[serde(default)]
+    pub actions: Option<Vec<MouseAction>>,
 }
 
 /// A connected ROG mouse with known settings (`mouse_settings`).
@@ -975,6 +999,7 @@ impl ControlState {
                 self.mouse_busy = false;
             }
             ControlEvent::MouseUpdated(mouse) => {
+                let mouse = *mouse;
                 match self.mice.iter_mut().find(|m| m.id == mouse.id) {
                     Some(known) => *known = mouse,
                     None => self.mice.push(mouse),
@@ -1070,7 +1095,7 @@ pub enum ControlEvent {
     /// Every ROG mouse with settings, freshly read (#431).
     Mice(Vec<MouseInfo>),
     /// One mouse after a change, as it read back.
-    MouseUpdated(MouseInfo),
+    MouseUpdated(Box<MouseInfo>),
     /// A mouse request started (`true`) or ended without an answer.
     MouseBusy(bool),
     /// A headset request started (`true`) or ended without an answer.
@@ -1652,7 +1677,7 @@ async fn handle_cmd(
                 .and_then(|m| serde_json::from_value(m).ok())
             {
                 Some(mouse) => {
-                    let _ = event_tx.send(ControlEvent::MouseUpdated(mouse));
+                    let _ = event_tx.send(ControlEvent::MouseUpdated(Box::new(mouse)));
                 }
                 None => {
                     let _ = event_tx.send(ControlEvent::MouseBusy(false));
@@ -2041,16 +2066,27 @@ mod tests {
                      "dpi_colors": true, "polling_hz": [125, 250, 500, 1000], "debounce": [2, 7],
                      "lift_off": true, "angle_snapping": true, "angle_tuning": [-30, 30, 1],
                      "acceleration": 9, "deceleration": 9, "motion_sync": false,
-                     "auto_power_off": true, "low_battery_warning": [10, 50]},
+                     "auto_power_off": true, "low_battery_warning": [10, 50],
+                     "buttons": [{"source": 496, "name": "Left click"}, {"source": 486, "name": "DPI button"}],
+                     "actions": [{"code": 483, "name": "Double click"}, {"code": 0, "name": "Disabled"}]},
             "settings": {"profile": 2, "active_stage": 3,
                          "stages": [{"dpi": 400, "color": "#ff0000"}, {"dpi": 800, "color": "#ff00ff"}],
                          "polling_hz": 1000, "debounce": 2, "angle_snapping": false, "angle_tuning": -5,
                          "acceleration": 2, "deceleration": 1, "motion_sync": null, "lift_off": 1,
-                         "power_off": 2, "low_battery_warning": 20}
+                         "power_off": 2, "low_battery_warning": 20, "buttons": [496, 0]}
         }))
         .unwrap();
         assert_eq!(mouse.spec.angle_tuning, Some((-30, 30, 1)));
         assert_eq!(mouse.spec.low_battery_warning, Some((10, 50)));
+        assert_eq!(
+            mouse.spec.buttons.as_ref().map(|b| b[1].source),
+            Some(0x01E6)
+        );
+        assert_eq!(mouse.spec.actions.as_ref().map(|a| a.len()), Some(2));
+        assert_eq!(
+            mouse.settings.as_ref().unwrap().buttons,
+            Some(vec![0x01F0, 0])
+        );
         let settings = mouse.settings.clone().unwrap();
         assert_eq!(settings.stages[1].dpi, 800);
         assert_eq!(settings.angle_tuning, Some(-5));
@@ -2063,7 +2099,7 @@ mod tests {
         state.apply(ControlEvent::Mice(vec![mouse.clone()]));
         let mut changed = mouse;
         changed.settings.as_mut().unwrap().polling_hz = Some(500);
-        state.apply(ControlEvent::MouseUpdated(changed));
+        state.apply(ControlEvent::MouseUpdated(Box::new(changed)));
         assert_eq!(state.mice.len(), 1);
         assert_eq!(
             state.mice[0].settings.as_ref().unwrap().polling_hz,
