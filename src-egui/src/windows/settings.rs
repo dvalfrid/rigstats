@@ -112,6 +112,28 @@ pub struct SettingsWindow {
     /// Windows' microphones for the General page's selector (#425), read
     /// when the dialog opens.
     microphones: Vec<microphone::Device>,
+    /// The chosen microphone's level and live meter (#427).
+    mic: MicPanel,
+}
+
+/// The General page's microphone level and meter (#427), for one device —
+/// rebuilt when the device choice changes. The level is Windows' own input
+/// level, so it applies at once rather than with Save; the meter opens its
+/// stream only while drawn (`microphone::Meter`).
+struct MicPanel {
+    device: Option<String>,
+    level: Option<f64>,
+    meter: microphone::Meter,
+}
+
+impl MicPanel {
+    fn for_device(device: Option<String>) -> Self {
+        Self {
+            level: microphone::level(device.as_deref()).map(f64::from),
+            meter: microphone::Meter::new(device.clone()),
+            device,
+        }
+    }
 }
 
 impl SettingsWindow {
@@ -127,6 +149,7 @@ impl SettingsWindow {
             saved_at: None,
             gpu_names,
             microphones: microphone::list(),
+            mic: MicPanel::for_device(s.microphone_device.clone()),
         }
     }
 
@@ -287,10 +310,15 @@ pub fn show(
                             let gpu_names = st.gpu_names.clone();
                             let microphones = st.microphones.clone();
                             let SettingsWindow {
-                                draft, saved_at, ..
+                                draft,
+                                saved_at,
+                                mic,
+                                ..
                             } = &mut *st;
                             match page {
-                                Page::General => general_page(ui, dc, draft, &microphones),
+                                Page::General => {
+                                    general_page(ui, dc, draft, &microphones, mic, saved_at)
+                                }
                                 Page::Display => {
                                     display_page(ui, dc, draft, &applied_layer, &gpu_names)
                                 }
@@ -395,6 +423,8 @@ fn general_page(
     dc: &DialogColors,
     draft: &mut settings::Settings,
     microphones: &[microphone::Device],
+    mic: &mut MicPanel,
+    saved_at: &mut Option<std::time::Instant>,
 ) {
     ui_kit::page_header(
         ui,
@@ -428,7 +458,7 @@ fn general_page(
         ui,
         dc,
         Some("Microphone"),
-        Some("Ctrl+Alt+M and the tray menu mute or unmute it. Whether that shows a notification is under Notifications."),
+        Some("Ctrl+Alt+M, the tray menu and the microphone in the dashboard header mute or unmute it. The level is Windows' own input level and applies at once. Whether muting shows a notification is under Notifications."),
         |g| {
             g.row(
                 "Microphone",
@@ -453,6 +483,33 @@ fn general_page(
                     });
                 },
             );
+            // The level and meter follow the device shown above, even before Save.
+            if mic.device != draft.microphone_device {
+                *mic = MicPanel::for_device(draft.microphone_device.clone());
+            }
+            g.row("Level", Some("How loud the microphone records"), |ui| {
+                match mic.level.as_mut() {
+                    Some(level) => {
+                        if ui_kit::slider_pct(ui, dc, level, 0.0..=1.0) {
+                            match microphone::set_level(mic.device.as_deref(), *level as f32) {
+                                Ok(read) => {
+                                    *level = f64::from(read);
+                                    *saved_at = Some(std::time::Instant::now());
+                                }
+                                Err(_) => mic.level = microphone::level(mic.device.as_deref()).map(f64::from),
+                            }
+                        }
+                    }
+                    None => {
+                        ui.label(egui::RichText::new("No microphone").size(12.0).color(dc.muted));
+                    }
+                }
+            });
+            if mic.level.is_some() {
+                g.row("Hearing now", Some("Speak to check the level"), |ui| {
+                    ui_kit::meter(ui, dc, "settings_mic", mic.meter.level(), ui_kit::SLIDER_PCT_W);
+                });
+            }
         },
     );
     ui_kit::group(

@@ -76,16 +76,115 @@ pub fn toggle(device: Option<&str>) -> Result<Microphone, String> {
     set_muted(device, !now.muted)
 }
 
+/// The microphone's input level, 0–1 (Windows' "Input volume"), or `None`
+/// when there is no microphone (#427).
+pub fn level(device: Option<&str>) -> Option<f32> {
+    win::with_endpoint(device, win::level).ok().flatten()
+}
+
+/// Sets the input level (clamped to 0–1) and reads it back.
+pub fn set_level(device: Option<&str>, level: f32) -> Result<f32, String> {
+    let level = level.clamp(0.0, 1.0);
+    win::with_endpoint(device, |endpoint| {
+        win::set_level(endpoint, level)?;
+        win::level(endpoint).ok_or_else(|| "could not read the level back".to_owned())
+    })?
+}
+
+/// What the microphone hears right now, 0–1 (the peak since the last
+/// read), or `None` when there is no microphone (#427). Read-only. Windows
+/// meters a capture endpoint only while some program records from it — use
+/// a [`Meter`] to see it at any time.
+pub fn peak(device: Option<&str>) -> Option<f32> {
+    win::with_endpoint(device, win::peak).ok().flatten()
+}
+
+/// A live level meter for a microphone (#427). Windows meters a capture
+/// endpoint only while something records from it (verified: the webcam read
+/// 0 until a stream was open, then 0.04 silent / 0.5 talking), so reading the
+/// meter opens a shared capture stream on a thread — its samples are never
+/// read — and publishes the peak about 20 times a second.
+///
+/// While the stream is open Windows shows RIGStats as using the microphone,
+/// so it runs only while someone looks: the first [`Meter::level`] starts the
+/// thread, and it closes the stream by itself once `level` hasn't been
+/// called for a second (a window closed, the tray card hidden). Nothing to
+/// stop by hand; the next `level` starts it again.
+pub struct Meter {
+    device: Option<String>,
+    shared: std::sync::Arc<MeterShared>,
+}
+
+#[derive(Default)]
+struct MeterShared {
+    level: std::sync::atomic::AtomicU32,
+    running: std::sync::atomic::AtomicBool,
+    last_read: std::sync::Mutex<Option<std::time::Instant>>,
+}
+
+/// How long the stream stays open after the last read.
+const METER_IDLE: std::time::Duration = std::time::Duration::from_secs(1);
+
+impl Meter {
+    /// A meter for `device` (`None` = the one Windows uses for calls). No
+    /// stream is opened until the first [`Meter::level`].
+    pub fn new(device: Option<String>) -> Self {
+        Self {
+            device,
+            shared: std::sync::Arc::default(),
+        }
+    }
+
+    /// The latest peak, 0–1 — 0 for the first few frames after (re)start.
+    pub fn level(&self) -> f32 {
+        use std::sync::atomic::Ordering;
+        if let Ok(mut t) = self.shared.last_read.lock() {
+            *t = Some(std::time::Instant::now());
+        }
+        if !self.shared.running.swap(true, Ordering::AcqRel) {
+            let (shared, device) = (std::sync::Arc::clone(&self.shared), self.device.clone());
+            let spawned = std::thread::Builder::new()
+                .name("mic-meter".into())
+                .spawn(move || {
+                    let keep = || {
+                        shared
+                            .last_read
+                            .lock()
+                            .ok()
+                            .and_then(|t| *t)
+                            .is_some_and(|t| t.elapsed() < METER_IDLE)
+                    };
+                    win::run_meter(device.as_deref(), &shared.level, &keep);
+                    shared.level.store(0, Ordering::Relaxed);
+                    shared.running.store(false, Ordering::Release);
+                });
+            if spawned.is_err() {
+                self.shared.running.store(false, Ordering::Release);
+            }
+        }
+        f32::from_bits(self.shared.level.load(Ordering::Relaxed))
+    }
+
+    /// The microphone this meter listens to (`None` = the one for calls).
+    pub fn device(&self) -> Option<&str> {
+        self.device.as_deref()
+    }
+}
+
 #[cfg(windows)]
 mod win {
     use super::Device;
     use std::ptr::NonNull;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    use winapi::shared::mmreg::WAVEFORMATEX;
     use winapi::shared::winerror::S_OK;
     use winapi::shared::wtypes::VT_LPWSTR;
+    use winapi::um::audioclient::IAudioClient;
+    use winapi::um::audiosessiontypes::AUDCLNT_SHAREMODE_SHARED;
     use winapi::um::combaseapi::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
     };
-    use winapi::um::endpointvolume::IAudioEndpointVolume;
+    use winapi::um::endpointvolume::{IAudioEndpointVolume, IAudioMeterInformation};
     use winapi::um::functiondiscoverykeys_devpkey::PKEY_Device_FriendlyName;
     use winapi::um::mmdeviceapi::{
         eCapture, eCommunications, CLSID_MMDeviceEnumerator, IMMDevice, IMMDeviceCollection,
@@ -247,6 +346,87 @@ mod win {
         }
     }
 
+    pub fn level(device: &IMMDevice) -> Option<f32> {
+        with_volume(device, |volume| unsafe {
+            let mut level = 0.0f32;
+            (volume.GetMasterVolumeLevelScalar(&mut level) == S_OK).then_some(level)
+        })
+        .flatten()
+    }
+
+    pub fn set_level(device: &IMMDevice, level: f32) -> Result<(), String> {
+        let hr = with_volume(device, |volume| unsafe {
+            volume.SetMasterVolumeLevelScalar(level, std::ptr::null())
+        })
+        .ok_or("no volume control on the microphone")?;
+        if hr == S_OK {
+            Ok(())
+        } else {
+            Err(format!("SetMasterVolumeLevelScalar failed (0x{hr:08x})"))
+        }
+    }
+
+    pub fn peak(device: &IMMDevice) -> Option<f32> {
+        unsafe {
+            let mut raw: *mut IAudioMeterInformation = std::ptr::null_mut();
+            let hr = device.Activate(
+                &IAudioMeterInformation::uuidof(),
+                CLSCTX_ALL,
+                std::ptr::null_mut(),
+                (&mut raw as *mut *mut IAudioMeterInformation).cast(),
+            );
+            let meter = NonNull::new(raw).filter(|_| hr >= 0)?;
+            let meter = meter.as_ref();
+            let mut peak = 0.0f32;
+            let ok = meter.GetPeakValue(&mut peak) == S_OK;
+            meter.Release();
+            ok.then_some(peak)
+        }
+    }
+
+    /// `Meter`'s thread: opens a shared capture stream on the endpoint (never
+    /// read — it only makes Windows meter the endpoint), then publishes the
+    /// peak every 50 ms while `keep()` holds.
+    pub fn run_meter(device: Option<&str>, level: &AtomicU32, keep: &dyn Fn() -> bool) {
+        let _ = with_endpoint(device, |endpoint| unsafe {
+            let mut raw: *mut IAudioClient = std::ptr::null_mut();
+            let hr = endpoint.Activate(
+                &IAudioClient::uuidof(),
+                CLSCTX_ALL,
+                std::ptr::null_mut(),
+                (&mut raw as *mut *mut IAudioClient).cast(),
+            );
+            let Some(client) = NonNull::new(raw).filter(|_| hr >= 0) else {
+                return;
+            };
+            let client = client.as_ref();
+            let mut format: *mut WAVEFORMATEX = std::ptr::null_mut();
+            let started = client.GetMixFormat(&mut format) == S_OK
+                && client.Initialize(
+                    AUDCLNT_SHAREMODE_SHARED,
+                    0,
+                    1_000_000, // 100 ms buffer, in 100 ns units
+                    0,
+                    format,
+                    std::ptr::null(),
+                ) >= 0
+                && client.Start() >= 0;
+            if started {
+                while keep() {
+                    let peak = self::peak(endpoint).unwrap_or(0.0);
+                    level.store(peak.to_bits(), Ordering::Relaxed);
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                client.Stop();
+            }
+            if !format.is_null() {
+                CoTaskMemFree(format.cast());
+            }
+            client.Release();
+        });
+        level.store(0, Ordering::Relaxed);
+    }
+
     /// Windows' endpoint id, or "" when it can't be read.
     pub fn id(device: &IMMDevice) -> String {
         unsafe {
@@ -307,6 +487,16 @@ mod win {
     pub fn set_muted(_: &Endpoint, _: bool) -> Result<(), String> {
         Err("Windows only".to_owned())
     }
+    pub fn level(_: &Endpoint) -> Option<f32> {
+        None
+    }
+    pub fn set_level(_: &Endpoint, _: f32) -> Result<(), String> {
+        Err("Windows only".to_owned())
+    }
+    pub fn peak(_: &Endpoint) -> Option<f32> {
+        None
+    }
+    pub fn run_meter(_: Option<&str>, _: &std::sync::atomic::AtomicU32, _: &dyn Fn() -> bool) {}
     pub fn id(_: &Endpoint) -> String {
         String::new()
     }

@@ -16,9 +16,11 @@
 
 use crate::RigStatsApp;
 use eframe::egui;
+use rigstats_backend::microphone;
 use rigstats_egui::dialog_reveal::DialogReveal;
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::menu_icons;
+use rigstats_egui::windows::ui_kit;
 use rigstats_egui::{panels, theme};
 use std::sync::{Arc, Mutex};
 
@@ -106,6 +108,9 @@ pub(crate) struct TrayCard {
     /// The microphone glyph as textures, one per state (none / on / muted),
     /// made the first time each is shown (#425).
     mic_icons: [Option<egui::TextureHandle>; 3],
+    /// The live meter beside the glyph while the microphone is on (#427);
+    /// its stream closes by itself a second after the card hides.
+    mic_meter: Option<microphone::Meter>,
 }
 
 impl TrayCard {
@@ -190,6 +195,22 @@ impl RigStatsApp {
         let recording = self.recording.active;
         let mic_state = self.microphone;
         let mic_icon = self.tray_card.mic_icon(ctx, mic_state);
+        // The meter only while the microphone is on — muted, the red glyph
+        // says it all and no stream is opened (#427).
+        let mic_level = if mic_state == Some(false) {
+            let device = self.current_settings.lock_safe().microphone_device.clone();
+            let meter = self
+                .tray_card
+                .mic_meter
+                .get_or_insert_with(|| microphone::Meter::new(device.clone()));
+            if meter.device() != device.as_deref() {
+                *meter = microphone::Meter::new(device);
+            }
+            Some(meter.level())
+        } else {
+            None
+        };
+        let dc = theme::DialogColors::dark();
         let (warn, crit) = self.runtime.thresholds.battery;
         let builder = egui::ViewportBuilder::default()
             .with_title(TITLE)
@@ -235,6 +256,11 @@ impl RigStatsApp {
                                 Some(false) => "Microphone on",
                                 Some(true) => "Microphone muted",
                             });
+                            if let Some(level) = mic_level {
+                                ui.add_space(2.0);
+                                ui_kit::meter(ui, &dc, "tray_card_mic", level, 72.0)
+                                    .on_hover_text("What the microphone hears");
+                            }
                         });
                     });
                     ui.add_space(4.0);
