@@ -140,3 +140,22 @@ then restarts Explorer. Self-elevates to admin. See
 ```powershell
 pwsh -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
 ```
+
+## `hid-caps.ps1`
+
+Prints every HID collection of a device and what its report descriptor
+declares — usage page/usage, report lengths, each input/output/feature
+usage with its report id. Read-only (the collections are opened without
+access rights; nothing is sent), so it is the first step before any code
+for a new device: it shows what the device can be asked or told through
+*documented* HID usages — a telephony headset's LED outputs, a consumer
+control's buttons — and which collections are vendor-defined (page `0xFFxx`,
+whose commands must come from a schema, never from probing).
+
+```powershell
+pwsh -NoProfile -File tools/hid-caps.ps1 -Match "vid_0b05&pid_1afa"   # the ROG Delta II
+```
+
+Used for the Delta II's mute lamp (`docs/control-architecture.md`,
+"Microphone mute and the mute lamp"): the collection declares the standard
+LED usages, but the lamp doesn't follow them.

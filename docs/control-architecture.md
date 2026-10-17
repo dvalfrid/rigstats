@@ -1396,6 +1396,26 @@ polling rates, which settings exist) are in each model file.
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen
 commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
 
+**Microphone mute and the mute lamp (ROG Delta II, verified 2026-10-17,
+#425):** there is no microphone command in the headset's HID schema
+(GearLink's keys are battery, power saving, lighting, equalizer, sidetone,
+voice prompt, demo mode; G-Helper has none either) — GearLink mutes through
+`SetSystemSettings` on a Windows audio endpoint, which is what RIGStats does
+too (`rigstats-backend/src/microphone.rs`, Core Audio, any headset). The
+headset's own mute button is **local**: pressed while every one of its four
+HID collections was read (consumer `0x0C`, vendor `FF13`, telephony
+`0x0B/0x05`, vendor `FF00`), it sent nothing, and Windows' endpoint mute
+didn't change — so neither Windows nor RIGStats can see it. The telephony
+collection declares the standard LED outputs (page `0x08`: Mute `0x09`,
+Off-Hook `0x17`, Ring `0x18`, Hold `0x20`, Microphone `0x21`, Online `0x2A`,
+report `0x05`), the way Teams-certified headsets light their mute lamp;
+every one of them was written — alone, Off-Hook + Mute, Online + Off-Hook +
+Mute, all six, through `HidD_SetOutputReport` and through `WriteFile` — and
+accepted, and the lamp never lit. The lamp is therefore not controllable by
+any documented means; a vendor command for it is not guessed at (see "Never
+probe with unknown commands"). Descriptors were read with
+`tools/hid-caps.ps1` (read-only).
+
 Model coverage when read: G-Helper 31 mouse model files (several classes each), 7 keyboard families (Azoth
 incl. Extreme / X / Omni, Claymore II, Falchion, Strix Flare II, Strix Scope II
 / RX, TUF K3), 6 headset families (Delta II, Pelta, Cetra RGB / SpeedNova,
