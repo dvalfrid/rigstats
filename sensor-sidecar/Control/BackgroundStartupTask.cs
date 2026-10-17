@@ -7,7 +7,10 @@ namespace SensorSidecar.Control;
 /// started (#383): before `host.Run()` it would count against the 30 s the
 /// service manager gives a starting service, and in a hosted service's
 /// `StartAsync` it would hold up telemetry. A failure is logged, never thrown;
-/// stopping the service waits for it (or the host's stop timeout).
+/// stopping the service waits for it (or the host's stop timeout). Register
+/// it once: `AddHostedService` keeps only the first registration of a type
+/// (`TryAddEnumerable`), so a second task of this class would silently never
+/// run (seen live, #193) — put more work into the one task instead.
 public sealed class BackgroundStartupTask(string name, Action work) : IHostedService
 {
     private Task? _running;

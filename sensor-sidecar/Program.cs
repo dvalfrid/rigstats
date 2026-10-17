@@ -66,17 +66,20 @@ builder.Services.AddWindowsService(options =>
     options.ServiceName = "RIGStats Sensor";
 });
 
-// Earlier crashes Windows recorded but this log couldn't, read in the
-// background once the service has started (#242, #383).
+// One-off start-up work in the background once the service has started
+// (#383): which other hardware software runs here (Armoury Crate's services,
+// OpenRGB — the evidence, in users' diagnostics, for what owns the fans and
+// the lighting on boards we don't have, #193), then earlier crashes Windows
+// recorded but this log couldn't (#242). One task for both: AddHostedService
+// drops a second registration of the same type (TryAddEnumerable), so a
+// second BackgroundStartupTask would never run.
 if (SidecarLog.FileEnabled)
 {
-    builder.Services.AddHostedService(_ => new BackgroundStartupTask("Reading earlier crashes",
-        () => LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath)));
-    // Which other hardware software runs here (Armoury Crate's services,
-    // OpenRGB) — the evidence, in users' diagnostics, for what owns the fans
-    // and the lighting on boards we don't have (#193).
-    builder.Services.AddHostedService(_ => new BackgroundStartupTask("Looking for other hardware software",
-        () => SidecarLog.Log($"[rigstats-control] {OtherSoftware.Summary()}")));
+    builder.Services.AddHostedService(_ => new BackgroundStartupTask("Start-up checks", () =>
+    {
+        SidecarLog.Log($"[rigstats-control] {OtherSoftware.Summary()}");
+        LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath);
+    }));
 }
 
 // The host's own warnings and errors (a worker that failed, a slow stop) in
