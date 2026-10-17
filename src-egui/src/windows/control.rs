@@ -3146,6 +3146,20 @@ fn overview_page(
                 lighting.1,
             ),
         },
+        {
+            // From the profile only — the Overview never asks the mouse.
+            let chosen = profile
+                .part
+                .mouse
+                .as_ref()
+                .and_then(|m| m.profile)
+                .map_or_else(
+                    || "Left as it is".to_owned(),
+                    |p| format!("Mouse profile {p}"),
+                );
+            let (summary, dot) = tile_summary(control.domain_problem("mouse"), dc, chosen);
+            (Page::Mouse, Icon::Mouse, "Mouse", summary, dot)
+        },
     ];
     let starts_with: Vec<&str> = rules
         .iter()
@@ -3165,7 +3179,7 @@ fn overview_page(
     )];
     let gap = 12.0;
     let tile_w = ((ui.available_width() - 2.0 * gap) / 3.0).floor();
-    let size = egui::vec2(tile_w, 92.0);
+    let size = egui::vec2(tile_w, ui_kit::TILE_H);
     // Sections side by side when they fit in one row of three tiles:
     // Windows and Automation hold a tile each, so they share a row.
     let lines: [&[(&str, &[OverviewTile])]; 3] = [

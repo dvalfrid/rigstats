@@ -1075,8 +1075,13 @@ pub fn icon_button(ui: &mut Ui, dc: &DialogColors, icon: Icon, tooltip: &str) ->
     resp.on_hover_text(tooltip)
 }
 
-/// A clickable summary tile (the Control Center's overview): icon, title,
-/// value (up to two lines) and an optional colour dot.
+/// Height of a summary [`tile`].
+pub const TILE_H: f32 = 64.0;
+
+/// A clickable summary tile (the Control Center's overview, #440): the
+/// icon on the left, title and value beside it on one line each, and an
+/// optional colour dot; a value cut short shows in full on hover. Compact,
+/// so a whole profile fits on one screen.
 pub fn tile(
     ui: &mut Ui,
     dc: &DialogColors,
@@ -1086,7 +1091,7 @@ pub fn tile(
     value: &str,
     dot: Option<Color32>,
 ) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    let (rect, mut resp) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
         let fill = if resp.hovered() { dc.inner } else { dc.card };
@@ -1103,39 +1108,46 @@ pub fn tile(
             StrokeKind::Inside,
         );
         let pad = 12.0;
-        let badge = Rect::from_min_size(rect.min + vec2(pad, pad), vec2(26.0, 26.0));
+        let badge = Rect::from_min_size(
+            pos2(rect.left() + pad, rect.center().y - 13.0),
+            vec2(26.0, 26.0),
+        );
         icon_badge(p, badge, icon);
+        let chevron_x = rect.right() - pad - 4.0;
         paint_glyph(
             p,
-            Rect::from_center_size(
-                pos2(rect.right() - pad - 4.0, badge.center().y),
-                vec2(12.0, 12.0),
-            ),
+            Rect::from_center_size(pos2(chevron_x, rect.center().y), vec2(12.0, 12.0)),
             Icon::Chevron,
             dc.muted,
         );
+        let left = badge.right() + 12.0;
+        let right = chevron_x - 12.0;
         p.text(
-            pos2(badge.right() + 10.0, badge.center().y),
-            egui::Align2::LEFT_CENTER,
+            pos2(left, rect.center().y - 2.0),
+            egui::Align2::LEFT_BOTTOM,
             title,
             FontId::proportional(12.0),
             dc.muted,
         );
-        let mut x = rect.left() + pad;
-        let y = badge.bottom() + 10.0;
+        let mut x = left;
+        let y = rect.center().y + 1.0;
         if let Some(c) = dot {
-            p.circle_filled(pos2(x + 6.0, y + 9.0), 6.0, c);
-            x += 18.0;
+            p.circle_filled(pos2(x + 5.0, y + 9.0), 5.0, c);
+            x += 16.0;
         }
         let mut job = LayoutJob::single_section(
             value.to_owned(),
             TextFormat::simple(FontId::proportional(14.0), dc.title),
         );
-        job.wrap.max_width = rect.right() - pad - x;
-        job.wrap.max_rows = 2;
+        job.wrap.max_width = right - x;
+        job.wrap.max_rows = 1;
         job.wrap.overflow_character = Some('…');
         let galley = p.layout_job(job);
+        let elided = galley.elided;
         p.galley(pos2(x, y), galley, dc.title);
+        if elided {
+            resp = resp.on_hover_text(value);
+        }
     }
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);

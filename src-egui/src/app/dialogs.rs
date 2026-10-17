@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 /// Settings and the Control Center: a sidebar of pages beside grouped rows.
 const SETTINGS_SIZE: [f32; 2] = [760.0, 620.0];
-const CONTROL_SIZE: [f32; 2] = [940.0, 740.0];
+const CONTROL_SIZE: [f32; 2] = [940.0, 800.0];
 
 impl RigStatsApp {
     /// Shared tail of every dialog's per-frame render (Settings, About,

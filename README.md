@@ -31,7 +31,7 @@ For the full product overview, screenshots, and download, see [rigstats.app](htt
 <p align="center">
   <img src="assets/rigStats.png" width="220" alt="The RIGStats dashboard on a portrait secondary display: CPU, GPU, RAM, network and disk panels">
   &nbsp;
-  <img src="assets/control-center-overview.png" width="560" alt="The Control Center's Overview: a profile bar, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop, app rules, power, fans, CPU, graphics card and lighting">
+  <img src="assets/control-center-overview.png" width="560" alt="The Control Center's Overview: a profile bar, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop, app rules, power, fans, CPU, graphics card, lighting and mouse">
 </p>
 
 ## Installation
