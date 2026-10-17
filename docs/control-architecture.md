@@ -1399,7 +1399,7 @@ commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
 **Microphone mute and the mute lamp (ROG Delta II, verified 2026-10-17,
 #425):** there is no microphone command in the headset's HID schema
 (GearLink's keys are battery, power saving, lighting, equalizer, sidetone,
-voice prompt, demo mode; G-Helper has none either) — GearLink mutes through
+voice prompt, demo mode; G-Helper has none either, and GearLink's own UI offers no mute for the Delta II — checked by the owner) — GearLink mutes through
 `SetSystemSettings` on a Windows audio endpoint, which is what RIGStats does
 too (`rigstats-backend/src/microphone.rs`, Core Audio, any headset). The
 headset's own mute button is **local**: pressed while every one of its four
