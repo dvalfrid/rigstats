@@ -20,6 +20,7 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
+- **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, and RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
 - **Peripherals** — battery level and charging of ROG wireless headsets, keyboards and mice, and the battery of any Bluetooth device Windows knows it for, in a dashboard panel and a hover card over the tray icon, with a low-battery alert.

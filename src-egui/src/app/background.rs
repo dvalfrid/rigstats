@@ -79,6 +79,7 @@ struct TrayMenuIds {
     updater: MenuId,
     docs: MenuId,
     lamp: MenuId,
+    mic: MenuId,
     floating: MenuId,
     recording: MenuId,
     overlay: MenuId,
@@ -97,6 +98,7 @@ impl TrayMenuIds {
             updater: tray.updater_id.clone(),
             docs: tray.docs_id.clone(),
             lamp: tray.lamp_id.clone(),
+            mic: tray.mic_id.clone(),
             floating: tray.floating_id.clone(),
             recording: tray.recording_id.clone(),
             overlay: tray.overlay_id.clone(),
@@ -131,6 +133,8 @@ impl TrayMenuIds {
             Some(TrayCmd::OpenDocs)
         } else if *id == self.lamp {
             Some(TrayCmd::ToggleLamp)
+        } else if *id == self.mic {
+            Some(TrayCmd::ToggleMicMute)
         } else if let Some(pref) = gpu_choice_from_menu_id(id) {
             Some(TrayCmd::SelectGpu(pref))
         } else {
@@ -391,6 +395,7 @@ mod tests {
             updater: id("updater"),
             docs: id("docs"),
             lamp: id("lamp"),
+            mic: id("mic"),
             floating: id("floating"),
             recording: id("recording"),
             overlay: id("overlay"),
@@ -410,6 +415,7 @@ mod tests {
             ("updater", TrayCmd::OpenUpdater),
             ("docs", TrayCmd::OpenDocs),
             ("lamp", TrayCmd::ToggleLamp),
+            ("mic", TrayCmd::ToggleMicMute),
             ("floating", TrayCmd::ToggleFloating),
             ("recording", TrayCmd::ToggleRecording),
             ("overlay", TrayCmd::ToggleOverlay),

@@ -28,6 +28,8 @@ pub enum TrayCmd {
     ToggleOverlayLock,
     /// Switch the light bar's desk lamp off or back on (#214).
     ToggleLamp,
+    /// Mute or unmute the microphone (#425).
+    ToggleMicMute,
     /// Set the displayed GPU; `None` = automatic (highest VRAM).
     SelectGpu(Option<String>),
     /// Apply a Control Center profile by id (#187).
@@ -200,6 +202,7 @@ pub struct Tray {
     pub overlay_id: tray_icon::menu::MenuId,
     pub overlay_lock_id: tray_icon::menu::MenuId,
     pub lamp_id: tray_icon::menu::MenuId,
+    pub mic_id: tray_icon::menu::MenuId,
     pub gpu_menu: GpuMenu,
     pub profile_menu: ProfileMenu,
     recording_item: IconMenuItem,
@@ -209,10 +212,13 @@ pub struct Tray {
     menu: Menu,
     lamp_item: IconMenuItem,
     lamp_shown: bool,
+    /// "Mute/Unmute Microphone", or "No microphone" greyed out
+    /// ([`Tray::set_microphone`], #425).
+    mic_item: IconMenuItem,
 }
 
-/// Where "Toggle Desk Lamp" goes: right after "Control Center…".
-const LAMP_ITEM_POSITION: usize = 8;
+/// Where "Toggle Desk Lamp" goes: right after "Mute Microphone".
+const LAMP_ITEM_POSITION: usize = 9;
 
 fn load_tray_icon() -> Icon {
     let bytes = include_bytes!("../../assets/tray.png");
@@ -287,6 +293,13 @@ pub fn build_tray(
         IconMenuItem::new("Check for Updates", true, Some(menu_icons::updater()), None);
     let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
     let lamp_item = IconMenuItem::new("Toggle Desk Lamp", true, Some(menu_icons::lamp()), None);
+    // Greyed out until the first tick says whether Windows has a microphone.
+    let mic_item = IconMenuItem::new(
+        "No microphone",
+        false,
+        Some(menu_icons::microphone(None)),
+        None,
+    );
     let quit_item = IconMenuItem::new("Quit", true, Some(menu_icons::quit()), None);
 
     // GPU submenu — the only way to pick the displayed GPU in modes where the
@@ -327,6 +340,7 @@ pub fn build_tray(
     let docs_id = docs_item.id().clone();
     let quit_id = quit_item.id().clone();
     let lamp_id = lamp_item.id().clone();
+    let mic_id = mic_item.id().clone();
 
     let menu = Menu::new();
     let _ = menu.append(&floating_item);
@@ -337,6 +351,7 @@ pub fn build_tray(
     let _ = menu.append(&gpu_menu.submenu);
     let _ = menu.append(&profile_menu.submenu);
     let _ = menu.append(&control_item);
+    let _ = menu.append(&mic_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -384,6 +399,7 @@ pub fn build_tray(
         overlay_id,
         overlay_lock_id,
         lamp_id,
+        mic_id,
         gpu_menu,
         profile_menu,
         recording_item,
@@ -391,10 +407,24 @@ pub fn build_tray(
         menu,
         lamp_item,
         lamp_shown: false,
+        mic_item,
     }
 }
 
 impl Tray {
+    /// "Mute Microphone" (green) / "Unmute Microphone" (red, struck
+    /// through) for `Some(muted)`; "No microphone", greyed out, for `None`
+    /// (#425). The row always stays, so the state is visible at a glance.
+    pub fn set_microphone(&mut self, state: Option<bool>) {
+        self.mic_item.set_text(match state {
+            Some(true) => "Unmute Microphone",
+            Some(false) => "Mute Microphone",
+            None => "No microphone",
+        });
+        self.mic_item.set_enabled(state.is_some());
+        self.mic_item.set_icon(Some(menu_icons::microphone(state)));
+    }
+
     pub fn set_recording(&self, enabled: bool) {
         let label = if enabled {
             "Stop Recording"

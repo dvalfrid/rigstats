@@ -7,7 +7,7 @@ use app::state::{
 };
 use eframe::egui;
 use rigstats_backend::control;
-use rigstats_backend::{debug, hardware, logging, settings};
+use rigstats_backend::{debug, hardware, logging, microphone, settings};
 use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 #[cfg(windows)]
 use rigstats_egui::geometry::win_monitor;
@@ -45,9 +45,14 @@ struct RigStatsApp {
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
     /// Fires on the fixed global hotkeys (see `hotkey.rs`): Ctrl+Alt+O to
-    /// flip `overlay_click_through` (same as the tray's "Lock/Unlock
-    /// Overlay" row), Ctrl+Alt+P to cycle the Control Center profile.
+    /// show/hide the overlay (same as the tray's "Toggle Overlay Mode" row),
+    /// Ctrl+Alt+P to cycle the Control Center profile, Ctrl+Alt+M to mute
+    /// or unmute the microphone (#425).
     hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
+    /// The microphone's mute as the last telemetry tick saw it (#425,
+    /// `PollStats::microphone`), so the tray row and hover card follow a
+    /// change made anywhere; `None` while Windows has no microphone.
+    microphone: Option<bool>,
     /// Control Center (#187): events pushed by `control_task` (connect/
     /// disconnect, capabilities, profile changes, apply results), drained
     /// into `runtime.control` each frame — see `dashboard::DashboardRuntime::drain_control`.
@@ -211,6 +216,7 @@ impl RigStatsApp {
             ),
             seen_safety_trips: 0,
             seen_apply_result: None,
+            microphone: None,
             current_settings,
             settings_reload,
             preferred_gpu,
@@ -535,6 +541,50 @@ impl RigStatsApp {
         });
     }
 
+    /// Re-reads the microphone's mute from Windows (#425) and moves the tray
+    /// row along — a change made in Windows, in a call app or with the
+    /// headset's own button (where Windows sees it) shows within a tick.
+    fn refresh_microphone(&mut self) {
+        let now = self.runtime.latest.microphone;
+        if now != self.microphone {
+            self.tray.set_microphone(now);
+            self.microphone = now;
+        }
+    }
+
+    /// Ctrl+Alt+M and the tray's "Mute/Unmute Microphone" row: flips the
+    /// chosen microphone's mute in Windows (Settings → General; by default
+    /// the one Windows uses for calls) and — unless turned off under
+    /// Notifications — says which way it went in a toast, since a hotkey
+    /// gives no other feedback (#425).
+    fn toggle_microphone(&mut self) {
+        let (device, notify) = {
+            let s = self.current_settings.lock_safe();
+            (s.microphone_device.clone(), s.microphone_notify)
+        };
+        match microphone::toggle(device.as_deref()) {
+            Ok(mic) => {
+                let body = format!("{} {}", mic.name, if mic.muted { "muted" } else { "on" });
+                debug::log_debug(&self.dir, &format!("microphone: {body}"));
+                self.tray.set_microphone(Some(mic.muted));
+                self.microphone = Some(mic.muted);
+                // The header's glyph draws from the last telemetry tick;
+                // show the new state now rather than up to a second later.
+                self.runtime.latest.microphone = Some(mic.muted);
+                if notify {
+                    std::thread::spawn(move || {
+                        windows::settings::send_notification(
+                            "RIGStats — Microphone",
+                            &body,
+                            windows::settings::NotifyIcon::Info,
+                        );
+                    });
+                }
+            }
+            Err(e) => debug::log_warn(&self.dir, &format!("microphone: toggle failed: {e}")),
+        }
+    }
+
     /// One warning toast per critical-temperature fan override (#188), in the
     /// same notification style as temperature alerts. The service sends
     /// `safety_tripped` only on entering the critical state, so each counted
@@ -748,7 +798,18 @@ impl eframe::App for RigStatsApp {
                 // Settings-only).
                 hotkey::HotkeyEvent::ToggleOverlay => self.toggle_overlay_mode(),
                 hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
+                hotkey::HotkeyEvent::ToggleMicMute => self.toggle_microphone(),
             }
+        }
+        // The header panel's microphone glyph was clicked last frame (#425;
+        // `panels::header`), in whichever window drew it — set as a temp
+        // flag because the panel is drawn with `&self`.
+        if ui
+            .ctx()
+            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("toggle_microphone")))
+            .unwrap_or(false)
+        {
+            self.toggle_microphone();
         }
 
         // Show/hide the overlay's own add-on viewport — independent of
@@ -797,6 +858,7 @@ impl eframe::App for RigStatsApp {
         let new_stats = self.runtime.drain(&self.receiver);
         if new_stats {
             self.check_alerts();
+            self.refresh_microphone();
         }
 
         // Control Center (#187): fold any control-pipe events (connect/

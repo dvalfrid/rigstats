@@ -160,6 +160,14 @@ pub struct Settings {
     /// Whether to send notifications when a CRITICAL threshold is crossed.
     #[serde(default = "default_true")]
     pub notify_on_crit: bool,
+    /// Which microphone Ctrl+Alt+M and the tray mute (#425): a Windows
+    /// endpoint id from `microphone::list`, or `None` for the one Windows
+    /// uses for calls (also the fallback when the chosen one isn't connected).
+    #[serde(default)]
+    pub microphone_device: Option<String>,
+    /// Whether muting or unmuting the microphone shows a notification (#425).
+    #[serde(default = "default_true")]
+    pub microphone_notify: bool,
     /// Open each visible panel as its own frameless window instead of one portrait window.
     #[serde(default)]
     pub floating_mode: bool,
@@ -407,6 +415,8 @@ impl Default for Settings {
             alert_cooldown_secs: default_alert_cooldown_secs(),
             notify_on_warn: true,
             notify_on_crit: true,
+            microphone_device: None,
+            microphone_notify: true,
             floating_mode: false,
             floating_panel_scale: default_floating_panel_scale(),
             panel_layouts: HashMap::new(),

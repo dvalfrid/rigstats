@@ -6,6 +6,7 @@ pub mod hardware;
 pub mod lhm;
 pub mod lhm_process;
 pub mod logging;
+pub mod microphone;
 pub mod pipe_server;
 pub mod profile_rules;
 pub mod settings;

@@ -18,6 +18,7 @@ use crate::RigStatsApp;
 use eframe::egui;
 use rigstats_egui::dialog_reveal::DialogReveal;
 use rigstats_egui::lock_ext::LockSafe;
+use rigstats_egui::menu_icons;
 use rigstats_egui::{panels, theme};
 use std::sync::{Arc, Mutex};
 
@@ -102,6 +103,30 @@ pub(crate) struct TrayCard {
     /// Frames in a row drawn with the window visible — Windows only reports
     /// it visible a frame or so after egui shows it.
     shown_frames: u32,
+    /// The microphone glyph as textures, one per state (none / on / muted),
+    /// made the first time each is shown (#425).
+    mic_icons: [Option<egui::TextureHandle>; 3],
+}
+
+impl TrayCard {
+    /// The tray menu's microphone glyph for `state` (`None` = no
+    /// microphone, `Some(muted)`), as an egui texture.
+    fn mic_icon(&mut self, ctx: &egui::Context, state: Option<bool>) -> egui::TextureHandle {
+        let slot = match state {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        };
+        self.mic_icons[slot]
+            .get_or_insert_with(|| {
+                ctx.load_texture(
+                    format!("tray-card-mic-{slot}"),
+                    menu_icons::microphone_image(state),
+                    egui::TextureOptions::LINEAR,
+                )
+            })
+            .clone()
+    }
 }
 
 /// Content height for `devices` rows (or the empty-state line).
@@ -163,6 +188,8 @@ impl RigStatsApp {
         };
         let devices = self.runtime.latest.peripherals.clone();
         let recording = self.recording.active;
+        let mic_state = self.microphone;
+        let mic_icon = self.tray_card.mic_icon(ctx, mic_state);
         let (warn, crit) = self.runtime.thresholds.battery;
         let builder = egui::ViewportBuilder::default()
             .with_title(TITLE)
@@ -196,6 +223,19 @@ impl RigStatsApp {
                                     .color(egui::Color32::from_rgb(0xff, 0x55, 0x55)),
                             );
                         }
+                        // The microphone's state as the menu's own glyph:
+                        // green on, red muted, grey none (#425).
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.add(
+                                egui::Image::new(egui::load::SizedTexture::from_handle(&mic_icon))
+                                    .fit_to_exact_size(egui::vec2(18.0, 18.0)),
+                            )
+                            .on_hover_text(match mic_state {
+                                None => "No microphone",
+                                Some(false) => "Microphone on",
+                                Some(true) => "Microphone muted",
+                            });
+                        });
                     });
                     ui.add_space(4.0);
                     if devices.is_empty() {

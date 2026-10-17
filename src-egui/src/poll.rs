@@ -5,7 +5,7 @@
 
 use crate::gpu_process::{self, GpuEngineQuery, GpuProcessInfo};
 use crate::lock_ext::LockSafe;
-use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, settings};
+use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, microphone, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -131,6 +131,10 @@ pub struct PollStats {
     // Active Control Center profile from the sensor service (#302) — the
     // header chip's source in the wallpaper host, which has no control pipe
     pub service_profile: Option<rigstats_backend::lhm::ActiveProfile>,
+    // The microphone's mute as Windows sees it (#425): `None` = no
+    // microphone, `Some(muted)` — the header's glyph and the tray's row,
+    // polled here so the wallpaper host shows it too
+    pub microphone: Option<bool>,
     // System
     pub uptime_secs: u64,
     pub hostname: String,
@@ -599,14 +603,18 @@ pub async fn poll_loop(
             }
         }
 
-        let display_model_name = {
+        let (display_model_name, microphone_device) = {
             let s = settings_arc.lock_safe();
-            if s.model_name.is_empty() {
+            let name = if s.model_name.is_empty() {
                 model_name.clone()
             } else {
                 s.model_name.clone()
-            }
+            };
+            (name, s.microphone_device.clone())
         };
+        // One cheap COM read per tick, so a mute made anywhere shows within
+        // a second (#425).
+        let microphone = microphone::current(microphone_device.as_deref()).map(|m| m.muted);
 
         let stats = PollStats {
             cpu_load,
@@ -669,6 +677,7 @@ pub async fn poll_loop(
                 .map(|l| l.hardware_problems.clone())
                 .unwrap_or_default(),
             service_profile: lhm_data.as_ref().and_then(|l| l.active_profile.clone()),
+            microphone,
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),

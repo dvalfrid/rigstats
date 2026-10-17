@@ -55,6 +55,7 @@ impl RigStatsApp {
                         .control_cmd_tx
                         .try_send(control::ControlCmd::ToggleLamp);
                 }
+                TrayCmd::ToggleMicMute => self.toggle_microphone(),
                 TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
                 TrayCmd::SelectProfile(id) => self.apply_profile(id),
             }
