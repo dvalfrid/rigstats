@@ -226,6 +226,42 @@ If the release build fails or needs to be re-run for an existing tag:
 
 Leave the "Use workflow from" dropdown on `main`.
 
+### A release whose build fails after the release exists
+
+Release Please creates the tag and the GitHub Release *before* the build runs,
+so a failed build leaves a release with no installer — and it is **Latest**.
+Seen 2026-10-17 with 1.49.0: `cargo deny` stopped the build on three `zip`
+advisories published after the RC had passed the same check. What a failed
+release does, and what to do:
+
+- **Users:** the app reads `releases/latest/download/latest.json`; with no
+  asset it gets 404 and offers nothing, which is right. The website's download
+  button goes to `releases/latest`, now a page without a file. Winget was not
+  submitted (publish never ran).
+- **Mark it pre-release, with a note:** `gh release edit vX.Y.Z --prerelease
+  --latest=false --notes-file notes.md` (the explicit `--latest=false` was
+  needed: `--prerelease` alone left it Latest). The previous release is Latest
+  again; `releases/latest/download/…` lags about three minutes (GitHub caches
+  the redirect). Put at the top of the notes that it was never published and
+  which release to get instead.
+- **Fix, then ship the next patch version.** Don't re-run the Release workflow
+  on the same tag: it checks out the tag, which points before the fix, so it
+  fails the same way. Don't move the tag either: `CHANGELOG.md` (built into
+  the app) links `compare/vPREV...vX.Y.Z`. Merge the fix; Release Please opens
+  the release PR for X.Y.Z+1, and that is the release users get. Move the
+  highlights to that version: only a list for the exact version counts.
+- **Keep the tag and the release.** Release Please finds the previous release
+  by the `autorelease: tagged` label on its PR, not the tag, so deleting the
+  tag wouldn't confuse it — but the changelog's compare links for X.Y.Z and
+  X.Y.Z+1 would go dead. A pre-release with a note costs nothing.
+- **The website says X.Y.Z until the next release.** The "Sync PAD version"
+  step in `release-please.yml` wrote `website/pad.xml` (version and
+  `Primary_Download_URL` — a 404 for a failed release) and `index.html`'s
+  `softwareVersion` into the release PR, which was merged. It rewrites them in
+  the next release PR. Revert by hand only if that next release is far off.
+- **A green RC guarantees nothing about `cargo deny`:** the advisory database
+  changes between runs. The gate is right to stop; expect it to happen again.
+
 ## Accounts, Secrets And Settings
 
 Everything the pipeline needs that is not in the repo. This is the list to set
