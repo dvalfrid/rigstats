@@ -8,6 +8,13 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.49.1](https://github.com/dvalfrid/rigstats/compare/v1.49.0...v1.49.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **deps:** upgrade zip to 9 — three new advisories stopped the release build ([#419](https://github.com/dvalfrid/rigstats/issues/419)) ([72263bb](https://github.com/dvalfrid/rigstats/commit/72263bb28a4a33ad5725182dafbe61cfbb43950c))
+
 ## [1.49.0](https://github.com/dvalfrid/rigstats/compare/v1.48.1...v1.49.0) (2026-10-16)
 
 
