@@ -30,6 +30,7 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadse
     private readonly HidDeviceInfo _info;
     private readonly byte _reportId;
     private IHidDevice? _device;
+    private string? _loggedReplies;
     private string _lastLighting = "";
 
     public string Id { get; }
@@ -134,7 +135,16 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadse
                 return null;
             replies.Add(reply);
         }
-        return HeadsetCommands.Parse(replies[0], replies[1], replies[2], limits);
+        var settings = HeadsetCommands.Parse(replies[0], replies[1], replies[2], limits);
+        // The replies and what they were read as, each time they differ from
+        // the last — for verifying a model from a user's log (#438).
+        var raw = string.Join(" ", replies.Select(Hid.ReplyHex));
+        if (raw != _loggedReplies)
+        {
+            _loggedReplies = raw;
+            SidecarLog.Log($"[rigstats-control] Headset: {Name} 0x{_info.ProductId:X4} read {(settings is null ? "nothing it could use" : settings.ToString())} from {raw}.");
+        }
+        return settings;
     }
 
     /// Every headset that answers. A dongle whose headset is off or out of

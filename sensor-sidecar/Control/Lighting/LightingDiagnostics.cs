@@ -68,6 +68,8 @@ public static class LightingDiagnostics
         if (h.VendorId == AuraUsb.AsusVendorId && AsusKeyboardDevice.Model(h.ProductId) is { } keyboard
             && (keyboard.Receiver ? h.UsagePage is >= 0xFF00 and <= 0xFF02 : h.UsagePage == 0xFF00))
             return "asus_keyboard_channel";
+        if (Mice.MouseCatalog.Entries.Any(e => Mice.MouseProvider.IsChannel(h, e)))
+            return "asus_mouse_settings";
         if (h.VendorId != AuraUsb.AsusVendorId || h.UsagePage != AuraUsb.AuraUsagePage)
             return null;
         if (AuraUsb.Family(h.ProductId) is { } family)

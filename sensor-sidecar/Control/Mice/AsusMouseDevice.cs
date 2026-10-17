@@ -33,6 +33,7 @@ public sealed class AsusMouseDevice : IMouseDevice, IDisposable
     private readonly HidDeviceInfo _channel;
     private readonly byte _reportId;
     private IHidDevice? _device;
+    private string? _loggedReplies;
 
     public string Id { get; }
     public MouseEntry Entry { get; }
@@ -121,7 +122,22 @@ public sealed class AsusMouseDevice : IMouseDevice, IDisposable
                 return (null, replies);
             replies[MouseProtocol.Key(question)] = reply;
         }
-        return (MouseProtocol.Parse(Entry.Spec, replies, Booster), replies);
+        var settings = MouseProtocol.Parse(Entry.Spec, replies, Booster);
+        LogRead(replies, settings);
+        return (settings, replies);
+    }
+
+    // Caller holds _lock. The replies and what they were read as, each time
+    // they differ from the last — what verifying an unverified model from a
+    // user's log needs (#438).
+    private void LogRead(Dictionary<string, byte[]> replies, MouseSettings? settings)
+    {
+        var raw = string.Join(" ", replies.Select(r => $"{r.Key}:{Hid.ReplyHex(r.Value)}"));
+        if (raw == _loggedReplies)
+            return;
+        _loggedReplies = raw;
+        SidecarLog.Log($"[rigstats-control] Mouse: {Entry.Spec.Name} 0x{Entry.ProductId:X4} ({Entry.Link.ToString().ToLowerInvariant()}) read "
+            + (settings is null ? "nothing it could use" : Describe(settings)) + $" from {raw}.");
     }
 
     // Caller holds _lock. Asks once more when no answer came: the first
