@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -457,27 +456,5 @@ public sealed class LightingProvider : IControlProvider
         var (r, g, b) = AuraUsb.ParseColor(aura.Color) ?? ((byte)255, (byte)255, (byte)255);
         (r, g, b) = AuraUsb.Scale(r, g, b, aura.Brightness ?? 1.0);
         return (effect, r, g, b);
-    }
-
-    /// What holds the lighting besides us, or null: Armoury Crate's
-    /// LightingService (or its app) or OpenRGB rewrite the devices themselves,
-    /// so the two would fight over every change.
-    public static string? DetectConflict()
-    {
-        try
-        {
-            if (Process.GetProcessesByName("LightingService").Length > 0)
-                return "Armoury Crate (LightingService)";
-            if (Process.GetProcessesByName("ArmouryCrate").Length > 0)
-                return "Armoury Crate";
-            // OpenRGB drives the same devices (and redraws them constantly).
-            if (Process.GetProcessesByName("OpenRGB").Length > 0)
-                return "OpenRGB";
-        }
-        catch
-        {
-            // Can't tell — don't block lighting over it.
-        }
-        return null;
     }
 }

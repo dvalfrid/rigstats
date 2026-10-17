@@ -134,7 +134,7 @@ $features = @(
   @{ id="control-lighting-more"; kind="planned"; pin=212; title="Control Center: more lighting devices (ASUS monitors, peripherals, other vendors)" }
   @{ id="control-desk-lamp"; kind="done"; pin=214; title="Lighting: ROG Aura Monitor Light Bar desk lamp (on/off, brightness)" }
   @{ id="control-lighting-hue"; kind="done"; pin=215; title="Lighting: Philips Hue via the Hue Bridge" }
-  @{ id="control-armoury-crate"; kind="planned"; pin=193; title="Control Center phase 6: Armoury Crate replacement" }
+  @{ id="control-armoury-crate"; kind="done"; pin=193; title="Control Center phase 6: Armoury Crate replacement" }
   @{ id="peripheral-battery"; kind="done"; pin=290; title="Peripherals: battery status of ROG wireless devices (panel, tray card, alerts)" }
   @{ id="peripheral-battery-bluetooth"; kind="done"; pin=291; title="Peripherals: battery status for Bluetooth devices" }
   @{ id="peripheral-config"; kind="planned"; pin=292; title="Peripherals: device configuration (DPI, polling rate, sidetone, EQ)" }

@@ -3,9 +3,9 @@
 > Status: phases 0 (foundation, #187), 1 (fan control, #188), 2 (CPU power
 > limits, AMD part, #189), 3 (GPU power limit, AMD #190, NVIDIA desktop
 > #210), 4 (Curve
-> Optimizer, #191) and 5 (ASUS Aura lighting, #192) are implemented;
-> the rest is design / planned. Tracked per phase in GitHub
-> Issues — see [Delivery phases](#delivery-phases).
+> Optimizer, #191), 5 (ASUS Aura lighting, #192) and 6 (Armoury Crate
+> coexistence, #193) are implemented; the rest is design / planned. Tracked
+> per phase in GitHub Issues — see [Delivery phases](#delivery-phases).
 
 ## Contents
 
@@ -29,6 +29,7 @@
 - [Phase 3 — GPU power limit as built](#phase-3--gpu-power-limit-as-built)
 - [Phase 4 — Curve Optimizer as built](#phase-4--curve-optimizer-as-built)
 - [Phase 5 — ASUS Aura lighting as built](#phase-5--asus-aura-lighting-as-built)
+- [Phase 6 — Armoury Crate coexistence as built](#phase-6--armoury-crate-coexistence-as-built)
 - [Peripherals: battery and settings (research, #290–#292)](#peripherals-battery-and-settings-research-290292)
 - [Open questions](#open-questions)
 
@@ -322,7 +323,7 @@ built-ins — saved right away, logged, and announced by `get_state`'s
 | Boot-crash guard | Before applying Curve Optimizer / CPU limits a `pending-apply` marker is written; if it can't be written, the risky write isn't made and the profile is rolled back (#390); it is cleared after 3 min of stable uptime. If the marker exists at service start, the risky parts are **not** re-applied: they are applied as BIOS values (a no-op after a reboot; when only the service went down, it puts the SMU back) and the Control Center shows a red "Reverted after a restart" notice until a profile is applied again. A service stop inside the window keeps the marker. |
 | Hard limits | The service always clamps against probed limits; UI values are never trusted. |
 | Preview | Risky changes default to `preview` with auto-revert. |
-| Armoury Crate / ASUS services | Detected at start-up. Conflicting domains are disabled until the user chooses to stop them (guided, reversible). |
+| Armoury Crate / other hardware software | Detected by process name (`OtherSoftware`) when capabilities are read and before a profile applies: a domain another program writes — Armoury Crate's LightingService or OpenRGB → lighting, Armoury Crate's AsusFanControlService → fans — is reported as taken with a `Problem` and skipped by applies. RIGStats yields, never fights, and never stops another vendor's service; the problem links to ASUS's own uninstall tool (reversible: reinstall). Which such programs run is logged once at start-up, for the diagnostics. See [Phase 6](#phase-6--armoury-crate-coexistence-as-built). |
 | Dry-run | `--dry-run` (or a ProgramData flag) logs every write instead of performing it. |
 
 ---
@@ -365,7 +366,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | Provider | Mechanism | Notes / risk |
 | --- | --- | --- |
 | `PowerPlanProvider` | `PowerGetActiveScheme` / `PowerSetActiveScheme` (powrprof) | Trivial, no driver. Phase 0 reference provider. |
-| `FanProvider` | LHM `ISensor.Control.SetSoftware()` / `SetDefault()` on the shared `Computer` | Depends on Super I/O support per board; some firmware overrides writes — detect via `Verify`. |
+| `FanProvider` | LHM `ISensor.Control.SetSoftware()` / `SetDefault()` on the shared `Computer` | Depends on Super I/O support per board; some firmware overrides writes — detect via `Verify`. Yields to Armoury Crate's fan service (`OtherSoftware`, [Phase 6](#phase-6--armoury-crate-coexistence-as-built)). |
 | `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
@@ -1225,6 +1226,67 @@ account, no OpenRGB.
   up to four HTTPS calls). `Rescan` doesn't see network devices, so
   pairing and choosing rooms call `LightingProvider.Rediscover()`.
 
+## Phase 6 — Armoury Crate coexistence as built
+
+What phase 6 (#193) shipped, and what it deliberately didn't:
+
+- **The goal was mostly met before it.** Fans, CPU limits, GPU power limit,
+  lighting and profile switching all work without Armoury Crate. What was
+  left is living *beside* it: a user who still has Armoury Crate (or OpenRGB)
+  installed must not get two programs fighting over the same fan header or
+  the same LEDs.
+- **One table of other software** (`Control/OtherSoftware.cs`): process name
+  → the name the user sees → the domain it writes. `LightingService` and the
+  `ArmouryCrate` app → lighting (verified on the dev rig, since phase 5),
+  `OpenRGB` → lighting, `AsusFanControlService` → fans (**hypothesis**, see
+  below). Detection is by process name only — no service is queried, started
+  or stopped. `LightingProvider` and `FanProvider` get a `Func<string?>`
+  from it (null in tests, or any name) and check it in `Probe()` and before
+  writing.
+- **Taken, not hidden.** A domain another program owns is reported
+  `supported: false` with `details.conflict = true` and a `Problem`
+  (`aura_conflict` / `fan_conflict`, attention): the page stays, says who
+  has it and what to do, Status lists it. A profile that asks for fans while
+  they are taken throws `DomainUnavailableException` from `FanProvider.Apply`,
+  so the rest of the profile applies and the result carries the note
+  (`fan skipped: … controls the fans`). Lighting skips its writes the same
+  way as before. Closing the other program takes effect the next time the
+  Control Center reads capabilities — no restart.
+- **Not stopping other vendors' services.** The issue asked for a guided,
+  reversible stop of ASUS services from RIGStats. Dropped: a service RIGStats
+  stops comes back at the next boot (or when Armoury Crate repairs itself),
+  and stopping another vendor's software is the kind of thing that ends up in
+  a support thread. Instead the problem's first action opens ASUS's own
+  [Armoury Crate FAQ](https://rog.asus.com/support/FAQ/1041654) with the
+  Armoury Crate Uninstall Tool — the supported way to remove it, and a
+  reinstall brings it back. For Armoury Crate's fan service the message says
+  that closing the app isn't enough.
+- **Which ASUS component writes the fans — hypothesis.** Armoury Crate's fan
+  control on desktop boards is Fan Xpert 4
+  ([ASUS FAQ](https://www.asus.com/support/faq/1050426/)), and Armoury Crate
+  installs a Windows service named `AsusFanControlService`; the table assumes
+  that service is the writer. The owner's rig has no Armoury Crate (checked:
+  only `ArmouryCrateDownloadTool` and `AsusUpdateCheck` exist, no ASUS
+  process runs), so this is not verified on hardware. The evidence comes
+  from users: the service logs one line at start-up —
+  `Other hardware software running: Armoury Crate (AsusFanControlService) →
+  fan control; also seen: ArmouryCrateService, AsusCertService` — listing
+  every known program that runs plus any other process named ASUS, Armoury
+  or Aura. A diagnostics ZIP from a user whose fans still fight (RIGStats'
+  `Fan verify failed … firmware override?` lines while the table says no
+  conflict) names the component to add; one where fans were skipped while
+  the user had no Fan Xpert at all says the row is too broad.
+- **Validated boards list — deferred.** It needs capabilities and fixtures
+  from boards we don't have; the sensor-tree and Aura fixtures users send
+  already become regression tests (`Probe_holds_for_every_sensor_tree_fixture`),
+  which is the list in practice.
+- **Live test without hardware risk:** any process with the right name
+  triggers the detection, so `Copy-Item C:\Windows\notepad.exe
+  $env:TEMP\AsusFanControlService.exe; Start-Process
+  $env:TEMP\AsusFanControlService.exe` with the dev sidecar shows the Fans
+  page's problem and the skipped note on an apply, and closing that Notepad
+  gives the fans back.
+
 ## Peripherals: battery and settings (research, #290–#292)
 
 Research for battery status (#290) and later device configuration (#292),
@@ -1385,3 +1447,9 @@ Clavis, Strix Go 2.4); GearLink 99 ids (see "More lighting devices").
   upgrade (#200).
 - Service rename (`rigstats-sensor` → `rigstats-service`): worth the installer
   migration, or keep the name?
+- Is `AsusFanControlService` the process that writes the fans for Armoury
+  Crate on desktop boards, and does it write them even when the user never
+  opened Fan Xpert? Unverified (no Armoury Crate on the dev rig); users'
+  service logs carry the `Other hardware software running:` line — see
+  [Phase 6](#phase-6--armoury-crate-coexistence-as-built). Other fan tools
+  (FanControl, Argus Monitor) are not in the table yet; each is one row.
