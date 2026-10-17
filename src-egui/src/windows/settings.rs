@@ -11,7 +11,7 @@ use crate::windows::control;
 use crate::windows::ui_kit::{self, Icon};
 use crate::windows::{OpenRequest, OpenRequests};
 use rigstats_backend::settings::{self, ProfileLook};
-use rigstats_backend::{autostart, debug};
+use rigstats_backend::{autostart, debug, microphone};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -109,6 +109,9 @@ pub struct SettingsWindow {
     saved_at: Option<std::time::Instant>,
     /// Detected GPU adapter names for the Display page's GPU selector.
     gpu_names: Vec<String>,
+    /// Windows' microphones for the General page's selector (#425), read
+    /// when the dialog opens.
+    microphones: Vec<microphone::Device>,
 }
 
 impl SettingsWindow {
@@ -123,6 +126,7 @@ impl SettingsWindow {
             error: None,
             saved_at: None,
             gpu_names,
+            microphones: microphone::list(),
         }
     }
 
@@ -281,11 +285,12 @@ pub fn show(
                                 wallpaper_notice(ui, dc);
                             }
                             let gpu_names = st.gpu_names.clone();
+                            let microphones = st.microphones.clone();
                             let SettingsWindow {
                                 draft, saved_at, ..
                             } = &mut *st;
                             match page {
-                                Page::General => general_page(ui, dc, draft),
+                                Page::General => general_page(ui, dc, draft, &microphones),
                                 Page::Display => {
                                     display_page(ui, dc, draft, &applied_layer, &gpu_names)
                                 }
@@ -385,8 +390,18 @@ fn control_center_row(
 
 // ── General ───────────────────────────────────────────────────────────────────
 
-fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Settings) {
-    ui_kit::page_header(ui, dc, "General", "Start-up, the header and recordings.");
+fn general_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    draft: &mut settings::Settings,
+    microphones: &[microphone::Device],
+) {
+    ui_kit::page_header(
+        ui,
+        dc,
+        "General",
+        "Start-up, the header, the microphone and recordings.",
+    );
     ui_kit::group(ui, dc, None, None, |g| {
         g.row(
             "Start with Windows",
@@ -409,6 +424,37 @@ fn general_page(ui: &mut egui::Ui, dc: &DialogColors, draft: &mut settings::Sett
             },
         );
     });
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Microphone"),
+        Some("Ctrl+Alt+M and the tray menu mute or unmute it. Whether that shows a notification is under Notifications."),
+        |g| {
+            g.row(
+                "Microphone",
+                Some("The one Windows uses for calls, or a specific one — if it isn't connected, the one for calls"),
+                |ui| {
+                    const DEFAULT: &str = "The one Windows uses for calls";
+                    let current = draft
+                        .microphone_device
+                        .as_deref()
+                        .and_then(|id| microphones.iter().find(|m| m.id == id))
+                        .map_or(DEFAULT, |m| m.name.as_str());
+                    ui_kit::dropdown(ui, "microphone_device", current, |ui| {
+                        if ui.selectable_label(draft.microphone_device.is_none(), DEFAULT).clicked() {
+                            draft.microphone_device = None;
+                        }
+                        for m in microphones {
+                            let selected = draft.microphone_device.as_deref() == Some(m.id.as_str());
+                            if ui.selectable_label(selected, &m.name).clicked() {
+                                draft.microphone_device = Some(m.id.clone());
+                            }
+                        }
+                    });
+                },
+            );
+        },
+    );
     ui_kit::group(
         ui,
         dc,
@@ -799,6 +845,13 @@ fn notifications_page(
                 }
             });
         });
+        g.row(
+            "Microphone muted or unmuted",
+            Some("After Ctrl+Alt+M or the tray menu"),
+            |ui| {
+                ui_kit::toggle(ui, dc, &mut draft.microphone_notify);
+            },
+        );
         g.row("Test", Some("Shows a sample notification"), |ui| {
             if theme::dialog_btn_secondary(ui, "Send Test", dc).clicked() {
                 send_test_notification();

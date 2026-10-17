@@ -15,3 +15,4 @@ comment is ignored. See "Release routine" in docs/release.md.
 
 # 1.50.0
 - **Lives beside Armoury Crate** — if Armoury Crate's fan service is running, the Fans page says so and RIGStats leaves the fans to it instead of two programs fighting over every fan; the rest of a profile still applies. The message links to ASUS's own uninstall tool (the lighting message now does too) — nothing is stopped or changed behind your back, and a reinstall brings Armoury Crate back.
+- **Mute your microphone with Ctrl+Alt+M** — or from the tray; a toast says which way it went, the hover card shows "Mic muted", and the row follows a change made in Windows or a call app. Works for whatever microphone Windows uses for calls — or one you pick in Settings — so any headset; the toast can be turned off under Notifications.

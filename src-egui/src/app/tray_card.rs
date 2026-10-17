@@ -163,6 +163,7 @@ impl RigStatsApp {
         };
         let devices = self.runtime.latest.peripherals.clone();
         let recording = self.recording.active;
+        let mic_muted = self.microphone.as_ref().is_some_and(|m| m.muted);
         let (warn, crit) = self.runtime.thresholds.battery;
         let builder = egui::ViewportBuilder::default()
             .with_title(TITLE)
@@ -192,6 +193,13 @@ impl RigStatsApp {
                         if recording {
                             ui.label(
                                 egui::RichText::new("\u{2014} Recording")
+                                    .size(12.0)
+                                    .color(egui::Color32::from_rgb(0xff, 0x55, 0x55)),
+                            );
+                        }
+                        if mic_muted {
+                            ui.label(
+                                egui::RichText::new("\u{2014} Mic muted")
                                     .size(12.0)
                                     .color(egui::Color32::from_rgb(0xff, 0x55, 0x55)),
                             );

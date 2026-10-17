@@ -236,6 +236,28 @@ pub fn lamp() -> Icon {
     })
 }
 
+/// Microphone: capsule on a stand, a slash across it while muted —
+/// Mute/Unmute Microphone (#425).
+pub fn microphone(muted: bool) -> Icon {
+    rasterize(move |x, y| {
+        let capsule = rect_fill(x, y, 13.0, 6.0, 19.0, 17.0)
+            || dist(x, y, CENTER, 6.0) <= 3.0
+            || dist(x, y, CENTER, 17.0) <= 3.0;
+        let cradle = in_ring(x, y, CENTER, 15.0, 6.5, 1.6) && y >= 15.0;
+        let stem = seg_dist(x, y, CENTER, 21.5, CENTER, 25.0) <= 1.2;
+        let foot = seg_dist(x, y, 11.0, 26.0, 21.0, 26.0) <= 1.2;
+        let slash = muted && seg_dist(x, y, 8.0, 26.0, 24.0, 5.0) <= 1.4;
+        let gap = muted && seg_dist(x, y, 8.0, 26.0, 24.0, 5.0) <= 3.2;
+        if slash {
+            Some(NEUTRAL)
+        } else if gap {
+            None
+        } else {
+            (capsule || cradle || stem || foot).then_some(NEUTRAL)
+        }
+    })
+}
+
 /// Padlock, shackle closed or open — Lock/Unlock Overlay.
 pub fn lock(locked: bool) -> Icon {
     rasterize(move |x, y| {
