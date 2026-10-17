@@ -1467,7 +1467,10 @@ the `mouse` profile domain (`Control/Mice/`):
   `12 04 00` of a change sometimes goes unanswered over the Omni link
   (3 of ~15 changes); asked once more it always answered, so every question
   is repeated once before a request fails. The onboard-profile switch per
-  RIGStats profile was checked too (Balanced → profile 2 and back).
+  RIGStats profile was checked too: Balanced → profile 1 at 500 Hz, Gaming
+  → profile 2 at 1000 Hz, each kept and shown again on switching back. The
+  page reads the mouse again whenever the Control Center profile changes
+  (`mice_read_for`) — before that fix it showed the old profile's values.
 - **No stage colours on the page.** A stage colour is stored in the mouse
   (written and read back as `#ffbc0c` etc.), but its light kept the Lighting
   page's colour: RIGStats drives it through Dynamic Lighting, so the colour

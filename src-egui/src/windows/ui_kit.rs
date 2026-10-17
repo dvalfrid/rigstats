@@ -591,7 +591,9 @@ pub fn slider_steps(ui: &mut Ui, dc: &DialogColors, value: &mut u8, max: u8) -> 
 
 /// A whole-number slider over `range` in steps of `step`, its value and
 /// `unit` beside it ("−5°", "20 %") — the same look and width as
-/// [`slider_pct`], for a device's own scale that can go below zero. The
+/// [`slider_pct`], for a device's own scale that can go below zero. A range
+/// spanning 100× or more (DPI 50–36 000) is logarithmic, so the values in
+/// everyday use aren't crowded into its first tenth. The
 /// response says when a drag ends (send to a device then).
 pub fn slider_range(
     ui: &mut Ui,
@@ -611,8 +613,9 @@ pub fn slider_range(
     );
     ui.spacing_mut().slider_width = SLIDER_W;
     ui.add(
-        egui::Slider::new(value, range)
+        egui::Slider::new(value, range.clone())
             .step_by(f64::from(step.max(1)))
+            .logarithmic(*range.start() > 0 && *range.end() >= 100 * *range.start())
             .show_value(false)
             .trailing_fill(true),
     )

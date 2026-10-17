@@ -191,6 +191,9 @@ pub struct ControlUi {
     headset_pending: Option<(String, HeadsetSettings)>,
     /// The Mouse page asked for the mice's settings since it was opened (#431).
     mice_asked: bool,
+    /// The Control Center profile active when the mice were last read — a
+    /// switch can move the mouse to another onboard profile.
+    mice_read_for: Option<String>,
     /// A mouse's settings as just changed here, until its read-back arrives.
     mouse_pending: Option<(String, MouseSettings)>,
     /// A change made while a slider, number or colour picker was held, not
@@ -1331,9 +1334,14 @@ fn mouse_page(
     peripherals: &[Peripheral],
     battery_levels: (u8, u8),
 ) {
-    if !ui_state.mice_asked {
+    // Read when the page opens, and again whenever the Control Center
+    // profile changes (profile bar, hotkey, tray, an app rule): it may switch
+    // the mouse to another onboard profile, whose settings are its own.
+    if !ui_state.mice_asked || ui_state.mice_read_for != control.active_profile {
         ui_state.mice_asked = true;
+        ui_state.mice_read_for = control.active_profile.clone();
         ui_state.mouse_pending = None;
+        ui_state.mouse_unsent = false;
         let _ = cmd_tx.try_send(ControlCmd::ReadMice);
     }
     if let Some((id, pending)) = &ui_state.mouse_pending {
@@ -1509,34 +1517,42 @@ fn mouse_card(
     ui_kit::group(
         ui,
         dc,
-        Some(&format!("DPI levels — mouse profile {}", s.profile)),
-        Some("The button under the scroll wheel switches between these levels."),
+        Some(&format!("DPI — mouse profile {}", s.profile)),
+        Some("The button under the scroll wheel steps through the levels; the one picked here is in use now and is the one the slider changes."),
         |g| {
             if spec.dpi_stages > 1 {
-                g.row("Level in use", None, |ui| {
-                    let options: Vec<(u8, String)> =
-                        (1..=spec.dpi_stages).map(|i| (i, i.to_string())).collect();
+                g.row("Level", Some("Pick the level to use"), |ui| {
+                    let labels: Vec<(u8, String)> = s
+                        .stages
+                        .iter()
+                        .enumerate()
+                        .map(|(i, st)| (i as u8 + 1, st.dpi.to_string()))
+                        .collect();
                     let options: Vec<(u8, &str)> =
-                        options.iter().map(|(i, l)| (*i, l.as_str())).collect();
+                        labels.iter().map(|(i, l)| (*i, l.as_str())).collect();
                     ui_kit::segmented(ui, dc, &mut s.active_stage, &options);
                 });
             }
-            for (i, stage) in s.stages.iter_mut().enumerate() {
-                let active = i + 1 == usize::from(s.active_stage);
-                g.row(
-                    &format!("Level {}", i + 1),
-                    active.then_some("In use now"),
-                    |ui| {
-                        let resp = ui.add_sized(
-                            [96.0, ui_kit::CONTROL_H],
-                            egui::DragValue::new(&mut stage.dpi)
-                                .range(spec.dpi_min..=spec.dpi_max)
-                                .speed(f64::from(spec.dpi_step))
-                                .suffix(" DPI"),
-                        );
-                        track(&resp);
-                    },
-                );
+            let at = usize::from(s.active_stage.max(1)) - 1;
+            if let Some(stage) = s.stages.get_mut(at) {
+                let title = if spec.dpi_stages > 1 {
+                    format!("DPI of level {}", at + 1)
+                } else {
+                    "DPI".to_owned()
+                };
+                g.row(&title, Some("How far the pointer moves"), |ui| {
+                    let mut v = stage.dpi as i32;
+                    let resp = ui_kit::slider_range(
+                        ui,
+                        dc,
+                        &mut v,
+                        spec.dpi_min as i32..=spec.dpi_max as i32,
+                        spec.dpi_step as i32,
+                        "",
+                    );
+                    stage.dpi = v as u32;
+                    track(&resp);
+                });
             }
         },
     );
