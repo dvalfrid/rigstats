@@ -55,6 +55,7 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
             _crashGuard,
             new LightingProvider([], "no devices", () => null, dryRun: true),
             _hue,
+            new SensorSidecar.Control.Mice.MouseProvider([], dryRun: true),
             _pipeName);
     }
 

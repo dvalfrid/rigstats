@@ -17,7 +17,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     // providers for the domains that don't exist yet; anything with no
     // registered provider is simply skipped.
     private static readonly string[] DomainOrder =
-        ["power_plan", "cpu_limit", "curve_opt", "gpu", "fan", "aura"];
+        ["power_plan", "cpu_limit", "curve_opt", "gpu", "fan", "aura", "mouse"];
 
     private readonly Dictionary<string, IControlProvider> _byDomain =
         providers.ToDictionary(p => p.Domain);
@@ -267,6 +267,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         "gpu" => part.Gpu is not null,
         "fan" => part.Fan is not null,
         "aura" => part.Aura is not null,
+        "mouse" => part.Mouse?.Profile is not null,
         _ => false,
     };
 }
