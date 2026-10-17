@@ -188,7 +188,7 @@ impl RigStatsApp {
         };
         let devices = self.runtime.latest.peripherals.clone();
         let recording = self.recording.active;
-        let mic_state = self.microphone.as_ref().map(|m| m.muted);
+        let mic_state = self.microphone;
         let mic_icon = self.tray_card.mic_icon(ctx, mic_state);
         let (warn, crit) = self.runtime.thresholds.battery;
         let builder = egui::ViewportBuilder::default()

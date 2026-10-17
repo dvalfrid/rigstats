@@ -49,10 +49,10 @@ struct RigStatsApp {
     /// Ctrl+Alt+P to cycle the Control Center profile, Ctrl+Alt+M to mute
     /// or unmute the microphone (#425).
     hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
-    /// Windows' default communications microphone and its mute, re-read
-    /// each telemetry tick so the tray row and hover card follow a change
-    /// made anywhere (#425); `None` while Windows has no microphone.
-    microphone: Option<microphone::Microphone>,
+    /// The microphone's mute as the last telemetry tick saw it (#425,
+    /// `PollStats::microphone`), so the tray row and hover card follow a
+    /// change made anywhere; `None` while Windows has no microphone.
+    microphone: Option<bool>,
     /// Control Center (#187): events pushed by `control_task` (connect/
     /// disconnect, capabilities, profile changes, apply results), drained
     /// into `runtime.control` each frame — see `dashboard::DashboardRuntime::drain_control`.
@@ -545,10 +545,9 @@ impl RigStatsApp {
     /// row along — a change made in Windows, in a call app or with the
     /// headset's own button (where Windows sees it) shows within a tick.
     fn refresh_microphone(&mut self) {
-        let device = self.current_settings.lock_safe().microphone_device.clone();
-        let now = microphone::current(device.as_deref());
+        let now = self.runtime.latest.microphone;
         if now != self.microphone {
-            self.tray.set_microphone(now.as_ref().map(|m| m.muted));
+            self.tray.set_microphone(now);
             self.microphone = now;
         }
     }
@@ -566,8 +565,12 @@ impl RigStatsApp {
         match microphone::toggle(device.as_deref()) {
             Ok(mic) => {
                 let body = format!("{} {}", mic.name, if mic.muted { "muted" } else { "on" });
+                debug::log_debug(&self.dir, &format!("microphone: {body}"));
                 self.tray.set_microphone(Some(mic.muted));
-                self.microphone = Some(mic);
+                self.microphone = Some(mic.muted);
+                // The header's glyph draws from the last telemetry tick;
+                // show the new state now rather than up to a second later.
+                self.runtime.latest.microphone = Some(mic.muted);
                 if notify {
                     std::thread::spawn(move || {
                         windows::settings::send_notification(
@@ -797,6 +800,16 @@ impl eframe::App for RigStatsApp {
                 hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
                 hotkey::HotkeyEvent::ToggleMicMute => self.toggle_microphone(),
             }
+        }
+        // The header panel's microphone glyph was clicked last frame (#425;
+        // `panels::header`), in whichever window drew it — set as a temp
+        // flag because the panel is drawn with `&self`.
+        if ui
+            .ctx()
+            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("toggle_microphone")))
+            .unwrap_or(false)
+        {
+            self.toggle_microphone();
         }
 
         // Show/hide the overlay's own add-on viewport — independent of
