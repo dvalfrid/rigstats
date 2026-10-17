@@ -32,7 +32,7 @@ ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rfd = "0.15"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 # Already in the tree through ureq's TLS; hashes the downloaded update.
 ring = "0.17"
 
