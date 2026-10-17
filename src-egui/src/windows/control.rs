@@ -1676,33 +1676,66 @@ fn mouse_card(
         spec.actions.as_ref(),
         s.buttons.as_mut(),
     ) {
+        // What `code` is called on `source`'s button: its own function shows
+        // as "Default (…)".
+        let label = |source: u16, code: u16| {
+            if code == source {
+                format!("Default ({})", mouse_button_help(source).0)
+            } else {
+                actions
+                    .iter()
+                    .find(|a| a.code == code)
+                    .map_or_else(|| format!("Other (0x{code:04X})"), |a| a.name.clone())
+            }
+        };
+        // One button's choice: Default, then every other action.
+        let choose = |ui: &mut egui::Ui, source: u16, code: &mut u16, width: f32| {
+            let id = format!("mouse_button_{source}");
+            ui_kit::combo(ui, &id, width, label(source, *code), |ui| {
+                ui.selectable_value(code, source, label(source, source));
+                for action in actions.iter().filter(|a| a.code != source) {
+                    ui.selectable_value(code, action.code, &action.name);
+                }
+            })
+        };
         ui_kit::group(
             ui,
             dc,
             Some(&format!("Buttons — mouse profile {}", s.profile)),
-            Some("What each button does in this mouse profile. Default is what the button does out of the box."),
+            Some("What each button does in this mouse profile. Hover a choice to see its button."),
             |g| {
-                for (slot, code) in slots.iter().zip(bound.iter_mut()) {
-                    let (own, place) = mouse_button_help(slot.source);
-                    let default = format!("Default ({own})");
-                    let name_of = |c: u16| {
-                        if c == slot.source {
-                            default.clone()
-                        } else {
-                            actions
-                                .iter()
-                                .find(|a| a.code == c)
-                                .map_or_else(|| format!("Other (0x{c:04X})"), |a| a.name.clone())
+                g.block(|ui| {
+                    let names = |source: u16| {
+                        slots
+                            .iter()
+                            .find(|s| s.source == source)
+                            .map_or_else(String::new, |s| s.name.clone())
+                    };
+                    let mut pick = |ui: &mut egui::Ui, source: u16, width: f32| match slots
+                        .iter()
+                        .position(|s| s.source == source)
+                    {
+                        Some(i) => choose(ui, source, &mut bound[i], width),
+                        None => ui.label(""),
+                    };
+                    crate::windows::mouse_drawing::draw(ui, dc, &names, &mut pick);
+                });
+                // The buttons not in the drawing (the DPI button), as rows.
+                for (i, slot) in slots.iter().enumerate() {
+                    if crate::windows::mouse_drawing::drawn(slot.source) {
+                        continue;
+                    }
+                    let place = match spec.dpi_button.as_deref() {
+                        Some("underside") if slot.source == 0x01E6 => {
+                            Some("On the underside of the mouse")
                         }
+                        Some("top") if slot.source == 0x01E6 => {
+                            Some("On top, behind the scroll wheel")
+                        }
+                        _ => None,
                     };
                     g.row(&slot.name, place, |ui| {
-                        let id = format!("mouse_button_{}", slot.source);
-                        ui_kit::dropdown(ui, &id, name_of(*code), |ui| {
-                            ui.selectable_value(code, slot.source, &default);
-                            for action in actions.iter().filter(|a| a.code != slot.source) {
-                                ui.selectable_value(code, action.code, &action.name);
-                            }
-                        });
+                        choose(ui, slot.source, &mut bound[i], ui_kit::CONTROL_W);
                     });
                 }
                 if bound.iter().zip(slots).any(|(c, s)| *c != s.source) {
