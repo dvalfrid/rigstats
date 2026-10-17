@@ -212,16 +212,13 @@ pub struct Tray {
     menu: Menu,
     lamp_item: IconMenuItem,
     lamp_shown: bool,
-    /// "Mute/Unmute Microphone" — in the menu only while Windows has a
-    /// microphone ([`Tray::set_microphone`], #425).
+    /// "Mute/Unmute Microphone", or "No microphone" greyed out
+    /// ([`Tray::set_microphone`], #425).
     mic_item: IconMenuItem,
-    mic_shown: bool,
 }
 
-/// Where "Toggle Desk Lamp" and "Mute Microphone" go: right after
-/// "Control Center…" (the one inserted last comes first).
-const LAMP_ITEM_POSITION: usize = 8;
-const MIC_ITEM_POSITION: usize = 8;
+/// Where "Toggle Desk Lamp" goes: right after "Mute Microphone".
+const LAMP_ITEM_POSITION: usize = 9;
 
 fn load_tray_icon() -> Icon {
     let bytes = include_bytes!("../../assets/tray.png");
@@ -296,10 +293,11 @@ pub fn build_tray(
         IconMenuItem::new("Check for Updates", true, Some(menu_icons::updater()), None);
     let docs_item = IconMenuItem::new("Help / Docs", true, Some(menu_icons::docs()), None);
     let lamp_item = IconMenuItem::new("Toggle Desk Lamp", true, Some(menu_icons::lamp()), None);
+    // Greyed out until the first tick says whether Windows has a microphone.
     let mic_item = IconMenuItem::new(
-        "Mute Microphone",
-        true,
-        Some(menu_icons::microphone(false)),
+        "No microphone",
+        false,
+        Some(menu_icons::microphone(None)),
         None,
     );
     let quit_item = IconMenuItem::new("Quit", true, Some(menu_icons::quit()), None);
@@ -353,6 +351,7 @@ pub fn build_tray(
     let _ = menu.append(&gpu_menu.submenu);
     let _ = menu.append(&profile_menu.submenu);
     let _ = menu.append(&control_item);
+    let _ = menu.append(&mic_item);
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&settings_item);
     let _ = menu.append(&about_item);
@@ -409,35 +408,21 @@ pub fn build_tray(
         lamp_item,
         lamp_shown: false,
         mic_item,
-        mic_shown: false,
     }
 }
 
 impl Tray {
-    /// Shows "Mute Microphone" / "Unmute Microphone" (with the state's icon)
-    /// while Windows has a microphone — `Some(muted)` — and takes the row
-    /// out of the menu with `None` (#425).
+    /// "Mute Microphone" (green) / "Unmute Microphone" (red, struck
+    /// through) for `Some(muted)`; "No microphone", greyed out, for `None`
+    /// (#425). The row always stays, so the state is visible at a glance.
     pub fn set_microphone(&mut self, state: Option<bool>) {
-        if let Some(muted) = state {
-            self.mic_item.set_text(if muted {
-                "Unmute Microphone"
-            } else {
-                "Mute Microphone"
-            });
-            self.mic_item.set_icon(Some(menu_icons::microphone(muted)));
-        }
-        let show = state.is_some();
-        if show == self.mic_shown {
-            return;
-        }
-        let done = if show {
-            self.menu.insert(&self.mic_item, MIC_ITEM_POSITION)
-        } else {
-            self.menu.remove(&self.mic_item)
-        };
-        if done.is_ok() {
-            self.mic_shown = show;
-        }
+        self.mic_item.set_text(match state {
+            Some(true) => "Unmute Microphone",
+            Some(false) => "Mute Microphone",
+            None => "No microphone",
+        });
+        self.mic_item.set_enabled(state.is_some());
+        self.mic_item.set_icon(Some(menu_icons::microphone(state)));
     }
 
     pub fn set_recording(&self, enabled: bool) {

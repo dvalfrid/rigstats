@@ -21,6 +21,19 @@ const NEUTRAL: Color32 = Color32::from_gray(140);
 /// `Icon`, supersampling `SS`x per axis and averaging alpha-weighted color
 /// per output pixel for antialiased edges.
 fn rasterize(paint: impl Fn(f32, f32) -> Option<Color32>) -> Icon {
+    Icon::from_rgba(rasterize_rgba(paint), SIZE, SIZE).expect("menu icon rgba")
+}
+
+/// The same glyph as an egui image, for the tray hover card (#425).
+fn rasterize_image(paint: impl Fn(f32, f32) -> Option<Color32>) -> eframe::egui::ColorImage {
+    eframe::egui::ColorImage::from_rgba_unmultiplied(
+        [SIZE as usize, SIZE as usize],
+        &rasterize_rgba(paint),
+    )
+}
+
+/// `SIZE`×`SIZE` straight-alpha RGBA.
+fn rasterize_rgba(paint: impl Fn(f32, f32) -> Option<Color32>) -> Vec<u8> {
     let mut out = vec![0u8; (SIZE * SIZE * 4) as usize];
     for y in 0..SIZE {
         for x in 0..SIZE {
@@ -52,7 +65,7 @@ fn rasterize(paint: impl Fn(f32, f32) -> Option<Color32>) -> Icon {
             out[i + 3] = alpha;
         }
     }
-    Icon::from_rgba(out, SIZE, SIZE).expect("menu icon rgba")
+    out
 }
 
 fn dist(x: f32, y: f32, cx: f32, cy: f32) -> f32 {
@@ -236,10 +249,27 @@ pub fn lamp() -> Icon {
     })
 }
 
-/// Microphone: capsule on a stand, a slash across it while muted —
-/// Mute/Unmute Microphone (#425).
-pub fn microphone(muted: bool) -> Icon {
-    rasterize(move |x, y| {
+/// Microphone: capsule on a stand — Mute/Unmute Microphone (#425). Red with
+/// a slash across it while muted (`Some(true)`), green while on
+/// (`Some(false)`), grey when Windows has no microphone (`None`) — the same
+/// green/red the recording row uses.
+pub fn microphone(state: Option<bool>) -> Icon {
+    rasterize(microphone_paint(state))
+}
+
+/// The same microphone, for the tray hover card.
+pub fn microphone_image(state: Option<bool>) -> eframe::egui::ColorImage {
+    rasterize_image(microphone_paint(state))
+}
+
+fn microphone_paint(state: Option<bool>) -> impl Fn(f32, f32) -> Option<Color32> {
+    let muted = state == Some(true);
+    let color = match state {
+        Some(true) => theme::C_AMD,
+        Some(false) => theme::C_GRN,
+        None => NEUTRAL,
+    };
+    move |x, y| {
         let capsule = rect_fill(x, y, 13.0, 6.0, 19.0, 17.0)
             || dist(x, y, CENTER, 6.0) <= 3.0
             || dist(x, y, CENTER, 17.0) <= 3.0;
@@ -249,13 +279,13 @@ pub fn microphone(muted: bool) -> Icon {
         let slash = muted && seg_dist(x, y, 8.0, 26.0, 24.0, 5.0) <= 1.4;
         let gap = muted && seg_dist(x, y, 8.0, 26.0, 24.0, 5.0) <= 3.2;
         if slash {
-            Some(NEUTRAL)
+            Some(color)
         } else if gap {
             None
         } else {
-            (capsule || cradle || stem || foot).then_some(NEUTRAL)
+            (capsule || cradle || stem || foot).then_some(color)
         }
-    })
+    }
 }
 
 /// Padlock, shackle closed or open — Lock/Unlock Overlay.
