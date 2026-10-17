@@ -8,6 +8,25 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.50.0](https://github.com/dvalfrid/rigstats/compare/v1.49.1...v1.50.0) (2026-10-17)
+
+
+### Features
+
+* **control:** live beside Armoury Crate — fans yield to its fan service ([#422](https://github.com/dvalfrid/rigstats/issues/422)) ([91f9a4e](https://github.com/dvalfrid/rigstats/commit/91f9a4e4837f1a83d9514566fd3a27113f805819))
+* **diagnostics:** log mouse and headset reads with their raw replies ([#439](https://github.com/dvalfrid/rigstats/issues/439)) ([122a8fe](https://github.com/dvalfrid/rigstats/commit/122a8feac8b55cd1a636e3e9d3bc8fe7cb3cab73))
+* **headset:** sidetone and noise reduction on a Headset page ([#430](https://github.com/dvalfrid/rigstats/issues/430)) ([ad66824](https://github.com/dvalfrid/rigstats/commit/ad66824301c1c473656a7655516a493899f8745c)), closes [#428](https://github.com/dvalfrid/rigstats/issues/428)
+* **microphone:** level slider and a live level meter ([#429](https://github.com/dvalfrid/rigstats/issues/429)) ([bb85815](https://github.com/dvalfrid/rigstats/commit/bb8581509ad70905fdfe828124ca183f85da60fe)), closes [#427](https://github.com/dvalfrid/rigstats/issues/427)
+* **microphone:** mute the microphone from the tray and Ctrl+Alt+M ([#426](https://github.com/dvalfrid/rigstats/issues/426)) ([985b092](https://github.com/dvalfrid/rigstats/commit/985b092b4696140ace8e15e115879d3d4d89ff1a))
+* **mouse:** a drawing of the mouse that shows which button is which ([#437](https://github.com/dvalfrid/rigstats/issues/437)) ([27ff1a0](https://github.com/dvalfrid/rigstats/commit/27ff1a06c1409098e12d383aee140676cb182465))
+* **mouse:** rebind ROG mouse buttons per onboard profile ([#436](https://github.com/dvalfrid/rigstats/issues/436)) ([3674aac](https://github.com/dvalfrid/rigstats/commit/3674aac334ab5302309eded958fe5d97cfce96c8)), closes [#433](https://github.com/dvalfrid/rigstats/issues/433)
+* **mouse:** ROG mouse settings and an onboard profile per Control Center profile ([#434](https://github.com/dvalfrid/rigstats/issues/434)) ([32198c7](https://github.com/dvalfrid/rigstats/commit/32198c7bb9cda161a1de9780d4238101197ad54d))
+
+
+### Bug Fixes
+
+* **alerts:** no low-battery alert while the laptop is charging ([#424](https://github.com/dvalfrid/rigstats/issues/424)) ([0a6ea9f](https://github.com/dvalfrid/rigstats/commit/0a6ea9fd8a085bc88debbce3f83277b95e1cf33c)), closes [#340](https://github.com/dvalfrid/rigstats/issues/340)
+
 ## [1.49.1](https://github.com/dvalfrid/rigstats/compare/v1.49.0...v1.49.1) (2026-10-17)
 
 
