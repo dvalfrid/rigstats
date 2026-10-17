@@ -1518,10 +1518,10 @@ fn mouse_card(
         ui,
         dc,
         Some(&format!("DPI — mouse profile {}", s.profile)),
-        Some("The button under the scroll wheel steps through the levels; the one picked here is in use now and is the one the slider changes."),
+        Some("Picking a level uses it now; the button under the scroll wheel steps through the same levels."),
         |g| {
             if spec.dpi_stages > 1 {
-                g.row("Level", Some("Pick the level to use"), |ui| {
+                g.row("DPI levels", Some("The levels stored in the mouse"), |ui| {
                     let labels: Vec<(u8, String)> = s
                         .stages
                         .iter()
@@ -1536,11 +1536,11 @@ fn mouse_card(
             let at = usize::from(s.active_stage.max(1)) - 1;
             if let Some(stage) = s.stages.get_mut(at) {
                 let title = if spec.dpi_stages > 1 {
-                    format!("DPI of level {}", at + 1)
+                    format!("Change level {}", at + 1)
                 } else {
                     "DPI".to_owned()
                 };
-                g.row(&title, Some("How far the pointer moves"), |ui| {
+                g.row(&title, Some("The level in use — how far the pointer moves"), |ui| {
                     let mut v = stage.dpi as i32;
                     let resp = ui_kit::slider_range(
                         ui,
