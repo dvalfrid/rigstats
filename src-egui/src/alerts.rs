@@ -126,13 +126,17 @@ pub fn pending_alerts(stats: &PollStats, settings: &Settings) -> Vec<PendingAler
     }
 
     if stats.battery_present {
-        // Battery charge: fires when % drops BELOW threshold (warn > crit).
-        out.extend(check_below(
-            settings,
-            "battery",
-            "Battery charge".to_string(),
-            stats.battery_charge_pct.map(|p| p as f64),
-        ));
+        // Battery charge: fires when % drops BELOW threshold (warn > crit) —
+        // not while charging (#340), like the wireless devices below; unknown
+        // charging state still alerts.
+        if stats.battery_charging != Some(true) {
+            out.extend(check_below(
+                settings,
+                "battery",
+                "Battery charge".to_string(),
+                stats.battery_charge_pct.map(|p| p as f64),
+            ));
+        }
 
         // Battery power draw: fires when watts exceed threshold, discharge only.
         if stats.battery_charging == Some(false) {
@@ -337,6 +341,25 @@ mod tests {
         assert_eq!(alerts.len(), 1);
         assert_eq!(alerts[0].level, AlertLevel::Warn);
         assert_eq!(alerts[0].component, "battery");
+    }
+
+    #[test]
+    fn battery_charge_below_threshold_but_charging_fires_nothing() {
+        let s = settings_with(&[("battery", Some(20), Some(10))]);
+        let charging = PollStats {
+            battery_present: true,
+            battery_charge_pct: Some(5),
+            battery_charging: Some(true),
+            ..Default::default()
+        };
+        assert!(pending_alerts(&charging, &s).is_empty());
+
+        // Unknown charging state keeps alerting, as before.
+        let unknown = PollStats {
+            battery_charging: None,
+            ..charging
+        };
+        assert_eq!(pending_alerts(&unknown, &s).len(), 1);
     }
 
     #[test]
