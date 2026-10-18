@@ -132,10 +132,14 @@ public static class MouseProtocol
         return reads;
     }
 
-    /// Whether `reply` answers `question` (`12 04` replies repeat the index too).
+    /// Whether `reply` answers `question`. A read's reply repeats all three
+    /// bytes: the mouse also sends reports of its own that start like one —
+    /// `12 00 09 00 01` arrived while `12 00 00` was asked and was read as
+    /// DPI stage 1 (seen live on the Harpe Ace over Omni, #442), while every
+    /// real reply there repeats its third byte.
     public static bool Answers(byte[] reply, byte reportId, byte[] question) =>
         reply.Length >= 4 && reply[0] == reportId && reply[1] == question[0] && reply[2] == question[1]
-        && (question[0] != Get || question[1] != 0x04 || reply[3] == question[2]);
+        && (question[0] != Get || question.Length < 3 || reply[3] == question[2]);
 
     /// The polling rates this mouse accepts now.
     public static int[] Rates(MouseSpec spec, bool booster) =>

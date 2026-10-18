@@ -256,6 +256,17 @@ public class MouseProtocolTests
     }
 
     [Fact]
+    public void A_report_of_the_mouse_own_is_no_answer()
+    {
+        // Logged live (#442): 120000:031200090001 while 12 00 00 was asked,
+        // between real replies 03120000000800070005070003FFFF100008.
+        var stray = Convert.FromHexString("031200090001");
+        var real = Convert.FromHexString("03120000000800070005070003FFFF100008");
+        Assert.False(MouseProtocol.Answers(stray, 0x03, [0x12, 0x00, 0x00]));
+        Assert.True(MouseProtocol.Answers(real, 0x03, [0x12, 0x00, 0x00]));
+    }
+
+    [Fact]
     public void The_pipe_shape_deserializes_into_settings()
     {
         var s = JsonSerializer.Deserialize<MouseSettings>(
