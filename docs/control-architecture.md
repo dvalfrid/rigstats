@@ -1437,7 +1437,10 @@ the `mouse` profile domain (`Control/Mice/`):
   for #432. Found by id only: the mouse's own collection (interface, report
   id and a vendor usage page as the row names) or the Omni receiver's paired
   list (`OmniMouse.PairedDevices` / `Channel`) — nothing is sent to an
-  unknown device.
+  unknown device. Names: ASUS's own product names (`MouseCatalog.AsusNames`,
+  #446, from rog.asus.com / asus.com) over G-Helper's class names — kept
+  only where no ASUS page names the model (the China-market TX Gaming mice)
+  or G-Helper doesn't tell two ASUS models apart (ROG Gladius III / III Wireless).
 - **Cross-checked with GearLink** (its module for the Harpe Ace Aim Lab
   Edition, `1A94`): the same frames for DPI (`setDPI` 81·49·stage−1), DPI
   stage count (81·49·10), active stage (`switchDPI` 81·49·9, 1-based), polling
