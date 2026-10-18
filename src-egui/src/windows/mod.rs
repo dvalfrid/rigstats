@@ -44,6 +44,10 @@ pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &Op
         }
         // The debug log is in Status.
         ProblemActionKind::OpenLog => *open.lock_safe() = Some(OpenRequest::Status),
+        #[cfg(windows)]
+        ProblemActionKind::OpenNotificationSettings => crate::notify::open_windows_settings(),
+        #[cfg(not(windows))]
+        ProblemActionKind::OpenNotificationSettings => {}
         // Only the window showing the problem knows what to try again.
         ProblemActionKind::Retry | ProblemActionKind::Unknown => {}
     }

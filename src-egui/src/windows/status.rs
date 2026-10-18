@@ -164,12 +164,11 @@ fn problems_group(
     let sensor_connected = st.pipe_connected || st.wallpaper_active;
     // Before the first check the service's state isn't known yet.
     let service_running = st.service_running || st.last_refresh.is_empty();
-    let problems = crate::problems::active_problems(
-        control,
-        sensor_connected,
-        service_running,
-        hardware_problems,
-    );
+    let mut app_problems = hardware_problems.to_vec();
+    #[cfg(windows)]
+    app_problems.extend(crate::notify::off().map(crate::problems::notifications_off));
+    let problems =
+        crate::problems::active_problems(control, sensor_connected, service_running, &app_problems);
     if problems.is_empty() {
         return None;
     }
@@ -977,6 +976,10 @@ pub fn show(
         match action.kind {
             rigstats_backend::control::ProblemActionKind::CollectDiagnostics => {
                 action_collect_diag = true
+            }
+            #[cfg(windows)]
+            rigstats_backend::control::ProblemActionKind::OpenNotificationSettings => {
+                crate::notify::open_windows_settings()
             }
             _ => crate::windows::open_problem_link(ctx, &action),
         }

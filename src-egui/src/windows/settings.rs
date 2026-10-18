@@ -873,6 +873,15 @@ fn notifications_page(
         "Notifications",
         "Whether alerts notify you, for every profile.",
     );
+    // Turned off in Windows: say so here, where someone looks first (#449).
+    #[cfg(windows)]
+    if let Some(why) = crate::notify::off() {
+        let problem = crate::problems::notifications_off(why);
+        if let Some(action) = ui_kit::notice(ui, dc, &problem) {
+            crate::windows::run_problem_action(ui.ctx(), &action, requests);
+        }
+        ui.add_space(4.0);
+    }
     ui_kit::group(ui, dc, None, None, |g| {
         g.row(
             "Critical alerts",

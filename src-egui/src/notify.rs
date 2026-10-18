@@ -6,10 +6,16 @@
 //! An unpackaged app gets a name and icon for its app id from
 //! `HKCU\Software\Classes\AppUserModelId\<id>` ([`register`], at start-up);
 //! the uninstaller removes the key.
+//!
+//! Windows can turn the notifications off (#449): [`watch_setting`] reads
+//! the setting in the background and [`off`] says why, so Settings and Status
+//! can tell the user instead of alerts silently not showing.
 
 #![allow(unsafe_code)]
 
+use crate::problems::NotificationsOff;
 use std::path::Path;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 /// The app id toasts are sent under. The uninstaller (`build/installer.nsi`)
 /// deletes its registry key — keep the two in step.
@@ -58,6 +64,78 @@ pub fn send(title: &str, message: &str) -> Result<(), String> {
     show().map_err(|e| e.to_string())
 }
 
+/// Windows' notification setting for RIGStats, as last read by
+/// [`watch_setting`]: 0 on (or not read yet), else [`NotificationsOff`] + 1.
+static SETTING: AtomicU8 = AtomicU8::new(0);
+
+/// Why Windows doesn't show RIGStats' notifications, if it doesn't.
+pub fn off() -> Option<NotificationsOff> {
+    match SETTING.load(Ordering::Relaxed) {
+        1 => Some(NotificationsOff::ForRigStats),
+        2 => Some(NotificationsOff::ForAllApps),
+        3 => Some(NotificationsOff::ByPolicy),
+        _ => None,
+    }
+}
+
+/// Reads Windows' notification setting for RIGStats every few seconds on a
+/// thread of its own (a WinRT call; the setting changes in Windows' own
+/// window). Start once.
+pub fn watch_setting() {
+    std::thread::spawn(|| loop {
+        let value = match read_setting() {
+            Some(NotificationsOff::ForRigStats) => 1,
+            Some(NotificationsOff::ForAllApps) => 2,
+            Some(NotificationsOff::ByPolicy) => 3,
+            None => 0,
+        };
+        SETTING.store(value, Ordering::Relaxed);
+        std::thread::sleep(std::time::Duration::from_secs(3));
+    });
+}
+
+/// `None` when notifications show, or when the setting can't be read
+/// (nothing to tell the user then).
+fn read_setting() -> Option<NotificationsOff> {
+    use ::windows::core::HSTRING;
+    use ::windows::UI::Notifications::ToastNotificationManager;
+    let _ = unsafe {
+        ::windows::Win32::System::WinRT::RoInitialize(
+            ::windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
+        )
+    };
+    let setting = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(APP_ID))
+        .and_then(|notifier| notifier.Setting())
+        .ok()?;
+    off_for(setting)
+}
+
+fn off_for(setting: ::windows::UI::Notifications::NotificationSetting) -> Option<NotificationsOff> {
+    use ::windows::UI::Notifications::NotificationSetting as S;
+    match setting {
+        S::DisabledForApplication => Some(NotificationsOff::ForRigStats),
+        S::DisabledForUser => Some(NotificationsOff::ForAllApps),
+        S::DisabledByGroupPolicy => Some(NotificationsOff::ByPolicy),
+        _ => None,
+    }
+}
+
+/// Opens Windows' notification settings, where RIGStats is listed.
+pub fn open_windows_settings() {
+    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
+    let (verb, target) = (wide("open"), wide("ms-settings:notifications"));
+    unsafe {
+        winapi::um::shellapi::ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            winapi::um::winuser::SW_SHOWNORMAL,
+        );
+    }
+}
+
 /// The toast's XML: a title line and a message line.
 fn toast_xml(title: &str, message: &str) -> String {
     format!(
@@ -78,6 +156,26 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_settings_map_to_the_reason_notifications_are_off() {
+        use ::windows::UI::Notifications::NotificationSetting as S;
+        assert_eq!(off_for(S::Enabled), None);
+        assert_eq!(
+            off_for(S::DisabledForApplication),
+            Some(NotificationsOff::ForRigStats)
+        );
+        assert_eq!(
+            off_for(S::DisabledForUser),
+            Some(NotificationsOff::ForAllApps)
+        );
+        assert_eq!(
+            off_for(S::DisabledByGroupPolicy),
+            Some(NotificationsOff::ByPolicy)
+        );
+        // Packaged apps only; not something a user can change.
+        assert_eq!(off_for(S::DisabledByManifest), None);
+    }
 
     #[test]
     fn title_and_message_are_escaped_into_the_toast() {
