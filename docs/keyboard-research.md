@@ -176,8 +176,20 @@ listened to):
   reply about once a minute after a `12 00` — from the service, to be looked
   at separately.
 
-Not checked yet: the keyboard by cable (`1C24`), and whether a profile
-switch sent by the host (`51 00`) raises the same event.
+**By cable (`1C24`, 2026-10-18, same guided test with `-ProductId 1c24
+-Report 0`):** the command channel is `mi_01` (page `FF00`, report `0x00`,
+65-byte reports) and the event comes on `mi_02&col03` (page `FFC0`, report
+**`0x03`**): Fn + 2 → `03 70 00 00 04`, Fn + 3 → `08`, Fn + 1 → `02` — the
+same bytes after the report id as through the receiver. `12 00` answered
+`00 12 00 00 00 25 00 01 00 06 00 01 02` (bytes 5–8 differ from the
+receiver's — Gear Link reads the keyboard's own firmware version there by
+cable and the dongle's wirelessly; profiles and the current one at the
+same places). `12 01`: `42 02 01 01 14` — 66 %, 3 min, lighting off,
+**charging = 1** on the cable, 20 %. By cable the keyboard also exposes a
+second Windows keyboard collection (`mi_03`, page 1) that can't be opened;
+listening on it crashed `KeyboardFollower` once (a dictionary written from
+two threads) and a switch went unfollowed — fixed by reading only vendor
+collections (`FFxx`), under a lock. A host switch raises no event (#458).
 
 ## Open questions
 
@@ -197,6 +209,5 @@ table: the keyboard reports it (`12 00` byte 9).
   never the low-battery level. An ASUS Armoury Crate device package for one
   of them (read as documentation, nothing installed) would be the third
   source if a user asks for it.
-- The keyboard by cable (`1C24`): which collection carries the profile
-  event, and whether the Omni receiver's dropped-frame behaviour (#458)
-  applies.
+- Whether the Omni receiver's dropped-frame behaviour (#458) also happens
+  by cable (the cable test only listened; no switch was sent).

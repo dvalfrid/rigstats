@@ -71,6 +71,7 @@ public class KeyboardProfileTests
             Hid("mi_03&col04", 0xFFC0, 21, 0),  // events (verified)
             Hid("mi_03&col01", 0x000C, 4, 0),   // consumer keys, too short
             Hid("mi_03&col04", 0xFFC0, 21, 0, pid: 0x1AFA), // another device
+            Hid("mi_03", 0x0001, 16, 0),        // a second Windows keyboard collection (by cable) — never read
         };
         var found = KeyboardFollower.EventCollections([new FakeKeyboard()], hid);
         Assert.Single(found);
