@@ -49,10 +49,11 @@ are verified on hardware.
 | ASUS TX75 Core Gaming Keyboard | 1DF3, 1DF4 | r702 | yes | — | — | — |
 | TUF Gaming K4 Magnetic | 1DF5, 1DF6 | r704 | yes | — | — | — |
 
-Ids per model are cable, own dongle and Bluetooth (one name). 45 of the 46
-ids ship the same keyboard protocol library; the ZywOo Edition (`1D1D`)
-ships its own, older one — check it separately before relying on anything
-below for it. Not in Gear Link but in G-Helper: Claymore II (`196B`), Strix
+Ids per model are cable, own dongle and Bluetooth (one name). Every one of
+the 46 ids ships the same keyboard setters (profile, key binding and its
+read-back, idle time, power saving, low-battery level, polling rate, Fn
+mode — checked per module, #461); the ZywOo Edition (`1D1D`) bundles them
+in its own build. Not in Gear Link but in G-Helper: Claymore II (`196B`), Strix
 Flare (`1875`) / Flare II (`19FE`), Strix Scope RX (`1951`) / RX TKL
 (`1A07`), TUF K1 (`1945`), TUF K3 (`194B`) / K3 Gen II / TX98, older
 Falchion (`193C`).
@@ -66,13 +67,13 @@ Falchion (`193C`).
 | Profile changed on the keyboard (event) | `70 00 00 <bit>` after the report id: byte 4 = bit per profile (`PROFILE_n` = bit n; `0x0101` = hardware reset); also `03 81 06 00 <p>` | `70`, byte 4 = `1 << n` | — (it is the event) | **yes — verified on the Azoth X**, profile n = bit n (below) |
 | Idle / sleep timeout | `setIdleTime`: `81,56` = `51 38 00 00 <code>` (0 = 1 min, 1 = 2, 2 = 3, 3 = 5, 4 = 10, 255 = never) | `51 38 00 00 <code>` | `12 01` byte 7 | **yes** |
 | Power saving | `setSavingMode`: `81,57` = `51 39 00 00 <0 off / 1 turn off / 2 dim>` | — | `12 01` byte 8 | Gear Link only |
-| Low-battery level | `setLowPowerLevel`: `81,58` = `51 3A 00 00 <n>` | `51 37 00 00 <%>` "low-battery alert" | `12 01` byte 10 (Gear Link) | **no** — different commands; G-Helper says it can't be read, Gear Link reads it at byte 10 |
+| Low-battery level | `setLowPowerLevel`: `81,58` = `51 3A 00 00 <0–100>` (UI marks Off / 25 / 50 / 75 / 100, default 20) | `51 37 00 00 <%>` "low-battery alert" | `12 01` byte 10 (Gear Link; 20 read live) | **no — settled for Gear Link (#461):** in Gear Link `51 37` is the *mouse's* power frame (`setPowerConfig`, `[滑鼠電源]`, 7 data bytes) and no keyboard class sends it; G-Helper's keyboard `51 37` looks carried over from its mouse code. `51 3A` is the one to use; `51 37` is never sent to a keyboard |
 | Battery, charging | `12 01`: byte 6 %, 9 charging | same | — | yes (already used, #290) |
 | Polling rate | `setPollingRate`: `81,49,0,[s]` = `51 31 00 00 <s>`; read `37,36` = `25 24` byte 5 | — | yes | Gear Link only |
 | Fn-key mode (F-row media vs. F1–F12) | `setFnKeyModeEnable`: `81,98` = `51 62 00 00 <0/1>`; read `37,40` = `25 28` | — | yes | Gear Link only |
 | **Key binding** | `setKeyBinding`: `81,32,<src lo>,<src hi>,[dst lo, dst hi]` = `51 20 <src> <dst>`; read `getKeyBinding`: `37,13,0,[src lo, src hi]` = `25 0D`, target at bytes 5–6 | `51 20 <src> 00 <dst lo hi>`; "the device can't report bindings back" | **Gear Link: yes** | write frame agrees; read only in Gear Link |
 | Reset key bindings / lighting of the profile | `80,96` = `50 60` / `80,97` = `50 61` | per key, back to itself | — | — |
-| Macro (key sends a sequence) | `setMacroMode`: `81,24,<mode>` = `51 18 <mode>`; `writeMacroFlash`: `84,<axis>` = `54 <axis> 00 00 <key lo hi> <58 bytes>` (magnetic models) | `SetKeyCombo`: `51 18 02 00 <src>` then `53 <src> <count> <cont> <4-byte records>`, `FF` ends | — | **partly** — `51 18` agrees, the record frame differs (`53` vs `54`); check per model before use |
+| Macro (key sends a sequence) | Two frames, by model (#461): **Azoth X only** (`1C24`–`1C26`) `setCombinationKey`: `81,38,<axis>` = `51 26 <axis> 00 <key lo hi> [<key> <action> <delay lo hi>]… FF 00 00 00` (action: keyboard press 2 / release 1, mouse 18 / 17; read back `25 31`); **magnetic models** (Falcata, Falchion Ace 75 HE, TX75 Analog) `setMacroMode` `81,24,<mode>` = `51 18 <mode>` + `writeMacroFlash` `84,<axis>` = `54 <axis> 00 00 <key lo hi> <58 bytes>`. No other model has a macro setter | `SetKeyCombo` for every family: `51 18 02 00 <src>` then `53 <src> <count> <cont> <4-byte records>`, `FF` ends | Azoth X: yes (`25 31`) | **no** — G-Helper's `53` record frame appears in no Gear Link keyboard class, and Gear Link's two frames are per model; not to be sent on G-Helper's word alone |
 | Windows-key lock | key code `WindowLock` (209) | — | — | Gear Link only |
 | OLED (Azoth family) | on/off `105` = `69`, brightness `104` = `68` (0–100), mode `106` = `6A`, KPS `107` = `6B`, clock `99` = `63`, laptop battery `100` = `64`; reads `35,x` = `23 xx`, `36,x` = `24 xx` | `69`, `68`, `6A` | Gear Link: yes | **yes** for on/off, brightness, mode |
 | Magnetic keys (HE) | actuation `51 4F`/`51 50`, dead zone `51 58`/`51 59`, rapid trigger `51 54`/`51 5B`, speed tap, DKS, mod-tap; reads `25 xx` | — | yes | Gear Link only |
@@ -133,11 +134,19 @@ Three ways, from no device writes to some:
    combination. No keyboard commands at all, works for any brand. The
    simplest option.
 3. **RIGStats writes the binding.** As G-Helper's "Launch App 1–4": the key
-   gets a macro that types Ctrl+Shift+Alt+F1–F4 (`51 18` + records), and
-   the app registers that combination. Writes to the keyboard, with a
-   macro frame where the two sources differ (`53` vs `54`) — the riskiest
-   of the three. F13–F24 (G-Helper's route for mice) isn't available on
-   keyboards: no such key code.
+   gets a macro that types Ctrl+Shift+Alt+F1–F4, and the app registers
+   that combination. Writes to the keyboard with a macro frame the sources
+   don't share (G-Helper's `53` records are in no Gear Link class; Gear
+   Link's `51 26` is Azoth X-only, `54` magnetic-only) — ruled out until a
+   frame is confirmed per model on hardware. F13–F24 (G-Helper's route for
+   mice) isn't available on keyboards: no such key code.
+
+Options 1 and 2 shipped (#459, #456). None of the 19 Gear Link models has
+dedicated M1…M5 macro keys (ASUS's pages and reviews describe on-the-fly
+recording onto ordinary keys, and the manifests carry no such key); the
+keys that select a profile are Fn + 1…6, so "a macro key for a profile" is
+either Fn + n (option 1) or any key bound to Ctrl+Alt+F1…F9 in Gear Link
+(option 2).
 
 ## Verified on the ROG Azoth X (2026-10-18, #457)
 
@@ -172,13 +181,22 @@ switch sent by the host (`51 00`) raises the same event.
 
 ## Open questions
 
-- Which models have dedicated macro / profile keys — a physical fact the
-  modules don't state; ASUS's manuals or the hardware tell. The number of
-  profiles needs no table: the keyboard reports it (`12 00` byte 9), and
-  Gear Link retries the read until it is non-zero.
-- The low-battery command: Gear Link `51 3A` (readable) vs G-Helper `51 37`.
-- The macro record frame per model (`53` vs `54`).
-- Whether the ZywOo Edition (`1D1D`) and G-Helper-only families answer the
-  same way.
-- Whether a profile change made by RIGStats (`51 00`) also raises the event
-  (it would have to be ignored to avoid a loop).
+Settled in #461: the low-battery command (`51 3A`; `51 37` is a mouse
+frame), the macro frames (per model, G-Helper's unconfirmed), dedicated
+macro keys (none), the ZywOo Edition (the same setters), and that a
+host-made switch raises no event (#458). The number of profiles needs no
+table: the keyboard reports it (`12 00` byte 9).
+
+- **The G-Helper-only families** (Claymore II, Strix Flare / II, Strix
+  Scope RX / TKL, TUF K1 / K3 / TX98, the older Falchion): G-Helper's
+  `AsusKeyboard` base sends them the same frames as the Azoth family —
+  profile `51 00`, idle `51 38`, binding `51 20` — plus the low-battery
+  `51 37` that Gear Link uses for mice only. One source, nothing verified:
+  offer them the profile switch and idle time (both sources agree on the
+  frames for the newer models) marked "From G-Helper, not yet verified",
+  never the low-battery level. An ASUS Armoury Crate device package for one
+  of them (read as documentation, nothing installed) would be the third
+  source if a user asks for it.
+- The keyboard by cable (`1C24`): which collection carries the profile
+  event, and whether the Omni receiver's dropped-frame behaviour (#458)
+  applies.
