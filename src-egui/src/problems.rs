@@ -82,7 +82,7 @@ pub fn service_unreachable() -> Problem {
             .to_owned(),
         vec![
             diagnostics(),
-            read_more("#cpu-temperature--package-power-missing-or-defender-alert-on-service-start"),
+            read_more("#the-rigstats-service-isnt-answering-or-values-show---"),
         ],
         None,
     )
@@ -260,6 +260,54 @@ pub fn dry_run() -> Problem {
     )
 }
 
+/// Why Windows doesn't show RIGStats' notifications (#449).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotificationsOff {
+    /// Turned off for RIGStats in Windows' notification settings.
+    ForRigStats,
+    /// Turned off for every app.
+    ForAllApps,
+    /// Turned off by the organisation's policy.
+    ByPolicy,
+}
+
+/// Windows turned the notifications off: alerts won't show.
+pub fn notifications_off(why: NotificationsOff) -> Problem {
+    let open_settings = || {
+        action(
+            ProblemActionKind::OpenNotificationSettings,
+            "Open Windows settings",
+            None,
+        )
+    };
+    let (message, actions) = match why {
+        NotificationsOff::ForRigStats => (
+            "Notifications from RIGStats are turned off in Windows, so alerts won't show. \
+             Everything else keeps working. Turn RIGStats back on under Notifications in Windows \
+             settings.",
+            vec![open_settings()],
+        ),
+        NotificationsOff::ForAllApps => (
+            "Notifications are turned off for all apps in Windows, so RIGStats' alerts won't show \
+             either. Everything else keeps working. Turn notifications back on in Windows settings.",
+            vec![open_settings()],
+        ),
+        NotificationsOff::ByPolicy => (
+            "Your organisation's policy turns notifications off on this PC, so RIGStats' alerts \
+             won't show. Everything else keeps working. Ask whoever manages this PC.",
+            Vec::new(),
+        ),
+    };
+    problem(
+        "notifications_off",
+        Severity::Attention,
+        "Notifications are off in Windows",
+        message.to_owned(),
+        actions,
+        None,
+    )
+}
+
 /// The notification for a profile switch that failed or only partly applied
 /// (#373) — a new result since `previous`, while the Control Center is closed
 /// (its footer shows it otherwise). Hotkey, app rules and the tray switch
@@ -282,7 +330,8 @@ pub fn apply_notification(
 
 /// Every problem right now, most serious first — for Status. `service_running`
 /// is the service's state (`sc query`); `sensor_connected` whether its
-/// readings arrive.
+/// readings arrive; `hardware` the sensor service's hardware problems and the
+/// app's own that aren't in `control` (Windows' notification setting, #449).
 pub fn active_problems(
     control: &ControlState,
     sensor_connected: bool,
@@ -344,6 +393,56 @@ pub fn active_problems(
 mod tests {
     use super::*;
     use rigstats_backend::control::{ApplyResult, CapabilitySet};
+
+    /// The anchors `docs/troubleshooting.md` offers: GitHub's heading slugs
+    /// (lower case; letters, digits, spaces, `-` and `_` kept; spaces to `-`)
+    /// and the `<a id="…">` kept for old links.
+    fn troubleshooting_anchors() -> Vec<String> {
+        let doc = include_str!("../../docs/troubleshooting.md");
+        let mut anchors = Vec::new();
+        for line in doc.lines() {
+            if let Some(heading) = line.strip_prefix("## ") {
+                let slug: String = heading
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+                    .map(|c| if c == ' ' { '-' } else { c })
+                    .collect();
+                anchors.push(slug);
+            }
+            for part in line.split("<a id=\"").skip(1) {
+                if let Some((id, _)) = part.split_once('"') {
+                    anchors.push(id.to_owned());
+                }
+            }
+        }
+        anchors
+    }
+
+    #[test]
+    fn every_read_more_anchor_exists_in_the_troubleshooting_guide() {
+        let anchors = troubleshooting_anchors();
+        let app: Vec<String> = [service_unreachable(), service_refused()]
+            .iter()
+            .flat_map(|p| p.actions.iter())
+            .filter_map(|a| a.target.as_deref()?.strip_prefix(TROUBLESHOOTING_URL))
+            .map(|a| a.trim_start_matches('#').to_owned())
+            .collect();
+        assert!(!app.is_empty());
+        // The service's links (sensor-sidecar: ControlProtocol.cs ReadMore,
+        // GpuWorker.HelpUrl, HardwareWorkerClient.ReadMoreAnchor) and older
+        // app versions'. Changing a heading must keep these working.
+        let kept = [
+            "control-center",
+            "gpu-sensors-missing-temp--clock--power--fan-or-sidecar-crashes",
+            "cpu-temperature--package-power-missing-or-defender-alert-on-service-start",
+            "desktop-wallpaper-mode",
+            "wallpaper-engine",
+        ];
+        for anchor in app.iter().map(String::as_str).chain(kept) {
+            assert!(anchors.iter().any(|a| a == anchor), "#{anchor} missing");
+        }
+    }
 
     fn connected() -> ControlState {
         ControlState {
@@ -563,5 +662,28 @@ mod tests {
         }
         let unique: std::collections::BTreeSet<_> = all.iter().map(|p| p.id.as_str()).collect();
         assert_eq!(unique.len(), all.len(), "ids are unique");
+    }
+
+    #[test]
+    fn notifications_off_offers_windows_settings_unless_a_policy_decides() {
+        for why in [NotificationsOff::ForRigStats, NotificationsOff::ForAllApps] {
+            let p = notifications_off(why);
+            assert_eq!(p.severity, Severity::Attention);
+            assert_eq!(
+                p.actions.iter().map(|a| a.kind).collect::<Vec<_>>(),
+                [ProblemActionKind::OpenNotificationSettings]
+            );
+        }
+        assert!(notifications_off(NotificationsOff::ByPolicy)
+            .actions
+            .is_empty());
+        // The source's line breaks mustn't leave runs of spaces in the text.
+        for why in [
+            NotificationsOff::ForRigStats,
+            NotificationsOff::ForAllApps,
+            NotificationsOff::ByPolicy,
+        ] {
+            assert!(!notifications_off(why).message.contains("  "), "{why:?}");
+        }
     }
 }

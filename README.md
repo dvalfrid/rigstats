@@ -244,8 +244,8 @@ Each tab appears only when this PC's hardware supports it.
 | CPU | PPT/TDC/EDC power limits, and **Curve Optimizer** (−30…0, all-core or per core) | AMD Ryzen 9000, on hardware-verified SMU tables |
 | GPU | Power limit, the same setting as Adrenalin's or Afterburner's | AMD Radeon (ADLX), desktop NVIDIA GeForce (NVML) |
 | Lighting | Aura Sync: one effect and colour for every device, live preview, the light bar's desk lamp | ASUS Aura motherboards, ROG monitors and light bar, ROG keyboards and headsets, any Windows Dynamic Lighting device, Philips Hue rooms and zones via the Hue Bridge — see [supported devices](docs/supported-devices.md) |
-| Headset | Sidetone (hear your own voice) and microphone noise reduction, kept in the headset — no GearLink needed | ROG Delta II and Pelta, through their 2.4 GHz dongle |
-| Mouse | Which of the mouse's own onboard profiles the profile uses, and that profile's DPI levels, polling rate, button response, lift-off, angle snapping, acceleration, button bindings (on a drawing of the mouse) and energy — kept in the mouse | ROG mice on the common ROG protocol, wired, on their dongle or on the ROG Omni receiver (ROG Harpe Ace Aim Lab Edition verified, the rest unverified) |
+| Headset | Sidetone (hear your own voice) and microphone noise reduction, kept in the headset — no GearLink needed | ROG Delta II and Pelta, through their 2.4 GHz dongle — see [supported devices](docs/supported-devices.md#device-settings) |
+| Mouse | Which of the mouse's own onboard profiles the profile uses, and that profile's DPI levels, polling rate, button response, lift-off, angle snapping, acceleration, button bindings (on a drawing of the mouse) and energy — kept in the mouse | ROG mice on the common ROG protocol, wired, on their dongle or on the ROG Omni receiver (ROG Harpe Ace Aim Lab Edition verified, the rest unverified) — see [supported devices](docs/supported-devices.md#device-settings) |
 
 <p align="center">
   <img src="assets/control-center-mouse.png" width="560" alt="The Control Center's Mouse page: the onboard profile the RIGStats profile uses, DPI level chips with a slider, performance settings, and a drawing of the mouse seen from above with each button's binding beside it">
@@ -463,7 +463,8 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
 | [Control Center](docs/control-architecture.md) | Hardware control design, protocols, live testing |
 | [Supported devices](docs/supported-devices.md) | Every lighting device RIGStats drives and every device whose battery it shows, verified or not yet |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues, sensor diagnostics |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and what to do, for users |
+| [Developer troubleshooting](docs/developer-troubleshooting.md) | Logs, the diagnostics ZIP's files, crash causes, running from source |
 | [Changelog](CHANGELOG.md) | Full version history |
 | [Roadmap](ROADMAP.md) | Planned features and status |
 

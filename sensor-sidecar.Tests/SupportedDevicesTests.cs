@@ -49,6 +49,28 @@ public class SupportedDevicesTests
     public void Battery_website_table_matches_the_code_that_reads_them() =>
         WebsiteTableMatches("<!-- battery-devices:start -->\n", "<!-- battery-devices:end -->", BatteryCatalog.HtmlRows());
 
+    [Fact]
+    public void Device_settings_website_table_matches_the_model_tables() =>
+        WebsiteTableMatches("<!-- settings-devices:start -->\n", "<!-- settings-devices:end -->", DeviceSettingsCatalog.HtmlRows());
+
+    [Fact]
+    public void Device_settings_list_marks_only_verified_models_as_verified()
+    {
+        var rows = DeviceSettingsCatalog.All();
+
+        Assert.Contains(rows, r => r.Name == "ROG Delta II" && r.Type == "Headset" && r.Status == LightingCatalog.Verified);
+        Assert.Contains(rows, r => r.Name == "ROG Pelta" && r.Notes.StartsWith("Sidetone on/off and 0–20; noise reduction on/off,", StringComparison.Ordinal));
+        Assert.Contains(rows, r => r.Name == "ROG Harpe Ace Aim Lab Edition" && r.Status == LightingCatalog.Verified + " (ROG Omni receiver)");
+        Assert.Contains(rows, r => r.Name == "ROG Chakram X" && r.Status == DeviceSettingsCatalog.FromGHelper && r.Notes.Contains("no button bindings yet"));
+        // One row per mouse, though G-Helper names some differently per link.
+        Assert.Single(rows, r => r.Name.EndsWith("Keris Wireless Aimpoint", StringComparison.Ordinal));
+        Assert.Contains(rows, r => r.Name == "ROG Keris Wireless Aimpoint" && r.UsbIds == "1A66, 1A68, 1A6A");
+        Assert.Equal(
+            SensorSidecar.Control.Mice.MouseCatalog.Entries.Select(e => e.Spec.Name.StartsWith("ROG ", StringComparison.Ordinal) ? e.Spec.Name[4..] : e.Spec.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+            rows.Count(r => r.Type == "Mouse"));
+    }
+
     private static void WebsiteTableMatches(string startMarker, string endMarker, string expected)
     {
         var path = Path.Combine(RepoRoot(), "website", "index.html");

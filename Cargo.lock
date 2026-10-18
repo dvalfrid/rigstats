@@ -3436,7 +3436,9 @@ dependencies = [
  "ureq",
  "wgpu",
  "winapi",
+ "windows 0.62.2",
  "winit",
+ "winreg",
  "winres",
  "zip",
 ]

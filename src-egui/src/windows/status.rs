@@ -164,12 +164,11 @@ fn problems_group(
     let sensor_connected = st.pipe_connected || st.wallpaper_active;
     // Before the first check the service's state isn't known yet.
     let service_running = st.service_running || st.last_refresh.is_empty();
-    let problems = crate::problems::active_problems(
-        control,
-        sensor_connected,
-        service_running,
-        hardware_problems,
-    );
+    let mut app_problems = hardware_problems.to_vec();
+    #[cfg(windows)]
+    app_problems.extend(crate::notify::off().map(crate::problems::notifications_off));
+    let problems =
+        crate::problems::active_problems(control, sensor_connected, service_running, &app_problems);
     if problems.is_empty() {
         return None;
     }
@@ -971,14 +970,15 @@ pub fn show(
             .arg(dir.as_ref())
             .spawn();
     }
-    // A problem's button: diagnostics here, links in the browser; the log is
-    // already on this page.
+    // A problem's button, decided where every window's is
+    // (`windows::action_effect`): diagnostics are collected here, and the log
+    // is already on this page.
     if let Some(action) = problem_action {
-        match action.kind {
-            rigstats_backend::control::ProblemActionKind::CollectDiagnostics => {
-                action_collect_diag = true
-            }
-            _ => crate::windows::open_problem_link(ctx, &action),
+        use crate::windows::{ActionEffect, OpenRequest};
+        match crate::windows::action_effect(&action) {
+            ActionEffect::Open(OpenRequest::Diagnostics) => action_collect_diag = true,
+            ActionEffect::Open(_) => {}
+            effect => crate::windows::perform_local(ctx, &effect),
         }
     }
     if action_collect_diag {

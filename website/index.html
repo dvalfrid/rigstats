@@ -483,7 +483,7 @@
           </div>
           <div class="cc-text">
             <h3>ROG mice — without Armoury Crate<span class="badge-soon">Coming in v1.50.0</span></h3>
-            <p>Everything is kept in the mouse itself, so it works on any PC afterwards. Each profile picks one of the mouse's own onboard profiles — low DPI and 500 Hz for work, high polling for games.</p>
+            <p>Everything is kept in the mouse itself, so it works on any PC afterwards. Each profile picks one of the mouse's own onboard profiles — low DPI and 500 Hz for work, high polling for games. <a href="#settings-devices">Supported mice</a>.</p>
             <ul class="floating-features">
               <li><strong>DPI levels</strong> as chips, with one slider for the level in use</li>
               <li>Polling rate, button response, lift-off distance, angle snapping, acceleration and motion sync</li>
@@ -500,7 +500,7 @@
           </div>
           <div class="cc-text">
             <h3>Headset and microphone<span class="badge-soon">Coming in v1.50.0</span></h3>
-            <p>ROG Delta II and Pelta — no GearLink needed.</p>
+            <p>ROG Delta II and Pelta — no GearLink needed. <a href="#settings-devices">Supported headsets</a>.</p>
             <ul class="floating-features">
               <li><strong>Sidetone</strong>: hear your own voice during calls, with its level</li>
               <li><strong>Noise reduction</strong> on the microphone — Low, Medium or High</li>
@@ -653,6 +653,49 @@
                 <tr><td>Logitech devices on a Bolt receiver</td><td>Mouse, keyboard</td><td class="status-verified">Verified on hardware (Logi M650)</td><td>Battery and charging, asked in Logitech&#39;s HID++ protocol, up to six devices per receiver</td></tr>
                 <tr><td>Logitech devices on a Unifying receiver</td><td>Mouse, keyboard</td><td class="status-openrgb">From Solaar, not yet verified</td><td>Battery and charging, asked in Logitech&#39;s HID++ protocol, up to six devices per receiver</td></tr>
 <!-- battery-devices:end -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="supported-devices" id="settings-devices">
+        <h3>Headset and mouse settings: supported devices<span class="badge-soon">Coming in v1.50.0</span></h3>
+        <p>The Control Center's Headset and Mouse pages change these devices' own settings, kept in the device. <strong>Verified on hardware</strong>: seen working on a real device. <strong>From G-Helper</strong> or <strong>From Gear Link, not yet verified</strong>: the model as G-Helper or ASUS Gear Link documents it, with the commands checked on the verified device — it should work; open its page once, then <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> with your diagnostics ZIP to confirm it, or if it doesn't.</p>
+        <div class="diag-table-wrap">
+          <table class="diag-table">
+            <thead>
+              <tr><th>Device</th><th>Type</th><th>Status</th><th>Notes</th></tr>
+            </thead>
+            <tbody>
+<!-- settings-devices:start -->
+                <tr><td>ROG Delta II</td><td>Headset</td><td class="status-verified">Verified on hardware</td><td>Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Delta II (KJP)</td><td>Headset</td><td class="status-openrgb">From Gear Link, not yet verified</td><td>Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Delta II (PBZ)</td><td>Headset</td><td class="status-openrgb">From Gear Link, not yet verified</td><td>Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Pelta</td><td>Headset</td><td class="status-openrgb">From Gear Link, not yet verified</td><td>Sidetone on/off and 0–20; noise reduction on/off, through its 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Harpe Ace Aim Lab Edition</td><td>Mouse</td><td class="status-verified">Verified on hardware (ROG Omni receiver)</td><td>Cable, own 2.4 GHz dongle, ROG Omni receiver</td></tr>
+                <tr><td>ASUS Mouse MD200</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Own 2.4 GHz dongle</td></tr>
+                <tr><td>Harpe Ace Mini</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, ROG Omni receiver</td></tr>
+                <tr><td>ROG Chakram X</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout)</td></tr>
+                <tr><td>ROG Gladius III</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Gladius III Aimpoint</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle, ROG Omni receiver</td></tr>
+                <tr><td>ROG Gladius III Eva 2</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Harpe Ace Extreme</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, ROG Omni receiver</td></tr>
+                <tr><td>ROG HARPE II ACE</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle</td></tr>
+                <tr><td>ROG Keris II Ace</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, ROG Omni receiver</td></tr>
+                <tr><td>ROG Keris II Origin</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, ROG Omni receiver</td></tr>
+                <tr><td>ROG Keris II Origin KJP</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, ROG Omni receiver</td></tr>
+                <tr><td>ROG Keris Wireless Aimpoint</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle, ROG Omni receiver</td></tr>
+                <tr><td>ROG Spatha X</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout)</td></tr>
+                <tr><td>ROG Strix Impact III</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable</td></tr>
+                <tr><td>Strix Evolve</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable</td></tr>
+                <tr><td>Strix Impact III Wireless</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>ROG Omni receiver</td></tr>
+                <tr><td>TUF GAMING M3</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable</td></tr>
+                <tr><td>TUF GAMING M4</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Own 2.4 GHz dongle</td></tr>
+                <tr><td>TUF GAMING M4 Air</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable</td></tr>
+                <tr><td>TUF GAMING Mini Miku Edition</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle</td></tr>
+                <tr><td>TX GAMING MOUSE</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Own 2.4 GHz dongle</td></tr>
+                <tr><td>TX GAMING MOUSE Mini</td><td>Mouse</td><td class="status-openrgb">From G-Helper, not yet verified</td><td>Cable, own 2.4 GHz dongle</td></tr>
+<!-- settings-devices:end -->
             </tbody>
           </table>
         </div>
