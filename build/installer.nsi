@@ -285,6 +285,8 @@ Section "Uninstall"
 
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats"
   DeleteRegKey HKLM "Software\RIGStats"
+  ; Name and icon of the notifications' app id (#447, notify.rs registers it).
+  DeleteRegKey HKCU "Software\Classes\AppUserModelId\se.codeby.rigstats"
 
   ; Crash dumps (#220): the WER setting and the dumps themselves.
   SetRegView 64

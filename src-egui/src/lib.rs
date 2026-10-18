@@ -20,6 +20,8 @@ pub mod gpu_process;
 pub mod hotkey;
 pub mod lock_ext;
 pub mod menu_icons;
+#[cfg(windows)]
+pub mod notify;
 pub mod overlay;
 pub mod panels;
 pub mod poll;

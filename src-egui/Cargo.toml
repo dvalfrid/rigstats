@@ -37,6 +37,11 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 ring = "0.17"
 
 [target.'cfg(windows)'.dependencies]
+# Toasts sent as RIGStats (#447). 0.62 is already in the tree (wgpu,
+# accesskit); only these features are added.
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_WinRT"] }
+# The notification app id's registry key; the version rigstats-backend uses.
+winreg = "0.52"
 winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "winbase", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef", "wintrust", "softpub", "wincrypt", "winver", "wingdi", "commdlg", "combaseapi", "objbase"] }
 
 [target.'cfg(windows)'.build-dependencies]

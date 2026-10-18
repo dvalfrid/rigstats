@@ -408,20 +408,15 @@ impl RigStatsApp {
             }
             self.alert_cooldowns.insert(key, Instant::now());
 
-            let (title, icon) = match alert.level {
-                alerts::AlertLevel::Warn => {
-                    ("RIGStats — Warning", windows::settings::NotifyIcon::Warning)
-                }
-                alerts::AlertLevel::Crit => {
-                    ("RIGStats — Critical", windows::settings::NotifyIcon::Error)
-                }
+            let title = match alert.level {
+                alerts::AlertLevel::Warn => "Warning",
+                alerts::AlertLevel::Crit => "Critical",
             };
             let message = format!("{}: {:.0}", alert.label, alert.value);
-            // Fire on a background thread — the notification script blocks
-            // for several seconds (Start-Sleep before disposing the tray
-            // icon) and must never stall a UI frame.
+            // Off the UI thread — the first toast loads the notification
+            // platform.
             std::thread::spawn(move || {
-                windows::settings::send_notification(title, &message, icon);
+                let _ = rigstats_egui::notify::send(title, &message);
             });
         }
     }
@@ -533,11 +528,7 @@ impl RigStatsApp {
         let (id, name) = (next.id.clone(), next.name.clone());
         self.apply_profile(id);
         std::thread::spawn(move || {
-            windows::settings::send_notification(
-                "RIGStats — Profile",
-                &name,
-                windows::settings::NotifyIcon::Info,
-            );
+            let _ = rigstats_egui::notify::send("Profile", &name);
         });
     }
 
@@ -573,11 +564,7 @@ impl RigStatsApp {
                 self.runtime.latest.microphone = Some(mic.muted);
                 if notify {
                     std::thread::spawn(move || {
-                        windows::settings::send_notification(
-                            "RIGStats — Microphone",
-                            &body,
-                            windows::settings::NotifyIcon::Info,
-                        );
+                        let _ = rigstats_egui::notify::send("Microphone", &body);
                     });
                 }
             }
@@ -600,10 +587,9 @@ impl RigStatsApp {
             .clone()
             .unwrap_or_else(|| "Critical temperature".to_owned());
         std::thread::spawn(move || {
-            windows::settings::send_notification(
-                "RIGStats — Fan safety",
+            let _ = rigstats_egui::notify::send(
+                "Fan safety",
                 &format!("{reason}. All controlled fans set to 100 %."),
-                windows::settings::NotifyIcon::Warning,
             );
         });
     }
@@ -623,17 +609,9 @@ impl RigStatsApp {
         let Some(problem) = notification else {
             return;
         };
-        let icon = match problem.severity {
-            control::Severity::Error => windows::settings::NotifyIcon::Error,
-            _ => windows::settings::NotifyIcon::Warning,
-        };
         let body = problem.detail.unwrap_or(problem.message);
         std::thread::spawn(move || {
-            windows::settings::send_notification(
-                &format!("RIGStats — {}", problem.title),
-                &body,
-                icon,
-            );
+            let _ = rigstats_egui::notify::send(&problem.title, &body);
         });
     }
 
@@ -1229,6 +1207,9 @@ fn main() {
 
     let dir = app_data_dir();
     app::startup::init_logging(&dir);
+    if let Err(e) = rigstats_egui::notify::register(&dir) {
+        debug::log_warn(&dir, &format!("notifications: app id not registered: {e}"));
+    }
 
     let s = settings::load_settings(&dir);
     let visible_panels = s.visible_panels.clone();
