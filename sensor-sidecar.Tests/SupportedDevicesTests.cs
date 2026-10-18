@@ -62,12 +62,13 @@ public class SupportedDevicesTests
         Assert.Contains(rows, r => r.Name == "ROG Pelta" && r.Notes.StartsWith("Sidetone on/off and 0–20; noise reduction on/off,", StringComparison.Ordinal));
         Assert.Contains(rows, r => r.Name == "ROG Harpe Ace Aim Lab Edition" && r.Status == LightingCatalog.Verified + " (ROG Omni receiver)");
         Assert.Contains(rows, r => r.Name == "ROG Chakram X" && r.Status == DeviceSettingsCatalog.FromGHelper && r.Notes.Contains("no button bindings yet"));
-        // One row per mouse, though G-Helper names some differently per link.
-        Assert.Single(rows, r => r.Name.EndsWith("Keris Wireless Aimpoint", StringComparison.Ordinal));
-        Assert.Contains(rows, r => r.Name == "ROG Keris Wireless Aimpoint" && r.UsbIds == "1A66, 1A68, 1A6A");
+        // One row per mouse, under ASUS's name — G-Helper names this one
+        // differently per link (#446).
+        Assert.Single(rows, r => r.Name.Contains("Keris Wireless", StringComparison.Ordinal));
+        Assert.Contains(rows, r => r.Name == "ROG Keris Wireless AimPoint" && r.UsbIds == "1A66, 1A68, 1A6A");
+        Assert.DoesNotContain(rows, r => r.Name == "ROG HARPE II ACE" || r.Name == "Harpe Ace Mini");
         Assert.Equal(
-            SensorSidecar.Control.Mice.MouseCatalog.Entries.Select(e => e.Spec.Name.StartsWith("ROG ", StringComparison.Ordinal) ? e.Spec.Name[4..] : e.Spec.Name)
-                .Distinct(StringComparer.OrdinalIgnoreCase).Count(),
+            SensorSidecar.Control.Mice.MouseCatalog.Entries.Select(e => e.Spec.Name).Distinct().Count(),
             rows.Count(r => r.Type == "Mouse"));
     }
 

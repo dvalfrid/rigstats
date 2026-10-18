@@ -26,21 +26,18 @@ public static class DeviceSettingsCatalog
                 "Sidetone on/off and 0–20; noise reduction " + (g.Key.NoiseLevels > 0 ? "on/off and Low / Medium / High" : "on/off")
                 + ", through its 2.4 GHz dongle")));
 
-        // G-Helper names one mouse differently per link ("Keris Wireless
-        // Aimpoint" / "ROG Keris Wireless Aimpoint"): one row per mouse, under
-        // its "ROG …" name where it has one. The catalog rows stay as they are.
+        // One row per mouse, under ASUS's name (MouseCatalog.AsusNames, #446).
         rows.AddRange(MouseCatalog.Entries
-            .GroupBy(e => SameMouse(e.Spec.Name), StringComparer.OrdinalIgnoreCase)
+            .GroupBy(e => e.Spec.Name)
             .Select(g =>
             {
-                var name = g.Select(e => e.Spec.Name).OrderBy(n => n.StartsWith("ROG ", StringComparison.Ordinal) ? 0 : 1).ThenBy(n => n, StringComparer.Ordinal).First();
                 var verified = g.Where(e => MouseCatalog.Verified.Contains((e.ProductId, e.Link))).Select(e => e.Link).ToList();
                 var status = verified.Count == 0
                     ? FromGHelper
                     : $"{LightingCatalog.Verified} ({string.Join(", ", verified.Order().Select(Link))})";
                 var notes = string.Join(", ", g.Select(e => e.Link).Distinct().Order().Select(Link))
                     + (g.Any(e => e.Spec.Buttons) ? "" : "; no button bindings yet (its own button layout)");
-                return new SupportedDevice(name, "Mouse",
+                return new SupportedDevice(g.Key, "Mouse",
                     string.Join(", ", g.Select(e => Hex(e.ProductId)).Distinct().Order()), status, Upper(notes));
             })
             .OrderBy(r => r.Status.StartsWith(LightingCatalog.Verified, StringComparison.Ordinal) ? 0 : 1).ThenBy(r => r.Name));
@@ -78,9 +75,6 @@ public static class DeviceSettingsCatalog
         MouseLink.Dongle => "own 2.4 GHz dongle",
         _ => "ROG Omni receiver",
     };
-
-    private static string SameMouse(string name) =>
-        name.StartsWith("ROG ", StringComparison.OrdinalIgnoreCase) ? name[4..] : name;
 
     private static string Upper(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 
