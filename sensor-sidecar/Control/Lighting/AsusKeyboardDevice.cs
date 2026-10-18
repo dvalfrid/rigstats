@@ -66,10 +66,14 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; } = [new AuraZone("keys", "Keys", Addressable: true, 0, 1)];
 
+    // The keyboard's own product id — behind a receiver the paired one's.
+    private readonly ushort? _ownProductId;
+
     private AsusKeyboardDevice(HidDeviceInfo info, IHidDevice device, KeyboardModel model, byte reportId,
-        string id, string name, string version, string layout, bool hasBattery)
+        string id, string name, string version, string layout, ushort? ownProductId)
     {
-        HasBattery = hasBattery;
+        _ownProductId = ownProductId;
+        HasBattery = ownProductId is { } own && BatteryModels.Contains(own);
         _info = info;
         _device = device;
         _model = model;
@@ -256,7 +260,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
                     $"asus-keyboard-{info.ProductId:x4}-{nth}",
                     name,
                     Hex(version, 64), Hex(layout, 64),
-                    batteryId is { } id && BatteryModels.Contains(id)));
+                    batteryId));
             }
             catch (Exception e)
             {
@@ -454,20 +458,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
             profile = Math.Clamp(profile, 1, now.Count);
             if (now.Current == profile)
                 return;
-            // Wait for the keyboard's echo, and send once more without it:
-            // through the Omni receiver a frame sent right after a reply is
-            // often dropped (the mouse's first question likewise, #431) —
-            // seen live twice, while Gear Link's switch was echoed (#458).
-            // Switching to the same profile twice is harmless.
-            var frame = KeyboardProfileCommands.Switch(_reportId, _info.OutputReportLength, profile, now.Count);
-            Send(frame);
-            if (!AwaitEcho(Set, 0x00))
-            {
-                SidecarLog.Log($"[rigstats-control] Keyboard: {Name} didn't acknowledge the profile switch, sending it again.");
-                Send(frame);
-                if (!AwaitEcho(Set, 0x00))
-                    throw new IOException($"{Name} didn't acknowledge the profile switch.");
-            }
+            SendAcknowledged(KeyboardProfileCommands.Switch(_reportId, _info.OutputReportLength, profile, now.Count), "the profile switch");
             var back = KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId);
             if (back?.Current != profile)
             {
@@ -478,6 +469,63 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
             if (back?.Current != profile)
                 throw new IOException($"{Name} did not switch to profile {profile} (read back {back?.Current.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "nothing"}).");
         }
+    }
+
+    /// The energy settings seen working on hardware (#460): the ROG Azoth X
+    /// through the Omni receiver (2026-10-18 — sleep 3 → 5 → 3 min, power
+    /// saving lighting off → dimmed → off, low battery 20 → 25 → 20 %, each
+    /// echoed and read back as written).
+    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25 };
+
+    public bool SettingsVerified => _ownProductId is { } id && VerifiedSettingsModels.Contains(id);
+
+    /// `12 01` — the same question as the battery's; the energy fields of
+    /// its reply (#460). Null on a keyboard without a battery.
+    public KeyboardSettings? ReadSettings()
+    {
+        if (!HasBattery)
+            return null;
+        lock (_lock)
+            return KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId);
+    }
+
+    public KeyboardSettings WriteSettings(KeyboardSettings wanted)
+    {
+        if (!HasBattery)
+            throw new InvalidOperationException($"{Name} has no battery, so no energy settings.");
+        wanted = KeyboardSettingsCommands.Clamp(wanted);
+        lock (_lock)
+        {
+            var now = KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId)
+                ?? throw new IOException($"{Name} didn't answer.");
+            var writes = KeyboardSettingsCommands.Writes(_reportId, _info.OutputReportLength, now, wanted);
+            if (writes.Count == 0)
+                return now;
+            SidecarLog.Log($"[rigstats-control] Keyboard: {Name} writes {string.Join(" ", writes.Select(Hid.ReplyHex))}.");
+            foreach (var write in writes)
+                SendAcknowledged(write, $"setting {write[2]:X2}");
+            var back = KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId)
+                ?? throw new IOException($"{Name} didn't answer after the change.");
+            if (back != wanted)
+                throw new IOException($"{Name} did not take the settings (read back {back}).");
+            return back;
+        }
+    }
+
+    // Caller holds _lock. Sends a `51` frame and waits for the keyboard's
+    // echo; without one, sends it once more: through the Omni receiver a
+    // frame sent right after a reply is often dropped (the mouse's first
+    // question likewise, #431) — seen live twice, while Gear Link's switch
+    // was echoed (#458). Sending the same setting twice is harmless.
+    private void SendAcknowledged(byte[] frame, string what)
+    {
+        Send(frame);
+        if (AwaitEcho(frame[1], frame[2]))
+            return;
+        SidecarLog.Log($"[rigstats-control] Keyboard: {Name} didn't acknowledge {what}, sending it again.");
+        Send(frame);
+        if (!AwaitEcho(frame[1], frame[2]))
+            throw new IOException($"{Name} didn't acknowledge {what}.");
     }
 
     // Caller holds _lock. Reads input reports until one echoes `command key`

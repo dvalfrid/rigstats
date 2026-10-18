@@ -26,6 +26,22 @@ public static class DeviceSettingsCatalog
                 "Sidetone on/off and 0–20; noise reduction " + (g.Key.NoiseLevels > 0 ? "on/off and Low / Medium / High" : "on/off")
                 + ", through its 2.4 GHz dongle")));
 
+        // Keyboards (#458, #460): one row per model, the Omni receiver's own
+        // entry left out (its keyboard is listed under its own name).
+        rows.AddRange(AsusKeyboardDevice.Models
+            .Where(m => !m.Value.Receiver)
+            .GroupBy(m => m.Value.Name)
+            .Select(g =>
+            {
+                var ids = g.Select(m => m.Key).ToList();
+                var battery = ids.Any(AsusKeyboardDevice.BatteryModels.Contains);
+                var status = ids.Any(AsusKeyboardDevice.VerifiedSettingsModels.Contains) ? LightingCatalog.Verified : LightingCatalog.FromGearLink;
+                var notes = "Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back"
+                    + (battery ? "; sleep, power saving and the low-battery level" : "");
+                return new SupportedDevice(g.Key, "Keyboard", string.Join(", ", ids.Order().Select(Hex)), status, notes);
+            })
+            .OrderBy(r => r.Status == LightingCatalog.Verified ? 0 : 1).ThenBy(r => r.Name));
+
         // One row per mouse, under ASUS's name (MouseCatalog.AsusNames, #446).
         rows.AddRange(MouseCatalog.Entries
             .GroupBy(e => e.Spec.Name)
@@ -53,9 +69,11 @@ public static class DeviceSettingsCatalog
     {
         var md = new StringBuilder();
         md.Append("## Device settings\n\n");
-        md.Append("The Control Center's **Headset** and **Mouse** pages change these devices' own settings, kept in the device. ");
+        md.Append("The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these devices' own settings, kept in the device. ");
         md.Append("Mice: DPI levels, polling rate, button response, lift-off, angle snapping and tuning, acceleration, ");
         md.Append("button bindings and energy — as far as the model has them — and which onboard profile each Control Center profile uses. ");
+        md.Append("Keyboards: which onboard profile each Control Center profile uses (Fn + that number on the keyboard switches the profile back), ");
+        md.Append("and on wireless models when the keyboard sleeps, what its lighting does when the battery is low and at which level. ");
         md.Append(CultureInfo.InvariantCulture, $"**{FromGHelper}**: the model and its settings as G-Helper documents them, read as documentation; ");
         md.Append("the commands are the ones checked on the verified mouse and against ASUS Gear Link.\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");

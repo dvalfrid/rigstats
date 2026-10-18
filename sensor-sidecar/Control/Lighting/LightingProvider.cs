@@ -431,6 +431,61 @@ public sealed class LightingProvider : IControlProvider
         return HeadsetJson(headset, back);
     }
 
+    /// Every connected keyboard with a battery (#460), with its energy
+    /// settings (null when it doesn't answer — asleep behind its receiver).
+    /// Read from the keyboards each call.
+    public JsonArray KeyboardSettingsList()
+    {
+        Rescan();
+        return new JsonArray(_devices.OfType<IKeyboardProfileDevice>()
+            .Where(k => k.HasBattery)
+            .Select(k => (JsonNode)KeyboardJson(k, SafeRead(k)))
+            .ToArray());
+    }
+
+    /// Changes one keyboard's energy settings (#460) and returns it as
+    /// <see cref="KeyboardSettingsList"/> does, with what it read back.
+    public JsonObject SetKeyboard(string deviceId, KeyboardSettings wanted)
+    {
+        if (_devices.FirstOrDefault(d => d.Id == deviceId) is not IKeyboardProfileDevice { HasBattery: true } keyboard)
+            throw new InvalidOperationException($"No keyboard '{deviceId}' with energy settings to change.");
+        wanted = KeyboardSettingsCommands.Clamp(wanted);
+        if (_dryRun)
+        {
+            SidecarLog.Log($"[rigstats-control] dry-run: {keyboard.Name} settings -> {wanted}");
+            return KeyboardJson(keyboard, wanted);
+        }
+        var back = keyboard.WriteSettings(wanted);
+        SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} idle {back.IdleCode}, power saving {back.PowerSaving}, low battery {back.LowBatteryLevel} %.");
+        return KeyboardJson(keyboard, back);
+    }
+
+    private static KeyboardSettings? SafeRead(IKeyboardProfileDevice keyboard)
+    {
+        try
+        {
+            return keyboard.ReadSettings();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} settings not read: {e.Message}");
+            return null;
+        }
+    }
+
+    private static JsonObject KeyboardJson(IKeyboardProfileDevice keyboard, KeyboardSettings? settings) => new()
+    {
+        ["id"] = keyboard.Id,
+        ["name"] = keyboard.Name,
+        ["verified"] = keyboard.SettingsVerified,
+        ["settings"] = settings is null ? null : new JsonObject
+        {
+            ["idle_code"] = settings.IdleCode,
+            ["power_saving"] = settings.PowerSaving,
+            ["low_battery_level"] = settings.LowBatteryLevel,
+        },
+    };
+
     private static HeadsetSettings? SafeRead(IHeadsetSettingsDevice headset)
     {
         try
