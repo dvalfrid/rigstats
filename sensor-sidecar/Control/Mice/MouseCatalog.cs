@@ -74,10 +74,38 @@ public static class MouseCatalog
         [0x1A92] = "underside",
     };
 
+    /// ASUS's own product names for G-Helper's (#446), from each model's page
+    /// on rog.asus.com / asus.com (2026-10-18). G-Helper's name is kept where
+    /// ASUS uses it too or no ASUS page names the model: "ROG Gladius III"
+    /// (its three ids are the wired and the Wireless model, not told apart by
+    /// G-Helper's class names), "TX Gaming Mouse" / "TX Gaming Mouse Mini"
+    /// (China-market models, G-Helper `TUFM4WirelssCN` / `TXGamingMini`; only
+    /// the casing follows ASUS's).
+    private static readonly Dictionary<string, string> AsusNames = new()
+    {
+        ["ROG Gladius III Aimpoint"] = "ROG Gladius III Wireless AimPoint",
+        ["ROG Gladius III Eva 2"] = "ROG Gladius III Wireless AimPoint EVA-02 Edition",
+        ["Harpe Ace Mini"] = "ROG Harpe Ace Mini",
+        ["ROG HARPE II ACE"] = "ROG Harpe II Ace",
+        ["ROG Keris II Origin KJP"] = "ROG Keris II Origin (KJP)", // as OmniMouse and GearLink name it
+        ["ROG Keris Wireless Aimpoint"] = "ROG Keris Wireless AimPoint",
+        ["Keris Wireless Aimpoint"] = "ROG Keris Wireless AimPoint",
+        ["ASUS Mouse MD200"] = "ASUS SmartO Mouse MD200 Silent Plus",
+        ["Strix Evolve"] = "ROG Strix Evolve",
+        ["Strix Impact III Wireless"] = "ROG Strix Impact III Wireless",
+        ["TUF GAMING M3"] = "TUF Gaming M3",
+        ["TUF GAMING M4 Air"] = "TUF Gaming M4 Air",
+        ["TUF GAMING M4"] = "TUF Gaming M4 Wireless",
+        ["TUF GAMING Mini Miku Edition"] = "ASUS TUF GAMING Mini Wireless Mouse Hatsune Miku Edition",
+        ["TX GAMING MOUSE"] = "TX Gaming Mouse",
+        ["TX GAMING MOUSE Mini"] = "TX Gaming Mouse Mini",
+    };
+
     public static readonly IReadOnlyList<MouseEntry> Entries = Rows().Select(e => e with
     {
         Spec = e.Spec with
         {
+            Name = AsusNames.GetValueOrDefault(e.Spec.Name, e.Spec.Name),
             Buttons = !OwnButtonLayout.Contains(e.ProductId),
             DpiButton = DpiButtonPlace.GetValueOrDefault(e.ProductId),
         },
