@@ -8,6 +8,11 @@
 //!   Afterburner, …).
 //! - `Ctrl+Alt+P`: cycle the active Control Center profile (#187).
 //! - `Ctrl+Alt+M`: mute/unmute the microphone (#425).
+//! - `Ctrl+Alt+F1`…`F9`: switch to the 1st…9th Control Center profile, in
+//!   the profile bar's order (#456) — so a macro key on any keyboard, bound
+//!   to the chord in its own software, switches straight to a profile.
+//!   F-keys, not digits: Ctrl+Alt is AltGr, and AltGr+2 types `@` on Swedish
+//!   and German layouts.
 
 #![allow(unsafe_code)]
 
@@ -26,6 +31,8 @@ pub enum HotkeyEvent {
     ToggleOverlay,
     CycleProfile,
     ToggleMicMute,
+    /// The profile at this position in the profile bar (0-based).
+    SwitchProfile(usize),
 }
 
 /// One fixed `Ctrl+Alt+<key>` chord: its `RegisterHotKey` id, virtual key,
@@ -37,7 +44,42 @@ struct Chord {
     event: HotkeyEvent,
 }
 
-const CHORDS: [Chord; 3] = [
+/// How many profiles get a chord of their own (`Ctrl+Alt+F1`…`F9`).
+pub const PROFILE_CHORDS: usize = 9;
+
+const VK_F1: u32 = 0x70;
+
+/// The chord that switches to the profile at `index` in the profile bar,
+/// for showing beside it; `None` past the ninth.
+pub fn profile_chord(index: usize) -> Option<&'static str> {
+    PROFILE_CHORD_NAMES.get(index).copied()
+}
+
+const PROFILE_CHORD_NAMES: [&str; PROFILE_CHORDS] = [
+    "Ctrl+Alt+F1",
+    "Ctrl+Alt+F2",
+    "Ctrl+Alt+F3",
+    "Ctrl+Alt+F4",
+    "Ctrl+Alt+F5",
+    "Ctrl+Alt+F6",
+    "Ctrl+Alt+F7",
+    "Ctrl+Alt+F8",
+    "Ctrl+Alt+F9",
+];
+
+/// Every chord: the fixed ones, then one per profile position.
+fn chords() -> Vec<Chord> {
+    let mut chords: Vec<Chord> = FIXED.into_iter().collect();
+    chords.extend((0..PROFILE_CHORDS).map(|i| Chord {
+        id: 10 + i as i32,
+        vk: VK_F1 + i as u32,
+        name: PROFILE_CHORD_NAMES[i],
+        event: HotkeyEvent::SwitchProfile(i),
+    }));
+    chords
+}
+
+const FIXED: [Chord; 3] = [
     Chord {
         id: 1,
         vk: 0x4F, // O
@@ -79,8 +121,8 @@ const CHORDS: [Chord; 3] = [
 /// calls `request_repaint()` right after sending its own command).
 pub fn spawn(dir: PathBuf, tx: Sender<HotkeyEvent>, ctx: egui::Context) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        let registered: Vec<&Chord> = CHORDS
-            .iter()
+        let registered: Vec<Chord> = chords()
+            .into_iter()
             .filter(|chord| {
                 let ok = unsafe {
                     RegisterHotKey(
@@ -132,4 +174,30 @@ pub fn spawn(dir: PathBuf, tx: Sender<HotkeyEvent>, ctx: egui::Context) -> JoinH
             }
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_of_the_first_nine_profiles_has_its_own_f_key() {
+        assert_eq!(profile_chord(0), Some("Ctrl+Alt+F1"));
+        assert_eq!(profile_chord(8), Some("Ctrl+Alt+F9"));
+        assert_eq!(profile_chord(9), None);
+        let chords = chords();
+        let profile: Vec<_> = chords
+            .iter()
+            .filter_map(|c| match c.event {
+                HotkeyEvent::SwitchProfile(i) => Some((i, c.vk, c.name)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(profile.len(), PROFILE_CHORDS);
+        assert_eq!(profile[1], (1, VK_F1 + 1, "Ctrl+Alt+F2"));
+        // Every RegisterHotKey id is unique.
+        let mut ids: Vec<_> = chords.iter().map(|c| c.id).collect();
+        ids.dedup();
+        assert_eq!(ids.len(), chords.len());
+    }
 }

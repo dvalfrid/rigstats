@@ -229,7 +229,9 @@ browse and chart past sessions.
 ## Control Center
 
 Hardware control per profile — **Silent, Balanced, Gaming, Eco** and your own
-— switched from the tray, the header chip or **Ctrl+Alt+P**. Open it from the
+— switched from the tray, the header chip, **Ctrl+Alt+P** (the next one) or
+**Ctrl+Alt+F1**…**F9** (the first … ninth, in the profile bar's order — bind a
+macro key to one in your keyboard's software). Open it from the
 tray (**Control Center…**). Everything runs inside the `rigstats-sensor`
 service, so fan curves keep working with the app closed and after a reboot.
 Each tab appears only when this PC's hardware supports it.
