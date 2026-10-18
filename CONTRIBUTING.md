@@ -172,8 +172,8 @@ docs(readme): update release instructions
 Full rules are in [STANDARDS.md](STANDARDS.md). The essentials:
 
 **Rust**
-- **2-space indent** (project-specific — deviates from the Rust default of 4),
-  max line width 120. `cargo fmt` handles it — never format manually.
+- Standard `rustfmt` defaults (4-space indent, no `rustfmt.toml`). `cargo fmt`
+  handles it — never format manually.
 - Standard Rust naming: `snake_case` functions, `PascalCase` types,
   `SCREAMING_SNAKE_CASE` constants.
 - `unsafe_code = "deny"` in both crates; Win32 FFI modules opt out with a
