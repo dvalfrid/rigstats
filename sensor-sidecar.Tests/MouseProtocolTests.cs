@@ -338,16 +338,143 @@ public class MouseProtocolTests
         Assert.Throws<InvalidOperationException>(() => provider.Set("nope", mouse.Current));
     }
 
-    private sealed class FakeMouse : IMouseDevice
+    // ── The older families (#432): G-Helper's per-family frames ──────────
+
+    private static MouseSpec Spec(ushort productId, MouseLink link) => MouseCatalog.Find(productId, link)!.Spec;
+
+    private static string Hex(IEnumerable<byte[]> writes) => string.Join(" ", writes.Select(Convert.ToHexString));
+
+    [Fact]
+    public void Old_config_reads_and_writes_polling_debounce_and_snapping_at_their_own_places()
     {
+        var gladius = Spec(0x1845, MouseLink.Wired); // Gladius II: 12 04 00 at 9 / 11 / 13, subs 2 / 3 / 4
+        var replies = new Dictionary<string, byte[]>
+        {
+            ["120000"] = Reply(0x12, 0x00, 0x00, (11, 0), (12, 2)),
+            ["120400"] = Reply(0x12, 0x04, 0x00, (5, 7), (7, 15), (9, 2), (11, 3), (13, 1)),
+            ["120600"] = Reply(0x12, 0x06, 0x00, (8, 1)),
+        };
+
+        var now = MouseProtocol.Parse(gladius, replies, booster: false)!;
+
+        Assert.Equal([800, 1600], now.Stages.Select(s => s.Dpi)); // (code + 1) × 100
+        Assert.Equal(500, now.PollingHz);
+        Assert.Equal(3, now.Debounce);
+        Assert.True(now.AngleSnapping);
+        Assert.Equal(1, now.LiftOff);
+        Assert.Equal(2, now.ActiveStage);
+
+        var wanted = now with { PollingHz = 1000, Debounce = 4, AngleSnapping = false, LiftOff = 0 };
+        Assert.Equal("5131020003 5131030004 5131040000 5135FF00FF00",
+            Hex(MouseProtocol.Writes(gladius, now, wanted, replies["120600"], null)));
+        Assert.DoesNotContain(MouseProtocol.Reads(gladius), r => r[1] == 0x05); // no bindings on the older families
+    }
+
+    [Fact]
+    public void Strix_carry_has_its_profile_stage_and_power_off_elsewhere()
+    {
+        var carry = Spec(0x18B4, MouseLink.Dongle);
+        var replies = new Dictionary<string, byte[]>
+        {
+            ["120000"] = Reply(0x12, 0x00, 0x00, (10, 2), (11, 1)),
+            ["120400"] = Reply(0x12, 0x04, 0x00, (9, 3)),
+            ["120600"] = Reply(0x12, 0x06, 0x00),
+            ["120700"] = Reply(0x12, 0x07, 0x00, (5, 4)),
+        };
+
+        var now = MouseProtocol.Parse(carry, replies, booster: false)!;
+
+        Assert.Equal(3, now.Profile);
+        Assert.Equal(1, now.ActiveStage);
+        Assert.Equal(4, now.PowerOff);
+        Assert.Equal("51370000FF0000", Convert.ToHexString(MouseProtocol.Writes(carry, now, now with { PowerOff = 0xFF }, null, null).Single()));
+    }
+
+    [Fact]
+    public void Quarters_and_the_height_only_lift_off_frame()
+    {
+        var keris = Spec(0x1960, MouseLink.Dongle); // Keris Wireless
+        Assert.Equal((25, 50), keris.LowBatteryWarning); // G-Helper's 10 % steps, but only quarters reach the mouse
+        var replies = new Dictionary<string, byte[]>
+        {
+            ["120000"] = Reply(0x12, 0x00, 0x00, (12, 1)),
+            ["120400"] = Reply(0x12, 0x04, 0x00, (15, 2)),
+            ["120600"] = Reply(0x12, 0x06, 0x00, (5, 1), (8, 0)),
+            ["120700"] = Reply(0x12, 0x07, 0x00, (6, 2), (7, 1)),
+        };
+
+        var now = MouseProtocol.Parse(keris, replies, booster: false)!;
+
+        Assert.Equal(25, now.LowBatteryWarning);
+        Assert.Equal(1, now.LiftOff); // at 5, not 8
+        var wanted = MouseProtocol.Clamp(keris, now, now with { LowBatteryWarning = 50, LiftOff = 0, ActiveStage = 3 }, booster: false);
+        Assert.Equal(1, wanted.ActiveStage); // only its DPI button picks the level
+        Assert.Equal("5135000000 51370000020002", Hex(MouseProtocol.Writes(keris, now, wanted, replies["120600"], replies["120700"])));
+        Assert.False(keris.CanSwitchStage);
+    }
+
+    [Fact]
+    public void A_profile_switch_is_confirmed_where_the_model_keeps_its_profile()
+    {
+        var reply = Reply(0x12, 0x00, 0x00, (10, 2), (11, 1));
+        Assert.Equal(3, MouseProtocol.ProfileIn(Spec(0x18B4, MouseLink.Dongle), reply)); // Strix Carry: at 10
+        Assert.Equal(2, MouseProtocol.ProfileIn(HarpeAce, reply)); // common: at 11
+        Assert.Null(MouseProtocol.ProfileIn(HarpeAce, null));
+    }
+
+    [Fact]
+    public void Tuf_m3_gen_ii_counts_its_stage_from_zero()
+    {
+        var m3 = Spec(0x1A9B, MouseLink.Wired);
+        var replies = new Dictionary<string, byte[]>
+        {
+            ["120000"] = Reply(0x12, 0x00, 0x00, (12, 1)),
+            ["120400"] = Reply(0x12, 0x04, 0x00, (15, 2)),
+            ["120403"] = Reply(0x12, 0x04, 0x03),
+            ["120500"] = Reply(0x12, 0x05, 0x00),
+        };
+
+        var now = MouseProtocol.Parse(m3, replies, booster: false)!;
+
+        Assert.Equal(2, now.ActiveStage);
+        Assert.Equal("5131090002", Convert.ToHexString(MouseProtocol.Writes(m3, now, now with { ActiveStage = 3 }, null, null).Single()));
+    }
+
+    [Fact]
+    public void A_mouse_with_one_onboard_profile_is_not_switched()
+    {
+        var mouse = new FakeMouse(MouseCatalog.Find(0x1847, MouseLink.Wired)!); // Strix Impact
+        new MouseProvider([mouse], dryRun: false).Apply(new ProfilePart { Mouse = new MousePart { Profile = 2 } });
+        Assert.Equal(0, mouse.Switches);
+    }
+
+    [Fact]
+    public void The_older_families_are_named_as_asus_names_them()
+    {
+        Assert.Equal("ROG Keris Wireless", Spec(0x1960, MouseLink.Dongle).Name);
+        Assert.Equal("ROG Keris", Spec(0x195C, MouseLink.Wired).Name);
+        Assert.Equal("ROG Strix Impact II Wireless", Spec(0x1949, MouseLink.Dongle).Name);
+        Assert.Equal("ROG Strix Impact II", Spec(0x18E1, MouseLink.Wired).Name);
+        Assert.Equal("ROG Gladius II", Spec(0x1845, MouseLink.Wired).Name);
+        Assert.Equal("ROG Gladius II Origin", Spec(0x1877, MouseLink.Wired).Name);
+        Assert.DoesNotContain(MouseCatalog.Entries, e => e.Spec.Name.Contains("Balteus", StringComparison.Ordinal)); // a mouse pad
+    }
+
+    private sealed class FakeMouse(MouseEntry? entry = null) : IMouseDevice
+    {
+        public int Switches { get; private set; }
         public string Id => "asus-mouse-1a94-omni";
-        public MouseEntry Entry { get; } = MouseCatalog.Find(0x1A94, MouseLink.Omni)!;
+        public MouseEntry Entry { get; } = entry ?? MouseCatalog.Find(0x1A94, MouseLink.Omni)!;
         public bool Booster => false;
         public MouseSettings Current { get; private set; } = HarpeSettings();
         public MouseSettings? Read() => Current;
 
         public MouseSettings Write(MouseSettings wanted) => Current = wanted;
 
-        public void SwitchProfile(int profile) => Current = Current with { Profile = profile };
+        public void SwitchProfile(int profile)
+        {
+            Switches++;
+            Current = Current with { Profile = profile };
+        }
     }
 }

@@ -1428,13 +1428,12 @@ polling rates, which settings exist) are in each model file.
 the `mouse` profile domain (`Control/Mice/`):
 
 - **Which mice.** `MouseCatalog` lists every ROG mouse on the common protocol
-  — 45 rows (model × link: cable, own dongle, ROG Omni receiver) transcribed
-  as facts from G-Helper's 72 mouse model classes by a resolver that follows
+  — 71 rows (model × link: cable, own dongle, ROG Omni receiver) transcribed
+  as facts from G-Helper's mouse model classes by a resolver that follows
   each class's constructor chain and merges its overrides with
   `AsusMouse`'s defaults; the Omni ids are G-Helper's `MouseFromOmniPid`.
-  Families whose packets or replies differ (Gladius II, Strix Impact I/II,
-  Pugio I/II, Chakram / Core, Keris Wireless, Strix Carry, TUF M5) are left
-  for #432. Found by id only: the mouse's own collection (interface, report
+  The older families whose packets or replies differ carry their
+  differences as `MouseFrames` (#432, below). Found by id only: the mouse's own collection (interface, report
   id and a vendor usage page as the row names) or the Omni receiver's paired
   list (`OmniMouse.PairedDevices` / `Channel`) — nothing is sent to an
   unknown device. Names: ASUS's own product names (`MouseCatalog.AsusNames`,
@@ -1518,11 +1517,44 @@ the `mouse` profile domain (`Control/Mice/`):
   showed stage 3 each time. Separately, the first `12 04 00` of a read goes
   unanswered within 600 ms almost every time over the Omni link (18 of ~20
   reads, before and after the fix) and is answered when asked again.
+- **Older families (#432).** G-Helper's packet overrides per family,
+  transcribed as `MouseFrames` (default = the common protocol) and assigned
+  by the resolver from the class right under `AsusMouse`:
+  - **OldConfig** (Gladius II / Origin / PNK LTD / COD, Gladius II Wireless,
+    Strix Impact, TUF Gaming M5): `12 04 00` holds polling at 9, button
+    response at 11, angle snapping at 13; written with `51 31 02` / `03` /
+    `04`. **StrixCarry** adds profile at 10, DPI stage at 11 and auto power
+    off at 5 of `12 07`. **Pugio** reads polling at 9 but writes it with the
+    common `51 31 04`.
+  - **Quarters** (Pugio II, Chakram): the low-battery warning in quarters
+    (1 = 25 %); G-Helper offers 10 % steps on some of them but sends value /
+    25, so RIGStats offers steps of 25. **QuartersShortLift** (Keris /
+    Keris Wireless / EVA, Strix Impact II Wireless) and **ShortLift**
+    (Chakram Core): lift-off read at 5 of `12 06`, written `51 35 00 00 <h>`.
+  - **TufM3GenII**: the active DPI stage counted from 0.
+  - Every older family writes G-Helper's own lift-off (`51 35 FF 00 FF <h>`)
+    and energy frames (`51 37 00 00 <off> 00 <low>`): GearLink's safer
+    frames are documented only for the common models. Strix Impact II and
+    Gladius II Core differ only in lighting and use the common frames this
+    way (**GHelper**).
+  - Where G-Helper's `CanChangeDPIProfile` is false (Pugio II, Chakram /
+    Core, Keris Wireless, Strix Impact II Wireless, Strix Carry) the level in
+    use is not switched from the PC (`CanSwitchStage`); the Mouse page's
+    chips then only pick the level to change. Mice with one onboard profile
+    (Gladius II Origin / COD, Gladius II Wireless, Strix Impact, TUF Gaming
+    M3 Gen II) are never sent a profile switch. No button bindings on the
+    older families until one is seen working (TUF Gaming M3 Gen II keeps
+    them, as its common TUF Gaming M3). ROG Balteus (a mouse pad) is left out.
+  - Names by id where G-Helper gives two ASUS products one name
+    (`MouseCatalog.AsusNamesById`: Gladius II, Keris Wireless, Strix Impact
+    II Wireless). None of the older families is verified on hardware.
 - **Diagnostics (#438).** Each read whose replies differ from the last is
   logged with the raw replies, zero padding left out (`Hid.ReplyHex`):
   `Mouse: <model> 0x<pid> (<link>) read <settings> from 120000:<hex> 120400:<hex> …`
   — so a user's log shows what an unverified model answered and what
-  RIGStats made of it, without new commands. In `lighting-devices.json`
+  RIGStats made of it, without new commands. Each change logs the frames it
+  sends (`Mouse: <model> 0x<pid> writes 5131…`, #432), and a profile switch
+  that doesn't take logs the `12 00 00` reply. In `lighting-devices.json`
   → `hid_scan`, a mouse's own settings collection is
   `known_as: "asus_mouse_settings"` (`MouseProvider.IsChannel`, the same
   test discovery uses); a ROG mouse there with `null` isn't in the

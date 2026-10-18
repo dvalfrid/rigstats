@@ -199,6 +199,9 @@ pub struct ControlUi {
     /// A change made while a slider, number or colour picker was held, not
     /// sent yet.
     mouse_unsent: bool,
+    /// The DPI level being changed on a mouse whose level in use only its
+    /// DPI button picks (#432).
+    mouse_edit_stage: u8,
 }
 
 #[derive(Debug)]
@@ -1530,11 +1533,22 @@ fn mouse_card(
     };
 
     // ── DPI ─────────────────────────────────────────────────────────────
+    // Older mice (#432) can't be switched to a level from the PC: the chips
+    // then only pick the level to change.
+    let mut edit_stage = if spec.can_switch_stage {
+        s.active_stage
+    } else {
+        ui_state.mouse_edit_stage.clamp(1, spec.dpi_stages.max(1))
+    };
     ui_kit::group(
         ui,
         dc,
         Some(&format!("DPI — mouse profile {}", s.profile)),
-        Some("Picking a level uses it now; the mouse's DPI button steps through the same levels."),
+        Some(if spec.can_switch_stage {
+            "Picking a level uses it now; the mouse's DPI button steps through the same levels."
+        } else {
+            "Pick a level to change it; the mouse's DPI button picks the level in use."
+        }),
         |g| {
             if spec.dpi_stages > 1 {
                 g.row("DPI levels", Some("The levels stored in the mouse"), |ui| {
@@ -1546,10 +1560,10 @@ fn mouse_card(
                         .collect();
                     let options: Vec<(u8, &str)> =
                         labels.iter().map(|(i, l)| (*i, l.as_str())).collect();
-                    ui_kit::segmented(ui, dc, &mut s.active_stage, &options);
+                    ui_kit::segmented(ui, dc, &mut edit_stage, &options);
                 });
             }
-            let at = usize::from(s.active_stage.max(1)) - 1;
+            let at = usize::from(edit_stage.max(1)) - 1;
             if let Some(stage) = s.stages.get_mut(at) {
                 let title = if spec.dpi_stages > 1 {
                     format!("Change level {}", at + 1)
@@ -1558,7 +1572,11 @@ fn mouse_card(
                 };
                 g.row(
                     &title,
-                    Some("The level in use — how far the pointer moves"),
+                    Some(if spec.can_switch_stage {
+                        "The level in use — how far the pointer moves"
+                    } else {
+                        "How far the pointer moves at this level"
+                    }),
                     |ui| {
                         let mut v = stage.dpi as i32;
                         let resp = ui_kit::slider_range(
@@ -1576,6 +1594,11 @@ fn mouse_card(
             }
         },
     );
+    if spec.can_switch_stage {
+        s.active_stage = edit_stage;
+    } else {
+        ui_state.mouse_edit_stage = edit_stage;
+    }
 
     // ── Performance ─────────────────────────────────────────────────────
     ui_kit::group(ui, dc, Some("Performance"), None, |g| {

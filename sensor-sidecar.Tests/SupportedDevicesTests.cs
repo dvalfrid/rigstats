@@ -64,7 +64,7 @@ public class SupportedDevicesTests
         Assert.Contains(rows, r => r.Name == "ROG Chakram X" && r.Status == DeviceSettingsCatalog.FromGHelper && r.Notes.Contains("no button bindings yet"));
         // One row per mouse, under ASUS's name — G-Helper names this one
         // differently per link (#446).
-        Assert.Single(rows, r => r.Name.Contains("Keris Wireless", StringComparison.Ordinal));
+        Assert.Single(rows, r => r.Name.Contains("Keris Wireless AimPoint", StringComparison.Ordinal));
         Assert.Contains(rows, r => r.Name == "ROG Keris Wireless AimPoint" && r.UsbIds == "1A66, 1A68, 1A6A");
         Assert.DoesNotContain(rows, r => r.Name == "ROG HARPE II ACE" || r.Name == "Harpe Ace Mini");
         Assert.Equal(
