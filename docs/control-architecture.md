@@ -1602,9 +1602,7 @@ the `mouse` profile domain (`Control/Mice/`):
   catalog, or answers on another interface or report id. Mice on the Omni
   receiver show under `asus_probes` instead.
 
-**Keyboards: see [keyboard-research.md](keyboard-research.md)** (Gear Link's 46 keyboard ids and G-Helper compared, 2026-10-18). Earlier note —  low-battery alert `51 37 00 00
-<%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen
-commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
+**Keyboards: see [keyboard-research.md](keyboard-research.md)** (Gear Link's 46 keyboard ids and G-Helper compared, 2026-10-18). The earlier note here — G-Helper's low-battery alert `51 37 00 00 <%>` — is superseded: in Gear Link that frame is the mouse's power config and no keyboard class sends it; keyboards use `51 3A` (#461). Idle/sleep timeout `51 38 00 00 <value>` and the Azoth family's OLED commands (`0x68`, `0x69`, `0x6A`) agree between the sources.
 
 **Microphone mute and the mute lamp (ROG Delta II, verified 2026-10-17,
 #425):** there is no microphone command in the headset's HID schema
