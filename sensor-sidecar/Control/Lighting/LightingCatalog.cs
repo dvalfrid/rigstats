@@ -116,6 +116,7 @@ public static class LightingCatalog
         md.Append("write can damage the hardware). A device that isn't listed: the diagnostics export's ");
         md.Append("`lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers ");
         md.Append("and the mice paired to them — attach it to a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).\n\n");
+        md.Append(DeviceSettingsCatalog.Markdown());
         md.Append(BatteryCatalog.Markdown());
         return md.ToString();
     }
