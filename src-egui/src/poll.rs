@@ -256,6 +256,50 @@ fn poll_stats_to_log_payload(
     }
 }
 
+// ── Battery cache ─────────────────────────────────────────────────────────────
+
+/// `(charge %, charging, minutes left, watts)` from `sample_battery_wmi`.
+type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
+
+/// How long a battery reading is kept before WMI is asked again.
+const BATTERY_TTL_PRESENT: Duration = Duration::from_secs(10);
+/// How long "no battery" is kept — a desktop has none, so ask rarely (#464).
+const BATTERY_TTL_ABSENT: Duration = Duration::from_secs(60);
+
+/// When to read the battery over WMI and when to run `probe_wmi_status`.
+/// The clock is passed in so the decisions are testable.
+#[derive(Default)]
+struct BatteryPoll {
+    last: Option<(Instant, Option<BatteryCache>)>,
+    /// `probe_wmi_status` already ran in the current run of misses.
+    probed: bool,
+}
+
+impl BatteryPoll {
+    fn is_stale(&self, now: Instant) -> bool {
+        match self.last {
+            None => true,
+            Some((t, Some(_))) => now.duration_since(t) >= BATTERY_TTL_PRESENT,
+            Some((t, None)) => now.duration_since(t) >= BATTERY_TTL_ABSENT,
+        }
+    }
+
+    /// Stores a reading. Returns `true` when `probe_wmi_status` should run:
+    /// only on the first miss of a run of misses, to log once why WMI failed.
+    fn record(&mut self, now: Instant, reading: Option<BatteryCache>) -> bool {
+        self.last = Some((now, reading));
+        if reading.is_some() {
+            self.probed = false;
+            return false;
+        }
+        !std::mem::replace(&mut self.probed, true)
+    }
+
+    fn cached(&self) -> Option<BatteryCache> {
+        self.last.and_then(|(_, d)| d)
+    }
+}
+
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
 pub async fn poll_loop(
@@ -353,8 +397,7 @@ pub async fn poll_loop(
     let mut last_net_instant = Instant::now();
     let mut last_ping: Option<(Instant, Option<f64>)> = None;
     let mut last_ping_wan: Option<(Instant, Option<f64>)> = None;
-    type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
-    let mut last_battery: Option<(Instant, BatteryCache)> = None;
+    let mut battery_poll = BatteryPoll::default();
     let mut last_prune_day: Option<u64> = None;
     let mut first_tick_logged = false;
 
@@ -534,11 +577,7 @@ pub async fn poll_loop(
             battery_time_mins,
             battery_power_w,
         ) = {
-            let stale = last_battery
-                .as_ref()
-                .map(|(t, _)| t.elapsed().as_secs_f64() >= 10.0)
-                .unwrap_or(true);
-            if stale {
+            if battery_poll.is_stale(Instant::now()) {
                 let result = match tokio::task::spawn_blocking(hardware::sample_battery_wmi).await {
                     Ok(result) => result,
                     Err(err) => {
@@ -549,7 +588,7 @@ pub async fn poll_loop(
                         None
                     }
                 };
-                if result.is_none() {
+                if battery_poll.record(Instant::now(), result) {
                     match tokio::task::spawn_blocking(hardware::probe_wmi_status).await {
                         Ok(Err(err)) => debug::log_warn(
                             &dir,
@@ -562,16 +601,10 @@ pub async fn poll_loop(
                         Ok(Ok(())) => {}
                     }
                 }
-                last_battery = result.as_ref().map(|d| (Instant::now(), *d));
-                match result {
-                    Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
-                    None => (false, None, None, None, None),
-                }
-            } else {
-                match last_battery.as_ref().map(|(_, d)| *d) {
-                    Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
-                    None => (false, None, None, None, None),
-                }
+            }
+            match battery_poll.cached() {
+                Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
+                None => (false, None, None, None, None),
             }
         };
 
@@ -742,5 +775,57 @@ pub async fn poll_loop(
         }
 
         tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const READING: BatteryCache = (80, true, Some(90), Some(12.5));
+
+    #[test]
+    fn battery_stale_before_first_read() {
+        assert!(BatteryPoll::default().is_stale(Instant::now()));
+    }
+
+    #[test]
+    fn battery_present_cached_for_10s() {
+        let t0 = Instant::now();
+        let mut poll = BatteryPoll::default();
+        poll.record(t0, Some(READING));
+        assert!(!poll.is_stale(t0 + Duration::from_secs(9)));
+        assert!(poll.is_stale(t0 + BATTERY_TTL_PRESENT));
+        assert_eq!(poll.cached(), Some(READING));
+    }
+
+    #[test]
+    fn no_battery_cached_for_60s() {
+        let t0 = Instant::now();
+        let mut poll = BatteryPoll::default();
+        poll.record(t0, None);
+        assert!(!poll.is_stale(t0 + Duration::from_secs(10)));
+        assert!(!poll.is_stale(t0 + Duration::from_secs(59)));
+        assert!(poll.is_stale(t0 + BATTERY_TTL_ABSENT));
+        assert_eq!(poll.cached(), None);
+    }
+
+    #[test]
+    fn probe_only_on_first_miss_of_a_run() {
+        let t0 = Instant::now();
+        let mut poll = BatteryPoll::default();
+        assert!(poll.record(t0, None));
+        assert!(!poll.record(t0 + BATTERY_TTL_ABSENT, None));
+        assert!(!poll.record(t0 + BATTERY_TTL_ABSENT * 2, None));
+    }
+
+    #[test]
+    fn probe_rearmed_after_battery_seen() {
+        let t0 = Instant::now();
+        let mut poll = BatteryPoll::default();
+        assert!(poll.record(t0, None));
+        assert!(!poll.record(t0, Some(READING)));
+        assert!(poll.record(t0, None));
+        assert!(!poll.record(t0, None));
     }
 }
