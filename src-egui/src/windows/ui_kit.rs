@@ -1172,6 +1172,7 @@ pub enum Icon {
     Lighting,
     Headset,
     Mouse,
+    Keyboard,
     General,
     Display,
     Rules,
@@ -1196,6 +1197,7 @@ impl Icon {
             Icon::Lighting => Color32::from_rgb(255, 55, 95),
             Icon::Headset => Color32::from_rgb(88, 86, 214),
             Icon::Mouse => Color32::from_rgb(52, 120, 246),
+            Icon::Keyboard => Color32::from_rgb(90, 200, 250),
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
             Icon::Rules => Color32::from_rgb(255, 159, 10),
@@ -1318,6 +1320,26 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
             p.line_segment(
                 [c + vec2(0.0, -s * 0.24), c + vec2(0.0, -s * 0.14)],
                 Stroke::new(s * 0.1, color),
+            );
+        }
+        Icon::Keyboard => {
+            // A wide body with two rows of keys and a space bar.
+            let body = Rect::from_center_size(c, vec2(s * 0.86, s * 0.5));
+            p.rect_stroke(
+                body,
+                CornerRadius::same((s * 0.08) as u8),
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            for row in [-0.1_f32, 0.04] {
+                for k in 0..4 {
+                    let x = -0.24 + k as f32 * 0.16;
+                    p.circle_filled(c + vec2(x * s, row * s), s * 0.035, color);
+                }
+            }
+            p.line_segment(
+                [c + vec2(-s * 0.18, s * 0.15), c + vec2(s * 0.18, s * 0.15)],
+                stroke,
             );
         }
         Icon::Headset => {

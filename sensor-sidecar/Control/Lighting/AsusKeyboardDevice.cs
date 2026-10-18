@@ -28,7 +28,7 @@ public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, 
 ///
 /// Not covered: the ROG Claymore (a different command layout, 2018) and the
 /// Strix Scope TKL family (direct per-key mode only, model key maps).
-public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDisposable
+public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeyboardProfileDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(500);
 
@@ -72,6 +72,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
         _model = model;
         _reportId = reportId;
         _version = version;
+        FoundProfiles = KeyboardProfileCommands.Parse(version.Length > 1 ? Convert.FromHexString(version) : null, reportId);
         _layout = layout;
         Id = id;
         Name = name;
@@ -426,6 +427,87 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IDispo
     }
 
     public bool HasBattery { get; }
+
+    /// The onboard profiles in the `12 00` reply discovery got — no device I/O,
+    /// so the capability doesn't depend on the keyboard being awake (#458).
+    public KeyboardProfiles? FoundProfiles { get; }
+
+    /// The keyboard's onboard profiles from `12 00` — the question discovery
+    /// already asks (#458); null when it doesn't answer.
+    public KeyboardProfiles? ReadProfiles()
+    {
+        lock (_lock)
+            return KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId);
+    }
+
+    /// Switches to onboard profile `profile` (1-based) with `51 00` and
+    /// confirms it by reading `12 00` again; throws when it didn't take.
+    public void SwitchProfile(int profile)
+    {
+        lock (_lock)
+        {
+            var now = KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId)
+                ?? throw new IOException($"{Name} didn't answer.");
+            profile = Math.Clamp(profile, 1, now.Count);
+            if (now.Current == profile)
+                return;
+            // Wait for the keyboard's echo, and send once more without it:
+            // through the Omni receiver a frame sent right after a reply is
+            // often dropped (the mouse's first question likewise, #431) —
+            // seen live twice, while Gear Link's switch was echoed (#458).
+            // Switching to the same profile twice is harmless.
+            var frame = KeyboardProfileCommands.Switch(_reportId, _info.OutputReportLength, profile, now.Count);
+            Send(frame);
+            if (!AwaitEcho(Set, 0x00))
+            {
+                SidecarLog.Log($"[rigstats-control] Keyboard: {Name} didn't acknowledge the profile switch, sending it again.");
+                Send(frame);
+                if (!AwaitEcho(Set, 0x00))
+                    throw new IOException($"{Name} didn't acknowledge the profile switch.");
+            }
+            var back = KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId);
+            if (back?.Current != profile)
+            {
+                // The switch (lighting, OLED) may still be under way.
+                Thread.Sleep(300);
+                back = KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId);
+            }
+            if (back?.Current != profile)
+                throw new IOException($"{Name} did not switch to profile {profile} (read back {back?.Current.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "nothing"}).");
+        }
+    }
+
+    // Caller holds _lock. Reads input reports until one echoes `command key`
+    // (skipping events and other replies); false when none came in time.
+    private bool AwaitEcho(byte command, byte key)
+    {
+        if (_device is null)
+            return false;
+        var deadline = DateTime.UtcNow + ReplyTimeout;
+        for (var left = ReplyTimeout; left > TimeSpan.Zero; left = deadline - DateTime.UtcNow)
+        {
+            if (_device.Read(left) is not { } reply)
+                return false;
+            if (reply.Length >= 3 && reply[0] == _reportId && reply[1] == command && reply[2] == key)
+                return true;
+        }
+        return false;
+    }
+
+    // Caller holds _lock. Reopens once, like ReadBattery.
+    private byte[]? AskLocked(byte what)
+    {
+        try
+        {
+            return Ask(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId, what, ReplyTimeout);
+        }
+        catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
+        {
+            _device?.Dispose();
+            _device = Hid.Open(_info);
+            return Ask(_device, _info.OutputReportLength, _reportId, what, ReplyTimeout);
+        }
+    }
 
     /// The Omni receiver is 2.4 GHz; a model's own dongle says so in its name.
     public string Connection => Lighting.Connection.Of(_info.Path, $"{_info.Product} {_model.Name}", _model.Receiver);

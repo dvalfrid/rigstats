@@ -323,6 +323,13 @@ public sealed class MousePart
     public int? Profile { get; init; }
 }
 
+/// A profile's keyboard part (#458): which of the keyboard's own onboard
+/// profiles it uses (1-based, as the keyboard and its Fn + 1…6 keys count).
+public sealed class KeyboardPart
+{
+    public int? Profile { get; init; }
+}
+
 /// A white lamp: on or off, how bright and how warm.
 public sealed class LampPart
 {
@@ -377,6 +384,7 @@ public sealed class ProfilePart
     public GpuPart? Gpu { get; init; }
     public AuraPart? Aura { get; init; }
     public MousePart? Mouse { get; init; }
+    public KeyboardPart? Keyboard { get; init; }
 }
 
 public sealed class Profile

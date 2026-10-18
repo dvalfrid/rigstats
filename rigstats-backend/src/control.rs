@@ -100,6 +100,31 @@ pub struct ProfilePart {
     pub aura: Option<AuraPart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mouse: Option<MousePart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keyboard: Option<KeyboardPart>,
+}
+
+/// A profile's keyboard part (#458): which of the keyboard's own onboard
+/// profiles it uses (1-based, as its Fn + 1…6 keys count); `None` leaves the
+/// keyboard as it is.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyboardPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<u8>,
+}
+
+/// A keyboard with onboard profiles, as the `keyboard` domain reports it (#458).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct KeyboardInfo {
+    pub id: String,
+    pub name: String,
+    pub profiles: u8,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct KeyboardCaps {
+    #[serde(default)]
+    keyboards: Vec<KeyboardInfo>,
 }
 
 /// A profile's mouse part (#431): which of the mouse's own onboard profiles
@@ -826,6 +851,18 @@ impl ControlState {
 
     /// A ROG mouse with known settings is connected (#431) — the Control
     /// Center's Mouse page.
+    /// The keyboards with onboard profiles (#458) — the Control Center's
+    /// Keyboard page; empty when there are none.
+    pub fn keyboards(&self) -> Vec<KeyboardInfo> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "keyboard" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value::<KeyboardCaps>(d).ok())
+            .map(|c| c.keyboards)
+            .unwrap_or_default()
+    }
+
     pub fn has_mouse(&self) -> bool {
         self.capabilities
             .iter()
@@ -2127,6 +2164,24 @@ mod tests {
         assert!(serde_json::to_value(ProfilePart::default())
             .unwrap()
             .get("mouse")
+            .is_none());
+    }
+
+    /// The `keyboard` domain's capability as `KeyboardProvider.Probe` writes
+    /// it, and a profile's keyboard part (#458).
+    #[test]
+    fn keyboard_wire_shapes_match_the_service() {
+        let caps: KeyboardCaps = serde_json::from_value(serde_json::json!({
+            "keyboards": [{"id": "asus-kb-1ace-02", "name": "ROG Azoth X", "profiles": 6}]
+        }))
+        .unwrap();
+        assert_eq!(caps.keyboards[0].profiles, 6);
+        let part: ProfilePart =
+            serde_json::from_value(serde_json::json!({"keyboard": {"profile": 2}})).unwrap();
+        assert_eq!(part.keyboard, Some(KeyboardPart { profile: Some(2) }));
+        assert!(serde_json::to_value(ProfilePart::default())
+            .unwrap()
+            .get("keyboard")
             .is_none());
     }
 
