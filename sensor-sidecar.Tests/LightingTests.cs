@@ -1115,9 +1115,18 @@ public class LightingDiagnosticsTests
     [InlineData((ushort)0x1532, (ushort)0x0099, (ushort)0x0059, "lamp_array")]
     [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFF00, "asus_keyboard_channel")]
     [InlineData((ushort)0x0B05, (ushort)0x1ACE, (ushort)0xFFC0, null)]
+    [InlineData((ushort)0x0B05, (ushort)0x1A94, (ushort)0xFF01, "asus_mouse_settings")] // Harpe Ace Aim Lab on its dongle, mi_00
+    [InlineData((ushort)0x0B05, (ushort)0x1A94, (ushort)0x0001, null)] // its pointer collection
     public void Collections_are_classified(ushort vid, ushort pid, ushort page, string? expected)
     {
         Assert.Equal(expected, LightingDiagnostics.KnownAs(Hid(vid, pid, page)));
+    }
+
+    [Fact]
+    public void A_reply_is_logged_without_its_zero_padding()
+    {
+        Assert.Equal("02120003", SensorSidecar.Control.Lighting.Hid.ReplyHex([0x02, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00]));
+        Assert.Equal("", SensorSidecar.Control.Lighting.Hid.ReplyHex([0x00, 0x00]));
     }
 
     [Fact]

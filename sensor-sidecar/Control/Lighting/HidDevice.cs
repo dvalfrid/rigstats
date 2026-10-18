@@ -36,6 +36,16 @@ public interface IHidDevice : IDisposable
 /// hidapi, no extra binary. Thin: enumeration, open, and overlapped I/O.
 public static class Hid
 {
+    /// A device's reply as hex for the log, without the zero padding a
+    /// report ends in ("0212000300000000…" → "02120003").
+    public static string ReplyHex(byte[] reply)
+    {
+        var end = reply.Length;
+        while (end > 0 && reply[end - 1] == 0)
+            end--;
+        return Convert.ToHexString(reply, 0, end);
+    }
+
     /// Every HID collection present, with its VID/PID and top-level usage.
     public static IReadOnlyList<HidDeviceInfo> Enumerate()
     {
