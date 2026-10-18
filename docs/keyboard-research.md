@@ -61,7 +61,7 @@ Falchion (`193C`).
 
 | Setting | Gear Link (decimal → hex) | G-Helper | Read back? | Agree? |
 |---|---|---|---|---|
-| **Onboard profile** (6) | `changeProfile`: `81,0,0,[p]` = `51 00 00 00 <p>` | `51 00 00 00 <p>` (0–5) | `12 00` byte 11 (G-Helper: 1–6, 6 = profile 0) | **yes** |
+| **Onboard profile** | `changeProfile`: `81,0,0,[p]` = `51 00 00 00 <p>` | `51 00 00 00 <p>` (0–5) | `12 00`: byte 11 current profile, byte 10 current effect (both sources), **byte 9 number of profiles** (Gear Link `getKeyboardDeviceInfo`; G-Helper assumes 6) | **yes** |
 | Save to the current profile | `saveCurrentProfile`: `80,85` = `50 55` | `50 55` (after lighting) | — | **yes** |
 | Profile changed on the keyboard (event) | report `0x70`, first non-zero byte at position 2 = bit per profile (`0x0201` → profile 0 … `0x0240` → 6, `0x0101` = hardware reset); also `03 81 06 00 <p>` | report `0x70`, byte 4 = `1 << n` | — (it is the event) | **yes** — see "Macro keys" |
 | Idle / sleep timeout | `setIdleTime`: `81,56` = `51 38 00 00 <code>` (0 = 1 min, 1 = 2, 2 = 3, 3 = 5, 4 = 10, 255 = never) | `51 38 00 00 <code>` | `12 01` byte 7 | **yes** |
@@ -143,9 +143,10 @@ Three ways, from no device writes to some:
 
 ## Open questions
 
-- Which models have dedicated macro / profile keys, and how many profiles
-  each shows (Gear Link's UI config per model wasn't decoded; G-Helper
-  assumes 6 for all).
+- Which models have dedicated macro / profile keys — a physical fact the
+  modules don't state; ASUS's manuals or the hardware tell. The number of
+  profiles needs no table: the keyboard reports it (`12 00` byte 9), and
+  Gear Link retries the read until it is non-zero.
 - The low-battery command: Gear Link `51 3A` (readable) vs G-Helper `51 37`.
 - The macro record frame per model (`53` vs `54`).
 - Whether the ZywOo Edition (`1D1D`) and G-Helper-only families answer the
