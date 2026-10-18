@@ -2936,9 +2936,13 @@ fn profile_bar(
                             .color(dc.muted),
                     );
                 }
-                for profile in &control.profiles {
+                for (index, profile) in control.profiles.iter().enumerate() {
                     let is_active = active.map(|a| &a.id) == Some(&profile.id);
-                    let resp = ui_kit::chip(ui, dc, &profile.name, is_active);
+                    let mut resp = ui_kit::chip(ui, dc, &profile.name, is_active);
+                    // Its hotkey (#456), for binding a macro key to it.
+                    if let Some(chord) = crate::hotkey::profile_chord(index) {
+                        resp = resp.on_hover_text(format!("{chord} switches to {}", profile.name));
+                    }
                     if resp.clicked() && !is_active {
                         let _ = cmd_tx.try_send(ControlCmd::ApplyProfile(profile.id.clone()));
                     }

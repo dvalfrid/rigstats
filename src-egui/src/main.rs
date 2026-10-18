@@ -46,7 +46,8 @@ struct RigStatsApp {
     tray_rx: mpsc::Receiver<TrayCmd>,
     /// Fires on the fixed global hotkeys (see `hotkey.rs`): Ctrl+Alt+O to
     /// show/hide the overlay (same as the tray's "Toggle Overlay Mode" row),
-    /// Ctrl+Alt+P to cycle the Control Center profile, Ctrl+Alt+M to mute
+    /// Ctrl+Alt+P to cycle the Control Center profile, Ctrl+Alt+F1…F9 to
+    /// switch straight to one (#456), Ctrl+Alt+M to mute
     /// or unmute the microphone (#425).
     hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
     /// The microphone's mute as the last telemetry tick saw it (#425,
@@ -532,6 +533,24 @@ impl RigStatsApp {
         });
     }
 
+    /// Ctrl+Alt+F1…F9: the profile at that position in the profile bar
+    /// (#456), with the same toast as cycling; nothing when there is no such
+    /// profile or it is already active.
+    fn switch_to_profile(&mut self, index: usize) {
+        let control = &self.runtime.control;
+        let Some(profile) = control.profiles.get(index) else {
+            return;
+        };
+        if control.active_profile.as_deref() == Some(profile.id.as_str()) {
+            return;
+        }
+        let (id, name) = (profile.id.clone(), profile.name.clone());
+        self.apply_profile(id);
+        std::thread::spawn(move || {
+            let _ = rigstats_egui::notify::send("Profile", &name);
+        });
+    }
+
     /// Re-reads the microphone's mute from Windows (#425) and moves the tray
     /// row along — a change made in Windows, in a call app or with the
     /// headset's own button (where Windows sees it) shows within a tick.
@@ -777,6 +796,7 @@ impl eframe::App for RigStatsApp {
                 hotkey::HotkeyEvent::ToggleOverlay => self.toggle_overlay_mode(),
                 hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
                 hotkey::HotkeyEvent::ToggleMicMute => self.toggle_microphone(),
+                hotkey::HotkeyEvent::SwitchProfile(index) => self.switch_to_profile(index),
             }
         }
         // The header panel's microphone glyph was clicked last frame (#425;
