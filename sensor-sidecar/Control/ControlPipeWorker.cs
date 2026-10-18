@@ -28,7 +28,10 @@ public sealed class ControlPipeWorker(
     Mice.MouseProvider mice,
     // Only overridden by tests, which must not collide with an installed
     // service's pipe (same seam as SensorWorker).
-    string pipeName = "rigstats-control") : GuardedBackgroundService
+    string pipeName = "rigstats-control",
+    // A profile switched because of the keyboard (#459) reaches the app as
+    // `profile_changed`.
+    Keyboards.KeyboardFollower? keyboardFollower = null) : GuardedBackgroundService
 {
     /// The service's own version — the same as the app's (sensor-sidecar.csproj
     /// `<Version>`, bumped by release-please).
@@ -270,8 +273,16 @@ public sealed class ControlPipeWorker(
                     connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "preview_reverted", Data = new { id } });
             }
 
+            void OnProfileSwitched(string id)
+            {
+                if (connection.Subscribed)
+                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "profile_changed", Data = new { id } });
+            }
+
             fanLoop.EventRaised += OnFanEvent;
             broker.PreviewReverted += OnPreviewReverted;
+            if (keyboardFollower is not null)
+                keyboardFollower.ProfileSwitched += OnProfileSwitched;
             var pump = PumpEventsAsync(connection, ct);
             try
             {
@@ -288,6 +299,8 @@ public sealed class ControlPipeWorker(
                 // Stop the pump before the writer it uses is disposed.
                 fanLoop.EventRaised -= OnFanEvent;
                 broker.PreviewReverted -= OnPreviewReverted;
+                if (keyboardFollower is not null)
+                    keyboardFollower.ProfileSwitched -= OnProfileSwitched;
                 connectionCts.Cancel();
                 await pump;
             }

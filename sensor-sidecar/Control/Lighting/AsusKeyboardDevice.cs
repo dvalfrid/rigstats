@@ -59,6 +59,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     /// LampArray collection (the Falchion Ace HFX does); that one is left
     /// out of discovery, so two paths don't fight over the same keys.
     public ushort? DirectProductId => _model.Receiver ? null : _info.ProductId;
+
+    /// The channel's product id — the keyboard's own, or the receiver's.
+    public ushort ProductId => _info.ProductId;
     public string Firmware => "";
     public string? Blocked => null;
     public IReadOnlyList<AuraZone> Zones { get; } = [new AuraZone("keys", "Keys", Addressable: true, 0, 1)];

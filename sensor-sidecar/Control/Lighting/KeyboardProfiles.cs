@@ -10,6 +10,10 @@ public interface IKeyboardProfileDevice
     string Id { get; }
     string Name { get; }
 
+    /// The USB product id of the channel it is reached through (the ROG Omni
+    /// receiver's behind it) — where its own events arrive too (#459).
+    ushort ProductId { get; }
+
     /// Its onboard profiles as discovery read them (no device I/O); null when
     /// that reply didn't carry them.
     KeyboardProfiles? FoundProfiles { get; }
@@ -34,6 +38,23 @@ public static class KeyboardProfileCommands
         && r[9] is >= 1 and <= 16 && r[11] >= 1 && r[11] <= r[9]
             ? new KeyboardProfiles(r[9], r[11])
             : null;
+
+    /// The profile a keyboard reports it switched to by itself (Fn + 1…6,
+    /// #459): `[report id, 70, 00, 00, <bit>]`, profile n = bit n (Fn + 1 →
+    /// `02`, Fn + 2 → `04`, Fn + 3 → `08` on the Azoth X through the Omni
+    /// receiver, 2026-10-18; G-Helper reads `1 << n`, Gear Link `PROFILE_n`).
+    /// Anything else on the same collection — the key-state reports `71` —
+    /// is null and never looked at further. A switch from the host raises no
+    /// such event (Gear Link's and RIGStats', verified).
+    public static int? ProfileFromEvent(byte[]? report, int length)
+    {
+        if (report is null || length < 5 || report[1] != 0x70 || report[2] != 0 || report[3] != 0)
+            return null;
+        var bit = report[4];
+        if (bit < 2 || (bit & (bit - 1)) != 0)
+            return null;
+        return System.Numerics.BitOperations.Log2(bit);
+    }
 
     /// `51 00 00 00 <p>` switches the onboard profile; the keyboard echoes the
     /// frame (Gear Link's switch to 2 and 1 on the Azoth X through the Omni
