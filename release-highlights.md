@@ -22,3 +22,4 @@ comment is ignored. See "Release routine" in docs/release.md.
 - **Rebind your mouse buttons** — on a drawing of the mouse on the Mouse page, per mouse profile, so you see which button is which: any button can become left, right or middle click, double click, back, forward, scroll up or down, be disabled, or go back to its default.
 - **No low-battery alert while a laptop is charging** — the "Battery charge below…" alert now waits until the laptop is actually discharging, like the wireless devices' alerts already did.
 - **Help confirm your mouse or headset** — a diagnostics ZIP (Status → Collect diagnostics) now shows what your ROG mouse or headset answered and how RIGStats read it, so a model marked "not yet verified" can be confirmed from your report.
+- **The whole profile at a glance** — the Control Center's Overview is more compact and fits on one screen, now with a tile for the mouse profile each profile uses; the sidebar fits without scrolling.
