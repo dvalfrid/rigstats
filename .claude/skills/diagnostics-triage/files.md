@@ -10,6 +10,9 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | What sits behind an ASUS receiver? | `lighting-devices.json` → `asus_probes` | `paired_reply` (`01 a0 00 <count> 00` + 4 bytes per device: pid lo, pid hi, report id, type), `paired[]` with `device_info` (version reply) |
 | What names/ids did the app get? | `lighting-devices.json` → `devices`; `control-capabilities.json` | `id`, `name`, `blocked`, `problem` |
 | Is another program in the way? | `lighting-devices.json` → `conflict`, `windows_dynamic_lighting_on` | Armoury Crate, OpenRGB, Dynamic Lighting |
+| Was a ROG mouse found, and what does it answer? | `sidecar-log.txt`; `lighting-devices.json` | `Mouse: <model> 0x<pid> (<link>)` at discovery; `Mouse: … read <settings> from 120000:<hex> 120400:<hex> …` — the raw replies and what they were read as (#438), to check an unverified model against `MouseProtocol.Parse`; `didn't answer <question> … asking again`; `settings not read`. Not found: `hid_scan` → its collection `known_as: asus_mouse_settings` (found) or `null` (not in `MouseCatalog`, or another interface / report id); on the Omni receiver `asus_probes` → `paired` |
+| Headset settings (sidetone, noise reduction) | `sidecar-log.txt` | `Headset: <name> 0x<pid> read HeadsetSettings { … } from <hex> <hex> <hex>` (replies to `12 24`, `12 19`, `41 20`); `settings not read`; after a change `Headset: … sidetone on 16, noise reduction …` |
+| Which onboard mouse profile a profile uses | `profiles.json` → `mouse.profile`; `sidecar-log.txt` | `Mouse: <model> on onboard profile <n>.` |
 | Fans / CPU / GPU limits | `sidecar-log.txt`, `control-capabilities.json`, `profiles.json` | verify failures, `drives` mapping, PM table version (unsupported = not verified), safety overrides |
 | Missing or wrong sensor values | `sensor-tree.txt`, `hardware.json` | the raw LHM tree → `/sensor-fixture` |
 | GPU Apps panel | `gpu-engine.txt` | → `/gpu-engine-fixture` |

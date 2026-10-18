@@ -1409,7 +1409,9 @@ back as written; sidetone is heard **only while a program uses the
 microphone** (a call, a recording, the Settings level meter) — with nothing
 recording it is silent, which is the headset's behaviour, not a failed
 write. Noise reduction filters what the microphone sends, not what plays
-in the headset.
+in the headset. Each read whose replies differ from the last is logged
+with the three raw replies (#438): `Headset: <name> 0x<pid> read
+HeadsetSettings { … } from <12 24> <12 19> <41 20>`.
 
 **Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
 config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04
@@ -1504,6 +1506,16 @@ the `mouse` profile domain (`Control/Mice/`):
   `DpiButtonPlace` — known only where seen on the hardware or in an ASUS
   manual (the Harpe Ace Aim Lab Edition: underside, owner 2026-10-18); web
   pages rarely say it in words.
+- **Diagnostics (#438).** Each read whose replies differ from the last is
+  logged with the raw replies, zero padding left out (`Hid.ReplyHex`):
+  `Mouse: <model> 0x<pid> (<link>) read <settings> from 120000:<hex> 120400:<hex> …`
+  — so a user's log shows what an unverified model answered and what
+  RIGStats made of it, without new commands. In `lighting-devices.json`
+  → `hid_scan`, a mouse's own settings collection is
+  `known_as: "asus_mouse_settings"` (`MouseProvider.IsChannel`, the same
+  test discovery uses); a ROG mouse there with `null` isn't in the
+  catalog, or answers on another interface or report id. Mice on the Omni
+  receiver show under `asus_probes` instead.
 
 **Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen

@@ -256,8 +256,7 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
         {
             foreach (var entry in MouseCatalog.Entries.Where(e => e.ProductId == group.Key && e.Link != MouseLink.Omni))
             {
-                var channel = group.FirstOrDefault(h => h.Interface == Interface(entry.Endpoint) && h.UsagePage >= 0xFF00
-                    && h.OutputReportLength > 0 && (h.OutputReportId ?? 0) == entry.ReportId);
+                var channel = group.FirstOrDefault(h => IsChannel(h, entry));
                 if (channel is null)
                     continue;
                 found.Add(Open(channel, entry, $"asus-mouse-{entry.ProductId:x4}-{entry.Link.ToString().ToLowerInvariant()}"));
@@ -276,6 +275,13 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
         }
         return found;
     }
+
+    /// `h` is the settings collection of a mouse on its own cable or dongle:
+    /// the catalog's interface and report id, on a vendor page.
+    public static bool IsChannel(HidDeviceInfo h, MouseEntry entry) =>
+        h.VendorId == AuraUsb.AsusVendorId && h.ProductId == entry.ProductId && entry.Link != MouseLink.Omni
+        && h.Interface == Interface(entry.Endpoint) && h.UsagePage >= 0xFF00
+        && h.OutputReportLength > 0 && (h.OutputReportId ?? 0) == entry.ReportId;
 
     private static AsusMouseDevice Open(HidDeviceInfo channel, MouseEntry entry, string id) => new(channel, entry, id);
 
