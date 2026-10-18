@@ -63,7 +63,7 @@ Falchion (`193C`).
 |---|---|---|---|---|
 | **Onboard profile** | `changeProfile`: `81,0,0,[p]` = `51 00 00 00 <p>` | `51 00 00 00 <p>` (0–5) | `12 00`: byte 11 current profile, byte 10 current effect (both sources), **byte 9 number of profiles** (Gear Link `getKeyboardDeviceInfo`; G-Helper assumes 6) | **yes** |
 | Save to the current profile | `saveCurrentProfile`: `80,85` = `50 55` | `50 55` (after lighting) | — | **yes** |
-| Profile changed on the keyboard (event) | report `0x70`, first non-zero byte at position 2 = bit per profile (`0x0201` → profile 0 … `0x0240` → 6, `0x0101` = hardware reset); also `03 81 06 00 <p>` | report `0x70`, byte 4 = `1 << n` | — (it is the event) | **yes** — see "Macro keys" |
+| Profile changed on the keyboard (event) | `70 00 00 <bit>` after the report id: byte 4 = bit per profile (`PROFILE_n` = bit n; `0x0101` = hardware reset); also `03 81 06 00 <p>` | `70`, byte 4 = `1 << n` | — (it is the event) | **yes — verified on the Azoth X**, profile n = bit n (below) |
 | Idle / sleep timeout | `setIdleTime`: `81,56` = `51 38 00 00 <code>` (0 = 1 min, 1 = 2, 2 = 3, 3 = 5, 4 = 10, 255 = never) | `51 38 00 00 <code>` | `12 01` byte 7 | **yes** |
 | Power saving | `setSavingMode`: `81,57` = `51 39 00 00 <0 off / 1 turn off / 2 dim>` | — | `12 01` byte 8 | Gear Link only |
 | Low-battery level | `setLowPowerLevel`: `81,58` = `51 3A 00 00 <n>` | `51 37 00 00 <%>` "low-battery alert" | `12 01` byte 10 (Gear Link) | **no** — different commands; G-Helper says it can't be read, Gear Link reads it at byte 10 |
@@ -125,10 +125,8 @@ Three ways, from no device writes to some:
    onboard profile is switched on the keyboard (Fn + a profile key on
    models that have one), it sends `70` / `03 81 06 00` by itself. RIGStats
    could listen and switch the Control Center profile mapped to it —
-   nothing sent to the keyboard. Both sources decode it the same way. To
-   check on hardware: which key combination switches the Azoth X's
-   profile, and that the event arrives (on the cable and through the Omni
-   receiver).
+   nothing sent to the keyboard. Both sources decode it the same way, and it
+   is **verified on the Azoth X** (Fn + 1…6 through the Omni receiver, below).
 2. **RIGStats hotkeys, the key bound by the user.** A global hotkey per
    Control Center profile (today only Ctrl+Alt+P cycles them), and the
    user assigns a macro key in Gear Link or Armoury Crate to that
@@ -140,6 +138,37 @@ Three ways, from no device writes to some:
    macro frame where the two sources differ (`53` vs `54`) — the riskiest
    of the three. F13–F24 (G-Helper's route for mice) isn't available on
    keyboards: no such key code.
+
+## Verified on the ROG Azoth X (2026-10-18, #457)
+
+Through the ROG Omni receiver (`1ACE`), with `tools/keyboard-listen-guided.ps1`
+(guided by the owner; only `12 00` and `12 01` sent, everything else
+listened to):
+
+- **The keyboard reports its profile switch.** Fn + 1 / 2 / 3 (number row)
+  switched the onboard profile — the keyboard changed colour and its OLED
+  showed the profile — and each sent `04 70 00 00 <bit>` on `mi_03&col04`
+  (usage page `0xFFC0`, report `0x04`, input only): Fn + 1 → `02`,
+  Fn + 2 → `04`, Fn + 3 → `08`. Profile *n* (1–6) is bit *n* of byte 4 —
+  G-Helper's `1 << n`, Gear Link's `PROFILE_n`. `03 81 06 00` was not seen.
+- **`12 00`** (on `mi_02&col02`, report `0x02`): `02 12 00 00 00 08 00 07 00 06
+  00 01 24 00 01` — byte 9 = 6 profiles, byte 10 = effect 0, byte 11 =
+  profile 1 (after Fn + 1, at the start and at the end).
+- **`12 01`**: `02 12 01 00 00 00 43 02 01 00 14 43 6F 0F` — byte 6 battery
+  67 %, 7 idle 2 (= 3 min), 8 power saving 1 (turn off), 9 not charging,
+  10 low-power level 0x14 = 20; bytes 12–13 look like the battery voltage
+  (`0F6F` = 3951, moving between reads) — not documented, not used.
+- **Report `71` on the same collection is a key-state bitmap**: every key
+  press, Fn included (Gear Link's `onCommonKeys`). It would let Fn
+  combinations be caught without writing anything — but reading it means
+  seeing every keystroke, so it is not proposed for RIGStats.
+- Also seen: `04 81 02 01 43` at start (an unnamed status, 0x43 = the
+  battery %), and on the mouse's channel (`mi_02&col03`) a `03 FF AA` error
+  reply about once a minute after a `12 00` — from the service, to be looked
+  at separately.
+
+Not checked yet: the keyboard by cable (`1C24`), and whether a profile
+switch sent by the host (`51 00`) raises the same event.
 
 ## Open questions
 
