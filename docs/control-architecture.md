@@ -1452,6 +1452,27 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
   loop on RIGStats' own switch.
 - A keyboard that doesn't answer skips the domain
   (`DomainUnavailableException`); the rest of the profile applies.
+- **Energy settings (#460):** the Keyboard page's Energy group — sleep after
+  (idle code 0–4 = 1/2/3/5/10 min, 255 never), power saving when the
+  battery is low (0 off, 1 lighting off, 2 lighting dimmed) and the
+  low-battery level (0–100 %) where the lighting alert and power saving
+  start — kept in the keyboard for every profile, sent at once
+  (`keyboard_settings` / `keyboard_set`, `KeyboardSettingsCommands`). Read
+  from `12 01` (bytes 7, 8, 10 — the battery question, so no new read),
+  written `51 38` / `51 39` / `51 3A 00 00 <value>` only for what differs,
+  each echoed (sent once more without an echo, as the profile switch) and
+  read back. Only on keyboards with a battery. `51 37` is never sent: in
+  Gear Link it is the mouse's power frame (#461). Polling rate and the Fn
+  mode are left out: Gear Link's polling is a mode (normal / zone / per-key,
+  the booster's 8 kHz) that turns lighting off, and its Fn-mode meaning
+  wasn't found in the UI strings — neither is offered until understood.
+  **Verified 2026-10-18 on the Azoth X (Omni):** the page read 3 min /
+  lighting off / 20 % (what `12 01` gave live in #457); sleep → 5 min
+  (`51 38 00 00 03`), power saving → dimmed (`51 39 00 00 02`), level → 25 %
+  (`51 3A 00 00 19`) and each back again, every write echoed at the first
+  send and read back as written. At the service's start the keyboard was
+  asleep and the profile's keyboard part was skipped
+  (`DomainUnavailableException`) — the rest of the profile applied.
 - **Following the keyboard (#459):** `Keyboards/KeyboardFollower` (a
   `GuardedBackgroundService`) listens on the keyboard's input-only
   collections (its product id's, `mi_00` left out — on the Omni receiver

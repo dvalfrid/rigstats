@@ -21,8 +21,8 @@ use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
     FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HeadsetSettings,
-    HueCaps, KeyboardPart, LampPart, MouseInfo, MousePart, MouseSettings, PowerScheme, Problem,
-    Profile, Severity,
+    HueCaps, KeyboardPart, KeyboardSettings, LampPart, MouseInfo, MousePart, MouseSettings,
+    PowerScheme, Problem, Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -203,6 +203,11 @@ pub struct ControlUi {
     /// The DPI level being changed on a mouse whose level in use only its
     /// DPI button picks (#432).
     mouse_edit_stage: u8,
+    /// The Keyboard page asked for the keyboards' energy settings since it
+    /// was opened (#460).
+    keyboards_asked: bool,
+    /// A keyboard's settings as just changed here, until its read-back arrives.
+    keyboard_pending: Option<(String, KeyboardSettings)>,
 }
 
 #[derive(Debug)]
@@ -1503,6 +1508,113 @@ fn keyboard_page(
         });
         ui_state.saved_at = Some((Instant::now(), "Saved"));
     }
+
+    // ── Energy, kept in the keyboard for every profile (#460) ───────────
+    if !ui_state.keyboards_asked {
+        ui_state.keyboards_asked = true;
+        ui_state.keyboard_pending = None;
+        let _ = cmd_tx.try_send(ControlCmd::ReadKeyboards);
+    }
+    if let Some((id, pending)) = &ui_state.keyboard_pending {
+        let landed = control
+            .keyboard_settings
+            .iter()
+            .any(|k| &k.id == id && k.settings.as_ref() == Some(pending));
+        if landed || !control.keyboard_busy {
+            ui_state.keyboard_pending = None;
+        }
+    }
+    let mut send: Option<(String, KeyboardSettings)> = None;
+    for keyboard in &control.keyboard_settings {
+        let heading = if keyboards.len() > 1 {
+            format!("Energy — {}", keyboard.name)
+        } else {
+            "Energy".to_owned()
+        };
+        let footnote = if keyboard.verified {
+            "Kept in the keyboard, for every profile. Changes are sent at once."
+        } else {
+            "Kept in the keyboard, for every profile. Changes are sent at once — not yet verified on this model."
+        };
+        let Some(read) = keyboard.settings else {
+            ui_kit::group(ui, dc, Some(&heading), None, |g| {
+                g.row(
+                    "The keyboard doesn't answer",
+                    Some("Press a key to wake it, then try again"),
+                    |ui| {
+                        if !control.keyboard_busy
+                            && theme::dialog_btn_secondary(ui, "Try again", dc).clicked()
+                        {
+                            let _ = cmd_tx.try_send(ControlCmd::ReadKeyboards);
+                        }
+                    },
+                );
+            });
+            continue;
+        };
+        let mut s = match &ui_state.keyboard_pending {
+            Some((id, pending)) if id == &keyboard.id => *pending,
+            _ => read,
+        };
+        let before = s;
+        let mut release = false;
+        ui_kit::group(ui, dc, Some(&heading), Some(footnote), |g| {
+            g.row("Sleep after", Some("Without a key press"), |ui| {
+                let label = MOUSE_POWER_OFF
+                    .iter()
+                    .find(|(code, _)| *code == s.idle_code)
+                    .map_or("—", |(_, words)| words);
+                ui_kit::dropdown(ui, "keyboard_idle", label, |ui| {
+                    for (code, words) in MOUSE_POWER_OFF {
+                        ui.selectable_value(&mut s.idle_code, code, words);
+                    }
+                });
+            });
+            g.row(
+                "Power saving when the battery is low",
+                Some("What the lighting does below the level"),
+                |ui| {
+                    let label = match s.power_saving {
+                        1 => "Lighting off",
+                        2 => "Lighting dimmed",
+                        _ => "Off",
+                    };
+                    ui_kit::dropdown(ui, "keyboard_saving", label, |ui| {
+                        ui.selectable_value(&mut s.power_saving, 0, "Off");
+                        ui.selectable_value(&mut s.power_saving, 1, "Lighting off");
+                        ui.selectable_value(&mut s.power_saving, 2, "Lighting dimmed");
+                    });
+                },
+            );
+            g.row(
+                "Low-battery level",
+                Some("Where the lighting alert and power saving start"),
+                |ui| {
+                    let mut v = i32::from(s.low_battery_level);
+                    let resp = ui_kit::slider_range(ui, dc, &mut v, 0..=100, 5, "%");
+                    s.low_battery_level = v as u8;
+                    release |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                },
+            );
+        });
+        if s != before {
+            let dragging = s.low_battery_level != before.low_battery_level && !release;
+            ui_state.keyboard_pending = Some((keyboard.id.clone(), s));
+            if !dragging {
+                send = Some((keyboard.id.clone(), s));
+            }
+        } else if release {
+            send = Some((keyboard.id.clone(), s));
+        }
+    }
+    if let Some((id, settings)) = send {
+        if cmd_tx
+            .try_send(ControlCmd::SetKeyboard { id, settings })
+            .is_ok()
+        {
+            ui_state.saved_at = Some((Instant::now(), "Sent to the keyboard"));
+        }
+    }
 }
 
 /// One mouse on the Mouse page.
@@ -2373,6 +2485,9 @@ pub fn show(
     }
     if ui_state.tab != Page::Headset {
         ui_state.headsets_asked = false;
+    }
+    if ui_state.tab != Page::Keyboard {
+        ui_state.keyboards_asked = false;
     }
     match ui_state.tab {
         Page::Fans if fan_caps.is_none() && fan_problem.is_none() => ui_state.tab = Page::Overview,

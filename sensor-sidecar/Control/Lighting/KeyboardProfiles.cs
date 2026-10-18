@@ -23,6 +23,78 @@ public interface IKeyboardProfileDevice
 
     /// Switches to onboard profile `profile` (1-based) and confirms it.
     void SwitchProfile(int profile);
+
+    /// Whether it has a battery — the energy settings (#460) exist only then.
+    bool HasBattery { get; }
+
+    /// The energy settings seen working on this model.
+    bool SettingsVerified { get; }
+
+    /// Its energy settings now, or null when it has none or doesn't answer.
+    KeyboardSettings? ReadSettings();
+
+    /// Writes what differs from the keyboard's current settings, reads them
+    /// back and returns them; throws when the keyboard didn't take them.
+    KeyboardSettings WriteSettings(KeyboardSettings wanted);
+}
+
+/// A wireless keyboard's own energy settings (#460), kept in the keyboard
+/// for every profile: when it sleeps without a key press (`IdleCode`: 0 →
+/// 1 min, 1 → 2, 2 → 3, 3 → 5, 4 → 10, 255 → never), what power saving does
+/// once the battery is low (`PowerSaving`: 0 off, 1 lighting off, 2 lighting
+/// dimmed) and the battery percentage where that and the lighting alert
+/// start (`LowBatteryLevel`, 0–100).
+public sealed record KeyboardSettings(int IdleCode, int PowerSaving, int LowBatteryLevel);
+
+/// The energy frames of ASUS keyboards, from Gear Link's `[鍵盤電源]` class
+/// (`setIdleTime` / `setSavingMode` / `setLowPowerLevel`, read back by its
+/// `fetchPowerInfo`); G-Helper agrees on the idle time (#461,
+/// docs/keyboard-research.md). Pure, so they are unit-tested.
+public static class KeyboardSettingsCommands
+{
+    public static readonly int[] IdleCodes = [0, 1, 2, 3, 4, 255];
+    public const int PowerSavingMax = 2;
+
+    /// `12 01` reply (report id at 0): byte 7 idle code, 8 power saving,
+    /// 10 low-battery level — bytes 6 and 9 are the battery, read elsewhere.
+    /// Read live on the ROG Azoth X (2026-10-18): 3 min, lighting off, 20 %.
+    public static KeyboardSettings? Parse(byte[]? reply, byte reportId) =>
+        reply is { Length: >= 11 } r && r[0] == reportId && r[1] == 0x12 && r[2] == 0x01
+        && IdleCodes.Contains(r[7]) && r[8] <= PowerSavingMax && r[10] <= 100
+            ? new KeyboardSettings(r[7], r[8], r[10])
+            : null;
+
+    /// `wanted` kept inside the keyboard's own ranges.
+    public static KeyboardSettings Clamp(KeyboardSettings wanted) => new(
+        IdleCodes.Contains(wanted.IdleCode) ? wanted.IdleCode : 255,
+        Math.Clamp(wanted.PowerSaving, 0, PowerSavingMax),
+        Math.Clamp(wanted.LowBatteryLevel, 0, 100));
+
+    /// The writes that take the keyboard from `now` to `wanted` (already
+    /// clamped), as `[report id, 51, key, 00, 00, value]` — only for what
+    /// differs: `51 38` idle time, `51 39` power saving, `51 3A` low-battery
+    /// level. Never `51 37`: in Gear Link that is the mouse's power frame.
+    public static IReadOnlyList<byte[]> Writes(byte reportId, int length, KeyboardSettings now, KeyboardSettings wanted)
+    {
+        var writes = new List<byte[]>();
+        if (now.IdleCode != wanted.IdleCode)
+            writes.Add(Frame(reportId, length, 0x38, (byte)wanted.IdleCode));
+        if (now.PowerSaving != wanted.PowerSaving)
+            writes.Add(Frame(reportId, length, 0x39, (byte)wanted.PowerSaving));
+        if (now.LowBatteryLevel != wanted.LowBatteryLevel)
+            writes.Add(Frame(reportId, length, 0x3A, (byte)wanted.LowBatteryLevel));
+        return writes;
+    }
+
+    private static byte[] Frame(byte reportId, int length, byte key, byte value)
+    {
+        var report = new byte[Math.Max(length, 6)];
+        report[0] = reportId;
+        report[1] = 0x51;
+        report[2] = key;
+        report[5] = value;
+        return report;
+    }
 }
 
 /// The onboard-profile frames of ASUS keyboards — Gear Link's
@@ -60,7 +132,8 @@ public static class KeyboardProfileCommands
     /// frame (Gear Link's switch to 2 and 1 on the Azoth X through the Omni
     /// receiver: `02 51 00 00 00 02`, then `12 00` byte 11 = 2, 2026-10-18). G-Helper sends its
     /// own index 0–5, where the keyboard's last profile (6) is 0 — so
-    /// profile n goes out as n mod count. To be confirmed on hardware.
+    /// profile n goes out as n mod count (profiles 1 and 2 confirmed live on
+    /// the Azoth X, #458).
     public static byte[] Switch(byte reportId, int length, int profile, int count)
     {
         var report = new byte[Math.Max(length, 6)];

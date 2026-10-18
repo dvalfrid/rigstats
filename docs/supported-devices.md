@@ -77,7 +77,7 @@ Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C
 
 ## Device settings
 
-The Control Center's **Headset** and **Mouse** pages change these devices' own settings, kept in the device. Mice: DPI levels, polling rate, button response, lift-off, angle snapping and tuning, acceleration, button bindings and energy — as far as the model has them — and which onboard profile each Control Center profile uses. **From G-Helper, not yet verified**: the model and its settings as G-Helper documents them, read as documentation; the commands are the ones checked on the verified mouse and against ASUS Gear Link.
+The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these devices' own settings, kept in the device. Mice: DPI levels, polling rate, button response, lift-off, angle snapping and tuning, acceleration, button bindings and energy — as far as the model has them — and which onboard profile each Control Center profile uses. Keyboards: which onboard profile each Control Center profile uses (Fn + that number on the keyboard switches the profile back), and on wireless models when the keyboard sleeps, what its lighting does when the battery is low and at which level. **From G-Helper, not yet verified**: the model and its settings as G-Helper documents them, read as documentation; the commands are the ones checked on the verified mouse and against ASUS Gear Link.
 
 | Device | Type | USB id | Status | Notes |
 |---|---|---|---|---|
@@ -85,6 +85,46 @@ The Control Center's **Headset** and **Mouse** pages change these devices' own s
 | ROG Delta II (KJP) | Headset | 1D41 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle |
 | ROG Delta II (PBZ) | Headset | 1E6B | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle |
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off, through its 2.4 GHz dongle |
+| ROG Azoth X | Keyboard | 1C24, 1C25 | Verified on hardware | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ASUS TX75 Core Gaming Keyboard | Keyboard | 1DF3, 1DF4 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth | Keyboard | 1A83 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth 96 HE / Lite | Keyboard | 1C10, 1C11, 1C12 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth Extreme | Keyboard | 1B3F, 1B40, 1B42 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth Extreme Edition 20 | Keyboard | 1DA2, 1DA3, 1DA4 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Azoth Extreme Special Edition | Keyboard | 1CEF, 1CF0, 1CF1 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Falcata | Keyboard | 1C2F, 1C31 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Falchion | Keyboard | 193C | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Falchion (wireless) | Keyboard | 193E | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Falchion Ace 75 HE | Keyboard | 1C7D | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Falchion Ace HFX | Keyboard | 1B7E, 1B7F | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Falchion Ace HFX ZywOo Edition | Keyboard | 1D1D | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Flare | Keyboard | 1875 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Flare CoD Black Ops 4 Edition | Keyboard | 18AF | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Flare II | Keyboard | 19FE | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Flare II Animate | Keyboard | 19FC | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Flare PNK LTD | Keyboard | 18CF | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Morph 96 Wireless | Keyboard | 1CE8, 1CE9, 1CEA | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Strix Morph 96 Wireless (PBZ) | Keyboard | 1E5B, 1E5C, 1E5D | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Strix Morph 96 X Wireless | Keyboard | 1E0A, 1E0B, 1E0C | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Strix Scope | Keyboard | 18F8 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope II | Keyboard | 1AB3 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope II 96 RX Wireless | Keyboard | 1B78 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope II 96 Wireless | Keyboard | 1AAE, 1AAF, 1AB0 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Strix Scope II RX | Keyboard | 1AB5, 1AB6 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope NX Wireless Deluxe | Keyboard | 19F6 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope NX Wireless Deluxe (2.4 GHz) | Keyboard | 19F8 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope RX | Keyboard | 1951 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| ROG Strix Scope RX EVA-02 Edition | Keyboard | 1B12 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K1 | Keyboard | 1945 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K3 | Keyboard | 194B | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K3 Gen II | Keyboard | 1B30 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K3 Gen II Miku Edition | Keyboard | 1C5E | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K4 Magnetic | Keyboard | 1DF5, 1DF6 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K5 | Keyboard | 1899 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
+| TUF Gaming K7 | Keyboard | 18AA | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A92, 1A94 | Verified on hardware (ROG Omni receiver) | Cable, own 2.4 GHz dongle, ROG Omni receiver |
 | ASUS SmartO Mouse MD200 Silent Plus | Mouse | 1A24 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
 | ASUS TUF Gaming M3 Gen II | Mouse | 1A9B | From G-Helper, not yet verified | Cable |

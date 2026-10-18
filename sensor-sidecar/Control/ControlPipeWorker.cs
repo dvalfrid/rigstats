@@ -372,6 +372,8 @@ public sealed class ControlPipeWorker(
                 "aura_enable_wdl" => HandleAuraEnableWdl(request),
                 "headset_settings" => ControlResponse.Ok(request.Id, new { headsets = lighting.Headsets() }),
                 "headset_set" => HandleHeadsetSet(request),
+                "keyboard_settings" => ControlResponse.Ok(request.Id, new { keyboards = lighting.KeyboardSettingsList() }),
+                "keyboard_set" => HandleKeyboardSet(request),
                 "mouse_settings" => ControlResponse.Ok(request.Id, new { mice = mice.List() }),
                 "mouse_set" => HandleMouseSet(request),
                 "hue_discover" => await HandleHueDiscoverAsync(request, ct),
@@ -632,6 +634,15 @@ public sealed class ControlPipeWorker(
             ? ObjectParam<Lighting.HeadsetSettings>(value, "settings")
             : throw new BadRequestException("'settings' must be an object.");
         return ControlResponse.Ok(request.Id, new { headset = lighting.SetHeadset(id, settings) });
+    }
+
+    private ControlResponse HandleKeyboardSet(ControlRequest request)
+    {
+        var id = StringParam(request, "id");
+        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
+            ? ObjectParam<Lighting.KeyboardSettings>(value, "settings")
+            : throw new BadRequestException("'settings' must be an object.");
+        return ControlResponse.Ok(request.Id, new { keyboard = lighting.SetKeyboard(id, settings) });
     }
 
     private ControlResponse HandleAuraEnableWdl(ControlRequest request)

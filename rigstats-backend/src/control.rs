@@ -382,6 +382,29 @@ pub struct HeadsetSettings {
     pub noise_reduction_level: u8,
 }
 
+/// A wireless keyboard's own energy settings (#460), kept in the keyboard
+/// for every profile (`keyboard_settings` / `keyboard_set`): `idle_code`
+/// 0 → 1 min, 1 → 2, 2 → 3, 3 → 5, 4 → 10, 255 → never; `power_saving`
+/// 0 off, 1 lighting off, 2 lighting dimmed; `low_battery_level` 0–100 %.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyboardSettings {
+    pub idle_code: u8,
+    pub power_saving: u8,
+    pub low_battery_level: u8,
+}
+
+/// A connected keyboard with energy settings (`keyboard_settings`).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+pub struct KeyboardSettingsInfo {
+    pub id: String,
+    pub name: String,
+    /// Settings seen working on this model.
+    #[serde(default)]
+    pub verified: bool,
+    /// `None` while the keyboard doesn't answer (asleep behind its receiver).
+    pub settings: Option<KeyboardSettings>,
+}
+
 /// A connected headset with settings RIGStats knows (`headset_settings`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 pub struct HeadsetInfo {
@@ -765,6 +788,10 @@ pub struct ControlState {
     pub headsets: Vec<HeadsetInfo>,
     /// A headset request is in flight.
     pub headset_busy: bool,
+    /// Keyboards with energy settings (#460), as last read from the service.
+    pub keyboard_settings: Vec<KeyboardSettingsInfo>,
+    /// A keyboard settings request is in flight.
+    pub keyboard_busy: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1045,6 +1072,22 @@ impl ControlState {
                 self.headset_busy = false;
             }
             ControlEvent::HeadsetBusy(busy) => self.headset_busy = busy,
+            ControlEvent::KeyboardSettings(list) => {
+                self.keyboard_settings = list;
+                self.keyboard_busy = false;
+            }
+            ControlEvent::KeyboardUpdated(keyboard) => {
+                match self
+                    .keyboard_settings
+                    .iter_mut()
+                    .find(|k| k.id == keyboard.id)
+                {
+                    Some(known) => *known = keyboard,
+                    None => self.keyboard_settings.push(keyboard),
+                }
+                self.keyboard_busy = false;
+            }
+            ControlEvent::KeyboardBusy(busy) => self.keyboard_busy = busy,
             ControlEvent::Mice(list) => {
                 self.mice = list;
                 self.mouse_busy = false;
@@ -1151,6 +1194,12 @@ pub enum ControlEvent {
     MouseBusy(bool),
     /// A headset request started (`true`) or ended without an answer.
     HeadsetBusy(bool),
+    /// Every keyboard with energy settings, freshly read (#460).
+    KeyboardSettings(Vec<KeyboardSettingsInfo>),
+    /// One keyboard after a change, as it read back.
+    KeyboardUpdated(KeyboardSettingsInfo),
+    /// A keyboard settings request started (`true`) or ended without an answer.
+    KeyboardBusy(bool),
 }
 
 /// Sent from the UI to `control_task` (async-native channel — the task
@@ -1215,6 +1264,13 @@ pub enum ControlCmd {
     SetHeadset {
         id: String,
         settings: HeadsetSettings,
+    },
+    /// Read every keyboard's energy settings (#460) — when the Keyboard page opens.
+    ReadKeyboards,
+    /// Change one keyboard's energy settings; saved in the keyboard.
+    SetKeyboard {
+        id: String,
+        settings: KeyboardSettings,
     },
 }
 
@@ -1790,6 +1846,60 @@ async fn handle_cmd(
             }
             result.map(|_| ())
         }
+        ControlCmd::ReadKeyboards => {
+            let _ = event_tx.send(ControlEvent::KeyboardBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "keyboard_settings",
+                None,
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("keyboards").cloned())
+            {
+                Some(list) => {
+                    let list = serde_json::from_value(list).unwrap_or_default();
+                    let _ = event_tx.send(ControlEvent::KeyboardSettings(list));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::KeyboardBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
+        ControlCmd::SetKeyboard { id, settings } => {
+            let _ = event_tx.send(ControlEvent::KeyboardBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "keyboard_set",
+                Some(serde_json::json!({ "id": id, "settings": settings })),
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("keyboard").cloned())
+                .and_then(|k| serde_json::from_value(k).ok())
+            {
+                Some(keyboard) => {
+                    let _ = event_tx.send(ControlEvent::KeyboardUpdated(keyboard));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::KeyboardBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
         ControlCmd::EnableWdl(id) => {
             request(
                 writer,
@@ -2183,6 +2293,51 @@ mod tests {
             .unwrap()
             .get("keyboard")
             .is_none());
+    }
+
+    /// `keyboard_settings`' answer as `LightingProvider.KeyboardSettingsList`
+    /// writes it, and `keyboard_set`'s settings as `KeyboardSettingsTests`
+    /// read them (#460).
+    #[test]
+    fn keyboard_settings_wire_shapes_match_the_service() {
+        let list: Vec<KeyboardSettingsInfo> = serde_json::from_value(serde_json::json!([
+            {"id": "asus-keyboard-1ace-1", "name": "ROG Azoth X", "verified": false,
+             "settings": {"idle_code": 2, "power_saving": 1, "low_battery_level": 20}},
+            {"id": "asus-keyboard-1c24-1", "name": "ROG Azoth X", "verified": true, "settings": null}
+        ]))
+        .unwrap();
+        assert_eq!(
+            list[0].settings,
+            Some(KeyboardSettings {
+                idle_code: 2,
+                power_saving: 1,
+                low_battery_level: 20
+            })
+        );
+        assert!(list[1].settings.is_none());
+        let sent = serde_json::to_value(KeyboardSettings {
+            idle_code: 255,
+            power_saving: 0,
+            low_battery_level: 25,
+        })
+        .unwrap();
+        assert_eq!(sent["idle_code"], 255);
+        assert_eq!(sent["low_battery_level"], 25);
+
+        let mut state = ControlState::default();
+        state.apply(ControlEvent::KeyboardSettings(list));
+        state.apply(ControlEvent::KeyboardUpdated(KeyboardSettingsInfo {
+            id: "asus-keyboard-1ace-1".into(),
+            name: "ROG Azoth X".into(),
+            verified: false,
+            settings: Some(KeyboardSettings {
+                idle_code: 4,
+                power_saving: 1,
+                low_battery_level: 20,
+            }),
+        }));
+        assert_eq!(state.keyboard_settings[0].settings.unwrap().idle_code, 4);
+        assert!(!state.keyboard_busy);
     }
 
     /// `headset_settings`' answer as `LightingProvider.Headsets` writes it,

@@ -128,6 +128,14 @@ public class KeyboardProfileTests
         public int Current { get; private set; } = 1;
         public bool Asleep { get; init; }
         public KeyboardProfiles? FoundProfiles => new(6, 1);
+        public bool HasBattery => true;
+        public bool SettingsVerified => false;
+        public KeyboardSettings Settings { get; private set; } = new(2, 1, 20);
+
+        public KeyboardSettings? ReadSettings() => Asleep ? null : Settings;
+
+        public KeyboardSettings WriteSettings(KeyboardSettings wanted) =>
+            Asleep ? throw new IOException("ROG Azoth X didn't answer.") : Settings = KeyboardSettingsCommands.Clamp(wanted);
 
         public KeyboardProfiles? ReadProfiles() => Asleep ? null : new KeyboardProfiles(6, Current);
 
