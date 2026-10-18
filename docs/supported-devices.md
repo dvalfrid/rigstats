@@ -75,6 +75,42 @@ RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or
 
 Not supported: RGB on memory modules and graphics cards (reached over SMBus/I²C, where a wrong write can damage the hardware). A device that isn't listed: the diagnostics export's `lighting-devices.json` lists every HID device on the machine, plus read-only replies from ASUS receivers and the mice paired to them — attach it to a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).
 
+## Device settings
+
+The Control Center's **Headset** and **Mouse** pages change these devices' own settings, kept in the device. Mice: DPI levels, polling rate, button response, lift-off, angle snapping and tuning, acceleration, button bindings and energy — as far as the model has them — and which onboard profile each Control Center profile uses. **From G-Helper, not yet verified**: the model and its settings as G-Helper documents them, read as documentation; the commands are the ones checked on the verified mouse and against ASUS Gear Link.
+
+| Device | Type | USB id | Status | Notes |
+|---|---|---|---|---|
+| ROG Delta II | Headset | 1AFA | Verified on hardware | Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle |
+| ROG Delta II (KJP) | Headset | 1D41 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle |
+| ROG Delta II (PBZ) | Headset | 1E6B | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off and Low / Medium / High, through its 2.4 GHz dongle |
+| ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off, through its 2.4 GHz dongle |
+| ROG Harpe Ace Aim Lab Edition | Mouse | 1A92, 1A94 | Verified on hardware (ROG Omni receiver) | Cable, own 2.4 GHz dongle, ROG Omni receiver |
+| ASUS Mouse MD200 | Mouse | 1A24 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
+| Harpe Ace Mini | Mouse | 1B63, 1B65 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG Chakram X | Mouse | 1A18, 1A1A | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout) |
+| ROG Gladius III | Mouse | 197B, 197D, 197F | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| ROG Gladius III Aimpoint | Mouse | 1A70, 1A72 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle, ROG Omni receiver |
+| ROG Gladius III Eva 2 | Mouse | 1B0A, 1B0C | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| ROG Harpe Ace Extreme | Mouse | 1B67, 1B68, 1B69 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG HARPE II ACE | Mouse | 1AD0, 1C69 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| ROG Keris II Ace | Mouse | 1B16, 1B18, 1B1A | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG Keris II Origin | Mouse | 1C0C, 1C0E | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG Keris II Origin KJP | Mouse | 1D4C, 1D4E | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG Keris Wireless Aimpoint | Mouse | 1A66, 1A68, 1A6A | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle, ROG Omni receiver |
+| ROG Spatha X | Mouse | 1977, 1979 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout) |
+| ROG Strix Impact III | Mouse | 1A88 | From G-Helper, not yet verified | Cable |
+| Strix Evolve | Mouse | 185B | From G-Helper, not yet verified | Cable |
+| Strix Impact III Wireless | Mouse | 1AD7 | From G-Helper, not yet verified | ROG Omni receiver |
+| TUF GAMING M3 | Mouse | 1910 | From G-Helper, not yet verified | Cable |
+| TUF GAMING M4 | Mouse | 19F4 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
+| TUF GAMING M4 Air | Mouse | 1A03 | From G-Helper, not yet verified | Cable |
+| TUF GAMING Mini Miku Edition | Mouse | 1C56, 1C57 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| TX GAMING MOUSE | Mouse | 1A8D | From G-Helper, not yet verified | Own 2.4 GHz dongle |
+| TX GAMING MOUSE Mini | Mouse | 1AF3, 1AF5 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+
+Not yet: older ROG mice whose commands differ (Gladius II, Strix Impact, Pugio, Chakram / Core, Keris Wireless, Strix Carry, TUF M5 — [#432](https://github.com/dvalfrid/rigstats/issues/432)). To confirm a model, or if one doesn't work: open its page once, then collect diagnostics — the service log (`rigstats-sensor.log`) has a `Mouse: … read …` or `Headset: … read …` line with what the device answered — and send the ZIP with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).
+
 ## Battery
 
 The PERIPHERALS panel and the tray icon's hover card show the battery of these devices, read every 20 s. **From Solaar, not yet verified**: built from Solaar's implementation of Logitech's protocol, read as documentation.
