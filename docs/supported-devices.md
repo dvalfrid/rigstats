@@ -87,29 +87,50 @@ The Control Center's **Headset** and **Mouse** pages change these devices' own s
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off, through its 2.4 GHz dongle |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A92, 1A94 | Verified on hardware (ROG Omni receiver) | Cable, own 2.4 GHz dongle, ROG Omni receiver |
 | ASUS SmartO Mouse MD200 Silent Plus | Mouse | 1A24 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
+| ASUS TUF Gaming M3 Gen II | Mouse | 1A9B | From G-Helper, not yet verified | Cable |
 | ASUS TUF GAMING Mini Wireless Mouse Hatsune Miku Edition | Mouse | 1C56, 1C57 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| Gladius II Origin COD | Mouse | 18B1 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Chakram | Mouse | 18E3, 18E5 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
+| ROG Chakram Core | Mouse | 1958 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Chakram X | Mouse | 1A18, 1A1A | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout) |
+| ROG Gladius II | Mouse | 1845 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Gladius II Core | Mouse | 18DD | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Gladius II Origin | Mouse | 1877 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Gladius II Origin PNK LTD | Mouse | 18CD | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Gladius II Wireless | Mouse | 18A0 | From G-Helper, not yet verified | Own 2.4 GHz dongle; no button bindings yet (an older model) |
 | ROG Gladius III | Mouse | 197B, 197D, 197F | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
 | ROG Gladius III Wireless AimPoint | Mouse | 1A70, 1A72 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle, ROG Omni receiver |
 | ROG Gladius III Wireless AimPoint EVA-02 Edition | Mouse | 1B0A, 1B0C | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
 | ROG Harpe Ace Extreme | Mouse | 1B67, 1B68, 1B69 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
 | ROG Harpe Ace Mini | Mouse | 1B63, 1B65 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
 | ROG Harpe II Ace | Mouse | 1AD0, 1C69 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
+| ROG Keris | Mouse | 195C | From G-Helper, not yet verified | Cable; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Keris II Ace | Mouse | 1B16, 1B18, 1B1A | From G-Helper, not yet verified | Cable, ROG Omni receiver |
 | ROG Keris II Origin | Mouse | 1C0C, 1C0E | From G-Helper, not yet verified | Cable, ROG Omni receiver |
 | ROG Keris II Origin (KJP) | Mouse | 1D4C, 1D4E | From G-Helper, not yet verified | Cable, ROG Omni receiver |
+| ROG Keris Wireless | Mouse | 195E, 1960 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Keris Wireless AimPoint | Mouse | 1A66, 1A68, 1A6A | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle, ROG Omni receiver |
+| ROG Keris Wireless EVA Edition | Mouse | 1A57, 1A59 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
+| ROG Pugio | Mouse | 1846 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Pugio II | Mouse | 1906, 1908 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Spatha X | Mouse | 1977, 1979 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (its own button layout) |
+| ROG Strix Carry | Mouse | 18B4 | From G-Helper, not yet verified | Own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Strix Evolve | Mouse | 185B | From G-Helper, not yet verified | Cable |
+| ROG Strix Impact | Mouse | 1847 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Strix Impact II | Mouse | 18E1 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Strix Impact II Electro Punk | Mouse | 1956 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Strix Impact II Moonlight White | Mouse | 19D2 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
+| ROG Strix Impact II Wireless | Mouse | 1947, 1949 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Strix Impact III | Mouse | 1A88 | From G-Helper, not yet verified | Cable |
 | ROG Strix Impact III Wireless | Mouse | 1AD7 | From G-Helper, not yet verified | ROG Omni receiver |
 | TUF Gaming M3 | Mouse | 1910 | From G-Helper, not yet verified | Cable |
 | TUF Gaming M4 Air | Mouse | 1A03 | From G-Helper, not yet verified | Cable |
 | TUF Gaming M4 Wireless | Mouse | 19F4 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
+| TUF Gaming M5 | Mouse | 1898 | From G-Helper, not yet verified | Cable; no button bindings yet (an older model) |
 | TX Gaming Mouse | Mouse | 1A8D | From G-Helper, not yet verified | Own 2.4 GHz dongle |
 | TX Gaming Mouse Mini | Mouse | 1AF3, 1AF5 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
 
-Not yet: older ROG mice whose commands differ (Gladius II, Strix Impact, Pugio, Chakram / Core, Keris Wireless, Strix Carry, TUF M5 — [#432](https://github.com/dvalfrid/rigstats/issues/432)). To confirm a model, or if one doesn't work: open its page once, then collect diagnostics — the service log (`rigstats-sensor.log`) has a `Mouse: … read …` or `Headset: … read …` line with what the device answered — and send the ZIP with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).
+The older models (Gladius II, Strix Impact I / II, Pugio I / II, Chakram / Core, Keris, Strix Carry, TUF Gaming M5) use their own variants of the commands, each as G-Helper documents it (#432). To confirm a model, or if one doesn't work: open its page once, then collect diagnostics — the service log (`rigstats-sensor.log`) has a `Mouse: … read …` or `Headset: … read …` line with what the device answered — and send the ZIP with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).
 
 ## Battery
 

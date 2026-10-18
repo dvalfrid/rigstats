@@ -36,7 +36,10 @@ public static class DeviceSettingsCatalog
                     ? FromGHelper
                     : $"{LightingCatalog.Verified} ({string.Join(", ", verified.Order().Select(Link))})";
                 var notes = string.Join(", ", g.Select(e => e.Link).Distinct().Order().Select(Link))
-                    + (g.Any(e => e.Spec.Buttons) ? "" : "; no button bindings yet (its own button layout)");
+                    + (g.Any(e => e.Spec.Buttons) ? ""
+                        : g.All(e => e.Spec.Frames == MouseFrames.Common) ? "; no button bindings yet (its own button layout)"
+                        : "; no button bindings yet (an older model)")
+                    + (g.All(e => e.Spec.CanSwitchStage) ? "" : "; the DPI level in use is picked with its DPI button");
                 return new SupportedDevice(g.Key, "Mouse",
                     string.Join(", ", g.Select(e => Hex(e.ProductId)).Distinct().Order()), status, Upper(notes));
             })
@@ -58,8 +61,8 @@ public static class DeviceSettingsCatalog
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())
             md.Append(CultureInfo.InvariantCulture, $"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
-        md.Append("\nNot yet: older ROG mice whose commands differ (Gladius II, Strix Impact, Pugio, Chakram / Core, Keris Wireless, ");
-        md.Append("Strix Carry, TUF M5 — [#432](https://github.com/dvalfrid/rigstats/issues/432)). ");
+        md.Append("\nThe older models (Gladius II, Strix Impact I / II, Pugio I / II, Chakram / Core, Keris, Strix Carry, TUF Gaming M5) ");
+        md.Append("use their own variants of the commands, each as G-Helper documents it (#432). ");
         md.Append("To confirm a model, or if one doesn't work: open its page once, then collect diagnostics — the service log ");
         md.Append("(`rigstats-sensor.log`) has a `Mouse: … read …` or `Headset: … read …` line with what the device answered — and send the ZIP ");
         md.Append("with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).\n\n");

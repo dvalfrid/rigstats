@@ -169,12 +169,15 @@ public static class MouseProtocol
             stages.Add(new DpiStage(dpi, color));
         }
 
+        var f = spec.Frames;
         int? polling = null;
         if (spec.PollingHz.Length > 0)
         {
-            var raw = main[13];
+            var raw = main[f.PollingAt];
             var high = (raw >> 4) & 0x0F;
-            var code = booster && spec.Booster && high > 0 ? high : raw & 0x07;
+            // The older families keep the plain code (G-Helper reads it as is).
+            var code = f.PollingAt != MouseFrames.Common.PollingAt ? raw
+                : booster && spec.Booster && high > 0 ? high : raw & 0x07;
             polling = code < PollingCodes.Length ? PollingCodes[code] : null;
         }
 
@@ -196,19 +199,19 @@ public static class MouseProtocol
         }
 
         return new MouseSettings(
-            Profile: profile[11] + 1,
-            ActiveStage: Math.Clamp((int)profile[12], 1, spec.DpiStages),
+            Profile: profile[f.ProfileAt] + 1,
+            ActiveStage: Math.Clamp(profile[f.StageAt] + (f.StageFromZero ? 1 : 0), 1, spec.DpiStages),
             Stages: stages,
             PollingHz: polling,
-            Debounce: spec.Debounce is not null ? main[15] : null,
-            AngleSnapping: spec.AngleSnapping ? main[17] == 1 : null,
+            Debounce: spec.Debounce is not null ? main[f.DebounceAt] : null,
+            AngleSnapping: spec.AngleSnapping ? main[f.SnapAt] == 1 : null,
             AngleTuning: spec.AngleTuning is not null ? (short)(main[19] | (main[20] << 8)) : null,
             Acceleration: spec.Acceleration > 0 ? accel![5] : null,
             Deceleration: spec.Deceleration > 0 ? accel![7] : null,
             MotionSync: spec.MotionSync ? motion![5] == 1 : null,
-            LiftOff: spec.LiftOff ? lift![8] : null,
-            PowerOff: spec.AutoPowerOff ? power![6] : null,
-            LowBatteryWarning: spec.LowBatteryWarning is not null ? power![7] : null,
+            LiftOff: spec.LiftOff ? lift![f.LiftOff == LiftOffFrame.HeightOnly ? 5 : 8] : null,
+            PowerOff: spec.AutoPowerOff ? power![f.PowerOffAt] : null,
+            LowBatteryWarning: spec.LowBatteryWarning is not null ? power![7] * (f.BatteryQuarters ? 25 : 1) : null,
             Buttons: buttons);
     }
 
@@ -226,7 +229,7 @@ public static class MouseProtocol
         var rates = Rates(spec, booster);
         return now with
         {
-            ActiveStage = Math.Clamp(wanted.ActiveStage, 1, spec.DpiStages),
+            ActiveStage = spec.CanSwitchStage ? Math.Clamp(wanted.ActiveStage, 1, spec.DpiStages) : now.ActiveStage,
             Stages = stages,
             PollingHz = wanted.PollingHz is { } hz && rates.Contains(hz) ? hz : now.PollingHz,
             Debounce = spec.Debounce is { } d && wanted.Debounce is { } w ? Math.Clamp(w, d.Min, d.Max) : now.Debounce,
@@ -253,6 +256,7 @@ public static class MouseProtocol
     public static IReadOnlyList<byte[]> Writes(MouseSpec spec, MouseSettings now, MouseSettings wanted, byte[]? liftReply, byte[]? powerReply)
     {
         var writes = new List<byte[]>();
+        var f = spec.Frames;
         byte[] Sub(byte sub, params byte[] data) => [Set, 0x31, sub, 0x00, .. data];
         for (var i = 0; i < Math.Min(now.Stages.Count, wanted.Stages.Count); i++)
         {
@@ -263,13 +267,13 @@ public static class MouseProtocol
             writes.Add(spec.DpiColors ? Sub((byte)i, [.. dpi, .. Rgb(wanted.Stages[i].Color)]) : Sub((byte)i, dpi));
         }
         if (now.ActiveStage != wanted.ActiveStage)
-            writes.Add(Sub(0x09, (byte)wanted.ActiveStage));
+            writes.Add(Sub(0x09, (byte)(wanted.ActiveStage - (f.StageFromZero ? 1 : 0))));
         if (wanted.PollingHz is { } hz && hz != now.PollingHz)
-            writes.Add(Sub(0x04, (byte)Array.IndexOf(PollingCodes, hz)));
+            writes.Add(Sub(f.PollingSub, (byte)Array.IndexOf(PollingCodes, hz)));
         if (wanted.Debounce is { } d && d != now.Debounce)
-            writes.Add(Sub(0x05, (byte)d));
+            writes.Add(Sub(f.DebounceSub, (byte)d));
         if (wanted.AngleSnapping is { } snap && snap != now.AngleSnapping)
-            writes.Add(Sub(0x06, (byte)(snap ? 1 : 0)));
+            writes.Add(Sub(f.SnapSub, (byte)(snap ? 1 : 0)));
         if (wanted.AngleTuning is { } angle && angle != now.AngleTuning)
             writes.Add(Sub(0x0B, (byte)(angle & 0xFF), (byte)((angle >> 8) & 0xFF)));
         if (wanted.Acceleration is { } acc && acc != now.Acceleration)
@@ -278,11 +282,24 @@ public static class MouseProtocol
             writes.Add(Sub(0x08, (byte)dec));
         if (wanted.MotionSync is { } sync && sync != now.MotionSync)
             writes.Add(Sub(0x12, (byte)(sync ? 1 : 0)));
-        if (wanted.LiftOff is { } height && height != now.LiftOff && liftReply is { Length: >= 12 } lift)
-            writes.Add([Set, 0x35, lift[6], 0x00, lift[7], (byte)height, 0x00, lift[9], lift[10], lift[11]]);
-        if ((wanted.PowerOff != now.PowerOff || wanted.LowBatteryWarning != now.LowBatteryWarning) && powerReply is { Length: >= 13 } power)
-            writes.Add([Set, 0x37, 0x00, 0x00, (byte)(wanted.PowerOff ?? power[6]), 0x00,
-                (byte)(wanted.LowBatteryWarning ?? power[7]), power[11], power[12]]);
+        if (wanted.LiftOff is { } height && height != now.LiftOff)
+        {
+            if (f.LiftOff == LiftOffFrame.Plain)
+                writes.Add([Set, 0x35, 0xFF, 0x00, 0xFF, (byte)height]);
+            else if (f.LiftOff == LiftOffFrame.HeightOnly)
+                writes.Add([Set, 0x35, 0x00, 0x00, (byte)height]);
+            else if (liftReply is { Length: >= 12 } lift)
+                writes.Add([Set, 0x35, lift[6], 0x00, lift[7], (byte)height, 0x00, lift[9], lift[10], lift[11]]);
+        }
+        if (wanted.PowerOff != now.PowerOff || wanted.LowBatteryWarning != now.LowBatteryWarning)
+        {
+            if (f.PlainEnergy)
+                writes.Add([Set, 0x37, 0x00, 0x00, (byte)(wanted.PowerOff ?? 0), 0x00,
+                    (byte)((wanted.LowBatteryWarning ?? 0) / (f.BatteryQuarters ? 25 : 1))]);
+            else if (powerReply is { Length: >= 13 } power)
+                writes.Add([Set, 0x37, 0x00, 0x00, (byte)(wanted.PowerOff ?? power[6]), 0x00,
+                    (byte)(wanted.LowBatteryWarning ?? power[7]), power[11], power[12]]);
+        }
         if (wanted.Buttons is { } wantedButtons && now.Buttons is { } nowButtons)
         {
             for (var i = 0; i < Math.Min(Buttons.Count, Math.Min(wantedButtons.Count, nowButtons.Count)); i++)

@@ -87,6 +87,9 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
             throw new DomainUnavailableException("No ROG mouse is connected, so its profile was skipped.");
         foreach (var mouse in mice)
         {
+            // A mouse with one onboard profile (Gladius II Origin, Strix Impact, #432) has nothing to switch.
+            if (mouse.Entry.Spec.Profiles <= 1)
+                continue;
             var p = Math.Clamp(profile, 1, mouse.Entry.Spec.Profiles);
             if (_dryRun)
             {
@@ -203,6 +206,7 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                     ? new JsonArray(MouseProtocol.Buttons.Select(b => (JsonNode)new JsonObject { ["source"] = b.Source, ["name"] = b.Name }).ToArray())
                     : null,
                 ["dpi_button"] = spec.DpiButton,
+                ["can_switch_stage"] = spec.CanSwitchStage,
                 ["actions"] = spec.Buttons
                     ? new JsonArray(MouseProtocol.Actions.Select(a => (JsonNode)new JsonObject { ["code"] = a.Code, ["name"] = a.Name }).ToArray())
                     : null,

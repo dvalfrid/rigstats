@@ -38,6 +38,91 @@ public sealed record MouseSpec(
     /// manual (#435): "underside" or "top"; null = not known, so the Mouse
     /// page doesn't place it in its drawing.
     public string? DpiButton { get; init; }
+
+    /// Where this model's frames differ from the common protocol (#432).
+    public MouseFrames Frames { get; init; } = MouseFrames.Common;
+
+    /// The DPI level in use can be picked from the PC (G-Helper's
+    /// `CanChangeDPIProfile`); false = only the mouse's DPI button picks it.
+    public bool CanSwitchStage { get; init; } = true;
+}
+
+/// How the lift-off height is read and written: `Calibration` — read at 8,
+/// written as GearLink's `setCalibration` with the other fields as read;
+/// `Plain` — read at 8, written `51 35 FF 00 FF <h>` (G-Helper's `AsusMouse`);
+/// `HeightOnly` — read at 5, written `51 35 00 00 <h>` (G-Helper's Keris Wireless,
+/// Strix Impact II Wireless, Chakram Core).
+public enum LiftOffFrame { Calibration, Plain, HeightOnly }
+
+/// Where an older ROG mouse family's frames differ from the common protocol
+/// (#432) — G-Helper's packet overrides per family, transcribed (read as
+/// documentation). Positions count with the report id at 0; `…Sub` is the
+/// `51 31 <sub>` write. The common protocol is the default of every field.
+public sealed record MouseFrames
+{
+    public int PollingAt { get; init; } = 13;
+    public byte PollingSub { get; init; } = 0x04;
+    public int DebounceAt { get; init; } = 15;
+    public byte DebounceSub { get; init; } = 0x05;
+    public int SnapAt { get; init; } = 17;
+    public byte SnapSub { get; init; } = 0x06;
+
+    /// `12 00 00`: the onboard profile and the active DPI stage.
+    public int ProfileAt { get; init; } = 11;
+    public int StageAt { get; init; } = 12;
+
+    /// The active stage is counted from 0 on the wire (TUF Gaming M3 Gen II).
+    public bool StageFromZero { get; init; }
+
+    /// `12 07`: auto power off.
+    public int PowerOffAt { get; init; } = 6;
+
+    /// The low-battery warning is kept in quarters: 1 = 25 %.
+    public bool BatteryQuarters { get; init; }
+
+    public LiftOffFrame LiftOff { get; init; } = LiftOffFrame.Calibration;
+
+    /// Energy written as G-Helper's `51 37 00 00 <off> 00 <low>`, not
+    /// GearLink's `setPowerConfig` (which only the common models' GearLink
+    /// modules document).
+    public bool PlainEnergy { get; init; }
+
+    public static readonly MouseFrames Common = new();
+
+    /// G-Helper's base frames where they differ from GearLink's: older
+    /// families without other changes (Strix Impact II, Gladius II Core).
+    public static readonly MouseFrames GHelper = new() { LiftOff = LiftOffFrame.Plain, PlainEnergy = true };
+
+    /// `12 04 00` with polling at 9, debounce at 11, angle snapping at 13,
+    /// written with subs 2, 3, 4 (Gladius II, Gladius II Wireless, Strix
+    /// Impact, TUF Gaming M5).
+    public static readonly MouseFrames OldConfig = GHelper with
+    {
+        PollingAt = 9,
+        PollingSub = 0x02,
+        DebounceAt = 11,
+        DebounceSub = 0x03,
+        SnapAt = 13,
+        SnapSub = 0x04,
+    };
+
+    /// OldConfig, with profile at 10, stage at 11 and power off at 5.
+    public static readonly MouseFrames StrixCarry = OldConfig with { ProfileAt = 10, StageAt = 11, PowerOffAt = 5 };
+
+    /// Polling read at 9 but written with the common sub 4 (G-Helper's Pugio).
+    public static readonly MouseFrames Pugio = GHelper with { PollingAt = 9 };
+
+    /// Low-battery warning in quarters (Pugio II, Chakram).
+    public static readonly MouseFrames Quarters = GHelper with { BatteryQuarters = true };
+
+    /// Quarters and the short lift-off frame (Keris Wireless, Strix Impact II Wireless).
+    public static readonly MouseFrames QuartersShortLift = Quarters with { LiftOff = LiftOffFrame.HeightOnly };
+
+    /// The short lift-off frame (Chakram Core).
+    public static readonly MouseFrames ShortLift = GHelper with { LiftOff = LiftOffFrame.HeightOnly };
+
+    /// The active stage from 0 (TUF Gaming M3 Gen II; otherwise as its common TUF Gaming M3).
+    public static readonly MouseFrames TufM3GenII = Common with { StageFromZero = true };
 }
 
 /// One mouse as it appears to the PC: its id (the Omni receiver's paired-list
@@ -51,9 +136,10 @@ public sealed record MouseEntry(ushort ProductId, MouseLink Link, string Endpoin
 /// resolver that follows each class's constructor chain and merges its
 /// overrides; the Omni ids are G-Helper's `MouseFromOmniPid`. The commands
 /// themselves are cross-checked with GearLink's module for the Harpe Ace Aim
-/// Lab Edition (see `MouseProtocol`). Families with their own packet
-/// variants are not here (#432). Regenerate by the same means — never edit
-/// a row by guess.
+/// Lab Edition (see `MouseProtocol`). The older families with their own
+/// packet variants carry them as `MouseFrames` (#432), classified by the
+/// resolver from the class right under `AsusMouse`. Regenerate by the same
+/// means — never edit a row by guess.
 public static class MouseCatalog
 {
     private static MouseEntry Row(ushort productId, MouseLink link, string endpoint, byte reportId, MouseSpec spec) =>
@@ -99,15 +185,42 @@ public static class MouseCatalog
         ["TUF GAMING Mini Miku Edition"] = "ASUS TUF GAMING Mini Wireless Mouse Hatsune Miku Edition",
         ["TX GAMING MOUSE"] = "TX Gaming Mouse",
         ["TX GAMING MOUSE Mini"] = "TX Gaming Mouse Mini",
+        ["Gladius II Origin"] = "ROG Gladius II Origin",
+        ["Gladius II PNK LTD"] = "ROG Gladius II Origin PNK LTD",
+        ["Gladius II Wireless"] = "ROG Gladius II Wireless",
+        ["Strix Impact"] = "ROG Strix Impact",
+        ["TUF GAMING M3 (Gen II)"] = "ASUS TUF Gaming M3 Gen II",
+        ["TUF GAMING M5"] = "TUF Gaming M5",
+        ["ROG Keris EVA Edition"] = "ROG Keris Wireless EVA Edition",
+    };
+
+    /// Where G-Helper gives two ASUS products one name, told apart by its
+    /// class (#432): the Gladius II (`GladiusII`, named "Gladius II Origin"
+    /// after its parent), the Keris Wireless (`KerisWireless` /
+    /// `KerisWirelessWired`, both "ROG Keris" like the wired Keris) and the
+    /// Strix Impact II Wireless (`StrixImpactIIWireless` / `…Wired`).
+    /// "Gladius II Origin COD" is G-Helper's name: no ASUS page names it.
+    private static readonly Dictionary<ushort, string> AsusNamesById = new()
+    {
+        [0x1845] = "ROG Gladius II",
+        [0x1960] = "ROG Keris Wireless",
+        [0x195E] = "ROG Keris Wireless",
+        [0x1949] = "ROG Strix Impact II Wireless",
+        [0x1947] = "ROG Strix Impact II Wireless",
     };
 
     public static readonly IReadOnlyList<MouseEntry> Entries = Rows().Select(e => e with
     {
         Spec = e.Spec with
         {
-            Name = AsusNames.GetValueOrDefault(e.Spec.Name, e.Spec.Name),
-            Buttons = !OwnButtonLayout.Contains(e.ProductId),
+            Name = AsusNamesById.GetValueOrDefault(e.ProductId) ?? AsusNames.GetValueOrDefault(e.Spec.Name, e.Spec.Name),
+            // The older families get no bindings until one is seen working (#432).
+            Buttons = e.Spec.Buttons && !OwnButtonLayout.Contains(e.ProductId),
             DpiButton = DpiButtonPlace.GetValueOrDefault(e.ProductId),
+            // Kept in quarters: G-Helper offers 10 % steps on some of these but
+            // sends value / 25, so only multiples of 25 reach the mouse (#432).
+            LowBatteryWarning = e.Spec.Frames.BatteryQuarters && e.Spec.LowBatteryWarning is { } lb
+                ? (25, Math.Max(25, lb.Max - lb.Max % 25)) : e.Spec.LowBatteryWarning,
         },
     }).ToList();
 
@@ -158,6 +271,33 @@ public static class MouseCatalog
         Row(0x1AF3, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("TX GAMING MOUSE Mini", Profiles: 3, DpiStages: 4, Dpi: (100, 12000, 50), XyDpi: true, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50))), // G-Helper TXGamingMiniWired
         Row(0x1C57, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("TUF GAMING Mini Miku Edition", Profiles: 3, DpiStages: 4, Dpi: (100, 12000, 50), XyDpi: true, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50))), // G-Helper TUFGamingMiniMiku
         Row(0x1C56, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("TUF GAMING Mini Miku Edition", Profiles: 3, DpiStages: 4, Dpi: (100, 12000, 50), XyDpi: true, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50))), // G-Helper TUFGamingMiniMikuWired
+        // #432: the older families, G-Helper rows with their frames (MouseFrames).
+        Row(0x18E5, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Chakram", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (25, 100)) { Frames = MouseFrames.Quarters, CanSwitchStage = false, Buttons = false }), // G-Helper Chakram
+        Row(0x18E3, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Chakram", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (25, 100)) { Frames = MouseFrames.Quarters, CanSwitchStage = false, Buttons = false }), // G-Helper ChakramWired
+        Row(0x1958, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Chakram Core", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: null, LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.ShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper ChakramCore
+        Row(0x1877, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("Gladius II Origin", Profiles: 1, DpiStages: 2, Dpi: (100, 12000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper GladiusIIOrigin
+        Row(0x1845, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("Gladius II Origin", Profiles: 3, DpiStages: 2, Dpi: (100, 12000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper GladiusII
+        Row(0x18CD, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("Gladius II PNK LTD", Profiles: 3, DpiStages: 2, Dpi: (100, 12000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper GladiusIIOriginPink
+        Row(0x18B1, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("Gladius II Origin COD", Profiles: 1, DpiStages: 2, Dpi: (100, 12000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper GladiusIIOriginCOD
+        Row(0x18DD, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Gladius II Core", Profiles: 3, DpiStages: 4, Dpi: (100, 6200, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.GHelper, Buttons = false }), // G-Helper GladiusIICore
+        Row(0x18A0, MouseLink.Dongle, "mi_02", 0x00, new MouseSpec("Gladius II Wireless", Profiles: 1, DpiStages: 2, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: (-20, 20, 1), Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (25, 50)) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper GladiusIIWireless
+        Row(0x1960, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Keris", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper KerisWireless
+        Row(0x195C, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Keris", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper Keris
+        Row(0x195E, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Keris", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper KerisWirelessWired
+        Row(0x1A59, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Keris EVA Edition", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper KerisWirelessEvaEdition
+        Row(0x1A57, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Keris EVA Edition", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper KerisWirelessEvaEditionWired
+        Row(0x1846, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("ROG Pugio", Profiles: 3, DpiStages: 2, Dpi: (50, 7200, 50), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: null, LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.Pugio, Buttons = false }), // G-Helper Pugio
+        Row(0x1908, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Pugio II", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (25, 100)) { Frames = MouseFrames.Quarters, CanSwitchStage = false, Buttons = false }), // G-Helper PugioII
+        Row(0x1906, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Pugio II", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (25, 100)) { Frames = MouseFrames.Quarters, CanSwitchStage = false, Buttons = false }), // G-Helper PugioIIWired
+        Row(0x18B4, MouseLink.Dongle, "mi_01", 0x00, new MouseSpec("ROG Strix Carry", Profiles: 3, DpiStages: 2, Dpi: (50, 7200, 50), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: null) { Frames = MouseFrames.StrixCarry, CanSwitchStage = false, Buttons = false }), // G-Helper StrixCarry
+        Row(0x1847, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("Strix Impact", Profiles: 1, DpiStages: 2, Dpi: (100, 5000, 50), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: false, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper StrixImpact
+        Row(0x18E1, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Strix Impact II", Profiles: 3, DpiStages: 4, Dpi: (100, 6200, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.GHelper, Buttons = false }), // G-Helper StrixImpactII
+        Row(0x1956, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Strix Impact II Electro Punk", Profiles: 3, DpiStages: 4, Dpi: (100, 6200, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.GHelper, Buttons = false }), // G-Helper StrixImpactIIElectroPunk
+        Row(0x19D2, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Strix Impact II Moonlight White", Profiles: 3, DpiStages: 4, Dpi: (100, 6200, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.GHelper, Buttons = false }), // G-Helper StrixImpactIIMoonlightWhite
+        Row(0x1949, MouseLink.Dongle, "mi_00", 0x00, new MouseSpec("ROG Strix Impact II", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper StrixImpactIIWireless
+        Row(0x1947, MouseLink.Wired, "mi_00", 0x00, new MouseSpec("ROG Strix Impact II", Profiles: 3, DpiStages: 4, Dpi: (100, 16000, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: true, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: true, LowBatteryWarning: (10, 50)) { Frames = MouseFrames.QuartersShortLift, CanSwitchStage = false, Buttons = false }), // G-Helper StrixImpactIIWirelessWired
+        Row(0x1A9B, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("TUF GAMING M3 (Gen II)", Profiles: 1, DpiStages: 4, Dpi: (100, 8000, 50), XyDpi: false, DpiColors: true, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.TufM3GenII }), // G-Helper TUFM3GenII
+        Row(0x1898, MouseLink.Wired, "mi_02", 0x00, new MouseSpec("TUF GAMING M5", Profiles: 3, DpiStages: 2, Dpi: (100, 6200, 100), XyDpi: false, DpiColors: false, PollingHz: [125, 250, 500, 1000], Booster: false, Debounce: (2, 7), LiftOff: false, AngleSnapping: true, AngleTuning: null, Acceleration: 0, Deceleration: 0, MotionSync: false, AutoPowerOff: false, LowBatteryWarning: null) { Frames = MouseFrames.OldConfig, Buttons = false }), // G-Helper TUFM5
     ];
 
     /// Mice whose settings were seen working on hardware, by id and link: the

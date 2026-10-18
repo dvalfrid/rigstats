@@ -201,6 +201,14 @@ pub struct MouseSpec {
     /// Where the DPI button sits when known (#435): "underside" or "top".
     #[serde(default)]
     pub dpi_button: Option<String>,
+    /// The DPI level in use can be picked from the PC (#432); false on older
+    /// models where only the mouse's DPI button picks it.
+    #[serde(default = "yes")]
+    pub can_switch_stage: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// A connected ROG mouse with known settings (`mouse_settings`).
