@@ -970,18 +970,15 @@ pub fn show(
             .arg(dir.as_ref())
             .spawn();
     }
-    // A problem's button: diagnostics here, links in the browser; the log is
-    // already on this page.
+    // A problem's button, decided where every window's is
+    // (`windows::action_effect`): diagnostics are collected here, and the log
+    // is already on this page.
     if let Some(action) = problem_action {
-        match action.kind {
-            rigstats_backend::control::ProblemActionKind::CollectDiagnostics => {
-                action_collect_diag = true
-            }
-            #[cfg(windows)]
-            rigstats_backend::control::ProblemActionKind::OpenNotificationSettings => {
-                crate::notify::open_windows_settings()
-            }
-            _ => crate::windows::open_problem_link(ctx, &action),
+        use crate::windows::{ActionEffect, OpenRequest};
+        match crate::windows::action_effect(&action) {
+            ActionEffect::Open(OpenRequest::Diagnostics) => action_collect_diag = true,
+            ActionEffect::Open(_) => {}
+            effect => crate::windows::perform_local(ctx, &effect),
         }
     }
     if action_collect_diag {

@@ -29,13 +29,22 @@ const ICON_FILE: &str = "rigstats-notification-icon.png";
 /// cost the name and icon (the toast still shows), so they're returned for
 /// the log, not raised.
 pub fn register(dir: &Path) -> Result<(), String> {
+    register_at(dir, &app_id_key(APP_ID))
+}
+
+/// The HKCU key that names an app id.
+fn app_id_key(app_id: &str) -> String {
+    format!(r"Software\Classes\AppUserModelId\{app_id}")
+}
+
+fn register_at(dir: &Path, key_path: &str) -> Result<(), String> {
     let icon = dir.join(ICON_FILE);
     if std::fs::read(&icon).ok().as_deref() != Some(ICON_PNG) {
         std::fs::write(&icon, ICON_PNG).map_err(|e| format!("icon: {e}"))?;
     }
     let hkcu = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER);
     let (key, _) = hkcu
-        .create_subkey(format!(r"Software\Classes\AppUserModelId\{APP_ID}"))
+        .create_subkey(key_path)
         .map_err(|e| format!("registry: {e}"))?;
     key.set_value("DisplayName", &"RIGStats")
         .and_then(|()| key.set_value("IconUri", &icon.to_string_lossy().into_owned()))
@@ -65,12 +74,25 @@ pub fn send(title: &str, message: &str) -> Result<(), String> {
 }
 
 /// Windows' notification setting for RIGStats, as last read by
-/// [`watch_setting`]: 0 on (or not read yet), else [`NotificationsOff`] + 1.
+/// [`watch_setting`], stored with [`to_code`]: 0 on (or not read yet).
 static SETTING: AtomicU8 = AtomicU8::new(0);
 
 /// Why Windows doesn't show RIGStats' notifications, if it doesn't.
 pub fn off() -> Option<NotificationsOff> {
-    match SETTING.load(Ordering::Relaxed) {
+    from_code(SETTING.load(Ordering::Relaxed))
+}
+
+fn to_code(off: Option<NotificationsOff>) -> u8 {
+    match off {
+        None => 0,
+        Some(NotificationsOff::ForRigStats) => 1,
+        Some(NotificationsOff::ForAllApps) => 2,
+        Some(NotificationsOff::ByPolicy) => 3,
+    }
+}
+
+fn from_code(code: u8) -> Option<NotificationsOff> {
+    match code {
         1 => Some(NotificationsOff::ForRigStats),
         2 => Some(NotificationsOff::ForAllApps),
         3 => Some(NotificationsOff::ByPolicy),
@@ -83,13 +105,7 @@ pub fn off() -> Option<NotificationsOff> {
 /// window). Start once.
 pub fn watch_setting() {
     std::thread::spawn(|| loop {
-        let value = match read_setting() {
-            Some(NotificationsOff::ForRigStats) => 1,
-            Some(NotificationsOff::ForAllApps) => 2,
-            Some(NotificationsOff::ByPolicy) => 3,
-            None => 0,
-        };
-        SETTING.store(value, Ordering::Relaxed);
+        SETTING.store(to_code(read_setting()), Ordering::Relaxed);
         std::thread::sleep(std::time::Duration::from_secs(3));
     });
 }
@@ -156,6 +172,53 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_uninstaller_removes_the_key_the_app_creates() {
+        let installer = include_str!("../../build/installer.nsi");
+        let line = format!(r#"DeleteRegKey HKCU "{}""#, app_id_key(APP_ID));
+        assert!(installer.contains(&line), "installer.nsi lacks: {line}");
+    }
+
+    #[test]
+    fn registering_writes_the_name_and_an_icon_that_exists() {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        let dir = std::env::temp_dir().join(format!("rigstats-notify-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        // A key of its own, never the real app id's.
+        let key_path = app_id_key(&format!("{APP_ID}.test-{}", std::process::id()));
+
+        let result = register_at(&dir, &key_path);
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let read = hkcu.open_subkey(&key_path).map(|k| {
+            (
+                k.get_value::<String, _>("DisplayName"),
+                k.get_value::<String, _>("IconUri"),
+            )
+        });
+        // Clean up before asserting.
+        let _ = hkcu.delete_subkey_all(&key_path);
+        let icon_bytes = std::fs::read(dir.join(ICON_FILE));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(result, Ok(()));
+        let (name, icon) = read.expect("key written");
+        assert_eq!(name.unwrap(), "RIGStats");
+        assert_eq!(icon.unwrap(), dir.join(ICON_FILE).to_string_lossy());
+        assert_eq!(icon_bytes.unwrap(), ICON_PNG);
+    }
+
+    #[test]
+    fn the_stored_setting_reads_back_as_written() {
+        for off in [
+            None,
+            Some(NotificationsOff::ForRigStats),
+            Some(NotificationsOff::ForAllApps),
+            Some(NotificationsOff::ByPolicy),
+        ] {
+            assert_eq!(from_code(to_code(off)), off);
+        }
+    }
 
     #[test]
     fn windows_settings_map_to_the_reason_notifications_are_off() {

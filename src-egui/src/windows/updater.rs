@@ -509,7 +509,8 @@ fn render_item(ui: &mut egui::Ui, dc: &DialogColors, item: &NoteItem, kind: Sect
 fn version_group(ui: &mut egui::Ui, dc: &DialogColors, status: &UpdateStatus) {
     if let UpdateStatus::Error(e) = status {
         if let Some(action) = ui_kit::notice(ui, dc, &crate::problems::update_failed(e)) {
-            crate::windows::open_problem_link(ui.ctx(), &action);
+            let effect = crate::windows::action_effect(&action);
+            crate::windows::perform_local(ui.ctx(), &effect);
         }
     }
     ui_kit::group(ui, dc, None, None, |g| {

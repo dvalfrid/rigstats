@@ -158,6 +158,15 @@ The PERIPHERALS panel (switch it on under **Control Center → Dashboard → Pan
 - **Bluetooth devices keep disconnecting**: usually the signal, not RIGStats. A desktop board's Wi-Fi/Bluetooth module (for example ASUS boards with "AX" or "WIFI" in the name) needs its antenna screwed onto **both** connectors on the back panel; without it, Bluetooth reaches only a metre or two and drops in and out. Stand the antenna on the desk, not behind the case, and away from USB 3 hubs. Seen on the owner's rig: the mice dropped constantly until the antenna was connected.
 - **A ROG device doesn't show or keeps its old level**: see "A lighting device isn't listed" under [Control Center](#control-center); its battery is read through the same connection.
 
+## Notifications Don't Show
+
+Alerts and other notifications are Windows notifications from **RIGStats** (with its icon); RIGStats is listed under Windows **Settings → System → Notifications**.
+
+- **Turned off in Windows**: if notifications are off for RIGStats, for all apps, or by your organisation's policy, **Settings → Notifications** and **Status → Problems** in RIGStats say so. **Open Windows settings** takes you to the right page (not shown when a policy decides — ask whoever manages the PC).
+- **Do Not Disturb or Focus is on**: Windows holds notifications back while it is; they wait in the notification centre (Win+N). RIGStats doesn't check for it, so it won't mention it.
+- **Nothing at all, not even the test**: **Settings → Notifications → Send Test** shows a sample. If it doesn't appear and RIGStats reports nothing turned off, check the two points above, then collect diagnostics (Status → Collect diagnostics) and report it.
+- **An alert you expected didn't come**: check that the alert kind is on (**Settings → Notifications**: Critical alerts / Warnings) and its level in the profile (**Control Center → Alerts**). The same alert repeats at most once per "Repeat at most every".
+
 ## AMD Graphics: The Sensor Service Keeps Stopping
 
 **Symptoms:** the dashboard loses its sensors and the Control Center says "Connecting" a few seconds after RIGStats starts; a RIGStats update stops with *"Error opening file for writing: C:\Program Files\RIGStats\rigstats-sensor.exe"*; AMD Software says **"Update Required"** when opened.
