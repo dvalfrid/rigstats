@@ -142,6 +142,22 @@ for when to use it.
 pwsh -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
 ```
 
+## `keyboard-listen-guided.ps1`
+
+A guided, read-only live check of an ASUS keyboard (#457): opens a console
+with numbered steps in Swedish ("Håll ned Fn, tryck 2 …"), listens to every
+collection of the keyboard except `mi_00`, sends only the documented `12 00`
+and `12 01` at the start and the end, and writes prompts and input reports
+to a log. Found the Azoth X's profile event (`docs/keyboard-research.md`).
+
+```powershell
+pwsh -File toolskeyboard-listen-guided.ps1                         # on the ROG Omni receiver (report 0x02)
+pwsh -File toolskeyboard-listen-guided.ps1 -ProductId 1c24 -Report 0   # by cable
+```
+
+The log holds the key-state reports (`71`) of what was typed meanwhile —
+don't share it beyond the issue.
+
 ## `hid-caps.ps1`
 
 Prints every HID collection of a device and what its report descriptor

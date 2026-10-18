@@ -1561,7 +1561,7 @@ the `mouse` profile domain (`Control/Mice/`):
   catalog, or answers on another interface or report id. Mice on the Omni
   receiver show under `asus_probes` instead.
 
-**Keyboard (G-Helper `AsusKeyboard` / `Azoth`):** low-battery alert `51 37 00 00
+**Keyboards: see [keyboard-research.md](keyboard-research.md)** (Gear Link's 46 keyboard ids and G-Helper compared, 2026-10-18). Earlier note —  low-battery alert `51 37 00 00
 <%>`, idle/sleep timeout `51 38 00 00 <value>`; the Azoth family's OLED/screen
 commands use `0x61`, `0x63`, `0x68`, `0x69`, `0x6A`, and `0x21` to read.
 
