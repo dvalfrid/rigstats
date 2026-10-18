@@ -817,9 +817,11 @@ The detected startup values themselves (`ram_spec`, `ram_details`, `mb_board`,
   reads `ToastNotifier.Setting` every 3 s on its own thread; when it is off
   (for RIGStats, for all apps, or by policy) Settings → Notifications and
   Status → Problems show `problems::notifications_off`, with "Open Windows
-  settings" (`ms-settings:notifications`) unless a policy decides. Not
-  checked: whether Do Not Disturb / Focus shows in this setting (most likely
-  not — it is a separate Windows state).
+  settings" (`ms-settings:notifications`) unless a policy decides. Do Not
+  Disturb isn't reported, checked on Windows 11 (2026-10-18): with it on,
+  `ToastNotifier.Setting` stays `Enabled` and `SHQueryUserNotificationState`
+  says `QUNS_ACCEPTS_NOTIFICATIONS`. Only undocumented state shows it, so
+  RIGStats doesn't try; Troubleshooting tells the user instead.
 - **A problem's button is decided in one place** (`windows::action_effect`):
   every window carries it out through `run_problem_action` or, without
   `OpenRequests` (Status, Updates), `perform_local` — so no window can miss a
