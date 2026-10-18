@@ -1506,6 +1506,15 @@ the `mouse` profile domain (`Control/Mice/`):
   `DpiButtonPlace` — known only where seen on the hardware or in an ASUS
   manual (the Harpe Ace Aim Lab Edition: underside, owner 2026-10-18); web
   pages rarely say it in words.
+- **A reply repeats the whole question (#442).** The mouse also sends
+  reports of its own: `03 12 00 09 00 01` arrived while `12 00 00` was asked
+  and was read as DPI stage 1 with the mouse on stage 3 (1 of 3 reads,
+  2026-10-18, seen through the read log). Every real reply repeats all three
+  question bytes, so `MouseProtocol.Answers` now requires that for every
+  read (it already did for `12 04`). After the fix, ~20 reads in a row
+  showed stage 3 each time. Separately, the first `12 04 00` of a read goes
+  unanswered within 600 ms almost every time over the Omni link (18 of ~20
+  reads, before and after the fix) and is answered when asked again.
 - **Diagnostics (#438).** Each read whose replies differ from the last is
   logged with the raw replies, zero padding left out (`Hid.ReplyHex`):
   `Mouse: <model> 0x<pid> (<link>) read <settings> from 120000:<hex> 120400:<hex> …`
