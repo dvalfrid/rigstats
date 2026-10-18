@@ -463,7 +463,8 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
 | [Control Center](docs/control-architecture.md) | Hardware control design, protocols, live testing |
 | [Supported devices](docs/supported-devices.md) | Every lighting device RIGStats drives and every device whose battery it shows, verified or not yet |
-| [Troubleshooting](docs/troubleshooting.md) | Common issues, sensor diagnostics |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and what to do, for users |
+| [Developer troubleshooting](docs/developer-troubleshooting.md) | Logs, the diagnostics ZIP's files, crash causes, running from source |
 | [Changelog](CHANGELOG.md) | Full version history |
 | [Roadmap](ROADMAP.md) | Planned features and status |
 

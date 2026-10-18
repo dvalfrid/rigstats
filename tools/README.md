@@ -135,7 +135,8 @@ Removes ghost/orphaned RIGStats entries from the Windows system-tray icon
 settings (HKCU) and from Installed Apps / Programs & Features (HKLM) when an
 uninstaller is missing. Shows what it will keep vs delete, asks for confirmation,
 then restarts Explorer. Self-elevates to admin. See
-[`docs/troubleshooting.md`](../docs/troubleshooting.md) for when to use it.
+[`docs/developer-troubleshooting.md`](../docs/developer-troubleshooting.md#ghost-entries-in-other-system-tray-icons)
+for when to use it.
 
 ```powershell
 pwsh -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1

@@ -1,359 +1,314 @@
 # Troubleshooting
 
-## CPU Temperature / Package Power Missing, Or Defender Alert On Service Start
+Something not working? Find what you see below. Each section says what to do,
+step by step.
 
-Since v1.21.0, `LibreHardwareMonitorLib` uses **PawnIO** — a properly signed
-kernel driver — instead of WinRing0 to read CPU temperature, package power and
-other SMU/MSR sensors. The installer runs the official PawnIO setup
-(`build\pawnio\PawnIO_setup.exe -install -silent`) before starting the service.
-An existing PawnIO install from another tool (FanControl, LHM, …) is kept or
-upgraded, and uninstalling RIGStats leaves PawnIO in place.
+## Start here
 
-**Symptom of a missing PawnIO:** CPU temperature reads `0` / `--` and package
-power `0 W` (in `sensor-tree.txt`: `Core (Tctl/Tdie) val=0`, `Package val=0`).
-Check the service from any prompt:
+1. Open **Status** from the tray menu. Under **Problems** RIGStats lists
+   everything it knows is wrong right now, what it means, and a button for the
+   next step.
+2. If that doesn't help, find your problem on this page.
+3. Still stuck? [Report it](#report-a-problem) with a diagnostics file — it
+   tells us what your PC looks like without you having to describe it.
 
-```powershell
-sc.exe query PawnIO
-```
+**Jump to:**
+[Values show `--`](#the-rigstats-service-isnt-answering-or-values-show---) ·
+[CPU temperature missing](#cpu-temperature-or-package-power-missing) ·
+[Graphics card values missing](#graphics-card-values-missing-or-the-service-keeps-stopping) ·
+[Control Center](#control-center) ·
+[Wireless batteries](#peripherals-wireless-batteries) ·
+[Notifications](#notifications-dont-show) ·
+[Wrong screen or size](#the-dashboard-is-on-the-wrong-screen-or-the-wrong-size) ·
+[Desktop wallpaper mode](#desktop-wallpaper-mode) ·
+[Wallpaper Engine](#wallpaper-engine) ·
+[Intel and NVIDIA](#intel-and-nvidia) ·
+[Display goes to sleep](#the-display-still-goes-to-sleep)
 
-`STATE: 4 RUNNING` is correct. Error `1060` (service does not exist) means the
-PawnIO device was never created — the install log (`rigstats-install.log` in
-the diagnostics ZIP) records `pawnio_exit=` and `pawnio_service_query=`.
-Installers before #205 only staged the driver with `pnputil`, which never
-creates the device on a machine without another PawnIO consumer.
+<a id="gpu-data-always-shows---"></a>
 
-**Fix (and the dev-environment setup when running from source):** install
-PawnIO once from an elevated prompt, then restart the sensor service:
+## The RIGStats Service Isn't Answering, Or Values Show `--`
 
-```powershell
-winget install namazso.PawnIO
-sc.exe stop rigstats-sensor; sc.exe start rigstats-sensor
-```
+**What you see:** the dashboard shows `--` instead of values, Status says
+"The RIGStats service isn't answering", or the Control Center can't change
+anything.
 
-## GPU Data Always Shows `--`
+RIGStats reads your hardware through its own Windows service,
+`rigstats-sensor`, which starts with Windows.
 
-Make sure the `rigstats-sensor` Windows Service is running:
+**What to do:**
 
-```powershell
-sc.exe query rigstats-sensor
-```
+1. Restart Windows. The service starts with it.
+2. Still `--`? Open **Status**: the **Sensor service** row should say
+   **Running**.
+3. If it isn't running, install RIGStats again from
+   [rigstats.app](https://rigstats.app/#download) — the installer sets the
+   service up.
+4. Only CPU temperature or power missing? See the next section.
+5. Graphics card values missing, or the service keeps stopping? See
+   [Graphics card values missing](#graphics-card-values-missing-or-the-service-keeps-stopping).
 
-`STATE: 4 RUNNING` means the sidecar is active. If it is stopped or missing,
-the installer may not have completed successfully — check `install.log` in the
-diagnostics ZIP (Status → Collect Diagnostics).
+<a id="cpu-temperature--package-power-missing-or-defender-alert-on-service-start"></a>
 
-## GPU Sensors Missing (Temp / Clock / Power / Fan) Or Sidecar Crashes
+## CPU Temperature Or Package Power Missing
 
-**Symptom:** The GPU panel shows core load and D3D 3D usage, but `TEMP`, `HOT`,
-`FREQ`, `POWER`, `FAN` and `VRAM` stay at `--` / `0`. The Windows Event Log may
-also show `rigstats-sensor.exe` crashing with:
+**What you see:** CPU temperature shows `0` or `--`, and CPU power `0 W`.
 
-```
-System.AccessViolationException: Attempted to read or write protected memory.
-   at LibreHardwareMonitor.Hardware.Gpu.AmdGpu.Update()
-```
+These values are read through **PawnIO**, a signed driver the RIGStats
+installer installs (since version 1.21; older versions used a driver that
+Windows Defender could flag — update RIGStats if you see that). A PawnIO you
+already had from another tool (FanControl, LibreHardwareMonitor, …) is kept,
+and uninstalling RIGStats leaves PawnIO in place.
 
-(or a crash in `atiadlxx.dll`).
+**What to do:**
 
-**Since 1.49:** LibreHardwareMonitor runs in a worker process of the
-service. A crash there restarts the worker within seconds; sensors, fans and
-lighting keep working. If the same graphics card crashes it three times,
-RIGStats stops reading that card until Windows restarts and says so in
-**Status → Problems** ("… isn't read any more"), with a link to the driver
-and **Collect diagnostics…**. A laptop that switches its NVIDIA GPU off to
-save power (Eco mode, #338) can do this; the other sensors are unaffected.
+1. Install RIGStats again from [rigstats.app](https://rigstats.app/#download);
+   the installer sets PawnIO up.
+2. If it still shows `0`, install PawnIO yourself. Open **Terminal (Admin)** and
+   run:
 
-**Cause:** This is an **outdated GPU driver**, not a RIGStats bug. The core GPU
-sensors (temp, clock, power, fan) come from AMD's ADL library (`atiadlxx.dll`)
-via LibreHardwareMonitor. Some AMD driver builds return invalid data — or
-corrupt memory — on these ADL calls, which both hides the sensors and can crash
-the sidecar. The `AccessViolationException` is a native-side fault that **cannot
-be caught** from managed .NET, so the whole service dies until it auto-restarts.
-The D3D values (3D load, VRAM-used) keep working because they come from Windows
-D3D counters, not ADL.
+   ```powershell
+   winget install namazso.PawnIO
+   sc.exe stop rigstats-sensor; sc.exe start rigstats-sensor
+   ```
 
-This is a known LibreHardwareMonitor issue (see
-[LibreHardwareMonitor#736](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/issues/736)).
-The same RIGStats build on identical hardware works perfectly with a newer
-driver — the GPU read path (`sensor-sidecar/` + `LibreHardwareMonitorLib`) has
-not changed across recent app versions.
+3. Still missing? [Report it](#report-a-problem) with a diagnostics file.
 
-**Fix:** Update the GPU **and** chipset drivers to the latest versions:
+<a id="gpu-sensors-missing-temp--clock--power--fan-or-sidecar-crashes"></a>
+<a id="amd-graphics-the-sensor-service-keeps-stopping"></a>
 
-- AMD: install the latest [AMD Software: Adrenalin Edition](https://www.amd.com/en/support).
-- Note that Windows Update can silently install an older driver build; always
-  prefer the vendor's latest package.
+## Graphics Card Values Missing, Or The Service Keeps Stopping
 
-After updating, restart the `rigstats-sensor` service (or reboot) and the GPU
-sensors should populate.
+**What you see** — one or more of:
 
-## Desktop Wallpaper Mode
+- The graphics card's load shows, but its temperature, clock, power, fan or
+  memory stay at `--` or `0`.
+- Status says a graphics card "isn't read any more", or the Control Center's
+  **Graphics card** page says "The graphics driver crashed" / "stopped
+  answering".
+- On an AMD graphics card: the dashboard loses its values a few seconds after
+  RIGStats starts, an update stops with *"Error opening file for writing:
+  C:\Program Files\RIGStats\rigstats-sensor.exe"*, or AMD Software says
+  **"Update Required"**.
 
-Set **Settings → Display → Window Layer → Desktop Wallpaper** to render the
-dashboard as a live wallpaper, between the desktop background and the icons. It
-survives `Win+D`, is never covered by other windows, and coexists with Wallpaper
-Engine / Lively.
+**Why:** almost always the graphics driver, not RIGStats. Some driver versions
+give wrong answers or crash when asked about the card. A common cause on AMD:
+Windows Update replaced the driver AMD Software installed with an older one
+(seen in October 2026 with *"AMD Display Driver Update (32.0.21042.62)"*).
 
-A few behaviours are specific to this mode and are **expected**, not bugs:
+RIGStats keeps the rest working: since 1.49 a crash restarts only the part that
+reads the hardware, and after three crashes on the same card it stops reading
+that card until Windows restarts. The graphics card's power limit has run apart
+from the service since 1.48.1.
 
-- **Settings apply on Save, not as a live preview.** The wallpaper is drawn by a
-  separate background process (`rigstats-wallpaper.exe`) that reads settings from
-  disk about once a second, so theme/panel/threshold changes only appear after you
-  press **Save**. Settings shows an amber banner reminding you of this.
-- **Controls with no live effect are greyed out** while the applied layer is
-  Desktop Wallpaper, and the **Display Profile selector is locked**. To change the
-  profile, switch the Window Layer back to a non-wallpaper option (Normal / Always
-  on Top / Always Behind), pick the profile, then return to Desktop Wallpaper and
-  Save.
-- **Window opacity has no effect** in wallpaper mode. `WS_EX_LAYERED` cannot be
-  applied to a WorkerW child window, so the dashboard is opaque over the wallpaper.
-- **The dashboard position** is the screen position the window had when you
-  switched into wallpaper mode (saved as `wallpaperPosition`). Place the window
-  where you want it *before* switching to Desktop Wallpaper.
+**What to do:**
 
-If the dashboard disappears after Explorer restarts, the host process exits and is
-respawned automatically by the main app within a second.
+1. Install the latest driver from the maker — not from Windows Update:
+   - AMD: open AMD Software and choose **Download & Install**, or get it from
+     [amd.com](https://www.amd.com/en/support/download/drivers.html).
+   - NVIDIA: [nvidia.com](https://www.nvidia.com/Download/index.aspx).
+   - Install the latest chipset driver too.
+2. Restart Windows.
+3. If a RIGStats update had failed, run it again.
+4. Still the same? [Report it](#report-a-problem) with a diagnostics file — it
+   shows which drivers Windows Update installed.
 
-## Can I Change Which Display Is Used?
-
-Yes — open Settings and pick a **Display Profile** that matches the target screen.
-The dashboard auto-targets the connected monitor whose resolution and orientation
-best match the profile (a dedicated 1920×450 strip wins for `landscape-xl`, a
-portrait side-strip wins for the `*-side` profiles, etc.), and otherwise falls
-back to the primary monitor — it no longer lands on an arbitrary small screen.
-
-When you switch profiles the window keeps its current screen position if that spot
-is still on a connected monitor; only when the saved position is off-screen does it
-re-target the matching monitor. **Fill Screen** fills the height of the monitor the
-window currently sits on, so enabling it never moves the dashboard to another
-screen.
-
-The low-level targeting logic lives in `pick_window_rect_for_profile` /
-`select_profile_monitor` in `src-egui/src/geometry.rs`.
-
-## Can I Switch Dashboard Size Manually?
-
-Yes. Open Settings and change Display Profile. Save to apply immediately and persist the choice.
+**Stop Windows from replacing drivers:** Settings → System → About → Advanced
+system settings → Hardware → Device Installation Settings → **No**. Security
+updates still install.
 
 ## Control Center
 
-- **A tab is missing** (Fans, CPU, GPU, Lighting): each tab appears only when this PC's hardware supports it — writable fan control, an AMD Ryzen 9000 on a verified SMU table, an AMD Radeon, a supported lighting device. The diagnostics ZIP's `control-capabilities.json` says what was found and why a feature is unavailable.
-- **"Armoury Crate controls the fans"**: Armoury Crate's fan service (`AsusFanControlService`) is running, so RIGStats leaves the fans to it rather than have two programs fight over every fan — fan curves are off, everything else keeps working, and a profile with fan curves applies its other parts with the note "fan skipped". A service can't be closed like an app: remove Armoury Crate with ASUS's [Armoury Crate Uninstall Tool](https://rog.asus.com/support/FAQ/1041654) (the problem's **ASUS uninstall tool** button; a reinstall brings it back), then reopen the Control Center. Stopping the service in `services.msc` works until the next restart. If you have Armoury Crate but never used its fan control, or your fans still fight after this, send diagnostics — the service log's `Other hardware software running:` line shows what RIGStats found.
-- **"… controls the lighting"**: Armoury Crate (its LightingService) or OpenRGB is running and owns the lighting; close it, or turn its lighting off, then reopen the Control Center. A device marked as controlled by **Windows Dynamic Lighting** is skipped until you turn that off in Settings → Personalization → Dynamic Lighting.
-- **An ASUS mouse or keyboard is listed but doesn't change colour**: the device itself has a lighting mode setting, saved in the device, that decides whether it follows lighting commands from outside. For the mice that have it on the ROG Omni receiver (ROG Harpe Ace Aim Lab Edition, Keris II Ace, Harpe Ace Mini, Harpe Ace Extreme), the Lighting tab reads the setting and offers **Let RIGStats control it**. Newer ROG mice have no such setting. For other devices, open [Gear Link](https://gearlink.asus.com) (older firmware needs its Gear Link Companion app) or Armoury Crate and set the device's **Cross-device Lighting Toggle** to **Aura Sync & Windows Dynamic Lighting**. In "Device Lighting" mode it accepts every command and ignores them — RIGStats can't tell, because the device doesn't report its colour back. The setting stays in the device, so Gear Link / Armoury Crate can be closed or uninstalled afterwards. Leave Windows' own "Use Dynamic Lighting on my devices" off, or RIGStats leaves the device to Windows.
-- **A lighting device isn't listed**: check [supported-devices.md](supported-devices.md). Devices plugged in or switched on later are found when the Control Center opens. If it still doesn't show, open a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) with the diagnostics ZIP (`lighting-devices.json`) — the same form confirms a device marked "not yet verified" that works for you.
-- **"Refused by the service" / "The RIGStats service refused this app" / changes don't apply**: the `rigstats-sensor` service must be running (`sc query rigstats-sensor`). Only the installed, signed `rigstats.exe` may control hardware — a copied or self-built `rigstats.exe` is refused by design; `%ProgramData%\se.codeby.rigstats\rigstats-sensor.log` then shows `Client rejected: …`.
-- **Graphics card says "The graphics driver crashed" / "… stopped answering" / "… didn't answer"**: the graphics driver's library (AMD ADLX or NVIDIA NVML) crashed, hung or failed when asked for the power limit. It runs in a separate process, so the service keeps running and only the GPU power limit is off. The page has a button for the driver download, **Collect diagnostics…** and **Read more**. After a crash it is tried again once Windows restarts or the driver is updated; after a hang, 10 minutes later. Profiles still apply their other parts (fans, CPU, lighting) while the GPU part is skipped. The usual cause is a driver Windows Update replaced — see [AMD Graphics: The Sensor Service Keeps Stopping](#amd-graphics-the-sensor-service-keeps-stopping); the diagnostics ZIP's `driver-updates.txt` shows which drivers Windows Update installed, `gpu-worker.txt` why the library was turned off.
-- **A CPU limit or Curve Optimizer change was undone after a restart**: if Windows goes down shortly after such a change, it isn't re-applied at the next start, and the CPU tab says so — choose a milder value.
+- **A page is missing (Fans, CPU, Graphics card, Lighting…)** — a page only
+  appears when this PC's hardware supports it: fan control the board allows, an
+  AMD Ryzen 9000 processor, an AMD Radeon or desktop NVIDIA graphics card, a
+  supported lighting device. Laptop graphics cards have no Graphics card page;
+  the laptop's own performance modes decide their power.
+- **"Armoury Crate controls the fans"** — Armoury Crate's fan service is
+  running, so RIGStats leaves the fans to it instead of two programs fighting
+  over every fan. Everything else in a profile still applies.
+  1. Remove Armoury Crate with ASUS's
+     [Armoury Crate Uninstall Tool](https://rog.asus.com/support/FAQ/1041654)
+     (the **ASUS uninstall tool** button in RIGStats). Reinstalling Armoury
+     Crate brings it back.
+  2. Open the Control Center again.
+
+  Never used Armoury Crate's fan control, or the fans still fight afterwards?
+  [Report it](#report-a-problem).
+- **"… controls the lighting"** — Armoury Crate or OpenRGB is running and owns
+  the lighting. Close it, or turn its lighting off, then open the Control
+  Center again. A device "controlled by Windows Dynamic Lighting" is left alone
+  until you turn that off in Windows: Settings → Personalization → Dynamic
+  Lighting.
+- **An ASUS mouse or keyboard is listed but doesn't change colour** — the
+  device has its own setting that decides whether it follows lighting from
+  other programs.
+  - ROG Harpe Ace Aim Lab Edition, Keris II Ace, Harpe Ace Mini and Harpe Ace
+    Extreme on the ROG Omni receiver: the Lighting page offers **Let RIGStats
+    control it**.
+  - Other devices: open [Gear Link](https://gearlink.asus.com) or Armoury
+    Crate and set the device's **Cross-device Lighting Toggle** to **Aura Sync
+    & Windows Dynamic Lighting**. The setting is kept in the device, so you can
+    close or uninstall Gear Link / Armoury Crate afterwards.
+  - Leave Windows' own "Use Dynamic Lighting on my devices" off, or RIGStats
+    leaves the device to Windows.
+- **A lighting device isn't listed** — check the
+  [supported devices](supported-devices.md). A device plugged in or switched on
+  later is found when the Control Center opens. Still missing? Send a
+  [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml)
+  with a diagnostics file — the same form confirms a device marked "not yet
+  verified" that works for you.
+- **"The RIGStats service refused this app" / changes don't apply** — only the
+  installed RIGStats may control fans, power and lighting; a copied or
+  self-built `rigstats.exe` is refused on purpose. Start RIGStats from the Start
+  menu, or install it again from [rigstats.app](https://rigstats.app/#download).
+- **"The graphics driver crashed" / "stopped answering"** — see
+  [Graphics card values missing](#graphics-card-values-missing-or-the-service-keeps-stopping).
+  The rest of your profiles (fans, CPU, lighting) keeps applying meanwhile.
+- **A CPU limit or Curve Optimizer change was undone after a restart** — if
+  Windows goes down shortly after such a change, RIGStats doesn't apply it again
+  at the next start, and the CPU page says so. Choose a milder value.
 
 ## Peripherals (Wireless Batteries)
 
-The PERIPHERALS panel (switch it on under **Control Center → Dashboard → Panels**) and the hover card over the tray icon show the battery of wireless devices — which ones: [supported devices › Battery](supported-devices.md#battery). The service reads every 20 s; its log (`%ProgramData%\se.codeby.rigstats\rigstats-sensor.log`) has a line starting with `Battery:` for every device it found.
+The PERIPHERALS panel (turn it on under **Control Center → Dashboard →
+Panels**) and the card over the tray icon show the battery of wireless devices
+([which ones](supported-devices.md#battery)). They update every 20 seconds.
 
-- **A device shows greyed, "Not connected"**: it disconnected or stopped answering (switched off, asleep, out of range, or a 2.4 GHz device moved to its cable). The panel keeps its last level in grey for 10 minutes so a device that sleeps and wakes doesn't flicker in and out, then drops it; it comes back at the next read once it answers. A greyed device raises no low-battery alert, since its level is old.
-- **A Bluetooth device doesn't show**: RIGStats shows what Windows has. If Settings → Bluetooth & devices shows no percentage for it, the device doesn't report its battery over Bluetooth (common for older "classic" Bluetooth mice and keyboards). A device that was already off when the service started appears once it connects.
-- **No charging shown for a Bluetooth device**: Windows doesn't expose charging for Bluetooth devices. RIGStats asks Logitech devices themselves (HID++); other brands show only the percentage.
-- **A Logitech device on a receiver doesn't show**: check that its receiver is in [the list](supported-devices.md#battery). The log has a `Battery: Logitech … receiver` line listing what is paired in each slot. If the device is there but has no `Battery:` line with a level, it didn't answer (asleep or off) or doesn't report a percentage.
-- **Bluetooth devices keep disconnecting**: usually the signal, not RIGStats. A desktop board's Wi-Fi/Bluetooth module (for example ASUS boards with "AX" or "WIFI" in the name) needs its antenna screwed onto **both** connectors on the back panel; without it, Bluetooth reaches only a metre or two and drops in and out. Stand the antenna on the desk, not behind the case, and away from USB 3 hubs. Seen on the owner's rig: the mice dropped constantly until the antenna was connected.
-- **A ROG device doesn't show or keeps its old level**: see "A lighting device isn't listed" under [Control Center](#control-center); its battery is read through the same connection.
+- **A device shows greyed, "Not connected"** — it is off, asleep, out of range,
+  or a 2.4 GHz device moved to its cable. Its last level stays in grey for 10
+  minutes, then it disappears until it answers again. A greyed device raises no
+  low-battery alert, since its level is old.
+- **A Bluetooth device doesn't show** — RIGStats shows what Windows has. If
+  Windows' Settings → Bluetooth & devices shows no percentage for it, the device
+  doesn't report its battery (common for older Bluetooth mice and keyboards). A
+  device that was off when Windows started appears once it connects.
+- **No charging shown for a Bluetooth device** — Windows doesn't tell programs
+  whether a Bluetooth device is charging. RIGStats asks Logitech devices
+  themselves; other brands show only the percentage.
+- **A Logitech device on a receiver doesn't show** — check that its receiver is
+  in [the list](supported-devices.md#battery). A device that is asleep or off
+  doesn't answer until it wakes.
+- **Bluetooth devices keep disconnecting** — usually the signal, not RIGStats.
+  On a desktop PC, the Wi-Fi/Bluetooth antenna must be screwed onto **both**
+  connectors on the back panel; without it Bluetooth reaches only a metre or
+  two. Stand the antenna on the desk, not behind the case, and away from USB 3
+  hubs.
+- **A ROG device doesn't show or keeps its old level** — see "A lighting device
+  isn't listed" under [Control Center](#control-center); its battery is read
+  the same way.
 
 ## Notifications Don't Show
 
-Alerts and other notifications are Windows notifications from **RIGStats** (with its icon); RIGStats is listed under Windows **Settings → System → Notifications**.
+Alerts and other notifications come from **RIGStats** (with its icon), and
+RIGStats is listed under Windows **Settings → System → Notifications**.
 
-- **Turned off in Windows**: if notifications are off for RIGStats, for all apps, or by your organisation's policy, **Settings → Notifications** and **Status → Problems** in RIGStats say so. **Open Windows settings** takes you to the right page (not shown when a policy decides — ask whoever manages the PC).
-- **Do Not Disturb or Focus is on**: Windows holds notifications back while it is; they wait in the notification centre (Win+N). RIGStats doesn't check for it, so it won't mention it.
-- **Nothing at all, not even the test**: **Settings → Notifications → Send Test** shows a sample. If it doesn't appear and RIGStats reports nothing turned off, check the two points above, then collect diagnostics (Status → Collect diagnostics) and report it.
-- **An alert you expected didn't come**: check that the alert kind is on (**Settings → Notifications**: Critical alerts / Warnings) and its level in the profile (**Control Center → Alerts**). The same alert repeats at most once per "Repeat at most every".
+- **Turned off in Windows** — RIGStats says so under **Settings →
+  Notifications** and in **Status**. **Open Windows settings** takes you to the
+  right page (not shown when your organisation's policy decides — ask whoever
+  manages the PC).
+- **Do Not Disturb is on** — Windows holds notifications back meanwhile; they
+  wait in the notification centre (Win+N). RIGStats can't tell, so it won't
+  mention it.
+- **Not even the test shows** — **Settings → Notifications → Send Test** shows a
+  sample. If it doesn't appear and RIGStats reports nothing turned off, check
+  Do Not Disturb, then [report it](#report-a-problem).
+- **An alert you expected didn't come** — check that the kind is on (**Settings
+  → Notifications**: Critical alerts / Warnings) and its level in the profile
+  (**Control Center → Alerts**). The same alert repeats at most once per
+  "Repeat at most every".
 
-## AMD Graphics: The Sensor Service Keeps Stopping
+<a id="can-i-change-which-display-is-used"></a>
+<a id="can-i-switch-dashboard-size-manually"></a>
 
-**Symptoms:** the dashboard loses its sensors and the Control Center says "Connecting" a few seconds after RIGStats starts; a RIGStats update stops with *"Error opening file for writing: C:\Program Files\RIGStats\rigstats-sensor.exe"*; AMD Software says **"Update Required"** when opened.
+## The Dashboard Is On The Wrong Screen, Or The Wrong Size
 
-**Cause:** Windows Update replaced the driver AMD Software (Adrenalin) installed with an older one, so the driver's parts no longer match. AMD's driver library (ADLX) then crashes the service when it is asked about the graphics card (for the GPU power limit), each time RIGStats connects. Windows restarts the service a few times and gives up; while it is restarting, the installer can't replace its file. In the log (`%ProgramData%\se.codeby.rigstats\rigstats-sensor.log`): `An earlier run crashed … at SensorSidecar.Control.Providers.AdlxGpuPower.System()`; in Windows' Application log, *Application Error* 1000 for `rigstats-sensor.exe` with exception code `0xc0000005`. Seen in October 2026 after Windows Update installed *"AMD Display Driver Update (32.0.21042.62)"* over a newer Adrenalin driver.
+Open **Settings → Display** and pick a **Display profile** that matches the
+screen you want. RIGStats places the dashboard on the connected screen whose
+resolution and orientation fit the profile best, otherwise on the main screen.
+Save to apply.
 
-**Fix:**
-1. Open AMD Software and choose **Download & Install**, or install the latest driver from [amd.com](https://www.amd.com/en/support/download/drivers.html). Restart if it asks.
-2. Restart Windows, or start the service from an administrator terminal: `sc start rigstats-sensor`.
-3. Run a failed RIGStats update again.
+- When you switch profiles, the dashboard stays where it is if that spot is
+  still on a connected screen.
+- **Fill screen** fills the height of the screen the dashboard is on; it never
+  moves it to another screen.
 
-**Prevent it:** *Settings → System → About → Advanced system settings → Hardware → Device Installation Settings → No* stops Windows from replacing drivers on its own; security updates still install.
+## Desktop Wallpaper Mode
 
-From 1.48.1 the graphics-driver calls run in a separate process, so a crashing driver can't stop the service: the Control Center's **Graphics card** page says "The graphics driver crashed" instead, with a button for the driver download and **Collect diagnostics…** ([#370](https://github.com/dvalfrid/rigstats/issues/370)).
+**Settings → Display → Window layer → Desktop wallpaper** draws the dashboard
+as part of the desktop background, under your icons. It stays when you press
+Win+D and is never covered by other windows.
+
+These are expected in this mode, not faults:
+
+- **Changes show when you click Save**, not while you try them — Settings
+  reminds you with a banner.
+- **The display profile can't be changed here.** Switch the window layer to
+  another option, pick the profile, then go back to Desktop wallpaper and Save.
+- **Opacity has no effect** — the dashboard is solid over the background.
+- **Where it sits:** where the window was when you switched to Desktop
+  wallpaper. Move it into place *before* you switch.
+
+If Explorer restarts, the dashboard comes back by itself within a second.
 
 ## Wallpaper Engine
 
-The Control Center's **Desktop** page can switch [Wallpaper Engine](https://www.wallpaperengine.io/) per profile: leave it alone, show a wallpaper on each screen, pause it (the frame freezes), or turn it **Off** for that profile (the Windows background shows, and the profiles that use it start it again). RIGStats doesn't draw live wallpapers itself; it sends Wallpaper Engine the commands of its [command line](https://help.wallpaperengine.io/en/functionality/cli.html). Every change of state is written to the log (**Status → Log**, lines starting with `wallpaper engine:`), and **Status → Health** has a Wallpaper Engine row.
+The Control Center's **Desktop** page can switch
+[Wallpaper Engine](https://www.wallpaperengine.io/) per profile: leave it alone,
+show a wallpaper on each screen, pause it, or turn it off. **Status** has a
+Wallpaper Engine row.
 
-- **The page says "Not installed"**: RIGStats finds Wallpaper Engine through the path it registers for itself (`HKCU\Software\WallpaperEngine\installPath`). **Get it on Steam** opens its store page (in the Steam client when Steam is installed). After installing, start it once so it registers. The log says `wallpaper engine: not installed`, or `found at …` once it's there.
-- **"Not running" / it doesn't start**: click **Start** on the Desktop page, or start it from the Start menu. The profile's choice applies as soon as it runs; until then nothing is sent. The log says `wallpaper engine: starting …`, then `running` within a few seconds. If it can't be started, the page shows the reason in red under **Last problem**, and the log has `wallpaper engine: couldn't start … — <reason>`. If it hasn't come up 30 seconds after **Start**, the page says so under **Last problem** (log: `started, but not running 30 s later`); start it once by itself: Wallpaper Engine may be waiting for an answer (an update, or a question after a crash).
-- **It crashed or was closed**: within about 5 seconds the log says `wallpaper engine: not running (closed or crashed)` and the page shows **Not running**. Start it again and the active profile's wallpapers come back. If it keeps crashing, the cause is in Wallpaper Engine or the wallpaper itself: try another wallpaper, or Wallpaper Engine's own help (help.wallpaperengine.io).
-- **Back to the Windows background without closing it**: **Stop** on the Desktop page stops its wallpapers. The Windows background shows, and Wallpaper Engine stays in the tray with its wallpapers kept; **Start** brings them back. (Quitting Wallpaper Engine itself is done from its tray icon; its command line has no clean way to quit it.)
-- **A command failed**: the page shows **Last problem** (for example `'openWallpaper' failed: no answer within 5 s`), and the log has `wallpaper engine: '<command>' failed — <reason>`. It clears when the next command succeeds.
-- **A screen can't get a wallpaper ("doesn't know this screen yet")**: Wallpaper Engine numbers the screens itself and keeps the list in its `config.json` (`monitormap`). A screen it hasn't seen yet (new, or never shown a wallpaper) isn't in it. Open Wallpaper Engine once with that screen connected. The log says `screen … isn't in its monitor map — skipped`, or `couldn't read its config.json` if the file can't be read at all.
-- **"No longer in your library"**: the wallpaper was unsubscribed or deleted. Choose another one; until then nothing is sent for that screen (log: `skipped screen N — … is gone`).
-- **Reporting a problem**: the diagnostics ZIP (**Status → Collect Diagnostics**) has `wallpaper-engine.txt`: where it's installed, whether it runs, its screen map and how many wallpapers the library has (no titles).
+- **"Not installed"** — install Wallpaper Engine (**Get it on Steam** on the
+  page), then start it once so RIGStats can find it.
+- **"Not running" / it doesn't start** — click **Start** on the Desktop page.
+  If it hasn't started after 30 seconds, start it once by itself: it may be
+  waiting for an answer (an update, or a question after a crash).
+- **It crashed or was closed** — the page shows **Not running** within about 5
+  seconds. Start it again and the profile's wallpapers come back. If it keeps
+  crashing, try another wallpaper, or
+  [Wallpaper Engine's help](https://help.wallpaperengine.io).
+- **Back to the Windows background** — **Stop** on the Desktop page. Wallpaper
+  Engine stays in the tray with your wallpapers kept; **Start** brings them
+  back. To quit Wallpaper Engine itself, use its tray icon.
+- **A red "Last problem" on the page** — the last command to Wallpaper Engine
+  failed; it clears when the next one works.
+- **"Doesn't know this screen yet"** — open Wallpaper Engine once with that
+  screen connected, so it learns about it.
+- **"No longer in your library"** — the wallpaper was unsubscribed or deleted.
+  Choose another one.
 
-## Intel And NVIDIA Support
+<a id="intel-and-nvidia-support"></a>
 
-CPU data comes from `sysinfo` regardless of vendor.
+## Intel And NVIDIA
 
-For NVIDIA GPUs, the sidecar works as well. If labels differ on your machine, adjust the GPU sensor matching in `sensor-sidecar/SensorReader.cs`.
+- Sensors, fan curves, power plans and lighting work whatever your processor
+  and graphics card brand.
+- CPU power limits and Curve Optimizer are for AMD Ryzen only for now (Intel:
+  [#209](https://github.com/dvalfrid/rigstats/issues/209)).
+- The graphics card power limit covers AMD Radeon and desktop NVIDIA GeForce
+  cards. Laptop graphics cards follow the laptop's own performance modes (ASUS
+  laptops: [#234](https://github.com/dvalfrid/rigstats/issues/234)).
 
-Control Center: fan curves, power plans and lighting work regardless of CPU/GPU vendor; CPU power limits and Curve Optimizer are AMD Ryzen only for now (Intel: [#209](https://github.com/dvalfrid/rigstats/issues/209)), and the GPU power limit covers AMD Radeon and desktop NVIDIA GeForce cards. Laptop GPUs don't get a GPU tab: their power budget follows the laptop's own performance modes (ASUS laptops: [#234](https://github.com/dvalfrid/rigstats/issues/234)).
+<a id="display-still-goes-to-sleep"></a>
 
-## How Do I Inspect Real WMI Strings?
+## The Display Still Goes To Sleep
 
-Use PowerShell and capture these values from the actual machine:
+RIGStats doesn't keep the display awake. Use Windows' power settings (Settings
+→ System → Power & battery) or the monitor's own menu.
 
-```powershell
-Get-CimInstance Win32_ComputerSystem |
-  Select-Object Manufacturer, Model |
-  Format-List
+<a id="how-do-i-report-a-bug-or-missing-sensor-support"></a>
 
-Get-CimInstance Win32_ComputerSystemProduct |
-  Select-Object Name, Version |
-  Format-List
+## Report A Problem
 
-Get-CimInstance Win32_BaseBoard |
-  Select-Object Manufacturer, Product |
-  Format-List
-```
+1. Open **Status** from the tray menu and click **Collect diagnostics…**.
+2. Choose where to save the ZIP file. Nothing is sent anywhere — the file is
+   only written where you choose.
+3. [Open an issue on GitHub](https://github.com/dvalfrid/rigstats/issues/new/choose)
+   describing what you see, and attach the ZIP.
 
-If you want one copy-paste friendly block for support/debugging, run:
+What the ZIP contains: [Diagnostics export](../README.md#diagnostics-export).
 
-```powershell
-$cs = Get-CimInstance Win32_ComputerSystem
-$csp = Get-CimInstance Win32_ComputerSystemProduct
-$bb = Get-CimInstance Win32_BaseBoard
+---
 
-[pscustomobject]@{
-  ComputerSystemManufacturer = $cs.Manufacturer
-  ComputerSystemModel = $cs.Model
-  ProductName = $csp.Name
-  ProductVersion = $csp.Version
-  BaseBoardManufacturer = $bb.Manufacturer
-  BaseBoardProduct = $bb.Product
-} | Format-List
-```
-
-Those six fields are the ones RIGStats now uses to classify the system brand, with product-line names like `Alienware`, `Legion`, `OMEN`, `Predator`, and `AORUS` taking priority over the generic OEM name.
-
-## How Do I Report A Bug Or Missing Sensor Support?
-
-Use the **Status dialog → Collect Diagnostics…** button.
-
-It opens a native Windows save dialog. Pick a location and a ZIP file is written immediately.
-No data is sent automatically — the file is written only to the path you choose.
-Share it by email or attach it to a GitHub issue.
-
-See [Diagnostics Export](../README.md#diagnostics-export) in the README for a full description of what the ZIP contains.
-
-### What To Look For In `displays.json`
-
-The file lists every monitor Windows reports to the app — the same data used by
-`geometry::pick_window_rect_for_profile()` — plus which one was picked for the
-current dashboard profile.
-
-Top-level fields:
-
-- `dashboard_profile` — the profile active when diagnostics were collected
-- `monitors[]` — one entry per connected display:
-  - `left` / `top` / `right` / `bottom` — position in the virtual desktop
-    coordinate space, in logical (DPI-normalized) pixels
-  - `width` / `height` — derived resolution
-  - `is_primary` — `true` for the monitor at the virtual origin `(0, 0)`
-  - `is_selected` — `true` on the monitor that was actually chosen for
-    `dashboard_profile`
-
-If the dashboard appears on the wrong monitor, check which entry has
-`is_selected: true` and compare its `width`/`height` against the profile's
-expected size — a profile only targets a monitor whose resolution matches
-within ~10%; otherwise it falls back to the primary monitor.
-
-### What To Look For In `sensor-tree.txt`
-
-The file contains the full LHM hardware and sensor tree as seen by the sidecar at the last service start.
-Each hardware node shows its type, identifier, and name; each sensor shows its type, identifier, name, and current value.
-
-Use this file to identify the exact identifier path for a sensor that isn't being picked up.
-For example, if a DIMM temperature reads correctly in standalone LHM but not in RIGStats, find the sensor here and compare its identifier against the filter in `sensor-sidecar/SensorReader.cs`.
-
-The file is overwritten on every service start, so it always reflects the current hardware configuration.
-
-### What To Look For In `sidecar-log.txt`
-
-The file is the log written by the `rigstats-sensor` Windows Service itself:
-each start (`Listening on \\.\pipe\rigstats-sensors`, then `The hardware
-worker has opened the hardware.`), clients (`Client connected.` / `Client
-disconnected.`), lighting devices found, profiles applied, wireless
-batteries, and `Stopped.`. It does **not** contain sensor values.
-
-Use it to tell whether the sidecar is running and accepting a pipe
-connection at all. If the service never logs "Client connected", the Rust
-backend isn't reaching the pipe — check `sidecar-service.txt` for the service
-state first.
-
-**The hardware worker.** The service reads the hardware through a worker
-process of its own, which it restarts when a driver crashes or hangs it.
-`The hardware worker ended during 'sample' (exit code 0xC0000005) after 35 s
-while reading <hardware> (<id>) — starting it again …` is such a crash, with
-the hardware it was reading; `did not answer 'sample' within 8 s` is a hang;
-`The hardware worker is running again.` follows. After three crashes in the
-same hardware, `<hardware> (<id>) crashed the hardware worker 3 times — it is
-no longer read until Windows restarts`: only that hardware's values are
-missing, and Status lists it under Problems. Lines starting
-`[hardware-worker]` or `[gpu-worker]` are a worker's own output — after a
-crash, its stack.
-
-**Crashes.** A crash of the service itself (a native access violation
-outside the workers) ends the service before it can log anything itself. At its next start it copies
-what Windows recorded into the log: `An earlier run crashed at …` with the
-stack, and `Crash dump written at …: C:\ProgramData\se.codeby.rigstats\dumps\rigstats-sensor.exe.<pid>.dmp (… MB, administrators only)`.
-The dump (a minidump; Windows keeps the newest 3) is **not** in the ZIP: it
-holds the service's stack memory, so the folder is readable by
-administrators only. If we ask for it, open the folder in Explorer, confirm
-the administrator prompt, and attach the `.dmp` file named in the log.
-
-When a specific sensor always shows `--` in the dashboard (the sidecar itself
-is clearly running and connected), the mismatch is in
-`sensor-sidecar/SensorReader.cs` (the C# extraction logic) or
-`rigstats-backend/src/lhm.rs` (the Rust selection logic) — use
-`sensor-tree.txt` (below) to find the exact sensor identifier and compare it
-against both.
-
-## How Do I Change The UI?
-
-The dashboard is a native egui app — all UI is Rust code in `src-egui/src/`. Edit the relevant file and rebuild:
-
-```powershell
-cargo build --manifest-path src-egui/Cargo.toml
-.\target\debug\rigstats.exe
-```
-
-Build a new installer after:
-
-```powershell
-cargo xtask build
-```
-
-## Ghost Entries in "Other System Tray Icons"
-
-Windows stores one tray icon entry per unique exe path. Old entries from dev builds, renamed binaries, or previous Tauri installs linger even after those exes are gone.
-
-Run the cleanup script (no elevation needed — run as the same user that runs RIGStats):
-
-```powershell
-pwsh -ExecutionPolicy Bypass -File tools\clean-tray-ghosts.ps1
-```
-
-The script ([`tools/clean-tray-ghosts.ps1`](../tools/clean-tray-ghosts.ps1)) finds all RIGStats-related tray entries, shows what it will keep vs delete, asks for confirmation, then restarts Explorer.
-
-After it runs, check **Settings → Personalization → Taskbar → Other system tray icons** — only one RIGStats entry should remain.
-
-## Display Still Goes To Sleep
-
-Display sleep blocking is not currently implemented in the app.
-
-Use Windows power settings or the monitor OSD if you need the display to stay awake.
+Developers: log lines, the files in the diagnostics ZIP, PawnIO from source and
+more are in [developer troubleshooting](developer-troubleshooting.md).

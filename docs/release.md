@@ -397,7 +397,9 @@ AB, L=Vendelsö, S=Stockholm, C=SE`, from the profile's identity validation.
 5. **Docs say what ships:** the README (the Control Center table, feature
    sections, the dependency versions it names), the website's text and
    screenshots (`assets/*.png`, copied to the site when it is deployed), and
-   `docs/troubleshooting.md` for every new feature that can go wrong.
+   `docs/troubleshooting.md` for every new feature that can go wrong (what the
+   user sees and short steps; log lines, files and causes go in
+   `docs/developer-troubleshooting.md`).
 6. **Highlights — always, every release:** check `release-highlights.md`
    against the release PR's changelog right before merging it. Every `feat`
    (and every fix users will notice) that landed since the list was written

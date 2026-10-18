@@ -82,7 +82,7 @@ pub fn service_unreachable() -> Problem {
             .to_owned(),
         vec![
             diagnostics(),
-            read_more("#cpu-temperature--package-power-missing-or-defender-alert-on-service-start"),
+            read_more("#the-rigstats-service-isnt-answering-or-values-show---"),
         ],
         None,
     )
@@ -393,6 +393,56 @@ pub fn active_problems(
 mod tests {
     use super::*;
     use rigstats_backend::control::{ApplyResult, CapabilitySet};
+
+    /// The anchors `docs/troubleshooting.md` offers: GitHub's heading slugs
+    /// (lower case; letters, digits, spaces, `-` and `_` kept; spaces to `-`)
+    /// and the `<a id="…">` kept for old links.
+    fn troubleshooting_anchors() -> Vec<String> {
+        let doc = include_str!("../../docs/troubleshooting.md");
+        let mut anchors = Vec::new();
+        for line in doc.lines() {
+            if let Some(heading) = line.strip_prefix("## ") {
+                let slug: String = heading
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+                    .map(|c| if c == ' ' { '-' } else { c })
+                    .collect();
+                anchors.push(slug);
+            }
+            for part in line.split("<a id=\"").skip(1) {
+                if let Some((id, _)) = part.split_once('"') {
+                    anchors.push(id.to_owned());
+                }
+            }
+        }
+        anchors
+    }
+
+    #[test]
+    fn every_read_more_anchor_exists_in_the_troubleshooting_guide() {
+        let anchors = troubleshooting_anchors();
+        let app: Vec<String> = [service_unreachable(), service_refused()]
+            .iter()
+            .flat_map(|p| p.actions.iter())
+            .filter_map(|a| a.target.as_deref()?.strip_prefix(TROUBLESHOOTING_URL))
+            .map(|a| a.trim_start_matches('#').to_owned())
+            .collect();
+        assert!(!app.is_empty());
+        // The service's links (sensor-sidecar: ControlProtocol.cs ReadMore,
+        // GpuWorker.HelpUrl, HardwareWorkerClient.ReadMoreAnchor) and older
+        // app versions'. Changing a heading must keep these working.
+        let kept = [
+            "control-center",
+            "gpu-sensors-missing-temp--clock--power--fan-or-sidecar-crashes",
+            "cpu-temperature--package-power-missing-or-defender-alert-on-service-start",
+            "desktop-wallpaper-mode",
+            "wallpaper-engine",
+        ];
+        for anchor in app.iter().map(String::as_str).chain(kept) {
+            assert!(anchors.iter().any(|a| a == anchor), "#{anchor} missing");
+        }
+    }
 
     fn connected() -> ControlState {
         ControlState {
