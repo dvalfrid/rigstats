@@ -73,6 +73,8 @@ public sealed class AsusMouseDevice : IMouseDevice, IDisposable
                 replies.GetValueOrDefault(MouseProtocol.Key([MouseProtocol.Get, 0x07, 0x00])));
             if (writes.Count == 0)
                 return now;
+            // The frames sent, for checking an unverified model's family frames from a user's log (#432).
+            SidecarLog.Log($"[rigstats-control] Mouse: {Entry.Spec.Name} 0x{Entry.ProductId:X4} writes {string.Join(" ", writes.Select(Convert.ToHexString))}.");
             foreach (var write in writes)
                 Ask(write); // the acknowledgement; the read-back below decides
             Ask(MouseProtocol.Save);
@@ -91,8 +93,8 @@ public sealed class AsusMouseDevice : IMouseDevice, IDisposable
             Ask(MouseProtocol.SwitchProfile(profile));
             Ask(MouseProtocol.Save);
             var back = Ask([MouseProtocol.Get, 0x00, 0x00]);
-            if (back is not { Length: > 11 } || back[11] + 1 != profile)
-                throw new IOException($"{Entry.Spec.Name} did not switch to profile {profile}.");
+            if (MouseProtocol.ProfileIn(Entry.Spec, back) != profile)
+                throw new IOException($"{Entry.Spec.Name} did not switch to profile {profile} (read back {(back is null ? "nothing" : Hid.ReplyHex(back))}).");
         }
     }
 

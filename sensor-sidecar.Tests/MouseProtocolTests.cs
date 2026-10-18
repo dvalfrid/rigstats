@@ -414,6 +414,15 @@ public class MouseProtocolTests
     }
 
     [Fact]
+    public void A_profile_switch_is_confirmed_where_the_model_keeps_its_profile()
+    {
+        var reply = Reply(0x12, 0x00, 0x00, (10, 2), (11, 1));
+        Assert.Equal(3, MouseProtocol.ProfileIn(Spec(0x18B4, MouseLink.Dongle), reply)); // Strix Carry: at 10
+        Assert.Equal(2, MouseProtocol.ProfileIn(HarpeAce, reply)); // common: at 11
+        Assert.Null(MouseProtocol.ProfileIn(HarpeAce, null));
+    }
+
+    [Fact]
     public void Tuf_m3_gen_ii_counts_its_stage_from_zero()
     {
         var m3 = Spec(0x1A9B, MouseLink.Wired);

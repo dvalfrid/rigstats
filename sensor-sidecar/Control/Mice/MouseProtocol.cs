@@ -313,6 +313,11 @@ public static class MouseProtocol
         return writes;
     }
 
+    /// The onboard profile (1-based) a `12 00 00` reply reports, where this
+    /// model keeps it (Strix Carry: at 10, #432); null without a reply.
+    public static int? ProfileIn(MouseSpec spec, byte[]? reply) =>
+        reply is { } r && r.Length > spec.Frames.ProfileAt ? r[spec.Frames.ProfileAt] + 1 : null;
+
     /// `[50 02 <profile−1>]` — switch the onboard profile (1-based in).
     public static byte[] SwitchProfile(int profile) => [Profile, 0x02, (byte)(profile - 1)];
 

@@ -1552,7 +1552,9 @@ the `mouse` profile domain (`Control/Mice/`):
   logged with the raw replies, zero padding left out (`Hid.ReplyHex`):
   `Mouse: <model> 0x<pid> (<link>) read <settings> from 120000:<hex> 120400:<hex> …`
   — so a user's log shows what an unverified model answered and what
-  RIGStats made of it, without new commands. In `lighting-devices.json`
+  RIGStats made of it, without new commands. Each change logs the frames it
+  sends (`Mouse: <model> 0x<pid> writes 5131…`, #432), and a profile switch
+  that doesn't take logs the `12 00 00` reply. In `lighting-devices.json`
   → `hid_scan`, a mouse's own settings collection is
   `known_as: "asus_mouse_settings"` (`MouseProvider.IsChannel`, the same
   test discovery uses); a ROG mouse there with `null` isn't in the
