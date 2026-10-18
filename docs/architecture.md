@@ -156,6 +156,7 @@ rig-dashboard/
 │   │   ├── poll.rs         Poll thread (PollMode Full/Light), PollStats/DriveInfo/ProcessInfo
 │   │   ├── alerts.rs       Pure threshold-breach detection (pending_alerts); cooldowns/notify in main.rs
 │   │   ├── problems.rs     Every problem the app reports, one wording; active_problems for Status (#373)
+│   │   ├── notify.rs       Windows toasts sent as RIGStats; app id registration; notifications-off watch (#447, #449)
 │   │   ├── dcomp_burst.rs  DcompRevealBurst — hidden reveal policy for per-pixel-transparent viewports
 │   │   ├── dialog_reveal.rs DialogReveal — dialogs hidden until rendered, hidden before torn down
 │   │   ├── gpu_process.rs  Per-process GPU engine % via PDH \GPU Engine counters + DXGI LUID→adapter map
@@ -242,6 +243,7 @@ rig-dashboard/
 | `poll.rs` | Background `poll_loop` (tokio), `PollStats`/`DriveInfo`/`ProcessInfo` data types, CSV log payload mapping. `PollMode` (shared via `PollModeHandle`): `Full` normally; `Light` in wallpaper mode (the host is the dashboard's poller) — enough for the overlay, the tray hover card and the alerts the main app still owns; no per-app lists, no session recording. There is no paused mode: it froze the hover card and silenced every alert in wallpaper mode (#299) |
 | `alerts.rs` | `pending_alerts` — pure warn/crit threshold-breach detection (no I/O, unit-tested); `notify_on_*` checks, per-alert cooldowns and sending the notification are the caller's job in `main.rs`. Wireless devices' batteries (#290) use the `battery` charge thresholds while discharging, each with its own cooldown key (`peripheral_<id>`) |
 | `problems.rs` | One place for every problem the app reports itself and the control connection's state words (#373): `Problem` builders (service not answering / refused / version mismatch, sensor readings lost, profile not or partly applied, fan safety override, service error, dry-run, update / Wallpaper Engine failed), `active_problems` — the service's `CapabilitySet::problem`s and the app's own, most serious first, for Status's Problems group — and `apply_notification` (one toast for a failed profile switch while the Control Center is closed). All shown with `ui_kit::notice` / `row_problem` (rules in `src-egui/src/windows/CLAUDE.md`, "Problems") |
+| `notify.rs` | Windows notifications sent as RIGStats (#447): `send(title, message)` — a toast under the app id `se.codeby.rigstats`; `register(dir)` — that id's name and icon in HKCU, at start-up (the uninstaller removes the key). `watch_setting` / `off` — whether Windows has turned the notifications off and why (#449), shown by Settings and Status via `problems::notifications_off` |
 | `dcomp_burst.rs` | `DcompRevealBurst` — decision logic for revealing a per-pixel-transparent (DComp) viewport only after its style/resize burst settles; used by the overlay and floating panels |
 | `dialog_reveal.rs` | `DialogReveal` — each dialog window is created hidden and revealed after it has rendered, and hidden for one frame before it's torn down (no white flash on open/close); see the dialog lifecycle under `windows/` below |
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
@@ -801,16 +803,29 @@ The detected startup values themselves (`ram_spec`, `ram_details`, `mb_board`,
   across ticks, so LHM-derived fields go blank for the duration of an outage
   rather than holding the previous value — non-LHM data (sysinfo, WMI) is
   unaffected since it's sourced independently each tick.
-- **Threshold-based alert notifications are not currently wired up.**
-  `Settings` has full support for this — per-component warn/crit thresholds,
-  `notify_on_warn`/`notify_on_crit` toggles, `alert_cooldown_secs`, and a
-  working "Test Notification" button (`windows/settings.rs`,
-  `send_test_notification` — shows a real Windows balloon tip via a hidden
-  PowerShell `NotifyIcon` script) — but nothing in `poll_loop` or `main.rs`
-  currently compares a live reading against its threshold and fires that
-  notification automatically. Thresholds are otherwise fully used for panel
-  colour-coding (warn = yellow, crit = red). Tracked as a bug — see
-  [#179](https://github.com/dvalfrid/rigstats/issues/179).
+- **Notifications are Windows toasts sent as RIGStats** (`notify.rs`, #447).
+  Alerts (`alerts::pending_alerts`, fired from `main.rs` with per-alert
+  cooldowns, #179), a profile switch that failed, the fan safety override and
+  the microphone toggle call `notify::send` on a background thread. The toast
+  is sent under the app id `se.codeby.rigstats`; an unpackaged app gets that
+  id's name and icon from `HKCU\Software\Classes\AppUserModelId\<id>`, which
+  `notify::register` writes at start-up (icon file next to the settings) and
+  the uninstaller deletes — `notify::tests` checks the two use the same key.
+  Until 1.50 notifications were balloon tips from a hidden PowerShell, shown
+  as "Windows PowerShell".
+- **Windows can turn the notifications off** (#449). `notify::watch_setting`
+  reads `ToastNotifier.Setting` every 3 s on its own thread; when it is off
+  (for RIGStats, for all apps, or by policy) Settings → Notifications and
+  Status → Problems show `problems::notifications_off`, with "Open Windows
+  settings" (`ms-settings:notifications`) unless a policy decides. Do Not
+  Disturb isn't reported, checked on Windows 11 (2026-10-18): with it on,
+  `ToastNotifier.Setting` stays `Enabled` and `SHQueryUserNotificationState`
+  says `QUNS_ACCEPTS_NOTIFICATIONS`. Only undocumented state shows it, so
+  RIGStats doesn't try; Troubleshooting tells the user instead.
+- **A problem's button is decided in one place** (`windows::action_effect`):
+  every window carries it out through `run_problem_action` or, without
+  `OpenRequests` (Status, Updates), `perform_local` — so no window can miss a
+  kind (Status once ignored "Open Windows settings", #449).
 
 ### Window placement
 

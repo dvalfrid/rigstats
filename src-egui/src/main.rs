@@ -1210,6 +1210,7 @@ fn main() {
     if let Err(e) = rigstats_egui::notify::register(&dir) {
         debug::log_warn(&dir, &format!("notifications: app id not registered: {e}"));
     }
+    rigstats_egui::notify::watch_setting();
 
     let s = settings::load_settings(&dir);
     let visible_panels = s.visible_panels.clone();

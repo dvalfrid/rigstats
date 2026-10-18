@@ -32,28 +32,56 @@ pub enum OpenRequest {
 
 pub type OpenRequests = Arc<Mutex<Option<OpenRequest>>>;
 
-/// What a problem's button does — the same from every window (#370). A
-/// `Retry` is the showing window's own (it checks for it first). Links
-/// open only when they are https: a problem's text comes from the service,
-/// and the app must not be made to open anything else.
-pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &OpenRequests) {
+/// What a problem's button does (#370) — decided here once for every window,
+/// so no window can miss a kind (Status had its own copy and ignored "Open
+/// Windows settings", #449).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActionEffect {
+    /// An https link — a problem's text comes from the service, and the app
+    /// must not be made to open anything else.
+    OpenLink(String),
+    /// Windows' notification settings (a fixed page).
+    OpenNotificationSettings,
+    /// Another window (or Status collecting diagnostics).
+    Open(OpenRequest),
+    /// The showing window's own (`Retry`), or nothing (an unsafe link, a
+    /// kind from a newer service).
+    None,
+}
+
+pub fn action_effect(action: &ProblemAction) -> ActionEffect {
     match action.kind {
-        ProblemActionKind::OpenUrl => open_problem_link(ctx, action),
-        ProblemActionKind::CollectDiagnostics => {
-            *open.lock_safe() = Some(OpenRequest::Diagnostics);
-        }
+        ProblemActionKind::OpenUrl => action
+            .target
+            .as_deref()
+            .filter(|u| is_safe_link(u))
+            .map_or(ActionEffect::None, |u| ActionEffect::OpenLink(u.to_owned())),
+        ProblemActionKind::CollectDiagnostics => ActionEffect::Open(OpenRequest::Diagnostics),
         // The debug log is in Status.
-        ProblemActionKind::OpenLog => *open.lock_safe() = Some(OpenRequest::Status),
+        ProblemActionKind::OpenLog => ActionEffect::Open(OpenRequest::Status),
+        ProblemActionKind::OpenNotificationSettings => ActionEffect::OpenNotificationSettings,
         // Only the window showing the problem knows what to try again.
-        ProblemActionKind::Retry | ProblemActionKind::Unknown => {}
+        ProblemActionKind::Retry | ProblemActionKind::Unknown => ActionEffect::None,
     }
 }
 
-/// A problem's link, opened only when it is https — for windows without
-/// [`OpenRequests`] (Updates).
-pub fn open_problem_link(ctx: &egui::Context, action: &ProblemAction) {
-    if let Some(url) = action.target.as_deref().filter(|u| is_safe_link(u)) {
-        ctx.open_url(egui::OpenUrl::new_tab(url));
+/// Carries out a problem's button from a window that can open others.
+pub fn run_problem_action(ctx: &egui::Context, action: &ProblemAction, open: &OpenRequests) {
+    match action_effect(action) {
+        ActionEffect::Open(request) => *open.lock_safe() = Some(request),
+        effect => perform_local(ctx, &effect),
+    }
+}
+
+/// Carries out what needs no other window — a link, Windows' settings — and
+/// nothing else. For windows without [`OpenRequests`] (Status, Updates),
+/// after handling the [`ActionEffect::Open`] they can do themselves.
+pub fn perform_local(ctx: &egui::Context, effect: &ActionEffect) {
+    match effect {
+        ActionEffect::OpenLink(url) => ctx.open_url(egui::OpenUrl::new_tab(url)),
+        #[cfg(windows)]
+        ActionEffect::OpenNotificationSettings => crate::notify::open_windows_settings(),
+        _ => {}
     }
 }
 
@@ -143,6 +171,38 @@ mod tests {
         assert!(!is_safe_link("https:///etc"));
         assert!(!is_safe_link("https://a b"));
         assert!(!is_safe_link("javascript:alert(1)"));
+    }
+
+    #[test]
+    fn every_button_kind_does_something_except_retry_and_unknown() {
+        let action = |kind, target: Option<&str>| ProblemAction {
+            kind,
+            label: "x".into(),
+            target: target.map(str::to_owned),
+        };
+        use ProblemActionKind as K;
+        assert_eq!(
+            action_effect(&action(K::OpenUrl, Some("https://rigstats.app/"))),
+            ActionEffect::OpenLink("https://rigstats.app/".into())
+        );
+        assert_eq!(
+            action_effect(&action(K::CollectDiagnostics, None)),
+            ActionEffect::Open(OpenRequest::Diagnostics)
+        );
+        assert_eq!(
+            action_effect(&action(K::OpenLog, None)),
+            ActionEffect::Open(OpenRequest::Status)
+        );
+        // A fixed page: a target from the service is ignored.
+        assert_eq!(
+            action_effect(&action(
+                K::OpenNotificationSettings,
+                Some("file:///C:/x.exe")
+            )),
+            ActionEffect::OpenNotificationSettings
+        );
+        assert_eq!(action_effect(&action(K::Retry, None)), ActionEffect::None);
+        assert_eq!(action_effect(&action(K::Unknown, None)), ActionEffect::None);
     }
 
     #[test]

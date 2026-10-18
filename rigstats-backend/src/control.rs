@@ -656,6 +656,9 @@ pub enum ProblemActionKind {
     Retry,
     /// App-only: open the debug log (Status).
     OpenLog,
+    /// App-only: open Windows' notification settings (#449). A fixed target,
+    /// so nothing from the service can open another page.
+    OpenNotificationSettings,
     /// A kind this app doesn't know (a newer service): not shown.
     #[serde(other)]
     Unknown,
