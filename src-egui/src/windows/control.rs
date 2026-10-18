@@ -1465,10 +1465,20 @@ fn keyboard_page(
     let count = keyboards.iter().map(|k| k.profiles).max().unwrap_or(1);
     let chosen = profile.part.keyboard.and_then(|k| k.profile);
     let mut pick = chosen;
-    let footnote = format!(
-        "The keyboard keeps {count} profiles of its own — its lighting and keys — and Fn plus a number key switches between them on the keyboard. Switching to {} switches the keyboard too.",
-        profile.name
-    );
+    let footnote = match chosen {
+        // The keyboard's own switch follows back (#459).
+        Some(p) => format!(
+            "The keyboard keeps {count} profiles of its own — its lighting and keys. Switching to {name} \
+             puts the keyboard on profile {p}, and Fn + {p} on the keyboard switches to {name}.",
+            name = profile.name
+        ),
+        None => format!(
+            "The keyboard keeps {count} profiles of its own — its lighting and keys — and Fn plus a \
+             number key switches between them on the keyboard. Pick one to switch the keyboard with {}, \
+             and to switch to {} with Fn plus that number.",
+            profile.name, profile.name
+        ),
+    };
     ui_kit::group(ui, dc, Some("Profile"), Some(&footnote), |g| {
         g.row(
             &format!("Keyboard profile in {}", profile.name),

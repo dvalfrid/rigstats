@@ -233,6 +233,10 @@ builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.
 builder.Services.AddHostedService<ActiveProfileApplier>();
 // Batteries of the wireless lighting devices, about once a minute (#290).
 builder.Services.AddHostedService<PeripheralBatteryMonitor>();
+// A profile switched on the keyboard (Fn + 1…6) switches the Control Center
+// profile that uses it (#459). One instance: the pipe pushes its switches.
+builder.Services.AddSingleton<SensorSidecar.Control.Keyboards.KeyboardFollower>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<SensorSidecar.Control.Keyboards.KeyboardFollower>());
 
 IHost host;
 try

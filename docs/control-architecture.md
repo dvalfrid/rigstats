@@ -1452,6 +1452,18 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
   loop on RIGStats' own switch.
 - A keyboard that doesn't answer skips the domain
   (`DomainUnavailableException`); the rest of the profile applies.
+- **Following the keyboard (#459):** `Keyboards/KeyboardFollower` (a
+  `GuardedBackgroundService`) listens on the keyboard's input-only
+  collections (its product id's, `mi_00` left out — on the Omni receiver
+  `mi_03`, the event on `FFC0` report 4) and reads only
+  `[report, 70, 00, 00, <bit>]` (`KeyboardProfileCommands.ProfileFromEvent`,
+  profile n = bit n). Fn + n switches to the first profile whose keyboard
+  part is n — through the broker, like `apply_profile` — and the pipe pushes
+  `profile_changed` so the app's profile bar, tray, header and dashboard look
+  follow. The same collection carries the key-state reports (`71`, every key
+  press): dropped unread, never logged or kept. Nothing is sent to the
+  keyboard here; the switch RIGStats then makes finds the keyboard already on
+  n and sends nothing either.
 
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):

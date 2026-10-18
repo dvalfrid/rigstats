@@ -34,6 +34,51 @@ public class KeyboardProfileTests
     }
 
     [Fact]
+    public void A_profile_switched_on_the_keyboard_is_read_from_its_event()
+    {
+        // Fn + 1 / 2 / 3 on the Azoth X through the Omni receiver (#457).
+        byte[] Event(string hex) => Convert.FromHexString(hex.PadRight(42, '0'));
+        Assert.Equal(1, KeyboardProfileCommands.ProfileFromEvent(Event("0470000002"), 21));
+        Assert.Equal(2, KeyboardProfileCommands.ProfileFromEvent(Event("0470000004"), 21));
+        Assert.Equal(3, KeyboardProfileCommands.ProfileFromEvent(Event("0470000008"), 21));
+        // Key-state reports, other bytes or several bits are not a switch.
+        Assert.Null(KeyboardProfileCommands.ProfileFromEvent(Event("0471000108"), 21));
+        Assert.Null(KeyboardProfileCommands.ProfileFromEvent(Event("0470000006"), 21));
+        Assert.Null(KeyboardProfileCommands.ProfileFromEvent(Event("0470000001"), 21));
+        Assert.Null(KeyboardProfileCommands.ProfileFromEvent(Event("0470010004"), 21));
+        Assert.Null(KeyboardProfileCommands.ProfileFromEvent(null, 0));
+    }
+
+    [Fact]
+    public void The_first_profile_using_an_onboard_profile_follows_it()
+    {
+        Profile P(string id, int? keyboard) => new() { Id = id, Name = id, Part = new ProfilePart { Keyboard = keyboard is null ? null : new KeyboardPart { Profile = keyboard } } };
+        var list = new[] { P("silent", null), P("gaming", 2), P("eco", 2), P("balanced", 1) };
+        Assert.Equal("gaming", KeyboardFollower.PickProfile(list, 2)?.Id);
+        Assert.Equal("balanced", KeyboardFollower.PickProfile(list, 1)?.Id);
+        Assert.Null(KeyboardFollower.PickProfile(list, 5));
+    }
+
+    [Fact]
+    public void Events_are_listened_for_on_the_keyboards_input_only_collections()
+    {
+        HidDeviceInfo Hid(string mi, ushort page, int input, int output, ushort pid = 0x1ACE) =>
+            new($@"\\?\hid#vid_0b05&pid_{pid:x4}&{mi}#x", 0x0B05, pid, page, 1, output, input);
+        var hid = new[]
+        {
+            Hid("mi_00&col01", 0x0001, 9, 2),   // the system keyboard
+            Hid("mi_02&col02", 0xFF00, 64, 64), // the command channel
+            Hid("mi_03&col04", 0xFFC0, 21, 0),  // events (verified)
+            Hid("mi_03&col01", 0x000C, 4, 0),   // consumer keys, too short
+            Hid("mi_03&col04", 0xFFC0, 21, 0, pid: 0x1AFA), // another device
+        };
+        var found = KeyboardFollower.EventCollections([new FakeKeyboard()], hid);
+        Assert.Single(found);
+        Assert.Contains("mi_03&col04", found[0].Path, StringComparison.Ordinal);
+        Assert.Equal(0x1ACE, found[0].ProductId);
+    }
+
+    [Fact]
     public void Apply_switches_every_keyboard_and_verify_reads_it_back()
     {
         var keyboard = new FakeKeyboard();
@@ -79,6 +124,7 @@ public class KeyboardProfileTests
     {
         public string Id => "asus-kb-1ace-02";
         public string Name => "ROG Azoth X";
+        public ushort ProductId => 0x1ACE;
         public int Current { get; private set; } = 1;
         public bool Asleep { get; init; }
         public KeyboardProfiles? FoundProfiles => new(6, 1);
