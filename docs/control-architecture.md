@@ -1424,6 +1424,35 @@ energy `51 37 00 00 <powerOff> 00 <lowBattery%>`; lighting get `12 03 <zone>` /
 set `51 28 <zone> …`; save profile `50 03`. Per-model limits (DPI range,
 polling rates, which settings exist) are in each model file.
 
+**Keyboard profile as built (#458).** The Control Center's **Keyboard** page
+and the `keyboard` profile domain (`Control/Keyboards/KeyboardProvider`): a
+RIGStats profile picks one of the keyboard's own onboard profiles. Research:
+[keyboard-research.md](keyboard-research.md).
+
+- **Which keyboards:** the ones the lighting side drives
+  (`LightingProvider.Keyboards`, `AsusKeyboardDevice` implements
+  `IKeyboardProfileDevice`) — the command channel is shared, not opened twice.
+  The capability comes from the `12 00` reply discovery already got (byte 9 =
+  number of profiles, `FoundProfiles`), not a live question: the first build
+  asked live and the page stayed hidden — hypothesis: the wireless keyboard
+  was asleep (idle time 3 min).
+- **Switch:** `51 00 00 00 <p>` (Gear Link's `changeProfile`, G-Helper's
+  `SetProfile`; p = profile mod count, so 6 → 0 — G-Helper's index), the
+  keyboard's echo awaited, then `12 00` byte 11 read back (once more after
+  300 ms while the keyboard is still switching).
+- **Through the Omni receiver a frame sent right after a reply is often
+  dropped** (verified 2026-10-18 on the Azoth X): the first switch got no echo
+  and the keyboard stayed on profile 1, twice; Gear Link's identical frame,
+  sent with a pause, was echoed and switched. Sent once more without an echo,
+  RIGStats' switch was echoed and read back as profile 2. The mouse's first
+  `12 04 00` after `12 00 00` goes unanswered the same way (below).
+- **A switch from the host raises no `70` event** (Gear Link's and RIGStats'
+  switches, listened to with `tools/keyboard-listen-guided.ps1`) — only one
+  made on the keyboard (Fn + 1…6) does. Following the keyboard (#459) can't
+  loop on RIGStats' own switch.
+- A keyboard that doesn't answer skips the domain
+  (`DomainUnavailableException`); the rest of the profile applies.
+
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):
 

@@ -224,6 +224,10 @@ builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<Ligh
 builder.Services.AddSingleton(_ => new SensorSidecar.Control.Mice.MouseProvider(Hid.Enumerate, SensorSidecar.Control.Mice.MouseProvider.Discover, dryRun));
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<SensorSidecar.Control.Mice.MouseProvider>());
 
+// ASUS keyboards (#458): the onboard profile per RIGStats profile, through
+// the keyboards the lighting side found (the same command channel).
+builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.Keyboards.KeyboardProvider(() => sp.GetRequiredService<LightingProvider>().Keyboards(), dryRun));
+
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();

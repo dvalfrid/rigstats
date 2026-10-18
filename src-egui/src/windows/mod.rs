@@ -124,6 +124,7 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "lighting" => control::Page::Lighting,
             "headset" => control::Page::Headset,
             "mouse" => control::Page::Mouse,
+            "keyboard" => control::Page::Keyboard,
             "rules" => control::Page::Rules,
             _ => control::Page::Overview,
         })),

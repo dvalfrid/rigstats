@@ -392,6 +392,14 @@ public sealed class LightingProvider : IControlProvider
         return on;
     }
 
+    /// The connected keyboards with onboard profiles (#458), for the
+    /// `keyboard` profile domain — the same devices the lighting drives.
+    public IReadOnlyList<IKeyboardProfileDevice> Keyboards()
+    {
+        Rescan();
+        return _devices.OfType<IKeyboardProfileDevice>().ToList();
+    }
+
     /// Every connected headset with settings RIGStats knows (#428), with its
     /// limits and current settings (null when it doesn't answer — a headset
     /// switched off behind its dongle). Read from the headsets each call.

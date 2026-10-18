@@ -21,8 +21,8 @@ use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
     FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HeadsetSettings,
-    HueCaps, LampPart, MouseInfo, MousePart, MouseSettings, PowerScheme, Problem, Profile,
-    Severity,
+    HueCaps, KeyboardPart, LampPart, MouseInfo, MousePart, MouseSettings, PowerScheme, Problem,
+    Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -96,6 +96,7 @@ pub enum Page {
     Lighting,
     Headset,
     Mouse,
+    Keyboard,
     Rules,
 }
 
@@ -1434,6 +1435,66 @@ fn mouse_page(
     }
 }
 
+/// The Keyboard page (#458): which of the keyboard's own onboard profiles
+/// the RIGStats profile uses, saved at once in the profile — the keyboard
+/// switches with it. One choice for every keyboard (a profile has one
+/// keyboard part).
+fn keyboard_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
+) {
+    let keyboards = control.keyboards();
+    let Some(mut profile) = control.active().cloned() else {
+        return;
+    };
+    ui_kit::group(ui, dc, None, None, |g| {
+        for keyboard in &keyboards {
+            g.row(
+                &keyboard.name,
+                Some(&format!(
+                    "Keyboard · {} profiles of its own",
+                    keyboard.profiles
+                )),
+                |_| {},
+            );
+        }
+    });
+    let count = keyboards.iter().map(|k| k.profiles).max().unwrap_or(1);
+    let chosen = profile.part.keyboard.and_then(|k| k.profile);
+    let mut pick = chosen;
+    let footnote = format!(
+        "The keyboard keeps {count} profiles of its own — its lighting and keys — and Fn plus a number key switches between them on the keyboard. Switching to {} switches the keyboard too.",
+        profile.name
+    );
+    ui_kit::group(ui, dc, Some("Profile"), Some(&footnote), |g| {
+        g.row(
+            &format!("Keyboard profile in {}", profile.name),
+            Some("Saved at once"),
+            |ui| {
+                let label =
+                    chosen.map_or_else(|| "Leave unchanged".to_owned(), |p| format!("Profile {p}"));
+                ui_kit::dropdown(ui, "keyboard_profile", label, |ui| {
+                    ui.selectable_value(&mut pick, None, "Leave unchanged");
+                    for p in 1..=count {
+                        ui.selectable_value(&mut pick, Some(p), format!("Profile {p}"));
+                    }
+                });
+            },
+        );
+    });
+    if pick != chosen {
+        profile.part.keyboard = pick.map(|p| KeyboardPart { profile: Some(p) });
+        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+            profile: Box::new(profile),
+            apply: true,
+        });
+        ui_state.saved_at = Some((Instant::now(), "Saved"));
+    }
+}
+
 /// One mouse on the Mouse page.
 #[allow(clippy::too_many_arguments)] // one card's inputs and its two outputs
 fn mouse_card(
@@ -2312,6 +2373,7 @@ pub fn show(
         Page::Lighting if !lighting_shown => ui_state.tab = Page::Overview,
         Page::Headset if !control.has_headset() => ui_state.tab = Page::Overview,
         Page::Mouse if !control.has_mouse() => ui_state.tab = Page::Overview,
+        Page::Keyboard if control.keyboards().is_empty() => ui_state.tab = Page::Overview,
         _ => {}
     }
     let active = control.active();
@@ -2556,6 +2618,7 @@ pub fn show(
         lighting: lighting_shown,
         headset: control.has_headset(),
         mouse: control.has_mouse(),
+        keyboard: !control.keyboards().is_empty(),
     };
     egui::SidePanel::left("control_nav")
         .resizable(false)
@@ -2705,6 +2768,15 @@ pub fn show(
                             look_link.open,
                         );
                     }
+                    Page::Keyboard => {
+                        ui_kit::page_header(
+                            ui,
+                            dc,
+                            "Keyboard",
+                            "Which of the keyboard's own profiles this profile uses. Saved at once.",
+                        );
+                        keyboard_page(ui, dc, control, cmd_tx, ui_state);
+                    }
                     Page::Mouse => {
                         ui_kit::page_header(
                             ui,
@@ -2810,6 +2882,7 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Lighting, Icon::Lighting, "Lighting"),
     (Page::Headset, Icon::Headset, "Headset"),
     (Page::Mouse, Icon::Mouse, "Mouse"),
+    (Page::Keyboard, Icon::Keyboard, "Keyboard"),
     (Page::Rules, Icon::Rules, "App rules"),
 ];
 
@@ -2834,6 +2907,7 @@ struct PageShown {
     lighting: bool,
     headset: bool,
     mouse: bool,
+    keyboard: bool,
 }
 
 impl PageShown {
@@ -2845,6 +2919,7 @@ impl PageShown {
             Page::Lighting => self.lighting,
             Page::Headset => self.headset,
             Page::Mouse => self.mouse,
+            Page::Keyboard => self.keyboard,
             _ => true,
         }
     }
@@ -3182,6 +3257,19 @@ fn overview_page(
                 );
             let (summary, dot) = tile_summary(control.domain_problem("mouse"), dc, chosen);
             (Page::Mouse, Icon::Mouse, "Mouse", summary, dot)
+        },
+        {
+            let chosen = profile
+                .part
+                .keyboard
+                .as_ref()
+                .and_then(|k| k.profile)
+                .map_or_else(
+                    || "Left as it is".to_owned(),
+                    |p| format!("Keyboard profile {p}"),
+                );
+            let (summary, dot) = tile_summary(control.domain_problem("keyboard"), dc, chosen);
+            (Page::Keyboard, Icon::Keyboard, "Keyboard", summary, dot)
         },
     ];
     let starts_with: Vec<&str> = rules
