@@ -5,18 +5,23 @@ window.addEventListener('scroll', () => {
   nav.classList.toggle('scrolled', window.scrollY > 10);
 }, { passive: true });
 
-// Highlight active nav link based on visible section
-const sections = document.querySelectorAll('section[id]');
+// Highlight active nav link based on what is in the middle of the screen:
+// the sections, and the device lists inside the Control Center section —
+// those win while they are there, so "Devices" lights up, not "Control
+// Center".
+const sections = document.querySelectorAll('section[id], #device-lists');
 const navLinks = document.querySelectorAll('.nav-links a[href^="#"]');
+const inView = new Set();
 
 const observer = new IntersectionObserver(entries => {
   entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const id = entry.target.id;
-      navLinks.forEach(link => {
-        link.classList.toggle('active', link.getAttribute('href') === `#${id}`);
-      });
-    }
+    if (entry.isIntersecting) inView.add(entry.target.id);
+    else inView.delete(entry.target.id);
+  });
+  const id = inView.has('device-lists') ? 'device-lists' : [...inView].pop();
+  if (!id) return;
+  navLinks.forEach(link => {
+    link.classList.toggle('active', link.getAttribute('href') === `#${id}`);
   });
 }, { rootMargin: '-40% 0px -55% 0px' });
 
