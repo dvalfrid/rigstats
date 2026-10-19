@@ -23,6 +23,14 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     private static readonly string[] DomainOrder =
         ["power_plan", "cpu_limit", "curve_opt", "gpu", "fan", "mouse", "keyboard", "aura", "headset"];
 
+    /// The parts a profile switch answers before (#495): the lighting and
+    /// the wireless devices — slow (a sleeping mouse costs seconds) and
+    /// harmless, so they follow right after the switch is answered, in the
+    /// same order, and their outcome is pushed (`ApplyResultChanged`). The
+    /// rest — power, CPU, GPU, fans — stays one transaction that the
+    /// answer waits for.
+    private static readonly HashSet<string> Afterwards = ["mouse", "keyboard", "aura", "headset"];
+
     private readonly Dictionary<string, IControlProvider> _byDomain =
         providers.ToDictionary(p => p.Domain);
 
@@ -45,6 +53,12 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     // The retry of the last apply's sleeping parts; a new apply ends it.
     private CancellationTokenSource? _retry;
 
+    // The last switch's lighting and devices, applied after its answer.
+    private CancellationTokenSource? _afterwards;
+
+    /// The last switch's lighting and devices are done (tests, start-up).
+    public Task Settled { get; private set; } = Task.CompletedTask;
+
     /// Raised (off the caller's thread) when a retried part caught up, or
     /// gave up — the apply's new result, for the app's footer (#489).
     public event Action<ApplyResult>? ApplyResultChanged;
@@ -60,15 +74,55 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             RevertPreviewLocked();
             _retry?.Cancel();
             _retry = null;
-            var (result, _, asleep) = Apply(profile);
+            _afterwards?.Cancel();
+            _afterwards = null;
+            var (result, _, _) = Apply(profile, d => !Afterwards.Contains(d));
+            if (result.Ok && HasAny(profile, Afterwards))
+            {
+                _afterwards = new CancellationTokenSource();
+                Settled = ApplyAfterwardsAsync(profile, result, _afterwards.Token);
+            }
+            return result;
+        }
+        finally
+        {
+            _transactionLock.Release();
+        }
+    }
+
+    private bool HasAny(Profile profile, IReadOnlySet<string> domains) =>
+        Affected(profile, domains.Contains).Count > 0;
+
+    // The lighting and devices of a switch already answered (#495). Their
+    // own transaction; a sleeping device is tried again (#489); anything to
+    // say is pushed with the switch's own note in front.
+    private async Task ApplyAfterwardsAsync(Profile profile, ApplyResult answered, CancellationToken ct)
+    {
+        try
+        {
+            await _transactionLock.WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // a newer switch took over before these started.
+        }
+        try
+        {
+            if (ct.IsCancellationRequested)
+                return;
+            var (result, _, asleep) = Apply(profile, Afterwards.Contains);
             if (result.Ok && asleep.Count > 0)
             {
-                // A sleeping keyboard, mouse or headset gets its part as soon
-                // as it answers (#489).
                 _retry = new CancellationTokenSource();
                 _ = RetryAsleepAsync(profile, asleep, _retry.Token);
             }
-            return result;
+            var note = result.Ok
+                ? result.Message?.Replace($"Profile {profile.Name} applied; ", "", StringComparison.Ordinal)
+                : $"its lighting and devices weren't set — {result.Message?.Replace($"Profile {profile.Name} not applied: ", "", StringComparison.Ordinal)}";
+            // Pushed even with nothing to add: the app reads the devices'
+            // pages again on it, now that they hold the profile's settings.
+            var before = answered.Message is { } m ? m + " " : $"Profile {profile.Name} applied; ";
+            ApplyResultChanged?.Invoke(note is null ? answered : ApplyResult.Success(profile.Id, before + note));
         }
         finally
         {
@@ -226,14 +280,18 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         SidecarLog.Log($"[rigstats-control] Preview of '{preview.Profile.Id}' reverted.");
     }
 
-    private (ApplyResult Result, List<(IControlProvider, Snapshot)> Snapshots, List<IControlProvider> Asleep) Apply(Profile profile)
+    private List<IControlProvider> Affected(Profile profile, Func<string, bool> include) => DomainOrder
+        .Where(HasPart(profile.Part))
+        .Where(include)
+        .Select(domain => _byDomain.TryGetValue(domain, out var p) ? p : null)
+        .Where(p => p is not null && (p is not IAffectsPart a || a.Affects(profile.Part)))
+        .Select(p => p!)
+        .ToList();
+
+    private (ApplyResult Result, List<(IControlProvider, Snapshot)> Snapshots, List<IControlProvider> Asleep) Apply(
+        Profile profile, Func<string, bool>? include = null)
     {
-        var affected = DomainOrder
-            .Where(HasPart(profile.Part))
-            .Select(domain => _byDomain.TryGetValue(domain, out var p) ? p : null)
-            .Where(p => p is not null && (p is not IAffectsPart a || a.Affects(profile.Part)))
-            .Select(p => p!)
-            .ToList();
+        var affected = Affected(profile, include ?? (_ => true));
 
         if (affected.Count == 0)
             return (ApplyResult.Success(profile.Id), [], []);
@@ -333,7 +391,9 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         // profile and its lighting): said once.
         var note = string.Join(" ", skipped.Select(s =>
             asleep.Any(a => a.Domain == s.Domain) ? s.Reason : $"{s.Domain} skipped: {s.Reason}").Distinct());
-        if (applied.Count == 0)
+        // Nothing applied is a failure — unless every part only waits for a
+        // sleeping device, which catches up when it wakes (#489, #495).
+        if (applied.Count == 0 && asleep.Count < skipped.Count)
             return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {note}"), [], []);
         return (ApplyResult.Success(profile.Id, $"Profile {profile.Name} applied; {note}"), applied, asleep);
     }

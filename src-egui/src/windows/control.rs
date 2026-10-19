@@ -196,7 +196,7 @@ pub struct ControlUi {
     /// arrives (#483).
     eq_pending: Option<(String, HeadsetEq)>,
     /// The Control Center profile active when the headsets were last read.
-    headsets_read_for: Option<String>,
+    headsets_read_for: (Option<String>, u64),
     /// Which mouse, keyboard and headset the page shows when more than one
     /// is connected (#296) — one device at a time, picked in a row of tabs.
     mouse_tab: usize,
@@ -208,7 +208,7 @@ pub struct ControlUi {
     mice_asked: bool,
     /// The Control Center profile active when the mice were last read — a
     /// switch can move the mouse to another onboard profile.
-    mice_read_for: Option<String>,
+    mice_read_for: (Option<String>, u64),
     /// A mouse's settings as just changed here, until its read-back arrives.
     mouse_pending: Option<(String, MouseSettings)>,
     /// A change made while a slider, number or colour picker was held, not
@@ -1191,9 +1191,11 @@ fn headset_page(
     // profile changes: its equalizer preset may have changed the headset
     // (#483). Showing the old values then would send them back with the
     // next change — seen live, a preset overwritten by a click.
-    if !ui_state.headsets_asked || ui_state.headsets_read_for != control.active_profile {
+    // Also when a switch's devices are done, after its answer (#495).
+    let read_for = (control.active_profile.clone(), control.apply_seq);
+    if !ui_state.headsets_asked || ui_state.headsets_read_for != read_for {
         ui_state.headsets_asked = true;
-        ui_state.headsets_read_for = control.active_profile.clone();
+        ui_state.headsets_read_for = read_for;
         ui_state.headset_pending = None;
         ui_state.eq_pending = None;
         let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
@@ -1601,9 +1603,11 @@ fn mouse_page(
     // Read when the page opens, and again whenever the Control Center
     // profile changes (profile bar, hotkey, tray, an app rule): it may switch
     // the mouse to another onboard profile, whose settings are its own.
-    if !ui_state.mice_asked || ui_state.mice_read_for != control.active_profile {
+    // Also when a switch's devices are done, after its answer (#495).
+    let read_for = (control.active_profile.clone(), control.apply_seq);
+    if !ui_state.mice_asked || ui_state.mice_read_for != read_for {
         ui_state.mice_asked = true;
-        ui_state.mice_read_for = control.active_profile.clone();
+        ui_state.mice_read_for = read_for;
         ui_state.mouse_pending = None;
         ui_state.mouse_unsent = false;
         let _ = cmd_tx.try_send(ControlCmd::ReadMice);
@@ -3363,8 +3367,11 @@ fn profile_bar(
     // Actions act on the active profile: not while a try runs or a click
     // awaits its answer.
     let can_edit = control.connected && control.preview.is_none() && !busy;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
+    // Wraps to a second row when the chips don't fit, rather than running
+    // off the window's edge — there is no limit on how many profiles there
+    // are (Ctrl+Alt+F1…F9 cover the first nine).
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
         ui.label(
             egui::RichText::new("Profile")
                 .size(12.0)

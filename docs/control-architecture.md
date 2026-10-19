@@ -220,6 +220,20 @@ Every profile change is a **transaction**:
    profile's a moment later (seen live 2026-10-19 — the Azoth X and the
    Falchion Ace HFX each turned a different colour when Balanced moved them
    to onboard profile 2).
+   **Answered before the lighting and devices (#495):** `apply_profile`
+   answers once power, CPU, Curve Optimizer, GPU and fans are set — one
+   transaction as above. The mouse's and keyboard's onboard profiles, the
+   lighting and the headset follow right after (`ApplyAfterwardsAsync`,
+   same order, their own transaction, a sleeping device retried, #489), and
+   their outcome is always pushed as `apply_result` so the app's footer and
+   its Headset / Mouse pages follow. They were the slow part — every
+   wireless device read before and after, a slow one costing seconds — and
+   can't harm the PC, so nothing else waits for them. A newer switch
+   cancels those not yet started. Previews still apply everything before
+   answering. The app shows a switch at once (`ControlEvent::Switching`:
+   the active profile, so the dashboard's look, desktop background and
+   Wallpaper Engine, change on the click) and puts the one before back if
+   the service refuses it.
 4. `Verify` by reading back.
 5. On any failure, `Restore` **all** affected providers in reverse order and
    return **one** consolidated result, e.g. *"Profile Gaming not applied: CPU

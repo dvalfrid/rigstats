@@ -45,16 +45,25 @@ public class BrokerRetryTests
             RetryEvery = TimeSpan.FromMilliseconds(20),
             RetryFor = TimeSpan.FromSeconds(10),
         };
-        var told = new TaskCompletionSource<ApplyResult>();
-        broker.ApplyResultChanged += r => told.TrySetResult(r);
+        var pushed = new List<ApplyResult>();
+        var caughtUp = new TaskCompletionSource();
+        broker.ApplyResultChanged += r =>
+        {
+            lock (pushed)
+                pushed.Add(r);
+            if (r.Message is null)
+                caughtUp.TrySetResult();
+        };
 
         var first = await broker.ApplyProfileAsync(Balanced, CancellationToken.None);
 
+        // The switch is answered before the keyboard is tried (#495); the
+        // note that it slept is pushed, then its catching up.
         Assert.True(first.Ok);
-        Assert.Equal("Profile Balanced applied; ROG Azoth X didn't answer — probably asleep — and gets the profile as soon as it wakes up.", first.Message);
-        var later = await told.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(later.Ok);
-        Assert.Null(later.Message); // the footer's note goes away.
+        Assert.Null(first.Message);
+        await caughtUp.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal("Profile Balanced applied; ROG Azoth X didn't answer — probably asleep — and gets the profile as soon as it wakes up.", pushed[0].Message);
+        Assert.True(pushed[^1].Ok);
         keyboard.Received(3).Apply(Arg.Any<ProfilePart>());
     }
 
@@ -66,14 +75,42 @@ public class BrokerRetryTests
             RetryEvery = TimeSpan.FromMilliseconds(20),
             RetryFor = TimeSpan.FromMilliseconds(100),
         };
-        var told = new TaskCompletionSource<ApplyResult>();
-        broker.ApplyResultChanged += r => told.TrySetResult(r);
+        var gaveUp = new TaskCompletionSource<ApplyResult>();
+        broker.ApplyResultChanged += r =>
+        {
+            if (r.Message?.Contains("stayed asleep", StringComparison.Ordinal) == true)
+                gaveUp.TrySetResult(r);
+        };
 
         await broker.ApplyProfileAsync(Balanced, CancellationToken.None);
 
-        var later = await told.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var later = await gaveUp.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(later.Ok);
         Assert.Contains("ROG Azoth X stayed asleep and kept its own settings", later.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_switch_is_answered_before_the_slow_devices_and_power_waits_for_none_of_them()
+    {
+        var keyboardStarted = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var keyboard = Provider("keyboard");
+        keyboard.When(k => k.Apply(Arg.Any<ProfilePart>())).Do(_ =>
+        {
+            keyboardStarted.TrySetResult();
+            release.Task.Wait(TimeSpan.FromSeconds(5)); // a slow wireless keyboard
+        });
+        var power = Provider("power_plan");
+        var broker = new ControlBroker([power, keyboard]);
+
+        var answer = await broker.ApplyProfileAsync(Balanced, CancellationToken.None);
+
+        Assert.True(answer.Ok);
+        power.Received(1).Apply(Arg.Any<ProfilePart>());
+        await keyboardStarted.Task.WaitAsync(TimeSpan.FromSeconds(5)); // started after the answer
+        release.SetResult();
+        await broker.Settled;
+        keyboard.Received(1).Apply(Arg.Any<ProfilePart>());
     }
 
     [Fact]

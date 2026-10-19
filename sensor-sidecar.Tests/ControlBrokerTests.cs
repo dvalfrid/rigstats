@@ -59,6 +59,7 @@ public class ControlBrokerTests
             Mouse = new MousePart { Profile = 2 },
             Keyboard = new KeyboardPart { Profile = 2 },
         }), CancellationToken.None);
+        await broker.Settled; // the lighting and devices follow the answer (#495)
 
         Assert.Equal(["mouse", "keyboard", "aura"], order);
     }

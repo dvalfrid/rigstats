@@ -811,6 +811,13 @@ pub struct ControlState {
     pub active_profile: Option<String>,
     pub dry_run: bool,
     pub last_apply_result: Option<ApplyResult>,
+    /// Counts every apply result, also those pushed after the answer when a
+    /// switch's lighting and devices are done (#495) — the Headset and Mouse
+    /// pages read their devices again on it.
+    pub apply_seq: u64,
+    /// The profile active before a switch the app showed at once (#495);
+    /// put back if the service refuses the switch.
+    pub switching_from: Option<Option<String>>,
     pub last_error: Option<String>,
     /// Number of `Error` events this session, so the UI can tell a new
     /// error from one already dismissed (the text alone may repeat).
@@ -1115,7 +1122,24 @@ impl ControlState {
             ControlEvent::Profiles(p) => self.profiles = p,
             ControlEvent::ActiveProfile(p) => self.active_profile = p,
             ControlEvent::DryRun(d) => self.dry_run = d,
-            ControlEvent::ApplyResult(r) => self.last_apply_result = Some(r),
+            ControlEvent::ApplyResult(r) => {
+                // A refused switch the app already showed: back to the one
+                // before (#495).
+                if !r.ok {
+                    if let Some(before) = self.switching_from.take() {
+                        self.active_profile = before;
+                    }
+                } else {
+                    self.switching_from = None;
+                }
+                self.last_apply_result = Some(r);
+                self.apply_seq += 1;
+            }
+            ControlEvent::Switching(id) => {
+                if self.active_profile.as_deref() != Some(id.as_str()) {
+                    self.switching_from = Some(self.active_profile.replace(id));
+                }
+            }
             ControlEvent::Error(e) => {
                 // The Lighting tab shows why its Hue request failed.
                 if self.hue_busy {
@@ -1265,6 +1289,9 @@ pub enum ControlEvent {
     MouseBusy(bool),
     /// A headset request started (`true`) or ended without an answer.
     HeadsetBusy(bool),
+    /// A switch to this profile was asked for: shown at once, before the
+    /// service answers (#495); a refusal puts the one before back.
+    Switching(String),
     /// Every keyboard with energy settings, freshly read (#460).
     KeyboardSettings(Vec<KeyboardSettingsInfo>),
     /// One keyboard after a change, as it read back.
@@ -1684,6 +1711,10 @@ async fn handle_cmd(
 ) -> Result<(), RequestError> {
     match cmd {
         ControlCmd::ApplyProfile(id) => {
+            // The dashboard's look, desktop background and Wallpaper Engine
+            // follow the active profile: switch it now, not when the service
+            // has set every device (#495).
+            let _ = event_tx.send(ControlEvent::Switching(id.clone()));
             let params = serde_json::json!({ "id": id.clone() });
             let result = request(
                 writer,
@@ -2396,6 +2427,41 @@ mod tests {
             .unwrap()
             .get("keyboard")
             .is_none());
+    }
+
+    /// A switch shows at once and goes back when the service refuses it;
+    /// every apply result counts, so device pages read again (#495).
+    #[test]
+    fn a_switch_shows_at_once_and_a_refusal_puts_the_one_before_back() {
+        let mut state = ControlState {
+            active_profile: Some("balanced".into()),
+            ..ControlState::default()
+        };
+        state.apply(ControlEvent::Switching("gaming".into()));
+        assert_eq!(state.active_profile.as_deref(), Some("gaming"));
+        state.apply(ControlEvent::ApplyResult(ApplyResult {
+            ok: false,
+            message: Some("Profile Gaming not applied: CPU limit locked".into()),
+            profile_id: Some("gaming".into()),
+        }));
+        assert_eq!(state.active_profile.as_deref(), Some("balanced"));
+        assert_eq!(state.apply_seq, 1);
+
+        state.apply(ControlEvent::Switching("gaming".into()));
+        state.apply(ControlEvent::ApplyResult(ApplyResult {
+            ok: true,
+            message: None,
+            profile_id: Some("gaming".into()),
+        }));
+        assert_eq!(state.active_profile.as_deref(), Some("gaming"));
+        // The devices' result, pushed later, keeps it and counts.
+        state.apply(ControlEvent::ApplyResult(ApplyResult {
+            ok: true,
+            message: None,
+            profile_id: Some("gaming".into()),
+        }));
+        assert_eq!(state.active_profile.as_deref(), Some("gaming"));
+        assert_eq!(state.apply_seq, 3);
     }
 
     /// A headset's equalizer as `LightingProvider.HeadsetJson` writes it, the
