@@ -525,7 +525,19 @@
         </div>
       </div>
 
-      <div class="supported-devices" id="supported-devices">
+      <div class="device-lists" id="device-lists">
+        <h3 class="device-lists-title">Supported devices</h3>
+        <div class="device-lists-bar">
+          <div class="settings-tabs device-tabs" role="tablist" aria-label="Device lists">
+            <button class="settings-tab active" role="tab" aria-selected="true" aria-controls="supported-devices" data-list="supported-devices" data-label="Lighting">Lighting</button>
+            <button class="settings-tab" role="tab" aria-selected="false" aria-controls="battery-devices" data-list="battery-devices" data-label="Battery">Battery</button>
+            <button class="settings-tab" role="tab" aria-selected="false" aria-controls="settings-devices" data-list="settings-devices" data-label="Device settings">Device settings</button>
+          </div>
+          <input type="search" class="device-search" id="device-search" placeholder="Find your device — e.g. Azoth, Harpe, Delta" aria-label="Find a device" autocomplete="off">
+        </div>
+        <p class="device-search-empty" hidden>No device in this list matches. The numbers on the tabs show where it does — or <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> to ask for yours.</p>
+
+      <div class="supported-devices" id="supported-devices" role="tabpanel">
         <h3>Supported lighting devices</h3>
         <p><strong>Verified on hardware</strong>: seen working on a real device. <strong>From OpenRGB, not yet verified</strong>: same protocol as a verified device, listed from OpenRGB's device list — it should work; <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> with your diagnostics ZIP if it doesn't, or to confirm it does. RGB on memory modules and graphics cards isn't supported: a wrong write there can damage the hardware.</p>
         <div class="diag-table-wrap">
@@ -604,7 +616,7 @@
         </div>
       </div>
 
-      <div class="supported-devices" id="battery-devices">
+      <div class="supported-devices" id="battery-devices" role="tabpanel">
         <h3>Battery: supported devices</h3>
         <p>The PERIPHERALS panel and the tray icon's hover card show the battery of these devices. <strong>Verified on hardware</strong>: seen working on a real device; the others use the same protocol as a verified device and should work — <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> with your diagnostics ZIP if one doesn't, or to confirm one does.</p>
         <div class="diag-table-wrap">
@@ -658,9 +670,9 @@
         </div>
       </div>
 
-      <div class="supported-devices" id="settings-devices">
-        <h3>Headset and mouse settings: supported devices<span class="badge-soon">Coming in v1.50.0</span></h3>
-        <p>The Control Center's Headset and Mouse pages change these devices' own settings, kept in the device. <strong>Verified on hardware</strong>: seen working on a real device. <strong>From G-Helper</strong> or <strong>From Gear Link, not yet verified</strong>: the model as G-Helper or ASUS Gear Link documents it, with the commands checked on the verified device — it should work; open its page once, then <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> with your diagnostics ZIP to confirm it, or if it doesn't.</p>
+      <div class="supported-devices" id="settings-devices" role="tabpanel">
+        <h3>Headset, mouse and keyboard settings: supported devices<span class="badge-soon">Coming in v1.50.0</span></h3>
+        <p>The Control Center's Headset, Mouse and Keyboard pages change these devices' own settings, kept in the device. <strong>Verified on hardware</strong>: seen working on a real device. <strong>From G-Helper</strong> or <strong>From Gear Link, not yet verified</strong>: the model as G-Helper or ASUS Gear Link documents it, with the commands checked on the verified device — it should work; open its page once, then <a href="https://github.com/dvalfrid/rigstats/issues/new?template=device.yml">open a device report</a> with your diagnostics ZIP to confirm it, or if it doesn't.</p>
         <div class="diag-table-wrap">
           <table class="diag-table">
             <thead>
@@ -760,6 +772,7 @@
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   </section>
