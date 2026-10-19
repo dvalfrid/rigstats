@@ -487,7 +487,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     /// through the Omni receiver (2026-10-18 — sleep 3 → 5 → 3 min, power
     /// saving lighting off → dimmed → off, low battery 20 → 25 → 20 %, each
     /// echoed and read back as written).
-    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25 };
+    // And the ROG Azoth (2.4 GHz) on a second Omni receiver (2026-10-19 —
+    // sleep 3 → 5 → 3 min, each read back, #296).
+    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25, 0x1A85 };
 
     public bool SettingsVerified => _ownProductId is { } id && VerifiedSettingsModels.Contains(id);
 
