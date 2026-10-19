@@ -800,9 +800,29 @@ Results:
 - **Service.** The hardware worker uses about 2.2 % of one core and the service
   process about 0.35 %. The variants differ only in the app, so this is the
   service's own share.
-- **Startup burst.** In both variants the app takes a whole core for about
-  1.5–2 minutes after it starts. The cause is unknown; the hypotheses and next
-  step are in #515.
+- **Startup burst: AMD's driver, not RIGStats (verified, #515).** For about
+  90 s after start, one thread takes a whole core. It is not RIGStats code: the
+  thread starts in AMD's driver (`amdxc64.dll` for D3D12, `amdvlk64.dll` for
+  Vulkan), its `cdb` stacks hold only driver frames, and it polls, mostly in
+  the kernel.
+
+  | What runs | Burst |
+  | --- | --- |
+  | RIGStats normally (D3D12 + DComp) | yes |
+  | RIGStats with DComp off (Vulkan) | yes |
+  | RIGStats on the iGPU, a different driver version | yes |
+  | A bare eframe window, D3D12 or Vulkan | yes |
+  | A bare eframe window, OpenGL | no |
+  | A wgpu device with no window | no |
+
+  OpenGL would avoid it, but DComp transparency needs D3D12, so the app keeps
+  D3D12. Which Adrenalin feature causes it is a hypothesis, not tested: the
+  overlay or metrics, Anti-Lag, Chill and Fluid Motion Frames are the
+  candidates. Whether NVIDIA or Intel GPUs see it is also not tested.
+
+  How it was found: CPU per thread with `GetThreadDescription` and the thread's
+  start address (`NtQueryInformationThread`, class 9), then `cdbX64 -pv -p
+  <pid> -c "!runaway 1; ~*kn 25; qd"` from WinDbg.
 - **Steady state.** About 2.5 % against the 1 % target. Still open in #463.
 
 ---
