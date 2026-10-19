@@ -184,14 +184,13 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
 | ROG Azoth | Keyboard | 1A83 | Verified on hardware | Battery and charging |
 | ROG Azoth (2.4 GHz) | Keyboard | 1A85 | Verified on hardware | Battery and charging |
-| ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Battery and charging |
+| ROG Azoth X | Keyboard | 1C24, 1C25 | Verified on hardware | Battery and charging |
 | ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Battery and charging |
 | ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth 96 HE / Lite | Keyboard | 1C10, 1C11, 1C12 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth Extreme | Keyboard | 1B3F, 1B40, 1B42 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth Extreme Edition 20 | Keyboard | 1DA2, 1DA3, 1DA4 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth Extreme Special Edition | Keyboard | 1CEF, 1CF0, 1CF1 | From Gear Link, not yet verified | Battery and charging |
-| ROG Azoth X | Keyboard | 1C25 | From Gear Link, not yet verified | Battery and charging |
 | ROG Falcata | Keyboard | 1C2F, 1C31 | From Gear Link, not yet verified | Battery and charging |
 | ROG Strix Morph 96 Wireless | Keyboard | 1CE8, 1CE9, 1CEA | From Gear Link, not yet verified | Battery and charging |
 | ROG Strix Morph 96 Wireless (PBZ) | Keyboard | 1E5B, 1E5C, 1E5D | From Gear Link, not yet verified | Battery and charging |

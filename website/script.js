@@ -38,7 +38,7 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
 });
 
 // Supported-device lists: one list at a time behind tabs, a search over all
-// three (by name, type or notes) with the matches counted on each tab.
+// three (by name, USB id, type or notes) with the matches counted on each tab.
 // Links to #supported-devices, #battery-devices or #settings-devices open
 // their tab. Without JavaScript the lists simply stay one after another.
 const deviceLists = document.getElementById('device-lists');

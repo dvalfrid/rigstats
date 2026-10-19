@@ -16,7 +16,9 @@ public static class BatteryCatalog
     /// Batteries seen on hardware for models whose lighting isn't verified:
     /// the ROG Azoth (2.4 GHz) and the Harpe Ace Mini on a second Omni
     /// receiver (2026-10-19, 64 % and 53 %, #296).
-    public static readonly IReadOnlySet<ushort> BatteryVerified = new HashSet<ushort> { 0x1A85, 0x1B65 };
+    // And the ROG Azoth X through the Omni receiver, which reports it as
+    // 1C25 (read daily on the owner's PC, e.g. 96 % on 2026-10-19).
+    public static readonly IReadOnlySet<ushort> BatteryVerified = new HashSet<ushort> { 0x1A85, 0x1B65, 0x1C25 };
 
     public static IReadOnlyList<SupportedDevice> All()
     {

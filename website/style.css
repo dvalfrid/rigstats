@@ -749,6 +749,13 @@ code {
 }
 .device-search:focus { outline: none; border-color: var(--accent); }
 .device-search-empty { margin-top: 16px; color: var(--text-muted); }
+.diag-table .usb-id {
+  margin-left: 6px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: .72rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
 .device-lists.tabbed .supported-devices { margin-top: 16px; }
 .device-lists:not(.tabbed) .device-lists-bar { display: none; }
 @media (max-width: 640px) {
