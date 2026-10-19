@@ -466,7 +466,7 @@ public class MouseProtocolTests
         var asleep = new FakeMouse { Asleep = true };
         var awake = new FakeMouse();
 
-        Assert.Throws<DomainUnavailableException>(() =>
+        Assert.Throws<DeviceAsleepException>(() =>
             new MouseProvider([asleep, awake], dryRun: false).Apply(new ProfilePart { Mouse = new MousePart { Profile = 4 } }));
 
         Assert.Equal(4, awake.Current.Profile);

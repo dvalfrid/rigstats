@@ -393,7 +393,29 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     public void Apply(AuraEffect effect, byte red, byte green, byte blue)
     {
         lock (_lock)
+        {
             Send(EffectReport(_model, _reportId, _info.OutputReportLength, effect, red, green, blue));
+            // A wireless keyboard asleep behind its receiver takes the write
+            // without a word. Its version question (`12 00`) carries its
+            // profiles whenever it is awake; asleep, the Omni receiver
+            // answers it itself with zeros there (seen live, 2026-10-19) —
+            // so a reply without them means it slept and missed the
+            // lighting, tried again when it wakes (#489). Asked after the
+            // write, and once more after a pause: the ROG Azoth left the
+            // question right after `51 2C` unanswered while awake (seen live).
+            if (HasBattery && !Awake() && !PauseThen(Awake))
+                throw new DeviceSilentException($"{Name} didn't answer.");
+        }
+    }
+
+    // Caller holds _lock. The keyboard itself answered `12 00` — with its
+    // profiles, not the receiver's zeros.
+    private bool Awake() => KeyboardProfileCommands.Parse(AskLocked(GetVersion), _reportId) is not null;
+
+    private static bool PauseThen(Func<bool> ask)
+    {
+        Thread.Sleep(150);
+        return ask();
     }
 
     /// The keyboard keeps its last effect; its own saved one returns after
