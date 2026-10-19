@@ -1528,8 +1528,12 @@ the `mouse` profile domain (`Control/Mice/`):
   own settings. A newer apply ends the retry. Not for previews. Asked for
   by the owner after the #296 test (2026-10-19). The lighting too: a
   keyboard's lighting write is never answered, so after writing it a
-  wireless keyboard is asked its version (`12 00`, answered whenever it is
-  awake); no answer is `DeviceSilentException`, and the retry
+  wireless keyboard is asked its version (`12 00`): awake, the reply
+  carries its profiles; asleep, the Omni receiver answers by itself with
+  zeros there (`0212000000080007` + zeros, seen live — a first version
+  counted any reply as awake and missed the Azoth X). Asked once more
+  after 150 ms (the ROG Azoth left the question right after `51 2C`
+  unanswered while awake). No profiles in either is `DeviceSilentException`, and the retry
   (`IRetryPart.Retry`) writes the lighting only to the devices that slept
   — the motherboard, monitors and Hue aren't written again. Seen live
   first: the Azoth X's onboard profile caught up on waking, but its colour
