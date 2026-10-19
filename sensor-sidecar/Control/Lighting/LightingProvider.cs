@@ -27,7 +27,7 @@ public sealed record LightingScan(IReadOnlyList<ILightingDevice> Devices, string
 /// kept as it is; a new one gets the current lighting at once. A device that
 /// can sit silent behind a plugged-in dongle (a headset switched off) is
 /// asked again on each rescan through the scan's `Retry`, alone.
-public sealed class LightingProvider : IControlProvider
+public sealed class LightingProvider : IControlProvider, IRetryPart
 {
     private static readonly string[] Effects = ["off", "static", "breathing", "spectrum_cycle"];
     private const long RescanIntervalMs = 2000;
@@ -288,8 +288,27 @@ public sealed class LightingProvider : IControlProvider
         if (part.Aura is { } aura)
         {
             Rescan();
-            Set(aura);
+            ThrowIfAsleep(Set(aura));
         }
+    }
+
+    // Devices that slept through the last lighting apply (#489).
+    private IReadOnlySet<string> _asleep = new HashSet<string>();
+
+    /// The lighting again, only to the devices that slept through it.
+    public void Retry(ProfilePart part)
+    {
+        if (part.Aura is not { } aura)
+            return;
+        Rescan();
+        ThrowIfAsleep(Set(aura, _asleep));
+    }
+
+    private void ThrowIfAsleep(IReadOnlyList<ILightingDevice> asleep)
+    {
+        _asleep = asleep.Select(d => d.Id).ToHashSet();
+        if (asleep.Count > 0)
+            throw DomainUnavailableException.Silent(asleep.Select(d => d.Name).ToList());
     }
 
     /// A lighting write can't be read back; a write that didn't throw counts.
@@ -329,15 +348,18 @@ public sealed class LightingProvider : IControlProvider
             Set(aura);
     }
 
-    private void Set(AuraPart aura)
+    // Writes `aura` to every device (or only those in `only`); returns the
+    // ones that slept through it (a wireless keyboard, #489).
+    private IReadOnlyList<ILightingDevice> Set(AuraPart aura, IReadOnlySet<string>? only = null)
     {
         var devices = _devices;
+        var asleep = new List<ILightingDevice>();
         if (devices.Count == 0)
-            return;
+            return asleep;
         if (_conflict() is { } other)
         {
             SidecarLog.Log($"[rigstats-control] Lighting skipped: {other} controls the lighting.");
-            return;
+            return asleep;
         }
         if (_dryRun)
         {
@@ -351,12 +373,17 @@ public sealed class LightingProvider : IControlProvider
             // every device fails does the profile apply fail. A device another
             // controller owns (Windows Dynamic Lighting) is skipped.
             var failures = new List<string>();
-            var targets = devices.Where(d => d.Blocked is null && Touches(d, aura)).ToList();
+            var targets = devices.Where(d => d.Blocked is null && Touches(d, aura) && (only is null || only.Contains(d.Id))).ToList();
             foreach (var device in targets)
             {
                 try
                 {
                     Write(device, aura);
+                }
+                catch (DeviceSilentException)
+                {
+                    asleep.Add(device);
+                    SidecarLog.Log($"[rigstats-control] Lighting on {device.Name}: it didn't answer (asleep?); tried again when it wakes.");
                 }
                 catch (Exception e)
                 {
@@ -369,6 +396,7 @@ public sealed class LightingProvider : IControlProvider
         }
         lock (_lock)
             _current = aura;
+        return asleep;
     }
 
     /// The tray's lamp toggle: every lamp off when any is lit, else every

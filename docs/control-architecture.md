@@ -1526,7 +1526,17 @@ the `mouse` profile domain (`Control/Mice/`):
   `apply_result` (ok, no message), which clears the footer; after 5
   minutes it pushes the words that the device stayed asleep and kept its
   own settings. A newer apply ends the retry. Not for previews. Asked for
-  by the owner after the #296 test (2026-10-19).
+  by the owner after the #296 test (2026-10-19). The lighting too: a
+  keyboard's lighting write is never answered, so after writing it a
+  wireless keyboard is asked its version (`12 00`, answered whenever it is
+  awake); no answer is `DeviceSilentException`, and the retry
+  (`IRetryPart.Retry`) writes the lighting only to the devices that slept
+  — the motherboard, monitors and Hue aren't written again. Seen live
+  first: the Azoth X's onboard profile caught up on waking, but its colour
+  stayed the old profile's, because the lighting part had counted the
+  silent write as done. While a wireless keyboard sleeps, each lighting
+  write (also the Lighting tab's live preview) waits for that one
+  unanswered question.
 - **Two or more Omni receivers (#296).** Each receiver is its own USB
   device; its vendor channels (mi_02, report ids 1–3) share one interface
   instance, its LampArray (mi_05) another — so receivers are told apart by

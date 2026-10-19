@@ -393,7 +393,16 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     public void Apply(AuraEffect effect, byte red, byte green, byte blue)
     {
         lock (_lock)
+        {
             Send(EffectReport(_model, _reportId, _info.OutputReportLength, effect, red, green, blue));
+            // A wireless keyboard asleep behind its receiver takes the write
+            // without a word. Its version question (`12 00`) is answered
+            // whenever it is awake, so no answer means it slept and missed
+            // the lighting — tried again when it wakes (#489). Asked after
+            // the write: a frame right after a reply can be dropped (#458).
+            if (HasBattery && AskLocked(GetVersion) is null)
+                throw new DeviceSilentException($"{Name} didn't answer.");
+        }
     }
 
     /// The keyboard keeps its last effect; its own saved one returns after

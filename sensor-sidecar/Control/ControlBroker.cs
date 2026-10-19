@@ -100,7 +100,10 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
                     {
                         try
                         {
-                            provider.Apply(profile.Part);
+                            if (provider is IRetryPart retry)
+                                retry.Retry(profile.Part);
+                            else
+                                provider.Apply(profile.Part);
                             if (!provider.Verify(profile.Part))
                                 throw new ControlApplyException($"{provider.Domain} did not take effect after applying.");
                             asleep.Remove(provider);
@@ -322,8 +325,10 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             return (ApplyResult.Success(profile.Id), applied, []);
         // A sleeping device's own words say it catches up; other skips name
         // their domain.
+        // The same sleeping keyboard can hold up two parts (its onboard
+        // profile and its lighting): said once.
         var note = string.Join(" ", skipped.Select(s =>
-            asleep.Any(a => a.Domain == s.Domain) ? s.Reason : $"{s.Domain} skipped: {s.Reason}"));
+            asleep.Any(a => a.Domain == s.Domain) ? s.Reason : $"{s.Domain} skipped: {s.Reason}").Distinct());
         if (applied.Count == 0)
             return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {note}"), [], []);
         return (ApplyResult.Success(profile.Id, $"Profile {profile.Name} applied; {note}"), applied, asleep);

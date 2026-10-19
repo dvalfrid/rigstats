@@ -445,6 +445,16 @@ public class DomainUnavailableException(string message) : InvalidOperationExcept
     public static DomainUnavailableException Silent(IReadOnlyList<string> names) => new DeviceAsleepException(names);
 }
 
+/// A provider whose part, tried again for a device that slept (#489),
+/// should go only to the devices that didn't answer — the lighting: the
+/// motherboard, monitors and Hue rooms that took it aren't written again.
+public interface IRetryPart
+{
+    /// Applies `part` to the devices that slept last time; throws
+    /// <see cref="DeviceAsleepException"/> for those still asleep.
+    void Retry(ProfilePart part);
+}
+
 /// A wireless device (keyboard, mouse, headset) didn't answer a profile
 /// switch — asleep or out of range. The broker tries its part again until
 /// it answers (#489), so the user reads that it will catch up by itself:

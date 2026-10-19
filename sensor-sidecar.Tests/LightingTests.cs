@@ -194,10 +194,15 @@ public class LightingProviderTests
             [new("argb1", "ARGB header 1", true, 0, 1), new("argb2", "ARGB header 2", true, 1, 1)];
         public List<(AuraEffect Effect, byte R, byte G, byte B)> Applied { get; } = [];
 
+        /// A wireless keyboard asleep behind its receiver (#489).
+        public bool Asleep { get; set; }
+
         public void Apply(AuraEffect effect, byte red, byte green, byte blue)
         {
             if (fails)
                 throw new IOException("unplugged");
+            if (Asleep)
+                throw new DeviceSilentException($"{Name} didn't answer.");
             Applied.Add((effect, red, green, blue));
         }
     }
@@ -349,6 +354,25 @@ public class LightingProviderTests
     {
         Assert.Throws<InvalidOperationException>(() =>
             Provider(new FakeDevice("a", fails: true)).Apply(Lights("static")));
+    }
+
+    [Fact]
+    public void A_sleeping_keyboard_gets_the_lighting_again_alone_when_it_wakes()
+    {
+        var board = new FakeDevice("board");
+        var keyboard = new FakeDevice("keyboard") { Asleep = true };
+        var provider = new LightingProvider([board, keyboard], "", () => null, dryRun: false);
+
+        var e = Assert.Throws<DeviceAsleepException>(() => provider.Apply(Lights("static", "#ff0000")));
+        Assert.Equal(["Device keyboard"], e.Names);
+        Assert.Single(board.Applied);
+
+        Assert.Throws<DeviceAsleepException>(() => provider.Retry(Lights("static", "#ff0000"))); // still asleep
+        keyboard.Asleep = false;
+        provider.Retry(Lights("static", "#ff0000"));
+
+        Assert.Single(keyboard.Applied);
+        Assert.Single(board.Applied); // the board isn't written again
     }
 
     [Fact]
