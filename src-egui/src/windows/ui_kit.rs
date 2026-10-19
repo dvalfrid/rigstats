@@ -943,6 +943,22 @@ pub fn row_problem(ui: &mut Ui, dc: &DialogColors, severity: Severity, text: &st
     });
 }
 
+/// A [`row_problem`] with a dismiss button on the same line, at the right;
+/// the text wraps in the width left of it. True when dismissed.
+pub fn row_problem_dismiss(ui: &mut Ui, dc: &DialogColors, severity: Severity, text: &str) -> bool {
+    let mut dismissed = false;
+    // A row as tall as the button (it grows if the text wraps further), so
+    // the button and the text centre on the same line.
+    let size = vec2(ui.available_width(), 30.0);
+    ui.allocate_ui_with_layout(size, Layout::right_to_left(Align::Center), |ui| {
+        dismissed = icon_button(ui, dc, Icon::Close, "Dismiss").clicked();
+        ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+            row_problem(ui, dc, severity, text);
+        });
+    });
+    dismissed
+}
+
 /// A state as a coloured dot and text ("● Running"). For a row's control.
 pub fn status(ui: &mut Ui, color: Color32, text: &str) {
     // Right-to-left row: the text first, so the dot ends up before it.

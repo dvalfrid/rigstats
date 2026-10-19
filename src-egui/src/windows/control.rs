@@ -2904,12 +2904,9 @@ pub fn show(
                         ui.add_space(6.0);
                     }
                     (true, Some(message)) => {
-                        ui.horizontal(|ui| {
-                            ui_kit::row_problem(ui, dc, Severity::Attention, message);
-                            if ui_kit::icon_button(ui, dc, Icon::Close, "Dismiss").clicked() {
-                                ui_state.dismissed_apply = Some(result.clone());
-                            }
-                        });
+                        if ui_kit::row_problem_dismiss(ui, dc, Severity::Attention, message) {
+                            ui_state.dismissed_apply = Some(result.clone());
+                        }
                         ui.add_space(6.0);
                     }
                     (true, None) => {}
@@ -2921,13 +2918,15 @@ pub fn show(
                 control.errors != ui_state.dismissed_errors
                     && control.hue_message.as_ref() != Some(*e)
             }) {
-                ui.horizontal(|ui| {
-                    let title = crate::problems::service_error(error).title;
-                    ui_kit::row_problem(ui, dc, Severity::Attention, &format!("{title}: {error}"));
-                    if ui_kit::icon_button(ui, dc, Icon::Close, "Dismiss").clicked() {
-                        ui_state.dismissed_errors = control.errors;
-                    }
-                });
+                let title = crate::problems::service_error(error).title;
+                if ui_kit::row_problem_dismiss(
+                    ui,
+                    dc,
+                    Severity::Attention,
+                    &format!("{title}: {error}"),
+                ) {
+                    ui_state.dismissed_errors = control.errors;
+                }
                 ui.add_space(6.0);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
