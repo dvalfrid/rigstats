@@ -1,4 +1,4 @@
-# Headset equalizer — research
+# Headset equalizer — research (#483)
 
 What ASUS headsets' equalizer is, which commands set it, and what RIGStats can
 build on. Sources were read as text and never run. Nothing in this document
