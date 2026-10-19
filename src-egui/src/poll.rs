@@ -261,42 +261,54 @@ fn poll_stats_to_log_payload(
 /// `(charge %, charging, minutes left, watts)` from `sample_battery_wmi`.
 type BatteryCache = (u8, bool, Option<u32>, Option<f64>);
 
-/// How long a battery reading is kept before WMI is asked again.
-const BATTERY_TTL_PRESENT: Duration = Duration::from_secs(10);
-/// How long "no battery" is kept — a desktop has none, so ask rarely (#464).
-const BATTERY_TTL_ABSENT: Duration = Duration::from_secs(60);
+/// How often WMI is asked for the battery's numbers — only on a PC that has
+/// a battery; whether it has one is `hardware::system_battery_present`
+/// (`GetSystemPowerStatus`), asked every tick for next to nothing (#473).
+const BATTERY_TTL: Duration = Duration::from_secs(10);
 
 /// When to read the battery over WMI and when to run `probe_wmi_status`.
-/// The clock is passed in so the decisions are testable.
+/// The clock and the presence are passed in so the decisions are testable.
 #[derive(Default)]
 struct BatteryPoll {
-    last: Option<(Instant, Option<BatteryCache>)>,
+    /// When WMI was last asked.
+    asked: Option<Instant>,
+    /// The last reading WMI gave — kept through a one-off miss, so a laptop
+    /// doesn't flip to "no battery" for it (#473).
+    good: Option<BatteryCache>,
     /// `probe_wmi_status` already ran in the current run of misses.
     probed: bool,
 }
 
 impl BatteryPoll {
-    fn is_stale(&self, now: Instant) -> bool {
-        match self.last {
-            None => true,
-            Some((t, Some(_))) => now.duration_since(t) >= BATTERY_TTL_PRESENT,
-            Some((t, None)) => now.duration_since(t) >= BATTERY_TTL_ABSENT,
-        }
+    /// Whether WMI should be asked now: never without a battery (#464,
+    /// #473), every `BATTERY_TTL` with one — after a miss too.
+    fn is_stale(&self, now: Instant, present: bool) -> bool {
+        present
+            && self
+                .asked
+                .map_or(true, |t| now.duration_since(t) >= BATTERY_TTL)
     }
 
     /// Stores a reading. Returns `true` when `probe_wmi_status` should run:
     /// only on the first miss of a run of misses, to log once why WMI failed.
     fn record(&mut self, now: Instant, reading: Option<BatteryCache>) -> bool {
-        self.last = Some((now, reading));
-        if reading.is_some() {
+        self.asked = Some(now);
+        if let Some(reading) = reading {
+            self.good = Some(reading);
             self.probed = false;
             return false;
         }
         !std::mem::replace(&mut self.probed, true)
     }
 
-    fn cached(&self) -> Option<BatteryCache> {
-        self.last.and_then(|(_, d)| d)
+    /// The reading to show: none without a battery; with one, the last good
+    /// reading (none before the first — the panels would show 0 %).
+    fn cached(&self, present: bool) -> Option<BatteryCache> {
+        if present {
+            self.good
+        } else {
+            None
+        }
     }
 }
 
@@ -398,6 +410,7 @@ pub async fn poll_loop(
     let mut last_ping: Option<(Instant, Option<f64>)> = None;
     let mut last_ping_wan: Option<(Instant, Option<f64>)> = None;
     let mut battery_poll = BatteryPoll::default();
+    let mut battery_here_logged: Option<bool> = None;
     let mut last_prune_day: Option<u64> = None;
     let mut first_tick_logged = false;
 
@@ -577,7 +590,24 @@ pub async fn poll_loop(
             battery_time_mins,
             battery_power_w,
         ) = {
-            if battery_poll.is_stale(Instant::now()) {
+            let battery_here = hardware::system_battery_present();
+            // Once, and on a change: whether WMI is asked about a battery at all.
+            if battery_here_logged != Some(battery_here) {
+                battery_here_logged = Some(battery_here);
+                debug::log_debug(
+                    &dir,
+                    &format!(
+                        "battery: system battery {} (GetSystemPowerStatus){}",
+                        if battery_here { "present" } else { "absent" },
+                        if battery_here {
+                            "; WMI read every 10 s"
+                        } else {
+                            "; WMI not asked"
+                        }
+                    ),
+                );
+            }
+            if battery_poll.is_stale(Instant::now(), battery_here) {
                 let result = match tokio::task::spawn_blocking(hardware::sample_battery_wmi).await {
                     Ok(result) => result,
                     Err(err) => {
@@ -602,7 +632,7 @@ pub async fn poll_loop(
                     }
                 }
             }
-            match battery_poll.cached() {
+            match battery_poll.cached(battery_here) {
                 Some((pct, charging, mins, w)) => (true, Some(pct), Some(charging), mins, w),
                 None => (false, None, None, None, None),
             }
@@ -785,29 +815,43 @@ mod tests {
     const READING: BatteryCache = (80, true, Some(90), Some(12.5));
 
     #[test]
-    fn battery_stale_before_first_read() {
-        assert!(BatteryPoll::default().is_stale(Instant::now()));
+    fn battery_stale_before_first_read_only_when_there_is_one() {
+        let poll = BatteryPoll::default();
+        assert!(poll.is_stale(Instant::now(), true));
+        // A desktop: WMI is never asked (#473).
+        assert!(!poll.is_stale(Instant::now(), false));
     }
 
     #[test]
-    fn battery_present_cached_for_10s() {
+    fn battery_read_every_10s() {
         let t0 = Instant::now();
         let mut poll = BatteryPoll::default();
         poll.record(t0, Some(READING));
-        assert!(!poll.is_stale(t0 + Duration::from_secs(9)));
-        assert!(poll.is_stale(t0 + BATTERY_TTL_PRESENT));
-        assert_eq!(poll.cached(), Some(READING));
+        assert!(!poll.is_stale(t0 + Duration::from_secs(9), true));
+        assert!(poll.is_stale(t0 + BATTERY_TTL, true));
+        assert_eq!(poll.cached(true), Some(READING));
     }
 
     #[test]
-    fn no_battery_cached_for_60s() {
+    fn a_one_off_miss_keeps_the_last_reading_and_retries_in_10s() {
+        // Before #473 a miss was "no battery" for 60 s on a laptop.
+        let t0 = Instant::now();
+        let mut poll = BatteryPoll::default();
+        poll.record(t0, Some(READING));
+        poll.record(t0 + BATTERY_TTL, None);
+        assert_eq!(poll.cached(true), Some(READING));
+        assert!(!poll.is_stale(t0 + BATTERY_TTL + Duration::from_secs(9), true));
+        assert!(poll.is_stale(t0 + BATTERY_TTL * 2, true));
+    }
+
+    #[test]
+    fn nothing_shown_without_a_battery_or_before_the_first_reading() {
         let t0 = Instant::now();
         let mut poll = BatteryPoll::default();
         poll.record(t0, None);
-        assert!(!poll.is_stale(t0 + Duration::from_secs(10)));
-        assert!(!poll.is_stale(t0 + Duration::from_secs(59)));
-        assert!(poll.is_stale(t0 + BATTERY_TTL_ABSENT));
-        assert_eq!(poll.cached(), None);
+        assert_eq!(poll.cached(true), None); // the panels would show 0 %
+        poll.record(t0, Some(READING));
+        assert_eq!(poll.cached(false), None); // the battery went away
     }
 
     #[test]
@@ -815,8 +859,8 @@ mod tests {
         let t0 = Instant::now();
         let mut poll = BatteryPoll::default();
         assert!(poll.record(t0, None));
-        assert!(!poll.record(t0 + BATTERY_TTL_ABSENT, None));
-        assert!(!poll.record(t0 + BATTERY_TTL_ABSENT * 2, None));
+        assert!(!poll.record(t0 + BATTERY_TTL, None));
+        assert!(!poll.record(t0 + BATTERY_TTL * 2, None));
     }
 
     #[test]

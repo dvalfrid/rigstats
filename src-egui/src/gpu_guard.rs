@@ -64,7 +64,7 @@ pub fn install_gpu_loss_guard(
 /// overrides both, as does the per-app choice in Windows' graphics settings.
 pub fn render_power_preference() -> PowerPreference {
     PowerPreference::from_env().unwrap_or_else(|| {
-        if has_system_battery() {
+        if rigstats_backend::hardware::system_battery_present() {
             PowerPreference::LowPower
         } else {
             PowerPreference::HighPerformance
@@ -84,42 +84,4 @@ pub fn log_render_adapter(render_state: &eframe::egui_wgpu::RenderState, dir: &s
             render_power_preference()
         ),
     );
-}
-
-/// `GetSystemPowerStatus` is instant (no WMI), so it can run before the
-/// window — and its wgpu device — is created.
-#[cfg(windows)]
-#[allow(unsafe_code)] // one FFI call filling a stack struct
-fn has_system_battery() -> bool {
-    use winapi::um::winbase::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
-    let mut status: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
-    if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
-        return false;
-    }
-    battery_flag_means_battery(status.BatteryFlag)
-}
-
-#[cfg(not(windows))]
-fn has_system_battery() -> bool {
-    false
-}
-
-/// `SYSTEM_POWER_STATUS.BatteryFlag`: 128 = no system battery, 255 = unknown.
-/// Unknown counts as "no battery" so it keeps today's behaviour.
-fn battery_flag_means_battery(flag: u8) -> bool {
-    flag != 128 && flag != 255
-}
-
-#[cfg(test)]
-mod tests {
-    use super::battery_flag_means_battery;
-
-    #[test]
-    fn battery_flag_maps_to_presence() {
-        assert!(!battery_flag_means_battery(128), "no system battery");
-        assert!(!battery_flag_means_battery(255), "unknown status");
-        assert!(battery_flag_means_battery(1), "high");
-        assert!(battery_flag_means_battery(8), "charging");
-        assert!(battery_flag_means_battery(0), "between low and high");
-    }
 }

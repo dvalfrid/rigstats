@@ -327,7 +327,8 @@ startup background thread in `main.rs`) and keep the results.
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
 | `detect_ping_target` | First IPv4 default gateway (`Win32_NetworkAdapterConfiguration`), else `1.1.1.1` |
 | `probe_wmi_status` | Checks whether WMI is reachable |
-| `sample_battery_wmi` | Battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW). The poll loop's `BatteryPoll` keeps a reading 10 s and a "no battery" answer 60 s, and runs `probe_wmi_status` only on the first miss of a run (#464) — before, a PC without a battery ran two WMI queries every second |
+| `system_battery_present` | Whether Windows reports a system battery — `GetSystemPowerStatus` (`BatteryFlag` 128 none, 255 unknown → no), microseconds, no COM/WMI. Asked by the poll loop every tick and by `gpu_guard::render_power_preference` (#473) |
+| `sample_battery_wmi` | Battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW). Asked only when `system_battery_present` says yes, every 10 s — after a miss too, which keeps the last good reading (`BatteryPoll`, #464/#473); `probe_wmi_status` runs only on the first miss of a run. Before #464 a PC without a battery ran two WMI queries every second; after it, once a minute; since #473 none. The poll loop logs `battery: system battery present/absent (GetSystemPowerStatus)` once and on a change |
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
