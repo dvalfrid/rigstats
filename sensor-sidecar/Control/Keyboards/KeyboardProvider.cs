@@ -64,6 +64,10 @@ public sealed class KeyboardProvider(Func<IReadOnlyList<IKeyboardProfileDevice>>
         var all = keyboards();
         if (all.Count == 0)
             throw new DomainUnavailableException("No ASUS keyboard is connected, so its profile was skipped.");
+        // Every keyboard is tried; one that doesn't answer (asleep behind its
+        // receiver) doesn't keep the others from switching (#484). The rest
+        // of the profile still applies.
+        var silent = new List<string>();
         foreach (var keyboard in all)
         {
             if (dryRun)
@@ -78,10 +82,11 @@ public sealed class KeyboardProvider(Func<IReadOnlyList<IKeyboardProfileDevice>>
             }
             catch (IOException e)
             {
-                // Asleep or out of range: the rest of the profile still applies.
-                throw new DomainUnavailableException($"{keyboard.Name} didn't answer, so its profile was skipped ({e.Message}).");
+                silent.Add($"{keyboard.Name} ({e.Message})");
             }
         }
+        if (silent.Count > 0)
+            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its profile was skipped.");
     }
 
     public bool Verify(ProfilePart part)
