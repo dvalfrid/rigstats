@@ -73,10 +73,17 @@ if (deviceLists) {
     empty.hidden = inActive > 0;
   };
 
+  // A jump, not a smooth scroll: scrolling smoothly past the Control Center
+  // section loads its lazy screenshots on the way, the page grows and the
+  // scroll stopped short, in the Control Center. Jumped once more when the
+  // page has settled, in case something above still grew. 'instant':
+  // the page's CSS makes every scroll smooth (scroll-behavior).
   const open = (id, scroll) => {
     show(id);
     filter();
-    if (scroll) deviceLists.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!scroll) return;
+    deviceLists.scrollIntoView({ behavior: 'instant', block: 'start' });
+    setTimeout(() => deviceLists.scrollIntoView({ behavior: 'instant', block: 'start' }), 400);
   };
 
   tabs.forEach(t => t.addEventListener('click', () => {
