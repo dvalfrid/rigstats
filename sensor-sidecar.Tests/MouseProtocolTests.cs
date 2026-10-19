@@ -460,8 +460,21 @@ public class MouseProtocolTests
         Assert.DoesNotContain(MouseCatalog.Entries, e => e.Spec.Name.Contains("Balteus", StringComparison.Ordinal)); // a mouse pad
     }
 
+    [Fact]
+    public void A_silent_mouse_doesnt_keep_the_others_from_switching()
+    {
+        var asleep = new FakeMouse { Asleep = true };
+        var awake = new FakeMouse();
+
+        Assert.Throws<DomainUnavailableException>(() =>
+            new MouseProvider([asleep, awake], dryRun: false).Apply(new ProfilePart { Mouse = new MousePart { Profile = 4 } }));
+
+        Assert.Equal(4, awake.Current.Profile);
+    }
+
     private sealed class FakeMouse(MouseEntry? entry = null) : IMouseDevice
     {
+        public bool Asleep { get; init; }
         public int Switches { get; private set; }
         public string Id => "asus-mouse-1a94-omni";
         public MouseEntry Entry { get; } = entry ?? MouseCatalog.Find(0x1A94, MouseLink.Omni)!;
@@ -473,6 +486,8 @@ public class MouseProtocolTests
 
         public void SwitchProfile(int profile)
         {
+            if (Asleep)
+                throw new IOException("ROG Harpe Ace Aim Lab Edition didn't answer.");
             Switches++;
             Current = Current with { Profile = profile };
         }

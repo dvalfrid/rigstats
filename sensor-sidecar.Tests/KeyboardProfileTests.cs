@@ -95,6 +95,20 @@ public class KeyboardProfileTests
     }
 
     [Fact]
+    public void A_silent_keyboard_doesnt_keep_the_others_from_switching()
+    {
+        var asleep = new FakeKeyboard { Asleep = true };
+        var awake = new FakeKeyboard();
+        var provider = new KeyboardProvider(() => [asleep, awake], dryRun: false);
+
+        var e = Assert.Throws<DomainUnavailableException>(() =>
+            provider.Apply(new ProfilePart { Keyboard = new KeyboardPart { Profile = 4 } }));
+
+        Assert.Equal(4, awake.Current);
+        Assert.Contains("ROG Azoth X", e.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Dry_run_and_restore()
     {
         var keyboard = new FakeKeyboard();

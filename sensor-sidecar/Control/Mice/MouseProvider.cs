@@ -85,6 +85,10 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
         var mice = Mice();
         if (mice.Count == 0)
             throw new DomainUnavailableException("No ROG mouse is connected, so its profile was skipped.");
+        // Every mouse is tried; one that doesn't answer (asleep, out of range)
+        // doesn't keep the others from switching (#484). The rest of the
+        // profile still applies.
+        var silent = new List<string>();
         foreach (var mouse in mice)
         {
             // A mouse with one onboard profile (Gladius II Origin, Strix Impact, #432) has nothing to switch.
@@ -103,10 +107,11 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
             }
             catch (IOException e)
             {
-                // Asleep or out of range: the rest of the profile still applies.
-                throw new DomainUnavailableException($"{mouse.Entry.Spec.Name} didn't answer, so its profile was skipped ({e.Message}).");
+                silent.Add($"{mouse.Entry.Spec.Name} ({e.Message})");
             }
         }
+        if (silent.Count > 0)
+            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its profile was skipped.");
     }
 
     public bool Verify(ProfilePart part)
@@ -253,17 +258,37 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
     /// The known mice among `hid`: by id on their own collection (the
     /// interface, report id and vendor page the catalog names), and on the
     /// Omni receiver by its paired list.
-    public static IReadOnlyList<IMouseDevice> Discover(IReadOnlyList<HidDeviceInfo> hid)
+    public static IReadOnlyList<IMouseDevice> Discover(IReadOnlyList<HidDeviceInfo> hid) =>
+        Plan(hid).Select(c => (IMouseDevice)Open(c.Channel, c.Entry, c.Id)).ToList();
+
+    /// A mouse to open: its settings collection, catalog entry and id.
+    public sealed record Candidate(HidDeviceInfo Channel, MouseEntry Entry, string Id);
+
+    /// What <see cref="Discover"/> opens, without opening anything (tested).
+    /// Every mouse of a model is found — two identical mice on cable are two
+    /// collections on two USB devices — the second and later with `-2`, `-3`
+    /// on its id (#484). A mouse on its cable whose model the Omni receiver
+    /// also lists is taken once, by cable, as keyboards are (#484; that a
+    /// charging mouse stays in the receiver's list is assumed from the
+    /// keyboard, not yet seen with a mouse).
+    public static IReadOnlyList<Candidate> Plan(IReadOnlyList<HidDeviceInfo> hid)
     {
-        var found = new List<IMouseDevice>();
+        var found = new List<Candidate>();
         foreach (var group in hid.Where(h => h.VendorId == AuraUsb.AsusVendorId).GroupBy(h => h.ProductId))
         {
             foreach (var entry in MouseCatalog.Entries.Where(e => e.ProductId == group.Key && e.Link != MouseLink.Omni))
             {
-                var channel = group.FirstOrDefault(h => IsChannel(h, entry));
-                if (channel is null)
+                // One channel per USB device: a device's collections share
+                // its instance, so a second matching collection on the same
+                // device isn't a second mouse.
+                var channels = group.Where(h => IsChannel(h, entry))
+                    .GroupBy(h => DeviceInstance(h.Path)).Select(g => g.OrderBy(h => h.Path, StringComparer.Ordinal).First())
+                    .OrderBy(h => h.Path, StringComparer.Ordinal).ToList();
+                if (channels.Count == 0)
                     continue;
-                found.Add(Open(channel, entry, $"asus-mouse-{entry.ProductId:x4}-{entry.Link.ToString().ToLowerInvariant()}"));
+                var id = $"asus-mouse-{entry.ProductId:x4}-{entry.Link.ToString().ToLowerInvariant()}";
+                for (var i = 0; i < channels.Count; i++)
+                    found.Add(new Candidate(channels[i], entry, i == 0 ? id : $"{id}-{i + 1}"));
                 break;
             }
         }
@@ -274,10 +299,33 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                 if (MouseCatalog.Find(paired.ProductId, MouseLink.Omni) is not { } entry
                     || OmniMouse.Channel(hid, paired.ReportId) is not { } channel)
                     continue;
-                found.Add(Open(channel, entry with { ReportId = paired.ReportId }, $"asus-mouse-{entry.ProductId:x4}-omni"));
+                if (CabledToo(found, entry))
+                {
+                    SidecarLog.Log($"[rigstats-control] Mouse: {entry.Spec.Name} is connected by cable too — the receiver's entry is left out.");
+                    continue;
+                }
+                found.Add(new Candidate(channel, entry with { ReportId = paired.ReportId }, $"asus-mouse-{entry.ProductId:x4}-omni"));
             }
         }
         return found;
+    }
+
+    /// The receiver's mouse `omni` is already found on its cable — the same
+    /// model among the wired ones. Two different mice of one model, one by
+    /// cable and one by receiver, are taken as one (as for keyboards).
+    public static bool CabledToo(IEnumerable<Candidate> found, MouseEntry omni) =>
+        found.Any(c => c.Entry.Link == MouseLink.Wired && c.Entry.Spec.Name == omni.Spec.Name);
+
+    /// The USB device a HID collection belongs to: its instance id without
+    /// the collection's own last part — `…#8&31cacbe7&0&0002#…` → `8&31cacbe7&0`.
+    public static string DeviceInstance(string path)
+    {
+        var parts = path.Split('#');
+        if (parts.Length < 3)
+            return path;
+        var instance = parts[2];
+        var last = instance.LastIndexOf('&');
+        return last > 0 ? instance[..last] : instance;
     }
 
     /// `h` is the settings collection of a mouse on its own cable or dongle:

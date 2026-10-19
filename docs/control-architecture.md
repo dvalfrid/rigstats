@@ -1489,6 +1489,19 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):
 
+- **Several mice or keyboards at once (#484).** Each one is listed on its
+  page with its own settings. A profile's onboard-profile number goes to
+  every mouse (and every keyboard), clamped per model — the owner chose one
+  shared number over a choice per device (2026-10-19). The apply tries every
+  device and reports the silent ones together at the end; before, the first
+  silent device stopped the rest. Discovery (`MouseProvider.Plan`) finds
+  every identical mouse, one per USB device (`DeviceInstance`), the second
+  with `-2` on its id; a mouse on its cable whose model the Omni receiver
+  also lists is taken once, by cable (`CabledToo`, logged "connected by
+  cable too"), as keyboards already were. Code-read and unit-tested only —
+  no second mouse here, and that a cabled mouse stays in the receiver's
+  paired list is assumed from the keyboard.
+
 - **Which mice.** `MouseCatalog` lists every ROG mouse on the common protocol
   — 71 rows (model × link: cable, own dongle, ROG Omni receiver) transcribed
   as facts from G-Helper's mouse model classes by a resolver that follows
