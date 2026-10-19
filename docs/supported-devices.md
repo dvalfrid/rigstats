@@ -20,6 +20,7 @@ RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or
 | ROG Aura Monitor Light Bar | Light bar | 1AC8 | Verified on hardware | Runs its own effects; Desk lamp: on/off, brightness, colour temperature |
 | Keyboards paired to the ROG Omni receiver (e.g. ROG Azoth X) | Keyboard | 1ACE | Verified on hardware | Found on whichever receiver channel the keyboard answers |
 | ROG Azoth | Keyboard | 1A83 | Verified on hardware | Runs its own effects |
+| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | Verified on hardware | Runs its own effects |
 | ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Runs its own effects |
 | ROG Falchion Ace HFX | Keyboard | 1B7E | Verified on hardware | Runs its own effects |
 | ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Runs its own effects |
@@ -40,7 +41,6 @@ RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or
 | ROG Strix Scope II 96 Wireless | Keyboard | 1AAE, 1AAF, 1AB0 | From Gear Link, not yet verified | Runs its own effects |
 | ROG Strix Scope II RX | Keyboard | 1AB5, 1AB6 | From Gear Link, not yet verified | Runs its own effects |
 | TUF Gaming K4 Magnetic | Keyboard | 1DF5, 1DF6 | From Gear Link, not yet verified | Runs its own effects |
-| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion | Keyboard | 193C | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Falchion (wireless) | Keyboard | 193E | From OpenRGB, not yet verified | Runs its own effects |
 | ROG Strix Flare | Keyboard | 1875 | From OpenRGB, not yet verified | Runs its own effects |
@@ -67,8 +67,8 @@ RIGStats drives these lighting devices natively — no Armoury Crate, OpenRGB or
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Through its 2.4 GHz dongle; found when switched on; every write read back |
 | Any Windows Dynamic Lighting (HID LampArray) device, any brand | Keyboard, mouse, other | — | Verified on hardware (ROG Harpe Ace on the Omni receiver) | Skipped while Windows Dynamic Lighting controls it; keyboards above use their own protocol instead. ASUS devices: set the device's Cross-device Lighting Toggle to "Aura Sync & Windows Dynamic Lighting" in Gear Link or Armoury Crate, otherwise it ignores every lighting change |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A94 | Verified on hardware | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
+| ROG Harpe Ace Mini | Mouse | 1B65 | Verified on hardware | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
 | ROG Harpe Ace Extreme | Mouse | 1B69 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
-| ROG Harpe Ace Mini | Mouse | 1B65 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
 | ROG Keris II Ace | Mouse | 1B18 | From Gear Link, not yet verified | Through the ROG Omni receiver; its Cross-device Lighting Toggle can be switched from the Lighting tab |
 | Other ROG mice on the ROG Omni receiver (ProArt Mouse MD301, ROG Gladius IV Ace, ROG Gladius IV Ace Max, ROG Harpe II Ace, ROG Harpe II Ace (PBZ), ROG Harpe II Ace Mini, ROG Harpe II Ace Mini Demon1 Edition, ROG Harpe II Extreme Edition 20, ROG Keris II Origin, ROG Keris II Origin (KJP), ROG Spatha X 65K) | Mouse | 1C0E, 1C6B, 1CD3, 1D4E, 1D7C, 1DBF, 1DE0, 1E32, 1E4B, 1E4F, 1E52 | From Gear Link, not yet verified | Named in the Lighting tab; lit through the receiver's Dynamic Lighting (no toggle needed) |
 | Philips Hue lights, through a Hue Bridge (square, v2) | Room lights | — (network) | Verified on hardware | Paired from the Control Center; only the rooms and zones you choose follow the rig. Breathing and spectrum cycle fade slowly (the bridge takes about one command a second) |

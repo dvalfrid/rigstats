@@ -907,7 +907,7 @@ public class OmniMouseTests
         // Gear Link's WDL switch and Companion's WDL=1 agree on these four.
         Assert.Equal(new ushort[] { 0x1A94, 0x1B18, 0x1B65, 0x1B69 },
             OmniMouse.Models.Where(m => m.Value.Wdl).Select(m => m.Key).Order());
-        Assert.Equal(0x1A94, Assert.Single(OmniMouse.Models, m => m.Value.Verified).Key);
+        Assert.Equal([0x1A94, 0x1B65], OmniMouse.Models.Where(m => m.Value.Verified).Select(m => (int)m.Key).Order()); // Harpe Ace, Harpe Ace Mini (#296)
     }
 
     [Fact]

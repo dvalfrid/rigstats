@@ -114,7 +114,8 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
         [0x1A83] = new("ROG Azoth", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
         // The same keyboard over its dongle — the Azoth X keeps one scale on
         // cable and dongle, so this one is assumed 0–100 too (not verified).
-        [0x1A85] = new("ROG Azoth (2.4 GHz)", PerKey: true, BrightnessMax: 100, Speed: 30),
+        // Lighting seen following on a second Omni receiver (2026-10-19, #296).
+        [0x1A85] = new("ROG Azoth (2.4 GHz)", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
         [0x193C] = Azoth("ROG Falchion"),
         [0x193E] = Azoth("ROG Falchion (wireless)"),
         [0x19FE] = Azoth("ROG Strix Flare II"),

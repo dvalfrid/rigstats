@@ -43,13 +43,15 @@ public sealed class OmniMouse
     /// id). From Gear Link's device manifests and its Companion's model
     /// configs, which agree: `Wdl` = the mouse has the Cross-device Lighting
     /// Toggle (Companion `WDL=1`, Gear Link's WDL switch) — newer mice follow
-    /// LampArray's own autonomous mode and have none. `Verified`: the switch
-    /// was checked on this mouse.
+    /// LampArray's own autonomous mode and have none. `Verified`: seen on
+    /// hardware — the Harpe Ace's switch checked; the Harpe Ace Mini's
+    /// lighting following on a second receiver (2026-10-19, #296; its WDL
+    /// state didn't answer at discovery, so the switch itself is unchecked).
     public static readonly IReadOnlyDictionary<ushort, MouseModel> Models = new Dictionary<ushort, MouseModel>
     {
         [0x1A94] = new("ROG Harpe Ace Aim Lab Edition", Wdl: true, Verified: true),
         [0x1B18] = new("ROG Keris II Ace", Wdl: true),
-        [0x1B65] = new("ROG Harpe Ace Mini", Wdl: true),
+        [0x1B65] = new("ROG Harpe Ace Mini", Wdl: true, Verified: true),
         [0x1B69] = new("ROG Harpe Ace Extreme", Wdl: true),
         [0x1C0E] = new("ROG Keris II Origin"),
         [0x1C6B] = new("ROG Harpe II Ace"),
