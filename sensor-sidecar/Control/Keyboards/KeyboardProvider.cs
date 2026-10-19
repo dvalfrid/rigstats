@@ -82,11 +82,12 @@ public sealed class KeyboardProvider(Func<IReadOnlyList<IKeyboardProfileDevice>>
             }
             catch (IOException e)
             {
-                silent.Add($"{keyboard.Name} ({e.Message})");
+                SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} not switched: {e.Message}");
+                silent.Add(keyboard.Name);
             }
         }
         if (silent.Count > 0)
-            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its profile was skipped.");
+            throw DomainUnavailableException.Silent(silent);
     }
 
     public bool Verify(ProfilePart part)

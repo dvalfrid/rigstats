@@ -107,11 +107,12 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
             }
             catch (IOException e)
             {
-                silent.Add($"{mouse.Entry.Spec.Name} ({e.Message})");
+                SidecarLog.Log($"[rigstats-control] Mouse: {mouse.Entry.Spec.Name} not switched: {e.Message}");
+                silent.Add(mouse.Entry.Spec.Name);
             }
         }
         if (silent.Count > 0)
-            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its profile was skipped.");
+            throw DomainUnavailableException.Silent(silent);
     }
 
     public bool Verify(ProfilePart part)

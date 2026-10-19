@@ -13,6 +13,11 @@ public static class BatteryCatalog
 {
     public const string FromSolaar = "From Solaar, not yet verified";
 
+    /// Batteries seen on hardware for models whose lighting isn't verified:
+    /// the ROG Azoth (2.4 GHz) and the Harpe Ace Mini on a second Omni
+    /// receiver (2026-10-19, 64 % and 53 %, #296).
+    public static readonly IReadOnlySet<ushort> BatteryVerified = new HashSet<ushort> { 0x1A85, 0x1B65 };
+
     public static IReadOnlyList<SupportedDevice> All()
     {
         var rows = new List<SupportedDevice>();
@@ -26,15 +31,15 @@ public static class BatteryCatalog
         rows.AddRange(AsusKeyboardDevice.Models
             .Where(m => AsusKeyboardDevice.BatteryModels.Contains(m.Key))
             .GroupBy(m => (m.Value.Name,
-                Status: m.Value.Verified ? LightingCatalog.Verified : m.Value.GearLink ? LightingCatalog.FromGearLink : LightingCatalog.FromOpenRgb))
+                Status: m.Value.Verified || BatteryVerified.Contains(m.Key) ? LightingCatalog.Verified : m.Value.GearLink ? LightingCatalog.FromGearLink : LightingCatalog.FromOpenRgb))
             .OrderBy(g => g.Key.Status == LightingCatalog.Verified ? 0 : 1).ThenBy(g => g.Key.Name)
             .Select(g => new SupportedDevice(g.Key.Name, "Keyboard", string.Join(", ", g.Select(m => Hex(m.Key)).Order()),
                 g.Key.Status, "Battery and charging")));
 
         rows.AddRange(OmniMouse.Models
-            .OrderByDescending(m => m.Value.Verified).ThenBy(m => m.Value.Name)
+            .OrderByDescending(m => m.Value.Verified || BatteryVerified.Contains(m.Key)).ThenBy(m => m.Value.Name)
             .Select(m => new SupportedDevice(m.Value.Name, "Mouse", Hex(m.Key),
-                m.Value.Verified ? LightingCatalog.Verified : LightingCatalog.FromGearLink,
+                m.Value.Verified || BatteryVerified.Contains(m.Key) ? LightingCatalog.Verified : LightingCatalog.FromGearLink,
                 "Battery and charging, through the ROG Omni receiver")));
 
         rows.Add(new SupportedDevice(

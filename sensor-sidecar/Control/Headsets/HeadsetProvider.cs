@@ -86,11 +86,12 @@ public sealed class HeadsetProvider(Func<IReadOnlyList<IHeadsetEqDevice>> headse
             }
             catch (IOException e)
             {
-                silent.Add($"{headset.Name} ({e.Message})");
+                SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} equalizer not set: {e.Message}");
+                silent.Add(headset.Name);
             }
         }
         if (silent.Count > 0)
-            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its equalizer preset was skipped.");
+            throw DomainUnavailableException.Silent(silent);
     }
 
     public bool Verify(ProfilePart part)

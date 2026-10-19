@@ -438,7 +438,16 @@ public sealed class ApplyResult
 /// applies the rest and skips it, instead of rolling everything back. Skipping
 /// is the safe direction — the hardware keeps what it has. Any other
 /// exception still rolls the whole profile back.
-public class DomainUnavailableException(string message) : InvalidOperationException(message);
+public class DomainUnavailableException(string message) : InvalidOperationException(message)
+{
+    /// Wireless devices that didn't answer a profile switch (#484): "ROG
+    /// Azoth X didn't answer — probably asleep — so it was left as it is.
+    /// Wake it and switch the profile again." The technical reason goes to
+    /// the log; the user reads it once, in plain words.
+    public static DomainUnavailableException Silent(IReadOnlyList<string> names) => new(names.Count == 1
+        ? $"{names[0]} didn't answer — probably asleep — so it was left as it is. Wake it and switch the profile again."
+        : $"{string.Join(" and ", names)} didn't answer — probably asleep — so they were left as they are. Wake them and switch the profile again.");
+}
 
 /// One incoming NDJSON line: `{"id":1,"method":"hello","params":{...}}`.
 public sealed class ControlRequest

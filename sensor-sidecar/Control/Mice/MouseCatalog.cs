@@ -303,9 +303,12 @@ public static class MouseCatalog
     /// Mice whose settings were seen working on hardware, by id and link: the
     /// Harpe Ace Aim Lab Edition on the Omni receiver (2026-10-17 — every
     /// setting and the onboard-profile switch read back as written; 2026-10-18
-    /// the button bindings too: double click, disabled, back to default).
+    /// the button bindings too: double click, disabled, back to default), and
+    /// the Harpe Ace Mini on a second Omni receiver (2026-10-19 — onboard
+    /// profile 1 → 2 → 1, DPI level in use, DPI level 1 400 → 800, each read
+    /// back as written, #296).
     public static readonly IReadOnlySet<(ushort ProductId, MouseLink Link)> Verified =
-        new HashSet<(ushort, MouseLink)> { (0x1A94, MouseLink.Omni) };
+        new HashSet<(ushort, MouseLink)> { (0x1A94, MouseLink.Omni), (0x1B65, MouseLink.Omni) };
 
     /// The entry for a mouse found by `productId` on `link`, or null.
     public static MouseEntry? Find(ushort productId, MouseLink link) =>

@@ -126,6 +126,7 @@ The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these 
 | TUF Gaming K5 | Keyboard | 1899 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | TUF Gaming K7 | Keyboard | 18AA | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A92, 1A94 | Verified on hardware (ROG Omni receiver) | Cable, own 2.4 GHz dongle, ROG Omni receiver |
+| ROG Harpe Ace Mini | Mouse | 1B63, 1B65 | Verified on hardware (ROG Omni receiver) | Cable, ROG Omni receiver |
 | ASUS SmartO Mouse MD200 Silent Plus | Mouse | 1A24 | From G-Helper, not yet verified | Own 2.4 GHz dongle |
 | ASUS TUF Gaming M3 Gen II | Mouse | 1A9B | From G-Helper, not yet verified | Cable |
 | ASUS TUF GAMING Mini Wireless Mouse Hatsune Miku Edition | Mouse | 1C56, 1C57 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
@@ -142,7 +143,6 @@ The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these 
 | ROG Gladius III Wireless AimPoint | Mouse | 1A70, 1A72 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle, ROG Omni receiver |
 | ROG Gladius III Wireless AimPoint EVA-02 Edition | Mouse | 1B0A, 1B0C | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
 | ROG Harpe Ace Extreme | Mouse | 1B67, 1B68, 1B69 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
-| ROG Harpe Ace Mini | Mouse | 1B63, 1B65 | From G-Helper, not yet verified | Cable, ROG Omni receiver |
 | ROG Harpe II Ace | Mouse | 1AD0, 1C69 | From G-Helper, not yet verified | Cable, own 2.4 GHz dongle |
 | ROG Keris | Mouse | 195C | From G-Helper, not yet verified | Cable; no button bindings yet (an older model); the DPI level in use is picked with its DPI button |
 | ROG Keris II Ace | Mouse | 1B16, 1B18, 1B1A | From G-Helper, not yet verified | Cable, ROG Omni receiver |
@@ -183,10 +183,10 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | ROG Delta II (PBZ) | Headset | 1E6B | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Battery and charging, through its 2.4 GHz dongle |
 | ROG Azoth | Keyboard | 1A83 | Verified on hardware | Battery and charging |
+| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | Verified on hardware | Battery and charging |
 | ROG Azoth X | Keyboard | 1C24 | Verified on hardware | Battery and charging |
 | ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Battery and charging |
 | ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Battery and charging |
-| ROG Azoth (2.4 GHz) | Keyboard | 1A85 | From OpenRGB, not yet verified | Battery and charging |
 | ROG Azoth 96 HE / Lite | Keyboard | 1C10, 1C11, 1C12 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth Extreme | Keyboard | 1B3F, 1B40, 1B42 | From Gear Link, not yet verified | Battery and charging |
 | ROG Azoth Extreme Edition 20 | Keyboard | 1DA2, 1DA3, 1DA4 | From Gear Link, not yet verified | Battery and charging |
@@ -198,11 +198,11 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | ROG Strix Morph 96 X Wireless | Keyboard | 1E0A, 1E0B, 1E0C | From Gear Link, not yet verified | Battery and charging |
 | ROG Strix Scope II 96 Wireless | Keyboard | 1AAE, 1AAF, 1AB0 | From Gear Link, not yet verified | Battery and charging |
 | ROG Harpe Ace Aim Lab Edition | Mouse | 1A94 | Verified on hardware | Battery and charging, through the ROG Omni receiver |
+| ROG Harpe Ace Mini | Mouse | 1B65 | Verified on hardware | Battery and charging, through the ROG Omni receiver |
 | ProArt Mouse MD301 | Mouse | 1CD3 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Gladius IV Ace | Mouse | 1DBF | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Gladius IV Ace Max | Mouse | 1E4F | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Harpe Ace Extreme | Mouse | 1B69 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
-| ROG Harpe Ace Mini | Mouse | 1B65 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Harpe II Ace | Mouse | 1C6B | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Harpe II Ace (PBZ) | Mouse | 1E4B | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
 | ROG Harpe II Ace Mini | Mouse | 1E32 | From Gear Link, not yet verified | Battery and charging, through the ROG Omni receiver |
