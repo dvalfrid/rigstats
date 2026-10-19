@@ -177,6 +177,8 @@ pub struct ControlUi {
     hue_ip: String,
     /// `ControlState::errors` when the footer's error was dismissed.
     dismissed_errors: u32,
+    /// The partly applied profile's message the footer no longer shows.
+    dismissed_apply: Option<ApplyResult>,
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
     /// When a page that saves at once (Power, App rules) last saved — the
@@ -2884,7 +2886,13 @@ pub fn show(
         .show(ctx, |ui| {
             // The last apply: failed (red) or partly applied (amber), in the
             // service's words — the same colours as every problem (#373).
-            if let Some(result) = &control.last_apply_result {
+            // Until dismissed: a partly applied profile stayed until the next
+            // switch, even after its sleeping keyboard woke (#296).
+            if let Some(result) = control
+                .last_apply_result
+                .as_ref()
+                .filter(|r| ui_state.dismissed_apply.as_ref() != Some(*r))
+            {
                 match (result.ok, result.message.as_deref()) {
                     (false, message) => {
                         ui_kit::row_problem(
@@ -2896,7 +2904,12 @@ pub fn show(
                         ui.add_space(6.0);
                     }
                     (true, Some(message)) => {
-                        ui_kit::row_problem(ui, dc, Severity::Attention, message);
+                        ui.horizontal(|ui| {
+                            ui_kit::row_problem(ui, dc, Severity::Attention, message);
+                            if ui_kit::icon_button(ui, dc, Icon::Close, "Dismiss").clicked() {
+                                ui_state.dismissed_apply = Some(result.clone());
+                            }
+                        });
                         ui.add_space(6.0);
                     }
                     (true, None) => {}
