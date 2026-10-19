@@ -7,7 +7,8 @@ namespace SensorSidecar.Control.Keyboards;
 /// keyboard's own onboard profiles a RIGStats profile uses. The keyboards are
 /// the ones the lighting side found (`LightingProvider.Keyboards`), so the
 /// command channel is shared, not opened twice.
-public sealed class KeyboardProvider(Func<IReadOnlyList<IKeyboardProfileDevice>> keyboards, bool dryRun)
+public sealed class KeyboardProvider(
+    Func<IReadOnlyList<IKeyboardProfileDevice>> keyboards, bool dryRun, Action? keepEnergy = null)
     : IControlProvider, IAffectsPart
 {
     public string Domain => "keyboard";
@@ -86,6 +87,10 @@ public sealed class KeyboardProvider(Func<IReadOnlyList<IKeyboardProfileDevice>>
                 silent.Add(keyboard.Name);
             }
         }
+        // A switch loads the keyboard's own saved energy settings: put the
+        // chosen ones back (#497).
+        if (!dryRun)
+            keepEnergy?.Invoke();
         if (silent.Count > 0)
             throw DomainUnavailableException.Silent(silent);
     }

@@ -216,7 +216,10 @@ builder.Services.AddSingleton(sp => new LightingProvider(
     dryRun,
     (hid, devices, reason) => LightingDiscovery.WriteDiagnostics(
         Path.Combine(programData, "lighting-devices.json"), hid, devices, reason),
-    hue: sp.GetRequiredService<HueLink>()));
+    hue: sp.GetRequiredService<HueLink>())
+{
+    KeyboardEnergy = new KeyboardEnergyStore(Path.Combine(programData, "keyboard-energy.json")),
+});
 builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<LightingProvider>());
 
 // ROG mice (#431): the onboard profile per RIGStats profile, and the Mouse
@@ -226,7 +229,9 @@ builder.Services.AddSingleton<IControlProvider>(sp => sp.GetRequiredService<Sens
 
 // ASUS keyboards (#458): the onboard profile per RIGStats profile, through
 // the keyboards the lighting side found (the same command channel).
-builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.Keyboards.KeyboardProvider(() => sp.GetRequiredService<LightingProvider>().Keyboards(), dryRun));
+builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.Keyboards.KeyboardProvider(
+    () => sp.GetRequiredService<LightingProvider>().Keyboards(), dryRun,
+    () => sp.GetRequiredService<LightingProvider>().KeepKeyboardEnergy()));
 builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.Headsets.HeadsetProvider(() => sp.GetRequiredService<LightingProvider>().HeadsetEqs(), dryRun));
 
 // Last: every provider exists and the hardware is open by the time the
