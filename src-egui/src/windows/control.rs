@@ -177,6 +177,8 @@ pub struct ControlUi {
     hue_ip: String,
     /// `ControlState::errors` when the footer's error was dismissed.
     dismissed_errors: u32,
+    /// The partly applied profile's message the footer no longer shows.
+    dismissed_apply: Option<ApplyResult>,
     /// The Dashboard/Overlay/Alerts pages' edit (#305).
     look: LookEditor,
     /// When a page that saves at once (Power, App rules) last saved — the
@@ -195,6 +197,13 @@ pub struct ControlUi {
     eq_pending: Option<(String, HeadsetEq)>,
     /// The Control Center profile active when the headsets were last read.
     headsets_read_for: Option<String>,
+    /// Which mouse, keyboard and headset the page shows when more than one
+    /// is connected (#296) — one device at a time, picked in a row of tabs.
+    mouse_tab: usize,
+    /// When a silent keyboard's settings were last asked for again.
+    keyboard_retry_at: Option<Instant>,
+    keyboard_tab: usize,
+    headset_tab: usize,
     /// The Mouse page asked for the mice's settings since it was opened (#431).
     mice_asked: bool,
     /// The Control Center profile active when the mice were last read — a
@@ -1230,7 +1239,13 @@ fn headset_page(
         return;
     }
     let mut send: Option<(String, HeadsetSettings)> = None;
-    for headset in &control.headsets {
+    let tab = device_tabs(
+        ui,
+        dc,
+        control.headsets.iter().map(|h| h.name.as_str()),
+        &mut ui_state.headset_tab,
+    );
+    for headset in control.headsets.iter().skip(tab).take(1) {
         let wireless = peripherals.iter().find(|p| p.id == headset.id);
         let subtitle = if headset.verified {
             "Headset"
@@ -1330,6 +1345,33 @@ fn headset_page(
             ui_state.saved_at = Some((Instant::now(), "Sent to the headset"));
         }
     }
+}
+
+/// How often the Keyboard page asks a silent (asleep) keyboard again.
+const KEYBOARD_RETRY: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// A row of tabs, one per device, when a page has more than one (#296):
+/// the page then shows the picked one only, not every device in one long
+/// list. Returns the picked index, kept inside the list.
+fn device_tabs<'a>(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    names: impl Iterator<Item = &'a str>,
+    picked: &mut usize,
+) -> usize {
+    let names: Vec<&str> = names.collect();
+    *picked = (*picked).min(names.len().saturating_sub(1));
+    if names.len() > 1 {
+        ui.horizontal_wrapped(|ui| {
+            for (i, name) in names.iter().enumerate() {
+                if ui_kit::chip(ui, dc, name, i == *picked).clicked() {
+                    *picked = i;
+                }
+            }
+        });
+        ui.add_space(12.0);
+    }
+    *picked
 }
 
 /// The Headset page's profile group (#483): which equalizer preset the
@@ -1440,7 +1482,7 @@ fn headset_eq_group(
         });
         g.row("Preset", Some("Sets every band"), |ui| {
             let label = matching.map_or("Custom", |p| p.name.as_str());
-            ui_kit::dropdown(ui, "headset_eq_preset", label, |ui| {
+            ui_kit::dropdown(ui, ("headset_eq_preset", &headset.id), label, |ui| {
                 for (i, p) in headset.eq_presets.iter().enumerate() {
                     let selected = matching.is_some_and(|m| m.name == p.name);
                     if ui.selectable_label(selected, &p.name).clicked() {
@@ -1600,19 +1642,29 @@ fn mouse_page(
     let profile = control.active().cloned();
     let mut send: Option<(String, MouseSettings)> = None;
     let mut save_profile: Option<Option<u8>> = None;
-    for mouse in &control.mice {
-        mouse_card(
-            ui,
-            dc,
-            mouse,
-            profile.as_ref(),
-            peripherals,
-            battery_levels,
-            cmd_tx,
-            ui_state,
-            &mut send,
-            &mut save_profile,
-        );
+    let tab = device_tabs(
+        ui,
+        dc,
+        control.mice.iter().map(|m| m.name.as_str()),
+        &mut ui_state.mouse_tab,
+    );
+    for mouse in control.mice.iter().skip(tab).take(1) {
+        // Each card's controls under its own id: with two mice their
+        // dropdowns otherwise share one id and flicker (#296, seen live).
+        ui.push_id(&mouse.id, |ui| {
+            mouse_card(
+                ui,
+                dc,
+                mouse,
+                profile.as_ref(),
+                peripherals,
+                battery_levels,
+                cmd_tx,
+                ui_state,
+                &mut send,
+                &mut save_profile,
+            );
+        });
     }
     if let (Some(choice), Some(mut profile)) = (save_profile, profile) {
         profile.part.mouse = choice.map(|p| MousePart { profile: Some(p) });
@@ -1652,51 +1704,76 @@ fn keyboard_page(
     let Some(mut profile) = control.active().cloned() else {
         return;
     };
-    ui_kit::group(ui, dc, None, None, |g| {
-        for keyboard in &keyboards {
-            g.row(
-                &keyboard.name,
-                Some(&format!(
-                    "Keyboard · {} profiles of its own",
-                    keyboard.profiles
-                )),
-                |_| {},
-            );
+    // Every keyboard the page knows — with onboard profiles, with energy
+    // settings, or both — one tab each when there is more than one (#296).
+    let mut all: Vec<(&str, &str)> = keyboards
+        .iter()
+        .map(|k| (k.id.as_str(), k.name.as_str()))
+        .collect();
+    for k in &control.keyboard_settings {
+        if !all.iter().any(|(id, _)| *id == k.id) {
+            all.push((k.id.as_str(), k.name.as_str()));
         }
-    });
+    }
+    let tab = device_tabs(
+        ui,
+        dc,
+        all.iter().map(|(_, name)| *name),
+        &mut ui_state.keyboard_tab,
+    );
+    let shown_id = all.get(tab).map(|(id, _)| *id);
+    if let Some((_, name)) = all.get(tab) {
+        let subtitle = keyboards
+            .iter()
+            .find(|k| Some(k.id.as_str()) == shown_id)
+            .map_or_else(
+                || "Keyboard".to_owned(),
+                |k| format!("Keyboard · {} profiles of its own", k.profiles),
+            );
+        ui_kit::group(ui, dc, None, None, |g| {
+            g.row(name, Some(&subtitle), |_| {});
+        });
+    }
     let count = keyboards.iter().map(|k| k.profiles).max().unwrap_or(1);
     let chosen = profile.part.keyboard.and_then(|k| k.profile);
     let mut pick = chosen;
+    let every = if all.len() > 1 {
+        " The same profile number goes to every keyboard."
+    } else {
+        ""
+    };
     let footnote = match chosen {
         // The keyboard's own switch follows back (#459).
         Some(p) => format!(
             "The keyboard keeps {count} profiles of its own — its lighting and keys. Switching to {name} \
-             puts the keyboard on profile {p}, and Fn + {p} on the keyboard switches to {name}.",
+             puts the keyboard on profile {p}, and Fn + {p} on the keyboard switches to {name}.{every}",
             name = profile.name
         ),
         None => format!(
             "The keyboard keeps {count} profiles of its own — its lighting and keys — and Fn plus a \
              number key switches between them on the keyboard. Pick one to switch the keyboard with {}, \
-             and to switch to {} with Fn plus that number.",
+             and to switch to {} with Fn plus that number.{every}",
             profile.name, profile.name
         ),
     };
-    ui_kit::group(ui, dc, Some("Profile"), Some(&footnote), |g| {
-        g.row(
-            &format!("Keyboard profile in {}", profile.name),
-            Some("Saved at once"),
-            |ui| {
-                let label =
-                    chosen.map_or_else(|| "Leave unchanged".to_owned(), |p| format!("Profile {p}"));
-                ui_kit::dropdown(ui, "keyboard_profile", label, |ui| {
-                    ui.selectable_value(&mut pick, None, "Leave unchanged");
-                    for p in 1..=count {
-                        ui.selectable_value(&mut pick, Some(p), format!("Profile {p}"));
-                    }
-                });
-            },
-        );
-    });
+    if !keyboards.is_empty() {
+        ui_kit::group(ui, dc, Some("Profile"), Some(&footnote), |g| {
+            g.row(
+                &format!("Keyboard profile in {}", profile.name),
+                Some("Saved at once"),
+                |ui| {
+                    let label = chosen
+                        .map_or_else(|| "Leave unchanged".to_owned(), |p| format!("Profile {p}"));
+                    ui_kit::dropdown(ui, "keyboard_profile", label, |ui| {
+                        ui.selectable_value(&mut pick, None, "Leave unchanged");
+                        for p in 1..=count {
+                            ui.selectable_value(&mut pick, Some(p), format!("Profile {p}"));
+                        }
+                    });
+                },
+            );
+        });
+    }
     if pick != chosen {
         profile.part.keyboard = pick.map(|p| KeyboardPart { profile: Some(p) });
         let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
@@ -1722,28 +1799,35 @@ fn keyboard_page(
         }
     }
     let mut send: Option<(String, KeyboardSettings)> = None;
-    for keyboard in &control.keyboard_settings {
-        let heading = if keyboards.len() > 1 {
-            format!("Energy — {}", keyboard.name)
-        } else {
-            "Energy".to_owned()
-        };
+    for keyboard in control
+        .keyboard_settings
+        .iter()
+        .filter(|k| Some(k.id.as_str()) == shown_id)
+    {
+        let heading = "Energy".to_owned();
         let footnote = if keyboard.verified {
             "Kept in the keyboard, for every profile. Changes are sent at once."
         } else {
             "Kept in the keyboard, for every profile. Changes are sent at once — not yet verified on this model."
         };
         let Some(read) = keyboard.settings else {
+            // A wireless keyboard asleep behind its receiver answers nothing;
+            // ask again every few seconds, so the settings appear as soon as a
+            // key wakes it (the owner took the old "doesn't answer" for an error).
+            let due = ui_state
+                .keyboard_retry_at
+                .map_or(true, |at| at.elapsed() >= KEYBOARD_RETRY);
+            if due && !control.keyboard_busy {
+                ui_state.keyboard_retry_at = Some(Instant::now());
+                let _ = cmd_tx.try_send(ControlCmd::ReadKeyboards);
+            }
+            ui.ctx().request_repaint_after(KEYBOARD_RETRY);
             ui_kit::group(ui, dc, Some(&heading), None, |g| {
                 g.row(
-                    "The keyboard doesn't answer",
-                    Some("Press a key to wake it, then try again"),
+                    &format!("{} is asleep", keyboard.name),
+                    Some("Press a key on it — its settings show as soon as it wakes up"),
                     |ui| {
-                        if !control.keyboard_busy
-                            && theme::dialog_btn_secondary(ui, "Try again", dc).clicked()
-                        {
-                            let _ = cmd_tx.try_send(ControlCmd::ReadKeyboards);
-                        }
+                        ui.spinner();
                     },
                 );
             });
@@ -1761,7 +1845,7 @@ fn keyboard_page(
                     .iter()
                     .find(|(code, _)| *code == s.idle_code)
                     .map_or("—", |(_, words)| words);
-                ui_kit::dropdown(ui, "keyboard_idle", label, |ui| {
+                ui_kit::dropdown(ui, ("keyboard_idle", &keyboard.id), label, |ui| {
                     for (code, words) in MOUSE_POWER_OFF {
                         ui.selectable_value(&mut s.idle_code, code, words);
                     }
@@ -1776,7 +1860,7 @@ fn keyboard_page(
                         2 => "Lighting dimmed",
                         _ => "Off",
                     };
-                    ui_kit::dropdown(ui, "keyboard_saving", label, |ui| {
+                    ui_kit::dropdown(ui, ("keyboard_saving", &keyboard.id), label, |ui| {
                         ui.selectable_value(&mut s.power_saving, 0, "Off");
                         ui.selectable_value(&mut s.power_saving, 1, "Lighting off");
                         ui.selectable_value(&mut s.power_saving, 2, "Lighting dimmed");
@@ -2802,7 +2886,13 @@ pub fn show(
         .show(ctx, |ui| {
             // The last apply: failed (red) or partly applied (amber), in the
             // service's words — the same colours as every problem (#373).
-            if let Some(result) = &control.last_apply_result {
+            // Until dismissed: a partly applied profile stayed until the next
+            // switch, even after its sleeping keyboard woke (#296).
+            if let Some(result) = control
+                .last_apply_result
+                .as_ref()
+                .filter(|r| ui_state.dismissed_apply.as_ref() != Some(*r))
+            {
                 match (result.ok, result.message.as_deref()) {
                     (false, message) => {
                         ui_kit::row_problem(
@@ -2814,7 +2904,9 @@ pub fn show(
                         ui.add_space(6.0);
                     }
                     (true, Some(message)) => {
-                        ui_kit::row_problem(ui, dc, Severity::Attention, message);
+                        if ui_kit::row_problem_dismiss(ui, dc, Severity::Attention, message) {
+                            ui_state.dismissed_apply = Some(result.clone());
+                        }
                         ui.add_space(6.0);
                     }
                     (true, None) => {}
@@ -2826,13 +2918,15 @@ pub fn show(
                 control.errors != ui_state.dismissed_errors
                     && control.hue_message.as_ref() != Some(*e)
             }) {
-                ui.horizontal(|ui| {
-                    let title = crate::problems::service_error(error).title;
-                    ui_kit::row_problem(ui, dc, Severity::Attention, &format!("{title}: {error}"));
-                    if ui_kit::icon_button(ui, dc, Icon::Close, "Dismiss").clicked() {
-                        ui_state.dismissed_errors = control.errors;
-                    }
-                });
+                let title = crate::problems::service_error(error).title;
+                if ui_kit::row_problem_dismiss(
+                    ui,
+                    dc,
+                    Severity::Attention,
+                    &format!("{title}: {error}"),
+                ) {
+                    ui_state.dismissed_errors = control.errors;
+                }
                 ui.add_space(6.0);
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

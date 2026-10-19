@@ -69,6 +69,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
+| One of several devices of a kind (two mice, two keyboards) | `device_tabs` in `control.rs` — a row of chips over the page, shown only with more than one; the page shows the picked device (#296) |
 | A summary that opens a page | `tile` — `TILE_H` (64 px) tall, title and value on one line each, a cut value in full on hover, so a whole profile fits on one screen (#440); a failed domain: the problem's title, `dot` = `severity_color` |
 | A problem (something failed, with what to do) | `notice` — never a hand-made frame or coloured label |
 | A picture (desktop background) | `Group::row_picture` — a 16:9 preview leading the row, cropped to fill; previews from `app_icons::PictureCache` |

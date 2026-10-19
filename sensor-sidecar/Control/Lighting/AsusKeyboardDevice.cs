@@ -114,7 +114,8 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
         [0x1A83] = new("ROG Azoth", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
         // The same keyboard over its dongle — the Azoth X keeps one scale on
         // cable and dongle, so this one is assumed 0–100 too (not verified).
-        [0x1A85] = new("ROG Azoth (2.4 GHz)", PerKey: true, BrightnessMax: 100, Speed: 30),
+        // Lighting seen following on a second Omni receiver (2026-10-19, #296).
+        [0x1A85] = new("ROG Azoth (2.4 GHz)", PerKey: true, BrightnessMax: 100, Speed: 30, Verified: true),
         [0x193C] = Azoth("ROG Falchion"),
         [0x193E] = Azoth("ROG Falchion (wireless)"),
         [0x19FE] = Azoth("ROG Strix Flare II"),
@@ -223,10 +224,22 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
             .ThenBy(d => d.UsagePage)
             .ToList();
         var directSeen = new HashSet<string>();
-        var paired = candidates.Any(c => Model(c.ProductId)!.Receiver) ? OmniMouse.PairedDevices(hid) : [];
+        // Each receiver's own paired list, asked once (#296): a channel's
+        // keyboard is the one its receiver names.
+        var receivers = candidates.Any(c => Model(c.ProductId)!.Receiver) ? OmniMouse.Receivers(hid) : [];
+        var pairedBy = new Dictionary<string, IReadOnlyList<OmniMouse.Paired>>();
+        IReadOnlyList<OmniMouse.Paired> PairedOf(HidDeviceInfo channel)
+        {
+            if (receivers.FirstOrDefault(r => r.Channels.Contains(channel)) is not { } receiver)
+                return [];
+            if (!pairedBy.TryGetValue(receiver.Key, out var list))
+                pairedBy[receiver.Key] = list = OmniMouse.PairedDevices(receiver);
+            return list;
+        }
         foreach (var info in candidates)
         {
             var model = Model(info.ProductId)!;
+            var paired = model.Receiver ? PairedOf(info) : [];
             // A directly connected keyboard is one device even if it exposes
             // more than one vendor collection.
             var deviceKey = DeviceKey(info.Path);
@@ -475,7 +488,9 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     /// through the Omni receiver (2026-10-18 — sleep 3 → 5 → 3 min, power
     /// saving lighting off → dimmed → off, low battery 20 → 25 → 20 %, each
     /// echoed and read back as written).
-    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25 };
+    // And the ROG Azoth (2.4 GHz) on a second Omni receiver (2026-10-19 —
+    // sleep 3 → 5 → 3 min, each read back, #296).
+    public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25, 0x1A85 };
 
     public bool SettingsVerified => _ownProductId is { } id && VerifiedSettingsModels.Contains(id);
 
@@ -486,7 +501,22 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
         if (!HasBattery)
             return null;
         lock (_lock)
-            return KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId);
+            return ParseLogged(AskLocked(GetPower));
+    }
+
+    private string? _loggedPower;
+
+    // The settings from a `12 01` reply; a reply they can't be read from is
+    // logged raw, once per change (#438) — how a model whose fields differ
+    // shows up in a user's log.
+    private KeyboardSettings? ParseLogged(byte[]? reply)
+    {
+        var settings = KeyboardSettingsCommands.Parse(reply, _reportId);
+        var raw = reply is null ? "nothing" : Hid.ReplyHex(reply);
+        if (settings is null && raw != _loggedPower)
+            SidecarLog.Log($"[rigstats-control] Keyboard: {Name} 0x{_info.ProductId:X4} energy settings not read from {raw}.");
+        _loggedPower = settings is null ? raw : null;
+        return settings;
     }
 
     public KeyboardSettings WriteSettings(KeyboardSettings wanted)
@@ -496,7 +526,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
         wanted = KeyboardSettingsCommands.Clamp(wanted);
         lock (_lock)
         {
-            var now = KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId)
+            var now = ParseLogged(AskLocked(GetPower))
                 ?? throw new IOException($"{Name} didn't answer.");
             var writes = KeyboardSettingsCommands.Writes(_reportId, _info.OutputReportLength, now, wanted);
             if (writes.Count == 0)
@@ -504,7 +534,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
             SidecarLog.Log($"[rigstats-control] Keyboard: {Name} writes {string.Join(" ", writes.Select(Hid.ReplyHex))}.");
             foreach (var write in writes)
                 SendAcknowledged(write, $"setting {write[2]:X2}");
-            var back = KeyboardSettingsCommands.Parse(AskLocked(GetPower), _reportId)
+            var back = ParseLogged(AskLocked(GetPower))
                 ?? throw new IOException($"{Name} didn't answer after the change.");
             if (back != wanted)
                 throw new IOException($"{Name} did not take the settings (read back {back}).");

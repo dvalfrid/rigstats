@@ -43,13 +43,15 @@ public sealed class OmniMouse
     /// id). From Gear Link's device manifests and its Companion's model
     /// configs, which agree: `Wdl` = the mouse has the Cross-device Lighting
     /// Toggle (Companion `WDL=1`, Gear Link's WDL switch) — newer mice follow
-    /// LampArray's own autonomous mode and have none. `Verified`: the switch
-    /// was checked on this mouse.
+    /// LampArray's own autonomous mode and have none. `Verified`: seen on
+    /// hardware — the Harpe Ace's switch checked; the Harpe Ace Mini's
+    /// lighting following on a second receiver (2026-10-19, #296; its WDL
+    /// state didn't answer at discovery, so the switch itself is unchecked).
     public static readonly IReadOnlyDictionary<ushort, MouseModel> Models = new Dictionary<ushort, MouseModel>
     {
         [0x1A94] = new("ROG Harpe Ace Aim Lab Edition", Wdl: true, Verified: true),
         [0x1B18] = new("ROG Keris II Ace", Wdl: true),
-        [0x1B65] = new("ROG Harpe Ace Mini", Wdl: true),
+        [0x1B65] = new("ROG Harpe Ace Mini", Wdl: true, Verified: true),
         [0x1B69] = new("ROG Harpe Ace Extreme", Wdl: true),
         [0x1C0E] = new("ROG Keris II Origin"),
         [0x1C6B] = new("ROG Harpe II Ace"),
@@ -114,15 +116,34 @@ public sealed class OmniMouse
             ? reply[5] != 0
             : null;
 
-    /// The mouse on the receiver among `hid`, or null: no receiver, more
-    /// than one (which channel belongs to which is unknown), or no mouse.
-    public static OmniMouse? Find(IReadOnlyList<HidDeviceInfo> hid)
+    /// One ROG Omni receiver (#296): its key (the USB device it is, see
+    /// <see cref="UsbParent"/>) and its vendor channels — the receiver's own
+    /// (report id 1) and one per paired device (2, 3).
+    public sealed record Receiver(string Key, IReadOnlyList<HidDeviceInfo> Channels)
     {
-        var channels = Channels(hid);
-        var paired = PairedDevices(hid);
-        foreach (var p in paired)
+        public HidDeviceInfo? Own => Channels.FirstOrDefault(c => c.OutputReportId == ReceiverReportId);
+
+        /// The channel for the device on `reportId`, or null.
+        public HidDeviceInfo? Channel(byte reportId) => Channels.FirstOrDefault(c => c.OutputReportId == reportId);
+    }
+
+    /// Every Omni receiver among `hid`, each with its own channels — grouped
+    /// by the USB device they belong to (`key`, <see cref="UsbParent.Of"/> by
+    /// default), so two receivers no longer hide each other (#296). Ordered
+    /// by key, so ids stay put across rescans.
+    public static IReadOnlyList<Receiver> Receivers(IReadOnlyList<HidDeviceInfo> hid, Func<string, string>? key = null) =>
+        Channels(hid)
+            .GroupBy(c => (key ?? UsbParent.Of)(c.Path))
+            .OrderBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => new Receiver(g.Key, g.ToList()))
+            .ToList();
+
+    /// The mouse on `receiver`, or null when it has none.
+    public static OmniMouse? Find(Receiver receiver)
+    {
+        foreach (var p in PairedDevices(receiver))
         {
-            if (p.ReportId == ReceiverReportId || channels.FirstOrDefault(c => c.OutputReportId == p.ReportId) is not { } channel)
+            if (p.ReportId == ReceiverReportId || receiver.Channel(p.ReportId) is not { } channel)
                 continue;
             // A keyboard on the receiver is driven by AsusKeyboardDevice; never
             // ask it the mouse's WDL question.
@@ -143,27 +164,21 @@ public sealed class OmniMouse
         return null;
     }
 
-    /// The receiver's channel for the device on `reportId` (the mouse's settings
-    /// and WDL questions, #431), or null.
-    public static HidDeviceInfo? Channel(IReadOnlyList<HidDeviceInfo> hid, byte reportId) =>
-        Channels(hid).FirstOrDefault(c => c.OutputReportId == reportId);
-
     private static List<HidDeviceInfo> Channels(IReadOnlyList<HidDeviceInfo> hid) => hid
         .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == ReceiverProductId
             && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
         .ToList();
 
-    /// What the receiver among `hid` says is paired to it (`a0 00` on its
-    /// own channel); empty without exactly one receiver or when it doesn't
-    /// answer. Also used by keyboard discovery.
-    public static IReadOnlyList<Paired> PairedDevices(IReadOnlyList<HidDeviceInfo> hid)
+    /// What `receiver` says is paired to it (`a0 00` on its own channel);
+    /// empty when it doesn't answer. Also used by keyboard and mouse
+    /// discovery.
+    public static IReadOnlyList<Paired> PairedDevices(Receiver receiver)
     {
-        var receiver = Channels(hid).Where(h => h.OutputReportId == ReceiverReportId).ToList();
-        if (receiver.Count != 1)
+        if (receiver.Own is not { } own)
             return [];
         try
         {
-            using var device = Hid.Open(receiver[0]);
+            using var device = Hid.Open(own);
             return Ask(device, [ReceiverReportId, 0xA0, 0x00]) is { } reply ? ParsePaired(reply) : [];
         }
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
@@ -251,17 +266,18 @@ public sealed class OmniMouse
     public static JsonArray Probe(IReadOnlyList<HidDeviceInfo> hid, Func<HidDeviceInfo, IHidDevice>? open = null)
     {
         var result = new JsonArray();
-        foreach (var pid in ReceiverProductIds)
+        // One entry per receiver: two of the same kind are two USB devices
+        // (#296), told apart by their channels' interface instance.
+        foreach (var (pid, channels) in ReceiverProductIds.SelectMany(pid => hid
+                     .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == pid
+                         && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
+                     .GroupBy(h => UsbParent.Instance(h.Path))
+                     .Select(g => (pid, g.ToList()))))
         {
-            var channels = hid
-                .Where(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == pid
-                    && h.UsagePage is >= VendorPage and <= VendorPage + 2 && h.OutputReportLength > 0)
-                .ToList();
             var receiver = channels.Where(h => h.OutputReportId == ReceiverReportId).ToList();
             if (receiver.Count != 1)
             {
-                if (channels.Count > 0)
-                    result.Add(new JsonObject { ["receiver_pid"] = $"{pid:X4}", ["skipped"] = $"{receiver.Count} receiver channels" });
+                result.Add(new JsonObject { ["receiver_pid"] = $"{pid:X4}", ["skipped"] = $"{receiver.Count} receiver channels" });
                 continue;
             }
             var entry = new JsonObject

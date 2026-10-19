@@ -107,11 +107,12 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
             }
             catch (IOException e)
             {
-                silent.Add($"{mouse.Entry.Spec.Name} ({e.Message})");
+                SidecarLog.Log($"[rigstats-control] Mouse: {mouse.Entry.Spec.Name} not switched: {e.Message}");
+                silent.Add(mouse.Entry.Spec.Name);
             }
         }
         if (silent.Count > 0)
-            throw new DomainUnavailableException($"{string.Join(", ", silent)} didn't answer, so its profile was skipped.");
+            throw DomainUnavailableException.Silent(silent);
     }
 
     public bool Verify(ProfilePart part)
@@ -292,19 +293,24 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
                 break;
             }
         }
-        if (hid.Any(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == OmniMouse.ReceiverProductId))
+        // Every Omni receiver's own paired list (#296); a second mouse of the
+        // same model on another receiver gets `-2` on its id.
+        foreach (var receiver in hid.Any(h => h.VendorId == AuraUsb.AsusVendorId && h.ProductId == OmniMouse.ReceiverProductId)
+                     ? OmniMouse.Receivers(hid) : [])
         {
-            foreach (var paired in OmniMouse.PairedDevices(hid))
+            foreach (var paired in OmniMouse.PairedDevices(receiver))
             {
                 if (MouseCatalog.Find(paired.ProductId, MouseLink.Omni) is not { } entry
-                    || OmniMouse.Channel(hid, paired.ReportId) is not { } channel)
+                    || receiver.Channel(paired.ReportId) is not { } channel)
                     continue;
                 if (CabledToo(found, entry))
                 {
                     SidecarLog.Log($"[rigstats-control] Mouse: {entry.Spec.Name} is connected by cable too — the receiver's entry is left out.");
                     continue;
                 }
-                found.Add(new Candidate(channel, entry with { ReportId = paired.ReportId }, $"asus-mouse-{entry.ProductId:x4}-omni"));
+                var id = $"asus-mouse-{entry.ProductId:x4}-omni";
+                var same = found.Count(c => c.Id == id || c.Id.StartsWith(id + "-", StringComparison.Ordinal));
+                found.Add(new Candidate(channel, entry with { ReportId = paired.ReportId }, same == 0 ? id : $"{id}-{same + 1}"));
             }
         }
         return found;
@@ -318,15 +324,7 @@ public sealed class MouseProvider : IControlProvider, IAffectsPart, IDisposable
 
     /// The USB device a HID collection belongs to: its instance id without
     /// the collection's own last part — `…#8&31cacbe7&0&0002#…` → `8&31cacbe7&0`.
-    public static string DeviceInstance(string path)
-    {
-        var parts = path.Split('#');
-        if (parts.Length < 3)
-            return path;
-        var instance = parts[2];
-        var last = instance.LastIndexOf('&');
-        return last > 0 ? instance[..last] : instance;
-    }
+    public static string DeviceInstance(string path) => UsbParent.Instance(path);
 
     /// `h` is the settings collection of a mouse on its own cable or dongle:
     /// the catalog's interface and report id, on a vendor page.

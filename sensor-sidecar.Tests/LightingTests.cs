@@ -907,7 +907,7 @@ public class OmniMouseTests
         // Gear Link's WDL switch and Companion's WDL=1 agree on these four.
         Assert.Equal(new ushort[] { 0x1A94, 0x1B18, 0x1B65, 0x1B69 },
             OmniMouse.Models.Where(m => m.Value.Wdl).Select(m => m.Key).Order());
-        Assert.Equal(0x1A94, Assert.Single(OmniMouse.Models, m => m.Value.Verified).Key);
+        Assert.Equal([0x1A94, 0x1B65], OmniMouse.Models.Where(m => m.Value.Verified).Select(m => (int)m.Key).Order()); // Harpe Ace, Harpe Ace Mini (#296)
     }
 
     [Fact]
@@ -1013,7 +1013,8 @@ public class OmniMouseTests
     public void Probe_reports_the_receiver_and_its_paired_mouse_for_the_diagnostics()
     {
         HidDeviceInfo Channel(ushort page, byte reportId) =>
-            new($@"\\?\hid#vid_0b05&pid_1ace&mi_02&col0{reportId}", 0x0B05, 0x1ACE, page, 0x0001, 64, 64, OutputReportId: reportId);
+            new($@"\\?\hid#vid_0b05&pid_1ace&mi_02&col0{reportId}#a&17fdc3f8&0&000{reportId}#{{4d1e55b2-f16f-11cf-88cb-001111000030}}",
+                0x0B05, 0x1ACE, page, 0x0001, 64, 64, OutputReportId: reportId);
         var hid = new[] { Channel(0xFF00, 1), Channel(0xFF01, 2), Channel(0xFF02, 3) };
         // Replies recorded from the Harpe Ace Aim Lab Edition on the Omni receiver.
         var device = new RecordedHid(request => Convert.ToHexString(request.AsSpan(0, 4)) switch
