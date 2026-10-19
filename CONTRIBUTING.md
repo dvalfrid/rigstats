@@ -237,6 +237,11 @@ before opening a PR:
 A maintainer will review and merge. Release Please then folds your commit into the
 next release automatically based on the commit type.
 
+You keep the credit: a squash merge makes you the author of the commit (a
+maintainer who adds a commit to your PR shows up as a co-author), and the
+GitHub release your change ships in thanks you by name with your pull request
+under **Thanks**.
+
 ## Continuous Integration
 
 `.github/workflows/verify.yml` runs on Windows for every push and pull request and

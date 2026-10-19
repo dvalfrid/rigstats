@@ -308,6 +308,23 @@ jobs:
           gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --notes-file notes.md
           Write-Host "Highlights added to $env:RELEASE_TAG"
 
+      # A "## Thanks" block at the end of the release text for the people
+      # outside the core team whose work is in it — commit authors and
+      # co-authors since the previous release, not the owner or bots
+      # (tools/release-contributors.ps1). Nothing when there are none.
+      - name: Thank the contributors on the GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $thanks = (& tools\release-contributors.ps1 -Tag $env:RELEASE_TAG -Repo $env:GITHUB_REPOSITORY -Owner $env:GITHUB_REPOSITORY_OWNER) -join "`n"
+          if (-not $thanks) { Write-Host "No contributors outside the core team"; exit 0 }
+          $body = (gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json body --jq .body) -join "`n"
+          if ($body -match '(?m)^## Thanks') { Write-Host "Thanks already on the release"; exit 0 }
+          Set-Content notes.md -Value ($body.TrimEnd() + "`n`n" + $thanks) -Encoding utf8NoBOM
+          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --notes-file notes.md
+          Write-Host "Contributors thanked on $env:RELEASE_TAG"
+
       # Dispatched, not chained with `workflow_run`: this run was started with
       # GITHUB_TOKEN, and GitHub starts no workflow from a GITHUB_TOKEN-caused
       # event except a dispatch (#246). Not for pre-releases, nor when the

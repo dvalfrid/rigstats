@@ -81,6 +81,18 @@ routine" in [docs/release.md](../docs/release.md).
 pwsh -File tools\release-highlights.ps1 -Version 1.48.0 -Body   # preview the release text's block
 ```
 
+## `release-contributors.ps1`
+
+The `## Thanks` block of a GitHub Release: everyone outside the core team
+whose work is in it, with their pull requests — the authors and
+`Co-authored-by` people (GitHub noreply addresses) of the commits since the
+previous real release, not `-Owner`, not bots. Prints nothing when there are
+none. Used by `.github/workflows/release.yml`; needs `gh` signed in.
+
+```powershell
+pwsh -File tools\release-contributors.ps1 -Tag v1.50.0 -Repo dvalfrid/rigstats -Owner dvalfrid   # preview
+```
+
 ## `smoke-app.ps1`
 
 **Start-up smoke test** for the egui app — run it before and after a change
