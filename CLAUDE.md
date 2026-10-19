@@ -152,7 +152,7 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
                 several clients share one ≤1 Hz sample — HardwareHost.GetTelemetryLineAsync)
                     └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
 sysinfo crate (CPU load/freq, RAM, disk, network, processes)
-wmi crate (startup: GPU names, RAM spec/details, board, model, brand, ping target; per tick: battery)
+wmi crate (startup: GPU names, RAM spec/details, board, model, brand, ping target; battery: every 10 s with one, every 60 s without, `BatteryPoll`, #464)
 PDH \GPU Engine(*) (gpu_process.rs: per-app GPU %)
     └─► poll_loop (src-egui/src/poll.rs): → PollStats → mpsc::SyncSender
             ├─► egui UI thread: DashboardRuntime::drain each ~1 s tick → all panel draw() calls
