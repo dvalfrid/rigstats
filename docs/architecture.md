@@ -327,7 +327,7 @@ startup background thread in `main.rs`) and keep the results.
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
 | `detect_ping_target` | First IPv4 default gateway (`Win32_NetworkAdapterConfiguration`), else `1.1.1.1` |
 | `probe_wmi_status` | Checks whether WMI is reachable |
-| `sample_battery_wmi` | Per-tick (cached 10 s) battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW) |
+| `sample_battery_wmi` | Battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW). The poll loop's `BatteryPoll` keeps a reading 10 s and a "no battery" answer 60 s, and runs `probe_wmi_status` only on the first miss of a run (#464) — before, a PC without a battery ran two WMI queries every second |
 
 `detect_disk_model_map` builds its map via a three-table WMI join:
 `Win32_DiskDrive → Win32_DiskDriveToDiskPartition → Win32_LogicalDiskToPartition`.
