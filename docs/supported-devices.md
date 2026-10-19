@@ -87,6 +87,7 @@ The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these 
 | ROG Pelta | Headset | 1B82, 1B84 | From Gear Link, not yet verified | Sidetone on/off and 0–20; noise reduction on/off; equalizer on/off and 10 bands (32 Hz – 16 kHz), 14 presets (G-Helper's tables), one per Control Center profile if wanted — equalizer not yet verified, through its 2.4 GHz dongle |
 | ROG Azoth (2.4 GHz) | Keyboard | 1A85 | Verified on hardware | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
 | ROG Azoth X | Keyboard | 1C24, 1C25 | Verified on hardware | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
+| ROG Falchion Ace HFX | Keyboard | 1B7E, 1B7F | Verified on hardware | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ASUS TX75 Analog Gaming Keyboard | Keyboard | 1D68, 1D6A | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
 | ASUS TX75 Core Gaming Keyboard | Keyboard | 1DF3, 1DF4 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ProArt Keyboard KD300 | Keyboard | 1D45, 1D46, 1D47 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back; sleep, power saving and the low-battery level |
@@ -99,7 +100,6 @@ The Control Center's **Headset**, **Keyboard** and **Mouse** pages change these 
 | ROG Falchion | Keyboard | 193C | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Falchion (wireless) | Keyboard | 193E | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Falchion Ace 75 HE | Keyboard | 1C7D | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
-| ROG Falchion Ace HFX | Keyboard | 1B7E, 1B7F | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Falchion Ace HFX ZywOo Edition | Keyboard | 1D1D | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Strix Flare | Keyboard | 1875 | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |
 | ROG Strix Flare CoD Black Ops 4 Edition | Keyboard | 18AF | From Gear Link, not yet verified | Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back |

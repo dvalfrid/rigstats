@@ -63,7 +63,8 @@ public class SupportedDevicesTests
         Assert.Contains(rows, r => r.Name == "ROG Delta II" && r.Notes.Contains("8 bands (125 Hz", StringComparison.Ordinal));
         Assert.Contains(rows, r => r.Name == "ROG Harpe Ace Aim Lab Edition" && r.Status == LightingCatalog.Verified + " (ROG Omni receiver)");
         Assert.Contains(rows, r => r.Name == "ROG Azoth X" && r.Type == "Keyboard" && r.Status == LightingCatalog.Verified && r.Notes.Contains("low-battery level"));
-        Assert.Contains(rows, r => r.Name == "ROG Falchion Ace HFX" && r.Type == "Keyboard" && r.Status == LightingCatalog.FromGearLink && !r.Notes.Contains("low-battery"));
+        Assert.Contains(rows, r => r.Name == "ROG Falchion Ace HFX" && r.Type == "Keyboard" && r.Status == LightingCatalog.Verified && !r.Notes.Contains("low-battery"));
+        Assert.Contains(rows, r => r.Name == "ROG Azoth" && r.Type == "Keyboard" && r.Status == LightingCatalog.FromGearLink);
         Assert.DoesNotContain(rows, r => r.Name.Contains("Omni receiver", StringComparison.Ordinal));
         Assert.Contains(rows, r => r.Name == "ROG Chakram X" && r.Status == DeviceSettingsCatalog.FromGHelper && r.Notes.Contains("no button bindings yet"));
         // One row per mouse, under ASUS's name — G-Helper names this one
