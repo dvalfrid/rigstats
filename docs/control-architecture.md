@@ -214,7 +214,12 @@ Every profile change is a **transaction**:
    the probed hard limits when they are written).
 2. `Capture` a snapshot from every affected provider.
 3. `Apply` in a fixed order: power plan → CPU limits → Curve Optimizer → GPU →
-   fans → Aura.
+   fans → the mouse's and keyboard's onboard profiles → Aura → headset. The
+   onboard profiles go before Aura because each carries its own saved
+   lighting: switched after Aura, they put their own colours back over the
+   profile's a moment later (seen live 2026-10-19 — the Azoth X and the
+   Falchion Ace HFX each turned a different colour when Balanced moved them
+   to onboard profile 2).
 4. `Verify` by reading back.
 5. On any failure, `Restore` **all** affected providers in reverse order and
    return **one** consolidated result, e.g. *"Profile Gaming not applied: CPU

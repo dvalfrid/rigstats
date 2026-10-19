@@ -40,6 +40,30 @@ public class ControlBrokerTests
     }
 
     [Fact]
+    public async Task The_onboard_profiles_are_switched_before_the_lighting_is_written()
+    {
+        // Each onboard profile carries its own saved lighting: switched after
+        // Aura it put its own colours back over the profile's (#491).
+        var order = new List<string>();
+        IControlProvider Recording(string domain)
+        {
+            var p = FakeProvider(domain);
+            p.When(x => x.Apply(Arg.Any<ProfilePart>())).Do(_ => order.Add(domain));
+            return p;
+        }
+        var broker = new ControlBroker([Recording("aura"), Recording("keyboard"), Recording("mouse")]);
+
+        await broker.ApplyProfileAsync(ProfileWith(new ProfilePart
+        {
+            Aura = new AuraPart(),
+            Mouse = new MousePart { Profile = 2 },
+            Keyboard = new KeyboardPart { Profile = 2 },
+        }), CancellationToken.None);
+
+        Assert.Equal(["mouse", "keyboard", "aura"], order);
+    }
+
+    [Fact]
     public async Task ApplyProfileAsync_skips_domains_with_no_registered_provider()
     {
         var broker = new ControlBroker([]); // no providers at all
