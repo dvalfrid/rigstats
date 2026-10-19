@@ -35,38 +35,51 @@ public sealed class KeyboardFollower(LightingProvider lighting, ProfileStore pro
         catch (OperationCanceledException) { }
         finally
         {
-            foreach (var cts in _listening.Values)
-                cts.Cancel();
-            _listening.Clear();
+            lock (_listening)
+            {
+                foreach (var cts in _listening.Values)
+                    cts.Cancel();
+                _listening.Clear();
+            }
         }
     }
 
     /// The collections a keyboard's own events may arrive on: its product
-    /// id's input-only collections with room for the event, the standard
-    /// keyboard / pointer interface (mi_00) left out. On the Omni receiver
-    /// that is mi_03 (pages FFC0–FFC2; the event arrived on FFC0, report 4).
+    /// id's input-only vendor collections (usage page FFxx) with room for the
+    /// event. The event arrived on page FFC0 both through the Omni receiver
+    /// (mi_03&col04, report 4) and by cable (1C24's mi_02&col03, report 3,
+    /// 2026-10-18). The standard keyboard collections (page 1 — by cable a
+    /// second one, mi_03, that Windows keeps and can't be opened) and the
+    /// consumer-control one are never read.
     public static IReadOnlyList<HidDeviceInfo> EventCollections(
         IReadOnlyList<IKeyboardProfileDevice> keyboards, IReadOnlyList<HidDeviceInfo> hid)
     {
         var products = keyboards.Select(k => k.ProductId).ToHashSet();
         return hid.Where(h => h.VendorId == AuraUsb.AsusVendorId && products.Contains(h.ProductId)
-                && h.OutputReportLength == 0 && h.InputReportLength >= 5 && h.Interface != 0)
+                && h.UsagePage >= 0xFF00 && h.OutputReportLength == 0 && h.InputReportLength >= 5)
             .ToList();
     }
 
+    // `_listening` is touched by the scan loop and by each listener's end,
+    // so always under its own lock: concurrent writes once corrupted it
+    // (IndexOutOfRangeException, the service restarting the follower and
+    // missing a switch — by cable, #459).
     private void Watch(IReadOnlyList<HidDeviceInfo> collections, CancellationToken stoppingToken)
     {
         var paths = collections.Select(c => c.Path).ToHashSet();
-        foreach (var gone in _listening.Keys.Where(p => !paths.Contains(p)).ToList())
+        lock (_listening)
         {
-            _listening[gone].Cancel();
-            _listening.Remove(gone);
-        }
-        foreach (var info in collections.Where(c => !_listening.ContainsKey(c.Path)))
-        {
-            var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
-            _listening[info.Path] = cts;
-            _ = Task.Run(() => ListenAsync(info, cts.Token), CancellationToken.None);
+            foreach (var gone in _listening.Keys.Where(p => !paths.Contains(p)).ToList())
+            {
+                _listening[gone].Cancel();
+                _listening.Remove(gone);
+            }
+            foreach (var info in collections.Where(c => !_listening.ContainsKey(c.Path)))
+            {
+                var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                _listening[info.Path] = cts;
+                _ = Task.Run(() => ListenAsync(info, cts.Token), CancellationToken.None);
+            }
         }
     }
 
@@ -85,8 +98,11 @@ public sealed class KeyboardFollower(LightingProvider lighting, ProfileStore pro
         catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception or ObjectDisposedException)
         {
             // Unplugged or re-enumerated: the next scan opens it again.
-            if (_listening.TryGetValue(info.Path, out var cts) && cts.Token == ct)
-                _listening.Remove(info.Path);
+            lock (_listening)
+            {
+                if (_listening.TryGetValue(info.Path, out var cts) && cts.Token == ct)
+                    _listening.Remove(info.Path);
+            }
         }
         catch (OperationCanceledException) { }
     }
