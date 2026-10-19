@@ -534,6 +534,7 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     }
 
     private string? _loggedPower;
+    private KeyboardSettings? _loggedSettings;
 
     // The settings from a `12 01` reply; a reply they can't be read from is
     // logged raw, once per change (#438) — how a model whose fields differ
@@ -544,7 +545,14 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
         var raw = reply is null ? "nothing" : Hid.ReplyHex(reply);
         if (settings is null && raw != _loggedPower)
             SidecarLog.Log($"[rigstats-control] Keyboard: {Name} 0x{_info.ProductId:X4} energy settings not read from {raw}.");
+        // Each read whose settings differ from the last, with its reply: a
+        // setting that changed with no write from here shows in the log (a
+        // sleep setting seen back at its old value after an app restart).
+        if (settings is not null && settings != _loggedSettings)
+            SidecarLog.Log($"[rigstats-control] Keyboard: {Name} 0x{_info.ProductId:X4} read idle {settings.IdleCode}, power saving {settings.PowerSaving}, low battery {settings.LowBatteryLevel} % from {raw}.");
         _loggedPower = settings is null ? raw : null;
+        if (settings is not null)
+            _loggedSettings = settings;
         return settings;
     }
 
@@ -630,16 +638,22 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
             return null;
         lock (_lock)
         {
+            // The same `12 01` reply carries the energy settings: a change
+            // between two battery reads is logged too (ParseLogged).
+            byte[]? reply;
             try
             {
-                return QueryBattery(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId);
+                reply = Ask(_device ?? throw new ObjectDisposedException(Name), _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
             }
             catch (Exception e) when (e is IOException or ObjectDisposedException or System.ComponentModel.Win32Exception)
             {
                 _device?.Dispose();
                 _device = Hid.Open(_info);
-                return QueryBattery(_device, _info.OutputReportLength, _reportId);
+                reply = Ask(_device, _info.OutputReportLength, _reportId, GetPower, ReplyTimeout);
             }
+            if (reply is not null)
+                ParseLogged(reply);
+            return reply is null ? null : BatteryReplies.Keyboard(reply);
         }
     }
 

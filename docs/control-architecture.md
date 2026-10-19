@@ -1501,7 +1501,19 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
   (idle code 0–4 = 1/2/3/5/10 min, 255 never), power saving when the
   battery is low (0 off, 1 lighting off, 2 lighting dimmed) and the
   low-battery level (0–100 %) where the lighting alert and power saving
-  start — kept in the keyboard for every profile, sent at once
+  start — sent at once and, since #497, kept for every profile by RIGStats:
+  a keyboard loads its own saved energy settings whenever it switches
+  onboard profile (seen live on the Azoth X: sleep 5 min written, profile 1
+  → read 3 min, back on profile 2 still 3 min), so the chosen ones are kept
+  in `keyboard-energy.json` (`KeyboardEnergyStore`) and written again after
+  every switch — RIGStats' (`KeyboardProvider.Apply`) and Fn + n
+  (`KeyboardFollower`) — by `LightingProvider.KeepKeyboardEnergy`: one
+  `12 01` read per keyboard, a write only where they differ. Nothing goes
+  to the keyboard's flash; Gear Link's own save (`50 55`, its
+  `profileAutoSave` 1.5 s after a change) wasn't used because it may store
+  RIGStats' lighting in the onboard profile too (not tried). Each `12 01`
+  read whose settings differ from the last — also the battery's — is
+  logged with its raw reply
   (`keyboard_settings` / `keyboard_set`, `KeyboardSettingsCommands`). Read
   from `12 01` (bytes 7, 8, 10 — the battery question, so no new read),
   written `51 38` / `51 39` / `51 3A 00 00 <value>` only for what differs,

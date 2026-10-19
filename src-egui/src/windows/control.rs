@@ -1787,7 +1787,8 @@ fn keyboard_page(
         ui_state.saved_at = Some((Instant::now(), "Saved"));
     }
 
-    // ── Energy, kept in the keyboard for every profile (#460) ───────────
+    // ── Energy, for every profile: the service puts it back after each of
+    // the keyboard's own profile switches (#460, #497) ───────────────────
     if !ui_state.keyboards_asked {
         ui_state.keyboards_asked = true;
         ui_state.keyboard_pending = None;
@@ -1810,9 +1811,9 @@ fn keyboard_page(
     {
         let heading = "Energy".to_owned();
         let footnote = if keyboard.verified {
-            "Kept in the keyboard, for every profile. Changes are sent at once."
+            "For every profile — RIGStats sets them again whenever the keyboard switches its own profile, which loads the ones saved in it. Changes are sent at once."
         } else {
-            "Kept in the keyboard, for every profile. Changes are sent at once — not yet verified on this model."
+            "For every profile — RIGStats sets them again whenever the keyboard switches its own profile, which loads the ones saved in it. Changes are sent at once — not yet verified on this model."
         };
         let Some(read) = keyboard.settings else {
             // A wireless keyboard asleep behind its receiver answers nothing;

@@ -109,6 +109,16 @@ public sealed class KeyboardFollower(LightingProvider lighting, ProfileStore pro
 
     private async Task FollowAsync(int onboard, CancellationToken ct)
     {
+        // Fn + n loaded the keyboard's own saved energy settings: put the
+        // chosen ones back (#497), whichever profile follows.
+        try
+        {
+            lighting.KeepKeyboardEnergy();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] Keyboard energy settings not set again: {e.Message}");
+        }
         var target = PickProfile(await profiles.ListAsync(ct), onboard);
         if (target is null)
         {

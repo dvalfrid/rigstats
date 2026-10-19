@@ -82,6 +82,9 @@ public sealed class LightingProvider : IControlProvider, IRetryPart
 
     public IReadOnlyList<ILightingDevice> Devices => _devices;
 
+    /// The keyboards' chosen energy settings (#497); none in tests.
+    public KeyboardEnergyStore? KeyboardEnergy { get; init; }
+
     public string Domain => "aura";
 
     /// Looks for added and removed devices (see the class comment).
@@ -527,7 +530,34 @@ public sealed class LightingProvider : IControlProvider, IRetryPart
         }
         var back = keyboard.WriteSettings(wanted);
         SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} idle {back.IdleCode}, power saving {back.PowerSaving}, low battery {back.LowBatteryLevel} %.");
+        KeyboardEnergy?.Set(keyboard.Id, back);
         return KeyboardJson(keyboard, back);
+    }
+
+    /// Writes each keyboard's chosen energy settings again where it doesn't
+    /// have them (#497) — after it switched its own onboard profile, which
+    /// loads the ones saved in it. One `12 01` read per keyboard; a keyboard
+    /// that doesn't answer (asleep) is left for the next switch.
+    public void KeepKeyboardEnergy()
+    {
+        if (KeyboardEnergy is not { } store || _dryRun)
+            return;
+        foreach (var keyboard in _devices.OfType<IKeyboardProfileDevice>().Where(k => k.HasBattery))
+        {
+            if (store.Get(keyboard.Id) is not { } chosen)
+                continue;
+            try
+            {
+                if (keyboard.ReadSettings() is not { } now || now == chosen)
+                    continue;
+                keyboard.WriteSettings(chosen);
+                SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} energy settings set again after its profile switch (it had idle {now.IdleCode}, power saving {now.PowerSaving}, low battery {now.LowBatteryLevel} %).");
+            }
+            catch (Exception e) when (e is IOException or InvalidOperationException)
+            {
+                SidecarLog.Log($"[rigstats-control] Keyboard: {keyboard.Name} energy settings not set again: {e.Message}");
+            }
+        }
     }
 
     private static KeyboardSettings? SafeRead(IKeyboardProfileDevice keyboard)
