@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.49.1</Program_Version>
+		<Program_Version>1.50.0</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
-		<Program_Release_Day>17</Program_Release_Day>
+		<Program_Release_Day>19</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>deps: upgrade zip to 9 — three new advisories stopped the release build</Program_Change_Info>
+		<Program_Change_Info>control: a compact Overview with a Mouse tile, sidebar fits; control: a sleeping keyboard, mouse or headset gets the profile when it wakes; control: live beside Armoury Crate — fans yield to its fan service; diagnostics: log mouse and headset reads with their raw replies; headset: sidetone and noise reduction on a Headset page; headset: the equalizer on the Headset page, and a preset per profile; hotkeys: Ctrl+Alt+F1-F9 switch straight to a profile; keyboard: Fn + a number on the keyboard switches the profile; keyboard: sleep, power saving and the low-battery level, kept in the keyboard; keyboard: the keyboard's onboard profile per Control Center profile; microphone: level slider and a live level meter; microphone: mute the microphone from the tray and Ctrl+Alt+M; mouse: a drawing of the mouse that shows which button is which; mouse: rebind ROG mouse buttons per onboard profile; mouse: ROG mouse settings and an onboard profile per Control Center profile; mouse: settings for the older ROG mouse families; notifications: say so when Windows has turned RIGStats' notifications off; website: the supported-device lists as tabs with a search field; alerts: no low-battery alert while the laptop is charging; control: draw the error's dismiss button as an icon, not a missing glyph; control: several mice and keyboards - every device switches, every mouse found once; control: switch the onboard profiles before writing the lighting; control: two Omni receivers — each one's mouse and keyboard found, one device per tab; keyboard: follow the keyboard by cable too — vendor collections only, under a lock; keyboard: keep the chosen sleep time and power saving across the keyboard's profile switches; keyboard: mark the Falchion Ace HFX's profiles verified; mouse: show ASUS's own product names; mouse: take a reply only when it repeats the whole question; notifications: send notifications as RIGStats, not Windows PowerShell; website: links within the page land on their section, not short of it; control: answer a profile switch before the lighting and wireless devices</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.49.1/RIGStats_1.49.1_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.50.0/RIGStats_1.50.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
