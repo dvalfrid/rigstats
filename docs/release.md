@@ -189,8 +189,17 @@ can stay behind to read the signing secrets.
    - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
    - uploads the `.exe` and `latest.json` to the GitHub Release, puts the highlights on it, and starts the winget submission
 
-Until the approval, the release exists without an installer or `latest.json`,
-so the app offers no update yet.
+Release Please publishes the release before any of this runs, and a
+published release is Latest at once — so while it had no installer or
+`latest.json` yet (~20 minutes, the approval included), every app asking
+`releases/latest/download/latest.json` got a 404 and showed **Couldn't
+update** (seen on 1.50.0). Since then a first job, **Hold**, marks the
+release a pre-release (`--prerelease --latest=false`) before Build starts,
+so Latest stays on the last release; **Publish** makes it a normal, Latest
+release right after uploading the installer and `latest.json`, before the
+winget step. A release that was already a pre-release (an RC) is left as it
+is. GitHub caches the `releases/latest` redirect for about three minutes, so
+an app can still be sent to the new tag that long after Hold.
 
 ### Winget
 
@@ -229,17 +238,21 @@ Leave the "Use workflow from" dropdown on `main`.
 ### A release whose build fails after the release exists
 
 Release Please creates the tag and the GitHub Release *before* the build runs,
-so a failed build leaves a release with no installer — and it is **Latest**.
+so a failed build leaves a release with no installer. Since the Hold job it
+stays a pre-release, so it is not Latest; before that it was.
 Seen 2026-10-17 with 1.49.0: `cargo deny` stopped the build on three `zip`
 advisories published after the RC had passed the same check. What a failed
 release does, and what to do:
 
-- **Users:** the app reads `releases/latest/download/latest.json`; with no
-  asset it gets 404 and offers nothing, which is right. The website's download
+- **Users:** since Hold the failed release stays a pre-release, so Latest
+  is still the last good one and the app offers that as before. (Before
+  Hold, the app got a 404 for `latest.json` and showed "Couldn't update".) The website's download
   button goes to `releases/latest`, now a page without a file. Winget was not
   submitted (publish never ran).
-- **Mark it pre-release, with a note:** `gh release edit vX.Y.Z --prerelease
-  --latest=false --notes-file notes.md` (the explicit `--latest=false` was
+- **Mark it pre-release, with a note:** Hold has already made it a
+  pre-release; add the note with `gh release edit vX.Y.Z --notes-file
+  notes.md`. By hand (a release from before Hold): `gh release edit vX.Y.Z
+  --prerelease --latest=false --notes-file notes.md` (the explicit `--latest=false` was
   needed: `--prerelease` alone left it Latest). The previous release is Latest
   again; `releases/latest/download/…` lags about three minutes (GitHub caches
   the redirect). Put at the top of the notes that it was never published and

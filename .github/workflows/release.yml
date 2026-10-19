@@ -33,8 +33,40 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.tag }}
 
 jobs:
+  # Release Please publishes the release before anything is built, and a
+  # published release is "Latest" at once — so for the ~20 minutes until
+  # `publish` has uploaded latest.json, every app asking
+  # releases/latest/download/latest.json got a 404 and showed "Couldn't
+  # update" (seen on 1.50.0). It is held back as a pre-release until then:
+  # Latest stays on the last release. Runs only GitHub's own CLI — nothing
+  # from the repository — so the write permission stays out of `build`. A
+  # real pre-release (an RC) is left as it is.
+  hold:
+    name: Hold back until published
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      was_prerelease: ${{ steps.hold.outputs.was_prerelease }}
+    steps:
+      - name: Mark the release a pre-release while it is built
+        id: hold
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)
+          echo "was_prerelease=$pre" >> "$GITHUB_OUTPUT"
+          if [ "$pre" = "false" ]; then
+            # --latest=false too: --prerelease alone left 1.49.0 Latest.
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false
+            echo "$RELEASE_TAG held back as a pre-release until it is published"
+          else
+            echo "$RELEASE_TAG is a pre-release; left as it is"
+          fi
+
   build:
     name: Build (Windows)
+    needs: hold
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -185,7 +217,7 @@ jobs:
 
   publish:
     name: Publish (Windows)
-    needs: sign
+    needs: [hold, sign]
     runs-on: windows-latest
     permissions:
       contents: write
@@ -248,6 +280,17 @@ jobs:
           files: |
             target\release\RIGStats_*_x64-setup.exe
             latest.json
+
+      # The files are there: now it may be Latest, and apps are offered it.
+      # Before the winget step, which skips a pre-release.
+      - name: Make it the latest release
+        if: ${{ needs.hold.outputs.was_prerelease == 'false' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --prerelease=false --latest
+          Write-Host "$env:RELEASE_TAG is the latest release"
 
       # The highlights above the text release-please wrote — only a list for
       # this version (release-highlights.md); otherwise nothing changes.
