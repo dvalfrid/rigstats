@@ -8,6 +8,7 @@
 - [Backend Modules](#backend-modules)
 - [Dashboard Panels](#dashboard-panels)
 - [Diagnostics Export](#diagnostics-export)
+- [Resource Budget](#resource-budget)
 - [Design Decisions](#design-decisions)
 
 ---
@@ -761,6 +762,48 @@ The detected startup values themselves (`ram_spec`, `ram_details`, `mb_board`,
 `model_name`, `system_brand`, `gpu_name`, `gpu_names`, `ping_target`,
 `battery_present`, `disk_model_map entries`) are logged as `hardware: …` lines in
 `debug.log`.
+
+---
+
+## Resource Budget
+
+What RIGStats may cost the PC it watches (#463, part of #462), and what it
+costs today. Measure with `tools/measure-resources.ps1` (see `tools/README.md`).
+It only reads Windows' performance counters, so WmiPrvSE can be measured with it.
+
+**Targets**
+
+- About 1 % of one core in steady state for the app, with the dashboard showing
+  and no dialog open.
+- No WMI query every second on a desktop. WMI work lands in `WmiPrvSE.exe`,
+  where Task Manager doesn't charge it to RIGStats.
+- Handles and threads stay flat over an hour, with no drift.
+
+**Baseline (2026-10-19)**
+
+Measured on the owner's PC: 16 logical cores, a desktop with no battery, the
+dev sidecar running. Each variant ran 10 minutes, sampled every 10 s, starting
+30 s after launch. CPU is a percentage of one core.
+
+| | A: installed 1.50.0 | B: release build with #471 + #505 |
+| --- | --- | --- |
+| App CPU, after the first 2 min | 2.59 % | 2.48 % |
+| WmiPrvSE busy samples | 48 of 60, avg 0.20 % | 0 of 38 |
+| App working set / private | ~220 / ~355 MB | ~220 / ~355 MB |
+| App GPU dedicated memory | 214 MB | 214 MB |
+| App threads / handles | 54 / ~1 090 | 54 / ~1 090 |
+
+Results:
+
+- **WMI (verified).** Since #471 and #505, a desktop never asks WMI for the
+  battery. `GetSystemPowerStatus` answers first, and WmiPrvSE stayed idle in B.
+- **Service.** The hardware worker uses about 2.2 % of one core and the service
+  process about 0.35 %. The variants differ only in the app, so this is the
+  service's own share.
+- **Startup burst.** In both variants the app takes a whole core for about
+  1.5–2 minutes after it starts. The cause is unknown; the hypotheses and next
+  step are in #515.
+- **Steady state.** About 2.5 % against the 1 % target. Still open in #463.
 
 ---
 
