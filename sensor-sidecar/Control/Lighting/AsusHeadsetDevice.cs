@@ -137,8 +137,11 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadse
         [0x1B84] = HeadsetEqCommands.Pelta,
     };
 
-    /// Equalizers seen working on hardware.
-    public static readonly IReadOnlySet<ushort> VerifiedEqModels = new HashSet<ushort>();
+    /// Equalizers seen working on hardware: the Delta II on its 2.4 GHz
+    /// dongle (2026-10-19 — read off and flat at 50; on/off, single bands at
+    /// 0 and 100, every preset, Flat, and a preset per profile, each read
+    /// back as written and heard by the owner).
+    public static readonly IReadOnlySet<ushort> VerifiedEqModels = new HashSet<ushort> { 0x1AFA };
 
     public HeadsetEqLimits? EqLimits => EqModels.GetValueOrDefault(_info.ProductId);
 

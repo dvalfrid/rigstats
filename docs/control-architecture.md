@@ -1430,6 +1430,14 @@ switching to the profile writes that preset to every headset that has it,
 leaves one without it as it is, and skips one that is off
 (`DomainUnavailableException`). Each read that differs is logged with its
 raw reply: `Headset: <name> 0x<pid> equalizer on 50,50,… from <12 21>`.
+**Verified 2026-10-19 on the Delta II (dongle, dev sidecar):** the first read
+was `CC1221 0000 00 32×10` — off, every band 50, so 50 is flat; single
+bands to 0 and 100 (`…00…`, `…64…`), every preset and Flat were written
+and read back as sent, and heard in the headset. The profile preset at
+first didn't show on the page, and the page's next click wrote its old
+values back over it — the page now reads the headsets again after every
+profile change and right after a preset is picked for the profile; then
+Balanced (Techno) ⇄ Gaming (Default) showed and read back right.
 
 **Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
 config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04

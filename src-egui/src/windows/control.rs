@@ -193,6 +193,8 @@ pub struct ControlUi {
     /// A headset's equalizer as just changed here, until its read-back
     /// arrives (#483).
     eq_pending: Option<(String, HeadsetEq)>,
+    /// The Control Center profile active when the headsets were last read.
+    headsets_read_for: Option<String>,
     /// The Mouse page asked for the mice's settings since it was opened (#431).
     mice_asked: bool,
     /// The Control Center profile active when the mice were last read — a
@@ -1176,9 +1178,15 @@ fn headset_page(
     peripherals: &[Peripheral],
     battery_levels: (u8, u8),
 ) {
-    if !ui_state.headsets_asked {
+    // Read when the page opens, and again whenever the Control Center
+    // profile changes: its equalizer preset may have changed the headset
+    // (#483). Showing the old values then would send them back with the
+    // next change — seen live, a preset overwritten by a click.
+    if !ui_state.headsets_asked || ui_state.headsets_read_for != control.active_profile {
         ui_state.headsets_asked = true;
+        ui_state.headsets_read_for = control.active_profile.clone();
         ui_state.headset_pending = None;
+        ui_state.eq_pending = None;
         let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
     }
     // The read-back arrived: show the headset's own values again.
@@ -1382,6 +1390,10 @@ fn headset_eq_profile(
             profile: Box::new(profile),
             apply: true,
         });
+        // The control task runs commands in order, so this read comes after
+        // the profile has put the preset on the headset.
+        ui_state.eq_pending = None;
+        let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
         ui_state.saved_at = Some((Instant::now(), "Saved"));
     }
 }
