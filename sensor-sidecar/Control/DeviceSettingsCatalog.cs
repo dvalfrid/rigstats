@@ -36,7 +36,11 @@ public static class DeviceSettingsCatalog
             {
                 var ids = g.Select(m => m.Key).ToList();
                 var battery = ids.Any(AsusKeyboardDevice.BatteryModels.Contains);
-                var status = ids.Any(AsusKeyboardDevice.VerifiedSettingsModels.Contains) ? LightingCatalog.Verified : LightingCatalog.FromGearLink;
+                // Verified when what the row offers was seen: the profiles,
+                // and the energy settings too on a wireless model.
+                var verified = ids.Any(AsusKeyboardDevice.VerifiedProfileModels.Contains)
+                    && (!battery || ids.Any(AsusKeyboardDevice.VerifiedSettingsModels.Contains));
+                var status = verified ? LightingCatalog.Verified : LightingCatalog.FromGearLink;
                 var notes = "Its onboard profile per Control Center profile, and Fn + 1…6 on the keyboard switches the profile back"
                     + (battery ? "; sleep, power saving and the low-battery level" : "");
                 return new SupportedDevice(g.Key, "Keyboard", string.Join(", ", ids.Order().Select(Hex)), status, notes);

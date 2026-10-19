@@ -16,8 +16,12 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     // Fixed apply order from the design doc — later phases add the
     // providers for the domains that don't exist yet; anything with no
     // registered provider is simply skipped.
+    // The mouse's and keyboard's onboard profiles come before the lighting:
+    // each onboard profile carries its own saved lighting, so switching it
+    // after Aura wrote the profile's colour put the old colours back a
+    // moment later — a different one on each keyboard (seen live, #491).
     private static readonly string[] DomainOrder =
-        ["power_plan", "cpu_limit", "curve_opt", "gpu", "fan", "aura", "mouse", "keyboard", "headset"];
+        ["power_plan", "cpu_limit", "curve_opt", "gpu", "fan", "mouse", "keyboard", "aura", "headset"];
 
     private readonly Dictionary<string, IControlProvider> _byDomain =
         providers.ToDictionary(p => p.Domain);
