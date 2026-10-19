@@ -131,8 +131,15 @@ public static class LightingCatalog
         foreach (var row in rows)
         {
             var status = row.Status.StartsWith(Verified, StringComparison.Ordinal) ? "status-verified" : "status-openrgb";
+            // The USB ids after the name, small: two rows of one model (by
+            // cable and wireless, one verified) are told apart, and the
+            // site's search finds an id. Rows without ids ("— (Bluetooth)")
+            // show none.
+            var ids = row.UsbIds.StartsWith('—') || string.IsNullOrWhiteSpace(row.UsbIds)
+                ? ""
+                : $" <span class=\"usb-id\">{Enc(row.UsbIds)}</span>";
             html.Append("                <tr>")
-                .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Name)}</td>")
+                .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Name)}{ids}</td>")
                 .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Type)}</td>")
                 .Append(CultureInfo.InvariantCulture, $"<td class=\"{status}\">{Enc(row.Status)}</td>")
                 .Append(CultureInfo.InvariantCulture, $"<td>{Enc(row.Notes)}</td>")
