@@ -492,6 +492,13 @@ public sealed class AsusKeyboardDevice : ILightingDevice, IBatteryDevice, IKeybo
     // sleep 3 → 5 → 3 min, each read back, #296).
     public static readonly IReadOnlySet<ushort> VerifiedSettingsModels = new HashSet<ushort> { 0x1C24, 0x1C25, 0x1A85 };
 
+    /// The onboard profile per Control Center profile and Fn + n following
+    /// back, seen on hardware: the ROG Azoth X through the Omni receiver and
+    /// by cable (#458, #459), the ROG Azoth (2.4 GHz) on a second receiver
+    /// (#296), the ROG Falchion Ace HFX by cable (2026-10-19 — Fn + 1 / 2
+    /// switched Gaming ⇄ Balanced five times, each onboard profile read back).
+    public static readonly IReadOnlySet<ushort> VerifiedProfileModels = new HashSet<ushort> { 0x1C24, 0x1C25, 0x1A85, 0x1B7E };
+
     public bool SettingsVerified => _ownProductId is { } id && VerifiedSettingsModels.Contains(id);
 
     /// `12 01` — the same question as the battery's; the energy fields of
