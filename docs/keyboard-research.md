@@ -189,7 +189,7 @@ same places). `12 01`: `42 02 01 01 14` — 66 %, 3 min, lighting off,
 second Windows keyboard collection (`mi_03`, page 1) that can't be opened;
 listening on it crashed `KeyboardFollower` once (a dictionary written from
 two threads) and a switch went unfollowed — fixed by reading only vendor
-collections (`FFxx`), under a lock. A host switch raises no event (#458).
+collections (`FFxx`), under a lock — verified 2026-10-19 by cable: Fn + 2 → Gaming and Fn + 1 → Balanced both followed, no follower restart; with the cable in, discovery keeps the cable entry and leaves the receiver's out. A host switch raises no event (#458).
 
 ## Open questions
 
