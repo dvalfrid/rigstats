@@ -8,6 +8,51 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.50.0](https://github.com/dvalfrid/rigstats/compare/v1.49.1...v1.50.0) (2026-10-19)
+
+
+### Features
+
+* **control:** a compact Overview with a Mouse tile, sidebar fits ([#441](https://github.com/dvalfrid/rigstats/issues/441)) ([ba5fb8f](https://github.com/dvalfrid/rigstats/commit/ba5fb8f478b59990960e4726c8dee45d35da4bfc)), closes [#440](https://github.com/dvalfrid/rigstats/issues/440)
+* **control:** a sleeping keyboard, mouse or headset gets the profile when it wakes ([#490](https://github.com/dvalfrid/rigstats/issues/490)) ([1fefe67](https://github.com/dvalfrid/rigstats/commit/1fefe676469056a1e9655a3cad844686a50ba900))
+* **control:** live beside Armoury Crate — fans yield to its fan service ([#422](https://github.com/dvalfrid/rigstats/issues/422)) ([91f9a4e](https://github.com/dvalfrid/rigstats/commit/91f9a4e4837f1a83d9514566fd3a27113f805819))
+* **diagnostics:** log mouse and headset reads with their raw replies ([#439](https://github.com/dvalfrid/rigstats/issues/439)) ([122a8fe](https://github.com/dvalfrid/rigstats/commit/122a8feac8b55cd1a636e3e9d3bc8fe7cb3cab73))
+* **headset:** sidetone and noise reduction on a Headset page ([#430](https://github.com/dvalfrid/rigstats/issues/430)) ([ad66824](https://github.com/dvalfrid/rigstats/commit/ad66824301c1c473656a7655516a493899f8745c)), closes [#428](https://github.com/dvalfrid/rigstats/issues/428)
+* **headset:** the equalizer on the Headset page, and a preset per profile ([#487](https://github.com/dvalfrid/rigstats/issues/487)) ([82e4ca4](https://github.com/dvalfrid/rigstats/commit/82e4ca4c98df5a2f04224d21760b3ad5c6775797))
+* **hotkeys:** Ctrl+Alt+F1-F9 switch straight to a profile ([#470](https://github.com/dvalfrid/rigstats/issues/470)) ([ac409d6](https://github.com/dvalfrid/rigstats/commit/ac409d6d23a8ba9784910bf4aa502db253a36327)), closes [#456](https://github.com/dvalfrid/rigstats/issues/456)
+* **keyboard:** Fn + a number on the keyboard switches the profile ([#475](https://github.com/dvalfrid/rigstats/issues/475)) ([cb6d362](https://github.com/dvalfrid/rigstats/commit/cb6d3624a535beabeeb0e08da1e9fff302932f9a)), closes [#459](https://github.com/dvalfrid/rigstats/issues/459)
+* **keyboard:** sleep, power saving and the low-battery level, kept in the keyboard ([#477](https://github.com/dvalfrid/rigstats/issues/477)) ([11a8283](https://github.com/dvalfrid/rigstats/commit/11a828322de6a552cd887a56d5315693fdc16a8a)), closes [#460](https://github.com/dvalfrid/rigstats/issues/460)
+* **keyboard:** the keyboard's onboard profile per Control Center profile ([#472](https://github.com/dvalfrid/rigstats/issues/472)) ([9680479](https://github.com/dvalfrid/rigstats/commit/9680479c73b8ccb422b20ca874ead906e7086529)), closes [#458](https://github.com/dvalfrid/rigstats/issues/458)
+* **microphone:** level slider and a live level meter ([#429](https://github.com/dvalfrid/rigstats/issues/429)) ([bb85815](https://github.com/dvalfrid/rigstats/commit/bb8581509ad70905fdfe828124ca183f85da60fe)), closes [#427](https://github.com/dvalfrid/rigstats/issues/427)
+* **microphone:** mute the microphone from the tray and Ctrl+Alt+M ([#426](https://github.com/dvalfrid/rigstats/issues/426)) ([985b092](https://github.com/dvalfrid/rigstats/commit/985b092b4696140ace8e15e115879d3d4d89ff1a))
+* **mouse:** a drawing of the mouse that shows which button is which ([#437](https://github.com/dvalfrid/rigstats/issues/437)) ([27ff1a0](https://github.com/dvalfrid/rigstats/commit/27ff1a06c1409098e12d383aee140676cb182465))
+* **mouse:** rebind ROG mouse buttons per onboard profile ([#436](https://github.com/dvalfrid/rigstats/issues/436)) ([3674aac](https://github.com/dvalfrid/rigstats/commit/3674aac334ab5302309eded958fe5d97cfce96c8)), closes [#433](https://github.com/dvalfrid/rigstats/issues/433)
+* **mouse:** ROG mouse settings and an onboard profile per Control Center profile ([#434](https://github.com/dvalfrid/rigstats/issues/434)) ([32198c7](https://github.com/dvalfrid/rigstats/commit/32198c7bb9cda161a1de9780d4238101197ad54d))
+* **mouse:** settings for the older ROG mouse families ([#454](https://github.com/dvalfrid/rigstats/issues/454)) ([e94e8dc](https://github.com/dvalfrid/rigstats/commit/e94e8dc6984261f31bf6c0cb6f2541ef36611907))
+* **notifications:** say so when Windows has turned RIGStats' notifications off ([#450](https://github.com/dvalfrid/rigstats/issues/450)) ([c275c2d](https://github.com/dvalfrid/rigstats/commit/c275c2dc572791dbe4a7f993fc91ee93febd475d))
+* **website:** the supported-device lists as tabs with a search field ([#494](https://github.com/dvalfrid/rigstats/issues/494)) ([e57074d](https://github.com/dvalfrid/rigstats/commit/e57074dd63c2f16ae2ff386833eb82b4fe0bd90e))
+
+
+### Bug Fixes
+
+* **alerts:** no low-battery alert while the laptop is charging ([#424](https://github.com/dvalfrid/rigstats/issues/424)) ([0a6ea9f](https://github.com/dvalfrid/rigstats/commit/0a6ea9fd8a085bc88debbce3f83277b95e1cf33c)), closes [#340](https://github.com/dvalfrid/rigstats/issues/340)
+* **control:** draw the error's dismiss button as an icon, not a missing glyph ([#480](https://github.com/dvalfrid/rigstats/issues/480)) ([fd832e6](https://github.com/dvalfrid/rigstats/commit/fd832e639aae0b2e3b97f63575fd341d2b6a8125)), closes [#479](https://github.com/dvalfrid/rigstats/issues/479)
+* **control:** several mice and keyboards - every device switches, every mouse found once ([#486](https://github.com/dvalfrid/rigstats/issues/486)) ([0f5b25e](https://github.com/dvalfrid/rigstats/commit/0f5b25e3a72b009eda75393af4b9c5c14b3666c8)), closes [#484](https://github.com/dvalfrid/rigstats/issues/484)
+* **control:** switch the onboard profiles before writing the lighting ([#492](https://github.com/dvalfrid/rigstats/issues/492)) ([73d3b83](https://github.com/dvalfrid/rigstats/commit/73d3b83b75e362b7688a57827f6a821205894b49)), closes [#491](https://github.com/dvalfrid/rigstats/issues/491)
+* **control:** two Omni receivers — each one's mouse and keyboard found, one device per tab ([#488](https://github.com/dvalfrid/rigstats/issues/488)) ([64f92d8](https://github.com/dvalfrid/rigstats/commit/64f92d86029718afd5557cc10eb62056394db260))
+* **keyboard:** follow the keyboard by cable too — vendor collections only, under a lock ([#478](https://github.com/dvalfrid/rigstats/issues/478)) ([017d762](https://github.com/dvalfrid/rigstats/commit/017d762074a90ca7a087b4dc6ae2671f9e3c58b6))
+* **keyboard:** keep the chosen sleep time and power saving across the keyboard's profile switches ([#498](https://github.com/dvalfrid/rigstats/issues/498)) ([8471b18](https://github.com/dvalfrid/rigstats/commit/8471b1804711b42988c0ba0d5277da8b4802cde4))
+* **keyboard:** mark the Falchion Ace HFX's profiles verified ([#493](https://github.com/dvalfrid/rigstats/issues/493)) ([01a6108](https://github.com/dvalfrid/rigstats/commit/01a610890922e30f7c99b5c348d5b2a5e8dbbc12))
+* **mouse:** show ASUS's own product names ([#453](https://github.com/dvalfrid/rigstats/issues/453)) ([71ae178](https://github.com/dvalfrid/rigstats/commit/71ae1783ab01bbde0fa1f558293ce2b71b15d297))
+* **mouse:** take a reply only when it repeats the whole question ([#443](https://github.com/dvalfrid/rigstats/issues/443)) ([3b34fa6](https://github.com/dvalfrid/rigstats/commit/3b34fa6b212b8e8f536c7b56b8ea1b195dc67b87))
+* **notifications:** send notifications as RIGStats, not Windows PowerShell ([#448](https://github.com/dvalfrid/rigstats/issues/448)) ([c10410f](https://github.com/dvalfrid/rigstats/commit/c10410f0fa3f1c8989082c3adec886fcfb8027ea)), closes [#447](https://github.com/dvalfrid/rigstats/issues/447)
+* **website:** links within the page land on their section, not short of it ([#499](https://github.com/dvalfrid/rigstats/issues/499)) ([9429571](https://github.com/dvalfrid/rigstats/commit/9429571d5a26c29b0fbd391926160282311f58ac))
+
+
+### Performance Improvements
+
+* **control:** answer a profile switch before the lighting and wireless devices ([#496](https://github.com/dvalfrid/rigstats/issues/496)) ([a342e22](https://github.com/dvalfrid/rigstats/commit/a342e22c3bf2ee3e6ea6a87a16c8897be6569dec))
+
 ## [1.49.1](https://github.com/dvalfrid/rigstats/compare/v1.49.0...v1.49.1) (2026-10-17)
 
 
