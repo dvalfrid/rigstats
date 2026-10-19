@@ -1510,8 +1510,11 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
   (`KeyboardFollower`) — by `LightingProvider.KeepKeyboardEnergy`: one
   `12 01` read per keyboard, a write only where they differ. Nothing goes
   to the keyboard's flash; Gear Link's own save (`50 55`, its
-  `profileAutoSave` 1.5 s after a change) wasn't used because it may store
-  RIGStats' lighting in the onboard profile too (not tried). Each `12 01`
+  `profileAutoSave` 1.5 s after a change) wasn't used: it saves to the
+  current onboard profile only (all six would need a switch each) and may
+  store RIGStats' lighting in it too (not tried). The full reasoning and a
+  safe test to settle it: "Energy settings and the keyboard's own
+  profiles" in `docs/keyboard-research.md`. Each `12 01`
   read whose settings differ from the last — also the battery's — is
   logged with its raw reply
   (`keyboard_settings` / `keyboard_set`, `KeyboardSettingsCommands`). Read

@@ -191,6 +191,53 @@ listening on it crashed `KeyboardFollower` once (a dictionary written from
 two threads) and a switch went unfollowed — fixed by reading only vendor
 collections (`FFxx`), under a lock — verified 2026-10-19 by cable: Fn + 2 → Gaming and Fn + 1 → Balanced both followed, no follower restart; with the cable in, discovery keeps the cable entry and leaves the receiver's out. A host switch raises no event (#458).
 
+## Energy settings and the keyboard's own profiles (#497)
+
+**Seen live on the ROG Azoth X (2026-10-19, through the Omni receiver):**
+a sleep time written with `51 38` (5 min, read back as written) lasts only
+until the keyboard switches onboard profile. On profile 1 the next `12 01`
+read gave 3 min again, and back on profile 2 it stayed 3 min — a switch
+loads the energy settings saved in the keyboard. Switching RIGStats
+profiles that leave the onboard profile alone (Eco, Silent: no keyboard
+part) and restarting the app changed nothing. The Keyboard page reads only
+when it opens, which first hid this (it kept showing 5 min).
+
+**How Gear Link keeps them:** it saves. Its `profileAutoSave` sends
+`saveCurrentProfile` about 1.5 s after a change — for keyboards `50 55`
+("save settings to the current profile", `[鍵盤設定檔]`; `50 03` is the
+mouse's, `52 01` a gamepad's `doSaveNow`), on every keyboard module from
+the Azoth (1A83) to the Azoth X (1C24/1C25) and the Falchion Ace HFX
+(1B7E/1B7F). Its name says the energy settings belong to the current
+onboard profile.
+
+**What RIGStats does instead, and why:** it keeps the chosen settings
+itself (`keyboard-energy.json`) and writes them again after every onboard
+switch, its own and Fn + n (`LightingProvider.KeepKeyboardEnergy`).
+Nothing goes to the keyboard's flash. Saving with `50 55` was not used
+because two things are unknown:
+
+1. *Per profile.* `50 55` saves to the current onboard profile only. The
+   same value on every profile would mean switching through all six,
+   writing and saving each — the lighting and key layout change meanwhile,
+   for seconds — or a per-profile setting, which the page's single "Sleep
+   after" doesn't fit.
+2. *What else it saves.* The keyboard's working state also holds the
+   lighting RIGStats set (`51 2C`). If `50 55` saves all of it, it would
+   overwrite the user's own lighting in that onboard profile for good.
+   Not tried.
+
+The cost: without RIGStats running (another PC, service off) the keyboard
+uses its own saved values.
+
+**How to settle it, if wanted:** on an onboard profile whose RIGStats
+lighting is "Unchanged" (so the working lighting is the saved one and
+nothing can be overwritten): write the sleep time, send `50 55`, switch
+onboard profile away and back, read `12 01`. Kept = the save works. Only
+then, if the user accepts the risk to that profile's lighting (it can be
+set again in Gear Link): set a different colour from RIGStats, save,
+switch away and back with the lighting "Unchanged", and see whether the
+colour stayed.
+
 ## Open questions
 
 Settled in #461: the low-battery command (`51 3A`; `51 37` is a mouse
@@ -211,3 +258,6 @@ table: the keyboard reports it (`12 00` byte 9).
   source if a user asks for it.
 - Whether the Omni receiver's dropped-frame behaviour (#458) also happens
   by cable (the cable test only listened; no switch was sent).
+- Whether `50 55` saves only the energy settings or the lighting too, and
+  whether a keyboard waking from sleep also loads its saved energy
+  settings (not seen yet; the battery reads now log any change, #497).
