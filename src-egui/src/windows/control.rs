@@ -2632,7 +2632,7 @@ pub fn show(
                 ui.horizontal(|ui| {
                     let title = crate::problems::service_error(error).title;
                     ui_kit::row_problem(ui, dc, Severity::Attention, &format!("{title}: {error}"));
-                    if ui.small_button("✕").on_hover_text("Dismiss").clicked() {
+                    if ui_kit::icon_button(ui, dc, Icon::Close, "Dismiss").clicked() {
                         ui_state.dismissed_errors = control.errors;
                     }
                 });

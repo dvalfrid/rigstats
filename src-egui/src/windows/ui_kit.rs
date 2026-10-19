@@ -1179,6 +1179,8 @@ pub enum Icon {
     More,
     Plus,
     Chevron,
+    /// Dismiss / close — painted, since the app's font has no ✕ (#479).
+    Close,
 }
 
 impl Icon {
@@ -1201,7 +1203,9 @@ impl Icon {
             Icon::General => Color32::from_rgb(142, 142, 147),
             Icon::Display => Color32::from_rgb(0, 122, 255),
             Icon::Rules => Color32::from_rgb(255, 159, 10),
-            Icon::More | Icon::Plus | Icon::Chevron => Color32::from_rgb(142, 142, 147),
+            Icon::More | Icon::Plus | Icon::Chevron | Icon::Close => {
+                Color32::from_rgb(142, 142, 147)
+            }
         }
     }
 }
@@ -1400,6 +1404,10 @@ pub fn paint_glyph(p: &egui::Painter, rect: Rect, icon: Icon, color: Color32) {
                 vec![at(-0.15, -0.3), at(0.15, 0.0), at(-0.15, 0.3)],
                 stroke,
             ));
+        }
+        Icon::Close => {
+            p.line_segment([at(-0.25, -0.25), at(0.25, 0.25)], stroke);
+            p.line_segment([at(-0.25, 0.25), at(0.25, -0.25)], stroke);
         }
     }
 }
