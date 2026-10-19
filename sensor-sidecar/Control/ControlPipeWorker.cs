@@ -372,6 +372,7 @@ public sealed class ControlPipeWorker(
                 "aura_enable_wdl" => HandleAuraEnableWdl(request),
                 "headset_settings" => ControlResponse.Ok(request.Id, new { headsets = lighting.Headsets() }),
                 "headset_set" => HandleHeadsetSet(request),
+                "headset_eq_set" => HandleHeadsetEqSet(request),
                 "keyboard_settings" => ControlResponse.Ok(request.Id, new { keyboards = lighting.KeyboardSettingsList() }),
                 "keyboard_set" => HandleKeyboardSet(request),
                 "mouse_settings" => ControlResponse.Ok(request.Id, new { mice = mice.List() }),
@@ -643,6 +644,19 @@ public sealed class ControlPipeWorker(
             ? ObjectParam<Lighting.KeyboardSettings>(value, "settings")
             : throw new BadRequestException("'settings' must be an object.");
         return ControlResponse.Ok(request.Id, new { keyboard = lighting.SetKeyboard(id, settings) });
+    }
+
+    /// `{"id": …, "eq": {"on": true, "gains": [10 × gain]}}` — one headset's
+    /// equalizer (#483); answers the headset as `headset_settings` lists it.
+    private ControlResponse HandleHeadsetEqSet(ControlRequest request)
+    {
+        var id = StringParam(request, "id");
+        var eq = Param(request, "eq") is { ValueKind: JsonValueKind.Object } value
+            ? ObjectParam<Lighting.HeadsetEq>(value, "eq")
+            : throw new BadRequestException("'eq' must be an object.");
+        if (eq.Gains is null || eq.Gains.Length != Lighting.HeadsetEqCommands.Bands)
+            throw new BadRequestException($"'eq.gains' must have {Lighting.HeadsetEqCommands.Bands} values.");
+        return ControlResponse.Ok(request.Id, new { headset = lighting.SetHeadsetEq(id, eq) });
     }
 
     private ControlResponse HandleAuraEnableWdl(ControlRequest request)

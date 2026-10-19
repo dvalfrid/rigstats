@@ -408,7 +408,7 @@ public sealed class LightingProvider : IControlProvider
         Rescan();
         return new JsonArray(_devices.OfType<IHeadsetSettingsDevice>()
             .Where(h => h.Limits is not null)
-            .Select(h => (JsonNode)HeadsetJson(h, SafeRead(h)))
+            .Select(h => (JsonNode)HeadsetJson(h, SafeRead(h), SafeReadEq(h)))
             .ToArray());
     }
 
@@ -423,12 +423,54 @@ public sealed class LightingProvider : IControlProvider
         if (_dryRun)
         {
             SidecarLog.Log($"[rigstats-control] dry-run: {headset.Name} settings -> {wanted}");
-            return HeadsetJson(headset, wanted);
+            return HeadsetJson(headset, wanted, SafeReadEq(headset));
         }
         var back = headset.WriteSettings(wanted);
         SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} sidetone {(back.SidetoneOn ? "on" : "off")} {back.SidetoneLevel}, "
             + $"noise reduction {(back.NoiseReductionOn ? "on" : "off")} {back.NoiseReductionLevel}.");
-        return HeadsetJson(headset, back);
+        return HeadsetJson(headset, back, SafeReadEq(headset));
+    }
+
+    /// Changes one headset's equalizer (#483) and returns the headset as
+    /// <see cref="Headsets"/> does, with what it read back. Kept in the
+    /// headset; asked for from the Headset page.
+    public JsonObject SetHeadsetEq(string deviceId, HeadsetEq wanted)
+    {
+        if (_devices.FirstOrDefault(d => d.Id == deviceId) is not IHeadsetEqDevice { EqLimits: { } limits } headset
+            || headset is not IHeadsetSettingsDevice settings)
+            throw new InvalidOperationException($"No headset '{deviceId}' with an equalizer to change.");
+        wanted = HeadsetEqCommands.Clamp(wanted, limits);
+        if (_dryRun)
+        {
+            SidecarLog.Log($"[rigstats-control] dry-run: {headset.Name} equalizer -> {(wanted.On ? "on" : "off")} {string.Join(",", wanted.Gains)}");
+            return HeadsetJson(settings, SafeRead(settings), wanted);
+        }
+        var back = headset.WriteEq(wanted);
+        SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} equalizer {(back.On ? "on" : "off")} {string.Join(",", back.Gains)}.");
+        return HeadsetJson(settings, SafeRead(settings), back);
+    }
+
+    /// The headsets whose equalizer RIGStats knows (#483) — the `headset`
+    /// profile domain's devices.
+    public IReadOnlyList<IHeadsetEqDevice> HeadsetEqs()
+    {
+        Rescan();
+        return _devices.OfType<IHeadsetEqDevice>().Where(h => h.EqLimits is not null).ToList();
+    }
+
+    private static HeadsetEq? SafeReadEq(IHeadsetSettingsDevice headset)
+    {
+        if (headset is not IHeadsetEqDevice { EqLimits: not null } eq)
+            return null;
+        try
+        {
+            return eq.ReadEq();
+        }
+        catch (Exception e)
+        {
+            SidecarLog.Log($"[rigstats-control] Headset: {headset.Name} equalizer not read: {e.Message}");
+            return null;
+        }
     }
 
     /// Every connected keyboard with a battery (#460), with its energy
@@ -499,7 +541,29 @@ public sealed class LightingProvider : IControlProvider
         }
     }
 
-    private static JsonObject HeadsetJson(IHeadsetSettingsDevice headset, HeadsetSettings? settings) => new()
+    private static JsonObject HeadsetJson(IHeadsetSettingsDevice headset, HeadsetSettings? settings, HeadsetEq? eq)
+    {
+        var json = HeadsetSettingsJson(headset, settings);
+        if (headset is IHeadsetEqDevice { EqLimits: { } limits } device)
+        {
+            json["eq_verified"] = device.EqVerified;
+            json["eq_max"] = limits.Max;
+            json["eq_first_band"] = limits.FirstBand;
+            json["eq_presets"] = new JsonArray(limits.Presets.Select(p => (JsonNode)new JsonObject
+            {
+                ["name"] = p.Name,
+                ["gains"] = new JsonArray(p.Gains.Select(g => (JsonNode)g).ToArray()),
+            }).ToArray());
+            json["eq"] = eq is null ? null : new JsonObject
+            {
+                ["on"] = eq.On,
+                ["gains"] = new JsonArray(eq.Gains.Select(g => (JsonNode)g).ToArray()),
+            };
+        }
+        return json;
+    }
+
+    private static JsonObject HeadsetSettingsJson(IHeadsetSettingsDevice headset, HeadsetSettings? settings) => new()
     {
         ["id"] = headset.Id,
         ["name"] = headset.Name,

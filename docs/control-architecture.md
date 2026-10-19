@@ -1413,6 +1413,24 @@ in the headset. Each read whose replies differ from the last is logged
 with the three raw replies (#438): `Headset: <name> 0x<pid> read
 HeadsetSettings { … } from <12 24> <12 19> <41 20>`.
 
+**Headset equalizer as built (#483).** Research: `docs/headset-eq-research.md`.
+The Headset page's **Equalizer** group per headset — on/off, a preset, a
+slider per band the model uses (the Delta II family from 125 Hz, the Pelta
+all ten), Flat — is kept in the headset like sidetone: read with `12 21`
+(byte 5 on, 6–15 gains) when the page opens, sent at once (a slider when
+let go) as `41 03 <on>` first and then `41 06 <band> <gain>` per changed
+band, never the all-bands `41 04` (G-Helper: ignored right after switching
+on), and read back (`HeadsetEqCommands`, `AsusHeadsetDevice.WriteEq`, pipe
+`headset_eq_set`). Scales per model in `AsusHeadsetDevice.EqModels`: Delta
+II family 0–100, Pelta 0–24, flat in the middle. The presets are
+G-Helper's tables (Gear Link's come with its Windows audio service). A
+profile can pick a preset — the **`headset` domain** (`Headsets/
+HeadsetProvider`, `HeadsetPart.eq_preset`, the owner's choice 2026-10-19):
+switching to the profile writes that preset to every headset that has it,
+leaves one without it as it is, and skips one that is off
+(`DomainUnavailableException`). Each read that differs is logged with its
+raw reply: `Headset: <name> 0x<pid> equalizer on 50,50,… from <12 21>`.
+
 **Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
 config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04
 02` on models with separate X/Y DPI (else `12 04 00`), DPI colours `12 04 03`, acceleration `12 04

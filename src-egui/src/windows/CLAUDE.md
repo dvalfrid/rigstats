@@ -13,9 +13,10 @@ Every setting has exactly one home:
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval, the microphone mute toast |
 | — | Which microphone Ctrl+Alt+M mutes (#425) |
-| — | A device's own settings (headset sidetone, noise reduction, #428; mouse DPI, polling, energy …, #431; keyboard sleep, power saving, low-battery level, #460) — kept in the device, edited on the Control Center's Headset / Mouse / Keyboard page, sent at once |
+| — | A device's own settings (headset sidetone, noise reduction, #428; headset equalizer bands, #483; mouse DPI, polling, energy …, #431; keyboard sleep, power saving, low-battery level, #460) — kept in the device, edited on the Control Center's Headset / Mouse / Keyboard page, sent at once |
 | Which onboard mouse profile a profile uses (#431) | — |
 | Which onboard keyboard profile a profile uses (#458) | — |
+| Which headset equalizer preset a profile uses (#483) | — |
 
 Ask "does this change with what I'm doing (gaming, quiet, work)?" — yes → profile, no → Settings. Where a setting sits in the other window, add a row that links there (`OpenRequest`, `windows/mod.rs`), not a second editor. The same goes for actions: each has one home (the log folder is in Status, a recording's file in Session History), not a copy in every window that could have it. A link button is always named after where it goes — "Open Control Center", "Open Settings" — the same wherever it appears, and its row sits next to the settings it belongs with (in the page's first group, or first on the page), never at the bottom under a long list.
 
