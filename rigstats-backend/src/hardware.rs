@@ -1109,6 +1109,32 @@ struct WmiBatteryStatusRow {
     discharge_rate: Option<u32>,
 }
 
+/// Whether Windows reports a system battery — `GetSystemPowerStatus`: one
+/// call, microseconds, no COM or WMI. The poll loop asks it every tick and
+/// only asks WMI for the battery's numbers when there is one (#473); the
+/// renderer picks its GPU by it (`gpu_guard`). An unknown state counts as
+/// no battery.
+#[cfg(windows)]
+#[allow(unsafe_code)] // one FFI call filling a stack struct
+pub fn system_battery_present() -> bool {
+    use winapi::um::winbase::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
+    if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
+        return false;
+    }
+    battery_flag_means_battery(status.BatteryFlag)
+}
+
+#[cfg(not(windows))]
+pub fn system_battery_present() -> bool {
+    false
+}
+
+/// `SYSTEM_POWER_STATUS.BatteryFlag`: 128 = no system battery, 255 = unknown.
+pub fn battery_flag_means_battery(flag: u8) -> bool {
+    flag != 128 && flag != 255
+}
+
 /// Whether the system has a battery (gates the Battery panel/overlay metric
 /// in Settings). Unlike [`sample_battery_wmi`], a WMI *failure* returns `true`
 /// — erring toward leaving the option enabled rather than hiding it on a
@@ -1186,7 +1212,17 @@ pub fn sample_battery_wmi() -> Option<(u8, bool, Option<u32>, Option<f64>)> {
 
 #[cfg(test)]
 mod cross_platform_tests {
-    use super::{is_placeholder_model_name, normalize_model_name};
+    use super::{battery_flag_means_battery, is_placeholder_model_name, normalize_model_name};
+
+    /// Moved from `gpu_guard.rs` with the presence check (#473).
+    #[test]
+    fn battery_flag_maps_to_presence() {
+        assert!(!battery_flag_means_battery(128), "no system battery");
+        assert!(!battery_flag_means_battery(255), "unknown status");
+        assert!(battery_flag_means_battery(1), "high");
+        assert!(battery_flag_means_battery(8), "charging");
+        assert!(battery_flag_means_battery(0), "between low and high");
+    }
 
     #[test]
     fn normalize_model_name_accepts_real_names() {
