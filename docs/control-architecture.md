@@ -1516,7 +1516,9 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
   safe test to settle it: "Energy settings and the keyboard's own
   profiles" in `docs/keyboard-research.md`. **Verified 2026-10-19 on the Azoth
   X:** sleep 5 min chosen; on each switch to onboard profile 1 and back to
-  2 the keyboard read 3 min and was set to 5 min again within the second. Each `12 01`
+  2 the keyboard read 3 min and was set to 5 min again within the second;
+  after an app restart the same; sleeping and waking kept the chosen value
+  (1 min, read back after waking), so a wake needs nothing. Each `12 01`
   read whose settings differ from the last — also the battery's — is
   logged with its raw reply
   (`keyboard_settings` / `keyboard_set`, `KeyboardSettingsCommands`). Read

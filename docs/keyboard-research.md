@@ -199,7 +199,9 @@ until the keyboard switches onboard profile. On profile 1 the next `12 01`
 read gave 3 min again, and back on profile 2 it stayed 3 min — a switch
 loads the energy settings saved in the keyboard. Switching RIGStats
 profiles that leave the onboard profile alone (Eco, Silent: no keyboard
-part) and restarting the app changed nothing. The Keyboard page reads only
+part), restarting the app, and the keyboard sleeping and waking (sleep set
+to 1 min, it slept, woke, and still read 1 min) changed nothing. The
+Keyboard page reads only
 when it opens, which first hid this (it kept showing 5 min).
 
 **How Gear Link keeps them:** it saves. Its `profileAutoSave` sends
@@ -258,6 +260,4 @@ table: the keyboard reports it (`12 00` byte 9).
   source if a user asks for it.
 - Whether the Omni receiver's dropped-frame behaviour (#458) also happens
   by cable (the cable test only listened; no switch was sent).
-- Whether `50 55` saves only the energy settings or the lighting too, and
-  whether a keyboard waking from sleep also loads its saved energy
-  settings (not seen yet; the battery reads now log any change, #497).
+- Whether `50 55` saves only the energy settings or the lighting too.
