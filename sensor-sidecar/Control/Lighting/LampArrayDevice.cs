@@ -120,31 +120,35 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
         return string.IsNullOrWhiteSpace(product) ? $"LampArray {vendorId:X4}:{productId:X4}" : product;
     }
 
+    private static bool IsReceiver(HidDeviceInfo info) =>
+        info.VendorId == AuraUsb.AsusVendorId && info.ProductId == OmniMouse.ReceiverProductId;
+
     /// Every LampArray collection that can be opened and described.
     public static IReadOnlyList<LampArrayDevice> Discover(IReadOnlyList<HidDeviceInfo> hid, Func<bool> dynamicLightingOn)
     {
         var found = new List<LampArrayDevice>();
         var lampArrays = hid.Where(d => d.UsagePage == LightingPage && d.Usage == LampArrayUsage).ToList();
-        // The receiver's LampArray is its paired mouse; the receiver says which.
-        OmniMouse? omni = null;
-        if (lampArrays.Count(d => d.VendorId == AuraUsb.AsusVendorId && d.ProductId == OmniMouse.ReceiverProductId) == 1)
-        {
-            try
-            {
-                omni = OmniMouse.Find(hid);
-            }
-            catch (Exception e)
-            {
-                LightingLog.Discovery($"[rigstats-control] Lighting: Omni receiver mouse not read: {e.Message}");
-            }
-        }
+        // A receiver's LampArray is its paired mouse; that receiver says which
+        // — matched by the USB device both belong to (#296).
+        var receivers = lampArrays.Any(IsReceiver) ? OmniMouse.Receivers(hid) : [];
         foreach (var info in lampArrays)
         {
-            var receiver = info.VendorId == AuraUsb.AsusVendorId && info.ProductId == OmniMouse.ReceiverProductId;
+            OmniMouse? omni = null;
+            if (IsReceiver(info) && receivers.FirstOrDefault(r => r.Key == UsbParent.Of(info.Path)) is { } receiver)
+            {
+                try
+                {
+                    omni = OmniMouse.Find(receiver);
+                }
+                catch (Exception e)
+                {
+                    LightingLog.Discovery($"[rigstats-control] Lighting: Omni receiver mouse not read: {e.Message}");
+                }
+            }
             try
             {
                 if (Open(info, found.Count + 1, found.Select(f => f._baseName).ToList(), dynamicLightingOn,
-                        receiver ? omni : null) is { } device)
+                        omni) is { } device)
                     found.Add(device);
             }
             catch (Exception e)

@@ -1515,6 +1515,25 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):
 
+- **Two or more Omni receivers (#296).** Each receiver is its own USB
+  device; its vendor channels (mi_02, report ids 1–3) share one interface
+  instance, its LampArray (mi_05) another — so receivers are told apart by
+  the USB device all their collections hang under (`UsbParent.Of`,
+  cfgmgr32's device tree, no device I/O). `OmniMouse.Receivers` groups the
+  channels per receiver and every caller asks each one for its own paired
+  list: mouse discovery, keyboard discovery (`PairedOf`), the LampArray's
+  mouse name and WDL (`LampArrayDevice.Discover`) and the diagnostics probe.
+  Before, every one of them required exactly one receiver and gave up —
+  **seen live 2026-10-19**: with a second receiver (ROG Azoth + Harpe Ace
+  Mini) plugged in, the owner's Azoth X disappeared, both mice became
+  "Mouse via ROG Omni receiver" and the Mouse and Keyboard pages went away.
+  With the fix all four were found by name with their batteries, and both
+  mice switched with the profile. The Mouse, Keyboard and Headset pages
+  show one device at a time with a row of tabs when there are more
+  (`device_tabs`); each mouse card's controls sit under its own id (two
+  mice's dropdowns shared one and flickered). Still open in #296: a
+  receiver keyboard is left out whenever the same model is on a cable,
+  which is wrong for two physical keyboards of one model.
 - **Several mice or keyboards at once (#484).** Each one is listed on its
   page with its own settings. A profile's onboard-profile number goes to
   every mouse (and every keyboard), clamped per model — the owner chose one

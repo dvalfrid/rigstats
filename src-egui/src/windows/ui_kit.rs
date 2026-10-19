@@ -508,7 +508,7 @@ pub fn segmented<T: PartialEq + Clone>(
 /// A drop-down list of [`CONTROL_W`] width.
 pub fn dropdown(
     ui: &mut Ui,
-    id: &str,
+    id: impl std::hash::Hash,
     selected: impl Into<egui::WidgetText>,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
