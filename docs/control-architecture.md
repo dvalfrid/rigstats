@@ -1515,6 +1515,18 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):
 
+- **A sleeping device catches up (#489).** A keyboard, mouse or headset
+  that doesn't answer a profile switch (asleep behind its receiver) throws
+  `DeviceAsleepException`: the rest of the profile applies, the footer
+  reads "Profile Balanced applied; ROG Azoth X didn't answer — probably
+  asleep — and gets the profile as soon as it wakes up.", and
+  `ControlBroker.RetryAsleepAsync` applies only that part again every 5 s
+  (one read per sleeping device) for 5 minutes. When it takes, the log
+  says "<domain> applied now that it answered" and the service pushes
+  `apply_result` (ok, no message), which clears the footer; after 5
+  minutes it pushes the words that the device stayed asleep and kept its
+  own settings. A newer apply ends the retry. Not for previews. Asked for
+  by the owner after the #296 test (2026-10-19).
 - **Two or more Omni receivers (#296).** Each receiver is its own USB
   device; its vendor channels (mi_02, report ids 1–3) share one interface
   instance, its LampArray (mi_05) another — so receivers are told apart by
