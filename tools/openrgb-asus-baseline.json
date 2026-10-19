@@ -385,6 +385,11 @@
     "Detector": "DetectAsusAuraUSBMonitor"
   },
   {
+    "Pid": "19D0",
+    "Name": "ASUS ROG Strix Scope NX TKL Moonlight White",
+    "Detector": "DetectAsusAuraUSBKeyboards"
+  },
+  {
     "Pid": "19D2",
     "Name": "ASUS ROG Strix Impact II Moonlight White",
     "Detector": "DetectAsusAuraUSBMice"
