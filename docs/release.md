@@ -188,6 +188,7 @@ can stay behind to read the signing secrets.
 3. **Publish** — the only job that may write to the release. It:
    - **generates `latest.json`** — version, installer URL, SHA256 checksum, and the current version's changelog section embedded in the `notes` field. The app refuses an update unless the download matches the checksum and carries a valid signature from the app's own publisher (`update_check.rs`). Clients older than 1.26 (Tauri updater, minisign) can no longer update in place
    - uploads the `.exe` and `latest.json` to the GitHub Release, puts the highlights on it, and starts the winget submission
+   - **thanks the contributors**: a `## Thanks` block at the end of the release text naming everyone outside the core team whose work is in it, with their pull requests (`tools/release-contributors.ps1` — the authors and `Co-authored-by` people of the commits since the previous real release, not the repository owner, not bots; nothing when there are none)
 
 Release Please publishes the release before any of this runs, and a
 published release is Latest at once — so while it had no installer or
