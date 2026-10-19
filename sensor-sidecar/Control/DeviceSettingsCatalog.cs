@@ -24,6 +24,7 @@ public static class DeviceSettingsCatalog
             .OrderBy(g => g.Key.Status == LightingCatalog.Verified ? 0 : 1).ThenBy(g => g.Key.Name)
             .Select(g => new SupportedDevice(g.Key.Name, "Headset", string.Join(", ", g.Select(m => Hex(m.Key)).Order()), g.Key.Status,
                 "Sidetone on/off and 0–20; noise reduction " + (g.Key.NoiseLevels > 0 ? "on/off and Low / Medium / High" : "on/off")
+                + EqNote(g.Select(m => m.Key))
                 + ", through its 2.4 GHz dongle")));
 
         // Keyboards (#458, #460): one row per model, the Omni receiver's own
@@ -62,6 +63,19 @@ public static class DeviceSettingsCatalog
             .OrderBy(r => r.Status.StartsWith(LightingCatalog.Verified, StringComparison.Ordinal) ? 0 : 1).ThenBy(r => r.Name));
 
         return rows;
+    }
+
+    // "; equalizer on/off and 8 bands (125 Hz – 16 kHz), presets" (#483), or
+    // nothing for a model without one.
+    private static string EqNote(IEnumerable<ushort> ids)
+    {
+        var list = ids.ToList();
+        if (list.Select(id => AsusHeadsetDevice.EqModels.GetValueOrDefault(id)).FirstOrDefault(l => l is not null) is not { } eq)
+            return "";
+        var verified = list.Any(AsusHeadsetDevice.VerifiedEqModels.Contains);
+        return $"; equalizer on/off and {HeadsetEqCommands.Bands - eq.FirstBand} bands ({HeadsetEqCommands.BandNames[eq.FirstBand]} – 16 kHz), "
+            + $"{eq.Presets.Count} presets (G-Helper's tables), one per Control Center profile if wanted"
+            + (verified ? "" : " — equalizer not yet verified");
     }
 
     /// The "Device settings" section of docs/supported-devices.md.

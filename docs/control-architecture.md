@@ -1413,6 +1413,32 @@ in the headset. Each read whose replies differ from the last is logged
 with the three raw replies (#438): `Headset: <name> 0x<pid> read
 HeadsetSettings { … } from <12 24> <12 19> <41 20>`.
 
+**Headset equalizer as built (#483).** Research: `docs/headset-eq-research.md`.
+The Headset page's **Equalizer** group per headset — on/off, a preset, a
+slider per band the model uses (the Delta II family from 125 Hz, the Pelta
+all ten), Flat — is kept in the headset like sidetone: read with `12 21`
+(byte 5 on, 6–15 gains) when the page opens, sent at once (a slider when
+let go) as `41 03 <on>` first and then `41 06 <band> <gain>` per changed
+band, never the all-bands `41 04` (G-Helper: ignored right after switching
+on), and read back (`HeadsetEqCommands`, `AsusHeadsetDevice.WriteEq`, pipe
+`headset_eq_set`). Scales per model in `AsusHeadsetDevice.EqModels`: Delta
+II family 0–100, Pelta 0–24, flat in the middle. The presets are
+G-Helper's tables (Gear Link's come with its Windows audio service). A
+profile can pick a preset — the **`headset` domain** (`Headsets/
+HeadsetProvider`, `HeadsetPart.eq_preset`, the owner's choice 2026-10-19):
+switching to the profile writes that preset to every headset that has it,
+leaves one without it as it is, and skips one that is off
+(`DomainUnavailableException`). Each read that differs is logged with its
+raw reply: `Headset: <name> 0x<pid> equalizer on 50,50,… from <12 21>`.
+**Verified 2026-10-19 on the Delta II (dongle, dev sidecar):** the first read
+was `CC1221 0000 00 32×10` — off, every band 50, so 50 is flat; single
+bands to 0 and 100 (`…00…`, `…64…`), every preset and Flat were written
+and read back as sent, and heard in the headset. The profile preset at
+first didn't show on the page, and the page's next click wrote its old
+values back over it — the page now reads the headsets again after every
+profile change and right after a preset is picked for the profile; then
+Balanced (Techno) ⇄ Gaming (Default) showed and read back right.
+
 **Mouse (G-Helper `AsusMouse`):** profile get `12 00` / set `50 02 <profile>`;
 config get `12 04 00` (polling rate, angle snapping, debounce …), DPI get `12 04
 02` on models with separate X/Y DPI (else `12 04 00`), DPI colours `12 04 03`, acceleration `12 04

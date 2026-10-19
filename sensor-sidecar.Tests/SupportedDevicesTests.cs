@@ -59,7 +59,8 @@ public class SupportedDevicesTests
         var rows = DeviceSettingsCatalog.All();
 
         Assert.Contains(rows, r => r.Name == "ROG Delta II" && r.Type == "Headset" && r.Status == LightingCatalog.Verified);
-        Assert.Contains(rows, r => r.Name == "ROG Pelta" && r.Notes.StartsWith("Sidetone on/off and 0–20; noise reduction on/off,", StringComparison.Ordinal));
+        Assert.Contains(rows, r => r.Name == "ROG Pelta" && r.Notes.StartsWith("Sidetone on/off and 0–20; noise reduction on/off; equalizer on/off and 10 bands", StringComparison.Ordinal));
+        Assert.Contains(rows, r => r.Name == "ROG Delta II" && r.Notes.Contains("8 bands (125 Hz", StringComparison.Ordinal));
         Assert.Contains(rows, r => r.Name == "ROG Harpe Ace Aim Lab Edition" && r.Status == LightingCatalog.Verified + " (ROG Omni receiver)");
         Assert.Contains(rows, r => r.Name == "ROG Azoth X" && r.Type == "Keyboard" && r.Status == LightingCatalog.Verified && r.Notes.Contains("low-battery level"));
         Assert.Contains(rows, r => r.Name == "ROG Falchion Ace HFX" && r.Type == "Keyboard" && r.Status == LightingCatalog.FromGearLink && !r.Notes.Contains("low-battery"));

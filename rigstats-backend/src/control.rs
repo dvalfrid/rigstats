@@ -102,6 +102,31 @@ pub struct ProfilePart {
     pub mouse: Option<MousePart>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keyboard: Option<KeyboardPart>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub headset: Option<HeadsetPart>,
+}
+
+/// A profile's headset part (#483): the equalizer preset (by name) the
+/// headsets switch to with the profile; `None` leaves the equalizer as it is.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeadsetPart {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eq_preset: Option<String>,
+}
+
+/// A headset with an equalizer, as the `headset` domain reports it (#483).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct HeadsetEqInfo {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub presets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+struct HeadsetCaps {
+    #[serde(default)]
+    headsets: Vec<HeadsetEqInfo>,
 }
 
 /// A profile's keyboard part (#458): which of the keyboard's own onboard
@@ -420,7 +445,42 @@ pub struct HeadsetInfo {
     pub noise_levels: u8,
     /// `None` while the headset doesn't answer (off behind its dongle).
     pub settings: Option<HeadsetSettings>,
+    /// Its equalizer's scale (0–`eq_max`, flat in the middle); 0 = no
+    /// equalizer RIGStats knows (#483).
+    #[serde(default)]
+    pub eq_max: u8,
+    /// The first band shown and written (the Delta II family starts at
+    /// 125 Hz, band 2).
+    #[serde(default)]
+    pub eq_first_band: u8,
+    #[serde(default)]
+    pub eq_verified: bool,
+    #[serde(default)]
+    pub eq_presets: Vec<HeadsetEqPreset>,
+    /// `None` while it doesn't answer.
+    #[serde(default)]
+    pub eq: Option<HeadsetEq>,
 }
+
+/// A headset's equalizer as the headset keeps it (#483): on/off and ten band
+/// gains, 32 Hz … 16 kHz, on the model's scale.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeadsetEq {
+    pub on: bool,
+    pub gains: Vec<u8>,
+}
+
+/// An equalizer preset with its ten gains (G-Helper's tables).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+pub struct HeadsetEqPreset {
+    pub name: String,
+    pub gains: Vec<u8>,
+}
+
+/// The equalizer's band labels, band 0 first.
+pub const EQ_BANDS: [&str; 10] = [
+    "32 Hz", "64 Hz", "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz", "16 kHz",
+];
 
 /// A bridge found on the network (`hue_discover`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
@@ -880,6 +940,17 @@ impl ControlState {
     /// Center's Mouse page.
     /// The keyboards with onboard profiles (#458) — the Control Center's
     /// Keyboard page; empty when there are none.
+    /// Headsets with an equalizer the `headset` domain can switch (#483).
+    pub fn headset_eqs(&self) -> Vec<HeadsetEqInfo> {
+        self.capabilities
+            .iter()
+            .find(|c| c.domain == "headset" && c.supported)
+            .and_then(|c| c.details.clone())
+            .and_then(|d| serde_json::from_value::<HeadsetCaps>(d).ok())
+            .map(|c| c.headsets)
+            .unwrap_or_default()
+    }
+
     pub fn keyboards(&self) -> Vec<KeyboardInfo> {
         self.capabilities
             .iter()
@@ -1264,6 +1335,11 @@ pub enum ControlCmd {
     SetHeadset {
         id: String,
         settings: HeadsetSettings,
+    },
+    /// Change one headset's equalizer (#483); kept in the headset.
+    SetHeadsetEq {
+        id: String,
+        eq: HeadsetEq,
     },
     /// Read every keyboard's energy settings (#460) — when the Keyboard page opens.
     ReadKeyboards,
@@ -1846,6 +1922,33 @@ async fn handle_cmd(
             }
             result.map(|_| ())
         }
+        ControlCmd::SetHeadsetEq { id, eq } => {
+            let _ = event_tx.send(ControlEvent::HeadsetBusy(true));
+            let result = request(
+                writer,
+                reader,
+                next_id,
+                "headset_eq_set",
+                Some(serde_json::json!({ "id": id, "eq": eq })),
+                event_tx,
+                dir,
+            )
+            .await;
+            match result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("headset").cloned())
+                .and_then(|h| serde_json::from_value(h).ok())
+            {
+                Some(headset) => {
+                    let _ = event_tx.send(ControlEvent::HeadsetUpdated(headset));
+                }
+                None => {
+                    let _ = event_tx.send(ControlEvent::HeadsetBusy(false));
+                }
+            }
+            result.map(|_| ())
+        }
         ControlCmd::ReadKeyboards => {
             let _ = event_tx.send(ControlEvent::KeyboardBusy(true));
             let result = request(
@@ -2293,6 +2396,53 @@ mod tests {
             .unwrap()
             .get("keyboard")
             .is_none());
+    }
+
+    /// A headset's equalizer as `LightingProvider.HeadsetJson` writes it, the
+    /// `headset` part and caps as `HeadsetEqTests` reads them (#483).
+    #[test]
+    fn headset_eq_wire_shapes_match_the_service() {
+        let headset: HeadsetInfo = serde_json::from_value(serde_json::json!({
+            "id": "asus-headset-1afa-1", "name": "ROG Delta II", "verified": true,
+            "sidetone_max": 20, "noise_levels": 3, "settings": null,
+            "eq_verified": false, "eq_max": 100, "eq_first_band": 2,
+            "eq_presets": [{"name": "Default", "gains": [50,50,50,50,50,50,50,50,50,50]}],
+            "eq": {"on": true, "gains": [50,50,60,50,50,50,50,50,50,40]}
+        }))
+        .unwrap();
+        assert_eq!(headset.eq_max, 100);
+        assert_eq!(headset.eq_first_band, 2);
+        assert_eq!(headset.eq.as_ref().unwrap().gains[2], 60);
+        assert_eq!(headset.eq_presets[0].name, "Default");
+        // A headset without an equalizer leaves the fields out.
+        let plain: HeadsetInfo = serde_json::from_value(serde_json::json!({
+            "id": "x", "name": "y", "sidetone_max": 20, "settings": null
+        }))
+        .unwrap();
+        assert_eq!(plain.eq_max, 0);
+        assert!(plain.eq.is_none());
+
+        let part: ProfilePart =
+            serde_json::from_value(serde_json::json!({"headset": {"eq_preset": "FPS"}})).unwrap();
+        assert_eq!(
+            part.headset.as_ref().and_then(|h| h.eq_preset.as_deref()),
+            Some("FPS")
+        );
+        let sent = serde_json::to_value(HeadsetEq {
+            on: true,
+            gains: vec![12; 10],
+        })
+        .unwrap();
+        assert_eq!(sent["on"], true);
+        assert_eq!(sent["gains"][9], 12);
+
+        let mut state = ControlState::default();
+        state.capabilities = vec![serde_json::from_value(serde_json::json!({
+            "domain": "headset", "supported": true,
+            "details": {"headsets": [{"id": "h", "name": "ROG Pelta", "presets": ["Default", "FPS"]}]}
+        }))
+        .unwrap()];
+        assert_eq!(state.headset_eqs()[0].presets, ["Default", "FPS"]);
     }
 
     /// `keyboard_settings`' answer as `LightingProvider.KeyboardSettingsList`

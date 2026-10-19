@@ -20,9 +20,9 @@ use crate::windows::OpenRequests;
 use rigstats_backend::control::{
     AmdCpuLimit, AmdLimitValues, ApplyResult, AuraCaps, AuraPart, ControlCmd, ControlState,
     CpuLimitCaps, CpuLimitPart, CurveOptCaps, CurveOptPart, FanCaps, FanHeaderCap, FanHeaderConfig,
-    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HeadsetSettings,
-    HueCaps, KeyboardPart, KeyboardSettings, LampPart, MouseInfo, MousePart, MouseSettings,
-    PowerScheme, Problem, Profile, Severity,
+    FanPart, FanResponder, GpuAdapterCap, GpuAdapterConfig, GpuCaps, GpuPart, HeadsetEq,
+    HeadsetInfo, HeadsetPart, HeadsetSettings, HueCaps, KeyboardPart, KeyboardSettings, LampPart,
+    MouseInfo, MousePart, MouseSettings, PowerScheme, Problem, Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -190,6 +190,11 @@ pub struct ControlUi {
     /// A headset's settings as just changed here, shown until the service's
     /// read-back arrives (a slider would otherwise jump back meanwhile).
     headset_pending: Option<(String, HeadsetSettings)>,
+    /// A headset's equalizer as just changed here, until its read-back
+    /// arrives (#483).
+    eq_pending: Option<(String, HeadsetEq)>,
+    /// The Control Center profile active when the headsets were last read.
+    headsets_read_for: Option<String>,
     /// The Mouse page asked for the mice's settings since it was opened (#431).
     mice_asked: bool,
     /// The Control Center profile active when the mice were last read — a
@@ -1173,9 +1178,15 @@ fn headset_page(
     peripherals: &[Peripheral],
     battery_levels: (u8, u8),
 ) {
-    if !ui_state.headsets_asked {
+    // Read when the page opens, and again whenever the Control Center
+    // profile changes: its equalizer preset may have changed the headset
+    // (#483). Showing the old values then would send them back with the
+    // next change — seen live, a preset overwritten by a click.
+    if !ui_state.headsets_asked || ui_state.headsets_read_for != control.active_profile {
         ui_state.headsets_asked = true;
+        ui_state.headsets_read_for = control.active_profile.clone();
         ui_state.headset_pending = None;
+        ui_state.eq_pending = None;
         let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
     }
     // The read-back arrived: show the headset's own values again.
@@ -1188,6 +1199,16 @@ fn headset_page(
             ui_state.headset_pending = None;
         }
     }
+    if let Some((id, pending)) = &ui_state.eq_pending {
+        let landed = control
+            .headsets
+            .iter()
+            .any(|h| &h.id == id && h.eq.as_ref() == Some(pending));
+        if landed || !control.headset_busy {
+            ui_state.eq_pending = None;
+        }
+    }
+    headset_eq_profile(ui, dc, control, cmd_tx, ui_state);
     if control.headsets.is_empty() {
         ui_kit::group(ui, dc, None, None, |g| {
             g.row(
@@ -1288,6 +1309,7 @@ fn headset_page(
                 }
             },
         );
+        headset_eq_group(ui, dc, cmd_tx, ui_state, headset);
         if s != before {
             // A slider shows its value while dragging and is sent when let go;
             // a switch or a choice is sent at once.
@@ -1310,6 +1332,181 @@ fn headset_page(
     }
 }
 
+/// The Headset page's profile group (#483): which equalizer preset the
+/// RIGStats profile switches the headsets to, saved at once in the profile.
+/// Shown while the `headset` domain lists a headset with an equalizer.
+fn headset_eq_profile(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    control: &ControlState,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
+) {
+    let headsets = control.headset_eqs();
+    if headsets.is_empty() {
+        return;
+    }
+    let Some(mut profile) = control.active().cloned() else {
+        return;
+    };
+    // Every preset any connected headset has, in the first one's order.
+    let mut names: Vec<String> = Vec::new();
+    for name in headsets.iter().flat_map(|h| h.presets.iter()) {
+        if !names.contains(name) {
+            names.push(name.clone());
+        }
+    }
+    let chosen = profile
+        .part
+        .headset
+        .as_ref()
+        .and_then(|h| h.eq_preset.clone());
+    let mut pick = chosen.clone();
+    let footnote = format!(
+        "Switching to {} puts the headset's equalizer on this preset. The sliders below change it now and \
+         stay until a profile with a preset is switched to. A headset without the preset is left as it is.",
+        profile.name
+    );
+    ui_kit::group(ui, dc, Some("Profile"), Some(&footnote), |g| {
+        g.row(
+            &format!("Equalizer in {}", profile.name),
+            Some("Saved at once"),
+            |ui| {
+                let label = chosen
+                    .clone()
+                    .unwrap_or_else(|| "Leave unchanged".to_owned());
+                ui_kit::dropdown(ui, "headset_eq_profile", label, |ui| {
+                    ui.selectable_value(&mut pick, None, "Leave unchanged");
+                    for name in &names {
+                        ui.selectable_value(&mut pick, Some(name.clone()), name);
+                    }
+                });
+            },
+        );
+    });
+    if pick != chosen {
+        profile.part.headset = pick.map(|p| HeadsetPart { eq_preset: Some(p) });
+        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
+            profile: Box::new(profile),
+            apply: true,
+        });
+        // The control task runs commands in order, so this read comes after
+        // the profile has put the preset on the headset.
+        ui_state.eq_pending = None;
+        let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
+        ui_state.saved_at = Some((Instant::now(), "Saved"));
+    }
+}
+
+/// One headset's equalizer (#483): on/off, a preset, a slider per band the
+/// model uses (its own scale, flat in the middle) and Flat. Kept in the
+/// headset; a switch, a preset or Flat is sent at once, a slider when let go.
+fn headset_eq_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
+    headset: &HeadsetInfo,
+) {
+    if headset.eq_max == 0 {
+        return;
+    }
+    let Some(read) = headset.eq.clone() else {
+        return;
+    };
+    let mut eq = match &ui_state.eq_pending {
+        Some((id, pending)) if id == &headset.id => pending.clone(),
+        _ => read,
+    };
+    let before = eq.clone();
+    let first = usize::from(headset.eq_first_band);
+    let flat = headset.eq_max / 2;
+    let matching = headset
+        .eq_presets
+        .iter()
+        .find(|p| p.gains.len() == eq.gains.len() && p.gains[first..] == eq.gains[first..]);
+    let mut preset: Option<usize> = None;
+    let mut flat_clicked = false;
+    let mut release = false;
+    let footnote = if headset.eq_verified {
+        "Kept in the headset. Flat is the middle of each slider."
+    } else {
+        "Kept in the headset. Flat is the middle of each slider. The presets are G-Helper's, and the \
+         equalizer is not yet verified on this model."
+    };
+    ui_kit::group(ui, dc, Some("Equalizer"), Some(footnote), |g| {
+        g.row("Equalizer", None, |ui| {
+            ui_kit::toggle(ui, dc, &mut eq.on);
+        });
+        g.row("Preset", Some("Sets every band"), |ui| {
+            let label = matching.map_or("Custom", |p| p.name.as_str());
+            ui_kit::dropdown(ui, "headset_eq_preset", label, |ui| {
+                for (i, p) in headset.eq_presets.iter().enumerate() {
+                    let selected = matching.is_some_and(|m| m.name == p.name);
+                    if ui.selectable_label(selected, &p.name).clicked() {
+                        preset = Some(i);
+                    }
+                }
+            });
+        });
+        for (band, name) in rigstats_backend::control::EQ_BANDS
+            .iter()
+            .enumerate()
+            .skip(first)
+        {
+            if band >= eq.gains.len() {
+                break;
+            }
+            g.row(name, None, |ui| {
+                ui.add_enabled_ui(eq.on, |ui| {
+                    let resp = ui_kit::slider_steps(ui, dc, &mut eq.gains[band], headset.eq_max);
+                    release |= resp.drag_stopped() || (resp.changed() && !resp.dragged());
+                });
+            });
+        }
+        g.row("Flat", Some("Every band to the middle"), |ui| {
+            if theme::dialog_btn_secondary(ui, "Flat", dc).clicked() {
+                flat_clicked = true;
+            }
+        });
+    });
+    if let Some(i) = preset {
+        eq.gains = headset.eq_presets[i].gains.clone();
+        eq.on = true;
+    }
+    if flat_clicked {
+        for gain in eq.gains.iter_mut().skip(first) {
+            *gain = flat;
+        }
+    }
+    if eq != before {
+        // Only a band slider held down waits; everything else goes at once.
+        let dragging = eq.on == before.on && preset.is_none() && !flat_clicked && !release;
+        ui_state.eq_pending = Some((headset.id.clone(), eq.clone()));
+        if !dragging {
+            send_eq(cmd_tx, ui_state, &headset.id, eq);
+        }
+    } else if release {
+        send_eq(cmd_tx, ui_state, &headset.id, eq);
+    }
+}
+
+fn send_eq(
+    cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
+    id: &str,
+    eq: HeadsetEq,
+) {
+    if cmd_tx
+        .try_send(ControlCmd::SetHeadsetEq {
+            id: id.to_owned(),
+            eq,
+        })
+        .is_ok()
+    {
+        ui_state.saved_at = Some((Instant::now(), "Sent to the headset"));
+    }
+}
 /// A bindable button's own function and where it sits, by its action code
 /// (#433) — the place only where it is the same on every ROG mouse.
 fn mouse_button_help(source: u16) -> (&'static str, Option<&'static str>) {
@@ -3399,6 +3596,18 @@ fn overview_page(
                 );
             let (summary, dot) = tile_summary(control.domain_problem("keyboard"), dc, chosen);
             (Page::Keyboard, Icon::Keyboard, "Keyboard", summary, dot)
+        },
+        {
+            // The profile's equalizer preset (#483); the rest of the
+            // headset's settings are the same in every profile.
+            let chosen = profile
+                .part
+                .headset
+                .as_ref()
+                .and_then(|h| h.eq_preset.clone())
+                .map_or_else(|| "Left as it is".to_owned(), |p| format!("Equalizer {p}"));
+            let (summary, dot) = tile_summary(control.domain_problem("headset"), dc, chosen);
+            (Page::Headset, Icon::Headset, "Headset", summary, dot)
         },
     ];
     let starts_with: Vec<&str> = rules

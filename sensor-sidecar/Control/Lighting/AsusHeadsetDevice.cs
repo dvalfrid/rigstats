@@ -11,7 +11,7 @@ namespace SensorSidecar.Control.Lighting;
 /// four header bytes. Lighting: set key 40 / get key 3 with `effectId,
 /// brightness (0–100), R, G, B` — so unlike other lighting devices, every
 /// write is verified by reading it back.
-public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadsetSettingsDevice, IDisposable
+public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadsetSettingsDevice, IHeadsetEqDevice, IDisposable
 {
     private static readonly TimeSpan ReplyTimeout = TimeSpan.FromMilliseconds(800);
 
@@ -31,6 +31,7 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadse
     private readonly byte _reportId;
     private IHidDevice? _device;
     private string? _loggedReplies;
+    private string? _loggedEq;
     private string _lastLighting = "";
 
     public string Id { get; }
@@ -122,6 +123,74 @@ public sealed class AsusHeadsetDevice : ILightingDevice, IBatteryDevice, IHeadse
                 throw new IOException($"{Name} did not take the settings (read back {back}).");
             return back;
         }
+    }
+
+    /// Headsets whose equalizer is in the headset (#483), each with the
+    /// scale and bands of its Gear Link caps and G-Helper's model:
+    /// the Delta II family 0–100 from 125 Hz, the Pelta 0–24 over all ten.
+    public static readonly IReadOnlyDictionary<ushort, HeadsetEqLimits> EqModels = new Dictionary<ushort, HeadsetEqLimits>
+    {
+        [0x1AFA] = HeadsetEqCommands.Delta,
+        [0x1D41] = HeadsetEqCommands.Delta,
+        [0x1E6B] = HeadsetEqCommands.Delta,
+        [0x1B82] = HeadsetEqCommands.Pelta,
+        [0x1B84] = HeadsetEqCommands.Pelta,
+    };
+
+    /// Equalizers seen working on hardware: the Delta II on its 2.4 GHz
+    /// dongle (2026-10-19 — read off and flat at 50; on/off, single bands at
+    /// 0 and 100, every preset, Flat, and a preset per profile, each read
+    /// back as written and heard by the owner).
+    public static readonly IReadOnlySet<ushort> VerifiedEqModels = new HashSet<ushort> { 0x1AFA };
+
+    public HeadsetEqLimits? EqLimits => EqModels.GetValueOrDefault(_info.ProductId);
+
+    public bool EqVerified => VerifiedEqModels.Contains(_info.ProductId);
+
+    public HeadsetEq? ReadEq()
+    {
+        if (EqLimits is not { } limits)
+            return null;
+        lock (_lock)
+            return ReadEqLocked(limits);
+    }
+
+    public HeadsetEq WriteEq(HeadsetEq wanted)
+    {
+        var limits = EqLimits ?? throw new InvalidOperationException($"{Name} has no equalizer RIGStats knows.");
+        wanted = HeadsetEqCommands.Clamp(wanted, limits);
+        lock (_lock)
+        {
+            var now = ReadEqLocked(limits) ?? throw new IOException($"{Name} didn't answer.");
+            var writes = HeadsetEqCommands.Writes(now, wanted, limits);
+            if (writes.Count == 0)
+                return now;
+            foreach (var (command, key, data) in writes)
+            {
+                Send(Frame(_reportId, _info.OutputReportLength, command, key, data));
+                ReadReply(command, key); // the acknowledgement; the read-back below decides
+            }
+            var back = ReadEqLocked(limits) ?? throw new IOException($"{Name} didn't answer after the change.");
+            if (!back.SameAs(wanted, limits))
+                throw new IOException($"{Name} did not take the equalizer (read back {(back.On ? "on" : "off")} {string.Join(",", back.Gains)}).");
+            return back;
+        }
+    }
+
+    // Caller holds _lock. Logs the raw reply each time it changes (#438).
+    private HeadsetEq? ReadEqLocked(HeadsetEqLimits limits)
+    {
+        Send(Frame(_reportId, _info.OutputReportLength, HeadsetEqCommands.Get, HeadsetEqCommands.StatusGet, []));
+        var reply = ReadReply(HeadsetEqCommands.Get, HeadsetEqCommands.StatusGet);
+        var eq = HeadsetEqCommands.Parse(reply, _reportId, limits);
+        var raw = reply is null ? "nothing" : Hid.ReplyHex(reply);
+        if (raw != _loggedEq)
+        {
+            _loggedEq = raw;
+            SidecarLog.Log($"[rigstats-control] Headset: {Name} 0x{_info.ProductId:X4} equalizer "
+                + (eq is null ? "not read" : $"{(eq.On ? "on" : "off")} {string.Join(",", eq.Gains)}") + $" from {raw}.");
+        }
+        return eq;
     }
 
     // Caller holds _lock.

@@ -323,6 +323,14 @@ public sealed class MousePart
     public int? Profile { get; init; }
 }
 
+/// A profile's headset part (#483): the equalizer preset (by name, e.g.
+/// "FPS") the headsets switch to with the profile. The equalizer's own
+/// sliders are kept in the headset and edited on the Headset page.
+public sealed class HeadsetPart
+{
+    public string? EqPreset { get; init; }
+}
+
 /// A profile's keyboard part (#458): which of the keyboard's own onboard
 /// profiles it uses (1-based, as the keyboard and its Fn + 1…6 keys count).
 public sealed class KeyboardPart
@@ -385,6 +393,7 @@ public sealed class ProfilePart
     public AuraPart? Aura { get; init; }
     public MousePart? Mouse { get; init; }
     public KeyboardPart? Keyboard { get; init; }
+    public HeadsetPart? Headset { get; init; }
 }
 
 public sealed class Profile
