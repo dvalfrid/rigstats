@@ -105,3 +105,22 @@ if (deviceLists) {
   const start = location.hash.slice(1);
   open(ids.includes(start) ? start : ids[0], ids.includes(start));
 }
+
+// Every other link within the page (the nav bar: Panels, Dialogs, Download,
+// Support …) jumps too. The page's CSS scrolls smoothly, and a smooth scroll
+// past the Control Center's lazy screenshots loaded them on the way: the
+// page grew and the scroll stopped about 2000 px short of anything below
+// them (measured in Brave for #panels, #dialogs, #download and #support).
+// A jump passes nothing, so nothing loads on the way; jumped once more when
+// the page has settled.
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  const id = a.getAttribute('href').slice(1);
+  const target = id && document.getElementById(id);
+  if (!target || a.dataset.list || (deviceLists && ['supported-devices', 'battery-devices', 'settings-devices'].includes(id))) return;
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    target.scrollIntoView({ behavior: 'instant', block: 'start' });
+    setTimeout(() => target.scrollIntoView({ behavior: 'instant', block: 'start' }), 400);
+    history.replaceState(null, '', '#' + id);
+  });
+});
