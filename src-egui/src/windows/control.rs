@@ -3367,8 +3367,11 @@ fn profile_bar(
     // Actions act on the active profile: not while a try runs or a click
     // awaits its answer.
     let can_edit = control.connected && control.preview.is_none() && !busy;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 8.0;
+    // Wraps to a second row when the chips don't fit, rather than running
+    // off the window's edge — there is no limit on how many profiles there
+    // are (Ctrl+Alt+F1…F9 cover the first nine).
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
         ui.label(
             egui::RichText::new("Profile")
                 .size(12.0)
