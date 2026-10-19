@@ -100,7 +100,7 @@ public class HeadsetEqTests
         var provider = new HeadsetProvider(() => [off, on], dryRun: false);
         var snapshot = provider.Capture();
 
-        Assert.Throws<DomainUnavailableException>(() => provider.Apply(new ProfilePart { Headset = new HeadsetPart { EqPreset = "Vocal" } }));
+        Assert.Throws<DeviceAsleepException>(() => provider.Apply(new ProfilePart { Headset = new HeadsetPart { EqPreset = "Vocal" } }));
         Assert.Equal(HeadsetEqCommands.Preset(Delta, "Vocal")!.Gains, on.Eq.Gains);
 
         provider.Restore(snapshot);

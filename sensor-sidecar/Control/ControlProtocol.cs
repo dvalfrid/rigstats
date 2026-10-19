@@ -440,13 +440,31 @@ public sealed class ApplyResult
 /// exception still rolls the whole profile back.
 public class DomainUnavailableException(string message) : InvalidOperationException(message)
 {
-    /// Wireless devices that didn't answer a profile switch (#484): "ROG
-    /// Azoth X didn't answer — probably asleep — so it was left as it is.
-    /// Wake it and switch the profile again." The technical reason goes to
-    /// the log; the user reads it once, in plain words.
-    public static DomainUnavailableException Silent(IReadOnlyList<string> names) => new(names.Count == 1
-        ? $"{names[0]} didn't answer — probably asleep — so it was left as it is. Wake it and switch the profile again."
-        : $"{string.Join(" and ", names)} didn't answer — probably asleep — so they were left as they are. Wake them and switch the profile again.");
+    /// Wireless devices that didn't answer a profile switch (#484) — see
+    /// <see cref="DeviceAsleepException"/>.
+    public static DomainUnavailableException Silent(IReadOnlyList<string> names) => new DeviceAsleepException(names);
+}
+
+/// A provider whose part, tried again for a device that slept (#489),
+/// should go only to the devices that didn't answer — the lighting: the
+/// motherboard, monitors and Hue rooms that took it aren't written again.
+public interface IRetryPart
+{
+    /// Applies `part` to the devices that slept last time; throws
+    /// <see cref="DeviceAsleepException"/> for those still asleep.
+    void Retry(ProfilePart part);
+}
+
+/// A wireless device (keyboard, mouse, headset) didn't answer a profile
+/// switch — asleep or out of range. The broker tries its part again until
+/// it answers (#489), so the user reads that it will catch up by itself:
+/// "ROG Azoth X didn't answer — probably asleep — and gets the profile as
+/// soon as it wakes up." The technical reason goes to the log.
+public sealed class DeviceAsleepException(IReadOnlyList<string> names) : DomainUnavailableException(names.Count == 1
+    ? $"{names[0]} didn't answer — probably asleep — and gets the profile as soon as it wakes up."
+    : $"{string.Join(" and ", names)} didn't answer — probably asleep — and get the profile as soon as they wake up.")
+{
+    public IReadOnlyList<string> Names { get; } = names;
 }
 
 /// One incoming NDJSON line: `{"id":1,"method":"hello","params":{...}}`.

@@ -1515,6 +1515,35 @@ RIGStats profile picks one of the keyboard's own onboard profiles. Research:
 **Mouse settings as built (#431).** The Control Center's **Mouse** page and
 the `mouse` profile domain (`Control/Mice/`):
 
+- **A sleeping device catches up (#489).** A keyboard, mouse or headset
+  that doesn't answer a profile switch (asleep behind its receiver) throws
+  `DeviceAsleepException`: the rest of the profile applies, the footer
+  reads "Profile Balanced applied; ROG Azoth X didn't answer — probably
+  asleep — and gets the profile as soon as it wakes up.", and
+  `ControlBroker.RetryAsleepAsync` applies only that part again every 5 s
+  (one read per sleeping device) for 5 minutes. When it takes, the log
+  says "<domain> applied now that it answered" and the service pushes
+  `apply_result` (ok, no message), which clears the footer; after 5
+  minutes it pushes the words that the device stayed asleep and kept its
+  own settings. A newer apply ends the retry. Not for previews. Asked for
+  by the owner after the #296 test (2026-10-19). The lighting too: a
+  keyboard's lighting write is never answered, so after writing it a
+  wireless keyboard is asked its version (`12 00`): awake, the reply
+  carries its profiles; asleep, the Omni receiver answers by itself with
+  zeros there (`0212000000080007` + zeros, seen live — a first version
+  counted any reply as awake and missed the Azoth X). Asked once more
+  after 150 ms (the ROG Azoth left the question right after `51 2C`
+  unanswered while awake). No profiles in either is `DeviceSilentException`, and the retry
+  (`IRetryPart.Retry`) writes the lighting only to the devices that slept
+  — the motherboard, monitors and Hue aren't written again. Seen live
+  first: the Azoth X's onboard profile caught up on waking, but its colour
+  stayed the old profile's, because the lighting part had counted the
+  silent write as done. While a wireless keyboard sleeps, each lighting
+  write (also the Lighting tab's live preview) waits for that one
+  unanswered question. **Verified 2026-10-19:** switching profile while
+  the Azoth X slept said it would catch up; on waking it got the onboard
+  profile and the new colour within one retry, and the footer note went
+  away by itself.
 - **Two or more Omni receivers (#296).** Each receiver is its own USB
   device; its vendor channels (mi_02, report ids 1–3) share one interface
   instance, its LampArray (mi_05) another — so receivers are told apart by
@@ -1533,7 +1562,13 @@ the `mouse` profile domain (`Control/Mice/`):
   (`device_tabs`); each mouse card's controls sit under its own id (two
   mice's dropdowns shared one and flickered). Still open in #296: a
   receiver keyboard is left out whenever the same model is on a cable,
-  which is wrong for two physical keyboards of one model.
+  which is wrong for two physical keyboards of one model. Also seen with
+  two receivers: Fn + 2 / Fn + 1 followed from both keyboards (the ROG
+  Azoth sends the same `70` event), and the diagnostics ZIP's receiver
+  probe lists each receiver with its own paired keyboard and mouse. A
+  profile switch took ~8 s with the second receiver in, ~6 s of it the
+  Harpe Ace Mini leaving each first question unanswered (600 ms, asked
+  again).
 - **Several mice or keyboards at once (#484).** Each one is listed on its
   page with its own settings. A profile's onboard-profile number goes to
   every mouse (and every keyboard), clamped per model — the owner chose one

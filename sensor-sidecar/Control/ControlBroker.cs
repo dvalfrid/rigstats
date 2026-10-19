@@ -33,6 +33,18 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     /// reverted — the id of the previewed profile.
     public event Action<string>? PreviewReverted;
 
+    /// How often, and for how long, a part skipped because its device slept
+    /// is tried again (#489). One read per sleeping device each time.
+    public TimeSpan RetryEvery { get; init; } = TimeSpan.FromSeconds(5);
+    public TimeSpan RetryFor { get; init; } = TimeSpan.FromMinutes(5);
+
+    // The retry of the last apply's sleeping parts; a new apply ends it.
+    private CancellationTokenSource? _retry;
+
+    /// Raised (off the caller's thread) when a retried part caught up, or
+    /// gave up — the apply's new result, for the app's footer (#489).
+    public event Action<ApplyResult>? ApplyResultChanged;
+
     public async Task<ApplyResult> ApplyProfileAsync(Profile profile, CancellationToken ct)
     {
         await _transactionLock.WaitAsync(ct);
@@ -42,11 +54,83 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             // domains the new profile doesn't touch don't keep previewed
             // values nobody confirmed.
             RevertPreviewLocked();
-            return Apply(profile).Result;
+            _retry?.Cancel();
+            _retry = null;
+            var (result, _, asleep) = Apply(profile);
+            if (result.Ok && asleep.Count > 0)
+            {
+                // A sleeping keyboard, mouse or headset gets its part as soon
+                // as it answers (#489).
+                _retry = new CancellationTokenSource();
+                _ = RetryAsleepAsync(profile, asleep, _retry.Token);
+            }
+            return result;
         }
         finally
         {
             _transactionLock.Release();
+        }
+    }
+
+    // Tries the parts whose devices slept every RetryEvery until they all
+    // answered or RetryFor passed; a newer apply cancels it.
+    private async Task RetryAsleepAsync(Profile profile, List<IControlProvider> asleep, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + RetryFor;
+        var still = new List<string>();
+        try
+        {
+            while (asleep.Count > 0)
+            {
+                if (DateTime.UtcNow >= deadline)
+                {
+                    SidecarLog.Log($"[rigstats-control] Profile '{profile.Id}': {string.Join(", ", still)} still didn't answer after {RetryFor.TotalMinutes:0} minutes; kept as they are.");
+                    ApplyResultChanged?.Invoke(ApplyResult.Success(profile.Id,
+                        $"Profile {profile.Name} applied; {string.Join(" and ", still)} stayed asleep and kept {(still.Count == 1 ? "its" : "their")} own settings. Switch the profile again once {(still.Count == 1 ? "it is" : "they are")} awake."));
+                    return;
+                }
+                await Task.Delay(RetryEvery, ct);
+                await _transactionLock.WaitAsync(ct);
+                try
+                {
+                    if (ct.IsCancellationRequested)
+                        return;
+                    still.Clear();
+                    foreach (var provider in asleep.ToList())
+                    {
+                        try
+                        {
+                            if (provider is IRetryPart retry)
+                                retry.Retry(profile.Part);
+                            else
+                                provider.Apply(profile.Part);
+                            if (!provider.Verify(profile.Part))
+                                throw new ControlApplyException($"{provider.Domain} did not take effect after applying.");
+                            asleep.Remove(provider);
+                            SidecarLog.Log($"[rigstats-control] Profile '{profile.Id}': {provider.Domain} applied now that it answered.");
+                        }
+                        catch (DeviceAsleepException e)
+                        {
+                            still.AddRange(e.Names);
+                        }
+                        catch (Exception e)
+                        {
+                            // Something else than sleep: stop trying that part.
+                            asleep.Remove(provider);
+                            SidecarLog.Log($"[rigstats-control] Profile '{profile.Id}': {provider.Domain} not applied on retry: {e.Message}");
+                        }
+                    }
+                }
+                finally
+                {
+                    _transactionLock.Release();
+                }
+            }
+            ApplyResultChanged?.Invoke(ApplyResult.Success(profile.Id));
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer apply took over.
         }
     }
 
@@ -57,7 +141,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         try
         {
             RevertPreviewLocked();
-            var (result, snapshots) = Apply(profile);
+            var (result, snapshots, _) = Apply(profile);
             if (!result.Ok)
                 return result;
 
@@ -138,7 +222,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         SidecarLog.Log($"[rigstats-control] Preview of '{preview.Profile.Id}' reverted.");
     }
 
-    private (ApplyResult Result, List<(IControlProvider, Snapshot)> Snapshots) Apply(Profile profile)
+    private (ApplyResult Result, List<(IControlProvider, Snapshot)> Snapshots, List<IControlProvider> Asleep) Apply(Profile profile)
     {
         var affected = DomainOrder
             .Where(HasPart(profile.Part))
@@ -148,20 +232,20 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             .ToList();
 
         if (affected.Count == 0)
-            return (ApplyResult.Success(profile.Id), []);
+            return (ApplyResult.Success(profile.Id), [], []);
 
         // Every outcome lands in rigstats-sensor.log, which ships in the
         // diagnostics ZIP — the record of which boards/firmware accept which
         // writes (#207).
-        var (result, snapshots) = Apply(profile, affected);
+        var (result, snapshots, asleep) = Apply(profile, affected);
         var domains = string.Join(", ", affected.Select(p => p.Domain));
         SidecarLog.Log(result.Ok
             ? $"[rigstats-control] Applied profile '{profile.Id}' ({domains}){(result.Message is { } note ? $" — {note}" : ".")}"
             : $"[rigstats-control] Profile '{profile.Id}' not applied ({domains}), rolled back: {result.Message}");
-        return (result, snapshots);
+        return (result, snapshots, asleep);
     }
 
-    private static (ApplyResult, List<(IControlProvider, Snapshot)>) Apply(Profile profile, List<IControlProvider> affected)
+    private static (ApplyResult, List<(IControlProvider, Snapshot)>, List<IControlProvider>) Apply(Profile profile, List<IControlProvider> affected)
     {
         // 1. Validate every affected domain up front — reject before touching
         //    anything if any single part is invalid.
@@ -172,7 +256,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             {
                 return (ApplyResult.Failure(
                     profile.Id,
-                    $"Profile {profile.Name} not applied: {validation.Reason ?? $"{provider.Domain} rejected the requested value."}"), []);
+                    $"Profile {profile.Name} not applied: {validation.Reason ?? $"{provider.Domain} rejected the requested value."}"), [], []);
             }
         }
 
@@ -184,6 +268,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         //    rest of the profile still applies.
         var snapshots = new List<(IControlProvider Provider, Snapshot Snapshot)>();
         var skipped = new List<(string Domain, string Reason)>();
+        var asleep = new List<IControlProvider>();
         foreach (var provider in affected)
         {
             try
@@ -197,7 +282,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             catch (Exception e)
             {
                 return (ApplyResult.Failure(profile.Id,
-                    $"Profile {profile.Name} not applied: could not read the current {provider.Domain} state ({e.Message})."), []);
+                    $"Profile {profile.Name} not applied: could not read the current {provider.Domain} state ({e.Message})."), [], []);
             }
         }
 
@@ -221,24 +306,32 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
                 catch (DomainUnavailableException e)
                 {
                     // Went down while applying: nothing more can be written
-                    // or restored there; the rest goes on.
+                    // or restored there; the rest goes on. A sleeping device
+                    // is tried again by the caller (#489).
                     applied.RemoveAt(applied.Count - 1);
                     skipped.Add((provider.Domain, e.Message));
+                    if (e is DeviceAsleepException)
+                        asleep.Add(provider);
                 }
             }
         }
         catch (Exception e)
         {
             RestoreAll(applied);
-            return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {e.Message}"), []);
+            return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {e.Message}"), [], []);
         }
 
         if (skipped.Count == 0)
-            return (ApplyResult.Success(profile.Id), applied);
-        var note = string.Join(" ", skipped.Select(s => $"{s.Domain} skipped: {s.Reason}"));
+            return (ApplyResult.Success(profile.Id), applied, []);
+        // A sleeping device's own words say it catches up; other skips name
+        // their domain.
+        // The same sleeping keyboard can hold up two parts (its onboard
+        // profile and its lighting): said once.
+        var note = string.Join(" ", skipped.Select(s =>
+            asleep.Any(a => a.Domain == s.Domain) ? s.Reason : $"{s.Domain} skipped: {s.Reason}").Distinct());
         if (applied.Count == 0)
-            return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {note}"), []);
-        return (ApplyResult.Success(profile.Id, $"Profile {profile.Name} applied; {note}"), applied);
+            return (ApplyResult.Failure(profile.Id, $"Profile {profile.Name} not applied: {note}"), [], []);
+        return (ApplyResult.Success(profile.Id, $"Profile {profile.Name} applied; {note}"), applied, asleep);
     }
 
     /// Restores in reverse order. Best-effort: a restore failure must not

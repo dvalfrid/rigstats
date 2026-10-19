@@ -273,6 +273,12 @@ public sealed class ControlPipeWorker(
                     connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "preview_reverted", Data = new { id } });
             }
 
+            void OnApplyResultChanged(ApplyResult result)
+            {
+                if (connection.Subscribed)
+                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "apply_result", Data = result });
+            }
+
             void OnProfileSwitched(string id)
             {
                 if (connection.Subscribed)
@@ -281,6 +287,7 @@ public sealed class ControlPipeWorker(
 
             fanLoop.EventRaised += OnFanEvent;
             broker.PreviewReverted += OnPreviewReverted;
+            broker.ApplyResultChanged += OnApplyResultChanged;
             if (keyboardFollower is not null)
                 keyboardFollower.ProfileSwitched += OnProfileSwitched;
             var pump = PumpEventsAsync(connection, ct);
@@ -299,6 +306,7 @@ public sealed class ControlPipeWorker(
                 // Stop the pump before the writer it uses is disposed.
                 fanLoop.EventRaised -= OnFanEvent;
                 broker.PreviewReverted -= OnPreviewReverted;
+                broker.ApplyResultChanged -= OnApplyResultChanged;
                 if (keyboardFollower is not null)
                     keyboardFollower.ProfileSwitched -= OnProfileSwitched;
                 connectionCts.Cancel();

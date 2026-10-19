@@ -143,3 +143,7 @@ public static class KeyboardProfileCommands
         return report;
     }
 }
+
+/// A wireless device took a write without answering — asleep behind its
+/// receiver (#489). The lighting tries it again when it wakes.
+public sealed class DeviceSilentException(string message) : IOException(message);

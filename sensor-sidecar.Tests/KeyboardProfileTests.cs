@@ -101,7 +101,7 @@ public class KeyboardProfileTests
         var awake = new FakeKeyboard();
         var provider = new KeyboardProvider(() => [asleep, awake], dryRun: false);
 
-        var e = Assert.Throws<DomainUnavailableException>(() =>
+        var e = Assert.Throws<DeviceAsleepException>(() =>
             provider.Apply(new ProfilePart { Keyboard = new KeyboardPart { Profile = 4 } }));
 
         Assert.Equal(4, awake.Current);
@@ -127,7 +127,7 @@ public class KeyboardProfileTests
     {
         var part = new ProfilePart { Keyboard = new KeyboardPart { Profile = 2 } };
         Assert.Throws<DomainUnavailableException>(() => new KeyboardProvider(() => [], dryRun: false).Apply(part));
-        Assert.Throws<DomainUnavailableException>(() =>
+        Assert.Throws<DeviceAsleepException>(() =>
             new KeyboardProvider(() => [new FakeKeyboard { Asleep = true }], dryRun: false).Apply(part));
         Assert.False(new KeyboardProvider(() => [], dryRun: false).Probe().Supported);
         // An asleep keyboard still shows: the probe uses what discovery read.
