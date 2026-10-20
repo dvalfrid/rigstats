@@ -647,8 +647,13 @@ separate `windows.rs` module:
 
 #### Updates (`update_check.rs` + `windows/updater.rs`)
 
-`update_check.rs` is plain blocking I/O: `check()` fetches `latest.json` and
-compares versions, `download()` streams the installer with a progress
+`update_check.rs` is plain blocking I/O: `check(channel)` fetches `latest.json`
+and compares it with `APP_VERSION` (the tag's version from the release build,
+so an RC knows it is one; `Cargo.toml`'s in local builds). On the "Release
+candidates too" channel (Settings → General → Updates, #535) it also takes the
+newest published pre-release's `latest.json` from GitHub's releases API and
+uses whichever is newer; versions compare as semver, `1.51.0-rc.2` <
+`1.51.0`. Details in "Update channels" in `docs/release.md`. `download()` streams the installer with a progress
 callback and returns a `VerifiedInstaller`, `launch_installer()` runs it, and
 `BUNDLED_CHANGELOG` embeds `CHANGELOG.md`. The installer is launched elevated,
 so nothing unverified gets that far: the manifest's link must be a file in
@@ -738,7 +743,7 @@ thread). Produces a self-contained ZIP for bug reports.
 
 | File | Source | Key fields |
 | --- | --- | --- |
-| `manifest.json` | inline | Unix timestamp + `CARGO_PKG_VERSION` |
+| `manifest.json` | inline | Unix timestamp + `update_check::APP_VERSION` (e.g. `1.51.0-rc.3`) |
 | `debug.log` | `std::fs::read(debug_log_path)` | Current session: first lines always include `settings dir`, `os_dark_mode`, settings summary. Ends with `shutdown: clean` on normal exit. |
 | `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
