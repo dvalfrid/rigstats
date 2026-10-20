@@ -160,7 +160,7 @@ public class RazerDeviceTests
     [InlineData(RazerProtocol.StatusFailure, "failed")]
     [InlineData(RazerProtocol.StatusTimeout, "timed out")]
     [InlineData(RazerProtocol.StatusNotSupported, "not supported")]
-    [InlineData(0x00, "status 00")]
+    [InlineData(0x00, "not taken up yet")]
     public void A_reply_status_says_whether_the_command_took(byte status, string? problem)
     {
         var request = RazerProtocol.MatrixNone(0xFF);
@@ -283,4 +283,17 @@ public class RazerDeviceTests
     [Fact]
     public void Every_model_is_unverified_until_seen_on_a_device() =>
         Assert.All(RazerDevice.Models.Values, m => Assert.False(m.Verified));
+
+    [Theory]
+    [InlineData(0x00, true)]
+    [InlineData(0x01, true)]
+    [InlineData(0x02, false)]
+    [InlineData(0x03, false)]
+    [InlineData(0x05, false)]
+    public void New_and_busy_replies_are_read_again(byte status, bool pending)
+    {
+        // #538: a DeathAdder 2013 answered 00 (not taken up yet) when read
+        // 2 ms after the request — that is a wait, not a refusal.
+        Assert.Equal(pending, RazerProtocol.Pending(status));
+    }
 }
