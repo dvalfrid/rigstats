@@ -89,7 +89,8 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
             └─► named pipe \\.\pipe\rigstats-control  (duplex, request/response + events)
                     └─► control.rs (rigstats-backend): control_task → ControlState
 
-sysinfo crate           CPU load/freq, RAM, disk, network, processes
+sysinfo crate           CPU load/freq, RAM, disk space, network
+process_list.rs         processes + disk read/write (NtQuerySystemInformation, one call per tick)
 wmi crate               GPU name, VRAM, RAM spec, system brand (startup only)
 
     └─► poll_loop (src-egui/poll.rs): samples hardware → PollStats → mpsc::Sender
@@ -223,6 +224,7 @@ rig-dashboard/
 | `stats.rs` | `StatsPayload` and its sub-structs — the serialisable row shape for session recording (built from `PollStats`); `DiskKind` |
 | `hardware.rs` | Hardware detection via WMI (PowerShell only as a fallback when WMI fails) |
 | `lhm.rs` | Named pipe client → `LhmData`; GPU selection and sensor extraction |
+| `process_list.rs` | The running processes from one `NtQuerySystemInformation(SystemProcessInformation)` call per tick (#463): `ProcessReader::read` (the call, buffer reused) → `RawProcess` totals (name, CPU time, working set, I/O bytes); pure `parse` checks every offset, length and name pointer against the buffer; `UsageTracker::update` → `ProcessUsage` rates (CPU % of the machine, bytes since the last tick; 0 on a process's first tick or a reused pid; idle process left out). Feeds the Processes panel, GPU Apps names and the disk read/write totals. Replaces sysinfo's process refresh (~80 % of the poll loop's CPU), which also opened every process for five more calls: measured ~13 M cycles a tick against ~27 M; the call itself is ~90 % of what is left |
 | `lhm_process.rs` | `track_lhm_connection_state` — sidecar pipe connect/disconnect logging, 30 s "still offline" throttle |
 | `control.rs` | Control Center pipe client (`control_task`) → `ControlState` (capabilities, profiles, active profile, live `fan_duty`, `fan_identified` channel→fan mapping, safety trips, running preview, crash-guard notice); `ControlCmd` (apply/save profile, preview/confirm, identify fan, release to firmware); typed `FanPart`/`FanHeaderConfig`/`FanCaps`, `CpuLimitPart`/`AmdCpuLimit`/`CpuLimitCaps`, `GpuPart`/`GpuAdapterConfig`/`GpuCaps`, `CurveOptPart`/`CurveOptCaps`, `AuraPart`/`AuraCaps`, `HueCaps` (`hue_caps()`: Hue Bridge pairing state, read even when lighting is otherwise unsupported) and the `Hue*` commands (#215); `active_ppt_limit()` and `active_gpu_limit(name)` feed the CPU panel's `PPT … W` and the GPU panel's `PL … %` lines. Design: `docs/control-architecture.md` |
 | `settings.rs` | `Settings` struct, JSON persistence, `atomic_write` |
@@ -699,8 +701,8 @@ No dependencies on other crate modules — safe to import from anywhere.
 | `net` | Network | ✓ | sysinfo |
 | `disk` | Storage | ✓ | sidecar · sysinfo |
 | `motherboard` | Motherboard | opt-in | sidecar · WMI |
-| `process` | Processes | opt-in | sysinfo |
-| `gpu_processes` | GPU Apps | opt-in | PDH `\GPU Engine` · DXGI · sysinfo |
+| `process` | Processes | opt-in | `process_list` |
+| `gpu_processes` | GPU Apps | opt-in | PDH `\GPU Engine` · DXGI · `process_list` |
 | `battery` | Battery | opt-in | sidecar · WMI |
 | `peripherals` | Peripherals | opt-in | sidecar (battery of wireless devices — which ones: [supported-devices.md](supported-devices.md#battery); disconnected ones greyed, #351) |
 | `power` | System Power | opt-in | sidecar (derived, no new sensors) |
@@ -848,6 +850,13 @@ Results:
 
 ### Data sources
 
+- **Processes and disk throughput** come from `process_list.rs`: one
+  `NtQuerySystemInformation` call returns every process with its CPU times,
+  working set and I/O byte counts, the source Task Manager reads too. sysinfo's
+  process refresh asked the same call and then opened every process for five
+  more calls each, ~1 300 calls a second; it also couldn't open protected
+  processes (System, Memory Compression), which now count. Disk read/write is
+  the sum of every process's bytes since the last tick (#463).
 - **Network throughput** always comes from sysinfo, not LHM. Sysinfo reads the
   same OS counters as Task Manager. LHM tracks adapters by GUID and can latch
   onto a VPN or Hyper-V bridge, producing near-zero readings.

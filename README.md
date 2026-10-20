@@ -315,8 +315,8 @@ Supports NVIDIA and AMD discrete GPUs through LHM. Intel Arc GPUs should work bu
 
 | Metric | Source |
 | --- | --- |
-| Read throughput (MB/s) | LHM — aggregated across all drives |
-| Write throughput (MB/s) | LHM — aggregated across all drives |
+| Read throughput (MB/s) | Windows' process list — bytes every process read, summed |
+| Write throughput (MB/s) | Windows' process list — bytes every process wrote, summed |
 | Per-drive capacity and usage | sysinfo |
 | Filesystem label | sysinfo |
 | Drive temperature (°C) | LHM — highest real temperature sensor per drive (`/nvme/`, `/hdd/`, `/ata/`, `/scsi/`, `/ssd/`), matched to drive letter via WMI at startup |
@@ -356,9 +356,9 @@ Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and othe
 
 | Metric | Source |
 | --- | --- |
-| Top 8 processes by CPU usage | sysinfo |
-| Per-process CPU % of total system | sysinfo |
-| Per-process RAM usage (MB / GB) | sysinfo |
+| Top 8 processes by CPU usage | Windows' process list (`NtQuerySystemInformation`) |
+| Per-process CPU % of total system | Windows' process list |
+| Per-process RAM usage (MB / GB) | Windows' process list (working set) |
 
 ### GPU Apps (opt-in)
 
