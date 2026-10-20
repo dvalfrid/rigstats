@@ -1,0 +1,255 @@
+# sensor-tree — 2026-10-19 20:12:56Z
+# data-unit: bytes
+HW  Motherboard          id=/motherboard name=ASUS PRIME B450M-A
+  SUB SuperIO            id=/lpc/it8655e/0 name=ITE IT8655E
+    S  Control         id=/lpc/it8655e/0/control/0 name=Fan #1 val=
+    S  Control         id=/lpc/it8655e/0/control/1 name=Fan #2 val=
+    S  Control         id=/lpc/it8655e/0/control/2 name=Fan #3 val=
+    S  Voltage         id=/lpc/it8655e/0/voltage/0 name=Vcore val=1.2862
+    S  Voltage         id=/lpc/it8655e/0/voltage/1 name=Voltage #2 val=2.5179
+    S  Voltage         id=/lpc/it8655e/0/voltage/2 name=Voltage #3 val=2.0274
+    S  Voltage         id=/lpc/it8655e/0/voltage/3 name=Voltage #4 val=2.0165
+    S  Voltage         id=/lpc/it8655e/0/voltage/4 name=Voltage #5 val=2.0056
+    S  Voltage         id=/lpc/it8655e/0/voltage/5 name=Voltage #6 val=1.9511
+    S  Voltage         id=/lpc/it8655e/0/voltage/6 name=Voltage #7 val=2.0165
+    S  Voltage         id=/lpc/it8655e/0/voltage/7 name=Voltage #8 val=1.6786001
+    S  Voltage         id=/lpc/it8655e/0/voltage/8 name=CMOS Battery val=1.635
+    S  Temperature     id=/lpc/it8655e/0/temperature/0 name=Temperature #1 val=39
+    S  Temperature     id=/lpc/it8655e/0/temperature/1 name=Temperature #2 val=30
+    S  Temperature     id=/lpc/it8655e/0/temperature/2 name=Temperature #3 val=34
+    S  Temperature     id=/lpc/it8655e/0/temperature/3 name=Temperature #4 val=34
+    S  Temperature     id=/lpc/it8655e/0/temperature/4 name=Temperature #5 val=34
+    S  Temperature     id=/lpc/it8655e/0/temperature/5 name=Temperature #6 val=34
+    S  Fan             id=/lpc/it8655e/0/fan/0 name=Fan #1 val=858.7786
+    S  Fan             id=/lpc/it8655e/0/fan/1 name=Fan #2 val=791.3247
+    S  Fan             id=/lpc/it8655e/0/fan/2 name=Fan #3 val=837.469
+HW  Cpu                  id=/amdcpu/0 name=AMD Ryzen 5 2600
+  S  Load            id=/amdcpu/0/load/2 name=CPU Core #1 val=17.8
+  S  Load            id=/amdcpu/0/load/3 name=CPU Core #2 val=10.75
+  S  Load            id=/amdcpu/0/load/4 name=CPU Core #3 val=15.16
+  S  Load            id=/amdcpu/0/load/5 name=CPU Core #4 val=12.28
+  S  Load            id=/amdcpu/0/load/6 name=CPU Core #5 val=19.56
+  S  Load            id=/amdcpu/0/load/7 name=CPU Core #6 val=18.2
+  S  Load            id=/amdcpu/0/load/8 name=CPU Core #7 val=17.58
+  S  Load            id=/amdcpu/0/load/9 name=CPU Core #8 val=4.4
+  S  Load            id=/amdcpu/0/load/10 name=CPU Core #9 val=16.26
+  S  Load            id=/amdcpu/0/load/11 name=CPU Core #10 val=6.37
+  S  Load            id=/amdcpu/0/load/12 name=CPU Core #11 val=14.73
+  S  Load            id=/amdcpu/0/load/13 name=CPU Core #12 val=9.01
+  S  Load            id=/amdcpu/0/load/0 name=CPU Total val=13.51
+  S  Load            id=/amdcpu/0/load/1 name=CPU Core Max val=19.56
+  S  Power           id=/amdcpu/0/power/0 name=Package val=25.713736
+  S  Clock           id=/amdcpu/0/clock/1 name=Cores (Average) val=3693
+  S  Clock           id=/amdcpu/0/clock/2 name=Cores (Average Effective) val=566
+  S  Clock           id=/amdcpu/0/clock/3 name=Core #1 val=3693
+  S  Clock           id=/amdcpu/0/clock/4 name=Core #1 (Effective) val=578
+  S  Factor          id=/amdcpu/0/factor/0 name=Core #1 val=37
+  S  Power           id=/amdcpu/0/power/1 name=Core #1 (SMU) val=2.2329514
+  S  Voltage         id=/amdcpu/0/voltage/3 name=Core #1 VID val=1.2625
+  S  Clock           id=/amdcpu/0/clock/5 name=Core #2 val=3693
+  S  Clock           id=/amdcpu/0/clock/6 name=Core #2 (Effective) val=583
+  S  Factor          id=/amdcpu/0/factor/1 name=Core #2 val=37
+  S  Power           id=/amdcpu/0/power/2 name=Core #2 (SMU) val=2.3612604
+  S  Voltage         id=/amdcpu/0/voltage/4 name=Core #2 VID val=1.26875
+  S  Clock           id=/amdcpu/0/clock/7 name=Core #3 val=3693
+  S  Clock           id=/amdcpu/0/clock/8 name=Core #3 (Effective) val=775.5
+  S  Factor          id=/amdcpu/0/factor/2 name=Core #3 val=37
+  S  Power           id=/amdcpu/0/power/3 name=Core #3 (SMU) val=3.2352087
+  S  Voltage         id=/amdcpu/0/voltage/5 name=Core #3 VID val=1.26875
+  S  Clock           id=/amdcpu/0/clock/9 name=Core #4 val=3693
+  S  Clock           id=/amdcpu/0/clock/10 name=Core #4 (Effective) val=450.5
+  S  Factor          id=/amdcpu/0/factor/3 name=Core #4 val=37
+  S  Power           id=/amdcpu/0/power/4 name=Core #4 (SMU) val=1.9346058
+  S  Voltage         id=/amdcpu/0/voltage/6 name=Core #4 VID val=1.26875
+  S  Clock           id=/amdcpu/0/clock/11 name=Core #5 val=3693
+  S  Clock           id=/amdcpu/0/clock/12 name=Core #5 (Effective) val=518
+  S  Factor          id=/amdcpu/0/factor/4 name=Core #5 val=37
+  S  Power           id=/amdcpu/0/power/5 name=Core #5 (SMU) val=2.206281
+  S  Voltage         id=/amdcpu/0/voltage/7 name=Core #5 VID val=1.26875
+  S  Clock           id=/amdcpu/0/clock/13 name=Core #6 val=3693
+  S  Clock           id=/amdcpu/0/clock/14 name=Core #6 (Effective) val=492
+  S  Factor          id=/amdcpu/0/factor/5 name=Core #6 val=37
+  S  Power           id=/amdcpu/0/power/6 name=Core #6 (SMU) val=2.181689
+  S  Voltage         id=/amdcpu/0/voltage/8 name=Core #6 VID val=1.26875
+  S  Temperature     id=/amdcpu/0/temperature/2 name=Core (Tctl/Tdie) val=39.500008
+  S  Voltage         id=/amdcpu/0/voltage/0 name=Core (SVI2 TFN) val=1.25625
+  S  Clock           id=/amdcpu/0/clock/0 name=Bus Speed val=99.8192
+HW  Memory               id=/vram name=Virtual Memory
+  S  Data            id=/vram/data/2 name=Memory Used val=9.340314E+09
+  S  Data            id=/vram/data/3 name=Memory Available val=2.7092836E+10
+  S  Load            id=/vram/load/1 name=Memory val=25.636856
+HW  Memory               id=/ram name=Total Memory
+  S  Data            id=/ram/data/0 name=Memory Used val=7.9448187E+09
+  S  Data            id=/ram/data/1 name=Memory Available val=2.6340848E+10
+  S  Load            id=/ram/load/0 name=Memory val=23.172417
+HW  Memory               id=/memory/dimm/0 name=Kingston - KHX3200C16D4/8GX (#0)
+  S  Timing          id=/memory/dimm/0/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0.833
+  S  Timing          id=/memory/dimm/0/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1.6
+  S  Timing          id=/memory/dimm/0/timing/22 name=tAA (CAS Latency Time) val=13.75
+  S  Timing          id=/memory/dimm/0/timing/23 name=tRCD (RAS to CAS Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/0/timing/24 name=tRP (Row Precharge Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/0/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/0/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=45.75
+  S  Timing          id=/memory/dimm/0/timing/27 name=tRFC1 (Refresh Recovery Delay Time) val=350
+  S  Timing          id=/memory/dimm/0/timing/28 name=tRFC2 (Refresh Recovery Delay Time) val=260
+  S  Timing          id=/memory/dimm/0/timing/29 name=tRFC4 (Refresh Recovery Delay Time) val=160
+  S  Timing          id=/memory/dimm/0/timing/30 name=tFAW (Four Activate Window Time) val=21
+  S  Timing          id=/memory/dimm/0/timing/31 name=tRRD_S (Activate to Activate Delay Time) val=3.3
+  S  Timing          id=/memory/dimm/0/timing/32 name=tRRD_L (Activate to Activate Delay Time) val=4.9
+  S  Timing          id=/memory/dimm/0/timing/33 name=tCCD_L (CAS to CAS Delay Time) val=5
+  S  Timing          id=/memory/dimm/0/timing/34 name=tWR (Write Recovery Time) val=15
+  S  Timing          id=/memory/dimm/0/timing/35 name=tWTR_S (Write to Read Time) val=2.5
+  S  Timing          id=/memory/dimm/0/timing/36 name=tWTR_L (Write to Read Time) val=7.5
+  S  Data            id=/memory/dimm/0/data/50 name=Capacity val=8.589935E+09
+HW  Memory               id=/memory/dimm/1 name=Kingston - KHX3200C16D4/8GX (#1)
+  S  Timing          id=/memory/dimm/1/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0.833
+  S  Timing          id=/memory/dimm/1/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1.6
+  S  Timing          id=/memory/dimm/1/timing/22 name=tAA (CAS Latency Time) val=13.75
+  S  Timing          id=/memory/dimm/1/timing/23 name=tRCD (RAS to CAS Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/1/timing/24 name=tRP (Row Precharge Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/1/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/1/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=45.75
+  S  Timing          id=/memory/dimm/1/timing/27 name=tRFC1 (Refresh Recovery Delay Time) val=350
+  S  Timing          id=/memory/dimm/1/timing/28 name=tRFC2 (Refresh Recovery Delay Time) val=260
+  S  Timing          id=/memory/dimm/1/timing/29 name=tRFC4 (Refresh Recovery Delay Time) val=160
+  S  Timing          id=/memory/dimm/1/timing/30 name=tFAW (Four Activate Window Time) val=21
+  S  Timing          id=/memory/dimm/1/timing/31 name=tRRD_S (Activate to Activate Delay Time) val=3.3
+  S  Timing          id=/memory/dimm/1/timing/32 name=tRRD_L (Activate to Activate Delay Time) val=4.9
+  S  Timing          id=/memory/dimm/1/timing/33 name=tCCD_L (CAS to CAS Delay Time) val=5
+  S  Timing          id=/memory/dimm/1/timing/34 name=tWR (Write Recovery Time) val=15
+  S  Timing          id=/memory/dimm/1/timing/35 name=tWTR_S (Write to Read Time) val=2.5
+  S  Timing          id=/memory/dimm/1/timing/36 name=tWTR_L (Write to Read Time) val=7.5
+  S  Data            id=/memory/dimm/1/data/50 name=Capacity val=8.589935E+09
+HW  Memory               id=/memory/dimm/2 name=Kingston - KHX3200C16D4/8GX (#2)
+  S  Timing          id=/memory/dimm/2/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0.833
+  S  Timing          id=/memory/dimm/2/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1.6
+  S  Timing          id=/memory/dimm/2/timing/22 name=tAA (CAS Latency Time) val=13.75
+  S  Timing          id=/memory/dimm/2/timing/23 name=tRCD (RAS to CAS Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/2/timing/24 name=tRP (Row Precharge Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/2/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/2/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=45.75
+  S  Timing          id=/memory/dimm/2/timing/27 name=tRFC1 (Refresh Recovery Delay Time) val=350
+  S  Timing          id=/memory/dimm/2/timing/28 name=tRFC2 (Refresh Recovery Delay Time) val=260
+  S  Timing          id=/memory/dimm/2/timing/29 name=tRFC4 (Refresh Recovery Delay Time) val=160
+  S  Timing          id=/memory/dimm/2/timing/30 name=tFAW (Four Activate Window Time) val=21
+  S  Timing          id=/memory/dimm/2/timing/31 name=tRRD_S (Activate to Activate Delay Time) val=3.3
+  S  Timing          id=/memory/dimm/2/timing/32 name=tRRD_L (Activate to Activate Delay Time) val=4.9
+  S  Timing          id=/memory/dimm/2/timing/33 name=tCCD_L (CAS to CAS Delay Time) val=5
+  S  Timing          id=/memory/dimm/2/timing/34 name=tWR (Write Recovery Time) val=15
+  S  Timing          id=/memory/dimm/2/timing/35 name=tWTR_S (Write to Read Time) val=2.5
+  S  Timing          id=/memory/dimm/2/timing/36 name=tWTR_L (Write to Read Time) val=7.5
+  S  Data            id=/memory/dimm/2/data/50 name=Capacity val=8.589935E+09
+HW  Memory               id=/memory/dimm/3 name=Kingston - KHX3200C16D4/8GX (#3)
+  S  Timing          id=/memory/dimm/3/timing/20 name=tCKAVGmin (Minimum Cycle Time) val=0.833
+  S  Timing          id=/memory/dimm/3/timing/21 name=tCKAVGmax (Maximum Cycle Time) val=1.6
+  S  Timing          id=/memory/dimm/3/timing/22 name=tAA (CAS Latency Time) val=13.75
+  S  Timing          id=/memory/dimm/3/timing/23 name=tRCD (RAS to CAS Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/3/timing/24 name=tRP (Row Precharge Delay Time) val=13.75
+  S  Timing          id=/memory/dimm/3/timing/25 name=tRAS (Active to Precharge Delay Time) val=32
+  S  Timing          id=/memory/dimm/3/timing/26 name=tRC (Active to Active/Refresh Delay Time) val=45.75
+  S  Timing          id=/memory/dimm/3/timing/27 name=tRFC1 (Refresh Recovery Delay Time) val=350
+  S  Timing          id=/memory/dimm/3/timing/28 name=tRFC2 (Refresh Recovery Delay Time) val=260
+  S  Timing          id=/memory/dimm/3/timing/29 name=tRFC4 (Refresh Recovery Delay Time) val=160
+  S  Timing          id=/memory/dimm/3/timing/30 name=tFAW (Four Activate Window Time) val=21
+  S  Timing          id=/memory/dimm/3/timing/31 name=tRRD_S (Activate to Activate Delay Time) val=3.3
+  S  Timing          id=/memory/dimm/3/timing/32 name=tRRD_L (Activate to Activate Delay Time) val=4.9
+  S  Timing          id=/memory/dimm/3/timing/33 name=tCCD_L (CAS to CAS Delay Time) val=5
+  S  Timing          id=/memory/dimm/3/timing/34 name=tWR (Write Recovery Time) val=15
+  S  Timing          id=/memory/dimm/3/timing/35 name=tWTR_S (Write to Read Time) val=2.5
+  S  Timing          id=/memory/dimm/3/timing/36 name=tWTR_L (Write to Read Time) val=7.5
+  S  Data            id=/memory/dimm/3/data/50 name=Capacity val=8.589935E+09
+HW  GpuNvidia            id=/gpu-nvidia/0 name=NVIDIA GeForce RTX 3060
+  S  Temperature     id=/gpu-nvidia/0/temperature/0 name=GPU Core val=29
+  S  Clock           id=/gpu-nvidia/0/clock/0 name=GPU Core val=210
+  S  Clock           id=/gpu-nvidia/0/clock/4 name=GPU Memory val=405
+  S  Fan             id=/gpu-nvidia/0/fan/1 name=GPU Fan val=1689
+  S  Control         id=/gpu-nvidia/0/control/1 name=GPU Fan val=40
+  S  Load            id=/gpu-nvidia/0/load/0 name=GPU Core val=0
+  S  Load            id=/gpu-nvidia/0/load/1 name=GPU Memory Controller val=2
+  S  Load            id=/gpu-nvidia/0/load/2 name=GPU Video Engine val=0
+  S  Load            id=/gpu-nvidia/0/load/3 name=GPU Bus val=0
+  S  Load            id=/gpu-nvidia/0/load/5 name=GPU Power val=9.056
+  S  Load            id=/gpu-nvidia/0/load/6 name=GPU Board Power val=9.233
+  S  Voltage         id=/gpu-nvidia/0/voltage/0 name=GPU Core Voltage val=0.6625
+  S  Data            id=/gpu-nvidia/0/data/3 name=D3D Dedicated Memory Used val=855658500
+  S  Data            id=/gpu-nvidia/0/data/4 name=D3D Shared Memory Used val=132739070
+  S  Load            id=/gpu-nvidia/0/load/7 name=D3D 3D val=2.9482746
+  S  Load            id=/gpu-nvidia/0/load/8 name=D3D Compute_0 val=0
+  S  Load            id=/gpu-nvidia/0/load/18 name=D3D Overlay val=0
+  S  Load            id=/gpu-nvidia/0/load/20 name=D3D Video Decode val=0
+  S  Load            id=/gpu-nvidia/0/load/10 name=D3D Copy val=0
+  S  Load            id=/gpu-nvidia/0/load/11 name=D3D Copy val=0.035331953
+  S  Load            id=/gpu-nvidia/0/load/19 name=D3D Security val=0
+  S  Load            id=/gpu-nvidia/0/load/21 name=D3D Video Encode val=0
+  S  Load            id=/gpu-nvidia/0/load/22 name=D3D Video Processing val=0
+  S  Load            id=/gpu-nvidia/0/load/17 name=D3D Graphics_1 val=0.6340792
+  S  Load            id=/gpu-nvidia/0/load/16 name=D3D Cuda val=0
+  S  Load            id=/gpu-nvidia/0/load/9 name=D3D Compute_1 val=0
+  S  Load            id=/gpu-nvidia/0/load/23 name=D3D VR val=0
+  S  Load            id=/gpu-nvidia/0/load/12 name=D3D Copy val=0.59532106
+  S  Load            id=/gpu-nvidia/0/load/13 name=D3D Copy val=0
+  S  Load            id=/gpu-nvidia/0/load/14 name=D3D Copy val=0
+  S  Load            id=/gpu-nvidia/0/load/15 name=D3D Copy val=0.027003415
+  S  Temperature     id=/gpu-nvidia/0/temperature/2 name=GPU Hot Spot val=39.15625
+  S  Data            id=/gpu-nvidia/0/data/2 name=GPU Memory Total val=1.2884902E+10
+  S  Data            id=/gpu-nvidia/0/data/0 name=GPU Memory Free val=1.1855131E+10
+  S  Data            id=/gpu-nvidia/0/data/1 name=GPU Memory Used val=1.02977126E+09
+  S  Load            id=/gpu-nvidia/0/load/4 name=GPU Memory val=7.992077
+  S  Power           id=/gpu-nvidia/0/power/0 name=GPU Package val=16.603
+  S  Throughput      id=/gpu-nvidia/0/throughput/0 name=GPU PCIe Rx val=0
+  S  Throughput      id=/gpu-nvidia/0/throughput/1 name=GPU PCIe Tx val=0
+HW  Storage              id=/ahci/2 name=Hitachi HTS545032B9SA02
+  S  Temperature     id=/ahci/2/temperature/0 name=Temperature val=26
+  S  Factor          id=/ahci/2/factor/23 name=Power On Count val=8514
+  S  Factor          id=/ahci/2/factor/24 name=Power On Hours val=10681
+  S  Load            id=/ahci/2/load/30 name=Used Space val=13.251022
+  S  Data            id=/ahci/2/data/31 name=Free Space val=2.7766E+11
+  S  Data            id=/ahci/2/data/32 name=Total Space val=3.2007294E+11
+  S  Load            id=/ahci/2/load/51 name=Read Activity val=1.4829034E-08
+  S  Load            id=/ahci/2/load/52 name=Write Activity val=8.2196614E-08
+  S  Load            id=/ahci/2/load/53 name=Total Activity val=99.99968
+  S  Throughput      id=/ahci/2/throughput/54 name=Read Rate val=
+  S  Throughput      id=/ahci/2/throughput/55 name=Write Rate val=
+HW  Storage              id=/ahci/0 name=Samsung SSD 850 EVO 250GB
+  S  Temperature     id=/ahci/0/temperature/0 name=Temperature val=32
+  S  Level           id=/ahci/0/level/20 name=Life val=91
+  S  Data            id=/ahci/0/data/22 name=Data Written val=3.754239E+13
+  S  Factor          id=/ahci/0/factor/23 name=Power On Count val=5044
+  S  Factor          id=/ahci/0/factor/24 name=Power On Hours val=9160
+  S  Load            id=/ahci/0/load/30 name=Used Space val=50.515564
+  S  Data            id=/ahci/0/data/31 name=Free Space val=1.2373837E+11
+  S  Data            id=/ahci/0/data/32 name=Total Space val=2.5005511E+11
+  S  Load            id=/ahci/0/load/51 name=Read Activity val=1.0965846E-05
+  S  Load            id=/ahci/0/load/52 name=Write Activity val=2.1921069E-06
+  S  Load            id=/ahci/0/load/53 name=Total Activity val=99.99968
+  S  Throughput      id=/ahci/0/throughput/54 name=Read Rate val=
+  S  Throughput      id=/ahci/0/throughput/55 name=Write Rate val=
+HW  Storage              id=/ahci/1 name=SAMSUNG HD501LJ
+  S  Data            id=/ahci/1/data/32 name=Total Space val=5.0010364E+11
+  S  Load            id=/ahci/1/load/51 name=Read Activity val=1.3885685E-05
+  S  Load            id=/ahci/1/load/52 name=Write Activity val=1.2874399E-06
+  S  Load            id=/ahci/1/load/53 name=Total Activity val=99.99968
+  S  Throughput      id=/ahci/1/throughput/54 name=Read Rate val=
+  S  Throughput      id=/ahci/1/throughput/55 name=Write Rate val=
+HW  Storage              id=/nvme/3 name=SAMSUNG MZVLW256HEHP-000H1
+  S  Temperature     id=/nvme/3/temperature/0 name=Temperature val=28
+  S  Temperature     id=/nvme/3/temperature/1 name=Temperature #1 val=27.850006
+  S  Temperature     id=/nvme/3/temperature/2 name=Temperature #2 val=36.850006
+  S  Temperature     id=/nvme/3/temperature/10 name=Warning Temperature val=68
+  S  Temperature     id=/nvme/3/temperature/11 name=Critical Temperature val=71
+  S  Level           id=/nvme/3/level/20 name=Life val=87
+  S  Data            id=/nvme/3/data/21 name=Data Read val=5.0530823E+13
+  S  Data            id=/nvme/3/data/22 name=Data Written val=2.6471505E+13
+  S  Factor          id=/nvme/3/factor/23 name=Power On Count val=4922
+  S  Factor          id=/nvme/3/factor/24 name=Power On Hours val=6175
+  S  Level           id=/nvme/3/level/25 name=Available Spare val=100
+  S  Level           id=/nvme/3/level/26 name=Available Spare Threshold val=5
+  S  Level           id=/nvme/3/level/27 name=Percentage Used val=87
+  S  Load            id=/nvme/3/load/30 name=Used Space val=91.09735
+  S  Data            id=/nvme/3/data/31 name=Free Space val=2.279617E+10
+  S  Data            id=/nvme/3/data/32 name=Total Space val=2.5606052E+11
+  S  Load            id=/nvme/3/load/51 name=Read Activity val=1.0441491E-06
+  S  Load            id=/nvme/3/load/52 name=Write Activity val=1.887141E-07
+  S  Load            id=/nvme/3/load/53 name=Total Activity val=99.99968
+  S  Throughput      id=/nvme/3/throughput/54 name=Read Rate val=
+  S  Throughput      id=/nvme/3/throughput/55 name=Write Rate val=

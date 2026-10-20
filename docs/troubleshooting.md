@@ -60,6 +60,12 @@ Windows Defender could flag — update RIGStats if you see that). A PawnIO you
 already had from another tool (FanControl, LibreHardwareMonitor, …) is kept,
 and uninstalling RIGStats leaves PawnIO in place.
 
+PawnIO installs only on **Windows 10 version 1809 (build 17763) or newer**.
+On an older Windows the CPU values stay empty, and **Status** says so
+("CPU temperature and power need a newer Windows"). Everything else works.
+Update Windows to read the CPU too. To see your version, press **Win + R** and
+run `winver` (#507).
+
 **What to do:**
 
 1. Install RIGStats again from [rigstats.app](https://rigstats.app/#download);

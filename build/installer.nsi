@@ -169,6 +169,14 @@ Section "RIGStats" SecMain
   Pop $R2
   Pop $R3
   DetailPrint "PawnIO service query: exit $R2"
+  ; PawnIO installs only on Windows 10 1809 (build 17763) or newer; below
+  ; that its setup exits 50 and the CPU values stay empty. The app's Status
+  ; says so (sensor service, PawnIoProblems, #507); here a line for the log.
+  ReadRegStr $R4 HKLM "SOFTWARE\Microsoft\Windows NT\CurrentVersion" "CurrentBuildNumber"
+  ${If} $R2 != 0
+  ${AndIf} $R4 < 17763
+    DetailPrint "PawnIO needs Windows 10 1809 (build 17763) or newer; this is build $R4. CPU temperature and power stay empty."
+  ${EndIf}
   SetOutPath "$INSTDIR"
 
   ; ── Crash dumps for the sensor service (#220) ──────────────────────────────
@@ -243,6 +251,7 @@ Section "RIGStats" SecMain
   FileWrite $9 "pawnio_output=$R1$\r$\n"
   FileWrite $9 "pawnio_service_query_exit=$R2$\r$\n"
   FileWrite $9 "pawnio_service_query=$R3$\r$\n"
+  FileWrite $9 "windows_build=$R4$\r$\n"
   FileWrite $9 "service_create_exit=$4$\r$\n"
   FileWrite $9 "service_start_exit=$6$\r$\n"
   FileClose $9

@@ -826,7 +826,37 @@ Results:
   How it was found: CPU per thread with `GetThreadDescription` and the thread's
   start address (`NtQueryInformationThread`, class 9), then `cdbX64 -pv -p
   <pid> -c "!runaway 1; ~*kn 25; qd"` from WinDbg.
-- **Steady state.** About 2.5 % against the 1 % target. Still open in #463.
+- **Steady state.** About 2.5 % against the 1 % target. This is the
+  baseline; the changes below brought it to ~0.95 %.
+
+**Where the steady-state CPU went, and what changed it (2026-10-20)**
+
+Found with CPU per thread, then `QueryThreadCycleTime` laps around each
+section of `poll_loop`, both from temporary code that was then removed.
+
+| Change | App CPU (% of one core) | Evidence |
+| --- | --- | --- |
+| Baseline (1.50.0 + #505) | ~2.4–2.7 | one rayon thread per core took ~1.3 % together |
+| #517: sysinfo without `multithread` (no rayon pool) | 1.10–1.62 | A/B 2.41 → 1.22; threads 53 → 38; a refresh takes 7–8 ms on one thread |
+| #518: `process_list.rs`, one `NtQuerySystemInformation` call | **~0.95** | the process part went from ~27 M to ~13 M cycles a tick; two rounds gave 0.95 and 0.96; ~140 fewer handles |
+
+Remaining split of `poll_loop` before #518, which cost ~0.75 % in total:
+
+| Section | Share | Note |
+| --- | --- | --- |
+| process refresh | ~80 % | halved by #518 |
+| GPU Apps PDH (`gpu_process`) | ~9 % | |
+| microphone mute (`microphone::current`, COM) | ~5.5 % | |
+| everything else | ~6 % | |
+
+What is left in the process part is the call itself, ~90 % of it; sysinfo
+made the same call. Going lower means reading the list less often than once a
+second. For example, when Processes and GPU Apps are hidden, disk throughput
+could come from Windows' disk counters instead; that changes what the numbers
+mean. Not done.
+
+Handle and thread counts were flat over each 5–10 min run. An hour-long run
+is still to do.
 
 ---
 

@@ -83,13 +83,18 @@ fn parse_instance(name: &str) -> Option<ParsedInstance> {
     let high = parse_hex_u32(high_s)? as i32;
     let low = parse_hex_u32(low_s)?;
     let engine_raw = rest.split_once("_engtype_").map(|(_, t)| t)?;
-    if engine_raw.is_empty() {
-        return None;
-    }
+    // An empty engine type is a real shape: an old Intel driver (UHD 630,
+    // Windows 10 1709) leaves two of its engines unnamed (#513). Counted
+    // under a neutral name, so their load still shows.
+    let engine = if engine_raw.is_empty() {
+        "Other".to_string()
+    } else {
+        compact_engine(engine_raw)
+    };
     Some(ParsedInstance {
         pid,
         luid: (high, low),
-        engine: compact_engine(engine_raw),
+        engine,
     })
 }
 
@@ -135,7 +140,7 @@ fn compact_engine(raw: &str) -> String {
 
 /// Collapse raw `(instance-name, value)` samples into one row per
 /// `(pid, adapter)`, taking the max utilisation across engines. `proc_names`
-/// maps PID -> process name (from `sysinfo`); `luid_map` maps LUID -> adapter
+/// maps PID -> process name (from `process_list`); `luid_map` maps LUID -> adapter
 /// name (from DXGI). Rows are sorted by utilisation desc; each row's `engines`
 /// is sorted by *that engine's own* utilisation desc (not alphabetically —
 /// truncating an alphabetical list in the panel systematically hid "Video
@@ -634,6 +639,17 @@ mod tests {
     fn negative_high_part_luid_round_trips() {
         let p = parse_instance("pid_1_luid_0xFFFFFFFF_0x0000ABCD_phys_0_eng_0_engtype_3D").unwrap();
         assert_eq!(p.luid, (-1, 0xABCD));
+    }
+
+    #[test]
+    fn an_empty_engine_type_counts_as_other() {
+        // #513: Intel UHD 630, driver 2018, Windows 10 1709.
+        let p =
+            parse_instance("pid_11636_luid_0x00000000_0x00008FEB_phys_0_eng_5_engtype_").unwrap();
+        assert_eq!(
+            (p.pid, p.luid, p.engine.as_str()),
+            (11636, (0, 0x8FEB), "Other")
+        );
     }
 
     #[test]

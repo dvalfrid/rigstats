@@ -776,6 +776,22 @@ pub fn detect_model_name() -> Option<String> {
 
 // --- RAM detection ---------------------------------------------------------
 
+/// A DIMM's data rate in MT/s from `Win32_PhysicalMemory`. The configured
+/// speed wins (it is what the memory runs at), except when it is half the
+/// rated `Speed`: before SMBIOS 3.1 the configured speed was given in MHz,
+/// half the data rate, and some boards still report it so (#506 — a PRIME
+/// B450M-A: configured 1200, speed 2400, really 2400 MT/s). A real
+/// down-clock to exactly half the rated speed would be read as full speed;
+/// DDR4's lowest JEDEC speed is 1600, so that would take a 3200+ kit run at
+/// 1600 MT/s.
+fn ram_data_rate(configured: Option<u32>, speed: Option<u32>) -> Option<u32> {
+    match (configured.filter(|c| *c > 0), speed.filter(|s| *s > 0)) {
+        (Some(c), Some(s)) if c.saturating_mul(2).abs_diff(s) <= s / 50 => Some(s),
+        (Some(c), _) => Some(c),
+        (None, s) => s,
+    }
+}
+
 #[cfg(windows)]
 fn map_memory_type(code: u16) -> Option<&'static str> {
     // Codes apply to both Win32_PhysicalMemory.MemoryType and .SMBIOSMemoryType.
@@ -807,7 +823,7 @@ pub fn detect_ram_spec() -> String {
       &[
         "-NoProfile",
         "-Command",
-        "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $dimms = $m.Count; $speed = ($m | ForEach-Object { if($_.ConfiguredClockSpeed){ $_.ConfiguredClockSpeed } else { $_.Speed } } | Measure-Object -Maximum).Maximum; $typeCode = ($m | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); if(-not $typeCode){ $typeCode = ($m | Select-Object -First 1 -ExpandProperty MemoryType) }; $type = switch([int]$typeCode){ 18 {'DDR'} 20 {'DDR2'} 24 {'DDR3'} 26 {'DDR4'} 27 {'LPDDR'} 28 {'LPDDR2'} 29 {'LPDDR3'} 30 {'LPDDR4'} 34 {'DDR5'} 35 {'LPDDR5'} 36 {'LPDDR5X'} default {''} }; $r = if($type -and $speed){ \"$type $speed MT/s ($dimms DIMMs)\" } elseif($type){ \"$type ($dimms DIMMs)\" } elseif($speed){ \"$speed MT/s ($dimms DIMMs)\" } else { \"RAM ($dimms DIMMs)\" }; $r",
+        "$m = Get-CimInstance Win32_PhysicalMemory; if(-not $m){ return }; $dimms = $m.Count; $speed = ($m | ForEach-Object { $c = $_.ConfiguredClockSpeed; $s = $_.Speed; if($c -and $s -and [math]::Abs($c * 2 - $s) -le $s / 50){ $s } elseif($c){ $c } else { $s } } | Measure-Object -Maximum).Maximum; $typeCode = ($m | Select-Object -First 1 -ExpandProperty SMBIOSMemoryType); if(-not $typeCode){ $typeCode = ($m | Select-Object -First 1 -ExpandProperty MemoryType) }; $type = switch([int]$typeCode){ 18 {'DDR'} 20 {'DDR2'} 24 {'DDR3'} 26 {'DDR4'} 27 {'LPDDR'} 28 {'LPDDR2'} 29 {'LPDDR3'} 30 {'LPDDR4'} 34 {'DDR5'} 35 {'LPDDR5'} 36 {'LPDDR5X'} default {''} }; $r = if($type -and $speed){ \"$type $speed MT/s ($dimms DIMMs)\" } elseif($type){ \"$type ($dimms DIMMs)\" } elseif($speed){ \"$speed MT/s ($dimms DIMMs)\" } else { \"RAM ($dimms DIMMs)\" }; $r",
       ],
     )
     .ok()?;
@@ -847,7 +863,7 @@ pub fn detect_ram_spec() -> String {
         let dimms = sticks.len();
         let max_speed = sticks
             .iter()
-            .filter_map(|s| s.configured_clock_speed.or(s.speed))
+            .filter_map(|s| ram_data_rate(s.configured_clock_speed, s.speed))
             .max()
             .unwrap_or(0);
         // SMBIOSMemoryType returns 0 on many DDR5 boards (a known BIOS quirk).
@@ -1648,7 +1664,7 @@ fn try_disk_type_map_via_shell() -> Option<std::collections::HashMap<String, Dis
 mod tests {
     use super::{
         classify_system_brand, clean_gpu_names, driver_age_days, first_ipv4_gateway,
-        gpu_name_score, map_memory_type, pick_best_gpu_name,
+        gpu_name_score, map_memory_type, pick_best_gpu_name, ram_data_rate,
     };
 
     // map_memory_type
@@ -1671,6 +1687,35 @@ mod tests {
         assert_eq!(driver_age_days("not-a-date"), None);
         assert_eq!(driver_age_days(""), None);
         assert_eq!(driver_age_days("06/16/2026"), None);
+    }
+
+    #[test]
+    fn ram_data_rate_doubles_a_configured_speed_given_in_mhz() {
+        // #506: a PRIME B450M-A, DDR4-2400 at JEDEC speed.
+        assert_eq!(ram_data_rate(Some(1200), Some(2400)), Some(2400));
+        // Rounded MHz values: 1333 for 2666/2667, 1600 for 3200.
+        assert_eq!(ram_data_rate(Some(1333), Some(2667)), Some(2667));
+        assert_eq!(ram_data_rate(Some(1600), Some(3200)), Some(3200));
+    }
+
+    #[test]
+    fn ram_data_rate_keeps_a_configured_speed_in_mt_s() {
+        // A Razer Blade 2018 and a typical DDR5 board.
+        assert_eq!(ram_data_rate(Some(2667), Some(2667)), Some(2667));
+        assert_eq!(ram_data_rate(Some(6000), Some(6000)), Some(6000));
+        // XMP above the rated (JEDEC) speed.
+        assert_eq!(ram_data_rate(Some(3600), Some(2133)), Some(3600));
+        // A real down-clock: 4800 on 6000-rated sticks.
+        assert_eq!(ram_data_rate(Some(4800), Some(6000)), Some(4800));
+    }
+
+    #[test]
+    fn ram_data_rate_falls_back_when_a_value_is_missing_or_zero() {
+        assert_eq!(ram_data_rate(None, Some(3200)), Some(3200));
+        assert_eq!(ram_data_rate(Some(0), Some(3200)), Some(3200));
+        assert_eq!(ram_data_rate(Some(3200), None), Some(3200));
+        assert_eq!(ram_data_rate(Some(1200), Some(0)), Some(1200));
+        assert_eq!(ram_data_rate(None, None), None);
     }
 
     #[test]

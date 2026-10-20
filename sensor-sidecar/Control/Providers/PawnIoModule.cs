@@ -55,6 +55,15 @@ public sealed class PawnIoModule : IPawnIoModule
         return module;
     }
 
+    /// Whether the driver can be opened — installed and running. Opens and
+    /// closes a handle; loads nothing (#507).
+    public static bool DriverAvailable()
+    {
+        using var device = CreateFileW(@"\\.\PawnIO", GenericRead | GenericWrite, FileShareReadWrite,
+            IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);
+        return !device.IsInvalid;
+    }
+
     public long[] Execute(string fn, long[] input, int outCount)
     {
         var inBuf = new byte[FnNameLength + input.Length * sizeof(long)];

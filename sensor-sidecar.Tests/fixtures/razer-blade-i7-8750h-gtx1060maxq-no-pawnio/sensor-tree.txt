@@ -1,0 +1,121 @@
+# sensor-tree — 2026-10-19 19:59:16Z
+# data-unit: bytes
+HW  Motherboard          id=/motherboard name=C1_MB
+HW  Cpu                  id=/intelcpu/0 name=Intel Core i7-8750H
+  S  Load            id=/intelcpu/0/load/2 name=CPU Core #1 Thread #1 val=76.81
+  S  Load            id=/intelcpu/0/load/3 name=CPU Core #1 Thread #2 val=75.36
+  S  Load            id=/intelcpu/0/load/4 name=CPU Core #2 Thread #1 val=78.26
+  S  Load            id=/intelcpu/0/load/5 name=CPU Core #2 Thread #2 val=69.57
+  S  Load            id=/intelcpu/0/load/6 name=CPU Core #3 Thread #1 val=81.16
+  S  Load            id=/intelcpu/0/load/7 name=CPU Core #3 Thread #2 val=66.67
+  S  Load            id=/intelcpu/0/load/8 name=CPU Core #4 Thread #1 val=73.91
+  S  Load            id=/intelcpu/0/load/9 name=CPU Core #4 Thread #2 val=76.81
+  S  Load            id=/intelcpu/0/load/10 name=CPU Core #5 Thread #1 val=71.01
+  S  Load            id=/intelcpu/0/load/11 name=CPU Core #5 Thread #2 val=69.57
+  S  Load            id=/intelcpu/0/load/12 name=CPU Core #6 Thread #1 val=72.46
+  S  Load            id=/intelcpu/0/load/13 name=CPU Core #6 Thread #2 val=73.91
+  S  Load            id=/intelcpu/0/load/0 name=CPU Total val=73.79
+  S  Load            id=/intelcpu/0/load/1 name=CPU Core Max val=81.16
+  S  Temperature     id=/intelcpu/0/temperature/0 name=Core Max val=
+  S  Temperature     id=/intelcpu/0/temperature/1 name=Core Average val=
+  S  Temperature     id=/intelcpu/0/temperature/2 name=CPU Core #1 val=
+  S  Temperature     id=/intelcpu/0/temperature/3 name=CPU Core #2 val=
+  S  Temperature     id=/intelcpu/0/temperature/4 name=CPU Core #3 val=
+  S  Temperature     id=/intelcpu/0/temperature/5 name=CPU Core #4 val=
+  S  Temperature     id=/intelcpu/0/temperature/6 name=CPU Core #5 val=
+  S  Temperature     id=/intelcpu/0/temperature/7 name=CPU Core #6 val=
+  S  Temperature     id=/intelcpu/0/temperature/8 name=CPU Package val=
+  S  Temperature     id=/intelcpu/0/temperature/9 name=CPU Core #1 Distance to TjMax val=
+  S  Temperature     id=/intelcpu/0/temperature/10 name=CPU Core #2 Distance to TjMax val=
+  S  Temperature     id=/intelcpu/0/temperature/11 name=CPU Core #3 Distance to TjMax val=
+  S  Temperature     id=/intelcpu/0/temperature/12 name=CPU Core #4 Distance to TjMax val=
+  S  Temperature     id=/intelcpu/0/temperature/13 name=CPU Core #5 Distance to TjMax val=
+  S  Temperature     id=/intelcpu/0/temperature/14 name=CPU Core #6 Distance to TjMax val=
+  S  Clock           id=/intelcpu/0/clock/1 name=CPU Core #1 val=
+  S  Clock           id=/intelcpu/0/clock/2 name=CPU Core #2 val=
+  S  Clock           id=/intelcpu/0/clock/3 name=CPU Core #3 val=
+  S  Clock           id=/intelcpu/0/clock/4 name=CPU Core #4 val=
+  S  Clock           id=/intelcpu/0/clock/5 name=CPU Core #5 val=
+  S  Clock           id=/intelcpu/0/clock/6 name=CPU Core #6 val=
+  S  Power           id=/intelcpu/0/power/0 name=CPU Package val=0
+  S  Power           id=/intelcpu/0/power/1 name=CPU Cores val=0
+  S  Power           id=/intelcpu/0/power/3 name=CPU Memory val=0
+  S  Power           id=/intelcpu/0/power/4 name=CPU Platform val=0
+HW  Memory               id=/vram name=Virtual Memory
+  S  Data            id=/vram/data/2 name=Memory Used val=2.0270072E+10
+  S  Data            id=/vram/data/3 name=Memory Available val=3.5189187E+09
+  S  Load            id=/vram/load/1 name=Memory val=85.20779
+HW  Memory               id=/ram name=Total Memory
+  S  Data            id=/ram/data/0 name=Memory Used val=1.2877492E+10
+  S  Data            id=/ram/data/1 name=Memory Available val=4.2006118E+09
+  S  Load            id=/ram/load/0 name=Memory val=75.40353
+HW  GpuNvidia            id=/gpu-nvidia/0 name=NVIDIA GeForce GTX 1060 with Max-Q Design
+  S  Temperature     id=/gpu-nvidia/0/temperature/0 name=GPU Core val=91
+  S  Clock           id=/gpu-nvidia/0/clock/0 name=GPU Core val=1670.5
+  S  Clock           id=/gpu-nvidia/0/clock/4 name=GPU Memory val=4006.8
+  S  Load            id=/gpu-nvidia/0/load/0 name=GPU Core val=60
+  S  Load            id=/gpu-nvidia/0/load/1 name=GPU Memory Controller val=18
+  S  Load            id=/gpu-nvidia/0/load/2 name=GPU Video Engine val=0
+  S  Load            id=/gpu-nvidia/0/load/3 name=GPU Bus val=8
+  S  Voltage         id=/gpu-nvidia/0/voltage/0 name=GPU Core Voltage val=0.88125
+  S  Data            id=/gpu-nvidia/0/data/3 name=D3D Dedicated Memory Used val=2.9137224E+09
+  S  Data            id=/gpu-nvidia/0/data/4 name=D3D Shared Memory Used val=328216580
+  S  Load            id=/gpu-nvidia/0/load/5 name=D3D 3D val=87.50359
+  S  Load            id=/gpu-nvidia/0/load/6 name=D3D Compute_0 val=0
+  S  Load            id=/gpu-nvidia/0/load/14 name=D3D Overlay val=0
+  S  Load            id=/gpu-nvidia/0/load/16 name=D3D Video Decode val=0
+  S  Load            id=/gpu-nvidia/0/load/15 name=D3D Security val=0
+  S  Load            id=/gpu-nvidia/0/load/8 name=D3D Copy val=0.81129825
+  S  Load            id=/gpu-nvidia/0/load/9 name=D3D Copy val=0.0902147
+  S  Load            id=/gpu-nvidia/0/load/17 name=D3D Video Encode val=0
+  S  Load            id=/gpu-nvidia/0/load/13 name=D3D Graphics_1 val=0
+  S  Load            id=/gpu-nvidia/0/load/7 name=D3D Compute_1 val=0
+  S  Load            id=/gpu-nvidia/0/load/18 name=D3D VR val=0
+  S  Load            id=/gpu-nvidia/0/load/10 name=D3D Copy val=0
+  S  Load            id=/gpu-nvidia/0/load/11 name=D3D Copy val=0
+  S  Load            id=/gpu-nvidia/0/load/12 name=D3D Copy val=0.09429416
+  S  Temperature     id=/gpu-nvidia/0/temperature/2 name=GPU Hot Spot val=97.40625
+  S  Data            id=/gpu-nvidia/0/data/2 name=GPU Memory Total val=6.442451E+09
+  S  Data            id=/gpu-nvidia/0/data/0 name=GPU Memory Free val=3.4486108E+09
+  S  Data            id=/gpu-nvidia/0/data/1 name=GPU Memory Used val=2.99384E+09
+  S  Load            id=/gpu-nvidia/0/load/4 name=GPU Memory val=46.470512
+  S  Power           id=/gpu-nvidia/0/power/0 name=GPU Package val=66.654
+  S  Throughput      id=/gpu-nvidia/0/throughput/0 name=GPU PCIe Rx val=2.103296E+09
+  S  Throughput      id=/gpu-nvidia/0/throughput/1 name=GPU PCIe Tx val=239616000
+HW  GpuIntel             id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D name=Intel(R) UHD Graphics 630
+  S  Power           id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/power/0 name=GPU Power val=0
+  S  Data            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/data/2 name=D3D Shared Memory Total val=8.539052E+09
+  S  Data            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/data/1 name=D3D Shared Memory Free val=
+  S  Data            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/data/0 name=D3D Shared Memory Used val=425009150
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/2 name=D3D 3D val=15.8655205
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/6 name=D3D Video Decode val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/3 name=D3D Copy val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/8 name=D3D Video Processing val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/7 name=D3D Video Decode val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/0 name=D3D  val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/1 name=D3D  val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/5 name=D3D Overlay val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/4 name=D3D GDI Render val=0
+  S  Load            id=/gpu-intel-integrated/%5C%5C%3F%5CPCI%23VEN_8086%26DEV_3E9B%26SUBSYS_20001A58%26REV_00%233%2611583659%260%2610%23%7B1ca05180-a699-450a-9a0c-de4fbe3ddd89%7D/load/9 name=D3D Video Processing val=0
+HW  Storage              id=/nvme/0 name=SAMSUNG MZVLB512HAJQ-00000
+  S  Temperature     id=/nvme/0/temperature/0 name=Temperature val=68
+  S  Temperature     id=/nvme/0/temperature/1 name=Temperature #1 val=67.850006
+  S  Temperature     id=/nvme/0/temperature/2 name=Temperature #2 val=85.850006
+  S  Temperature     id=/nvme/0/temperature/10 name=Warning Temperature val=81
+  S  Temperature     id=/nvme/0/temperature/11 name=Critical Temperature val=82
+  S  Level           id=/nvme/0/level/20 name=Life val=93
+  S  Data            id=/nvme/0/data/21 name=Data Read val=4.599742E+13
+  S  Data            id=/nvme/0/data/22 name=Data Written val=4.3111967E+13
+  S  Factor          id=/nvme/0/factor/23 name=Power On Count val=3006
+  S  Factor          id=/nvme/0/factor/24 name=Power On Hours val=8532
+  S  Level           id=/nvme/0/level/25 name=Available Spare val=100
+  S  Level           id=/nvme/0/level/26 name=Available Spare Threshold val=10
+  S  Level           id=/nvme/0/level/27 name=Percentage Used val=93
+  S  Load            id=/nvme/0/load/30 name=Used Space val=31.62983
+  S  Data            id=/nvme/0/data/31 name=Free Space val=3.501306E+11
+  S  Data            id=/nvme/0/data/32 name=Total Space val=5.121102E+11
+  S  Load            id=/nvme/0/load/51 name=Read Activity val=1.4805145E-05
+  S  Load            id=/nvme/0/load/52 name=Write Activity val=7.971747E-06
+  S  Load            id=/nvme/0/load/53 name=Total Activity val=99.999146
+  S  Throughput      id=/nvme/0/throughput/54 name=Read Rate val=
+  S  Throughput      id=/nvme/0/throughput/55 name=Write Rate val=
