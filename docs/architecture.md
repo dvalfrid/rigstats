@@ -855,8 +855,17 @@ second. For example, when Processes and GPU Apps are hidden, disk throughput
 could come from Windows' disk counters instead; that changes what the numbers
 mean. Not done.
 
-Handle and thread counts were flat over each 5–10 min run. An hour-long run
-is still to do.
+**An hour with #517 + #518 (2026-10-20, verified).** 120 samples, 30 s apart,
+with the PC in use for builds and tests meanwhile:
+- handles 942 → 939 (926–956)
+- threads 35–39
+- private bytes 352.8 → 353.8 MB
+- GPU memory flat at 214 MB
+- CPU 1.12 % of one core on average, noisier than the quiet runs because the
+  PC was busy
+
+The working set dropped to 84 MB at one point and came back: Windows trimming
+it, not the app. No drift.
 
 ---
 
