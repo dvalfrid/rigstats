@@ -319,6 +319,17 @@ impl BatteryPoll {
 
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
+/// Which pings this tick sends (#468): the gateway's while the Network panel
+/// shows, the overlay shows its PING, or a recording is running (the CSV
+/// has it); `1.1.1.1` only for the Network panel. A monitor shouldn't go out
+/// on the network for a value nobody sees. In light mode (the wallpaper host
+/// draws the dashboard) the Network panel is the host's, not this loop's.
+fn pings_wanted(s: &settings::Settings, light: bool, recording: bool) -> (bool, bool) {
+    let net_shown = !light && s.visible_panels.iter().any(|p| p == "net");
+    let overlay = s.overlay_enabled && s.overlay_metrics.iter().any(|m| m == "net_ping");
+    (net_shown || overlay || recording, net_shown)
+}
+
 pub async fn poll_loop(
     tx: mpsc::SyncSender<PollStats>,
     dir: PathBuf,
@@ -418,6 +429,8 @@ pub async fn poll_loop(
     let mut battery_here_logged: Option<bool> = None;
     let mut last_prune_day: Option<u64> = None;
     let mut active_session_index = logging::ActiveSession::default();
+    // Whether the last tick recorded — the CSV has a ping column.
+    let mut recording = false;
     let mut first_tick_logged = false;
     let mut process_reader = process_list::ProcessReader::default();
     let mut process_usage = process_list::UsageTracker::default();
@@ -556,7 +569,10 @@ pub async fn poll_loop(
             }
         }
 
-        let ping_ms = {
+        let (want_ping, want_ping_wan) = pings_wanted(&settings_arc.lock_safe(), light, recording);
+        let ping_ms = if !want_ping {
+            None
+        } else {
             let stale = last_ping
                 .as_ref()
                 .map(|(t, _)| t.elapsed().as_secs_f64() >= 5.0)
@@ -573,7 +589,9 @@ pub async fn poll_loop(
                 last_ping.as_ref().and_then(|(_, v)| *v)
             }
         };
-        let ping_wan_ms = {
+        let ping_wan_ms = if !want_ping_wan {
+            None
+        } else {
             let stale = last_ping_wan
                 .as_ref()
                 .map(|(t, _)| t.elapsed().as_secs_f64() >= 5.0)
@@ -790,6 +808,7 @@ pub async fn poll_loop(
         } else {
             active_session_index.get(&dir)
         };
+        recording = active_session.is_some();
         if let Some(session) = active_session {
             // The main app knows the profile from the control pipe; the
             // wallpaper host (no control pipe) takes the service's (#302).
@@ -818,6 +837,29 @@ mod tests {
     use super::*;
 
     const READING: BatteryCache = (80, true, Some(90), Some(12.5));
+
+    #[test]
+    fn pings_only_for_someone_who_sees_them() {
+        let mut s = settings::Settings::default();
+        s.visible_panels = vec!["cpu".into(), "gpu".into()];
+        s.overlay_enabled = false;
+        s.overlay_metrics.clear();
+        // Nobody shows a ping: none sent.
+        assert_eq!(pings_wanted(&s, false, false), (false, false));
+        // A recording writes the gateway ping to its CSV.
+        assert_eq!(pings_wanted(&s, false, true), (true, false));
+
+        // The Network panel shows both — but not this loop's in light mode.
+        s.visible_panels.push("net".into());
+        assert_eq!(pings_wanted(&s, false, false), (true, true));
+        assert_eq!(pings_wanted(&s, true, false), (false, false));
+
+        // The overlay's PING needs the gateway's, only while it shows.
+        s.overlay_metrics = vec!["net_ping".into()];
+        assert_eq!(pings_wanted(&s, true, false), (false, false));
+        s.overlay_enabled = true;
+        assert_eq!(pings_wanted(&s, true, false), (true, false));
+    }
 
     #[test]
     fn battery_stale_before_first_read_only_when_there_is_one() {

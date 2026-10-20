@@ -328,7 +328,7 @@ startup background thread in `main.rs`) and keep the results.
 | `detect_ram_spec` | Type + speed string, e.g. "DDR5 6000 MT/s" |
 | `detect_ram_details` | Stick count, capacity, vendor, part number |
 | `detect_disk_model_map` | `HashMap<drive_letter, model_name>` via WMI join |
-| `detect_ping_target` | First IPv4 default gateway (`Win32_NetworkAdapterConfiguration`), else `1.1.1.1` |
+| `detect_ping_target` | First IPv4 default gateway (`Win32_NetworkAdapterConfiguration`), else `1.1.1.1`. Pinged every 5 s only while someone sees it (`poll::pings_wanted`, #468): the Network panel (also pings `1.1.1.1` for WAN), the overlay's PING, or a recording (the CSV's ping column) |
 | `probe_wmi_status` | Checks whether WMI is reachable |
 | `system_battery_present` | Whether Windows reports a system battery — `GetSystemPowerStatus` (`BatteryFlag` 128 none, 255 unknown → no), microseconds, no COM/WMI. Asked by the poll loop every tick and by `gpu_guard::render_power_preference` (#473) |
 | `sample_battery_wmi` | Battery query via `Win32_Battery` + `root\wmi BatteryStatus` (charge/discharge rate in mW). Asked only when `system_battery_present` says yes, every 10 s — after a miss too, which keeps the last good reading (`BatteryPoll`, #464/#473); `probe_wmi_status` runs only on the first miss of a run. Before #464 a PC without a battery ran two WMI queries every second; after it, once a minute; since #473 none. The poll loop logs `battery: system battery present/absent (GetSystemPowerStatus)` once and on a change |

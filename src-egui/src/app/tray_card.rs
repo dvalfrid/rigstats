@@ -61,7 +61,8 @@ pub(crate) fn hover_step(
     (!state.suppressed && !menu_open, state)
 }
 
-/// Run from the tray thread every 50 ms (`app::background`): hides the card's
+/// Run from the tray thread, every 50 ms while the icon is hovered
+/// (`app::background`): hides the card's
 /// window straight away through Win32 when it shouldn't show. The UI thread's
 /// own check can stall — its frames stop while the tray menu's modal loop
 /// runs, and repaint requests are lost around it (winit #4608, see #177) —
