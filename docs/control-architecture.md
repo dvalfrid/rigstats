@@ -902,7 +902,9 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   transaction id, remaining packets, protocol type, data size, command class,
   command id, 80 argument bytes, XOR checksum over bytes 2..87 of the 90),
   sent with `HidD_SetFeature`, the reply read with `HidD_GetFeature` (status
-  `0x02` = done; busy is asked again a few times). The handle is opened
+  `0x02` = done; `0x01` busy and `0x00` not taken up yet are read again a few
+  times — a DeathAdder 2013 answered `0x00` when read 2 ms after the request,
+  #538). The handle is opened
   read/write, or with no access when Windows holds the collection (a mouse or
   keyboard) — feature reports work on such a handle (hypothesis until a
   device confirms). Command numbers, LEDs and the per-model transaction id
@@ -943,7 +945,10 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   Omni receiver, `1ACE`). Report ids and field layout come from the
   device's own descriptor (`HidP_*`); colours go out as a range update over
   all lamps; control is taken by clearing AutonomousMode and handed back on
-  release / service stop.
+  release / service stop. The intensity channel (`0x54`) is set only when the
+  report has it: the Razer BlackWidow V3 Mini (`1532:0258`) has red, green,
+  blue and the update flags but no intensity, and setting it failed every
+  colour write (`HidP_SetUsageValue(0x54) failed (0xC0110004)`, #537).
   **ASUS "WDL state".** ASUS mice keep a setting in the device — Gear Link's
   *Cross-device Lighting Toggle* — that decides whether the LampArray is
   obeyed. In "Device Lighting" mode every LampArray report is accepted and

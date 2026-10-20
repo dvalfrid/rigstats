@@ -288,7 +288,9 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
             Set(_rangeUpdate.Type, RedUpdateChannel, red, report);
             Set(_rangeUpdate.Type, GreenUpdateChannel, green, report);
             Set(_rangeUpdate.Type, BlueUpdateChannel, blue, report);
-            Set(_rangeUpdate.Type, IntensityUpdateChannel, 0xFF, report);
+            // Optional: the Razer BlackWidow V3 Mini has no intensity channel,
+            // and the RGB values alone carry the colour (#537).
+            SetIfPresent(_rangeUpdate.Type, IntensityUpdateChannel, 0xFF, report);
             Send(_rangeUpdate.Type, report);
         }
     }
@@ -310,6 +312,14 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
 
     private void Set(HidReportType type, ushort usage, uint value, byte[] report) =>
         Check(HidP_SetUsageValue((int)type, LightingPage, 0, usage, value, _preparsed, report, report.Length), $"HidP_SetUsageValue(0x{usage:X2})");
+
+    /// `Set` for a usage the report may not have.
+    private void SetIfPresent(HidReportType type, ushort usage, uint value, byte[] report)
+    {
+        var status = HidP_SetUsageValue((int)type, LightingPage, 0, usage, value, _preparsed, report, report.Length);
+        if (status != HidpStatusUsageNotFound)
+            Check(status, $"HidP_SetUsageValue(0x{usage:X2})");
+    }
 
     private void Send(HidReportType type, byte[] report)
     {
@@ -417,6 +427,7 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
     private const uint FileShareReadWrite = 3;
     private const uint OpenExisting = 3;
     private const int HidpStatusSuccess = 0x00110000;
+    private const int HidpStatusUsageNotFound = unchecked((int)0xC0110004);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct HidpCaps

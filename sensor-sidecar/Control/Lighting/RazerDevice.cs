@@ -50,6 +50,7 @@ public static class RazerProtocol
     public const int Crc = 89;
 
     // Reply status (`RAZER_CMD_*`).
+    public const byte StatusNotTakenUp = 0x00;
     public const byte StatusBusy = 0x01;
     public const byte StatusOk = 0x02;
     public const byte StatusFailure = 0x03;
@@ -112,6 +113,11 @@ public static class RazerProtocol
     /// `standard_matrix_effect_static`: the whole backlight in one colour.
     public static byte[] MatrixStaticColor(byte tid, byte r, byte g, byte b) => Frame(tid, 0x03, 0x0A, MatrixStatic, r, g, b);
 
+    /// Whether the device hasn't finished the command yet: new (not taken up
+    /// yet, seen on a DeathAdder 2013 read 2 ms after the request, #538) or
+    /// busy. The same reply is read again.
+    public static bool Pending(byte status) => status is StatusNotTakenUp or StatusBusy;
+
     /// Why a reply means the command didn't take, or null when it did. The
     /// reply must answer the same command.
     public static string? Problem(byte[] request, byte[]? reply)
@@ -123,6 +129,7 @@ public static class RazerProtocol
         return reply[Status] switch
         {
             StatusOk => null,
+            StatusNotTakenUp => "not taken up yet",
             StatusBusy => "busy",
             StatusFailure => "failed",
             StatusTimeout => "timed out",
@@ -338,7 +345,7 @@ public sealed class WindowsRazerTransport : IRazerTransport
             var reply = new byte[RazerProtocol.ReportLength];
             if (!HidD_GetFeature(_handle, reply, reply.Length))
                 return null;
-            if (reply[RazerProtocol.Status] != RazerProtocol.StatusBusy || attempt >= BusyRetries)
+            if (!RazerProtocol.Pending(reply[RazerProtocol.Status]) || attempt >= BusyRetries)
                 return reply;
         }
     }
