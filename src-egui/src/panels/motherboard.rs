@@ -95,7 +95,7 @@ pub fn draw(
                                             if resp.clicked() {
                                                 ui.ctx().data_mut(|d| {
                                                     d.insert_temp(
-                                                        egui::Id::new("open_fan_curve"),
+                                                        egui::Id::unique("open_fan_curve"),
                                                         label.clone(),
                                                     )
                                                 });

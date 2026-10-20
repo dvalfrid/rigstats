@@ -154,6 +154,8 @@ impl RigStatsApp {
             .with_title("RigStats \u{2014} Overlay")
             .with_inner_size(size)
             .with_decorations(false)
+            // No DWM frame behind a transparent window (third_party/egui-winit).
+            .with_has_shadow(false)
             .with_resizable(false)
             .with_taskbar(false)
             .with_always_on_top()

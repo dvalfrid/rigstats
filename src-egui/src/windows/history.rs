@@ -356,7 +356,11 @@ fn plot_metric(
         // box drawn in `draw_synced_readout`, on this chart as much as any other
         // linked one — so the mouse-following tooltip here only ever shows the
         // time, never a name/value pair.
-        .label_formatter(|_name, value| fmt_elapsed(value.x))
+        .label_formatter(|pos| {
+            let (egui_plot::HoverPosition::NearDataPoint { position, .. }
+            | egui_plot::HoverPosition::Elsewhere { position }) = *pos;
+            Some(fmt_elapsed(position.x))
+        })
         .show(ui, |plot_ui| {
             for (name, color, pts) in &chart.series {
                 if pts.is_empty() {
@@ -473,7 +477,7 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
     // Shared by every metric plot below so panning/zooming/hovering any one of
     // them stays in sync with the rest — unique per session so switching to a
     // different session doesn't inherit the previous one's zoom/pan state.
-    let group_id = egui::Id::new(("history_link_group", &meta.id));
+    let group_id = egui::Id::unique(("history_link_group", &meta.id));
 
     let charts = [
         ChartSpec {
@@ -613,11 +617,9 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
-// The ctx-level panel API, as in every other dialog.
-#[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
@@ -627,6 +629,7 @@ pub fn show(
     dir: &Arc<PathBuf>,
     dc: &DialogColors,
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -640,14 +643,14 @@ pub fn show(
     let st = state.lock_safe().clone();
     let busy = refreshing.load(Ordering::Relaxed) || loading_rows.load(Ordering::Relaxed);
 
-    ui_kit::hero(ctx, dc, "history", "Session History", |ui| {
+    ui_kit::hero(ui, dc, "history", "Session History", |ui| {
         if busy {
             ui.spinner();
         }
     });
 
     // ── Footer ────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("history_footer")
+    egui::Panel::bottom("history_footer")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -655,7 +658,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
                     action_close = true;
@@ -668,11 +671,11 @@ pub fn show(
         });
 
     // ── Recordings (sidebar) ──────────────────────────────────────────────────
-    egui::SidePanel::left("history_sessions")
+    egui::Panel::left("history_sessions")
         .resizable(false)
-        .exact_width(260.0)
+        .exact_size(260.0)
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::same(10)))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui_kit::nav_header(ui, dc, "Recordings");
             ui.add_space(2.0);
             render_session_list(ui, dc, &st, &mut actions);
@@ -686,7 +689,7 @@ pub fn show(
             top: 18,
             bottom: 8,
         }))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             let selected_meta = st
                 .selected
                 .as_ref()

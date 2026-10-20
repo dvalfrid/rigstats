@@ -819,11 +819,9 @@ pub fn spawn_collect(
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
-// The ctx-level panel API, as in every other dialog.
-#[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
@@ -837,6 +835,7 @@ pub fn show(
     hardware_problems: &[rigstats_backend::control::Problem],
     dc: &DialogColors,
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -851,7 +850,7 @@ pub fn show(
     let st = state.lock_safe().clone();
     let busy = refreshing.load(Ordering::Relaxed);
 
-    ui_kit::hero(ctx, dc, "status", "Status", |ui| {
+    ui_kit::hero(ui, dc, "status", "Status", |ui| {
         if busy {
             ui.label(
                 egui::RichText::new("Refreshing…")
@@ -863,7 +862,7 @@ pub fn show(
     });
 
     // ── Footer ────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("status_footer")
+    egui::Panel::bottom("status_footer")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -871,7 +870,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.horizontal(|ui| {
                 let collect_busy = collecting.load(Ordering::Relaxed);
                 let collect_label = if collect_busy {
@@ -932,7 +931,7 @@ pub fn show(
     // ── The page ──────────────────────────────────────────────────────────────
     egui::CentralPanel::default()
         .frame(ui_kit::dialog_frame(dc))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("status_page")
                 .auto_shrink([false, false])

@@ -573,7 +573,7 @@ pub fn draw_overlay(
     });
 
     let rect = inner.response.rect;
-    let drag_id = ui.id().with("overlay_drag_sense");
+    let drag_id = ui.scope_id().with("overlay_drag_sense");
     let response = ui.interact(rect, drag_id, egui::Sense::drag());
     OverlayResponse { rect, response }
 }
@@ -750,7 +750,10 @@ mod tests {
     /// exercise the non-empty-metrics path must run one empty pass first.
     fn ctx_with_fonts() -> egui::Context {
         let ctx = egui::Context::default();
-        let _ = ctx.run_ui(egui::RawInput::default(), |_| {});
+        // egui 0.37 asserts (debug) that a pass's texture deltas are handled;
+        // the font atlas upload is of no interest here.
+        let mut out = ctx.run_ui(egui::RawInput::default(), |_| {});
+        out.textures_delta.clear();
         ctx
     }
 

@@ -128,7 +128,13 @@ reveal sequence to avoid a transient white box on activation/resize (the
 DWM redirection-bitmap binding doesn't reliably follow a live resize), tuned
 to a handful of frames after measuring that a hidden window's paint/present
 cadence is throttled to a fixed ~100 ms/frame regardless of work done inside
-it. A live Scale-slider drag debounces before committing to a new size, to
+it. Every undecorated transparent viewport (dashboard, overlay, floating
+panels, tray card, wallpaper host) sets `with_has_shadow(false)`: since egui
+0.37, egui-winit otherwise asks winit for the undecorated-window shadow, which
+extends the DWM frame under the whole client area and shows it light through
+every transparent pixel. Upstream ignores `has_shadow` on Windows, hence the
+patched copy in `third_party/egui-winit` (`docs/upstream/egui-winit-shadow.md`).
+A live Scale-slider drag debounces before committing to a new size, to
 avoid re-triggering that burst on every intermediate value. A fixed global
 hotkey (`hotkey.rs`, `Ctrl+Alt+O`) shows/hides the overlay without leaving
 the game — the conventional in-game-overlay toggle; locking/unlocking

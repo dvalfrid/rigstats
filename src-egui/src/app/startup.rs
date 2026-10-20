@@ -109,6 +109,8 @@ pub(crate) fn native_options(
         .with_inner_size([inner_w, inner_h])
         .with_position([pos_x, pos_y])
         .with_decorations(false)
+        // No DWM frame behind a transparent window (third_party/egui-winit).
+        .with_has_shadow(false)
         .with_taskbar(false); // app is tray-only, never show in taskbar
     if always_on_top {
         viewport = viewport.with_always_on_top();

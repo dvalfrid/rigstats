@@ -87,6 +87,8 @@ impl RigStatsApp {
                 .with_title(win_title.clone())
                 .with_inner_size([panel_w, initial_h])
                 .with_decorations(false)
+                // No DWM frame behind a transparent window (third_party/egui-winit).
+                .with_has_shadow(false)
                 .with_resizable(false)
                 .with_taskbar(false)
                 .with_transparent(dcomp_available)
@@ -136,7 +138,7 @@ impl RigStatsApp {
                 egui::ViewportId::from_hash_of(format!("float_{key}")),
                 vp_builder,
                 |child_ui, _class| {
-                    let ctx = child_ui.ctx();
+                    let ctx = &child_ui.ctx().clone();
 
                     // ── Track window position for persistence ─────────────────
                     if !skip_pos_tracking {
@@ -211,10 +213,9 @@ impl RigStatsApp {
                     } else {
                         theme::PANEL_FILL
                     };
-                    #[allow(deprecated)] // CentralPanel::show is correct in viewport callbacks
                     egui::CentralPanel::default()
-                        .frame(egui::Frame::none().fill(central_fill))
-                        .show(ctx, |ui| {
+                        .frame(egui::Frame::NONE.fill(central_fill))
+                        .show(child_ui, |ui| {
                             // ── Drag & lock state ─────────────────────────────
                             let locked = lock_arc.load(Ordering::Relaxed);
                             let hover_pos = ctx.input(|i| i.pointer.hover_pos());
@@ -238,7 +239,7 @@ impl RigStatsApp {
                                     if ui
                                         .ctx()
                                         .data_mut(|d| {
-                                            d.remove_temp::<bool>(egui::Id::new(
+                                            d.remove_temp::<bool>(egui::Id::unique(
                                                 "open_control_center",
                                             ))
                                         })
@@ -261,7 +262,7 @@ impl RigStatsApp {
                                     if ui
                                         .ctx()
                                         .data_mut(|d| {
-                                            d.remove_temp::<bool>(egui::Id::new("open_updater"))
+                                            d.remove_temp::<bool>(egui::Id::unique("open_updater"))
                                         })
                                         .unwrap_or(false)
                                     {
@@ -428,7 +429,7 @@ impl RigStatsApp {
                             if !locked && !in_padlock {
                                 let drag_zone_resp = ui.interact(
                                     drag_zone,
-                                    ui.id().with("panel_drag_zone"),
+                                    ui.scope_id().with("panel_drag_zone"),
                                     egui::Sense::hover(),
                                 );
                                 let _ = drag_zone_resp.on_hover_text("Drag to move");
@@ -438,7 +439,7 @@ impl RigStatsApp {
                             let padlock_resp = ui
                                 .interact(
                                     padlock_hit,
-                                    ui.id().with("padlock"),
+                                    ui.scope_id().with("padlock"),
                                     egui::Sense::click(),
                                 )
                                 .on_hover_text(if locked {

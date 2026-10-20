@@ -157,7 +157,7 @@ impl RigStatsApp {
                         found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Settings");
                     }
                     windows::settings::show(
-                        child_ui.ctx(),
+                        child_ui,
                         &mctx,
                         &open,
                         &focus,
@@ -206,7 +206,7 @@ impl RigStatsApp {
                     {
                         found_hwnd = win_opacity::find_hwnd("About RigStats");
                     }
-                    windows::about::show(child_ui.ctx(), &mctx, &open, &focus, &dir, &dc);
+                    windows::about::show(child_ui, &mctx, &open, &focus, &dir, &dc);
                 },
             );
             self.finish_dialog_frame(ui.ctx(), "about", found_hwnd, wants_focus, &focus, visible);
@@ -250,7 +250,7 @@ impl RigStatsApp {
                         found_hwnd = win_opacity::find_hwnd("RigStats — Control Center");
                     }
                     windows::control::show(
-                        child_ui.ctx(),
+                        child_ui,
                         &mctx,
                         &open,
                         &focus,
@@ -305,7 +305,7 @@ impl RigStatsApp {
                         found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Status");
                     }
                     windows::status::show(
-                        child_ui.ctx(),
+                        child_ui,
                         &mctx,
                         &open,
                         &focus,
@@ -352,7 +352,7 @@ impl RigStatsApp {
                         found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Session History");
                     }
                     windows::history::show(
-                        child_ui.ctx(),
+                        child_ui,
                         &mctx,
                         &open,
                         &focus,
@@ -399,7 +399,7 @@ impl RigStatsApp {
                     {
                         found_hwnd = win_opacity::find_hwnd("RigStats — Updates");
                     }
-                    windows::updater::show(child_ui.ctx(), &mctx, &open, &focus, &state, &dc);
+                    windows::updater::show(child_ui, &mctx, &open, &focus, &state, &dc);
                 },
             );
             self.finish_dialog_frame(

@@ -97,7 +97,7 @@ impl RigStatsApp {
             let padlock_resp = ui
                 .interact(
                     padlock_hit,
-                    ui.id().with("fixed_padlock"),
+                    ui.scope_id().with("fixed_padlock"),
                     egui::Sense::click(),
                 )
                 .on_hover_text(if pinned {

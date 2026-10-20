@@ -29,23 +29,22 @@ const LINKS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-// The ctx-level panel API, as in every other dialog.
-#[allow(deprecated)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
     _dir: &Arc<PathBuf>,
     dc: &DialogColors,
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
 
     // ── Name and version, centred ────────────────────────────────────────
-    egui::TopBottomPanel::top("about_top")
+    egui::Panel::top("about_top")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -53,7 +52,7 @@ pub fn show(
             bottom: 18,
         }))
         .show_separator_line(false)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.vertical_centered(|ui| {
                 ui.label(
                     egui::RichText::new("RIGStats")
@@ -77,7 +76,7 @@ pub fn show(
         });
 
     // ── Footer ───────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("about_bottom")
+    egui::Panel::bottom("about_bottom")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -85,7 +84,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if theme::dialog_btn_primary(ui, "Close").clicked() {
                     open.store(false, Ordering::Relaxed);
@@ -97,7 +96,7 @@ pub fn show(
     // ── Links and credits ────────────────────────────────────────────────
     egui::CentralPanel::default()
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::symmetric(20, 4)))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui_kit::group(ui, dc, None, None, |g| {
                 for &(title, text, url) in LINKS {
                     g.row(title, None, |ui| {

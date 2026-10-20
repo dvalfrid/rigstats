@@ -81,6 +81,7 @@ impl Probe {
             power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
             force_fallback_adapter: false,
+            apply_limit_buckets: false,
         }))
         .expect("request DX12 adapter (DxgiFromVisual)");
         eprintln!("[dcomp_probe] adapter: {:?}", adapter.get_info());
@@ -120,6 +121,7 @@ impl Probe {
             desired_maximum_frame_latency: 2,
             alpha_mode,
             view_formats: vec![],
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&device, &config);
 
@@ -182,7 +184,7 @@ impl Probe {
             });
         }
         gpu.queue.submit(Some(encoder.finish()));
-        surface_texture.present();
+        gpu.queue.present(surface_texture);
     }
 }
 

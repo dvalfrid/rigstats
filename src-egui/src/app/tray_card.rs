@@ -217,6 +217,8 @@ impl RigStatsApp {
             .with_title(TITLE)
             .with_inner_size([CARD_W, card_height(devices.len())])
             .with_decorations(false)
+            // No DWM frame behind a transparent window (third_party/egui-winit).
+            .with_has_shadow(false)
             .with_resizable(false)
             .with_taskbar(false)
             .with_always_on_top()
