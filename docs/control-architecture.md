@@ -888,6 +888,27 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   (`0x35 … 0xFF`), frames `0x40 0x84 0x00 <n> RGB…`. Two identical monitors
   are two devices. The older feature-report family (XG27AQ, XG279Q, ...)
   is out of scope (legacy).
+- **Razer devices on Razer's own protocol** (`RazerDevice`, #510) — not
+  verified yet. One 91-byte feature report each way (report id 0, status,
+  transaction id, remaining packets, protocol type, data size, command class,
+  command id, 80 argument bytes, XOR checksum over bytes 2..87 of the 90),
+  sent with `HidD_SetFeature`, the reply read with `HidD_GetFeature` (status
+  `0x02` = done; busy is asked again a few times). The handle is opened
+  read/write, or with no access when Windows holds the collection (a mouse or
+  keyboard) — feature reports work on such a handle (hypothesis until a
+  device confirms). Command numbers, LEDs and the per-model transaction id
+  come from openrazer (GPL-2, documentation only, no code copied):
+  DeathAdder 2013 `0037` (transaction id `3F`; scroll wheel `01` and logo
+  `04` LEDs: `03 00` state, `03 01` colour, `03 02` effect static), Blade 15
+  (2018) `0233` (transaction id `FF`; `03 0A` standard matrix: `00` off,
+  `06 r g b` static). Off or one colour; breathing and spectrum show as the
+  colour. Discovery only opens the collection — nothing is sent until a
+  profile asks; a model that also shows a LampArray is left to
+  `LampArrayDevice`. A failed write never throws (the device's `Problem`
+  shows it), so an unconfirmed device can't fail a profile switch. Skipped
+  while Razer Synapse runs (`RazerDevice.RazerSoftware`, process names not
+  yet seen on a machine). New models: one row in `RazerDevice.Models`, from
+  openrazer's tables for that model only.
 - **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
   standard behind Windows Dynamic Lighting (usage page `0x59`), so one
   implementation covers every current keyboard, mouse or accessory that

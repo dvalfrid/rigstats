@@ -18,6 +18,7 @@ public static class LightingCatalog
     public const string Verified = "Verified on hardware";
     public const string FromOpenRgb = "From OpenRGB, not yet verified";
     public const string FromGearLink = "From Gear Link, not yet verified";
+    public const string FromOpenRazer = "From openrazer, not yet verified";
 
     public static IReadOnlyList<SupportedDevice> All()
     {
@@ -60,6 +61,14 @@ public static class LightingCatalog
             .OrderBy(g => g.Key.Status == Verified ? 0 : 1).ThenBy(g => g.Key.Name)
             .Select(g => new SupportedDevice(g.Key.Name, "Headset", string.Join(", ", g.Select(m => Hex(m.Key)).Order()),
                 g.Key.Status, "Through its 2.4 GHz dongle; found when switched on; every write read back")));
+
+        // Razer's own protocol (#510).
+        rows.AddRange(RazerDevice.Models
+            .OrderByDescending(m => m.Value.Verified).ThenBy(m => m.Value.Name)
+            .Select(m => new SupportedDevice(m.Value.Name, m.Value.Kind == "mouse" ? "Mouse" : "Keyboard", Hex(m.Key),
+                m.Value.Verified ? Verified : FromOpenRazer,
+                (m.Value.Layout == RazerLayout.ClassicLeds ? "Scroll wheel and logo: off or on (single-colour LEDs)" : "Keyboard backlight: off or one colour")
+                + "; breathing and spectrum show as the colour; skipped while Razer Synapse runs")));
 
         rows.Add(new SupportedDevice(
             "Any Windows Dynamic Lighting (HID LampArray) device, any brand",
@@ -107,6 +116,7 @@ public static class LightingCatalog
         md.Append(CultureInfo.InvariantCulture, $"**{Verified}**: seen working on real hardware. **{FromOpenRgb}**: same protocol as a verified device, ");
         md.Append("listed from OpenRGB's device list (read as documentation) — it should work; ");
         md.Append(CultureInfo.InvariantCulture, $"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
+        md.Append(CultureInfo.InvariantCulture, $"**{FromOpenRazer}**: Razer's protocol as documented by the openrazer project, for that model — not yet seen on a device; ");
         md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
         md.Append("## Lighting\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
