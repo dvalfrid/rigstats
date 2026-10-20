@@ -1,0 +1,15 @@
+{
+  "slug": "razer-blade-i7-8750h-gtx1060maxq-no-pawnio",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1792440161,
+  "rigstats_version": "1.50.0",
+  "os": "Microsoft Windows 10 Home (build 16299, 1709)",
+  "notes": "Beta tester's diagnostics (#509, #507). Razer Blade 2018 on Windows 10 1709 without the PawnIO driver: every CPU temperature and clock is empty and CPU power reads 0. The driver-missing case: the dashboard and fan-curve sources must not show 0 C (#205).",
+  "anonymized": true,
+  "confirmed_by": 1,
+  "gpu_driver": "Intel 23.20.16.4974; NVIDIA 23.21.13.8904 (389.04)",
+  "gpu_state": "all-active",
+  "variant_of": "razer-blade-i7-8750h-gtx1060maxq",
+  "differs": "no PawnIO (Windows 10 1709): CPU temperatures and clocks empty, CPU power 0; older Intel and NVIDIA drivers"
+}

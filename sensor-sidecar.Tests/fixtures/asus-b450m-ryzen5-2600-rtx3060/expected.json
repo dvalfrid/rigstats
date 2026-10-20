@@ -1,0 +1,77 @@
+{
+  "cpu_temp": 39.500008,
+  "cpu_power": 25.713736,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce RTX 3060",
+      "sensor_family": "gpu-nvidia",
+      "load": 0,
+      "temp": 29,
+      "hotspot_temp": 39.15625,
+      "mem_temp": null,
+      "core_clock": 210,
+      "mem_clock": 405,
+      "power": 16.603,
+      "fan": 40,
+      "vram_used_mb": 982.0664,
+      "vram_total_mb": 12288,
+      "d3d_3d": 2.9482746,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "SAMSUNG MZVLW256HEHP-000H1": 36.850006
+  },
+  "ram_temp": null,
+  "mb_fans": [
+    {
+      "label": "Fan #1",
+      "rpm": 858.7786
+    },
+    {
+      "label": "Fan #3",
+      "rpm": 837.469
+    },
+    {
+      "label": "Fan #2",
+      "rpm": 791.3247
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "Temperature #1",
+      "celsius": 39
+    },
+    {
+      "label": "Temperature #2",
+      "celsius": 30
+    },
+    {
+      "label": "Temperature #3",
+      "celsius": 34
+    },
+    {
+      "label": "Temperature #4",
+      "celsius": 34
+    },
+    {
+      "label": "Temperature #5",
+      "celsius": 34
+    },
+    {
+      "label": "Temperature #6",
+      "celsius": 34
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "Vcore",
+      "volts": 1.2862
+    },
+    {
+      "label": "CMOS Battery",
+      "volts": 1.635
+    }
+  ],
+  "mb_chip": "ITE IT8655E"
+}
