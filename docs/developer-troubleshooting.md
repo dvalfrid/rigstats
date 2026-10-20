@@ -29,6 +29,14 @@ the diagnostics ZIP) records `pawnio_exit=` and `pawnio_service_query=`.
 Installers before #205 only staged the driver with `pnputil`, which never
 creates the device on a machine without another PawnIO consumer.
 
+`pawnio_exit=50` (ERROR_NOT_SUPPORTED) with `windows_build=` below `17763`:
+PawnIO's INF installs only on `NTamd64.10.0...17763` and its catalog is
+signed for `10_RS5` and newer (`PawnIO/PawnIO.inf.in`, `PawnIO/CMakeLists.txt`
+in PawnIO 2.2.0) — Windows 10 1809. Nothing to fix but Windows; the service
+reports `pawnio_windows_too_old` in Status (`PawnIoProblems`, #507), and
+`pawnio_missing` when the driver can't be opened on a newer build. Seen on a
+Razer Blade on Windows 10 1709 (build 16299).
+
 **Fix (and the dev-environment setup when running from source):** install
 PawnIO once from an elevated prompt, then restart the sensor service:
 

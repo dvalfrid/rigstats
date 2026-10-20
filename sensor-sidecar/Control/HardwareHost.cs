@@ -42,6 +42,7 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     private const long SampleMaxAgeMs = 900;
 
     private readonly ISensorHardware _hardware;
+    private readonly Problem? _startProblem;
     private readonly PeripheralStatusStore? _peripherals;
     private readonly ProfileStore? _profiles;
     private readonly Func<long> _now;
@@ -79,9 +80,10 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
 
     /// `clock` (milliseconds, like Environment.TickCount64) is for tests.
     public HardwareHost(ISensorHardware hardware, PeripheralStatusStore? peripherals = null, ProfileStore? profiles = null,
-        Func<long>? clock = null)
+        Func<long>? clock = null, Problem? startProblem = null)
     {
         _hardware = hardware;
+        _startProblem = startProblem;
         _peripherals = peripherals;
         _profiles = profiles;
         _now = clock ?? (() => Environment.TickCount64);
@@ -262,7 +264,14 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
     private string Aged(Latest last) =>
         Serialize(last.Payload with { SampleAgeMs = _now() - last.AtMs, HardwareProblems = Problems() });
 
-    private List<Problem>? Problems() => _hardware.Problems is { Count: > 0 } problems ? [.. problems] : null;
+    // The worker's problems, plus one found at start (PawnIO missing, #507).
+    private List<Problem>? Problems()
+    {
+        List<Problem> all = [.. _hardware.Problems];
+        if (_startProblem is { } start)
+            all.Add(start);
+        return all.Count > 0 ? all : null;
+    }
 
     private static string Serialize(SensorPayload payload) =>
         System.Text.Json.JsonSerializer.Serialize(payload, TelemetryJsonOptions);

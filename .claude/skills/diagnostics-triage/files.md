@@ -19,7 +19,7 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | App crashed or misbehaved | `debug.log`, `debug-prev.log`, `event-log.txt` | missing `shutdown: clean` = crash; .NET 1026 / Application Error 1000 |
 | Sensors gone or a hardware item missing | `sidecar-log.txt` | `The hardware worker ended during … (exit code …) while reading <hardware> (<id>)`, `did not answer … within 8 s`, `… crashed the hardware worker 3 times — it is no longer read` (#374); `[hardware-worker]` lines = the worker's own stack |
 | Service crashed | `sidecar-log.txt` | copied event-log entries, `crash dump` lines (dumps themselves stay on the machine) |
-| Installer / service config | `install.log` / `rigstats-install.log`, `sidecar-service.txt` | PawnIO exit codes, `BINARY_PATH_NAME` (quoted since #277) |
+| Installer / service config | `install.log` / `rigstats-install.log`, `sidecar-service.txt` | PawnIO exit codes (`50` + `windows_build` < 17763 = Windows older than 1809, #507), `BINARY_PATH_NAME` (quoted since #277) |
 
 ## Case: keyboard on the Omni receiver not found (2026-10-09, #280)
 

@@ -255,6 +255,24 @@ public class HardwareHostTests
     }
 
     [Fact]
+    public async Task A_problem_found_at_start_rides_along_with_the_workers_own()
+    {
+        var hardware = new FakeHardware();
+        var start = PawnIoProblems.For(driverAvailable: false, windowsBuild: 16299)!;
+        var host = new HardwareHost(hardware, startProblem: start);
+
+        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var problems = line.GetProperty("hardware_problems");
+        Assert.Equal(1, problems.GetArrayLength());
+        Assert.Equal("pawnio_windows_too_old", problems[0].GetProperty("id").GetString());
+
+        hardware.Problems = [Control.Workers.HardwareProblems.Off("/gpu-nvidia/0", "RTX", "exit")];
+        var both = new HardwareHost(hardware, startProblem: start);
+        var two = JsonDocument.Parse(await both.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        Assert.Equal(2, two.GetProperty("hardware_problems").GetArrayLength());
+    }
+
+    [Fact]
     public async Task Without_any_sample_yet_telemetry_fails()
     {
         var hardware = new FakeHardware { SampleFails = () => new InvalidOperationException("not started") };
