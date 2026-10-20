@@ -379,6 +379,14 @@ index:
 The tray "GPU ▸" submenu and Settings' GPU list tick the same adapter via
 `tray::selected_gpu_index`, which uses the same matching.
 
+When `preferred_gpu` is set but none of the GPUs the service sends matches it
+(left out after crashing the hardware worker, #374, or a laptop dGPU switched
+off), `LhmData.gpu_missing` / `PollStats.gpu_missing` carry its name, and the
+GPU panel draws a hollow dot in the warning colour next to the selector dots,
+with the hover text "<name> isn't read right now — showing <shown> instead"
+(#528). Nothing else changes: the values are the shown card's, and its name
+stays under GPU LOAD. With no GPUs at all (no telemetry) nothing is missing.
+
 Extracted GPU fields: core load, core temp, hot-spot, core clock (`gpu_freq`),
 memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 (`gpu_d3d_3d`), D3D Video Decode load (`gpu_d3d_vdec`), plus

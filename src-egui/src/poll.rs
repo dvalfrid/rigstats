@@ -146,6 +146,9 @@ pub struct PollStats {
     pub gpu_name: String,     // GPU display name, e.g. "AMD Radeon RX 9070 XT"
     pub ram_temp: Option<f64>,
     pub gpu_devices: Vec<(String, f64)>,
+    /// The GPU picked in Settings when the sensor service doesn't send it
+    /// (`LhmData::gpu_missing`, #528).
+    pub gpu_missing: Option<String>,
     // Meta
     pub lhm_connected: bool,
 }
@@ -757,6 +760,7 @@ pub async fn poll_loop(
                 .as_ref()
                 .map(|l| l.gpu_devices.clone())
                 .unwrap_or_default(),
+            gpu_missing: lhm_data.as_ref().and_then(|l| l.gpu_missing.clone()),
             lhm_connected,
         };
 

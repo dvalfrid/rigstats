@@ -48,6 +48,10 @@ pub struct LhmData {
     /// Used by the frontend to display GPU selector; the backend selects which GPU data to return
     /// in `gpu_*` fields based on user preference and load heuristics.
     pub gpu_devices: Vec<(String, f64)>,
+    /// The GPU picked in Settings (`preferred_gpu`) when the sensor service
+    /// sends other GPUs but not that one — the `gpu_*` fields then show
+    /// another adapter, and the GPU panel says so (#528).
+    pub gpu_missing: Option<String>,
     /// Wireless devices' batteries (headset, keyboard, mouse — #290), read by
     /// the sidecar about once a minute. Empty from sidecars without it.
     pub peripherals: Vec<Peripheral>,
@@ -459,6 +463,46 @@ mod tests {
             .into_lhm_data(Some("AMD Radeon 890M"));
         assert_eq!(data.gpu_name.as_deref(), Some("AMD Radeon 890M"));
         assert!((data.gpu_load.unwrap() - 11.0).abs() < 0.01);
+        assert_eq!(data.gpu_missing, None);
+    }
+
+    #[test]
+    fn a_preferred_gpu_the_service_does_not_send_is_reported_missing() {
+        // #528: the chosen card left out (#374) — the other one is shown,
+        // and the panel is told the chosen one is missing.
+        let json = r#"{
+      "cpu_temp": null, "cpu_power": null,
+      "gpu_devices": [
+        {"name": "AMD Radeon(TM) Graphics", "load": 0.0, "temp": null, "hotspot_temp": null,
+         "core_clock": null, "mem_clock": null, "power": null, "fan": null,
+         "vram_used_mb": null, "vram_total_mb": 512.0, "d3d_3d": null, "d3d_vdec": null}
+      ],
+      "disk_temps": {}, "ram_temp": null,
+      "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null
+    }"#;
+        let parse = |pref| {
+            serde_json::from_str::<SidecarPayload>(json)
+                .unwrap()
+                .into_lhm_data(pref)
+        };
+
+        let data = parse(Some("AMD Radeon RX 9070 XT"));
+        assert_eq!(data.gpu_name.as_deref(), Some("AMD Radeon(TM) Graphics"));
+        assert_eq!(data.gpu_missing.as_deref(), Some("AMD Radeon RX 9070 XT"));
+
+        // Automatic, or the chosen card present (WMI spelling): nothing missing.
+        assert_eq!(parse(None).gpu_missing, None);
+        assert_eq!(parse(Some("AMD Radeon Graphics")).gpu_missing, None);
+    }
+
+    #[test]
+    fn no_gpus_at_all_reports_nothing_missing() {
+        let json = r#"{"cpu_temp": null, "cpu_power": null, "gpu_devices": [], "disk_temps": {},
+            "ram_temp": null, "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null}"#;
+        let data = serde_json::from_str::<SidecarPayload>(json)
+            .unwrap()
+            .into_lhm_data(Some("AMD Radeon RX 9070 XT"));
+        assert_eq!(data.gpu_missing, None);
     }
 }
 
@@ -596,22 +640,24 @@ pub fn gpu_names_match(a: &str, b: &str) -> bool {
     a == b || a.contains(&b) || b.contains(&a)
 }
 
+/// The device matching the preferred GPU: exact (normalized) match first, so
+/// a preference can't be captured by another adapter whose name merely
+/// contains it.
+fn preferred_gpu_idx(devices: &[SidecarGpuDevice], pref: &str) -> Option<usize> {
+    let pref_norm = normalize_gpu_name(pref);
+    devices
+        .iter()
+        .position(|d| normalize_gpu_name(&d.name) == pref_norm)
+        .or_else(|| devices.iter().position(|d| gpu_names_match(&d.name, pref)))
+}
+
 /// Picks the GPU to display: preferred match → highest VRAM → tiebreak by load.
 fn select_gpu_idx(devices: &[SidecarGpuDevice], preferred_gpu: Option<&str>) -> Option<usize> {
     if devices.is_empty() {
         return None;
     }
-    if let Some(pref) = preferred_gpu {
-        // Exact (normalized) match first, so a preference can't be captured by
-        // another adapter whose name merely contains it.
-        let pref_norm = normalize_gpu_name(pref);
-        let pos = devices
-            .iter()
-            .position(|d| normalize_gpu_name(&d.name) == pref_norm)
-            .or_else(|| devices.iter().position(|d| gpu_names_match(&d.name, pref)));
-        if pos.is_some() {
-            return pos;
-        }
+    if let Some(pos) = preferred_gpu.and_then(|pref| preferred_gpu_idx(devices, pref)) {
+        return Some(pos);
     }
     devices
         .iter()
@@ -640,6 +686,12 @@ impl SidecarPayload {
             .collect();
 
         let gpu = select_gpu_idx(&self.gpu_devices, preferred_gpu).map(|i| &self.gpu_devices[i]);
+        // Only with other GPUs to show: no GPUs at all is no telemetry.
+        let gpu_missing = preferred_gpu
+            .filter(|pref| {
+                !self.gpu_devices.is_empty() && preferred_gpu_idx(&self.gpu_devices, pref).is_none()
+            })
+            .map(str::to_string);
 
         let total_gpu_power: Option<f64> = {
             let powers: Vec<f64> = self
@@ -669,6 +721,7 @@ impl SidecarPayload {
             vram_total: gpu.and_then(|g| g.vram_total_mb).map(|v| v as f64),
             gpu_d3d_3d: gpu.and_then(|g| g.d3d_3d).map(|v| v as f64),
             gpu_d3d_vdec: gpu.and_then(|g| g.d3d_vdec).map(|v| v as f64),
+            gpu_missing,
             cpu_temp: self.cpu_temp.map(|v| v as f64),
             cpu_power: self.cpu_power.map(|v| v as f64),
             ram_temp: self.ram_temp.map(|v| v as f64),
