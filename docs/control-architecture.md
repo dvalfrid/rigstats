@@ -138,7 +138,11 @@ installer migration cost; "rigstats-service" is used here as the concept name.
   `HardwareWorkerClient` implements it over the worker.
 - **`HardwareWorkerClient` restarts the worker.** Every call has a time
   limit (8 s; the first call of a new worker, which opens the hardware,
-  60 s). A crash, a hang or a garbled answer ends the worker and is logged
+  60 s), counted per line: hung means no line — progress or answer — for
+  that long. Not one deadline for the whole call: `Environment.TickCount64`
+  counts while the PC sleeps, so a sample in flight when the PC went to
+  sleep counted as hung on wake, and three sleeps left the owner's
+  RX 9070 XT out for the day (#527). A crash, a hang or a garbled answer ends the worker and is logged
   with its exit code. The first restart is at once, then after 1, 2, 5, 15
   and 60 s while it keeps failing; a worker that ran for a minute starts
   the count over. During a pause, calls fail at once
@@ -167,8 +171,8 @@ installer migration cost; "rigstats-service" is used here as the concept name.
   `SkipAfter` (3) crashes or hangs in the same hardware, every new worker is
   started with `--skip <id>,…`: that hardware is neither read nor reported
   (`LhmHardware`), the sensor tree notes it, and the rest is read as
-  before. It stays out until Windows restarts (or the service restarts —
-  then it takes 3 crashes again; nothing is stored). The telemetry line
+  before. It stays out until the service restarts, Windows' restart
+  included — then it takes 3 crashes again; nothing is stored. The telemetry line
   carries a `Problem` per hardware left out (`hardware_problems`,
   `HardwareProblems.Off`: the vendor's driver download, "Collect
   diagnostics…", the troubleshooting page), shown in the app's Status under

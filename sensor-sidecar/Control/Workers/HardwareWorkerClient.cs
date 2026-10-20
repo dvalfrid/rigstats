@@ -19,7 +19,7 @@ public sealed class HardwareWorkerDownException(string message) : InvalidOperati
 public sealed class HardwareWorkerClient : ISensorHardware
 {
     /// A sample is normally well under a second; a storage device waking up
-    /// can take a few. Past this the worker is taken as hung.
+    /// can take a few. Silent this long, the worker is taken as hung.
     public static readonly TimeSpan DefaultCallTimeout = TimeSpan.FromSeconds(8);
 
     /// The first call of a new worker waits for LibreHardwareMonitor to open
@@ -37,7 +37,8 @@ public sealed class HardwareWorkerClient : ISensorHardware
     public static readonly TimeSpan StableAfter = TimeSpan.FromMinutes(1);
 
     /// Crashes while reading the same hardware before it is left out — until
-    /// Windows restarts (#374, #338). Once can be bad luck; three is the
+    /// the service restarts, Windows' restart included; nothing is stored
+    /// (#374, #338). Once can be bad luck; three is the
     /// hardware or its driver.
     public const int SkipAfter = 3;
 
@@ -168,11 +169,14 @@ public sealed class HardwareWorkerClient : ISensorHardware
         try
         {
             channel.Send(HardwareWorkerProtocol.Encode(request));
-            // Progress lines (the hardware being read) come before the answer.
-            var until = Environment.TickCount64 + (long)limit.TotalMilliseconds;
+            // Progress lines (the hardware being read) come before the answer,
+            // each within `limit`: hung means silent that long. Not one
+            // deadline for the whole call — Environment.TickCount64 counts
+            // while the PC sleeps, so a sample in flight across sleep looked
+            // hung on wake, and three sleeps left the GPU out (#527).
             while (true)
             {
-                (var answered, line) = channel.Receive(TimeSpan.FromMilliseconds(Math.Max(0, until - Environment.TickCount64)));
+                (var answered, line) = channel.Receive(limit);
                 hung = !answered;
                 if (hung || line is null || Progress(line) is not { } progress)
                     break;
@@ -265,14 +269,14 @@ public sealed class HardwareWorkerClient : ISensorHardware
         return crashes >= SkipAfter;
     }
 
-    /// Leaves `reading` out of every worker from now on, until Windows
+    /// Leaves `reading` out of every worker from now on, until the service
     /// restarts. True when it wasn't out already.
     private bool Skip(HardwareWorkerProgress reading, string happened)
     {
         if (!_skipped.TryAdd(reading.Updating, (reading.Name, happened)))
             return false;
         _problems = [.. _skipped.Select(s => HardwareProblems.Off(s.Key, s.Value.Name, s.Value.Detail))];
-        SidecarLog.Log($"[rigstats-sensor] {reading.Name} ({reading.Updating}) crashed the hardware worker {SkipAfter} times — it is no longer read until Windows restarts; the rest of the sensors keep working (#374).");
+        SidecarLog.Log($"[rigstats-sensor] {reading.Name} ({reading.Updating}) crashed the hardware worker {SkipAfter} times — it is no longer read until the service or Windows restarts; the rest of the sensors keep working (#374).");
         return true;
     }
 
@@ -319,7 +323,7 @@ public static class HardwareProblems
         Message = $"Reading {name} crashed RIGStats' sensor reader {HardwareWorkerClient.SkipAfter} times, so RIGStats stopped reading it. "
             + "Fans, the CPU, lighting and the other sensors keep working — only its values are missing. "
             + "A graphics card can do this when the PC switches it off to save power, or after a driver update: "
-            + "install the latest driver. RIGStats reads it again after Windows restarts.",
+            + "install the latest driver. RIGStats reads it again after Windows or the RIGStats service restarts.",
         Actions = Actions(id),
         Detail = detail,
     };

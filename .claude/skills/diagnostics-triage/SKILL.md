@@ -12,7 +12,7 @@ Read only: never send anything to a device to find out more (see `sensor-sidecar
 
 ## 2. Establish the timeline
 
-In the sidecar log, find each start (`Listening on \\.\pipe\rigstats-sensors`; `Hardware opened. Listening on …` up to 1.48) and the discovery lines before it. A sensor that vanished: look for `The hardware worker ended … while reading <hardware>` and `… crashed the hardware worker 3 times` (it is then left out until Windows restarts). Answer: was the device ever found, when last, what changed since (a version string, a firmware, a new paired device, an installer run in `rigstats-install.log`)? Compare the installed version with `git log v<version>..main -- <files>` before blaming current code.
+In the sidecar log, find each start (`Listening on \\.\pipe\rigstats-sensors`; `Hardware opened. Listening on …` up to 1.48) and the discovery lines before it. A sensor that vanished: look for `The hardware worker ended … while reading <hardware>` and `… crashed the hardware worker 3 times` (it is then left out until the service or Windows restarts). Answer: was the device ever found, when last, what changed since (a version string, a firmware, a new paired device, an installer run in `rigstats-install.log`)? Compare the installed version with `git log v<version>..main -- <files>` before blaming current code.
 
 ## 3. Compare what the service sees with what it does
 

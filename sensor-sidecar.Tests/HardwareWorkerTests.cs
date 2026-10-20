@@ -83,6 +83,9 @@ public class HardwareWorkerTests
 
         /// When set, the hardware the worker says it reads before each sample.
         public HardwareWorkerProgress? Reading { get; set; }
+
+        /// How long the worker is silent before and after its progress line.
+        public TimeSpan Pause { get; set; }
         public bool Hang { get; set; }
         public TextWriter Input { get; }
         public TextReader Output { get; }
@@ -104,8 +107,10 @@ public class HardwareWorkerTests
 
         private void BeforeSample()
         {
+            Thread.Sleep(Pause);
             if (Reading is { } reading)
                 _workerOutput.WriteLine(HardwareWorkerProtocol.Encode(reading));
+            Thread.Sleep(Pause);
             if (Crash)
                 End(unchecked((int)0xC0000005));
             if (Hang)
@@ -268,6 +273,21 @@ public class HardwareWorkerTests
         rig.Current.Hang = false;
         Assert.Equal(61, rig.Client.Sample().CpuTemp);
         Assert.Equal(2, rig.Started.Count);
+    }
+
+    [Fact]
+    public void The_time_limit_is_per_line_not_for_the_whole_sample()
+    {
+        // Silent for less than the limit each time, longer in total — as when
+        // a sample spans sleep and the wall clock jumps (#527): not hung.
+        var rig = new Rig(timeout: TimeSpan.FromMilliseconds(1000));
+        rig.Client.Sample();
+        rig.Current.Reading = Nvidia;
+        rig.Current.Pause = TimeSpan.FromMilliseconds(600);
+
+        Assert.Equal(61, rig.Client.Sample().CpuTemp);
+
+        Assert.Single(rig.Started);
     }
 
     [Fact]

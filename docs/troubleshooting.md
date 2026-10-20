@@ -104,7 +104,7 @@ Windows Update replaced the driver AMD Software installed with an older one
 
 RIGStats keeps the rest working: since 1.49 a crash restarts only the part that
 reads the hardware, and after three crashes on the same card it stops reading
-that card until Windows restarts. The graphics card's power limit has run apart
+that card until Windows or the RIGStats service restarts. The graphics card's power limit has run apart
 from the service since 1.48.1.
 
 **What to do:**
