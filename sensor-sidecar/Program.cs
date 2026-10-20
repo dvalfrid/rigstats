@@ -105,7 +105,8 @@ builder.Services.AddSingleton<PeripheralStatusStore>();
 builder.Services.AddSingleton(sp => new HardwareHost(
     new HardwareWorkerClient(skip => WorkerProcess.Start(Environment.ProcessPath!,
         skip.Count == 0 ? hardwareWorkerArgs : $"{hardwareWorkerArgs} {HardwareWorkerProtocol.SkipArgument} {string.Join(',', skip)}", "hardware-worker")),
-    sp.GetRequiredService<PeripheralStatusStore>(), sp.GetRequiredService<ProfileStore>()));
+    sp.GetRequiredService<PeripheralStatusStore>(), sp.GetRequiredService<ProfileStore>(),
+    startProblem: PawnIoProblems.Check()));
 builder.Services.AddSingleton<IHardwareHost>(sp => sp.GetRequiredService<HardwareHost>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<HardwareHost>());
 

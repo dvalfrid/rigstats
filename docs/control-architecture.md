@@ -175,6 +175,11 @@ installer migration cost; "rigstats-service" is used here as the concept name.
   Problems. Pinned by `contract/telemetry-hardware-problem.json` on both
   sides. A crash while nothing was being read (opening the hardware) is
   not put on any hardware: the restarts just get slower.
+  `hardware_problems` also carries one problem found at start
+  (`HardwareHost`'s `startProblem`): `PawnIoProblems.Check()` opens
+  `\\.\PawnIO` once. When the driver isn't there, the problem is
+  `pawnio_windows_too_old` below Windows build 17763 (1809, the oldest
+  PawnIO's INF installs on) and `pawnio_missing` otherwise (#507).
 
 ### Start-up
 
