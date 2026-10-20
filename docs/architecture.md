@@ -8,6 +8,7 @@
 - [Backend Modules](#backend-modules)
 - [Dashboard Panels](#dashboard-panels)
 - [Diagnostics Export](#diagnostics-export)
+- [Resource Budget](#resource-budget)
 - [Design Decisions](#design-decisions)
 
 ---
@@ -762,6 +763,68 @@ The detected startup values themselves (`ram_spec`, `ram_details`, `mb_board`,
 `model_name`, `system_brand`, `gpu_name`, `gpu_names`, `ping_target`,
 `battery_present`, `disk_model_map entries`) are logged as `hardware: …` lines in
 `debug.log`.
+
+---
+
+## Resource Budget
+
+What RIGStats may cost the PC it watches (#463, part of #462), and what it
+costs today. Measure with `tools/measure-resources.ps1` (see `tools/README.md`).
+It only reads Windows' performance counters, so WmiPrvSE can be measured with it.
+
+**Targets**
+
+- About 1 % of one core in steady state for the app, with the dashboard showing
+  and no dialog open.
+- No WMI query every second on a desktop. WMI work lands in `WmiPrvSE.exe`,
+  where Task Manager doesn't charge it to RIGStats.
+- Handles and threads stay flat over an hour, with no drift.
+
+**Baseline (2026-10-19)**
+
+Measured on the owner's PC: 16 logical cores, a desktop with no battery, the
+dev sidecar running. Each variant ran 10 minutes, sampled every 10 s, starting
+30 s after launch. CPU is a percentage of one core.
+
+| | A: installed 1.50.0 | B: release build with #471 + #505 |
+| --- | --- | --- |
+| App CPU, after the first 2 min | 2.59 % | 2.48 % |
+| WmiPrvSE busy samples | 48 of 60, avg 0.20 % | 0 of 38 |
+| App working set / private | ~220 / ~355 MB | ~220 / ~355 MB |
+| App GPU dedicated memory | 214 MB | 214 MB |
+| App threads / handles | 54 / ~1 090 | 54 / ~1 090 |
+
+Results:
+
+- **WMI (verified).** Since #471 and #505, a desktop never asks WMI for the
+  battery. `GetSystemPowerStatus` answers first, and WmiPrvSE stayed idle in B.
+- **Service.** The hardware worker uses about 2.2 % of one core and the service
+  process about 0.35 %. The variants differ only in the app, so this is the
+  service's own share.
+- **Startup burst: AMD's driver, not RIGStats (verified, #515).** For about
+  90 s after start, one thread takes a whole core. It is not RIGStats code: the
+  thread starts in AMD's driver (`amdxc64.dll` for D3D12, `amdvlk64.dll` for
+  Vulkan), its `cdb` stacks hold only driver frames, and it polls, mostly in
+  the kernel.
+
+  | What runs | Burst |
+  | --- | --- |
+  | RIGStats normally (D3D12 + DComp) | yes |
+  | RIGStats with DComp off (Vulkan) | yes |
+  | RIGStats on the iGPU, a different driver version | yes |
+  | A bare eframe window, D3D12 or Vulkan | yes |
+  | A bare eframe window, OpenGL | no |
+  | A wgpu device with no window | no |
+
+  OpenGL would avoid it, but DComp transparency needs D3D12, so the app keeps
+  D3D12. Which Adrenalin feature causes it is a hypothesis, not tested: the
+  overlay or metrics, Anti-Lag, Chill and Fluid Motion Frames are the
+  candidates. Whether NVIDIA or Intel GPUs see it is also not tested.
+
+  How it was found: CPU per thread with `GetThreadDescription` and the thread's
+  start address (`NtQueryInformationThread`, class 9), then `cdbX64 -pv -p
+  <pid> -c "!runaway 1; ~*kn 25; qd"` from WinDbg.
+- **Steady state.** About 2.5 % against the 1 % target. Still open in #463.
 
 ---
 

@@ -119,6 +119,23 @@ pwsh -File tools\smoke-app.ps1 -Only wallpaper  # one mode
 pwsh -File tools\smoke-app.ps1 -Restart         # start the installed app afterwards
 ```
 
+## `measure-resources.ps1`
+
+**What RIGStats costs the PC** (#463, #462): samples every `rigstats*` process
+and `WmiPrvSE` every `-Interval` seconds for `-Minutes` and writes a CSV — CPU
+(% of one core, averaged over each interval by Windows), working set, private
+bytes, threads, handles, and for the app its GPU dedicated memory and GPU
+engine utilization — then prints a summary per process (average and peak
+CPU, memory range, handle drift). Read-only: only performance counters, no
+WMI while measuring (WmiPrvSE is measured). The service's three processes
+show by role when the shell may read their command lines (elevated), else
+by pid. The numbers go into "Resource budget" in
+[docs/architecture.md](../docs/architecture.md).
+
+```powershell
+pwsh -File tools\measure-resources.ps1 -Minutes 30 -Label release-normal
+```
+
 ## `openrgb-asus-watch.ps1`
 
 Reports ASUS lighting devices **added to OpenRGB** since the last review, so
