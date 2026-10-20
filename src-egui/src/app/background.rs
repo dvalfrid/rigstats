@@ -1,6 +1,6 @@
 //! The background threads and tasks `main()` starts besides the poll loop:
 //! GPU name detection, the Control Center connection, the tray event
-//! thread, the floating-mode heartbeat and the update check.
+//! thread and the update check.
 
 use eframe::egui;
 use rigstats_backend::{control, debug, hardware};
@@ -143,7 +143,8 @@ impl TrayMenuIds {
     }
 }
 
-/// Polls tray menu events at 50 ms intervals on its own thread and hands
+/// Waits for tray menu events on its own thread (250 ms ticks, 50 ms while
+/// the icon is hovered, for the hover card's watchdog) and hands
 /// the commands to the UI thread, waking it with `request_repaint()`. Quit
 /// is handled here directly with `process::exit`, so it is never delayed
 /// by a missed repaint. `recording_active` mirrors
@@ -227,12 +228,21 @@ pub(crate) fn spawn_tray_event_thread(
     let dir_tray = dir.to_path_buf();
     let ctx = ctx.clone();
     std::thread::spawn(move || loop {
+        // Wakes on a menu event at once, otherwise every 250 ms — every 50 ms
+        // while the icon is hovered, when the hover card's watchdog needs
+        // it. It used to wake 20 times a second all the time (#468).
+        let tick = if card_watch.lock_safe().icon.is_some() {
+            Duration::from_millis(50)
+        } else {
+            Duration::from_millis(250)
+        };
+        let event = MenuEvent::receiver().recv_timeout(tick).ok();
         // Guard each iteration: a panic in a tray/Win32 call must not
         // silently kill this thread, or tray clicks would stop working
         // for the rest of the session. Recover and log instead.
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let mut repaint = false;
-            if let Ok(ev) = MenuEvent::receiver().try_recv() {
+            if let Some(ev) = event {
                 // Use the foreground rights that come with the tray-menu interaction.
                 // We immediately bring the (off-screen) parent window to the foreground
                 // so that our process owns foreground when the dialog is created a few
@@ -289,23 +299,8 @@ pub(crate) fn spawn_tray_event_thread(
                 "tray: event handler panicked — thread recovered, continuing",
             );
         }
-        std::thread::sleep(Duration::from_millis(50));
     });
     tray_rx
-}
-
-/// Heartbeat: wakes the parent eframe loop at ~1 fps when floating mode is
-/// active. With `show_viewport_immediate`, all panels are rendered
-/// synchronously as part of the parent frame, so one `request_repaint()`
-/// per second is enough to drive all panel updates.
-pub(crate) fn spawn_floating_heartbeat(ctx: &egui::Context, floating: Arc<AtomicBool>) {
-    let ctx = ctx.clone();
-    std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_millis(950));
-        if floating.load(Ordering::Relaxed) {
-            ctx.request_repaint();
-        }
-    });
 }
 
 /// The version from the `--just-updated=VERSION` argument the NSIS

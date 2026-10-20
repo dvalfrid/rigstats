@@ -260,8 +260,6 @@ pub(crate) struct FloatingState {
     /// a panel's creation frame triggers a burst; a later content-driven
     /// resize keeps the old, non-hiding behavior (see `render_floating_panels`).
     pub(crate) dcomp: RefCell<HashMap<String, DcompRevealBurst>>,
-    /// Shared with the heartbeat thread so it knows whether to drive parent repaints.
-    pub(crate) mode_arc: Arc<AtomicBool>,
 }
 
 /// The fixed-mode (non-floating) dashboard window: fullscreen, pinned

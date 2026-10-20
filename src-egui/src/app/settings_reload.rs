@@ -31,9 +31,6 @@ impl RigStatsApp {
             self.window_layer = s.window_layer.clone();
             let was_floating = self.floating.mode;
             self.floating.mode = s.floating_mode;
-            self.floating
-                .mode_arc
-                .store(self.floating.mode, Ordering::Relaxed);
             self.floating.panels_locked = s.floating_panels_locked;
             self.floating.panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
             self.overlay.click_through = s.overlay_click_through;

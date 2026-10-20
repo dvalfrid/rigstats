@@ -133,7 +133,6 @@ impl RigStatsApp {
         };
         let was_floating = self.floating.mode;
         self.floating.mode = new_mode;
-        self.floating.mode_arc.store(new_mode, Ordering::Relaxed);
         if was_floating != new_mode {
             if new_mode {
                 self.floating.panels_positioned.clear();

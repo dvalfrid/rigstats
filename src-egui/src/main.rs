@@ -158,7 +158,6 @@ impl RigStatsApp {
         dir: Arc<PathBuf>,
         preferred_gpu: Arc<Mutex<Option<String>>>,
         active_profile_shared: Arc<Mutex<Option<String>>>,
-        floating_mode_arc: Arc<AtomicBool>,
         updater_win: Arc<Mutex<windows::updater::UpdaterState>>,
         updater_open: Arc<AtomicBool>,
         updater_focus: Arc<AtomicBool>,
@@ -242,7 +241,6 @@ impl RigStatsApp {
                 panels_positioned: HashSet::new(),
                 behind_enforce: RefCell::new(HashMap::new()),
                 dcomp: RefCell::new(HashMap::new()),
-                mode_arc: floating_mode_arc,
             },
             os_dark_mode: {
                 #[cfg(windows)]
@@ -442,7 +440,7 @@ impl RigStatsApp {
         if self.wallpaper.is_active() {
             // The main window is parked off-screen and nothing else asks for
             // frames, but each frame drains the poll channel and checks the
-            // alerts — so keep one a second, like floating mode's heartbeat.
+            // alerts — so keep one a second.
             ctx.request_repaint_after(Duration::from_secs(1));
         }
         let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
@@ -1377,9 +1375,6 @@ fn main() {
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0);
 
-            let fm_arc_hb = Arc::new(AtomicBool::new(current_settings.lock_safe().floating_mode));
-            app::background::spawn_floating_heartbeat(&cc.egui_ctx, fm_arc_hb.clone());
-
             let (updater_win_bg, updater_open_bg, updater_focus_bg) =
                 app::background::start_updater(&runtime, &dir, &cc.egui_ctx);
 
@@ -1398,7 +1393,6 @@ fn main() {
                 dir_arc,
                 preferred_gpu_arc,
                 active_profile_arc,
-                fm_arc_hb,
                 updater_win_bg,
                 updater_open_bg,
                 updater_focus_bg,
