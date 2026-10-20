@@ -79,7 +79,7 @@ come from Windows' D3D counters, not ADL. Known LibreHardwareMonitor issue:
 **Since 1.49:** LibreHardwareMonitor runs in a worker process of the service. A
 crash there restarts the worker within seconds; sensors, fans and lighting keep
 working. If the same graphics card crashes it three times, RIGStats stops
-reading that card until Windows restarts and says so in **Status → Problems**
+reading that card until Windows or the service restarts and says so in **Status → Problems**
 ("… isn't read any more"). A laptop that switches its NVIDIA GPU off to save
 power (Eco mode, #338) can do this.
 
@@ -214,7 +214,7 @@ ended during 'sample' (exit code 0xC0000005) after 35 s while reading
 was reading; `did not answer 'sample' within 8 s` is a hang; `The hardware
 worker is running again.` follows. After three crashes in the same hardware,
 `<hardware> (<id>) crashed the hardware worker 3 times — it is no longer read
-until Windows restarts`: only that hardware's values are missing, and Status
+until the service or Windows restarts`: only that hardware's values are missing, and Status
 lists it under Problems. Lines starting `[hardware-worker]` or `[gpu-worker]`
 are a worker's own output — after a crash, its stack.
 
