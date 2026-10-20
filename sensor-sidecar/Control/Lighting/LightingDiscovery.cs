@@ -25,6 +25,13 @@ public static class LightingDiscovery
         // dongle. A headset switched off is asked again on later rescans.
         var silent = new List<HidDeviceInfo>();
         devices.AddRange(AsusHeadsetDevice.Discover(hid, silent));
+        // Razer mice and laptop keyboards on Razer's own protocol (#510);
+        // models that show a LampArray are left to LampArrayDevice below.
+        devices.AddRange(RazerDevice.Discover(hid));
+        // HyperX Alloy Origins Core keyboards (#511) and SteelSeries Siberia
+        // headsets (#512), from OpenRGB's documentation.
+        devices.AddRange(HyperXKeyboardDevice.Discover(hid));
+        devices.AddRange(SteelSeriesHeadsetDevice.Discover(hid));
         // Any HID LampArray device (Windows Dynamic Lighting standard), any
         // brand — except keyboards already driven by their own protocol above.
         devices.AddRange(LampArrayDevice.Discover(

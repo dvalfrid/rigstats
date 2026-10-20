@@ -893,6 +893,45 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   (`0x35 … 0xFF`), frames `0x40 0x84 0x00 <n> RGB…`. Two identical monitors
   are two devices. The older feature-report family (XG27AQ, XG279Q, ...)
   is out of scope (legacy).
+- **Razer devices on Razer's own protocol** (`RazerDevice`, #510) — not
+  verified yet. One 91-byte feature report each way (report id 0, status,
+  transaction id, remaining packets, protocol type, data size, command class,
+  command id, 80 argument bytes, XOR checksum over bytes 2..87 of the 90),
+  sent with `HidD_SetFeature`, the reply read with `HidD_GetFeature` (status
+  `0x02` = done; busy is asked again a few times). The handle is opened
+  read/write, or with no access when Windows holds the collection (a mouse or
+  keyboard) — feature reports work on such a handle (hypothesis until a
+  device confirms). Command numbers, LEDs and the per-model transaction id
+  come from openrazer (GPL-2, documentation only, no code copied):
+  DeathAdder 2013 `0037` (transaction id `3F`; scroll wheel `01` and logo
+  `04` LEDs: `03 00` state, `03 01` colour, `03 02` effect static), Blade 15
+  (2018) `0233` (transaction id `FF`; `03 0A` standard matrix: `00` off,
+  `06 r g b` static). Off or one colour; breathing and spectrum show as the
+  colour. Discovery only opens the collection — nothing is sent until a
+  profile asks; a model that also shows a LampArray is left to
+  `LampArrayDevice`. A failed write never throws (the device's `Problem`
+  shows it), so an unconfirmed device can't fail a profile switch. Skipped
+  while Razer Synapse runs (`RazerDevice.RazerSoftware`, process names not
+  yet seen on a machine). New models: one row in `RazerDevice.Models`, from
+  openrazer's tables for that model only.
+- **HyperX Alloy Origins Core** (`HyperXKeyboardDevice`, #511) and
+  **SteelSeries Siberia 350** (`SteelSeriesHeadsetDevice`, #512) — not
+  verified yet; protocols from OpenRGB (GPL-2, documentation only).
+  HyperX: vendor collection (interface 2, usage page `0xFF13`, 65-byte
+  output); a frame is 380 colour bytes (94 key slots; per 12 keys 6 green +
+  2 zero twice, then red, then blue) in seven `00 A2 <seq> 00 <len>` reports
+  of 60 bytes, brightness `00 A7 00 00 01 <0–255>`. The keyboard shows
+  colours only while frames keep coming (OpenRGB re-sends after 50 ms), so
+  `SoftwareKeepAlive` sends the frame every 50 ms on its own thread —
+  breathing and spectrum come free — until the profile changes or the
+  service stops (then the keyboard returns to its own effect); every ~2 s it
+  checks for HyperX NGENUITY and leaves the keyboard to it. Its layout query
+  (`0x10`) is not used: every key gets the same colour. SteelSeries: one
+  zone over interface 3 (16-byte output, report id 1); a colour is four
+  messages `01 00 <cmd> <len> <payload>`: `95 80 BF`, `80 52 20`,
+  `83 r g b`, `93 03 80`; off is black. Both never throw on a write (the
+  device's `Problem` shows it) and are skipped while their vendor's software
+  runs (process names not yet seen on a machine).
 - **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
   standard behind Windows Dynamic Lighting (usage page `0x59`), so one
   implementation covers every current keyboard, mouse or accessory that

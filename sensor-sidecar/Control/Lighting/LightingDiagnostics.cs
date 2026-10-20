@@ -70,6 +70,12 @@ public static class LightingDiagnostics
             return "asus_keyboard_channel";
         if (Mice.MouseCatalog.Entries.Any(e => Mice.MouseProvider.IsChannel(h, e)))
             return "asus_mouse_settings";
+        if (RazerDevice.IsChannel(h))
+            return "razer";
+        if (HyperXKeyboardDevice.IsChannel(h))
+            return "hyperx_keyboard";
+        if (SteelSeriesHeadsetDevice.IsChannel(h))
+            return "steelseries_headset";
         if (h.VendorId != AuraUsb.AsusVendorId || h.UsagePage != AuraUsb.AuraUsagePage)
             return null;
         if (AuraUsb.Family(h.ProductId) is { } family)
