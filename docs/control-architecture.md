@@ -909,6 +909,24 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   while Razer Synapse runs (`RazerDevice.RazerSoftware`, process names not
   yet seen on a machine). New models: one row in `RazerDevice.Models`, from
   openrazer's tables for that model only.
+- **HyperX Alloy Origins Core** (`HyperXKeyboardDevice`, #511) and
+  **SteelSeries Siberia 350** (`SteelSeriesHeadsetDevice`, #512) — not
+  verified yet; protocols from OpenRGB (GPL-2, documentation only).
+  HyperX: vendor collection (interface 2, usage page `0xFF13`, 65-byte
+  output); a frame is 380 colour bytes (94 key slots; per 12 keys 6 green +
+  2 zero twice, then red, then blue) in seven `00 A2 <seq> 00 <len>` reports
+  of 60 bytes, brightness `00 A7 00 00 01 <0–255>`. The keyboard shows
+  colours only while frames keep coming (OpenRGB re-sends after 50 ms), so
+  `SoftwareKeepAlive` sends the frame every 50 ms on its own thread —
+  breathing and spectrum come free — until the profile changes or the
+  service stops (then the keyboard returns to its own effect); every ~2 s it
+  checks for HyperX NGENUITY and leaves the keyboard to it. Its layout query
+  (`0x10`) is not used: every key gets the same colour. SteelSeries: one
+  zone over interface 3 (16-byte output, report id 1); a colour is four
+  messages `01 00 <cmd> <len> <payload>`: `95 80 BF`, `80 52 20`,
+  `83 r g b`, `93 03 80`; off is black. Both never throw on a write (the
+  device's `Problem` shows it) and are skipped while their vendor's software
+  runs (process names not yet seen on a machine).
 - **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
   standard behind Windows Dynamic Lighting (usage page `0x59`), so one
   implementation covers every current keyboard, mouse or accessory that

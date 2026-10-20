@@ -15,4 +15,4 @@ comment is ignored. See "Release routine" in docs/release.md.
 
 # 1.51.0
 - **Lighter on your PC** — RIGStats now uses about 1 % of one CPU core while it runs, down from about 2.5 %: it reads the running programs in one Windows call and without a pool of threads woken every second, and it no longer asks Windows about a battery a desktop doesn't have.
-- **First Razer devices** — the Razer DeathAdder 2013 and the Razer Blade 15 (2018) keyboard follow your lighting profile on Razer's own protocol (off or one colour; left alone while Razer Synapse runs). Built from the openrazer project's documentation and marked as not yet verified — a report from an owner confirms it.
+- **Razer, HyperX and SteelSeries lighting** — the Razer DeathAdder 2013 and Razer Blade 15 (2018) keyboard, the HyperX Alloy Origins Core keyboard and the SteelSeries Siberia 350 headset follow your lighting profile, each on its own protocol (left alone while Razer Synapse, HyperX NGENUITY or SteelSeries GG runs). Built from the openrazer and OpenRGB projects' documentation and marked as not yet verified — a report from an owner confirms it.
