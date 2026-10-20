@@ -10,7 +10,8 @@ out with `ViewportBuilder::with_has_shadow(false)`. Upstream ignores
 `has_shadow` on Windows and always asks for the shadow on an undecorated
 window.
 
-**Why:** since egui-winit 0.37, every undecorated window gets
+**Why:** since egui-winit 0.35 (emilk/egui#8169, "Always enable windows
+undecorated shadows"), every undecorated window gets
 `with_undecorated_shadow(true)`. winit then extends the DWM frame into the
 whole client area, so a per-pixel-transparent window (RIGStats' DComp
 dashboard, overlay, floating panels, wallpaper host) shows the light DWM

@@ -130,7 +130,7 @@ to a handful of frames after measuring that a hidden window's paint/present
 cadence is throttled to a fixed ~100 ms/frame regardless of work done inside
 it. Every undecorated transparent viewport (dashboard, overlay, floating
 panels, tray card, wallpaper host) sets `with_has_shadow(false)`: since egui
-0.37, egui-winit otherwise asks winit for the undecorated-window shadow, which
+0.35 (emilk/egui#8169), egui-winit otherwise asks winit for the undecorated-window shadow, which
 extends the DWM frame under the whole client area and shows it light through
 every transparent pixel. Upstream ignores `has_shadow` on Windows, hence the
 patched copy in `third_party/egui-winit` (`docs/upstream/egui-winit-shadow.md`).

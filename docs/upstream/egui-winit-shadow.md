@@ -18,7 +18,7 @@ whenever something happens.
 
 - egui-winit 0.37.0, `create_winit_window_attributes` (`src/lib.rs`, Windows block):
   `let want_undecorated_shadow = !decorations.unwrap_or(true) && !fullscreen.unwrap_or(false);`
-  then `window_attributes.with_undecorated_shadow(want_undecorated_shadow)`. 0.34.3 never asked for the shadow.
+  then `window_attributes.with_undecorated_shadow(want_undecorated_shadow)`. 0.34.3 never asked for the shadow; it came in 0.35 with emilk/egui#8169 ("Always enable windows undecorated shadows", per the egui-winit changelog). Our repro only compared 0.34.3 and 0.37.0, so issue #8750 wrongly says "since 0.37".
 - `ViewportBuilder::has_shadow` is destructured as `_has_shadow` and only used on macOS, so a Windows app can't opt out.
 - winit's undecorated shadow extends the DWM frame into the whole client area. A per-pixel-transparent window (DComp swap chain, `with_transparent(true)`) then shows the light DWM frame through every transparent pixel, with rounded corners and a 1 px border.
 - **Evidence:** a bare eframe window (`D:\Development\scratch-transparency-1`, outside the repo): DX12 `DxgiFromVisual`, `with_transparent(true)`, `with_decorations(false)`, a 10 % dark premultiplied clear colour, over a black desktop:
