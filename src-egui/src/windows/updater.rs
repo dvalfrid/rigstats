@@ -582,16 +582,15 @@ fn version_group(ui: &mut egui::Ui, dc: &DialogColors, status: &UpdateStatus) {
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
-// The ctx-level panel API, as in every other dialog.
-#[allow(deprecated)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
     state: &Arc<Mutex<UpdaterState>>,
     dc: &DialogColors,
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -614,10 +613,10 @@ pub fn show(
     // Parse the changelog at most once per status change (not every frame).
     let has_notes = st.ensure_changelog_cache();
 
-    ui_kit::hero(ctx, dc, "updater", "Updates", |_| {});
+    ui_kit::hero(ui, dc, "updater", "Updates", |_| {});
 
     // ── Footer ────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("updater_footer")
+    egui::Panel::bottom("updater_footer")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -625,7 +624,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.with_layout(
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| match &st.status {
@@ -673,7 +672,7 @@ pub fn show(
             top: 16,
             bottom: 8,
         }))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             version_group(ui, dc, &st.status);
             if let (true, Some((_, entries))) = (has_notes, &st.notes_cache) {
                 ui.add_space(2.0);

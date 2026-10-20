@@ -186,11 +186,9 @@ fn live_preview(draft: &settings::Settings, live: &settings::Settings) -> settin
 
 // ── show() ────────────────────────────────────────────────────────────────────
 
-// The ctx-level panel API, as in every other dialog.
-#[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
@@ -202,6 +200,7 @@ pub fn show(
     dcomp_available: bool,
     requests: &OpenRequests,
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if needs_focus.swap(false, Ordering::Relaxed) {
         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
@@ -210,10 +209,10 @@ pub fn show(
     let mut action_save = false;
     let mut action_cancel = false;
 
-    ui_kit::hero(ctx, dc, "settings", "Settings", |_| {});
+    ui_kit::hero(ui, dc, "settings", "Settings", |_| {});
 
     // ── Footer ────────────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("settings_footer")
+    egui::Panel::bottom("settings_footer")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -221,7 +220,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             let err = state.lock_safe().error.clone();
             if let Some(ref e) = err {
                 ui_kit::row_problem(ui, dc, rigstats_backend::control::Severity::Error, e);
@@ -249,11 +248,11 @@ pub fn show(
         });
 
     // ── Sidebar ───────────────────────────────────────────────────────────────
-    egui::SidePanel::left("settings_nav")
+    egui::Panel::left("settings_nav")
         .resizable(false)
-        .exact_width(ui_kit::SIDEBAR_W)
+        .exact_size(ui_kit::SIDEBAR_W)
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::same(10)))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             let mut st = state.lock_safe();
             ui.add_space(4.0);
             for &(page, icon, label) in PAGES {
@@ -280,7 +279,7 @@ pub fn show(
     // ── Page ──────────────────────────────────────────────────────────────────
     egui::CentralPanel::default()
         .frame(ui_kit::dialog_frame(dc))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("settings_scroll")
                 .auto_shrink([false, false])
@@ -468,7 +467,7 @@ fn general_page(
                 ui.add_sized(
                     [ui_kit::CONTROL_W, ui_kit::CONTROL_H],
                     egui::TextEdit::singleline(&mut draft.model_name)
-                        .vertical_align(egui::Align::Center)
+                        .align(egui::Align2::LEFT_CENTER)
                         .hint_text("Detected automatically")
                         .text_color(dc.text),
                 );

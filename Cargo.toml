@@ -4,10 +4,6 @@ default-members = ["src-egui", "rigstats-backend"]
 exclude = ["third_party"]
 resolver = "2"
 
-# egui-wgpu with one fix: don't keep a device open on every GPU (holds the
-# dGPU of hybrid laptops awake). See third_party/egui-wgpu/RIGSTATS-PATCH.md.
-# tray-icon registered in notify-icon version 4, so Windows 11 shows no empty
-# tooltip over the hover card. See third_party/tray-icon/RIGSTATS-PATCH.md.
 # Smaller, faster release binaries (#467). Not panic = "abort": the tray
 # thread and debug::supervise rely on catch_unwind.
 [profile.release]
@@ -15,6 +11,14 @@ lto = "thin"
 codegen-units = 1
 strip = true
 
+# egui-wgpu with one fix: don't keep a device open on every GPU (holds the
+# dGPU of hybrid laptops awake). See third_party/egui-wgpu/RIGSTATS-PATCH.md.
+# egui-winit with one fix: honour `with_has_shadow(false)` on Windows, so a
+# transparent window doesn't show the DWM frame. See
+# third_party/egui-winit/RIGSTATS-PATCH.md.
+# tray-icon registered in notify-icon version 4, so Windows 11 shows no empty
+# tooltip over the hover card. See third_party/tray-icon/RIGSTATS-PATCH.md.
 [patch.crates-io]
 egui-wgpu = { path = "third_party/egui-wgpu" }
+egui-winit = { path = "third_party/egui-winit" }
 tray-icon = { path = "third_party/tray-icon" }

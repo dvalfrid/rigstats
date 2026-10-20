@@ -78,7 +78,7 @@ pub fn draw(
             }
             if resp.clicked() {
                 ui.ctx()
-                    .data_mut(|d| d.insert_temp(egui::Id::new("open_updater"), true));
+                    .data_mut(|d| d.insert_temp(egui::Id::unique("open_updater"), true));
             }
         }
     })

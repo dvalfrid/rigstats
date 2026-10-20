@@ -347,6 +347,8 @@ fn main() {
         .with_inner_size(size)
         .with_position(pos)
         .with_decorations(false)
+        // No DWM frame behind a transparent window (third_party/egui-winit).
+        .with_has_shadow(false)
         .with_taskbar(false)
         .with_window_level(egui::WindowLevel::Normal)
         // Needed for egui-wgpu's alpha-mode picker to select a transparent

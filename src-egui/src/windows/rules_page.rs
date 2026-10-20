@@ -309,7 +309,7 @@ pub fn rules_page(
             ui.add_sized(
                 [ui_kit::CONTROL_W, ui_kit::CONTROL_H],
                 egui::TextEdit::singleline(&mut page.exe)
-                    .vertical_align(egui::Align::Center)
+                    .align(egui::Align2::LEFT_CENTER)
                     .hint_text("game.exe"),
             );
             // Typing a different program forgets the chosen one's path.

@@ -2422,7 +2422,7 @@ fn hue_card(
                             }
                             ui.add(
                                 egui::TextEdit::singleline(typed_ip)
-                                    .vertical_align(egui::Align::Center)
+                                    .align(egui::Align2::LEFT_CENTER)
                                     .desired_width(130.0)
                                     .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                                     .hint_text("192.168.1.20"),
@@ -2715,10 +2715,9 @@ fn set_gpu_limit(limits: &mut BTreeMap<String, i32>, adapter: &GpuAdapterCap, va
     }
 }
 
-#[allow(deprecated)]
 #[allow(clippy::too_many_arguments)]
 pub fn show(
-    ctx: &egui::Context,
+    ui: &mut egui::Ui,
     main_ctx: &egui::Context,
     open: &Arc<AtomicBool>,
     needs_focus: &Arc<AtomicBool>,
@@ -2729,6 +2728,7 @@ pub fn show(
     look_link: &LookLink,
     peripherals: &[Peripheral],
 ) {
+    let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
     if !ui_state.shown {
         ui_state.shown = true;
@@ -2742,7 +2742,7 @@ pub fn show(
         .sync(control.active_profile.as_deref(), look_link);
 
     let fan_caps = control.fan_caps();
-    if let Some(fan) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new(SELECT_FAN_ID))) {
+    if let Some(fan) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::unique(SELECT_FAN_ID))) {
         ui_state.select_fan(&fan, control);
     }
     let cpu_caps = control.cpu_caps();
@@ -2849,7 +2849,7 @@ pub fn show(
     }
 
     // ── Hero ─────────────────────────────────────────────────────────────
-    ui_kit::hero(ctx, dc, "control", "Control Center", |ui| {
+    ui_kit::hero(ui, dc, "control", "Control Center", |ui| {
         use crate::problems::{STATE_CONNECTED, STATE_CONNECTING, STATE_MISMATCH, STATE_REFUSED};
         let (dot, text) = if control.protocol_mismatch.is_some() {
             (ui_kit::C_BAD, STATE_MISMATCH)
@@ -2867,7 +2867,7 @@ pub fn show(
     });
 
     // ── Profile bar: which profile everything below belongs to ───────────
-    egui::TopBottomPanel::top("control_profiles")
+    egui::Panel::top("control_profiles")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -2875,12 +2875,12 @@ pub fn show(
             bottom: 10,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             profile_bar(ui, dc, control, ui_state, cmd_tx, busy);
         });
 
     // ── Footer ───────────────────────────────────────────────────────────
-    egui::TopBottomPanel::bottom("control_footer")
+    egui::Panel::bottom("control_footer")
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -2888,7 +2888,7 @@ pub fn show(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             // The last apply: failed (red) or partly applied (amber), in the
             // service's words — the same colours as every problem (#373).
             // Until dismissed: a partly applied profile stayed until the next
@@ -3041,11 +3041,11 @@ pub fn show(
         mouse: control.has_mouse(),
         keyboard: !control.keyboards().is_empty(),
     };
-    egui::SidePanel::left("control_nav")
+    egui::Panel::left("control_nav")
         .resizable(false)
-        .exact_width(ui_kit::SIDEBAR_W)
+        .exact_size(ui_kit::SIDEBAR_W)
         .frame(ui_kit::dialog_frame(dc).inner_margin(egui::Margin::same(10)))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(4.0);
                 for &(page, icon, label) in PAGES {
@@ -3070,7 +3070,7 @@ pub fn show(
             top: 18,
             bottom: 8,
         }))
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             // Why nothing can be changed — refused, or another version — above
             // every page (#373). Still connecting is normal for a moment.
             if let Some(problem) = connection_problem(control) {
@@ -3384,7 +3384,7 @@ fn profile_bar(
             (Some(ProfileEdit::Renaming { id, mut name }), Some(active)) => {
                 let edit = ui.add(
                     egui::TextEdit::singleline(&mut name)
-                        .vertical_align(egui::Align::Center)
+                        .align(egui::Align2::LEFT_CENTER)
                         .desired_width(200.0)
                         .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
                         .hint_text("Profile name"),
@@ -4178,7 +4178,7 @@ fn fans_tab(
             let mut label = config.label.clone().unwrap_or_default();
             ui.add(
                 egui::TextEdit::singleline(&mut label)
-                    .vertical_align(egui::Align::Center)
+                    .align(egui::Align2::LEFT_CENTER)
                     .hint_text("e.g. CPU cooler")
                     .desired_width(150.0)
 .min_size(egui::vec2(0.0, ui_kit::CONTROL_H)),

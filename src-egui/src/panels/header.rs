@@ -176,7 +176,7 @@ fn draw_profile_chip(ui: &mut Ui, label: String, sc: f32) {
     }
     if resp.clicked() {
         ui.ctx()
-            .data_mut(|d| d.insert_temp(egui::Id::new("open_control_center"), true));
+            .data_mut(|d| d.insert_temp(egui::Id::unique("open_control_center"), true));
     }
 }
 
@@ -218,7 +218,7 @@ fn draw_mic_glyph(ui: &mut Ui, muted: bool, sc: f32) {
     }
     if resp.clicked() {
         ui.ctx()
-            .data_mut(|d| d.insert_temp(egui::Id::new("toggle_microphone"), true));
+            .data_mut(|d| d.insert_temp(egui::Id::unique("toggle_microphone"), true));
         // The flag is consumed at the start of the next frame — ask for it
         // now instead of waiting for the ~1 s idle repaint.
         ui.ctx().request_repaint();

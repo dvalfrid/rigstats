@@ -802,7 +802,7 @@ impl eframe::App for RigStatsApp {
         // flag because the panel is drawn with `&self`.
         if ui
             .ctx()
-            .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("toggle_microphone")))
+            .data_mut(|d| d.remove_temp::<bool>(egui::Id::unique("toggle_microphone")))
             .unwrap_or(false)
         {
             self.toggle_microphone();
@@ -935,11 +935,11 @@ impl eframe::App for RigStatsApp {
 /// flag and hands the fan's label on to the Control Center, which resolves
 /// it to the header driving that fan. Returns whether the window should open.
 fn take_fan_curve_request(ctx: &egui::Context) -> bool {
-    let Some(label) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new("open_fan_curve")))
+    let Some(label) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::unique("open_fan_curve")))
     else {
         return false;
     };
-    ctx.data_mut(|d| d.insert_temp(egui::Id::new(windows::control::SELECT_FAN_ID), label));
+    ctx.data_mut(|d| d.insert_temp(egui::Id::unique(windows::control::SELECT_FAN_ID), label));
     true
 }
 
@@ -1061,7 +1061,7 @@ impl RigStatsApp {
         if panel == "clock"
             && ui
                 .ctx()
-                .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_updater")))
+                .data_mut(|d| d.remove_temp::<bool>(egui::Id::unique("open_updater")))
                 .unwrap_or(false)
         {
             self.dialogs.updater_open.store(true, Ordering::Relaxed);
@@ -1069,7 +1069,7 @@ impl RigStatsApp {
         if panel == "header"
             && ui
                 .ctx()
-                .data_mut(|d| d.remove_temp::<bool>(egui::Id::new("open_control_center")))
+                .data_mut(|d| d.remove_temp::<bool>(egui::Id::unique("open_control_center")))
                 .unwrap_or(false)
         {
             self.dialogs.control_open.store(true, Ordering::Relaxed);

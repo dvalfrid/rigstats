@@ -1,7 +1,7 @@
-# egui-wgpu 0.34.3 — RIGStats patch
+# egui-wgpu 0.37.0 — RIGStats patch
 
-Unmodified copy of `egui-wgpu` 0.34.3 from crates.io (upstream tag `0.34.3`,
-commit `7288e4b2`) with one change, wired in through `[patch.crates-io]` in the
+Unmodified copy of `egui-wgpu` 0.37.0 from crates.io (upstream tag `0.37.0`,
+commit `7c0b4040`) with one change, wired in through `[patch.crates-io]` in the
 workspace `Cargo.toml`.
 
 **Change:** `RenderState::create` (`src/lib.rs`) no longer keeps

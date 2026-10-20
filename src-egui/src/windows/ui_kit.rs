@@ -58,18 +58,10 @@ pub fn card_frame(dc: &DialogColors) -> egui::Frame {
         .inner_margin(egui::Margin::symmetric(14, 4))
 }
 
-// The ctx-level panel API, as in every dialog.
-#[allow(deprecated)]
 /// The dialog's title bar inside the window: big title left, `right`
 /// (status, a button) on the right.
-pub fn hero(
-    ctx: &egui::Context,
-    dc: &DialogColors,
-    id: &str,
-    title: &str,
-    right: impl FnOnce(&mut Ui),
-) {
-    egui::TopBottomPanel::top(format!("{id}_hero"))
+pub fn hero(ui: &mut Ui, dc: &DialogColors, id: &str, title: &str, right: impl FnOnce(&mut Ui)) {
+    egui::Panel::top(format!("{id}_hero"))
         .frame(dialog_frame(dc).inner_margin(egui::Margin {
             left: 20,
             right: 20,
@@ -77,7 +69,7 @@ pub fn hero(
             bottom: 12,
         }))
         .show_separator_line(true)
-        .show(ctx, |ui| {
+        .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(title).size(20.0).strong().color(dc.title));
                 ui.with_layout(Layout::right_to_left(Align::Center), right);
@@ -478,7 +470,7 @@ pub fn segmented<T: PartialEq + Clone>(
             pos2(rect.left() + 2.0 + i as f32 * seg_w, rect.top() + 2.0),
             vec2(seg_w, rect.height() - 4.0),
         );
-        let id = egui::Id::new(("segmented", rect.min.x as i32, rect.min.y as i32, i));
+        let id = egui::Id::unique(("segmented", rect.min.x as i32, rect.min.y as i32, i));
         let resp = ui.interact(r, id, Sense::click());
         let selected = *value == *v;
         if selected {
@@ -508,7 +500,7 @@ pub fn segmented<T: PartialEq + Clone>(
 /// A drop-down list of [`CONTROL_W`] width.
 pub fn dropdown(
     ui: &mut Ui,
-    id: impl std::hash::Hash,
+    id: impl egui::AsIdSalt,
     selected: impl Into<egui::WidgetText>,
     add: impl FnOnce(&mut Ui),
 ) -> Response {
@@ -519,7 +511,7 @@ pub fn dropdown(
 /// ([`CONTROL_H`]). Every drop-down goes through here.
 pub fn combo(
     ui: &mut Ui,
-    id: impl std::hash::Hash,
+    id: impl egui::AsIdSalt,
     width: f32,
     selected: impl Into<egui::WidgetText>,
     add: impl FnOnce(&mut Ui),
@@ -627,9 +619,8 @@ pub fn threshold_field(ui: &mut Ui, value: &mut Option<u8>) {
     let resp = ui.add_sized(
         [48.0, CONTROL_H],
         egui::TextEdit::singleline(&mut text)
-            .vertical_align(egui::Align::Center)
+            .align(egui::Align2::CENTER_CENTER)
             .hint_text("—")
-            .horizontal_align(Align::Center)
             .font(egui::TextStyle::Monospace),
     );
     if resp.changed() {
@@ -647,7 +638,7 @@ pub fn meter(ui: &mut Ui, dc: &DialogColors, id_salt: &str, level: f32, width: f
     const GAP: f32 = 2.0;
     const FALL_PER_SEC: f32 = 1.2;
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 8.0), Sense::hover());
-    let id = ui.id().with(("meter", id_salt));
+    let id = ui.scope_id().with(("meter", id_salt));
     let now = ui.input(|i| i.time);
     let (prev, at) = ui
         .data(|d| d.get_temp::<(f32, f64)>(id))

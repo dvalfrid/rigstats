@@ -33,17 +33,20 @@ See "Dialog lifecycle" in `docs/architecture.md` for why each step is needed.
 
 ## Layout
 
-Settings and the Control Center (the model for any multi-page dialog):
+Settings and the Control Center (the model for any multi-page dialog). A
+dialog's `show` takes the viewport's root `ui` (`show_viewport_immediate`'s
+callback) and lays its panels out in it — egui 0.37 has no context-level
+panels; use `let ctx = &ui.ctx().clone();` for everything else:
 
 ```rust
-ui_kit::hero(ctx, dc, "xxx", "Title", |ui| { /* right side: status */ });
-egui::TopBottomPanel::bottom("xxx_footer")            // Save/Cancel or Close
+ui_kit::hero(ui, dc, "xxx", "Title", |ui| { /* right side: status */ });
+egui::Panel::bottom("xxx_footer")                      // Save/Cancel or Close
     .frame(ui_kit::dialog_frame(dc).inner_margin(Margin { left: 20, right: 20, top: 10, bottom: 12 }))
-    .show(ctx, |ui| { /* right_to_left buttons */ });
-egui::SidePanel::left("xxx_nav").exact_width(ui_kit::SIDEBAR_W)
+    .show(ui, |ui| { /* right_to_left buttons */ });
+egui::Panel::left("xxx_nav").exact_size(ui_kit::SIDEBAR_W)
     .frame(ui_kit::dialog_frame(dc).inner_margin(Margin::same(10)))
-    .show(ctx, |ui| { ui_kit::nav_item(ui, dc, Icon::General, "General", selected); });
-egui::CentralPanel::default().frame(ui_kit::dialog_frame(dc)).show(ctx, |ui| {
+    .show(ui, |ui| { ui_kit::nav_item(ui, dc, Icon::General, "General", selected); });
+egui::CentralPanel::default().frame(ui_kit::dialog_frame(dc)).show(ui, |ui| {
     // ScrollArea, inner margin 24/18, then:
     ui_kit::page_header(ui, dc, "General", "What this page is for.");
     ui_kit::group(ui, dc, Some("Heading"), Some("Footnote."), |g| {
@@ -79,7 +82,19 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
 
-Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
+Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.align(Align2::LEFT_CENTER)`), segmented controls — so nothing sits lower than its neighbour.
+
+## egui 0.37 — worth reaching for (#200)
+
+When working on a page, check whether one of these makes it simpler or nicer than what it does today, and suggest it. Nothing here is adopted yet; each needs a `ui_kit` wrapper in our look before a page uses it.
+
+- **`egui::RangeSlider`**: one slider with two handles. A candidate for warn/crit pairs (Alerts, `threshold_field` today) and any min/max pair.
+- **System font provider and coloured emojis:** eframe can take glyphs our fonts lack from Windows' fonts, so device or program names with unusual characters don't show as boxes. Check `theme::apply_dashboard_fonts` before adding fonts by hand.
+- **`ViewportBuilder::with_monitor` / `ViewportCommand::SetMonitor`**: placing a window on a monitor directly. Compare with `geometry.rs` before adding more monitor code.
+- **Window theme follows egui's theme, and the title bar refreshes on a theme change** (#8299, #8402). This may let `win32_dark_mode` / `apply_titlebar_theme` shrink.
+- **`Aligned`** for centring a group of widgets, **`CollapsingHeader::custom`**, and **`WidgetText::concat`** for mixed-style text in one label.
+- **Accessibility (AccessKit):** `Response::accessible_name` and `Ui::label_inputs_by`. Give icon-only buttons and unlabelled inputs a name.
+- **Kinetic scrolling with rubber-banding** is on by default. A `fixed_card` or `ScrollArea` that fights it is a bug.
 
 ## Problems (#370)
 

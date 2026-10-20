@@ -18,11 +18,11 @@ path = "src/bin/wallpaper.rs"
 
 [dependencies]
 rigstats-backend = { path = "../rigstats-backend" }
-eframe = "0.34"
-egui = "0.34"
+eframe = "0.37"
+egui = "0.37"
 # egui_plot's own version numbering trails egui's by one minor — 0.35 is the
 # release that depends on egui ^0.34, matching the eframe/egui pin above.
-egui_plot = "0.35"
+egui_plot = "0.38"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
 # No `multithread` (rayon): a pool of one thread per core woken every
 # second for the process refresh cost ~1.2 % of a core, the work itself next
@@ -54,7 +54,7 @@ winres = "0.1"
 # Pinned to match the versions eframe/egui-wgpu already resolve to (see Cargo.lock),
 # so the DComp spike probe (examples/dcomp_probe.rs, issue #131) doesn't perturb
 # the workspace's dependency resolution.
-wgpu = "=29.0.4"
+wgpu = "30"
 winit = "=0.30.13"
 pollster = "=0.4.0"
 raw-window-handle = "=0.6.2"
