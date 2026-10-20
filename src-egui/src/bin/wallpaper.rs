@@ -306,7 +306,10 @@ fn main() {
         ),
     );
 
+    // Two workers: a 1 Hz poll loop and the control pipe, all async (blocking
+    // work goes to spawn_blocking's own pool) — not one per core (#467).
     let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
         .enable_all()
         .build()
         .expect("tokio runtime");
