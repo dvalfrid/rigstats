@@ -855,6 +855,30 @@ second. For example, when Processes and GPU Apps are hidden, disk throughput
 could come from Windows' disk counters instead; that changes what the numbers
 mean. Not done.
 
+**The sensor service (2026-10-20, verified, #469).** The hardware worker uses
+~2.15 % of one core. Almost all of it is LibreHardwareMonitor's hardware reads:
+the parts add up to the worker's own CPU, and .NET, the progress lines and the
+extract together are under 1 %. Per one-second sample on the owner's PC:
+
+| Hardware | Share | Per read |
+| --- | --- | --- |
+| RX 9070 XT (dGPU) | ~27 % | 5.5 ms |
+| Radeon iGPU | ~27 % | 5.4 ms |
+| NVMe (SMART) | ~16 % | 4.8 ms |
+| DIMM SPD temperatures (2) | ~11 % | 2 × 1.1 ms |
+| Motherboard Super I/O | ~9 % | 1.9 ms |
+| SATA disk | ~6 % | 7 ms |
+| CPU | ~4 % | 1.2 ms |
+
+Not done, measured as possible:
+- disks and DIMMs every 5 s (~0.5 % of one core)
+- the iGPU only when it is the displayed GPU (~0.6 %)
+
+**When to optimise.** Only for what users notice: the experience, or resources
+taken from a game. Fractions of a percent of one core, or minutes of battery on
+a laptop that runs 6–7 hours, are not worth the code (owner's decision,
+2026-10-20).
+
 **An hour with #517 + #518 (2026-10-20, verified).** 120 samples, 30 s apart,
 with the PC in use for builds and tests meanwhile:
 - handles 942 → 939 (926–956)
