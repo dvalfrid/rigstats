@@ -8,9 +8,11 @@ whenever something happens.
 
 | Date | Event |
 |---|---|
-| 2026-10-20 | Found with the egui 0.37 upgrade (#200): the dashboard turned light grey. Patched locally. Upstream issue not filed yet. |
+| 2026-10-20 | Found with the egui 0.37 upgrade (#200): the dashboard turned light grey. Patched locally (#544). |
+| 2026-10-20 | Issue filed with the repro and the one-line patch: <https://github.com/emilk/egui/issues/8750>. |
 
-**Next step:** file the issue on emilk/egui with the repro below, and offer the one-line patch as a PR (draft until Daniel has reviewed it).
+**Next step:** wait for a maintainer reply on #8750; open the PR (draft until Daniel has reviewed it) if asked. Check with:
+`gh issue view 8750 --repo emilk/egui --comments`
 
 ## The problem (verified 2026-10-20)
 
