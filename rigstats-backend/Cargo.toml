@@ -8,7 +8,10 @@ rust-version = "1.77"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync", "time", "net", "io-util", "rt", "macros"] }
-sysinfo = "0.30"
+# No `multithread` (rayon): a pool of one thread per core woken every
+# second for the process refresh cost ~1.2 % of a core, the work itself next
+# to nothing (#463). Off in both crates — Cargo unifies features.
+sysinfo = { version = "0.30", default-features = false }
 hostname = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
