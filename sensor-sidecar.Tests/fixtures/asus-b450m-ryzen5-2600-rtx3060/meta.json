@@ -1,0 +1,15 @@
+{
+  "slug": "asus-b450m-ryzen5-2600-rtx3060",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1792440912,
+  "rigstats_version": "1.50.0",
+  "os": "Microsoft Windows 10 (build 19045, 22H2)",
+  "notes": "Beta tester's diagnostics (#509). Same machine as asus-b450m-ryzen5-2600-gtx1070 (same four drives), now with an RTX 3060 and 4x Kingston KHX3200C16D4/8GX at JEDEC 2400 (configured speed reported in MHz, #506). With PawnIO: ITE IT8655E Super I/O with three writable fan headers (/lpc/it8655e/0/control/0..2), DIMM SPD temperatures and the SATA drives. NVML power limit offered (-41..+10 %).",
+  "anonymized": true,
+  "confirmed_by": 1,
+  "gpu_driver": "32.0.15.6094",
+  "gpu_state": "all-active",
+  "variant_of": "asus-b450m-ryzen5-2600-gtx1070",
+  "differs": "GPU GTX 1070 -> RTX 3060; IT8655E Super I/O, DIMM and SATA drive sensors now present (RIGStats 1.50.0 with PawnIO)"
+}
