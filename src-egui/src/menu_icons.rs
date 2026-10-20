@@ -154,15 +154,18 @@ pub fn history() -> Icon {
     })
 }
 
-/// Gauge with a needle — Control Center.
+/// Gauge with a needle — Control Center. A 270° dial open at the bottom,
+/// centred like the other glyphs: the half-circle it was read as cut off.
 pub fn control_center() -> Icon {
-    rasterize(|x, y| {
-        let cy = CENTER + 3.0;
-        let arc = in_ring(x, y, CENTER, cy, 10.0, 2.2) && y <= cy + 1.0;
-        let needle = seg_dist(x, y, CENTER, cy, CENTER + 6.0, cy - 6.0) <= 1.2;
-        let hub = dist(x, y, CENTER, cy) <= 2.2;
-        (arc || needle || hub).then_some(NEUTRAL)
-    })
+    rasterize(gauge_paint)
+}
+
+fn gauge_paint(x: f32, y: f32) -> Option<Color32> {
+    let arc = in_ring(x, y, CENTER, CENTER, 11.0, 2.4)
+        && angle_from_top_deg(x, y, CENTER, CENTER).abs() <= 135.0;
+    let needle = seg_dist(x, y, CENTER, CENTER, CENTER + 5.5, CENTER - 5.5) <= 1.25;
+    let hub = dist(x, y, CENTER, CENTER) <= 2.4;
+    (arc || needle || hub).then_some(NEUTRAL)
 }
 
 /// Three sliders — Settings.
