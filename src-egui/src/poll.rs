@@ -417,6 +417,7 @@ pub async fn poll_loop(
     let mut battery_poll = BatteryPoll::default();
     let mut battery_here_logged: Option<bool> = None;
     let mut last_prune_day: Option<u64> = None;
+    let mut active_session_index = logging::ActiveSession::default();
     let mut first_tick_logged = false;
     let mut process_reader = process_list::ProcessReader::default();
     let mut process_usage = process_list::UsageTracker::default();
@@ -787,9 +788,7 @@ pub async fn poll_loop(
         let active_session = if light {
             None
         } else {
-            logging::load_sessions(&dir)
-                .into_iter()
-                .find(logging::SessionMeta::is_active)
+            active_session_index.get(&dir)
         };
         if let Some(session) = active_session {
             // The main app knows the profile from the control pipe; the

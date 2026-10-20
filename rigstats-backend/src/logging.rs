@@ -217,6 +217,40 @@ pub fn load_sessions(dir: &Path) -> Vec<SessionMeta> {
     sessions
 }
 
+/// The active session for the poll loop, which asks every second (#466). The
+/// index on disk stays the source of truth (the app and the wallpaper host
+/// must agree, #299), but it is parsed again only when its modified time or
+/// size changed: every `start_session`/`end_session` rewrites it, so a change
+/// is seen on the next tick. Appending rows doesn't touch it.
+#[derive(Default)]
+pub struct ActiveSession {
+    stamp: Option<(SystemTime, u64)>,
+    active: Option<SessionMeta>,
+}
+
+impl ActiveSession {
+    pub fn get(&mut self, dir: &Path) -> Option<SessionMeta> {
+        let stamp = fs::metadata(sessions_index_path(dir))
+            .ok()
+            .and_then(|m| Some((m.modified().ok()?, m.len())));
+        self.refresh(stamp, || load_sessions(dir))
+    }
+
+    /// Without a stamp (no index yet, or no metadata) it reads every time,
+    /// as before — a missing file is a cheap failed open.
+    fn refresh(
+        &mut self,
+        stamp: Option<(SystemTime, u64)>,
+        load: impl FnOnce() -> Vec<SessionMeta>,
+    ) -> Option<SessionMeta> {
+        if stamp.is_none() || stamp != self.stamp {
+            self.active = load().into_iter().find(SessionMeta::is_active);
+            self.stamp = stamp;
+        }
+        self.active.clone()
+    }
+}
+
 fn save_sessions(dir: &Path, sessions: &[SessionMeta]) -> Result<(), String> {
     let path = sessions_index_path(dir);
     if let Some(parent) = path.parent() {
@@ -597,6 +631,78 @@ pub fn reconcile_sessions_on_startup(dir: &Path) {
 
 #[cfg(test)]
 mod tests {
+
+    fn session(id: &str, end_unix: Option<u64>) -> SessionMeta {
+        SessionMeta {
+            id: id.into(),
+            name: id.into(),
+            start_unix: 1,
+            end_unix,
+            pinned: false,
+            legacy: false,
+            summary: SessionSummary::default(),
+        }
+    }
+
+    #[test]
+    fn active_session_reads_the_index_only_when_it_changed() {
+        let mut cache = ActiveSession::default();
+        let mut loads = 0;
+        let t0 = UNIX_EPOCH + Duration::from_secs(100);
+        let t1 = UNIX_EPOCH + Duration::from_secs(101);
+
+        let mut tick = |cache: &mut ActiveSession, stamp, sessions: Vec<SessionMeta>| {
+            cache.refresh(stamp, || {
+                loads += 1;
+                sessions
+            })
+        };
+        assert_eq!(
+            tick(&mut cache, Some((t0, 10)), vec![session("a", Some(5))]),
+            None
+        );
+        // Same stamp: no read, the cached answer stands.
+        for _ in 0..5 {
+            assert_eq!(
+                tick(&mut cache, Some((t0, 10)), vec![session("x", None)]),
+                None
+            );
+        }
+        // A recording started: the index was rewritten.
+        let active = tick(&mut cache, Some((t1, 20)), vec![session("b", None)]);
+        assert_eq!(active.map(|s| s.id), Some("b".to_string()));
+        // Same time, other size: read again.
+        assert_eq!(
+            tick(&mut cache, Some((t1, 30)), vec![session("b", Some(9))]),
+            None
+        );
+        // No stamp (no index): read every time.
+        tick(&mut cache, None, vec![]);
+        tick(&mut cache, None, vec![]);
+        drop(tick);
+        assert_eq!(loads, 5);
+    }
+
+    #[test]
+    fn active_session_sees_a_recording_start_and_stop_on_disk() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let mut cache = ActiveSession::default();
+        assert!(cache.get(dir.path()).is_none());
+
+        let started = start_session(dir.path()).expect("start");
+        assert_eq!(
+            cache.get(dir.path()).map(|s| s.id),
+            Some(started.id.clone())
+        );
+        assert_eq!(
+            cache.get(dir.path()).map(|s| s.id),
+            Some(started.id.clone())
+        );
+
+        end_session(dir.path(), &started.id, unix_now_secs()).expect("end");
+        assert!(cache.get(dir.path()).is_none());
+    }
+
     use super::*;
     use std::fs;
 
