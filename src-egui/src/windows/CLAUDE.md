@@ -82,7 +82,19 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 
 Buttons: `ui.with_layout(Layout::right_to_left(Align::Center), …)`, primary added first lands rightmost.
 
-Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.vertical_align(Align::Center)`), segmented controls — so nothing sits lower than its neighbour.
+Every control in a row is **`CONTROL_H` (28 px) tall** — buttons, dropdowns, text fields (sized to it, `.align(Align2::LEFT_CENTER)`), segmented controls — so nothing sits lower than its neighbour.
+
+## egui 0.37 — worth reaching for (#200)
+
+When working on a page, check whether one of these makes it simpler or nicer than what it does today, and suggest it. Nothing here is adopted yet; each needs a `ui_kit` wrapper in our look before a page uses it.
+
+- **`egui::RangeSlider`**: one slider with two handles. A candidate for warn/crit pairs (Alerts, `threshold_field` today) and any min/max pair.
+- **System font provider and coloured emojis:** eframe can take glyphs our fonts lack from Windows' fonts, so device or program names with unusual characters don't show as boxes. Check `theme::apply_dashboard_fonts` before adding fonts by hand.
+- **`ViewportBuilder::with_monitor` / `ViewportCommand::SetMonitor`**: placing a window on a monitor directly. Compare with `geometry.rs` before adding more monitor code.
+- **Window theme follows egui's theme, and the title bar refreshes on a theme change** (#8299, #8402). This may let `win32_dark_mode` / `apply_titlebar_theme` shrink.
+- **`Aligned`** for centring a group of widgets, **`CollapsingHeader::custom`**, and **`WidgetText::concat`** for mixed-style text in one label.
+- **Accessibility (AccessKit):** `Response::accessible_name` and `Ui::label_inputs_by`. Give icon-only buttons and unlabelled inputs a name.
+- **Kinetic scrolling with rubber-banding** is on by default. A `fixed_card` or `ScrollArea` that fights it is a bug.
 
 ## Problems (#370)
 
