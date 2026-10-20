@@ -3,7 +3,7 @@ use egui::{RichText, Sense, Stroke, Ui, Vec2};
 use crate::brand::Textures;
 use crate::ring;
 use crate::spark::Sparkline;
-use crate::tempcolor::{color_unknown, temp_color};
+use crate::tempcolor::{color_unknown, color_warn, temp_color};
 use crate::theme;
 use crate::PollStats;
 
@@ -73,7 +73,7 @@ pub fn draw(
                             .color(theme::C_PANEL_TITLE)
                             .size(theme::FONT_PANEL_TITLE * sc),
                     );
-                    if stats.gpu_devices.len() > 1 {
+                    if stats.gpu_devices.len() > 1 || stats.gpu_missing.is_some() {
                         ui.add_space(6.0 * sc);
                         ui.spacing_mut().item_spacing.x = 3.0 * sc;
                         for (name, _vram) in &stats.gpu_devices {
@@ -94,6 +94,22 @@ pub fn draw(
                             if resp.clicked() {
                                 new_gpu = Some(name.clone());
                             }
+                        }
+                        // The chosen GPU the service doesn't send (#528): a
+                        // hollow dot in the warning colour — the values are
+                        // another card's until it is read again.
+                        if let Some(missing) = &stats.gpu_missing {
+                            let (resp, painter) =
+                                ui.allocate_painter(Vec2::splat(10.0 * sc), Sense::hover());
+                            painter.circle_stroke(
+                                resp.rect.center(),
+                                3.5 * sc,
+                                Stroke::new(1.5_f32, color_warn()),
+                            );
+                            resp.on_hover_text(format!(
+                                "{missing} isn't read right now — showing {} instead",
+                                stats.gpu_name
+                            ));
                         }
                     }
                 });
