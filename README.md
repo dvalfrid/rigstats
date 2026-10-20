@@ -307,7 +307,7 @@ Supports NVIDIA and AMD discrete GPUs through LHM. Intel Arc GPUs should work bu
 | --- | --- |
 | Used / free / total (GB) | sysinfo |
 | Memory type (DDR–DDR5) | WMI `Win32_PhysicalMemory.SMBIOSMemoryType` |
-| Speed (MT/s) | WMI `Win32_PhysicalMemory.ConfiguredClockSpeed` / `Speed` |
+| Speed (MT/s) | WMI `Win32_PhysicalMemory.ConfiguredClockSpeed` (what it runs at), else `Speed`; a configured speed of half `Speed` is MHz from older firmware and is doubled (#506) |
 | Manufacturer & part number | WMI `Win32_PhysicalMemory` |
 | DIMM temperature (°C) | LHM — SensorId prefix `/memory/dimm/` — DDR5 and equipped DDR4 |
 
