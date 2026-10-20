@@ -141,6 +141,7 @@ RIGStats is developed by one person with AI assistance (Anthropic's Claude) — 
 - **Tests and checks in CI:** several hundred Rust tests and the sensor service's .NET tests, clippy with zero warnings, a format check and a dependency audit (`cargo xtask verify`, required for every pull request), plus CodeQL.
 - **Live testing on real hardware** for anything that touches it — fan control, power limits and lighting are tried on the developer's own PC before they ship, and hardware writes follow strict safety rules inside the service ([sensor-sidecar/Control/CLAUDE.md](sensor-sidecar/Control/CLAUDE.md)).
 - **Signed releases** through a documented routine ([docs/release.md](docs/release.md)): the installer is code-signed, and the app only installs an update whose checksum and signature check out.
+- **Release candidates, if you want them:** Settings → General → Updates → "Release candidates too" offers each release candidate as an update before the release ships, then the release itself.
 
 ## Architecture
 

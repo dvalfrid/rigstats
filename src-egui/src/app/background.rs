@@ -3,7 +3,7 @@
 //! thread and the update check.
 
 use eframe::egui;
-use rigstats_backend::{control, debug, hardware};
+use rigstats_backend::{control, debug, hardware, settings};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::tray::{gpu_choice_from_menu_id, profile_choice_from_menu_id, Tray, TrayCmd};
 #[cfg(windows)]
@@ -327,6 +327,7 @@ pub(crate) fn start_updater(
     runtime: &tokio::runtime::Runtime,
     dir: &Path,
     ctx: &egui::Context,
+    settings: Arc<Mutex<settings::Settings>>,
 ) -> UpdaterHandles {
     let updater_win: Arc<Mutex<windows::updater::UpdaterState>> =
         Arc::new(Mutex::new(windows::updater::UpdaterState::default()));
@@ -348,8 +349,14 @@ pub(crate) fn start_updater(
         tokio::time::sleep(Duration::from_secs(10)).await;
         loop {
             let (win2, ctx2) = (win.clone(), ctx.clone());
+            let channel = settings.lock_safe().update_channel;
             let outcome = tokio::task::spawn_blocking(move || {
-                update_flow::run_check_and_download(&win2, &ctx2, update_flow::Trigger::Background)
+                update_flow::run_check_and_download(
+                    &win2,
+                    &ctx2,
+                    update_flow::Trigger::Background,
+                    channel,
+                )
             })
             .await
             .unwrap_or_else(|e| update_flow::Outcome::Failed(e.to_string()));

@@ -8,6 +8,7 @@
 use crate::lock_ext::LockSafe;
 use crate::update_check::{self, CheckResult, UpdateInfo, VerifiedInstaller};
 use crate::windows::updater::{UpdateStatus, UpdaterState};
+use rigstats_backend::settings::UpdateChannel;
 use std::sync::{Arc, Mutex};
 
 /// Who started the check.
@@ -31,18 +32,19 @@ pub enum Outcome {
     Failed(String),
 }
 
-/// Checks for a newer version and, if there is one, downloads and verifies
-/// its installer, keeping `win`'s status up to date as it goes.
+/// Checks `channel` for a newer version and, if there is one, downloads and
+/// verifies its installer, keeping `win`'s status up to date as it goes.
 pub fn run_check_and_download(
     win: &Mutex<UpdaterState>,
     ctx: &egui::Context,
     trigger: Trigger,
+    channel: UpdateChannel,
 ) -> Outcome {
     run_with(
         win,
         &|| ctx.request_repaint(),
         trigger,
-        update_check::check,
+        || update_check::check(channel),
         |info, progress| update_check::download(info, progress),
     )
 }

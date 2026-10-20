@@ -19,7 +19,7 @@ use sysinfo::System;
 const DEP_LHM_VER: &str = env!("RIGSTATS_LHM_VERSION");
 const DEP_SYSINFO_VER: &str = env!("RIGSTATS_SYSINFO_VERSION");
 const DEP_WMI_VER: &str = env!("RIGSTATS_WMI_VERSION");
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = crate::update_check::APP_VERSION;
 
 // ── State ─────────────────────────────────────────────────────────────────────
 

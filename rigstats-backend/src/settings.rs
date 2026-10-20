@@ -117,6 +117,18 @@ pub fn default_thresholds() -> HashMap<String, ComponentThresholds> {
     .collect()
 }
 
+/// Which releases the updater offers (#535).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateChannel {
+    /// Releases only (`releases/latest`).
+    #[default]
+    Stable,
+    /// The newest release candidate too, when it is newer than the newest
+    /// release.
+    ReleaseCandidates,
+}
+
 // --- Settings struct -------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -146,6 +158,9 @@ pub struct Settings {
     /// Version seen on last launch, used to detect first run after an update.
     #[serde(default)]
     pub last_seen_version: String,
+    /// Which releases the updater offers (#535).
+    #[serde(default)]
+    pub update_channel: UpdateChannel,
     /// Per-component temperature alert thresholds.
     /// Keys: "cpu", "gpu", "ram", "disk" (and any future components).
     #[serde(default)]
@@ -411,6 +426,7 @@ impl Default for Settings {
             visible_panels: default_visible_panels(),
             autostart_enabled: false,
             last_seen_version: String::new(),
+            update_channel: UpdateChannel::Stable,
             thresholds: default_thresholds(),
             alert_cooldown_secs: default_alert_cooldown_secs(),
             notify_on_warn: true,

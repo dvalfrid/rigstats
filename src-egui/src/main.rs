@@ -1376,7 +1376,12 @@ fn main() {
                 .unwrap_or(0);
 
             let (updater_win_bg, updater_open_bg, updater_focus_bg) =
-                app::background::start_updater(&runtime, &dir, &cc.egui_ctx);
+                app::background::start_updater(
+                    &runtime,
+                    &dir,
+                    &cc.egui_ctx,
+                    current_settings.clone(),
+                );
 
             Ok(Box::new(RigStatsApp::new(
                 dashboard_runtime,

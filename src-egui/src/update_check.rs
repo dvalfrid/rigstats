@@ -1,8 +1,24 @@
+use rigstats_backend::settings::UpdateChannel;
 use serde::Deserialize;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::os::windows::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+/// This build's version as released: the release workflow passes the tag's
+/// (`RIGSTATS_VERSION`, e.g. `1.51.0-rc.2`), so a release candidate knows it
+/// is one; elsewhere `Cargo.toml`'s. Shown in About and Status and compared
+/// by the updater (#535). The Control Center's handshake with the service
+/// keeps `CARGO_PKG_VERSION`.
+pub const APP_VERSION: &str = match option_env!("RIGSTATS_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
+/// The newest releases, release candidates included — `releases/latest`
+/// skips pre-releases.
+const RELEASES_API_URL: &str =
+    "https://api.github.com/repos/dvalfrid/rigstats/releases?per_page=20";
 
 /// Set at build time to test the updater against another manifest.
 const CUSTOM_MANIFEST_URL: Option<&str> = option_env!("RIGSTATS_UPDATE_URL");
@@ -121,21 +137,83 @@ fn agent() -> ureq::Agent {
         .build()
 }
 
-/// Fetch `latest.json` and compare against the current build version.
-pub fn check() -> Result<CheckResult, String> {
-    let resp = agent()
-        .get(LATEST_JSON_URL)
+fn fetch_manifest(url: &str) -> Result<LatestManifest, String> {
+    agent()
+        .get(url)
         .call()
-        .map_err(|e| format!("HTTP error: {e}"))?;
-
-    let manifest: LatestManifest = resp
+        .map_err(|e| format!("HTTP error: {e}"))?
         .into_json()
-        .map_err(|e| format!("JSON parse error: {e}"))?;
+        .map_err(|e| format!("JSON parse error: {e}"))
+}
 
-    if !is_newer(&manifest.version, env!("CARGO_PKG_VERSION")) {
+/// Fetch the channel's newest `latest.json` and compare it against this
+/// build's version. On `ReleaseCandidates` that is the newest release
+/// candidate's when it is newer than the newest release's; if the release
+/// candidates can't be listed (no network, GitHub's API limit), the
+/// release's.
+pub fn check(channel: UpdateChannel) -> Result<CheckResult, String> {
+    let mut manifest = fetch_manifest(LATEST_JSON_URL)?;
+    if channel == UpdateChannel::ReleaseCandidates && CUSTOM_MANIFEST_URL.is_none() {
+        if let Some(rc) = newest_candidate_manifest()
+            .ok()
+            .flatten()
+            .and_then(|url| fetch_manifest(&url).ok())
+        {
+            if is_newer(&rc.version, &manifest.version) {
+                manifest = rc;
+            }
+        }
+    }
+
+    if !is_newer(&manifest.version, APP_VERSION) {
         return Ok(CheckResult::UpToDate);
     }
     update_info(manifest, CUSTOM_MANIFEST_URL.is_some()).map(CheckResult::UpdateAvailable)
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiRelease {
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    assets: Vec<ApiAsset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApiAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+/// The `latest.json` of the newest release candidate, from GitHub's list of
+/// releases (newest first).
+fn newest_candidate_manifest() -> Result<Option<String>, String> {
+    let releases: Vec<ApiRelease> = agent()
+        .get(RELEASES_API_URL)
+        .set("Accept", "application/vnd.github+json")
+        .set("User-Agent", "RIGStats")
+        .call()
+        .map_err(|e| format!("HTTP error: {e}"))?
+        .into_json()
+        .map_err(|e| format!("JSON parse error: {e}"))?;
+    Ok(candidate_manifest_url(&releases).map(str::to_owned))
+}
+
+/// The first published pre-release with a `latest.json` from this
+/// project's releases. A release being built is a pre-release without one
+/// yet, and is passed over.
+fn candidate_manifest_url(releases: &[ApiRelease]) -> Option<&str> {
+    releases
+        .iter()
+        .filter(|r| r.prerelease && !r.draft)
+        .find_map(|r| {
+            r.assets
+                .iter()
+                .find(|a| a.name == "latest.json" && is_release_url(&a.browser_download_url))
+        })
+        .map(|a| a.browser_download_url.as_str())
 }
 
 /// The installer a manifest points at. A manifest without a checksum, or
@@ -371,22 +449,91 @@ fn is_newer(remote: &str, current: &str) -> bool {
     parse_semver(remote) > parse_semver(current)
 }
 
-fn parse_semver(v: &str) -> (u64, u64, u64) {
-    let v = v.trim_start_matches('v');
-    let mut parts = v.splitn(3, '.');
-    let major = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    let minor = parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    let patch = parts
-        .next()
-        .and_then(|s| s.split('-').next())
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    (major, minor, patch)
+/// One dot-separated part of a pre-release label: numbers sort as numbers
+/// and before words (semver), so `rc.10` comes after `rc.9`.
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum PreRelease {
+    Number(u64),
+    Word(String),
+}
+
+/// Sort key: major, minor, patch, then a release after all of its
+/// pre-releases (`1.51.0-rc.2` < `1.51.0`), then the pre-release label.
+fn parse_semver(v: &str) -> (u64, u64, u64, bool, Vec<PreRelease>) {
+    let v = v.trim().trim_start_matches('v');
+    let (core, pre) = v.split_once('-').unwrap_or((v, ""));
+    let mut parts = core.splitn(3, '.');
+    let mut next = || parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+    let (major, minor, patch) = (next(), next(), next());
+    let label = pre
+        .split('.')
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            p.parse()
+                .map_or_else(|_| PreRelease::Word(p.to_owned()), PreRelease::Number)
+        })
+        .collect::<Vec<_>>();
+    (major, minor, patch, label.is_empty(), label)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_candidates_sort_between_releases() {
+        assert!(is_newer("1.51.0-rc.1", "1.50.0"));
+        assert!(is_newer("1.51.0-rc.2", "1.51.0-rc.1"));
+        assert!(is_newer("1.51.0-rc.10", "1.51.0-rc.9"));
+        assert!(is_newer("1.51.0", "1.51.0-rc.2"));
+        assert!(!is_newer("1.51.0-rc.2", "1.51.0"));
+        assert!(!is_newer("1.51.0-rc.2", "1.51.0-rc.2"));
+        assert!(!is_newer("1.50.0", "1.51.0-rc.1"));
+    }
+
+    fn api_release(prerelease: bool, draft: bool, assets: &[(&str, &str)]) -> ApiRelease {
+        ApiRelease {
+            draft,
+            prerelease,
+            assets: assets
+                .iter()
+                .map(|(name, url)| ApiAsset {
+                    name: (*name).into(),
+                    browser_download_url: (*url).into(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn the_newest_published_candidate_with_a_manifest_is_taken() {
+        const RC2: &str =
+            "https://github.com/dvalfrid/rigstats/releases/download/v1.51.0-rc.2/latest.json";
+        const RC1: &str =
+            "https://github.com/dvalfrid/rigstats/releases/download/v1.51.0-rc.1/latest.json";
+        const STABLE: &str =
+            "https://github.com/dvalfrid/rigstats/releases/download/v1.50.0/latest.json";
+        let releases = [
+            // A release still being built: held back as a pre-release, no manifest yet.
+            api_release(true, false, &[("RIGStats_1.52.0_x64-setup.exe", "x")]),
+            api_release(true, true, &[("latest.json", RC2)]),
+            api_release(false, false, &[("latest.json", STABLE)]),
+            api_release(true, false, &[("latest.json", RC2)]),
+            api_release(true, false, &[("latest.json", RC1)]),
+        ];
+        assert_eq!(candidate_manifest_url(&releases), Some(RC2));
+    }
+
+    #[test]
+    fn a_candidate_manifest_outside_this_project_is_ignored() {
+        let releases = [api_release(
+            true,
+            false,
+            &[("latest.json", "https://example.com/latest.json")],
+        )];
+        assert_eq!(candidate_manifest_url(&releases), None);
+        assert_eq!(candidate_manifest_url(&[]), None);
+    }
 
     #[test]
     fn newer_patch_detected() {
