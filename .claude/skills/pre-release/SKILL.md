@@ -6,11 +6,12 @@ description: Publish a release candidate (GitHub pre-release with a signed insta
 What a pre-release reaches, and what it doesn't — checked against the code:
 
 - **Built and signed like a release.** `release.yml` runs on `release: published`, pre-releases included: build, then the signing job, which waits for the owner's approval in the `release-signing` environment, then publish (installer + `latest.json`).
-- **Not offered to users.** The app reads `releases/latest/download/latest.json` (`update_check.rs`), and `releases/latest` never points at a pre-release.
+- **Not offered to users on the default channel.** It reads `releases/latest/download/latest.json` (`update_check.rs`), and `releases/latest` never points at a pre-release.
 - **Not sent to winget.** `winget-submit.yml` only runs when publish dispatches it, and that step returns for a pre-release ("is a pre-release, not submitted").
 - **Visible to anyone** on the releases page, marked **Pre-release**. **Latest** stays on the last real release, and the website's download button follows Latest.
-- **Testers move on by themselves.** An RC built from main carries `Cargo.toml`'s version (the last release's), so the app offers the real release when it ships (`is_newer`).
-- **Known limit:** the app itself (About, diagnostics ZIP) shows the `Cargo.toml` version, not `-rc.N`. The installer's file name, its window title and Windows' "Installed apps" show the RC version.
+- **Offered in the app to testers on the RC channel.** Settings → General → Updates → "Release candidates too" (#535, from 1.51.0): the newest published pre-release with a `latest.json` is offered as soon as Publish has uploaded it, so testers on that channel need no link. Everyone else is not offered it (see "Update channels" in `docs/release.md`).
+- **Testers move on by themselves.** The app knows it is `X.Y.Z-rc.N` (the release workflow passes the tag's version, `update_check::APP_VERSION`) and semver puts the real `X.Y.Z` after every RC of it, so the app offers the real release when it ships, and on the RC channel the next RC before that.
+- **Versions before 1.51.0** have no channel and show `Cargo.toml`'s version (an RC built before #535 said 1.50.0 in About). The installer's file name, its window title and Windows' "Installed apps" always showed the RC version.
 
 ## 1. Which code, which version
 

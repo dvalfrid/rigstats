@@ -7,7 +7,7 @@ use crate::windows::ui_kit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = crate::update_check::APP_VERSION;
 
 // ── State machine ─────────────────────────────────────────────────────────────
 

@@ -217,6 +217,35 @@ published as usual — installer, `latest.json`, in-app updates — but not
 submitted to winget; the Release Please run logs the decision. When it's
 ready: Actions → Submit to Winget → Run workflow → the tag (e.g. `v1.45.0`).
 
+### Update channels
+
+Settings → General → Updates (#535): **Releases** (default) or **Release
+candidates too**.
+
+- **Releases:** the app reads `releases/latest/download/latest.json`.
+  `releases/latest` never points at a pre-release.
+- **Release candidates too:** it also asks GitHub's API for the newest
+  releases (`/repos/dvalfrid/rigstats/releases`, unauthenticated, 60 calls an
+  hour per IP against one check every 6 hours) and takes the newest published
+  pre-release that has a `latest.json`. It offers whichever of that and the
+  release's is newer, so a tester moves from an RC to the real release when
+  it ships. If the list can't be read, only the release counts.
+- **Which pre-releases count:** any published pre-release with a `latest.json`
+  from this repository's release downloads. A release being built (held back
+  by Hold, no `latest.json` yet) and a failed build (none at all) are passed
+  over. **To withdraw a published release or RC** from that channel, delete
+  its `latest.json` asset as well as marking it pre-release.
+- **The version the app compares:** `update_check::APP_VERSION`. The release
+  workflow passes the tag's version to the build (`RIGSTATS_VERSION`), so an RC
+  shows and compares `1.51.0-rc.2`, not `Cargo.toml`'s. Local builds fall back
+  to `CARGO_PKG_VERSION`. The order is semver: `1.50.0` < `1.51.0-rc.1` <
+  `1.51.0-rc.2` < `1.51.0`. The Control Center's handshake with the service
+  still sends `CARGO_PKG_VERSION`.
+- **Testing it locally:** build with `RIGSTATS_VERSION=1.51.0-rc.1` and the
+  channel set to Release candidates. The Updates window then offers the newest
+  real RC. Seen 2026-10-20: it found, downloaded and verified `v1.51.0-rc.2`.
+  On Releases the same build offered nothing.
+
 ### Signing
 
 Azure Artifact Signing (Authenticode: SmartScreen trust, the Control Center's

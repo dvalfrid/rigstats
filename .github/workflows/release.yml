@@ -98,7 +98,12 @@ jobs:
         run: cargo xtask verify
 
       - name: Build release binary + sidecar
-        run: cargo xtask build
+        # The tag's version goes into the app (update_check::APP_VERSION), so
+        # a release candidate shows and compares 1.51.0-rc.2, not Cargo.toml's
+        # 1.50.0 (#535).
+        run: |
+          $env:RIGSTATS_VERSION = $env:RELEASE_TAG -replace '^v', ''
+          cargo xtask build
 
       # The whole publish folder: installer.nsi takes two of its DLLs with
       # /nonfatal, so a missing one would not stop the installer build.

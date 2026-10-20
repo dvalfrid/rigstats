@@ -422,8 +422,14 @@ impl RigStatsApp {
             if start_check {
                 let win = self.dialogs.updater_win.clone();
                 let ctx = ui.ctx().clone();
+                let channel = self.current_settings.lock_safe().update_channel;
                 std::thread::spawn(move || {
-                    update_flow::run_check_and_download(&win, &ctx, update_flow::Trigger::Manual);
+                    update_flow::run_check_and_download(
+                        &win,
+                        &ctx,
+                        update_flow::Trigger::Manual,
+                        channel,
+                    );
                 });
             }
         }

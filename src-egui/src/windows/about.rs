@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = crate::update_check::APP_VERSION;
 
 /// Links: what, the text shown, where it goes.
 const LINKS: &[(&str, &str, &str)] = &[

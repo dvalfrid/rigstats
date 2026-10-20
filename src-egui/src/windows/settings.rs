@@ -430,7 +430,7 @@ fn general_page(
         ui,
         dc,
         "General",
-        "Start-up, the header, the microphone and recordings.",
+        "Start-up, updates, the header, the microphone and recordings.",
     );
     ui_kit::group(ui, dc, None, None, |g| {
         g.row(
@@ -438,6 +438,27 @@ fn general_page(
             Some("RIGStats opens when you sign in"),
             |ui| {
                 ui_kit::toggle(ui, dc, &mut draft.autostart_enabled);
+            },
+        );
+        g.row(
+            "Updates",
+            Some("Release candidates come before a release, for testing it — they can have bugs"),
+            |ui| {
+                use settings::UpdateChannel;
+                let label = |c: UpdateChannel| match c {
+                    UpdateChannel::Stable => "Releases",
+                    UpdateChannel::ReleaseCandidates => "Release candidates too",
+                };
+                ui_kit::dropdown(ui, "update_channel", label(draft.update_channel), |ui| {
+                    for c in [UpdateChannel::Stable, UpdateChannel::ReleaseCandidates] {
+                        if ui
+                            .selectable_label(draft.update_channel == c, label(c))
+                            .clicked()
+                        {
+                            draft.update_channel = c;
+                        }
+                    }
+                });
             },
         );
         g.row(
