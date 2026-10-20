@@ -5,7 +5,9 @@
 
 use crate::gpu_process::{self, GpuEngineQuery, GpuProcessInfo};
 use crate::lock_ext::LockSafe;
-use rigstats_backend::{debug, hardware, lhm, lhm_process, logging, microphone, settings};
+use rigstats_backend::{
+    debug, hardware, lhm, lhm_process, logging, microphone, process_list, settings,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -413,6 +415,9 @@ pub async fn poll_loop(
     let mut battery_here_logged: Option<bool> = None;
     let mut last_prune_day: Option<u64> = None;
     let mut first_tick_logged = false;
+    let mut process_reader = process_list::ProcessReader::default();
+    let mut process_usage = process_list::UsageTracker::default();
+    let mut process_read_failed = false;
 
     loop {
         let light = mode.get() == PollMode::Light;
@@ -422,12 +427,22 @@ pub async fn poll_loop(
                 .with_cpu(CpuRefreshKind::new().with_cpu_usage().with_frequency())
                 .with_memory(MemoryRefreshKind::everything()),
         );
-        sys.refresh_processes_specifics(
-            sysinfo::ProcessRefreshKind::new()
-                .with_cpu()
-                .with_memory()
-                .with_disk_usage(),
-        );
+        // Every process in one call; kept in Light too, for the disk
+        // read/write totals (#463).
+        let procs = match process_reader.read() {
+            Ok(list) => {
+                if std::mem::take(&mut process_read_failed) {
+                    debug::append_debug_log(&dir, "process list: read again");
+                }
+                process_usage.update(Instant::now(), sys.cpus().len(), &list)
+            }
+            Err(err) => {
+                if !std::mem::replace(&mut process_read_failed, true) {
+                    debug::log_warn(&dir, &format!("process list: {err}"));
+                }
+                Vec::new()
+            }
+        };
 
         let cpu_load = sys.global_cpu_info().cpu_usage() as u8;
         // global_cpu_info().frequency() returns 0 on Windows in sysinfo 0.30; use per-core average.
@@ -442,18 +457,16 @@ pub async fn poll_loop(
         let cpu_cores: Vec<u8> = sys.cpus().iter().map(|c| c.cpu_usage() as u8).collect();
         let uptime_secs = System::uptime();
 
-        // Light mode skips the per-panel lists below; the process refresh above
-        // is still needed for the disk read/write totals.
-        let num_cpus = sys.cpus().len().max(1) as f32;
+        // Light mode skips the per-panel lists below.
         let mut processes: Vec<ProcessInfo> = if light {
             Vec::new()
         } else {
-            sys.processes()
-                .values()
+            procs
+                .iter()
                 .map(|p| ProcessInfo {
-                    name: p.name().to_string(),
-                    cpu: p.cpu_usage() / num_cpus,
-                    mem_mb: p.memory() / 1_048_576,
+                    name: p.name.clone(),
+                    cpu: p.cpu_pct,
+                    mem_mb: p.working_set / 1_048_576,
                 })
                 .collect()
         };
@@ -482,11 +495,8 @@ pub async fn poll_loop(
                 gpu_luid_map = gpu_process::adapter_luid_map();
                 last_luid_refresh = Instant::now();
             }
-            let proc_names: HashMap<u32, String> = sys
-                .processes()
-                .iter()
-                .map(|(pid, p)| (pid.as_u32(), p.name().to_string()))
-                .collect();
+            let proc_names: HashMap<u32, String> =
+                procs.iter().map(|p| (p.pid, p.name.clone())).collect();
             let mut rows = query.sample(&proc_names, &gpu_luid_map);
             rows.truncate(8);
             rows
@@ -523,17 +533,9 @@ pub async fn poll_loop(
         let elapsed = now.duration_since(last_net_instant).as_secs_f64().max(0.5);
         last_net_instant = now;
 
-        // disk_usage().read_bytes / written_bytes are per-tick deltas from sysinfo processes.
-        let total_read_bytes: u64 = sys
-            .processes()
-            .values()
-            .map(|p| p.disk_usage().read_bytes)
-            .sum();
-        let total_write_bytes: u64 = sys
-            .processes()
-            .values()
-            .map(|p| p.disk_usage().written_bytes)
-            .sum();
+        // Bytes every process read / wrote since the last tick.
+        let total_read_bytes: u64 = procs.iter().map(|p| p.read_bytes).sum();
+        let total_write_bytes: u64 = procs.iter().map(|p| p.write_bytes).sum();
         let disk_read_mbps = total_read_bytes as f64 / elapsed / 1_048_576.0;
         let disk_write_mbps = total_write_bytes as f64 / elapsed / 1_048_576.0;
         networks.refresh();

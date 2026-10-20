@@ -151,7 +151,8 @@ rigstats-sensor.exe  (sensor-sidecar/, .NET 10, Windows Service / LocalSystem)
     └─► named pipe \\.\pipe\rigstats-sensors  (newline-delimited JSON,
                 several clients share one ≤1 Hz sample — HardwareHost.GetTelemetryLineAsync)
                     └─► lhm.rs (rigstats-backend): pipe client → LhmData struct
-sysinfo crate (CPU load/freq, RAM, disk, network, processes)
+sysinfo crate (CPU load/freq, RAM, disk space, network)
+process_list.rs (rigstats-backend: processes + disk read/write, one NtQuerySystemInformation call per tick, #463)
 wmi crate (startup: GPU names, RAM spec/details, board, model, brand, ping target; battery: only on a PC that has one — `hardware::system_battery_present` (`GetSystemPowerStatus`, no WMI) every tick, WMI every 10 s when it says yes, `BatteryPoll`, #464/#473)
 PDH \GPU Engine(*) (gpu_process.rs: per-app GPU %)
     └─► poll_loop (src-egui/src/poll.rs): → PollStats → mpsc::SyncSender
