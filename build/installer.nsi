@@ -44,6 +44,13 @@ RequestExecutionLevel admin
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
 
+; StdUtils 1.14 (LGPL 2.1, the DLL verbatim — see LGPL_CLARIFICATION.txt),
+; for ExecShellAsUser (#416). Fail the build if the DLL is not exactly that one.
+!define STDUTILS_DLL_SHA256 "B72E9013A6204E9F01076DC38DABBF30870D44DFC66962ADBF73619D4331601E"
+!system 'certutil -hashfile build\nsis-plugins\StdUtils\StdUtils.dll SHA256 | findstr /I /X "${STDUTILS_DLL_SHA256}"' = 0
+!addplugindir "build\nsis-plugins\StdUtils"
+!include "build\nsis-plugins\StdUtils\StdUtils.nsh"
+
 Var /GLOBAL AutoUpdate
 
 ; Stop the sensor service so its exe can be replaced or deleted (#370). A
@@ -91,11 +98,31 @@ Var /GLOBAL AutoUpdate
 
 !insertmacro MUI_LANGUAGE "English"
 
-; Launch RIGStats without the installer's elevated token so the app
-; runs with normal user privileges (expected for a tray application).
+; Start RIGStats as the user at the desktop, not elevated (#416). Exec would
+; hand it the installer's token: the account that approved UAC — on a shared
+; PC another person, whose settings the app would then use. ExecShellAsUser
+; asks the desktop's Explorer to start it, which runs as the signed-in user.
+!macro LaunchAsUser ARGS
+  ${StdUtils.ExecShellAsUser} $0 "$INSTDIR\rigstats.exe" "open" `${ARGS}`
+  DetailPrint "Launch RIGStats as the desktop user: $0"
+  ; "ok", or "fallback" (plain ShellExecute, no shell to ask). Anything else
+  ; started nothing — better the app as the installer's user than none.
+  ${If} $0 != "ok"
+  ${AndIf} $0 != "fallback"
+    Exec `"$INSTDIR\rigstats.exe" ${ARGS}`
+  ${EndIf}
+!macroend
+
 Function LaunchRIGStats
-  Exec '"$INSTDIR\rigstats.exe"'
+  !insertmacro LaunchAsUser ""
 FunctionEnd
+
+; The Start-menu folder in the current shell context (all or current user).
+!macro RemoveStartMenu
+  Delete "$SMPROGRAMS\RIGStats\RIGStats.lnk"
+  Delete "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk"
+  RMDir  "$SMPROGRAMS\RIGStats"
+!macroend
 
 ; ── Pre-install ────────────────────────────────────────────────────────────────
 Function .onInit
@@ -235,9 +262,15 @@ Section "RIGStats" SecMain
   WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats" \
     "NoRepair"         1
 
+  ; Shortcuts for every user (#416): in the current user's folders they
+  ; landed with whoever approved UAC. Remove those from earlier installs so
+  ; the Start menu doesn't show RIGStats twice.
+  !insertmacro RemoveStartMenu
+  SetShellVarContext all
   CreateDirectory "$SMPROGRAMS\RIGStats"
   CreateShortcut "$SMPROGRAMS\RIGStats\RIGStats.lnk" "$INSTDIR\rigstats.exe"
   CreateShortcut "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk" "$INSTDIR\uninstall.exe"
+  SetShellVarContext current
 
   WriteUninstaller "$INSTDIR\uninstall.exe"
 
@@ -259,13 +292,16 @@ Section "RIGStats" SecMain
   ; ── Auto-launch with update notification (in-app /autoupdate installs only) ──
   ; Manual installs use the finish-page "Launch RIGStats" checkbox instead.
   ${If} $AutoUpdate == 1
-    Exec '"$INSTDIR\rigstats.exe" "--just-updated=${VERSION}"'
+    !insertmacro LaunchAsUser "--just-updated=${VERSION}"
   ${EndIf}
 SectionEnd
 
 ; ── Optional: desktop shortcut ────────────────────────────────────────────────
 Section /o "Desktop Shortcut" SecDesktop
+  Delete "$DESKTOP\RIGStats.lnk"
+  SetShellVarContext all
   CreateShortcut "$DESKTOP\RIGStats.lnk" "$INSTDIR\rigstats.exe"
+  SetShellVarContext current
 SectionEnd
 
 ; ── Uninstaller ────────────────────────────────────────────────────────────────
@@ -287,10 +323,13 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\pawnio"
   RMDir "$INSTDIR"
 
+  ; Both places: every user's (#416) and this user's (earlier installs).
   Delete "$DESKTOP\RIGStats.lnk"
-  Delete "$SMPROGRAMS\RIGStats\RIGStats.lnk"
-  Delete "$SMPROGRAMS\RIGStats\Uninstall RIGStats.lnk"
-  RMDir  "$SMPROGRAMS\RIGStats"
+  !insertmacro RemoveStartMenu
+  SetShellVarContext all
+  Delete "$DESKTOP\RIGStats.lnk"
+  !insertmacro RemoveStartMenu
+  SetShellVarContext current
 
   DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\RIGStats"
   DeleteRegKey HKLM "Software\RIGStats"

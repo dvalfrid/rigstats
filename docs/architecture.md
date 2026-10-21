@@ -214,7 +214,9 @@ rig-dashboard/
 ├── assets/                 Screenshot PNGs for website/README
 └── build/
     ├── installer.nsi       NSIS installer script
-    └── pawnio/             Official PawnIO setup (pinned, SHA-256 checked)
+    ├── pawnio/             Official PawnIO setup (pinned, SHA-256 checked)
+    └── nsis-plugins/       StdUtils 1.14 (pinned, SHA-256 checked): starts the app as the
+                            desktop user, not the account that approved UAC (#416)
 ```
 
 ---
