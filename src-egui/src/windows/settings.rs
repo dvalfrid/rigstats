@@ -175,6 +175,12 @@ fn carry_live(dst: &mut settings::Settings, live: &settings::Settings) {
     dst.wallpaper_engine_before = live.wallpaper_engine_before.clone();
 }
 
+/// Whether the desktop wallpaper is what runs: its layer, and floating off —
+/// floating turned on over it (the tray) wins, as in `update_wallpaper_mode`.
+fn wallpaper_running(live: &settings::Settings) -> bool {
+    live.window_layer == "wallpaper" && !live.floating_mode
+}
+
 /// The draft as the app should run it now: the window layer stays what is
 /// running until Save (it starts or stops the wallpaper host).
 fn live_preview(draft: &settings::Settings, live: &settings::Settings) -> settings::Settings {
@@ -298,12 +304,15 @@ pub fn show(
                             // running is the live value, not the draft (and
                             // not a dialog-open-time snapshot — the tray can
                             // change it while this dialog is open).
-                            let applied_layer = saved.lock_safe().window_layer.clone();
+                            let (applied_layer, wallpaper_running) = {
+                                let live = saved.lock_safe();
+                                (live.window_layer.clone(), wallpaper_running(&live))
+                            };
                             let page = st.page;
                             // In wallpaper mode the visible dashboard is the
                             // host process, which reads the settings file:
                             // nothing previews until Save.
-                            if applied_layer == "wallpaper" {
+                            if wallpaper_running {
                                 wallpaper_notice(ui, dc);
                             }
                             let gpu_names = st.gpu_names.clone();
@@ -318,9 +327,14 @@ pub fn show(
                                 Page::General => {
                                     general_page(ui, dc, draft, &microphones, mic, saved_at)
                                 }
-                                Page::Display => {
-                                    display_page(ui, dc, draft, &applied_layer, &gpu_names)
-                                }
+                                Page::Display => display_page(
+                                    ui,
+                                    dc,
+                                    draft,
+                                    &applied_layer,
+                                    wallpaper_running,
+                                    &gpu_names,
+                                ),
                                 Page::Overlay => overlay_page(
                                     ui,
                                     dc,
@@ -569,6 +583,7 @@ fn display_page(
     dc: &DialogColors,
     draft: &mut settings::Settings,
     applied_layer: &str,
+    wallpaper_running: bool,
     gpu_names: &[String],
 ) {
     ui_kit::page_header(
@@ -577,10 +592,10 @@ fn display_page(
         "Display",
         "Where and how the dashboard window appears, for every profile.",
     );
-    // Desktop Wallpaper mode is display-only: floating and fill-screen have
-    // no effect there, so those controls are off while wallpaper is the
-    // *applied* layer — the layer itself only changes on Save.
-    let is_wallpaper = applied_layer == "wallpaper";
+    // Desktop Wallpaper mode is display-only: the display profile and
+    // fill-screen have no effect there, so those controls are off while the
+    // wallpaper is what runs — the layer itself only changes on Save.
+    let is_wallpaper = wallpaper_running;
     ui_kit::group(
         ui,
         dc,
@@ -628,35 +643,37 @@ fn display_page(
             g.row("Window layer", None, |ui| {
                 ui_kit::dropdown(ui, "window_layer", layer_label(&draft.window_layer), |ui| {
                     for layer in ["normal", "on_top", "behind", "wallpaper"] {
-                        ui.selectable_value(
-                            &mut draft.window_layer,
-                            layer.to_string(),
-                            layer_label(layer),
-                        );
+                        let picked = ui
+                            .selectable_value(
+                                &mut draft.window_layer,
+                                layer.to_string(),
+                                layer_label(layer),
+                            )
+                            .clicked();
+                        // Choosing the wallpaper means the docked dashboard
+                        // in it, so floating goes off. Only on that choice:
+                        // floating turned on over the wallpaper (the tray)
+                        // is a state the app runs, and opening this page
+                        // must not undo it.
+                        if picked && layer == "wallpaper" {
+                            draft.floating_mode = false;
+                        }
                     }
                 });
             });
         },
     );
-    // Wallpaper and floating mode exclude each other.
-    if draft.window_layer == "wallpaper" {
-        draft.floating_mode = false;
-    }
 
     let is_landscape = crate::geometry::profile_is_landscape(&draft.dashboard_profile);
     let fill_enabled = !draft.floating_mode && !is_wallpaper;
     ui_kit::group(ui, dc, Some("Layout"), None, |g| {
         g.row(
             "Floating panels",
-            Some(if is_wallpaper {
-                "Not available in desktop wallpaper mode"
-            } else {
-                "Each panel in its own window, placed anywhere"
-            }),
+            Some("Each panel in its own window, placed anywhere"),
+            // Floating wins over the wallpaper layer (`update_wallpaper_mode`),
+            // so it can be switched in any layer, as from the tray.
             |ui| {
-                ui.add_enabled_ui(!is_wallpaper, |ui| {
-                    ui_kit::toggle(ui, dc, &mut draft.floating_mode);
-                });
+                ui_kit::toggle(ui, dc, &mut draft.floating_mode);
             },
         );
         if draft.floating_mode {
@@ -965,6 +982,20 @@ fn send_test_notification() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn floating_over_the_wallpaper_layer_is_not_the_wallpaper_running() {
+        // Floating turned on from the tray while the layer is the wallpaper:
+        // floating runs, and the Display page must treat it so.
+        let mut s = settings::Settings::default();
+        s.window_layer = "wallpaper".into();
+        assert!(wallpaper_running(&s));
+        s.floating_mode = true;
+        assert!(!wallpaper_running(&s));
+        s.window_layer = "normal".into();
+        s.floating_mode = false;
+        assert!(!wallpaper_running(&s));
+    }
 
     #[test]
     fn writing_the_draft_back_keeps_what_this_window_does_not_edit() {
