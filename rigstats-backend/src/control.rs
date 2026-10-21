@@ -1375,6 +1375,9 @@ pub enum ControlCmd {
         id: String,
         settings: KeyboardSettings,
     },
+    /// The service's sensor tree as read now, for the diagnostics ZIP
+    /// (#557); `None` when the service didn't send one.
+    SensorTree(std::sync::mpsc::SyncSender<Option<String>>),
 }
 
 // ── The task ────────────────────────────────────────────────────────────
@@ -1897,6 +1900,15 @@ async fn handle_cmd(
                     let _ = event_tx.send(ControlEvent::MouseBusy(false));
                 }
             }
+            result.map(|_| ())
+        }
+        ControlCmd::SensorTree(reply) => {
+            let result = request(writer, reader, next_id, "sensor_tree", None, event_tx, dir).await;
+            let tree = result
+                .as_ref()
+                .ok()
+                .and_then(|r| r.as_ref()?.get("tree")?.as_str().map(str::to_string));
+            let _ = reply.try_send(tree);
             result.map(|_| ())
         }
         ControlCmd::ReadHeadsets => {
@@ -2937,6 +2949,41 @@ mod tests {
         )
         .await;
         assert_eq!(result, Err(RequestError::Closed));
+    }
+
+    /// `sensor_tree` (#557): the tree goes back to whoever asked; an error
+    /// reply still answers (`None`), so the diagnostics export doesn't wait.
+    #[tokio::test]
+    async fn sensor_tree_replies_with_the_tree_or_none() {
+        let (event_tx, _event_rx) = std::sync::mpsc::channel();
+        let dir = tempfile::tempdir().unwrap();
+
+        for (line, expected) in [
+            (
+                r#"{"id":1,"result":{"tree":"HW  GpuNvidia  id=/gpu-nvidia/0"}}"#,
+                Some("HW  GpuNvidia  id=/gpu-nvidia/0".to_string()),
+            ),
+            (
+                r#"{"id":1,"error":{"code":"unknown_method","message":"unknown method 'sensor_tree'."}}"#,
+                None,
+            ),
+        ] {
+            let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+            let response = format!("{line}\n");
+            let mut reader = BufReader::new(response.as_bytes());
+            let mut next_id = 1;
+            handle_cmd(
+                ControlCmd::SensorTree(reply_tx),
+                &mut tokio::io::sink(),
+                &mut reader,
+                &mut next_id,
+                &event_tx,
+                dir.path(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(reply_rx.try_recv(), Ok(expected));
+        }
     }
 
     #[test]

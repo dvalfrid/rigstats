@@ -14,7 +14,7 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | Headset settings (sidetone, noise reduction) | `sidecar-log.txt` | `Headset: <name> 0x<pid> read HeadsetSettings { … } from <hex> <hex> <hex>` (replies to `12 24`, `12 19`, `41 20`); `settings not read`; after a change `Headset: … sidetone on 16, noise reduction …` |
 | Which onboard mouse profile a profile uses | `profiles.json` → `mouse.profile`; `sidecar-log.txt` | `Mouse: <model> on onboard profile <n>.` |
 | Fans / CPU / GPU limits | `sidecar-log.txt`, `control-capabilities.json`, `profiles.json` | verify failures, `drives` mapping, PM table version (unsupported = not verified), safety overrides |
-| Missing or wrong sensor values | `sensor-tree.txt`, `hardware.json` | the raw LHM tree → `/sensor-fixture` |
+| Missing or wrong sensor values | `sensor-tree.txt`, `sensor-tree-now.txt`, `hardware.json` | the raw LHM tree at service start / when the ZIP was collected (#557, ZIPs from 1.51 on) — a sensor in the first but not the second went missing while the service ran → `/sensor-fixture` (from `sensor-tree.txt`) |
 | GPU Apps panel | `gpu-engine.txt` | → `/gpu-engine-fixture` |
 | App crashed or misbehaved | `debug.log`, `debug-prev.log`, `event-log.txt` | missing `shutdown: clean` = crash; .NET 1026 / Application Error 1000 |
 | Sensors gone or a hardware item missing | `sidecar-log.txt` | `The hardware worker ended during … (exit code …) while reading <hardware> (<id>)`, `did not answer … within 8 s`, `… crashed the hardware worker 3 times — it is no longer read` (#374); `[hardware-worker]` lines = the worker's own stack |

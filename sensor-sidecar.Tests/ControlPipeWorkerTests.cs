@@ -56,7 +56,8 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
             new LightingProvider([], "no devices", () => null, dryRun: true),
             _hue,
             new SensorSidecar.Control.Mice.MouseProvider([], dryRun: true),
-            _pipeName);
+            _pipeName,
+            hardware: host);
     }
 
     public Task InitializeAsync() => _worker.StartAsync(CancellationToken.None);
@@ -133,6 +134,20 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
                 throw new TimeoutException("condition not met in time");
             await Task.Delay(50);
         }
+    }
+
+    [Fact]
+    public async Task Sensor_tree_is_read_now_for_the_diagnostics_export()
+    {
+        using var client = await ConnectAsync();
+        await client.RequestAsync("hello", new { protocol = 1 });
+
+        var response = await client.RequestAsync("sensor_tree");
+
+        // The tree as `sensor-tree.txt` holds it, read at this request (#557).
+        var tree = response.GetProperty("result").GetProperty("tree").GetString()!;
+        Assert.StartsWith("# sensor-tree — ", tree);
+        Assert.Contains("HW  ", tree);
     }
 
     [Fact]

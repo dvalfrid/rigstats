@@ -31,7 +31,9 @@ public sealed class ControlPipeWorker(
     string pipeName = "rigstats-control",
     // A profile switched because of the keyboard (#459) reaches the app as
     // `profile_changed`.
-    Keyboards.KeyboardFollower? keyboardFollower = null) : GuardedBackgroundService
+    Keyboards.KeyboardFollower? keyboardFollower = null,
+    // `sensor_tree`: the diagnostics export's tree as read now (#557).
+    IHardwareHost? hardware = null) : GuardedBackgroundService
 {
     /// The service's own version — the same as the app's (sensor-sidecar.csproj
     /// `<Version>`, bumped by release-please).
@@ -396,6 +398,7 @@ public sealed class ControlPipeWorker(
                 "release_to_firmware" => HandleReleaseToFirmware(request),
                 "identify_fan" => HandleIdentifyFan(request, connection),
                 "subscribe" => HandleSubscribe(request, connection),
+                "sensor_tree" => HandleSensorTree(request),
                 _ => ControlResponse.Fail(request.Id, "unknown_method", $"unknown method '{request.Method}'."),
             };
         }
@@ -615,6 +618,13 @@ public sealed class ControlPipeWorker(
 
     /// Switches the desk lamp(s) off or back on (the tray). Like the
     /// preview, harmless and unsaved, so it skips the broker transaction.
+    /// The sensor tree as read now (#557) — `sensor-tree.txt` is only written
+    /// at start, so it can't show a sensor that went missing later.
+    private ControlResponse HandleSensorTree(ControlRequest request) =>
+        hardware is null
+            ? ControlResponse.Fail(request.Id, "unavailable", "The sensors aren't read by this service.")
+            : ControlResponse.Ok(request.Id, new { tree = hardware.SensorTree() });
+
     private ControlResponse HandleLampToggle(ControlRequest request) =>
         lighting.ToggleLamp() is { } on
             ? ControlResponse.Ok(request.Id, new { ok = true, on })

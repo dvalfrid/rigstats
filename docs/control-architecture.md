@@ -278,6 +278,7 @@ Transactions are serialised — there is never more than one in flight.
 | `confirm` | `{"keep": true}` stores the previewed profile and makes it active; `{"keep": false}` reverts now. |
 | `release_to_firmware` | Panic button: every provider → `ReleaseToFirmware()`. |
 | `identify_fan` | Spin one header to 100 % for 5 s so the user can see/hear which fan it is; the service measures which RPM sensors respond and reports them (`fan_identified`). |
+| `sensor_tree` | `{"tree": "..."}` — the full LHM sensor tree read now, in `sensor-tree.txt`'s format; for the diagnostics ZIP's `sensor-tree-now.txt` (#557). Read-only. |
 | `subscribe` | Start event stream: `profile_changed`, `apply_result`, `safety_tripped`, `fan_duty`, `fan_identified`, `preview_reverted`. |
 
 ---

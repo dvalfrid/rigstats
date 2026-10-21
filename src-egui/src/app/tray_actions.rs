@@ -100,6 +100,7 @@ impl RigStatsApp {
             self.dialogs.status_collecting.clone(),
             self.dir.as_ref().clone(),
             capabilities_json,
+            self.control_cmd_tx.clone(),
             ctx.clone(),
         );
     }

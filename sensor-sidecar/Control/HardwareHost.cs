@@ -24,6 +24,10 @@ public interface IHardwareHost
     /// Dumps the full sensor tree to disk for diagnostics; never throws.
     void WriteSensorTree(string path);
 
+    /// The full sensor tree as read now — the diagnostics export asks for it
+    /// over the control pipe, next to the one written at start (#557).
+    string SensorTree();
+
     IReadOnlyList<FanHeaderInfo> FanHeaders();
 
     void SetFan(string id, double duty);
@@ -112,11 +116,13 @@ public sealed class HardwareHost : IHardwareHost, IHostedService, IDisposable
         }
     }
 
+    public string SensorTree() => Locked(_hardware.SensorTree);
+
     public void WriteSensorTree(string path)
     {
         try
         {
-            var tree = Locked(_hardware.SensorTree);
+            var tree = SensorTree();
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             File.WriteAllText(path, tree);
         }

@@ -59,6 +59,8 @@ public class SensorWorkerTests
         public void RestartHardware(string reason) => throw new NotSupportedException();
 
         public void WriteSensorTree(string path) { }
+
+        public string SensorTree() => throw new NotSupportedException();
     }
 
     private sealed class Client(NamedPipeClientStream pipe) : IDisposable
