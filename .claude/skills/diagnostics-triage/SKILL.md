@@ -18,7 +18,7 @@ In the sidecar log, find each start (`Listening on \\.\pipe\rigstats-sensors`; `
 
 - Lighting: `lighting-devices.json` → `hid_scan` (is the hardware visible? `known_as` null = unsupported), `asus_probes` (receiver paired list, version replies), `devices` (what was driven, with the names sent to the app).
 - Mice and headsets: the `Mouse: … read … from …` / `Headset: … read … from …` lines hold the raw replies — decode them against `MouseProtocol` / `HeadsetCommands` to tell a wrong reading (parse) from a wrong value (device); an unverified model whose replies decode as its owner sees them in GearLink can be marked verified.
-- Sensors: `sensor-tree.txt` vs. the panel; GPU apps: `gpu-engine.txt`.
+- Sensors: `sensor-tree.txt` (service start) and `sensor-tree-now.txt` (when the ZIP was collected) vs. the panel; GPU apps: `gpu-engine.txt`.
 - `… failed:` lines carry the device's raw reply — decode it against the protocol before concluding "the device didn't take it" (a reply to a *different* command means a read bug, not a device bug).
 
 ## 4. Conclude

@@ -78,6 +78,8 @@ public sealed class FakeHardwareHost(IComputer computer) : IHardwareHost
 
     public void WriteSensorTree(string path) { }
 
+    public string SensorTree() => _hardware.SensorTree();
+
     public IReadOnlyList<FanHeaderInfo> FanHeaders() => _hardware.FanHeaders();
 
     public void SetFan(string id, double duty) => _hardware.SetFan(id, duty);
