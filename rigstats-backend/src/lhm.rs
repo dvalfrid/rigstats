@@ -92,8 +92,8 @@ pub struct Peripheral {
 #[cfg(test)]
 mod tests {
     use super::{
-        gpu_names_match, normalize_gpu_name, select_gpu_idx, ActiveProfile, Peripheral,
-        SidecarGpuDevice, SidecarPayload,
+        diagnostics_json, gpu_names_match, gpu_shown_change, normalize_gpu_name, select_gpu_idx,
+        ActiveProfile, GpuShown, Peripheral, SidecarGpuDevice, SidecarPayload,
     };
 
     /// The sensor pipe contract, checked against the sidecar's own golden
@@ -495,6 +495,76 @@ mod tests {
         assert_eq!(parse(Some("AMD Radeon Graphics")).gpu_missing, None);
     }
 
+    /// `dashboard-now.json` (#559): the service's line as sent, and the GPU
+    /// the dashboard shows from it with the chosen card — #556's case, where
+    /// the service sent a temperature the panel didn't show, or didn't send it.
+    #[test]
+    fn diagnostics_json_holds_the_line_and_what_is_shown() {
+        let line = r#"{"cpu_temp": null, "cpu_power": null,
+      "gpu_devices": [
+        {"name": "NVIDIA GeForce RTX 5070 Ti", "load": 3.0, "temp": 31.4, "hotspot_temp": null,
+         "core_clock": null, "mem_clock": null, "power": 47.8, "fan": null,
+         "vram_used_mb": null, "vram_total_mb": 16302.0, "d3d_3d": null, "d3d_vdec": null},
+        {"name": "AMD Radeon(TM) Graphics", "load": 0.0, "temp": 38.0, "hotspot_temp": null,
+         "core_clock": null, "mem_clock": null, "power": 31.0, "fan": null,
+         "vram_used_mb": null, "vram_total_mb": 512.0, "d3d_3d": null, "d3d_vdec": null}
+      ],
+      "disk_temps": {}, "ram_temp": null,
+      "mb_fans": [], "mb_temps": [], "mb_voltages": [], "mb_chip": null}"#;
+
+        let json: serde_json::Value = serde_json::from_str(&diagnostics_json(
+            100,
+            103,
+            line,
+            Some("NVIDIA GeForce RTX 5070 Ti"),
+        ))
+        .unwrap();
+
+        assert_eq!(json["age_secs"], 3);
+        assert_eq!(json["shown"]["gpu_name"], "NVIDIA GeForce RTX 5070 Ti");
+        assert_eq!(json["shown"]["gpu_temp"].as_f64().unwrap().round(), 31.0);
+        assert_eq!(json["shown"]["gpu_power"].as_f64().unwrap().round(), 48.0);
+        assert_eq!(json["service_line"]["gpu_devices"][1]["temp"], 38.0);
+
+        // A line that isn't the contract is still kept, as text.
+        let json: serde_json::Value =
+            serde_json::from_str(&diagnostics_json(100, 100, "not json", None)).unwrap();
+        assert_eq!(json["service_line"], "not json");
+        assert!(json["shown"].as_str().unwrap().starts_with("(not read"));
+    }
+
+    #[test]
+    fn a_gpu_reading_that_disappears_is_logged_once() {
+        let shown = |temp, power| GpuShown {
+            name: Some("NVIDIA GeForce RTX 5070 Ti".into()),
+            temp,
+            power,
+        };
+        assert_eq!(
+            gpu_shown_change(None, &shown(true, true)).as_deref(),
+            Some("gpu: showing NVIDIA GeForce RTX 5070 Ti — temperature reported, power reported")
+        );
+        assert_eq!(
+            gpu_shown_change(Some(&shown(true, true)), &shown(true, true)),
+            None
+        );
+        assert_eq!(
+            gpu_shown_change(Some(&shown(true, true)), &shown(false, false)).as_deref(),
+            Some(
+                "gpu: showing NVIDIA GeForce RTX 5070 Ti — temperature missing, power missing \
+                 (was NVIDIA GeForce RTX 5070 Ti — temperature reported, power reported)"
+            )
+        );
+        let other = GpuShown {
+            name: Some("AMD Radeon(TM) Graphics".into()),
+            temp: true,
+            power: true,
+        };
+        assert!(gpu_shown_change(Some(&shown(true, true)), &other)
+            .unwrap()
+            .starts_with("gpu: showing AMD Radeon(TM) Graphics — "));
+    }
+
     #[test]
     fn no_gpus_at_all_reports_nothing_missing() {
         let json = r#"{"cpu_temp": null, "cpu_power": null, "gpu_devices": [], "disk_temps": {},
@@ -839,6 +909,7 @@ pub async fn fetch_lhm_pipe(
                     *guard = None;
                     return None;
                 }
+                remember_line(&line);
                 return match serde_json::from_str::<SidecarPayload>(line.trim()) {
                     Ok(p) if p.is_stale() => {
                         log_pipe_trouble_throttled(dir, "pipe: no fresh sample — the sensor service is restarting its hardware worker");
@@ -916,6 +987,7 @@ pub async fn fetch_lhm_pipe(
         );
                 return None;
             }
+            remember_line(&line);
             let data = match serde_json::from_str::<SidecarPayload>(line.trim()) {
                 Ok(p) if p.is_stale() => {
                     log_pipe_trouble_throttled(dir, "pipe: no fresh sample — the sensor service is restarting its hardware worker");
@@ -944,5 +1016,96 @@ pub async fn fetch_lhm_pipe(
             None
         }
         Ok(Ok(_)) => None, // n == 0: EOF immediately after connect
+    }
+}
+
+/// The last line the sensor service sent, with when it came (unix seconds) —
+/// for the diagnostics ZIP's `dashboard-now.json` (#559).
+static LAST_LINE: std::sync::Mutex<Option<(u64, String)>> = std::sync::Mutex::new(None);
+
+fn remember_line(line: &str) {
+    let mut last = LAST_LINE.lock().unwrap_or_else(|e| e.into_inner());
+    *last = Some((crate::debug::unix_now_secs(), line.trim().to_string()));
+}
+
+/// `dashboard-now.json` for the diagnostics ZIP (#559): the last line the
+/// sensor service sent, how old it is, and what the dashboard makes of it
+/// with `preferred_gpu` — so a value the service sends but the panel doesn't
+/// show (or the other way round) can be told apart.
+pub fn diagnostics_now(preferred_gpu: Option<&str>) -> String {
+    let last = LAST_LINE.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some((received, line)) = last else {
+        return "{ \"error\": \"no line received from the sensor service in this run\" }"
+            .to_string();
+    };
+    diagnostics_json(
+        received,
+        crate::debug::unix_now_secs(),
+        &line,
+        preferred_gpu,
+    )
+}
+
+fn diagnostics_json(received: u64, now: u64, line: &str, preferred_gpu: Option<&str>) -> String {
+    let service_line = serde_json::from_str::<serde_json::Value>(line)
+        .unwrap_or_else(|_| serde_json::Value::String(line.to_string()));
+    let shown = match serde_json::from_str::<SidecarPayload>(line) {
+        Ok(p) if p.is_stale() => serde_json::json!("(stale sample — not shown)"),
+        Ok(p) => {
+            serde_json::to_value(p.into_lhm_data(preferred_gpu)).unwrap_or(serde_json::Value::Null)
+        }
+        Err(e) => serde_json::json!(format!("(not read: {e})")),
+    };
+    serde_json::to_string_pretty(&serde_json::json!({
+        "received_unix": received,
+        "age_secs": now.saturating_sub(received),
+        "preferred_gpu": preferred_gpu,
+        "shown": shown,
+        "service_line": service_line,
+    }))
+    .unwrap_or_default()
+}
+
+/// What the GPU panel shows from a sample: the card, and whether its
+/// temperature and power are there. A change goes into the debug log (#559),
+/// so a reading that disappears has a time to match against sleep, a game or
+/// a driver reset.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuShown {
+    pub name: Option<String>,
+    pub temp: bool,
+    pub power: bool,
+}
+
+impl GpuShown {
+    pub fn of(data: &LhmData) -> Self {
+        Self {
+            name: data.gpu_name.clone(),
+            temp: data.gpu_temp.is_some(),
+            power: data.gpu_power.is_some(),
+        }
+    }
+
+    fn describe(&self) -> String {
+        let said = |there: bool| if there { "reported" } else { "missing" };
+        format!(
+            "{} — temperature {}, power {}",
+            self.name.as_deref().unwrap_or("no graphics card"),
+            said(self.temp),
+            said(self.power)
+        )
+    }
+}
+
+/// The debug-log line for `now` after `before`; `None` when nothing changed.
+pub fn gpu_shown_change(before: Option<&GpuShown>, now: &GpuShown) -> Option<String> {
+    match before {
+        Some(before) if before == now => None,
+        Some(before) => Some(format!(
+            "gpu: showing {} (was {})",
+            now.describe(),
+            before.describe()
+        )),
+        None => Some(format!("gpu: showing {}", now.describe())),
     }
 }

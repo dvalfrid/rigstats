@@ -641,6 +641,11 @@ fn collect_and_open_diagnostics_impl(
     // The graphics drivers now, and every driver Windows Update installed
     // lately (#370): a driver replaced behind the user's back made AMD's
     // ADLX crash the service, and only Windows Update's own log showed it.
+    // Then the last week's display driver resets, the graphics drivers' own
+    // errors, sleep/wake and unexpected restarts (#559) — to match a reading
+    // that disappeared (`gpu: showing …` in debug.log) against them. Each
+    // provider is asked alone: one this PC doesn't have (no NVIDIA driver)
+    // fails a query that names it.
     let driver_updates_txt = run_ps_capture(
         "'== Graphics drivers now'; \
         try { Get-CimInstance Win32_VideoController -EA Stop | \
@@ -656,7 +661,29 @@ fn collect_and_open_diagnostics_impl(
               @{n='Update';e={($_.Message -split ': ')[-1].Trim().TrimEnd('.')}}; \
           if ($u) { $u | Format-Table -AutoSize -Wrap | Out-String -Width 300 } \
           else { 'None.' } \
-        } catch { 'None.' }",
+        } catch { 'None.' }; \
+        '== Display driver resets, graphics driver errors, sleep and wake, last 7 days'; \
+        $since = (Get-Date).AddDays(-7); \
+        $s = foreach ($p in 'Display','nvlddmkm','amdkmdag','amdwddmg', \
+            'Microsoft-Windows-Power-Troubleshooter','Microsoft-Windows-Kernel-Power') { \
+          try { Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName=$p; StartTime=$since} -EA Stop } \
+          catch {} \
+        }; \
+        $s = $s | \
+          Where-Object { $_.ProviderName -ne 'Microsoft-Windows-Kernel-Power' -or $_.Id -in 41,42,107 } | \
+          Where-Object { $_.ProviderName -ne 'Microsoft-Windows-Power-Troubleshooter' -or $_.Id -eq 1 } | \
+          Sort-Object TimeCreated -Descending | \
+          Select-Object -First 200 @{n='Time';e={$_.TimeCreated.ToString('yyyy-MM-dd HH:mm:ss')}},Id,ProviderName, \
+            @{n='Message';e={(($_.Message -split [char]10)[0]).Trim()}}; \
+        if ($s) { $s | Format-Table -AutoSize -Wrap | Out-String -Width 300 } else { 'None.' }",
+    );
+    // The last line the sensor service sent and what the dashboard shows
+    // from it (#559): next to `sensor-tree.txt` it tells whether a missing
+    // value was lost in the service or in the app.
+    let dashboard_now_json = rigstats_backend::lhm::diagnostics_now(
+        rigstats_backend::settings::load_settings(dir)
+            .preferred_gpu
+            .as_deref(),
     );
     let gpu_worker_txt = gpu_worker_status(
         std::fs::read_to_string(
@@ -707,6 +734,7 @@ fn collect_and_open_diagnostics_impl(
         ("wallpaper-engine.txt", wallpaper_engine_txt.as_bytes()),
         ("driver-updates.txt", driver_updates_txt.as_bytes()),
         ("gpu-worker.txt", gpu_worker_txt.as_bytes()),
+        ("dashboard-now.json", dashboard_now_json.as_bytes()),
     ];
 
     for (name, data) in entries {

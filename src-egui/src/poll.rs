@@ -435,6 +435,8 @@ pub async fn poll_loop(
     let mut process_reader = process_list::ProcessReader::default();
     let mut process_usage = process_list::UsageTracker::default();
     let mut process_read_failed = false;
+    // What the GPU panel last showed — a change is logged (#559).
+    let mut gpu_shown: Option<lhm::GpuShown> = None;
 
     loop {
         let light = mode.get() == PollMode::Light;
@@ -666,6 +668,13 @@ pub async fn poll_loop(
         let lhm_data = lhm::fetch_lhm_pipe(&pipe, pref.as_deref(), &dir).await;
         let lhm_connected = lhm_data.is_some();
         lhm_process::track_lhm_connection_state(&dir, lhm_connected);
+        if let Some(data) = &lhm_data {
+            let now = lhm::GpuShown::of(data);
+            if let Some(change) = lhm::gpu_shown_change(gpu_shown.as_ref(), &now) {
+                debug::append_debug_log(&dir, &change);
+            }
+            gpu_shown = Some(now);
+        }
 
         for drive in disk_drives.iter_mut() {
             let key = drive.fs.trim_end_matches(['\\', '/']).to_string();

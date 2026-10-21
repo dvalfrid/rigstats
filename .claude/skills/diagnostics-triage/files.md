@@ -15,6 +15,7 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | Which onboard mouse profile a profile uses | `profiles.json` → `mouse.profile`; `sidecar-log.txt` | `Mouse: <model> on onboard profile <n>.` |
 | Fans / CPU / GPU limits | `sidecar-log.txt`, `control-capabilities.json`, `profiles.json` | verify failures, `drives` mapping, PM table version (unsupported = not verified), safety overrides |
 | Missing or wrong sensor values | `sensor-tree.txt`, `hardware.json` | the raw LHM tree → `/sensor-fixture` |
+| A GPU value missing from the panel | `dashboard-now.json`, `debug.log`, `driver-updates.txt` | `service_line.gpu_devices` = what the service sent, `shown` = what the panel shows from it (ZIPs from 1.51 on, #559); `gpu: showing <card> — temperature missing, …` = when it changed; match that time against the display driver resets / sleep-wake section at the end of `driver-updates.txt` |
 | GPU Apps panel | `gpu-engine.txt` | → `/gpu-engine-fixture` |
 | App crashed or misbehaved | `debug.log`, `debug-prev.log`, `event-log.txt` | missing `shutdown: clean` = crash; .NET 1026 / Application Error 1000 |
 | Sensors gone or a hardware item missing | `sidecar-log.txt` | `The hardware worker ended during … (exit code …) while reading <hardware> (<id>)`, `did not answer … within 8 s`, `… crashed the hardware worker 3 times — it is no longer read` (#374); `[hardware-worker]` lines = the worker's own stack |
