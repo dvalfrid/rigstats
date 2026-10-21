@@ -762,6 +762,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `profiles.json` | `%PROGRAMDATA%\se.codeby.rigstats\profiles.json` | The service-owned profile store (power plan, fan curves, CPU limits, Curve Optimizer, GPU power limit, lighting incl. desk lamp) |
 | `hue.json` | `%PROGRAMDATA%\se.codeby.rigstats\hue.json` — **not** in the diagnostics ZIP | The paired Hue Bridge (#215): id, name, model, firmware, IP, rooms/zones, which are chosen, and the application key (DPAPI-encrypted, machine scope). File ACL: SYSTEM + Administrators only |
 | `sensor-tree.txt` | `%PROGRAMDATA%\se.codeby.rigstats\sensor-tree.txt` | Full LHM hardware/sensor tree written by the sidecar at service start — the raw input for `/sensor-fixture` |
+| `sensor-tree-now.txt` | control pipe `sensor_tree`, asked when the ZIP is collected (`status::sensor_tree_now`) | The same tree read at collection time (#557). Next to `sensor-tree.txt` it shows a sensor that was there at start and went missing later (#556); without a control connection or an answer within 8 s it says why instead |
 | `sidecar-service.txt` | `sc query` + `sc qc` + legacy schtasks | Service status, config, and any lingering LHM scheduled tasks |
 | `hardware.json` | PowerShell `Get-CimInstance` | OS, CPU, GPU, board, RAM modules, disks |
 | `environment.txt` | `std::env::var` | `USERNAME`, `USERDOMAIN`, `USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `COMPUTERNAME`, `PROCESSOR_ARCHITECTURE` — exposes child/standard account path redirections |

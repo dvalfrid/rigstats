@@ -288,6 +288,7 @@ impl RigStatsApp {
             let hardware_problems = self.runtime.latest.hardware_problems.clone();
             let wallpaper_active = self.wallpaper.is_active();
             let control_state = self.runtime.control.clone();
+            let cmd_tx = self.control_cmd_tx.clone();
             let visible = self.dialogs.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
@@ -316,6 +317,7 @@ impl RigStatsApp {
                         lhm_connected,
                         wallpaper_active,
                         &control_state,
+                        &cmd_tx,
                         &hardware_problems,
                         &dc,
                     );

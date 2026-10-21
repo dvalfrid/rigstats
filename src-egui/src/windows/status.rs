@@ -3,7 +3,7 @@ use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit;
 use chrono::Local;
-use rigstats_backend::control::ControlState;
+use rigstats_backend::control::{ControlCmd, ControlState};
 use rigstats_backend::{debug, hardware};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -363,9 +363,35 @@ fn run_ps_capture(script: &str) -> String {
     }
 }
 
+/// How long the diagnostics export waits for the service's sensor tree — it
+/// reads every sensor once, about a second on a normal PC.
+const SENSOR_TREE_WAIT: std::time::Duration = std::time::Duration::from_secs(8);
+
+/// The service's sensor tree as read now (#557), through the app's control
+/// connection; what went wrong in its place. `sensor-tree.txt` is the one
+/// written when the service started, so a sensor lost later only shows here.
+fn sensor_tree_now(control_cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>) -> String {
+    let (reply_tx, reply_rx) = std::sync::mpsc::sync_channel(1);
+    if control_cmd_tx
+        .try_send(ControlCmd::SensorTree(reply_tx))
+        .is_err()
+    {
+        return "(not asked: the connection to the service is busy or closed)".to_string();
+    }
+    match reply_rx.recv_timeout(SENSOR_TREE_WAIT) {
+        Ok(Some(tree)) => tree,
+        Ok(None) => "(the service did not send its sensor tree — see debug.log)".to_string(),
+        Err(_) => format!(
+            "(no answer from the service within {} s — not connected, or the sensors didn't answer)",
+            SENSOR_TREE_WAIT.as_secs()
+        ),
+    }
+}
+
 fn collect_and_open_diagnostics_impl(
     dir: &Path,
     capabilities_json: &str,
+    control_cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
 ) -> std::io::Result<PathBuf> {
     use std::io::Write as IoWrite;
     use zip::write::SimpleFileOptions;
@@ -464,6 +490,7 @@ fn collect_and_open_diagnostics_impl(
             .join("sensor-tree.txt"),
     )
     .unwrap_or_else(|_| b"(sensor-tree.txt not found)".to_vec());
+    let sensor_tree_now = sensor_tree_now(control_cmd_tx);
 
     // Written by the service at start (#212): the lighting devices it drives,
     // with firmware / config tables / LampArray layout, and every HID
@@ -720,6 +747,7 @@ fn collect_and_open_diagnostics_impl(
         ("settings.json", settings_json.as_bytes()),
         ("sidecar-log.txt", &sidecar_log),
         ("sensor-tree.txt", &sensor_tree),
+        ("sensor-tree-now.txt", sensor_tree_now.as_bytes()),
         ("sidecar-service.txt", service_txt.as_bytes()),
         ("profiles.json", &profiles_json),
         ("control-capabilities.json", capabilities_json.as_bytes()),
@@ -804,8 +832,12 @@ fn diagnostics_outcome(result: &std::io::Result<PathBuf>) -> Option<DiagnosticsR
     }
 }
 
-pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
-    let result = collect_and_open_diagnostics_impl(dir, capabilities_json);
+pub fn collect_and_open_diagnostics(
+    dir: &Path,
+    capabilities_json: &str,
+    control_cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+) {
+    let result = collect_and_open_diagnostics_impl(dir, capabilities_json, control_cmd_tx);
     match &result {
         Ok(path) => debug::append_debug_log(
             dir,
@@ -828,18 +860,20 @@ pub fn collect_and_open_diagnostics(dir: &Path, capabilities_json: &str) {
 /// seconds, so this must never run on the egui UI thread. No-op if a collection
 /// is already in flight. `capabilities_json` is a snapshot taken on the UI
 /// thread (`ControlState.capabilities`, already live there — no need for this
-/// background thread to make its own control-pipe round-trip).
+/// background thread to make its own control-pipe round-trip). The live
+/// sensor tree does need one — it goes through `control_cmd_tx`.
 pub fn spawn_collect(
     collecting: Arc<AtomicBool>,
     dir: PathBuf,
     capabilities_json: String,
+    control_cmd_tx: tokio::sync::mpsc::Sender<ControlCmd>,
     ctx: egui::Context,
 ) {
     if collecting.swap(true, Ordering::Relaxed) {
         return;
     }
     std::thread::spawn(move || {
-        collect_and_open_diagnostics(&dir, &capabilities_json);
+        collect_and_open_diagnostics(&dir, &capabilities_json, &control_cmd_tx);
         collecting.store(false, Ordering::Relaxed);
         ctx.request_repaint();
     });
@@ -860,6 +894,7 @@ pub fn show(
     pipe_connected: bool,
     wallpaper_active: bool,
     control: &ControlState,
+    control_cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     hardware_problems: &[rigstats_backend::control::Problem],
     dc: &DialogColors,
 ) {
@@ -1015,6 +1050,7 @@ pub fn show(
             collecting.clone(),
             dir.as_ref().clone(),
             capabilities_json,
+            control_cmd_tx.clone(),
             main_ctx.clone(),
         );
     }
