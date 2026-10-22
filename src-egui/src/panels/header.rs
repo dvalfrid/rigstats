@@ -98,7 +98,7 @@ pub fn draw(
     })
 }
 
-/// Active-profile chip (a painted dot + `GAMING`) — Control Center phase 0
+/// Active-profile chip (`GAMING`) — Control Center phase 0
 /// (#187). Click opens the Control Center window; consumed the same way the
 /// clock panel's
 /// `"open_updater"` badge-click flag is (see `RigStatsApp::draw_one_panel`
@@ -157,20 +157,24 @@ fn draw_profile_chip(ui: &mut Ui, label: String, sc: f32) {
     let border = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
     let bg = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 26);
 
-    // Painted dot rather than a Unicode bullet glyph, which the embedded
-    // font doesn't have (renders as a tofu box) — same fix as the
-    // "Recording" indicator in windows/history.rs.
-    let (dot_rect, _) =
-        ui.allocate_exact_size(egui::vec2(8.0 * sc, 11.0 * sc), egui::Sense::hover());
-    ui.painter()
-        .circle_filled(dot_rect.center(), 2.5 * sc, color);
-
-    let resp = ui.add(
-        egui::Button::new(RichText::new(label).size(11.0 * sc).color(color))
-            .fill(bg)
-            .stroke(egui::Stroke::new(1.0_f32, border))
-            .corner_radius(egui::CornerRadius::same(2)),
+    // Painted: as an `egui::Button` the chip changed size under the pointer
+    // (#566); here nothing depends on hover.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(label, egui::FontId::proportional(11.0 * sc), color);
+    // A button's padding and height, so the chip keeps its size.
+    let size = (galley.size() + 2.0 * ui.spacing().button_padding)
+        .max(egui::vec2(0.0, ui.spacing().interact_size.y));
+    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    let p = ui.painter();
+    p.rect(
+        rect,
+        egui::CornerRadius::same(2),
+        bg,
+        egui::Stroke::new(1.0_f32, border),
+        egui::StrokeKind::Inside,
     );
+    p.galley(rect.center() - galley.size() / 2.0, galley, color);
     if resp.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
