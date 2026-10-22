@@ -167,6 +167,8 @@ fn problems_group(
     let mut app_problems = hardware_problems.to_vec();
     #[cfg(windows)]
     app_problems.extend(crate::notify::off().map(crate::problems::notifications_off));
+    #[cfg(windows)]
+    app_problems.extend(crate::problems::hotkeys_taken(&crate::hotkey::taken()));
     let problems =
         crate::problems::active_problems(control, sensor_connected, service_running, &app_problems);
     if problems.is_empty() {

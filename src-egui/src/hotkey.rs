@@ -16,10 +16,12 @@
 
 #![allow(unsafe_code)]
 
+use crate::lock_ext::LockSafe;
 use eframe::egui;
 use rigstats_backend::debug;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
+use std::sync::Mutex;
 use std::thread::JoinHandle;
 use winapi::um::winuser::{
     GetMessageW, RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MSG, WM_HOTKEY,
@@ -100,6 +102,26 @@ const FIXED: [Chord; 3] = [
     },
 ];
 
+/// What a chord does, in the words Status uses.
+fn purpose(event: HotkeyEvent) -> String {
+    match event {
+        HotkeyEvent::ToggleOverlay => "show or hide the overlay".to_owned(),
+        HotkeyEvent::CycleProfile => "switch to the next profile".to_owned(),
+        HotkeyEvent::ToggleMicMute => "mute the microphone".to_owned(),
+        HotkeyEvent::SwitchProfile(i) => format!("switch to profile {}", i + 1),
+    }
+}
+
+/// The chords another program already held at start-up, each with what it
+/// does (#568).
+static TAKEN: Mutex<Vec<(&'static str, String)>> = Mutex::new(Vec::new());
+
+/// The chords that couldn't be registered because another program holds
+/// them — for Status's Problems group (#568).
+pub fn taken() -> Vec<(&'static str, String)> {
+    TAKEN.lock_safe().clone()
+}
+
 /// Spawns a dedicated thread that registers the fixed chords and sends the
 /// corresponding [`HotkeyEvent`] over `tx` each time one fires.
 /// `RegisterHotKey`/`WM_HOTKEY` delivery is thread-affine — the message
@@ -111,8 +133,8 @@ const FIXED: [Chord; 3] = [
 /// this one.)
 ///
 /// If a chord is already owned by another app, *that one* registration
-/// fails and is logged — the thread still runs the loop for whichever chords
-/// did register; there is no conflict UI in v1.
+/// fails, is logged and is listed by [`taken`] — the thread still runs the
+/// loop for whichever chords did register.
 ///
 /// `ctx` is used to wake the main eframe loop the instant a chord fires —
 /// without it, the event sits in `tx`'s channel until the app's own ~1 fps
@@ -140,6 +162,9 @@ pub fn spawn(dir: PathBuf, tx: Sender<HotkeyEvent>, ctx: egui::Context) -> JoinH
                             chord.name
                         ),
                     );
+                    TAKEN
+                        .lock_safe()
+                        .push((chord.name, purpose(chord.event)));
                 }
                 ok
             })
