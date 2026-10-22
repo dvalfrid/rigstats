@@ -308,6 +308,39 @@ pub fn notifications_off(why: NotificationsOff) -> Problem {
     )
 }
 
+/// Global shortcuts another program already held when RIGStats started
+/// (#568): each chord with what it does. `None` when all registered.
+pub fn hotkeys_taken(taken: &[(&str, String)]) -> Option<Problem> {
+    let (first, rest) = taken.split_first()?;
+    let (title, list) = if rest.is_empty() {
+        (
+            "A shortcut is used by another program",
+            format!("{} ({})", first.0, first.1),
+        )
+    } else {
+        (
+            "Shortcuts are used by another program",
+            taken
+                .iter()
+                .map(|(chord, what)| format!("{chord} ({what})"))
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    };
+    Some(problem(
+        "hotkeys_taken",
+        Severity::Attention,
+        title,
+        format!(
+            "Another program already uses {list}, so it doesn't reach RIGStats. Everything else \
+             keeps working. Change or turn off the shortcut in that program — NVIDIA App, for \
+             one, uses Ctrl+Alt+M for its own microphone switch — then restart RIGStats."
+        ),
+        Vec::new(),
+        None,
+    ))
+}
+
 /// The notification for a profile switch that failed or only partly applied
 /// (#373) — a new result since `previous`, while the Control Center is closed
 /// (its footer shows it otherwise). Hotkey, app rules and the tray switch
@@ -493,6 +526,25 @@ mod tests {
         assert_eq!(apply_notification(None, Some(&failed), true), None); // the footer shows it
         assert_eq!(apply_notification(None, Some(&fine), false), None);
         assert_eq!(apply_notification(Some(&failed), None, false), None);
+    }
+
+    #[test]
+    fn a_shortcut_another_program_holds_is_named_with_what_it_does() {
+        assert!(hotkeys_taken(&[]).is_none());
+        let one = hotkeys_taken(&[("Ctrl+Alt+M", "mute the microphone".into())]).unwrap();
+        assert_eq!(one.title, "A shortcut is used by another program");
+        assert!(one
+            .message
+            .starts_with("Another program already uses Ctrl+Alt+M (mute the microphone), "));
+        let two = hotkeys_taken(&[
+            ("Ctrl+Alt+M", "mute the microphone".into()),
+            ("Ctrl+Alt+F1", "switch to profile 1".into()),
+        ])
+        .unwrap();
+        assert_eq!(two.title, "Shortcuts are used by another program");
+        assert!(two
+            .message
+            .contains("Ctrl+Alt+M (mute the microphone), Ctrl+Alt+F1 (switch to profile 1)"));
     }
 
     #[test]
