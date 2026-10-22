@@ -254,9 +254,26 @@ impl eframe::App for WallpaperHost {
     }
 }
 
+/// A panic on the UI thread ends the process, after the panic logger has
+/// logged it. A new desktop background makes Explorer replace the WorkerW and
+/// destroy our window with it; winit then panics (`ClientToScreen failure`)
+/// and the process could live on without a window — the supervisor saw it
+/// running and never respawned it, so the dashboard was gone until the mode
+/// was toggled. Exiting lets the supervisor start a new host at once.
+fn exit_on_ui_panic() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        previous(info);
+        if std::thread::current().name() == Some("main") {
+            std::process::exit(101);
+        }
+    }));
+}
+
 fn main() {
     let dir = app_data_dir();
     debug::install_panic_logger(&dir);
+    exit_on_ui_panic();
     debug::append_debug_log(&dir, "rigstats-wallpaper starting");
 
     let parent_pid: Option<u32> = std::env::var("RIGSTATS_PARENT_PID")
