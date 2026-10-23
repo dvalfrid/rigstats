@@ -1,0 +1,13 @@
+{
+  "gpu_name": "NVIDIA GeForce GTX 1070",
+  "gpu_names": [
+    "NVIDIA GeForce GTX 1070"
+  ],
+  "ram_mt_s": [
+    2400,
+    2400,
+    2400,
+    2400
+  ],
+  "system_brand": "other"
+}

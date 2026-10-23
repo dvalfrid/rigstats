@@ -22,11 +22,34 @@ Commit only these two text files per machine:
 | File | Required | Notes |
 | --- | --- | --- |
 | `sensor-tree.txt` | ✅ yes | The `Extract` input. Contains only hardware model names (public info), no user identity. |
-| `hardware.json`   | optional | WMI ground truth (GPU/VRAM/RAM/board) — handy to cross-check expected output. |
+| `hardware.json`   | optional | WMI ground truth (GPU/VRAM/RAM/board). Read by the backend test `hardware::fixture_tests` (#572): every GPU in `expected.json` must match a WMI name, and what the app makes of it goes in `expected-wmi.json`. |
 | `meta.json`       | ✅ yes | Provenance (see schema below). |
+| `expected-wmi.json` | with `hardware.json` | Golden for `hardware.json`: the app's GPU list and GPU name, `system_brand`, RAM MT/s per DIMM. Generate with `RIGSTATS_WRITE_EXPECTED=1 cargo test --manifest-path rigstats-backend/Cargo.toml real_wmi_answers` (writes straight into the folder). Exports before 1.51 have no `bbMfr` in `hardware.json`, so a board whose brand is only in it (ASUS PRIME boards in a no-name case) reads as `other` here. |
 
 `sensor-tree.txt` needs no scrubbing in practice (it has no usernames/paths), but
 **glance through it before committing** and remove anything you consider private.
+
+## Everything else a diagnostics ZIP gives the tests (#572)
+
+A ZIP carries more real-hardware data than the sensor tree. Each kind has its
+own corpus, run by a test that finds every file itself, so adding data needs
+no code. **Add from every ZIP whatever the corpora don't have yet.** Use the
+machine's sensor-fixture slug for the file name.
+
+| ZIP file | Corpus | Test | What it checks |
+| --- | --- | --- | --- |
+| `sensor-tree.txt` | `fixtures/<slug>/` (this folder) | `FixtureTests`, `FanProviderTests` | LHM tree → telemetry payload, fan headers |
+| `hardware.json` | `fixtures/<slug>/hardware.json` + `expected-wmi.json` | `hardware::fixture_tests` (Rust) | WMI → GPU list, brand, RAM MT/s; LHM GPUs match WMI names |
+| `sidecar-log.txt`: `Mouse:`/`Headset:`/`Keyboard: … read/equalizer … from <hex>` lines | `fixtures/peripherals/<slug>.log`: the lines verbatim, one per distinct reading | `PeripheralReplyFixtureTests` | Raw replies → what the parser reads must equal what was logged. A model a user confirms against GearLink can then be marked verified. |
+| `sidecar-log.txt`: `Aura: 0x… firmware …, config …` | `fixtures/aura/*.json` | `AuraFixtureTests` | Config table → zones (see `aura/README.md`) |
+| `lighting-devices.json` → `hid_scan` | `fixtures/hid-scan/<slug>.json` (`slug`, `rigstats_version`, `collected_at_unix`, `hid_scan`) | `HidScanFixtureTests` | Every HID collection → `known_as`. New support or lost recognition shows as a diff. Regenerate with `RIGSTATS_WRITE_EXPECTED=1` and copy back from the test output's `fixtures/hid-scan/`. |
+| `gpu-power.json` (only with an NVIDIA card) | `fixtures/gpu-power/<slug>.json`, verbatim | `GpuPowerFixtureTests` | NVML's raw limits → `range_pct`, `offered`, laptop detection |
+| `gpu-engine.txt` | `src-egui/fixtures/gpu-engine/<slug>/` | `gpu_process::fixture_tests` (Rust) | GPU Engine instance names → per-app GPU % (`/gpu-engine-fixture`) |
+| `displays.json` | `src-egui/fixtures/displays/<slug>.json`, verbatim | `geometry::tests::real_display_layouts_pick_the_recorded_monitor` (Rust) | Monitor layout + profile → the monitor marked `is_selected` |
+
+All of these hold hardware model names, ids and values only. Look through
+`hid_scan`'s `product` strings before committing: a Bluetooth device can carry
+a name its owner gave it.
 
 ## Naming convention
 

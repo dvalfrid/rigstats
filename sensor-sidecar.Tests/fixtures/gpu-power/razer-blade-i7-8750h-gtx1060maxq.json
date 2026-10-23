@@ -1,0 +1,23 @@
+{
+  "written_utc": "2026-10-20T19:57:51.9842042\u002B00:00",
+  "adlx_installed": false,
+  "nvml": {
+    "driver_version": "389.04",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "GeForce GTX 1060 with Max-Q Design",
+        "laptop": true,
+        "refused_write": false,
+        "min_mw": "NVML_ERROR_NOT_SUPPORTED",
+        "max_mw": "NVML_ERROR_NOT_SUPPORTED",
+        "default_mw": "NVML_ERROR_NOT_SUPPORTED",
+        "limit_mw": "NVML_ERROR_NOT_SUPPORTED",
+        "enforced_mw": "NVML_ERROR_NOT_SUPPORTED",
+        "range_pct": null,
+        "offered": false
+      }
+    ]
+  },
+  "drivers": "amdadlx64.dll -; nvml.dll 8.17.13.8904"
+}

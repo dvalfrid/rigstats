@@ -1,0 +1,23 @@
+{
+  "written_utc": "2026-10-19T20:12:58.2614989\u002B00:00",
+  "adlx_installed": false,
+  "nvml": {
+    "driver_version": "560.94",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 3060",
+        "laptop": false,
+        "refused_write": false,
+        "min_mw": 100000,
+        "max_mw": 187000,
+        "default_mw": 170000,
+        "limit_mw": 170000,
+        "enforced_mw": 170000,
+        "range_pct": "-41..10",
+        "offered": true
+      }
+    ]
+  },
+  "drivers": "amdadlx64.dll -; nvml.dll 8.17.15.6094"
+}

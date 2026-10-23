@@ -1,0 +1,11 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 4090",
+  "gpu_names": [
+    "NVIDIA GeForce RTX 4090"
+  ],
+  "ram_mt_s": [
+    6600,
+    6600
+  ],
+  "system_brand": "rog"
+}

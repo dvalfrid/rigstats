@@ -1,0 +1,115 @@
+{
+  "slug": "asus-b450m-ryzen5-2600-rtx3060",
+  "rigstats_version": "1.50.0",
+  "collected_at_unix": 1792440912,
+  "hid_scan": [
+    {
+      "vendor_id": "046D",
+      "product_id": "C042",
+      "interface": 0,
+      "usage_page": "0001",
+      "usage": "0002",
+      "input_len": 11,
+      "output_len": 0,
+      "feature_len": 0,
+      "product": "USB Gaming Mouse",
+      "known_as": null
+    },
+    {
+      "vendor_id": "046D",
+      "product_id": "C042",
+      "interface": 1,
+      "usage_page": "FF00",
+      "usage": "0001",
+      "input_len": 7,
+      "output_len": 7,
+      "feature_len": 0,
+      "product": "USB Gaming Mouse",
+      "known_as": null
+    },
+    {
+      "vendor_id": "046D",
+      "product_id": "C042",
+      "interface": 1,
+      "usage_page": "FF00",
+      "usage": "0002",
+      "input_len": 20,
+      "output_len": 20,
+      "feature_len": 0,
+      "product": "USB Gaming Mouse",
+      "known_as": null
+    },
+    {
+      "vendor_id": "0951",
+      "product_id": "16E6",
+      "interface": 0,
+      "usage_page": "0001",
+      "usage": "0006",
+      "input_len": 9,
+      "output_len": 2,
+      "feature_len": 0,
+      "product": "HyperX Alloy Origins Core",
+      "known_as": null
+    },
+    {
+      "vendor_id": "0951",
+      "product_id": "16E6",
+      "interface": 1,
+      "usage_page": "0001",
+      "usage": "0007",
+      "input_len": 20,
+      "output_len": 0,
+      "feature_len": 0,
+      "product": "HyperX Alloy Origins Core",
+      "known_as": null
+    },
+    {
+      "vendor_id": "0951",
+      "product_id": "16E6",
+      "interface": 1,
+      "usage_page": "0001",
+      "usage": "0002",
+      "input_len": 5,
+      "output_len": 0,
+      "feature_len": 0,
+      "product": "HyperX Alloy Origins Core",
+      "known_as": null
+    },
+    {
+      "vendor_id": "0951",
+      "product_id": "16E6",
+      "interface": 1,
+      "usage_page": "000C",
+      "usage": "0001",
+      "input_len": 3,
+      "output_len": 0,
+      "feature_len": 0,
+      "product": "HyperX Alloy Origins Core",
+      "known_as": null
+    },
+    {
+      "vendor_id": "0951",
+      "product_id": "16E6",
+      "interface": 2,
+      "usage_page": "FF13",
+      "usage": "0001",
+      "input_len": 65,
+      "output_len": 65,
+      "feature_len": 65,
+      "product": "HyperX Alloy Origins Core",
+      "known_as": "hyperx_keyboard"
+    },
+    {
+      "vendor_id": "1038",
+      "product_id": "1229",
+      "interface": 3,
+      "usage_page": "000C",
+      "usage": "0001",
+      "input_len": 16,
+      "output_len": 16,
+      "feature_len": 0,
+      "product": "SteelSeries Siberia 350",
+      "known_as": "steelseries_headset"
+    }
+  ]
+}
