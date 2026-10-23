@@ -1,0 +1,21 @@
+{
+  "slug": "msi-x870e-ryzen7-9800x3d-rtx5070ti",
+  "synthetic": false,
+  "contributor": "crcrtuz",
+  "collected_at_unix": 1792604664,
+  "rigstats_version": "1.50.0",
+  "os": "Microsoft Windows 11 Home (build 26300)",
+  "gpu_driver": "NVIDIA 32.0.16.2101 (617.42), AMD 32.0.21045.16010",
+  "adapters": [
+    "NVIDIA GeForce RTX 5070 Ti (dGPU, LUID 0x00900FD6 — every engine instance)",
+    "AMD Radeon(TM) Graphics (iGPU)",
+    "NVIDIA GeForce RTX 5070 Ti (second DXGI entry, LUID 0x02246C5F — no engine instances)",
+    "Microsoft Basic Render Driver (software, Flags=2)"
+  ],
+  "gpu_state": "dual-active",
+  "notes": "From the diagnostics ZIP in #556 (same machine as the sensor-sidecar fixture of this slug). Desktop with a Fresco Logic IDDCX USB display adapter (in WMI, not in DXGI). New shape: the RTX 5070 Ti is listed twice by DXGI under two LUIDs, only one of which has GPU Engine instances — likely the indirect display adapter presenting through the NVIDIA card (hypothesis, not confirmed). NVIDIA Blackwell engine types: OFA_0, JPEG_Decode_1, VR, Security_1.",
+
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}
