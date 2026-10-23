@@ -173,6 +173,10 @@ fn is_ignored_adapter_name(name: &str) -> bool {
         || lower.contains("remote display")
         || lower.contains("virtual display")
         || lower.contains("hyper-v")
+        // An indirect display adapter (a USB display adapter's driver, e.g.
+        // "Fresco Logic IDDCX Adapter"): no GPU of its own, and the sensor
+        // service never reads it (#576).
+        || lower.contains("iddcx")
 }
 
 #[cfg(windows)]
@@ -1867,6 +1871,7 @@ mod tests {
             "Microsoft Basic Display Adapter".to_string(),
             " NVIDIA GeForce RTX 4090 ".to_string(),
             "Parsec Virtual Display Adapter".to_string(),
+            "Fresco Logic IDDCX Adapter".to_string(),
             "NVIDIA GeForce RTX 4090".to_string(),
             "nvidia geforce rtx(tm) 4090".to_string(),
             "Intel(R) UHD Graphics 770".to_string(),
