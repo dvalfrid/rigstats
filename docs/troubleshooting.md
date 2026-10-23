@@ -18,6 +18,7 @@ step by step.
 [Graphics card values missing](#graphics-card-values-missing-or-the-service-keeps-stopping) ·
 [Control Center](#control-center) ·
 [Wireless batteries](#peripherals-wireless-batteries) ·
+[A shortcut doesn't work](#a-shortcut-doesnt-work) ·
 [Notifications](#notifications-dont-show) ·
 [Wrong screen or size](#the-dashboard-is-on-the-wrong-screen-or-the-wrong-size) ·
 [Desktop wallpaper mode](#desktop-wallpaper-mode) ·
@@ -96,6 +97,12 @@ run `winver` (#507).
   RIGStats starts, an update stops with *"Error opening file for writing:
   C:\Program Files\RIGStats\rigstats-sensor.exe"*, or AMD Software says
   **"Update Required"**.
+
+- A small **amber dot** next to the card dots in the GPU panel: the card you
+  picked in Settings isn't read right now, so another card is shown. Hover the
+  dot to see which. On a laptop this is normal while the graphics card sleeps
+  (Eco / iGPU-only mode). Once the card is read again, RIGStats shows it again
+  by itself.
 
 **Why:** almost always the graphics driver, not RIGStats. Some driver versions
 give wrong answers or crash when asked about the card. A common cause on AMD:
@@ -203,6 +210,19 @@ Panels**) and the card over the tray icon show the battery of wireless devices
 - **A ROG device doesn't show or keeps its old level** — see "A lighting device
   isn't listed" under [Control Center](#control-center); its battery is read
   the same way.
+
+## A Shortcut Doesn't Work
+
+RIGStats' shortcuts are **Ctrl+Alt+O** (overlay), **Ctrl+Alt+P** (next
+profile), **Ctrl+Alt+F1**…**F9** (a profile) and **Ctrl+Alt+M** (microphone).
+Windows gives each shortcut to the program that asked first, so another program
+can hold one. Since 1.51, **Status → Problems** says which one is taken
+("A shortcut is used by another program"). The rest keep working.
+
+**What to do:** change or turn off the shortcut in the other program, then
+restart RIGStats. A common one: **NVIDIA App** uses Ctrl+Alt+M for its own
+microphone switch. RIGStats' shortcuts can't be changed yet (#569); the tray
+menu does the same things.
 
 ## Notifications Don't Show
 
