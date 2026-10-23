@@ -1,0 +1,141 @@
+{
+  "cpu_temp": 63.000008,
+  "cpu_power": 104.38802,
+  "gpu_devices": [
+    {
+      "name": "AMD Radeon(TM) Graphics",
+      "sensor_family": "gpu-amd",
+      "load": 0,
+      "temp": 38,
+      "hotspot_temp": null,
+      "mem_temp": null,
+      "core_clock": 600,
+      "mem_clock": 3000,
+      "power": 31,
+      "fan": null,
+      "vram_used_mb": 1,
+      "vram_total_mb": 512,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    },
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "sensor_family": "gpu-nvidia",
+      "load": 3,
+      "temp": 31.363281,
+      "hotspot_temp": 34.1875,
+      "mem_temp": 42,
+      "core_clock": 2505,
+      "mem_clock": 14001,
+      "power": 47.825,
+      "fan": 0,
+      "vram_used_mb": 833.66797,
+      "vram_total_mb": 16303,
+      "d3d_3d": 0.78348356,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "CT1000P510SSD8": 42
+  },
+  "ram_temp": 38.5,
+  "mb_fans": [
+    {
+      "label": "Pump Fan #1",
+      "rpm": 3870
+    },
+    {
+      "label": "CPU Fan",
+      "rpm": 1259
+    },
+    {
+      "label": "System Fan #6",
+      "rpm": 821
+    },
+    {
+      "label": "System Fan #5",
+      "rpm": 818
+    },
+    {
+      "label": "System Fan #4",
+      "rpm": 751
+    },
+    {
+      "label": "System Fan #3",
+      "rpm": 742
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "CPU Core",
+      "celsius": 61
+    },
+    {
+      "label": "System",
+      "celsius": 39.5
+    },
+    {
+      "label": "VRM MOS",
+      "celsius": 39
+    },
+    {
+      "label": "Chipset",
+      "celsius": 40
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "\u002B12V",
+      "volts": 12.192
+    },
+    {
+      "label": "\u002B5V",
+      "volts": 5
+    },
+    {
+      "label": "CPU Northbridge/SoC",
+      "volts": 1.218
+    },
+    {
+      "label": "DIMM",
+      "volts": 1.3640001
+    },
+    {
+      "label": "Vcore",
+      "volts": 1.266
+    },
+    {
+      "label": "Chipset",
+      "volts": 0.75600004
+    },
+    {
+      "label": "CPU System Agent",
+      "volts": 0.748
+    },
+    {
+      "label": "\u002B3.3V",
+      "volts": 3.3200002
+    },
+    {
+      "label": "VREF",
+      "volts": 2.046
+    },
+    {
+      "label": "\u002B1.8V",
+      "volts": 1.8440001
+    },
+    {
+      "label": "\u002B3V Standby",
+      "volts": 3.3680003
+    },
+    {
+      "label": "AVSB",
+      "volts": 3.3680003
+    },
+    {
+      "label": "CMOS Battery",
+      "volts": 3.104
+    }
+  ],
+  "mb_chip": "Nuvoton NCT6687D-R"
+}
