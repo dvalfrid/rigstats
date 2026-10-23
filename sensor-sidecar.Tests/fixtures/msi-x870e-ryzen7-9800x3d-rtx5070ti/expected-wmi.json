@@ -1,7 +1,6 @@
 {
   "gpu_name": "NVIDIA GeForce RTX 5070 Ti",
   "gpu_names": [
-    "Fresco Logic IDDCX Adapter",
     "NVIDIA GeForce RTX 5070 Ti",
     "AMD Radeon(TM) Graphics"
   ],
