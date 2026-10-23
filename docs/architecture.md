@@ -706,6 +706,20 @@ in sync with Windows Settings → Apps → Startup.
 variants (all via `append_debug_log_lvl` + the `LogLevel` enum), `reset_debug_log`,
 `run_hidden_command`, `unix_now_secs`. Log lines are formatted as
 `[YYYY-MM-DD HH:MM:SS] [LEVEL] message` using local time (`chrono`).
+
+`rigstats-debug.log` is rotated to `-prev` only at start, and the app can run
+for days, so it is also bounded while running (#563): after each line the
+open handle's size is checked, and over 1 MB (a normal session writes a few KB)
+the file is cut to its newest 256 KB at a line boundary, through a temp file,
+behind a line `debug log: over … KB — older lines cut`. Both binaries append
+to the file, so every append and cut holds an OS lock (`File::try_lock`) on
+`rigstats-debug.lock` — a separate file, so readers aren't blocked; the OS
+frees it if a process dies. Without the lock within 250 ms a line is still
+written but no cut is made. Like the service's `LogFile` (#223). A cut drops
+the session's first lines (settings dir, hardware); `debug-prev.log` keeps the
+previous session's. `LineLimit` caps a line that can repeat: the poll loop's
+`gpu: showing` at 10 an hour, then one `gpu: changes keep coming — next ones
+not logged until <time>`.
 No dependencies on other crate modules — safe to import from anywhere.
 
 ---
@@ -752,7 +766,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | File | Source | Key fields |
 | --- | --- | --- |
 | `manifest.json` | inline | Unix timestamp + `update_check::APP_VERSION` (e.g. `1.51.0-rc.3`) |
-| `debug.log` | `std::fs::read(debug_log_path)` | Current session: first lines always include `settings dir`, `os_dark_mode`, settings summary. Ends with `shutdown: clean` on normal exit. |
+| `debug.log` | `std::fs::read(debug_log_path)` | Current session: first lines include `settings dir`, `os_dark_mode`, settings summary — unless the log grew past 1 MB and was cut to its newest 256 KB (first line `debug log: over … KB — older lines cut`, #563). Ends with `shutdown: clean` on normal exit. |
 | `debug-prev.log` | `rigstats-debug-prev.log` (renamed from `debug.log` on previous startup) | Previous session log — preserved so crash evidence survives restart. Missing `shutdown: clean` at end = crash. |
 | `install.log` | `%PROGRAMDATA%\se.codeby.rigstats\` | Written by NSIS installer |
 | `settings.json` | `rigstats-settings.json` read from disk | All persisted user settings |
@@ -771,7 +785,7 @@ thread). Produces a self-contained ZIP for bug reports.
 | `displays.json` | `geometry::win_monitor::list()` + `pick_window_rect_for_profile()` | Each monitor's position/resolution, `is_primary`, and `is_selected` for the active dashboard profile |
 | `gpu-engine.txt` | `gpu_process::dump_diagnostics()` | Raw PDH `\GPU Engine(*)` instance names/values + the full DXGI adapter list. The exact input `gpu_process::parse_instance`/`aggregate` consume — doubles as a ready-made fixture for `src-egui/fixtures/gpu-engine/` (see its README, and `/gpu-engine-fixture`). Blocks ~1s (PDH needs two collects spaced in time). |
 | `driver-updates.txt` | PowerShell `Get-CimInstance` + `Get-WinEvent` (System, WindowsUpdateClient 19/20) | The graphics drivers installed now, and every driver Windows Update installed or failed to install in the last 60 days — the clue to #370, where Windows Update replaced the Adrenalin driver and AMD's ADLX crashed the service. Since #559 also the last 7 days of System-log events: display driver resets (`Display` 4101), the graphics drivers' own events (`nvlddmkm`, `amdkmdag`, `amdwddmg`), sleep/wake (Kernel-Power 42/107, Power-Troubleshooter 1) and unexpected restarts (Kernel-Power 41), each provider queried alone (one that isn't installed fails a query naming it) |
-| `dashboard-now.json` | `lhm::diagnostics_now` (the last line `fetch_lhm_pipe` read, kept in `LAST_LINE`) | The last telemetry line the sensor service sent (`service_line`, as sent), its age, the `preferred_gpu` setting and `shown` — that line through `into_lhm_data`, i.e. what the dashboard shows (#559). With `sensor-tree.txt` it tells a value the service never read from one the app didn't show. The debug log's `gpu: showing <card> — temperature …, power …` lines (written when the shown card or whether its temperature/power are there changes) give the time it changed |
+| `dashboard-now.json` | `lhm::diagnostics_now` (the last line `fetch_lhm_pipe` read, kept in `LAST_LINE`) | The last telemetry line the sensor service sent (`service_line`, as sent), its age, the `preferred_gpu` setting and `shown` — that line through `into_lhm_data`, i.e. what the dashboard shows (#559). With `sensor-tree.txt` it tells a value the service never read from one the app didn't show. The debug log's `gpu: showing <card> — temperature …, power …` lines (written when the shown card or whether its temperature/power are there changes) give the time it changed — at most 10 an hour, then `gpu: changes keep coming — next ones not logged until <time>` (#563) |
 | `gpu-worker.txt` | `%PROGRAMDATA%\se.codeby.rigstats\gpu-worker-crash.marker` via `status::gpu_worker_status` | Whether the GPU worker crashed or hung this boot, the driver files and the reason (#370) |
 
 ### `sysinfo.json` — key fields

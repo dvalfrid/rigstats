@@ -437,6 +437,8 @@ pub async fn poll_loop(
     let mut process_read_failed = false;
     // What the GPU panel last showed — a change is logged (#559).
     let mut gpu_shown: Option<lhm::GpuShown> = None;
+    // ...at most 10 times an hour, in case a reading flaps (#563).
+    let mut gpu_shown_limit = debug::LineLimit::new(10, 3600);
 
     loop {
         let light = mode.get() == PollMode::Light;
@@ -671,7 +673,17 @@ pub async fn poll_loop(
         if let Some(data) = &lhm_data {
             let now = lhm::GpuShown::of(data);
             if let Some(change) = lhm::gpu_shown_change(gpu_shown.as_ref(), &now) {
-                debug::append_debug_log(&dir, &change);
+                match gpu_shown_limit.check(debug::unix_now_secs()) {
+                    debug::LineGate::Write => debug::append_debug_log(&dir, &change),
+                    debug::LineGate::MuteUntil(until) => debug::append_debug_log(
+                        &dir,
+                        &format!(
+                            "gpu: changes keep coming — next ones not logged until {}",
+                            debug::fmt_local_timestamp(until)
+                        ),
+                    ),
+                    debug::LineGate::Mute => {}
+                }
             }
             gpu_shown = Some(now);
         }
