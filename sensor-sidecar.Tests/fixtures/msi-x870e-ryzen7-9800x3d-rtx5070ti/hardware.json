@@ -1,0 +1,55 @@
+{
+    "cpu":  [
+                {
+                    "threads":  16,
+                    "name":  "AMD Ryzen 7 9800X3D 8-Core Processor           ",
+                    "cores":  8
+                }
+            ],
+    "board":  {
+                  "bbProd":  "X870E GAMING PLUS WIFI (MS-7E70)",
+                  "csModel":  "MS-7E70",
+                  "csMfr":  "Micro-Star International Co., Ltd."
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  1000202273280,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "CT1000P510SSD8"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "Fresco Logic IDDCX Adapter",
+                    "driver":  "2.1.34054.0",
+                    "ramBytes":  null
+                },
+                {
+                    "name":  "NVIDIA GeForce RTX 5070 Ti",
+                    "driver":  "32.0.16.2101",
+                    "ramBytes":  4293918720
+                },
+                {
+                    "name":  "AMD Radeon(TM) Graphics",
+                    "driver":  "32.0.21045.16010",
+                    "ramBytes":  536870912
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  6000
+                },
+                {
+                    "configured":  6000,
+                    "capBytes":  17179869184,
+                    "speed":  6000
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Home",
+               "build":  "26300",
+               "version":  "10.0.26300"
+           }
+}

@@ -1,0 +1,11 @@
+{
+  "slug": "msi-x870e-ryzen7-9800x3d-rtx5070ti",
+  "synthetic": false,
+  "contributor": "crcrtuz",
+  "collected_at_unix": 1792604664,
+  "rigstats_version": "1.50.0",
+  "os": "Microsoft Windows 11 Home (build 26300)",
+  "gpu_driver": "NVIDIA 32.0.16.2101 (617.42), AMD 32.0.21045.16010",
+  "notes": "From the diagnostics ZIP in #556. First MSI board: X870E Gaming Plus WiFi (MS-7E70) with Nuvoton NCT6687D-R Super I/O. Dual-GPU desktop: AMD Radeon iGPU (/gpu-amd/0) + RTX 5070 Ti (/gpu-nvidia/0), preferred GPU set to the RTX. A Fresco Logic IDDCX USB display adapter is in WMI/DXGI but not in LHM. Ryzen 7 9800X3D, 2x Patriot DDR5-6000, 1x NVMe. Tree written at service start (2026-10-21 16:40:17Z), idle; both GPUs report temperature and power here.",
+  "anonymized": true
+}
