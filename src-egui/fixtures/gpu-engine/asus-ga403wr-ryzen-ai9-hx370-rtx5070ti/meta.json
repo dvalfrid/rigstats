@@ -1,0 +1,21 @@
+{
+  "slug": "asus-ga403wr-ryzen-ai9-hx370-rtx5070ti",
+  "synthetic": false,
+  "contributor": "dvalfrid",
+  "collected_at_unix": 1792790748,
+  "rigstats_version": "1.51.0-rc.6",
+  "os": "Microsoft Windows 11 Home (build 26300)",
+  "gpu_driver": "AMD 32.0.21036.1002, NVIDIA 32.0.16.2101 (621.01)",
+  "adapters": [
+    "AMD Radeon(TM) 890M Graphics (iGPU, LUID 0x00013EE3)",
+    "NVIDIA GeForce RTX 5070 Ti Laptop GPU (dGPU)",
+    "AMD Radeon(TM) 890M Graphics (second DXGI entry, LUID 0x000284E7)",
+    "Microsoft Basic Render Driver (software, Flags=2)"
+  ],
+  "gpu_state": "dual-active",
+  "notes": "ROG Zephyrus G14 (2025) with the dGPU awake, from the 1.51.0 release check (rc.6). The 890M is listed twice by DXGI under two LUIDs, on a laptop with no USB display adapter, so a GPU listed twice is not tied to an indirect display adapter (compare msi-x870e-ryzen7-9800x3d-rtx5070ti). Engine types: JPEG_Decode_0, OFA_0, Timer, VR.",
+
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}
