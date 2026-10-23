@@ -1175,7 +1175,7 @@ pub fn detect_battery_present() -> bool {
                 conn.raw_query::<BatteryIdRow>("SELECT DeviceID FROM Win32_Battery")
                     .ok()
             })
-            .map_or(true, |rows| !rows.is_empty())
+            .is_none_or(|rows| !rows.is_empty())
     }
     #[cfg(not(windows))]
     {

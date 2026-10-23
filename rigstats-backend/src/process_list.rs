@@ -140,7 +140,7 @@ pub fn parse(buf: &[u8], base: usize) -> Result<Vec<RawProcess>, ParseError> {
 fn image_name(buf: &[u8], base: usize, entry: &[u8]) -> String {
     let len = u16_at(entry, IMAGE_NAME_LENGTH).unwrap_or(0) as usize;
     let ptr = u64_at(entry, IMAGE_NAME_BUFFER).unwrap_or(0) as usize;
-    if len == 0 || ptr == 0 || len % 2 != 0 {
+    if len == 0 || ptr == 0 || !len.is_multiple_of(2) {
         return String::new();
     }
     let Some(start) = ptr.checked_sub(base) else {
@@ -150,8 +150,10 @@ fn image_name(buf: &[u8], base: usize, entry: &[u8]) -> String {
         return String::new();
     };
     let units: Vec<u16> = bytes
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| u16::from_le_bytes(c))
         .collect();
     String::from_utf16_lossy(&units)
 }

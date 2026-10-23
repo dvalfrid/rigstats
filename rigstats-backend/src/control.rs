@@ -563,7 +563,7 @@ pub struct CurveOptPart {
 
 impl CurveOptPart {
     pub fn is_bios(&self) -> bool {
-        self.all_core.is_none() && self.per_core.as_ref().map_or(true, BTreeMap::is_empty)
+        self.all_core.is_none() && self.per_core.as_ref().is_none_or(BTreeMap::is_empty)
     }
 }
 
