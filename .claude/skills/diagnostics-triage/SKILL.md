@@ -27,3 +27,5 @@ State the cause with the evidence lines, how sure you are, and the next step:
 - new model/id → `/add-lighting-device`; new board/sensor layout → `/sensor-fixture`; GPU engine data → `/gpu-engine-fixture`
 - code bug → issue + fix per `/commit-workflow`, then `/live-test`
 - unclear → say exactly which log line or reply would settle it
+
+**Always, whatever the cause:** a user's ZIP becomes test data. Compare its board, CPU, GPUs and adapters with `sensor-sidecar.Tests/fixtures/` and `src-egui/fixtures/gpu-engine/`, and add what the corpus doesn't have yet (`/sensor-fixture`, `/gpu-engine-fixture`; a new HID device from `lighting-devices.json` → `/add-lighting-device`). Only the safe files go in — never the ZIP itself.
