@@ -13,7 +13,7 @@
     "Microsoft Basic Render Driver (software, Flags=2)"
   ],
   "gpu_state": "dual-active",
-  "notes": "From the diagnostics ZIP in #556 (same machine as the sensor-sidecar fixture of this slug). Desktop with a Fresco Logic IDDCX USB display adapter (in WMI, not in DXGI). New shape: the RTX 5070 Ti is listed twice by DXGI under two LUIDs, only one of which has GPU Engine instances — likely the indirect display adapter presenting through the NVIDIA card (hypothesis, not confirmed). NVIDIA Blackwell engine types: OFA_0, JPEG_Decode_1, VR, Security_1.",
+  "notes": "From the diagnostics ZIP in #556 (same machine as the sensor-sidecar fixture of this slug). Desktop with a Fresco Logic IDDCX USB display adapter (in WMI, not in DXGI). New shape: the RTX 5070 Ti is listed twice by DXGI under two LUIDs, only one of which has GPU Engine instances. An earlier note blamed the indirect display adapter; that is unlikely, since the G14 (asus-ga403wr-ryzen-ai9-hx370-rtx5070ti) lists its 890M twice with no such adapter. Why DXGI repeats an adapter is not known. NVIDIA Blackwell engine types: OFA_0, JPEG_Decode_1, VR, Security_1.",
 
   "confirmed_by": 1,
   "variant_of": null,

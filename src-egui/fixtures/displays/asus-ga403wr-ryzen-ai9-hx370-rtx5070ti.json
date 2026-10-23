@@ -1,0 +1,15 @@
+{
+  "dashboard_profile": "portrait-qhd-side",
+  "monitors": [
+    {
+      "bottom": 1028,
+      "height": 1028,
+      "is_primary": true,
+      "is_selected": true,
+      "left": 0,
+      "right": 1645,
+      "top": 0,
+      "width": 1645
+    }
+  ]
+}
