@@ -1,0 +1,14 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 5070 Ti Laptop GPU",
+  "gpu_names": [
+    "AMD Radeon(TM) 890M Graphics",
+    "NVIDIA GeForce RTX 5070 Ti Laptop GPU"
+  ],
+  "ram_mt_s": [
+    8000,
+    8000,
+    8000,
+    8000
+  ],
+  "system_brand": "rog"
+}

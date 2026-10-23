@@ -1,0 +1,13 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 3060",
+  "gpu_names": [
+    "NVIDIA GeForce RTX 3060"
+  ],
+  "ram_mt_s": [
+    2400,
+    2400,
+    2400,
+    2400
+  ],
+  "system_brand": "other"
+}

@@ -1,0 +1,25 @@
+{
+  "dashboard_profile": "portrait-xl",
+  "monitors": [
+    {
+      "bottom": 1080,
+      "height": 1080,
+      "is_primary": true,
+      "is_selected": true,
+      "left": 0,
+      "right": 1920,
+      "top": 0,
+      "width": 1920
+    },
+    {
+      "bottom": 1440,
+      "height": 1440,
+      "is_primary": false,
+      "is_selected": false,
+      "left": 1920,
+      "right": 5360,
+      "top": 0,
+      "width": 3440
+    }
+  ]
+}

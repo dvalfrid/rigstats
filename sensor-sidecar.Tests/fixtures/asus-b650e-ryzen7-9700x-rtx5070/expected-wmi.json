@@ -1,0 +1,12 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 5070",
+  "gpu_names": [
+    "NVIDIA GeForce RTX 5070",
+    "AMD Radeon(TM) Graphics"
+  ],
+  "ram_mt_s": [
+    6000,
+    6000
+  ],
+  "system_brand": "other"
+}

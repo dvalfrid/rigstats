@@ -1,0 +1,12 @@
+{
+  "gpu_name": "NVIDIA GeForce GTX 1060 with Max-Q Design",
+  "gpu_names": [
+    "Intel(R) UHD Graphics 630",
+    "NVIDIA GeForce GTX 1060 with Max-Q Design"
+  ],
+  "ram_mt_s": [
+    2667,
+    2667
+  ],
+  "system_brand": "razer"
+}

@@ -546,7 +546,7 @@ fn collect_and_open_diagnostics_impl(
         "os=@{caption=$os.Caption;version=$os.Version;build=$os.BuildNumber};",
         "cpu=@($cpu|%{@{name=$_.Name;cores=$_.NumberOfCores;threads=$_.NumberOfLogicalProcessors}});",
         "gpu=@($gpu|%{@{name=$_.Name;ramBytes=$_.AdapterRAM;driver=$_.DriverVersion}});",
-        "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbProd=$bb.Product};",
+        "board=@{csMfr=$cs.Manufacturer;csModel=$cs.Model;bbMfr=$bb.Manufacturer;bbProd=$bb.Product};",
         "ram=@($mem|%{@{capBytes=$_.Capacity;speed=$_.Speed;configured=$_.ConfiguredClockSpeed}});",
         "disk=@($disk|%{@{model=$_.Model;sizeBytes=$_.Size;mediaType=$_.MediaType}})",
         "}|ConvertTo-Json -Depth 4",

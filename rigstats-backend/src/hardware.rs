@@ -1958,3 +1958,100 @@ mod wmi_classes_tests {
         assert_eq!(b.product.as_deref(), Some("GA403WR"));
     }
 }
+
+/// Real WMI answers (#572): `hardware.json` from users' diagnostics ZIPs,
+/// kept next to each sensor fixture in `sensor-sidecar.Tests/fixtures/<slug>/`.
+/// What the app makes of them — the GPU list and the GPU it names, the
+/// brand, the RAM data rate — is compared with `expected-wmi.json` there
+/// (regenerate with RIGSTATS_WRITE_EXPECTED=1). And every GPU the sensor
+/// service reads (`expected.json`) must match a WMI name, or a GPU picked in
+/// Settings could never be found in the telemetry (#556's setup).
+#[cfg(all(test, windows))]
+mod fixture_tests {
+    use super::{classify_system_brand, clean_gpu_names, pick_best_gpu_name, ram_data_rate};
+    use crate::lhm::gpu_names_match;
+    use serde_json::{json, Value};
+    use std::path::Path;
+
+    fn read_json(path: &Path) -> Value {
+        let text = std::fs::read_to_string(path).expect("readable fixture");
+        // PowerShell writes hardware.json with a byte-order mark.
+        serde_json::from_str(text.trim_start_matches('\u{feff}')).expect("fixture is JSON")
+    }
+
+    fn what_the_app_makes_of(hw: &Value) -> Value {
+        let str_of = |v: &Value| v.as_str().map(str::to_string);
+        let gpus = clean_gpu_names(
+            hw["gpu"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|g| str_of(&g["name"]))
+                .collect(),
+        );
+        // The fields hardware.json has, in the order the app passes them.
+        let board = &hw["board"];
+        let fields: Vec<&str> = ["csMfr", "csModel", "cspName", "cspVer", "bbMfr", "bbProd"]
+            .iter()
+            .filter_map(|k| board[*k].as_str())
+            .collect();
+        let ram: Vec<Option<u32>> = hw["ram"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|r| {
+                let n = |k: &str| r[k].as_u64().map(|v| v as u32);
+                ram_data_rate(n("configured"), n("speed"))
+            })
+            .collect();
+        json!({
+            "gpu_names": gpus,
+            "gpu_name": pick_best_gpu_name(gpus.clone()),
+            "system_brand": classify_system_brand(&fields),
+            "ram_mt_s": ram,
+        })
+    }
+
+    #[test]
+    fn real_wmi_answers_read_as_recorded() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../sensor-sidecar.Tests/fixtures");
+        let write = std::env::var("RIGSTATS_WRITE_EXPECTED").as_deref() == Ok("1");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&root).expect("sensor fixtures") {
+            let dir = entry.expect("readable entry").path();
+            let hardware = dir.join("hardware.json");
+            if !hardware.exists() {
+                continue;
+            }
+            let slug = dir.file_name().unwrap().to_string_lossy().to_string();
+            let actual = what_the_app_makes_of(&read_json(&hardware));
+
+            // Every GPU the service reads has a WMI name it matches.
+            let wmi = actual["gpu_names"].as_array().unwrap();
+            let lhm = read_json(&dir.join("expected.json"));
+            for gpu in lhm["gpu_devices"].as_array().into_iter().flatten() {
+                let name = gpu["name"].as_str().unwrap();
+                assert!(
+                    wmi.iter()
+                        .any(|w| gpu_names_match(w.as_str().unwrap(), name)),
+                    "{slug}: the service's '{name}' matches no WMI GPU in {wmi:?}"
+                );
+            }
+
+            let golden = dir.join("expected-wmi.json");
+            if write {
+                let text = serde_json::to_string_pretty(&actual).unwrap() + "\n";
+                std::fs::write(&golden, text).expect("golden written");
+            } else {
+                assert!(
+                    golden.exists(),
+                    "{slug}: no expected-wmi.json — run this test with RIGSTATS_WRITE_EXPECTED=1"
+                );
+                let expected = read_json(&golden);
+                assert_eq!(actual, expected, "{slug}: expected-wmi.json differs");
+            }
+            checked += 1;
+        }
+        assert!(checked > 0, "no hardware.json under {}", root.display());
+    }
+}

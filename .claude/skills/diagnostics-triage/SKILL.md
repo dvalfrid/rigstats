@@ -27,3 +27,7 @@ State the cause with the evidence lines, how sure you are, and the next step:
 - new model/id → `/add-lighting-device`; new board/sensor layout → `/sensor-fixture`; GPU engine data → `/gpu-engine-fixture`
 - code bug → issue + fix per `/commit-workflow`, then `/live-test`
 - unclear → say exactly which log line or reply would settle it
+
+## 5. Add the ZIP to the tests, always
+
+Whatever the cause, a user's ZIP becomes test data, in a `test:` PR. Go through **every row** of the table "Everything else a diagnostics ZIP gives the tests" in `sensor-sidecar.Tests/fixtures/README.md`: sensor tree (`/sensor-fixture`, with `hardware.json` → `expected-wmi.json`), `gpu-engine.txt` (`/gpu-engine-fixture`), peripheral reply lines, `Aura:` lines, `hid_scan`, `gpu-power.json`, `displays.json`. Add each one the corpus doesn't have for this hardware yet, and say which you skipped and why (already covered, no such data in this ZIP). A device in `hid_scan` with `known_as: null` is a candidate for `/add-lighting-device`. A test that fails while adding is a finding, so report it. Only the safe files go in, never the ZIP itself.

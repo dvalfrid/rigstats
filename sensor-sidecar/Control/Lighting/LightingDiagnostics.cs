@@ -52,6 +52,8 @@ public static class LightingDiagnostics
                     ["input_len"] = h.InputReportLength,
                     ["output_len"] = h.OutputReportLength,
                     ["feature_len"] = h.FeatureReportLength,
+                    // A mouse's settings channel is told apart by it (#572).
+                    ["output_report_id"] = h.OutputReportId,
                     ["product"] = h.Product,
                     ["known_as"] = KnownAs(h),
                 }).ToArray()),
