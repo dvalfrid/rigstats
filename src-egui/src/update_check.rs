@@ -130,19 +130,24 @@ pub enum CheckResult {
     UpdateAvailable(UpdateInfo),
 }
 
+/// 15 s to connect (TLS handshake included), 30 s for each read.
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(30))
+    ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(15)))
+        .timeout_per_read(Some(Duration::from_secs(30)))
         .build()
+        .new_agent()
 }
 
+/// `read_json` stops at 10 MB — far above `latest.json` or a page of
+/// releases.
 fn fetch_manifest(url: &str) -> Result<LatestManifest, String> {
     agent()
         .get(url)
         .call()
         .map_err(|e| format!("HTTP error: {e}"))?
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|e| format!("JSON parse error: {e}"))
 }
 
@@ -192,11 +197,12 @@ struct ApiAsset {
 fn newest_candidate_manifest() -> Result<Option<String>, String> {
     let releases: Vec<ApiRelease> = agent()
         .get(RELEASES_API_URL)
-        .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "RIGStats")
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "RIGStats")
         .call()
         .map_err(|e| format!("HTTP error: {e}"))?
-        .into_json()
+        .body_mut()
+        .read_json()
         .map_err(|e| format!("JSON parse error: {e}"))?;
     Ok(candidate_manifest_url(&releases).map(str::to_owned))
 }
@@ -335,12 +341,10 @@ fn download_to(url: &str, dest: &Path, on_progress: impl Fn(u64, u64)) -> Result
         .call()
         .map_err(|e| format!("Download HTTP error: {e}"))?;
 
-    let total: u64 = resp
-        .header("content-length")
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(0);
+    let total: u64 = resp.body().content_length().unwrap_or(0);
 
-    let mut reader = resp.into_reader();
+    // Unlimited in ureq; the loop below stops at `MAX_INSTALLER_BYTES`.
+    let mut reader = resp.into_body().into_reader();
     // Readable but not writable by anyone else while it is being written.
     let mut file = std::fs::OpenOptions::new()
         .write(true)
@@ -664,6 +668,96 @@ mod tests {
         assert_eq!(std::fs::read(&path).unwrap(), b"installer");
         drop(lock);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Answers one HTTP request on localhost with `response` and returns the
+    /// URL to ask.
+    fn serve_once(response: Vec<u8>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut byte = [0u8; 1];
+            while !request.ends_with(b"\r\n\r\n") && stream.read(&mut byte).unwrap() == 1 {
+                request.push(byte[0]);
+            }
+            stream.write_all(&response).unwrap();
+        });
+        format!("http://127.0.0.1:{port}/latest.json")
+    }
+
+    fn http_ok(body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    #[test]
+    fn a_manifest_is_read_from_the_response() {
+        let url = serve_once(http_ok(
+            br#"{"version":"9.9.9","notes":"n","platforms":{"windows-x86_64":{}}}"#,
+        ));
+        let m = fetch_manifest(&url).unwrap();
+        assert_eq!(m.version, "9.9.9");
+        assert_eq!(m.notes.as_deref(), Some("n"));
+    }
+
+    #[test]
+    fn an_error_status_is_an_http_error() {
+        let url = serve_once(
+            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+        );
+        let e = fetch_manifest(&url).unwrap_err();
+        assert!(e.starts_with("HTTP error:") && e.contains("404"), "{e}");
+    }
+
+    #[test]
+    fn a_download_reports_its_length_and_writes_every_byte() {
+        let body = vec![0x5a; 200_000];
+        let url = serve_once(http_ok(&body));
+        let dir = test_dir("download");
+        let path = dir.join("rigstats-setup.exe");
+        let last = std::cell::Cell::new((0, 0));
+        download_to(&url, &path, |done, total| last.set((done, total))).unwrap();
+        assert_eq!(last.get(), (200_000, 200_000));
+        assert_eq!(std::fs::read(&path).unwrap(), body);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Against the real GitHub: `cargo test --manifest-path src-egui/Cargo.toml
+    /// real_github -- --ignored --nocapture`, with `RIGSTATS_VERSION` set to
+    /// see what an older build is offered. Downloads and verifies the newest
+    /// release's and release candidate's installers (checksum and
+    /// signature); never runs them.
+    #[test]
+    #[ignore = "network: fetches from github.com"]
+    fn real_github_release_and_candidates() {
+        let manifest = fetch_manifest(LATEST_JSON_URL).unwrap();
+        println!("latest.json: {}", manifest.version);
+        let mut infos = vec![update_info(manifest, false).unwrap()];
+        if let Some(url) = newest_candidate_manifest().unwrap() {
+            let rc = fetch_manifest(&url).unwrap();
+            println!("newest candidate: {}", rc.version);
+            infos.push(update_info(rc, false).unwrap());
+        }
+        for channel in [UpdateChannel::Stable, UpdateChannel::ReleaseCandidates] {
+            let offered = match check(channel).unwrap() {
+                CheckResult::UpToDate => "nothing".to_string(),
+                CheckResult::UpdateAvailable(info) => info.version,
+            };
+            println!("{channel:?} offers {APP_VERSION}: {offered}");
+        }
+        for info in &infos {
+            let installer = download(info, |_, _| {}).unwrap();
+            println!("{} downloaded and verified", info.version);
+            drop(installer);
+        }
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join("rigstats-update"));
     }
 
     const HIGHLIGHTS: &str = "<!--

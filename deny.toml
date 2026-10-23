@@ -10,10 +10,4 @@ version = 2
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "warn"
 # Each entry needs the advisory id and why it doesn't apply / can't be fixed yet.
-ignore = [
-    # webpki-roots 0.26.11 (ureq 2's dependency) is a shim with nothing but
-    # `pub use parent::TLS_SERVER_ROOTS` from webpki-roots 1, which Cargo.lock
-    # pins at 1.0.10 — the fixed version. The advisory matches the shim's
-    # version number only; there is no 0.26.x after .11. Remove with ureq 3.
-    { id = "RUSTSEC-2026-0381", reason = "0.26.11 re-exports webpki-roots 1.0.10's roots (fixed); no newer 0.26 shim" },
-]
+ignore = []
