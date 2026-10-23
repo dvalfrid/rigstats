@@ -8,6 +8,47 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.51.0](https://github.com/dvalfrid/rigstats/compare/v1.50.0...v1.51.0) (2026-10-23)
+
+
+### Features
+
+* **diagnostics:** add the sensor tree as read when the ZIP is collected ([#558](https://github.com/dvalfrid/rigstats/issues/558)) ([0a3396f](https://github.com/dvalfrid/rigstats/commit/0a3396fa453c1a5a162f2b57b3b22829b91b1ba5))
+* **diagnostics:** what the dashboard shows, when a GPU reading drops, driver resets and sleep ([#562](https://github.com/dvalfrid/rigstats/issues/562)) ([0544c0b](https://github.com/dvalfrid/rigstats/commit/0544c0b1cce600b874fd3e393d79caecb8c3fae7)), closes [#559](https://github.com/dvalfrid/rigstats/issues/559)
+* **gpu:** show when the chosen graphics card isn't read ([#531](https://github.com/dvalfrid/rigstats/issues/531)) ([5122944](https://github.com/dvalfrid/rigstats/commit/51229442eb34fd3cb465679236615a7a37879ece)), closes [#528](https://github.com/dvalfrid/rigstats/issues/528)
+* **lighting:** drive Razer, HyperX and SteelSeries devices on their own protocols ([#524](https://github.com/dvalfrid/rigstats/issues/524)) ([18ee297](https://github.com/dvalfrid/rigstats/commit/18ee297c3e9602dc24d97e74fa053b1074e88641))
+* **release:** thank the contributors by name on the GitHub release ([#504](https://github.com/dvalfrid/rigstats/issues/504)) ([d702cb7](https://github.com/dvalfrid/rigstats/commit/d702cb7f96f972c2102d2695bd94f2ea0e35fb7d))
+* **status:** show a global shortcut another program already holds ([#570](https://github.com/dvalfrid/rigstats/issues/570)) ([5747e52](https://github.com/dvalfrid/rigstats/commit/5747e520a4fe5b5409efe74e78bb659bbee5c66b)), closes [#568](https://github.com/dvalfrid/rigstats/issues/568)
+* **updates:** an update channel for release candidates ([#536](https://github.com/dvalfrid/rigstats/issues/536)) ([5812e52](https://github.com/dvalfrid/rigstats/commit/5812e52751e6ab25af60dead08505421a280523e))
+
+
+### Bug Fixes
+
+* **gpu:** handle an empty engine type in GPU Engine instance names ([#521](https://github.com/dvalfrid/rigstats/issues/521)) ([c9ba6c3](https://github.com/dvalfrid/rigstats/commit/c9ba6c3b17b0760fbe330c3e84e14d7f74e84f53))
+* **gpu:** leave USB display adapters out of the GPU list ([#577](https://github.com/dvalfrid/rigstats/issues/577)) ([f4587ba](https://github.com/dvalfrid/rigstats/commit/f4587bab1bbc663b9616800decf420902d29a6a9))
+* **header:** drop the profile chip's dot and keep its size on hover ([#567](https://github.com/dvalfrid/rigstats/issues/567)) ([44c5ff6](https://github.com/dvalfrid/rigstats/commit/44c5ff6ddac5e5c56cd5c7a1be7d2a0f56400cb2)), closes [#566](https://github.com/dvalfrid/rigstats/issues/566)
+* **installer:** start RIGStats as the signed-in user, not the account that approved UAC ([#555](https://github.com/dvalfrid/rigstats/issues/555)) ([9d60623](https://github.com/dvalfrid/rigstats/commit/9d60623b04458bc986f06e6ae30239a53777d4a7)), closes [#416](https://github.com/dvalfrid/rigstats/issues/416)
+* **lighting:** drive LampArrays without an intensity channel, and wait out Razer's "not taken up yet" ([#539](https://github.com/dvalfrid/rigstats/issues/539)) ([2b352b2](https://github.com/dvalfrid/rigstats/commit/2b352b2c406e561fccc2fcb7b63d80e5c074dbdb)), closes [#537](https://github.com/dvalfrid/rigstats/issues/537) [#538](https://github.com/dvalfrid/rigstats/issues/538)
+* **ram:** show the real data rate on boards that report the speed in MHz ([#520](https://github.com/dvalfrid/rigstats/issues/520)) ([267e2aa](https://github.com/dvalfrid/rigstats/commit/267e2aacc4f8f23d30946ce852283dc81533dd02))
+* **release:** hold a new release back until its installer and latest.json are up ([f7dd52a](https://github.com/dvalfrid/rigstats/commit/f7dd52af214391e86700337f6a4ab504110e8b1b)), closes [#501](https://github.com/dvalfrid/rigstats/issues/501)
+* **sensors:** say why the CPU values are empty when PawnIO is missing ([#523](https://github.com/dvalfrid/rigstats/issues/523)) ([e3bdd47](https://github.com/dvalfrid/rigstats/commit/e3bdd47e16f759de7669e0f42e034bfef72cad9c)), closes [#507](https://github.com/dvalfrid/rigstats/issues/507)
+* **sensors:** stop counting sleep as a hardware worker hang ([#530](https://github.com/dvalfrid/rigstats/issues/530)) ([7db713e](https://github.com/dvalfrid/rigstats/commit/7db713e068d4b81db6f392aa4808d59800bad4de)), closes [#527](https://github.com/dvalfrid/rigstats/issues/527)
+* **settings:** keep floating mode turned on over the desktop wallpaper ([#553](https://github.com/dvalfrid/rigstats/issues/553)) ([46f7f32](https://github.com/dvalfrid/rigstats/commit/46f7f32f99faba53c5f07c8280a84bd63fd537e1)), closes [#552](https://github.com/dvalfrid/rigstats/issues/552)
+* **tray:** draw the Control Center icon as a whole dial ([#542](https://github.com/dvalfrid/rigstats/issues/542)) ([0806184](https://github.com/dvalfrid/rigstats/commit/0806184697e231283514d4a2e0b13625843750da)), closes [#541](https://github.com/dvalfrid/rigstats/issues/541)
+* **wallpaper:** restart the host when a new desktop background destroys its window ([#565](https://github.com/dvalfrid/rigstats/issues/565)) ([8c91e29](https://github.com/dvalfrid/rigstats/commit/8c91e29bd7ca60963a40f967195209323192f7ea)), closes [#564](https://github.com/dvalfrid/rigstats/issues/564)
+
+
+### Performance Improvements
+
+* **app:** let the tray thread rest, and ping only for someone who looks ([#534](https://github.com/dvalfrid/rigstats/issues/534)) ([ff38cbe](https://github.com/dvalfrid/rigstats/commit/ff38cbea27f3f4dc0cdb0e4977f113f93f2e53ab)), closes [#468](https://github.com/dvalfrid/rigstats/issues/468)
+* **app:** read the process list in one Windows call per tick ([#518](https://github.com/dvalfrid/rigstats/issues/518)) ([20ebb5f](https://github.com/dvalfrid/rigstats/commit/20ebb5fcdaeeb2cc7af31e62977ae019a446849f)), closes [#463](https://github.com/dvalfrid/rigstats/issues/463)
+* **app:** read the process list without a thread pool, halving idle CPU ([#517](https://github.com/dvalfrid/rigstats/issues/517)) ([faa9421](https://github.com/dvalfrid/rigstats/commit/faa9421bcccaf539caa331cb54fb1a204294d502)), closes [#463](https://github.com/dvalfrid/rigstats/issues/463)
+* **app:** two tokio workers, and a release profile with thin LTO ([#533](https://github.com/dvalfrid/rigstats/issues/533)) ([3768114](https://github.com/dvalfrid/rigstats/commit/3768114291d1daf02637481b961c2cc056d42e7a)), closes [#467](https://github.com/dvalfrid/rigstats/issues/467)
+* **battery:** ask Windows whether there is a battery, WMI only when there is one ([#505](https://github.com/dvalfrid/rigstats/issues/505)) ([f407c92](https://github.com/dvalfrid/rigstats/commit/f407c92df9426cf244dec9dd39cb34eea393d223)), closes [#473](https://github.com/dvalfrid/rigstats/issues/473)
+* **battery:** ask WMI about the battery once a minute on a PC without one ([#471](https://github.com/dvalfrid/rigstats/issues/471)) ([9af3ff4](https://github.com/dvalfrid/rigstats/commit/9af3ff41ea43d3784b2ac6aa1d6b695cb96403ae)), closes [#464](https://github.com/dvalfrid/rigstats/issues/464)
+* **recording:** parse the sessions index only when it changed ([#532](https://github.com/dvalfrid/rigstats/issues/532)) ([7bd3673](https://github.com/dvalfrid/rigstats/commit/7bd36731d9f6f7b036dd46b42f7ae3298737ec99))
+* **tools:** measure what RIGStats costs the PC and record a baseline ([#516](https://github.com/dvalfrid/rigstats/issues/516)) ([1829274](https://github.com/dvalfrid/rigstats/commit/18292745b273bd6768dd85fd5844a7aee369948c))
+
 ## [1.50.0](https://github.com/dvalfrid/rigstats/compare/v1.49.1...v1.50.0) (2026-10-19)
 
 
