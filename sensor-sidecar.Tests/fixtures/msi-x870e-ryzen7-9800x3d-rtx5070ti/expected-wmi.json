@@ -1,0 +1,13 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_names": [
+    "Fresco Logic IDDCX Adapter",
+    "NVIDIA GeForce RTX 5070 Ti",
+    "AMD Radeon(TM) Graphics"
+  ],
+  "ram_mt_s": [
+    6000,
+    6000
+  ],
+  "system_brand": "msi"
+}
