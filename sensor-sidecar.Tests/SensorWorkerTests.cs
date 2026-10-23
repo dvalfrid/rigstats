@@ -294,7 +294,9 @@ public class SensorWorkerTests
     {
         var host = new FakeTelemetryHost();
         var name = NewPipeName();
-        var worker = await StartAsync(host, name, writeTimeout: TimeSpan.FromSeconds(1));
+        // 3 s: six times the ~0.5 s each write waits below, so a busy CI
+        // runner can't push a reading client past it.
+        var worker = await StartAsync(host, name, writeTimeout: TimeSpan.FromSeconds(3));
         try
         {
             using var client = await ConnectAsync(name);

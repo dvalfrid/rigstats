@@ -399,7 +399,8 @@ public sealed class BootCrashGuardTests : IDisposable
         guard.Arm();
         Assert.True(guard.IsArmed);
 
-        for (var i = 0; i < 50 && guard.IsArmed; i++)
+        // A 100 ms timer; up to 10 s for a busy runner to fire it.
+        for (var i = 0; i < 500 && guard.IsArmed; i++)
             await Task.Delay(20);
         Assert.False(guard.IsArmed);
     }

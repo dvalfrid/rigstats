@@ -443,11 +443,15 @@ public sealed class GpuWorkerTests : IDisposable
     public void The_first_call_of_a_new_worker_gets_the_longer_start_limit()
     {
         var api = new FakeApi(Rx9070Xt);
-        // Every answer takes 400 ms: fine while the worker starts, too slow after.
-        var starter = new Starter(r => new Reply(GpuWorkerProtocol.Encode(GpuWorkerLoop.Handle(api, r)), Delay: TimeSpan.FromMilliseconds(400)));
-        using var client = Client(starter, timeout: TimeSpan.FromMilliseconds(150), startTimeout: TimeSpan.FromSeconds(5));
+        // Every answer takes 6 s: fine while the worker starts, too slow after.
+        // The gap to the 150 ms limit is wide on purpose: a test thread starved
+        // past the answer's arrival takes it anyway (TryTake returns an item
+        // that came in after its timeout). Seen with 400 ms and 2 s under full
+        // CPU load; with 6 s, 8 of 8 loaded runs passed.
+        var starter = new Starter(r => new Reply(GpuWorkerProtocol.Encode(GpuWorkerLoop.Handle(api, r)), Delay: TimeSpan.FromSeconds(6)));
+        using var client = Client(starter, timeout: TimeSpan.FromMilliseconds(150), startTimeout: TimeSpan.FromSeconds(10));
 
-        Assert.Equal([Rx9070Xt], client.Adapters()); // 400 ms is within the start limit
+        Assert.Equal([Rx9070Xt], client.Adapters()); // 6 s is within the start limit
 
         var e = Assert.Throws<GpuDriverCrashedException>(() => client.Adapters()); // but not the normal one
         Assert.True(e.Hung);

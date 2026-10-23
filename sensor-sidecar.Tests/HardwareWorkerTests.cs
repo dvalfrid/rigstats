@@ -87,6 +87,9 @@ public class HardwareWorkerTests
         /// How long the worker is silent before and after its progress line.
         public TimeSpan Pause { get; set; }
         public bool Hang { get; set; }
+
+        /// Set once a sample is hanging in the worker (`Hang`).
+        public ManualResetEventSlim Hanging { get; } = new();
         public TextWriter Input { get; }
         public TextReader Output { get; }
         public bool HasExited => _exitCode is not null;
@@ -114,7 +117,10 @@ public class HardwareWorkerTests
             if (Crash)
                 End(unchecked((int)0xC0000005));
             if (Hang)
+            {
+                Hanging.Set();
                 _killed.Wait();
+            }
         }
 
         private void End(int code)
@@ -299,7 +305,7 @@ public class HardwareWorkerTests
         rig.Client.Sample();
         rig.Current.Hang = true;
         var hung = Task.Run(() => rig.Client.Sample());
-        Thread.Sleep(200);
+        Assert.True(rig.Current.Hanging.Wait(TimeSpan.FromSeconds(10)), "the call never reached the worker");
 
         rig.Client.Restart("fan loop stalled for 10 s");
 
