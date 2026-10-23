@@ -1,0 +1,19 @@
+{
+  "slug": "asus-b450m-ryzen5-2600-rtx3060",
+  "synthetic": false,
+  "contributor": "isak (beta tester)",
+  "collected_at_unix": 1792440912,
+  "rigstats_version": "1.50.0",
+  "os": "Microsoft Windows 10 Pro (build 19045)",
+  "gpu_driver": "NVIDIA 32.0.15.6094 (560.94)",
+  "adapters": [
+    "NVIDIA GeForce RTX 3060 (dGPU)",
+    "Microsoft Basic Render Driver (software, Flags=2)"
+  ],
+  "gpu_state": "single",
+  "notes": "Beta tester's diagnostics ZIP (same machine as the sensor-sidecar fixture of this slug). Single NVIDIA GPU on Windows 10, driver 560.94. Engine types not in the other fixtures: Cuda, Graphics_1, LegacyOverlay, VideoProcessing.",
+
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}
