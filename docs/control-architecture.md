@@ -1106,6 +1106,30 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the
   LampArray devices itself: they report `blocked` and Aura Sync skips them,
   the Lighting tab explains it per device, and the rest keep syncing.
+- **Researched, not driven yet.** Devices seen in a user's HID scan
+  (`known_as: null`) whose protocol was looked up but isn't documented
+  well enough to write to them:
+  - **MSI Mystic Light, 761-byte generation** (`0DB0:0076`, usage page
+    `0xFF00` / usage `0x01`, feature report 761 bytes, product
+    `MYSTIC LIGHT`; seen on an X870E Gaming Plus WiFi, #556 → #582).
+    OpenRGB has four generations, told apart by the length of feature
+    report `0x52` (112, 162, 185) or, failing that, the 761-byte
+    controller for the X870 / B850 / Z890 boards; it registers `0DB0:0076`
+    on usage page `0xFF00` as "X870" and lists this board by DMI name. Not
+    driven because OpenRGB's 761 driver (taken from SignalRGB's plugin) is
+    direct mode only — `SetMode` is a no-op, so there is no documented way
+    back to the board's own effect for `Release` — its frames carry bytes
+    its own source calls unknown (`51 09 <hdr0> <hdr1> 00 00 <count>`,
+    "Always 9?", "IDK what this is"; a copied 290-byte `0x50`
+    configuration), and its detection *sends* a 761-byte `0x51` report of
+    zeros. What would unblock it is in #582.
+  - **Logitech G733 headset** (`046D:0AB5`; HID++ on interface 3, usage
+    page `0xFF43` / usage `0x0202`, 20-byte reports — OpenRGB registers
+    exactly this collection, through its generic HID++ 2.0 path). The same
+    PID also shows a HID LampArray (2 lamps, product "HID VHF Driver",
+    likely Logitech G HUB's virtual device — hypothesis), which
+    `LampArrayDevice` already drives when Windows Dynamic Lighting is off;
+    the native path waits for the HID++ lighting work (#353).
 
 ### Battery status of wireless devices (#290)
 
