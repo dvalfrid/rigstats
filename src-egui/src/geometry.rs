@@ -747,4 +747,45 @@ mod tests {
             "content's far corner must stay margin px from the monitor edge"
         );
     }
+
+    /// Real monitor layouts (#572): `displays.json` from users' diagnostics
+    /// ZIPs, in `src-egui/fixtures/displays/`. Each says which monitor the
+    /// dashboard profile was placed on (`is_selected`); today's selection
+    /// must pick the same one. See `fixtures/displays/README.md`.
+    #[test]
+    fn real_display_layouts_pick_the_recorded_monitor() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/displays");
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).expect("fixtures/displays") {
+            let path = entry.expect("readable entry").path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&path).expect("readable fixture");
+            let doc: serde_json::Value = serde_json::from_str(&text).expect("fixture is JSON");
+            let profile = doc["dashboard_profile"]
+                .as_str()
+                .expect("dashboard_profile");
+            let list = doc["monitors"].as_array().expect("monitors");
+            let monitors: Vec<(i32, i32, i32, i32)> = list
+                .iter()
+                .map(|m| {
+                    let n = |k: &str| m[k].as_i64().expect("monitor edge") as i32;
+                    (n("left"), n("top"), n("right"), n("bottom"))
+                })
+                .collect();
+            let recorded = list
+                .iter()
+                .position(|m| m["is_selected"].as_bool() == Some(true));
+            let [pw, ph] = profile_to_size(profile);
+            assert_eq!(
+                select_profile_monitor(&monitors, pw, ph),
+                recorded,
+                "{}: {profile} on {monitors:?}",
+                path.display()
+            );
+            checked += 1;
+        }
+        assert!(checked > 0, "no fixtures in {}", dir.display());
+    }
 }

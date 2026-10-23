@@ -1,0 +1,12 @@
+{
+  "gpu_name": "AMD Radeon RX 9070 XT",
+  "gpu_names": [
+    "AMD Radeon(TM) Graphics",
+    "AMD Radeon RX 9070 XT"
+  ],
+  "ram_mt_s": [
+    6000,
+    6000
+  ],
+  "system_brand": "rog"
+}

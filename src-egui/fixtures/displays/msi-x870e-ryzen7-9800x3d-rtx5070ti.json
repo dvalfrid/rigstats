@@ -1,0 +1,35 @@
+{
+  "dashboard_profile": "landscape-1600x900",
+  "monitors": [
+    {
+      "bottom": 960,
+      "height": 960,
+      "is_primary": true,
+      "is_selected": false,
+      "left": 0,
+      "right": 2293,
+      "top": 0,
+      "width": 2293
+    },
+    {
+      "bottom": 1280,
+      "height": 1080,
+      "is_primary": false,
+      "is_selected": false,
+      "left": -1920,
+      "right": 0,
+      "top": 200,
+      "width": 1920
+    },
+    {
+      "bottom": 200,
+      "height": 900,
+      "is_primary": false,
+      "is_selected": true,
+      "left": -1931,
+      "right": -331,
+      "top": -700,
+      "width": 1600
+    }
+  ]
+}

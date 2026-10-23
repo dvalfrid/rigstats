@@ -1,0 +1,11 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 3060 Ti",
+  "gpu_names": [
+    "NVIDIA GeForce RTX 3060 Ti"
+  ],
+  "ram_mt_s": [
+    3600,
+    3600
+  ],
+  "system_brand": "aorus"
+}

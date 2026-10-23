@@ -22,6 +22,19 @@ Full ZIP table: "Diagnostics Export → ZIP contents" in `docs/architecture.md`.
 | Service crashed | `sidecar-log.txt` | copied event-log entries, `crash dump` lines (dumps themselves stay on the machine) |
 | Installer / service config | `install.log` / `rigstats-install.log`, `sidecar-service.txt` | PawnIO exit codes (`50` + `windows_build` < 17763 = Windows older than 1809, #507), `BINARY_PATH_NAME` (quoted since #277) |
 
+## Every ZIP becomes test data
+
+After the triage, add from the ZIP whatever the corpora don't have yet, in the same PR or a `test:` PR of its own. The table of which ZIP file goes into which corpus, and the test that runs it, is in `sensor-sidecar.Tests/fixtures/README.md` ("Everything else a diagnostics ZIP gives the tests"). In short:
+- the sensor tree → `/sensor-fixture`, with `hardware.json` and its `expected-wmi.json`
+- `gpu-engine.txt` → `/gpu-engine-fixture`
+- the log's `Mouse:`/`Headset:`/`Keyboard: … read … from` lines → `fixtures/peripherals/`
+- `Aura:` config lines → `fixtures/aura/`
+- `hid_scan` → `fixtures/hid-scan/`
+- `gpu-power.json` → `fixtures/gpu-power/`
+- `displays.json` → `src-egui/fixtures/displays/`
+
+A failure when adding is a finding, not a nuisance: a reading the parser gets wrong, or a device recognised differently than at capture.
+
 ## Case: keyboard on the Omni receiver not found (2026-10-09, #280)
 
 The log showed it last discovered on 2026-10-04; `asus_probes` showed it paired (`0x1C25` on report 02) and answering a version query; its version string had changed that morning (firmware). The live log of the fixed build then showed the layout reply had become `0212120000000000` — all zeros, like the mouse channel — so the layout heuristic took it for a mouse. Fix: identify it from the paired list. Lesson: when a device "disappears" without code changes, look for a changed version string and re-check every heuristic that classifies replies.
