@@ -100,9 +100,16 @@ pub struct DashboardView<'a> {
     /// empty) on the wallpaper host, which never spawns `control_task`; the
     /// header chip simply doesn't render an active profile there.
     pub control: &'a ControlState,
+    /// Panels drawn in their compact layout (#596).
+    pub compact_panels: &'a [String],
 }
 
 impl DashboardView<'_> {
+    /// Whether `panel` is drawn in its compact layout (#596).
+    fn compact(&self, panel: &str) -> bool {
+        self.compact_panels.iter().any(|p| p == panel)
+    }
+
     /// Draw a single panel by key into `ui` at content scale `sc`. Returns a new
     /// preferred-GPU key if the GPU panel's device selector was clicked. Shared by
     /// the portrait vertical stack and the landscape grid.
@@ -162,6 +169,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.control.active_ppt_limit(),
+                    self.compact("cpu"),
                 );
             }
             "gpu" => {
@@ -178,6 +186,7 @@ impl DashboardView<'_> {
                     self.thresholds.gpu_mem,
                     sc,
                     self.control.active_gpu_limit(&self.latest.gpu_name),
+                    self.compact("gpu"),
                 )
                 .0
                 {
@@ -193,6 +202,7 @@ impl DashboardView<'_> {
                     self.thresholds.ram.1,
                     self.app_theme,
                     sc,
+                    self.compact("ram"),
                 );
             }
             "net" => {
@@ -204,6 +214,7 @@ impl DashboardView<'_> {
                     opacity,
                     self.app_theme,
                     sc,
+                    self.compact("net"),
                 );
             }
             "disk" => {
@@ -386,6 +397,8 @@ pub struct DashboardRuntime {
     pub thresholds: PanelThresholds,
     pub psu_watts: Option<u16>,
     pub visible_panels: Vec<String>,
+    /// Panels drawn compact (#596), from the profile's look.
+    pub compact_panels: Vec<String>,
     /// Control Center state (#187) — see `DashboardView::control`'s doc.
     pub control: ControlState,
 }
@@ -403,6 +416,7 @@ impl DashboardRuntime {
             thresholds: PanelThresholds::from_settings(s),
             psu_watts: s.psu_watts,
             visible_panels: s.visible_panels.clone(),
+            compact_panels: s.compact_panels.clone(),
             control: ControlState::default(),
         }
     }
@@ -434,15 +448,24 @@ impl DashboardRuntime {
         changed
     }
 
-    /// Apply a new settings snapshot. Returns `true` if `visible_panels`
-    /// changed (callers may need to invalidate cached panel-height state).
+    /// Whether `panel` is drawn in its compact layout (#596) — for the
+    /// floating panels, which draw each panel themselves.
+    pub fn is_compact(&self, panel: &str) -> bool {
+        self.compact_panels.iter().any(|p| p == panel)
+    }
+
+    /// Apply a new settings snapshot. Returns `true` if `visible_panels` or
+    /// `compact_panels` changed (callers may need to invalidate cached
+    /// panel-height state: a compact panel is shorter).
     pub fn apply_settings(&mut self, s: &settings::Settings) -> bool {
         self.app_theme = theme::AppTheme::from_key(&s.theme);
         self.thresholds = PanelThresholds::from_settings(s);
         self.psu_watts = s.psu_watts;
-        let panels_changed = self.visible_panels != s.visible_panels;
+        let panels_changed =
+            self.visible_panels != s.visible_panels || self.compact_panels != s.compact_panels;
         if panels_changed {
             self.visible_panels = s.visible_panels.clone();
+            self.compact_panels = s.compact_panels.clone();
         }
         panels_changed
     }
@@ -460,6 +483,7 @@ impl DashboardRuntime {
             thresholds: &self.thresholds,
             psu_watts: self.psu_watts,
             control: &self.control,
+            compact_panels: &self.compact_panels,
         }
     }
 }

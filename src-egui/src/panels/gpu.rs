@@ -42,11 +42,16 @@ pub fn draw(
     sc: f32,
     // The active profile's power limit for this GPU (#190), shown under POWER.
     power_limit_pct: Option<i32>,
+    // The compact layout (#596): a temperature ring beside the load ring,
+    // FREQ and POWER; no hotspot/VRAM columns, no bars and no graph.
+    compact: bool,
 ) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
 
     let rect = theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
         let tc = stats.gpu_temp.map_or(theme::C_UNAVAILABLE, |_| {
@@ -64,6 +69,8 @@ pub fn draw(
         };
 
         // Header: title (+ optional selector dots) and model name stacked on left; logo sibling.
+        let logo = tex.gpu_logo(&stats.gpu_name);
+        let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.horizontal(|ui| {
@@ -119,14 +126,10 @@ pub fn draw(
                     ui.label(RichText::new(name).size(11.0 * sc).color(th.text_muted));
                 }
             });
-            if let Some(logo) = tex.gpu_logo(&stats.gpu_name) {
-                let [lw, lh] = logo.size();
-                let target_h = 38.0 * sc;
-                let w = lw as f32 * (target_h / lh as f32);
+            if let (Some(logo), Some(size)) = (logo, logo_size) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(6.0 * sc);
-                    let sized =
-                        egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, target_h));
+                    let sized = egui::load::SizedTexture::new(logo.id(), size);
                     ui.add(egui::Image::new(sized));
                 });
             }
@@ -138,6 +141,34 @@ pub fn draw(
         } else {
             "--%".to_string()
         };
+
+        if compact {
+            use super::CompactCell;
+            super::compact_row(
+                ui,
+                &[
+                    CompactCell::Ring(load_frac, ring_color, ring_label),
+                    super::temp_cell(stats.gpu_temp, tc),
+                    CompactCell::Stat {
+                        label: "FREQ",
+                        label_color: theme::avail_color(&stats.gpu_freq_mhz, th.stat_label),
+                        value: fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2),
+                        value_color: theme::avail_color(&stats.gpu_freq_mhz, theme::C_TEXT),
+                        note: None,
+                    },
+                    CompactCell::Stat {
+                        label: "POWER",
+                        label_color: theme::avail_color(&stats.gpu_power, th.stat_label),
+                        value: fmt_opt(stats.gpu_power, " W", 0),
+                        value_color: theme::avail_color(&stats.gpu_power, theme::C_TEXT),
+                        note: power_limit_pct.map(|pct| format!("PL {pct:+} %")),
+                    },
+                ],
+                th,
+                sc,
+            );
+            return;
+        }
 
         ui.horizontal(|ui| {
             ring::show(
@@ -168,8 +199,10 @@ pub fn draw(
 
             // TEMP | HOT | [MEM] | FREQ | POWER
             ui.vertical(|ui| {
+                // Columns before FREQ: TEMP, HOT and MEM when it's read.
+                let lead = if mem_t.is_some() { 3 } else { 2 };
                 egui::Grid::new("gpu_meta")
-                    .num_columns(if mem_t.is_some() { 5 } else { 4 })
+                    .num_columns(lead + 2)
                     .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
                         ui.label(
@@ -209,7 +242,8 @@ pub fn draw(
                         ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(pwr_c));
                         ui.end_row();
                         if let Some(pct) = power_limit_pct {
-                            for _ in 0..if mem_t.is_some() { 4 } else { 3 } {
+                            // Under POWER: skip the columns before it and FREQ.
+                            for _ in 0..lead + 1 {
                                 ui.label("");
                             }
                             ui.label(

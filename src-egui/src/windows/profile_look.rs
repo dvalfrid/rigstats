@@ -377,14 +377,37 @@ pub fn dashboard_page(
         ui,
         dc,
         Some("Panels"),
-        Some("Shown panels appear top to bottom in this order. Use the arrows to move them."),
+        Some(
+            "Shown panels appear top to bottom in this order. Use the arrows to move them. Compact shows a panel's key values only: rings and numbers, no graphs or per-core bars.",
+        ),
         |g| {
-            ui_kit::ordered_rows(g, &mut look.visible_panels, &items, |k| {
-                k == "battery" && !battery && cfg!(not(debug_assertions))
-            });
+            let compact = &mut look.compact_panels;
+            ui_kit::ordered_rows_with(
+                g,
+                &mut look.visible_panels,
+                &items,
+                |k| k == "battery" && !battery && cfg!(not(debug_assertions)),
+                |ui, key| {
+                    if crate::panels::COMPACT_PANELS.contains(&key) {
+                        ui.add_space(12.0);
+                        compact_choice(ui, dc, compact, key);
+                    }
+                },
+            );
         },
     );
     editor.preview(link);
+}
+
+/// A panel's Full / Compact choice (#596), kept in `compact_panels`.
+fn compact_choice(ui: &mut egui::Ui, dc: &DialogColors, compact: &mut Vec<String>, key: &str) {
+    let mut on = compact.iter().any(|k| k == key);
+    if ui_kit::segmented(ui, dc, &mut on, &[(false, "Full"), (true, "Compact")]) {
+        compact.retain(|k| k != key);
+        if on {
+            compact.push(key.to_string());
+        }
+    }
 }
 
 /// The Desktop page (#306): the profile's desktop background.

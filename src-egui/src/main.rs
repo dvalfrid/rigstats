@@ -232,7 +232,7 @@ impl RigStatsApp {
             floating: FloatingState {
                 mode: init_settings.floating_mode,
                 panels_locked: init_settings.floating_panels_locked,
-                panel_scale: init_settings.floating_panel_scale.clamp(0.4, 1.0) as f32,
+                panel_scale: init_settings.floating_panel_scale.clamp(0.4, 2.0) as f32,
                 positions: Arc::new(Mutex::new(init_positions)),
                 positions_dirty: Arc::new(AtomicBool::new(false)),
                 new_pref_gpu: Arc::new(Mutex::new(None)),

@@ -26,13 +26,20 @@ pub fn draw(
     sc: f32,
     // The active profile's CPU power limit (#189), shown under POWER.
     ppt_limit: Option<f64>,
+    // The compact layout (#596): a temperature ring beside the load ring,
+    // FREQ and POWER, no per-core bars and no graph.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         let load_frac = stats.cpu_load as f32 / 100.0;
         let tc = temp_color(stats.cpu_temp, warn, crit);
 
         // Header: title + model name stacked vertically on the left; logo right-aligned.
+        let logo = tex.cpu_logo(&stats.cpu_model);
+        let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
@@ -51,17 +58,51 @@ pub fn draw(
                     ui.label(RichText::new(model).size(11.0 * sc).color(th.text_muted));
                 }
             });
-            if let Some(logo) = tex.cpu_logo(&stats.cpu_model) {
-                let [lw, lh] = logo.size();
-                let target_h = 38.0 * sc;
-                let w = lw as f32 * (target_h / lh as f32);
+            if let (Some(logo), Some(size)) = (logo, logo_size) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(6.0 * sc);
-                    let sized = egui::load::SizedTexture::new(logo.id(), Vec2::new(w, target_h));
+                    let sized = egui::load::SizedTexture::new(logo.id(), size);
                     ui.add(egui::Image::new(sized));
                 });
             }
         });
+
+        let freq_str = if stats.cpu_freq_mhz > 0.0 {
+            format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
+        } else {
+            "--".to_string()
+        };
+        let power_str = stats
+            .cpu_power
+            .map_or("-- W".to_string(), |p| format!("{p:.0} W"));
+
+        if compact {
+            use super::CompactCell;
+            super::compact_row(
+                ui,
+                &[
+                    CompactCell::Ring(load_frac, theme::C_ACCENT, format!("{}%", stats.cpu_load)),
+                    super::temp_cell(stats.cpu_temp, tc),
+                    CompactCell::Stat {
+                        label: "FREQ",
+                        label_color: th.stat_label,
+                        value: freq_str,
+                        value_color: theme::C_TEXT,
+                        note: None,
+                    },
+                    CompactCell::Stat {
+                        label: "POWER",
+                        label_color: th.stat_label,
+                        value: power_str,
+                        value_color: theme::C_TEXT,
+                        note: ppt_limit.map(|l| format!("PPT {l:.0} W")),
+                    },
+                ],
+                th,
+                sc,
+            );
+            return;
+        }
 
         // Ring gauge + metadata side by side.
         ui.horizontal(|ui| {
@@ -74,17 +115,9 @@ pub fn draw(
             );
             ui.add_space(16.0 * sc);
 
-            let freq_str = if stats.cpu_freq_mhz > 0.0 {
-                format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
-            } else {
-                "--".to_string()
-            };
             let temp_str = stats
                 .cpu_temp
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-            let power_str = stats
-                .cpu_power
-                .map_or("-- W".to_string(), |p| format!("{p:.0} W"));
 
             ui.vertical(|ui| {
                 egui::Grid::new("cpu_meta")

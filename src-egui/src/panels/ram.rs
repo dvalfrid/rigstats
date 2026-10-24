@@ -6,6 +6,7 @@ use crate::PollStats;
 
 const GIB: f64 = 1_073_741_824.0;
 
+#[allow(clippy::too_many_arguments)] // like the other panels: the frame's inputs
 pub fn draw(
     ui: &mut egui::Ui,
     stats: &PollStats,
@@ -14,9 +15,14 @@ pub fn draw(
     crit: u8,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#596): a usage ring with USED and FREE (and TEMP
+    // when it's read), no spec lines and no bar.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
 
         let used_gb = stats.ram_used as f64 / GIB;
         let total_gb = stats.ram_total as f64 / GIB;
@@ -35,6 +41,10 @@ pub fn draw(
                 .color(theme::C_PANEL_TITLE)
                 .size(theme::FONT_PANEL_TITLE * sc),
         );
+        if compact {
+            compact_body(ui, stats, frac, used_gb, free_gb, warn, crit, th, sc);
+            return;
+        }
         // Spec  (e.g. "DDR5 6000 MT/s (2 DIMMs)")
         if !stats.ram_spec.is_empty() {
             ui.label(
@@ -121,4 +131,48 @@ pub fn draw(
             );
         });
     })
+}
+
+/// The compact RAM panel's body (#596): memory in use as a ring, then USED
+/// and FREE, and TEMP only on boards that read it.
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
+fn compact_body(
+    ui: &mut egui::Ui,
+    stats: &PollStats,
+    frac: f32,
+    used_gb: f64,
+    free_gb: f64,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    use super::CompactCell;
+    let mut cells = vec![
+        CompactCell::Ring(frac, theme::C_RAM, format!("{:.0}%", frac * 100.0)),
+        CompactCell::Stat {
+            label: "USED",
+            label_color: th.stat_label,
+            value: format!("{used_gb:.1}G"),
+            value_color: theme::C_RAM,
+            note: None,
+        },
+        CompactCell::Stat {
+            label: "FREE",
+            label_color: th.stat_label,
+            value: format!("{free_gb:.1}G"),
+            value_color: theme::C_TEXT,
+            note: None,
+        },
+    ];
+    if let Some(t) = stats.ram_temp {
+        cells.push(CompactCell::Stat {
+            label: "TEMP",
+            label_color: th.stat_label,
+            value: format!("{t:.0}°C"),
+            value_color: temp_color(stats.ram_temp, warn, crit),
+            note: None,
+        });
+    }
+    super::compact_row(ui, &cells, th, sc);
 }

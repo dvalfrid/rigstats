@@ -275,7 +275,7 @@ rig-dashboard/
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `gpu_processes`, `power`, `battery`, `clock`, `header` |
-| `windows/` | Secondary windows, all built from `ui_kit.rs` (the design system: hero, sidebar `nav_item`s with tinted `Icon`s, `page_header`, `group`s of `row`s, `toggle`, `segmented`, `dropdown`, `slider_pct`, `swatches`, `ordered_rows`, `chip`, `tile`; contract in `src-egui/src/windows/CLAUDE.md`). `settings.rs` — app-wide settings: General, Display, Overlay (placement), Notifications and Shortcuts (#569: a dropdown per global shortcut — New shortcut… waits for the keys, Default, Off) pages. `control.rs` — the Control Center: a profile bar (chips, + copy, ⋯ rename/delete/reset) over a sidebar of the profile's pages — Overview (a compact tile per page summarising what the profile does, the mouse's onboard profile included, #440), Dashboard / Overlay / Alerts (`profile_look.rs`, #305: accent colour, opacity, panels and order, overlay content, thresholds — live preview, Save/Revert in the footer) and the hardware pages Power (Windows power plan), Fans (curve editor, identify, "Automatic (BIOS)" / "Custom curve"), CPU (PPT/TDC/EDC, Eco presets, Curve Optimizer), Graphics card (power limit per adapter), Lighting (effect, colour dots, desk lamp, the devices — a wireless one with its connection and battery from the telemetry, matched by id — and Philips Hue #215; live preview of only what changed), Headset (#428: sidetone and noise reduction, kept in the headset, sent at once), Mouse (#431: the onboard profile the RIGStats profile uses, and that profile's DPI levels, performance, button bindings on a drawing of the mouse (`mouse_drawing.rs`, #433/#435) and energy, kept in the mouse, sent at once), and in an Automation section the App rules page (`rules_page.rs`, #307: a status line, a row per rule — the program's icon and own name (`app_icons.rs`: `SHGetFileInfo` icon, `FileDescription` from its version info, else the file name without .exe), profile, "Runs / In front", Remove — and an Add form: pick a running program, Choose… one with the Open dialog (it needn't be running), or type its file name); the Overview shows which programs start each profile; limit changes go Try → Keep/Undo. The two windows link to each other where a setting lives in the other (`windows::OpenRequest`, handled in `app/tray_actions.rs`); debug builds open either at start-up with `RIGSTATS_OPEN=control:<page>` / `settings:<page>`. Also `about.rs`, `status.rs`, `updater.rs`, `history.rs`. The Control Center opens from the tray, the header's profile chip, or a fan name in the Motherboard panel (the curve of the channel that drives that fan, as measured by identify — never matched by name) |
+| `windows/` | Secondary windows, all built from `ui_kit.rs` (the design system: hero, sidebar `nav_item`s with tinted `Icon`s, `page_header`, `group`s of `row`s, `toggle`, `segmented`, `dropdown`, `slider_pct`, `swatches`, `ordered_rows`, `chip`, `tile`; contract in `src-egui/src/windows/CLAUDE.md`). `settings.rs` — app-wide settings: General, Display, Overlay (placement), Notifications and Shortcuts (#569: a dropdown per global shortcut — New shortcut… waits for the keys, Default, Off) pages. `control.rs` — the Control Center: a profile bar (chips, + copy, ⋯ rename/delete/reset) over a sidebar of the profile's pages — Overview (a compact tile per page summarising what the profile does, the mouse's onboard profile included, #440), Dashboard / Overlay / Alerts (`profile_look.rs`, #305: accent colour, opacity, panels and order with a Full / Compact choice per CPU, GPU, RAM and Network panel (`ui_kit::ordered_rows_with`, #596), overlay content, thresholds — live preview, Save/Revert in the footer) and the hardware pages Power (Windows power plan), Fans (curve editor, identify, "Automatic (BIOS)" / "Custom curve"), CPU (PPT/TDC/EDC, Eco presets, Curve Optimizer), Graphics card (power limit per adapter), Lighting (effect, colour dots, desk lamp, the devices — a wireless one with its connection and battery from the telemetry, matched by id — and Philips Hue #215; live preview of only what changed), Headset (#428: sidetone and noise reduction, kept in the headset, sent at once), Mouse (#431: the onboard profile the RIGStats profile uses, and that profile's DPI levels, performance, button bindings on a drawing of the mouse (`mouse_drawing.rs`, #433/#435) and energy, kept in the mouse, sent at once), and in an Automation section the App rules page (`rules_page.rs`, #307: a status line, a row per rule — the program's icon and own name (`app_icons.rs`: `SHGetFileInfo` icon, `FileDescription` from its version info, else the file name without .exe), profile, "Runs / In front", Remove — and an Add form: pick a running program, Choose… one with the Open dialog (it needn't be running), or type its file name); the Overview shows which programs start each profile; limit changes go Try → Keep/Undo. The two windows link to each other where a setting lives in the other (`windows::OpenRequest`, handled in `app/tray_actions.rs`); debug builds open either at start-up with `RIGSTATS_OPEN=control:<page>` / `settings:<page>`. Also `about.rs`, `status.rs`, `updater.rs`, `history.rs`. The Control Center opens from the tray, the header's profile chip, or a fan name in the Motherboard panel (the curve of the channel that drives that fan, as measured by identify — never matched by name) |
 
 ### Module details
 
@@ -451,7 +451,7 @@ are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"cpu_load"`, `"gpu_load"`,
 
 Dashboard look per Control Center profile (#305): a `ProfileLook` is the part
 of a profile that is the app's own — accent colour (`theme`), opacity,
-visible panels and their order, overlay shown, overlay metrics and columns,
+visible panels and their order, which of them are compact (#596), overlay shown, overlay metrics and columns,
 alert thresholds, desktop background (#306). A profile always holds all of it. The current settings *are*
 the active profile's look; `profile_looks` keeps the others by profile id and
 `look_profile` names the profile the current look belongs to.
@@ -746,7 +746,22 @@ No dependencies on other crate modules — safe to import from anywhere.
 Panel visibility and order are saved as a plain `Vec<String>` of keys in
 `Settings.visible_panels` (`rigstats-backend/src/settings.rs`) — there is no
 separate validation function; an unrecognized key is simply ignored by the
-renderer's key→panel match.
+renderer's key→panel match. `Settings.compact_panels` (#596, part of the profile's
+look) lists the panels drawn in their compact layout: CPU and GPU with a
+temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
+with USED/FREE, Network without its graph — no graphs or per-core bars, and no
+fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
+`panels::compact_row`: each ring and value in an equal column across the
+panel, centred, so they spread evenly at any width and scale. Which panels
+offer it: `panels::COMPACT_PANELS`;
+each panel's `draw` takes `compact`, passed by `DashboardView::draw_one_panel`
+and by the floating panels (`DashboardRuntime::is_compact`). A compact floating
+card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead
+of 450, so it can be scaled up to read without growing as wide as a full one;
+the CPU/GPU logo is 30 px tall instead of 38 (`panels::logo_size`), as tall
+as the title and model name. The model name is capped at 44 characters, so it
+ends before the logo at every scale (`panels::tests`). The landscape grid
+keeps its uniform cells, so a compact panel there is shorter than its cell.
 
 ---
 

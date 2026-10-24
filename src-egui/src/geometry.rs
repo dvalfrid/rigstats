@@ -203,6 +203,26 @@ pub fn dialog_center(w: f32, h: f32) -> [f32; 2] {
     [100.0, 100.0]
 }
 
+/// A floating panel's width: 450 × the panel scale, a compact one
+/// `panels::COMPACT_FLOATING_W` × the scale (#596).
+pub fn floating_panel_w(compact: bool, scale: f32) -> f32 {
+    let base = if compact {
+        crate::panels::COMPACT_FLOATING_W
+    } else {
+        450.0
+    };
+    base * scale
+}
+
+/// A floating panel's drag zone: the top 24 px of the panel × the panel
+/// scale — the top margin (8 px) plus most of the title row, at any scale.
+pub fn floating_drag_zone(panel: egui::Rect, scale: f32) -> egui::Rect {
+    egui::Rect::from_min_max(
+        panel.min,
+        egui::pos2(panel.right(), panel.top() + 24.0 * scale),
+    )
+}
+
 /// Returns `pos` if it is within any currently connected monitor (allowing 60 px
 /// overhang so a panel that straddles a monitor edge is still considered visible),
 /// otherwise returns `fallback`.  Call this before applying a saved floating-panel
@@ -419,9 +439,10 @@ pub fn tray_card_position(icon: [i32; 4], card: [i32; 2]) -> [i32; 2] {
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_landscape_window_height, landscape_grid_layout, monitor_containing_point,
-        overlay_anchor_position, position_on_any_monitor, profile_is_landscape, profile_to_size,
-        resolve_pinned_position, select_profile_monitor, tray_card_position,
+        compute_landscape_window_height, floating_drag_zone, floating_panel_w,
+        landscape_grid_layout, monitor_containing_point, overlay_anchor_position,
+        position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
+        select_profile_monitor, tray_card_position,
     };
 
     #[test]
@@ -787,5 +808,25 @@ mod tests {
             checked += 1;
         }
         assert!(checked > 0, "no fixtures in {}", dir.display());
+    }
+
+    #[test]
+    fn a_compact_floating_panel_scaled_up_stays_narrower_than_a_full_one() {
+        // SirBlacky21 reads his at 120 % (#598): it must not grow as wide as a
+        // full panel at 100 %.
+        assert!(floating_panel_w(true, 1.2) < floating_panel_w(false, 1.0));
+        assert_eq!(floating_panel_w(false, 2.0), 900.0);
+    }
+
+    #[test]
+    fn the_drag_zone_grows_with_the_panel_scale() {
+        let panel = egui::Rect::from_min_size(egui::pos2(10.0, 20.0), egui::vec2(612.0, 300.0));
+        // At 170 % the title's middle is ~35 px down; an unscaled 24 px zone
+        // missed it, so the drag dots were hard to find.
+        let zone = floating_drag_zone(panel, 1.7);
+        assert!(zone.contains(egui::pos2(300.0, 20.0 + 35.0)));
+        assert!(!zone.contains(egui::pos2(300.0, 20.0 + 48.0)));
+        assert_eq!(floating_drag_zone(panel, 1.0).height(), 24.0);
+        assert_eq!(zone.width(), panel.width());
     }
 }

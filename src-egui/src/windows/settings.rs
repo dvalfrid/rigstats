@@ -724,7 +724,7 @@ fn display_page(
         );
         if draft.floating_mode {
             g.row("Panel size", None, |ui| {
-                ui_kit::slider_pct(ui, dc, &mut draft.floating_panel_scale, 0.4..=1.0);
+                ui_kit::slider_pct(ui, dc, &mut draft.floating_panel_scale, 0.4..=2.0);
             });
         }
         g.row(
