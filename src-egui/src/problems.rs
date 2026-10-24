@@ -308,9 +308,25 @@ pub fn notifications_off(why: NotificationsOff) -> Problem {
     )
 }
 
-/// Global shortcuts another program already held when RIGStats started
-/// (#568): each chord with what it does. `None` when all registered.
-pub fn hotkeys_taken(taken: &[(&str, String)]) -> Option<Problem> {
+/// The same problem as [`hotkeys_taken`], compact for its row in Settings →
+/// Shortcuts, where the fix is the row's own control.
+pub fn hotkey_taken_in_row(chords: &[String]) -> String {
+    let (verb, reach) = if chords.len() == 1 {
+        ("uses", "it doesn't")
+    } else {
+        ("use", "they don't")
+    };
+    format!(
+        "Another program already {verb} {}, so {reach} reach RIGStats. Choose a new shortcut \
+         or turn it off.",
+        chords.join(", ")
+    )
+}
+
+/// Global shortcuts another program held when RIGStats registered them
+/// (#568): each chord with what it does. `None` when all registered. The
+/// fix is in Settings → Shortcuts (#569).
+pub fn hotkeys_taken(taken: &[(String, String)]) -> Option<Problem> {
     let (first, rest) = taken.split_first()?;
     let (title, list) = if rest.is_empty() {
         (
@@ -333,10 +349,15 @@ pub fn hotkeys_taken(taken: &[(&str, String)]) -> Option<Problem> {
         title,
         format!(
             "Another program already uses {list}, so it doesn't reach RIGStats. Everything else \
-             keeps working. Change or turn off the shortcut in that program — NVIDIA App, for \
-             one, uses Ctrl+Alt+M for its own microphone switch — then restart RIGStats."
+             keeps working. Choose another shortcut or turn it off in Settings → Shortcuts — or \
+             change it in that program (NVIDIA App, for one, uses Ctrl+Alt+M for its own \
+             microphone switch) and restart RIGStats."
         ),
-        Vec::new(),
+        vec![action(
+            ProblemActionKind::OpenShortcutSettings,
+            "Open Settings",
+            None,
+        )],
         None,
     ))
 }
@@ -531,20 +552,26 @@ mod tests {
     #[test]
     fn a_shortcut_another_program_holds_is_named_with_what_it_does() {
         assert!(hotkeys_taken(&[]).is_none());
-        let one = hotkeys_taken(&[("Ctrl+Alt+M", "mute the microphone".into())]).unwrap();
+        let one = hotkeys_taken(&[("Ctrl+Alt+M".into(), "mute the microphone".into())]).unwrap();
         assert_eq!(one.title, "A shortcut is used by another program");
         assert!(one
             .message
             .starts_with("Another program already uses Ctrl+Alt+M (mute the microphone), "));
         let two = hotkeys_taken(&[
-            ("Ctrl+Alt+M", "mute the microphone".into()),
-            ("Ctrl+Alt+F1", "switch to profile 1".into()),
+            ("Ctrl+Alt+M".into(), "mute the microphone".into()),
+            ("Ctrl+Alt+F1".into(), "switch to profile 1".into()),
         ])
         .unwrap();
         assert_eq!(two.title, "Shortcuts are used by another program");
         assert!(two
             .message
             .contains("Ctrl+Alt+M (mute the microphone), Ctrl+Alt+F1 (switch to profile 1)"));
+        // The fix is in Settings, one click away.
+        assert!(two.message.contains("Settings → Shortcuts"));
+        assert_eq!(
+            two.actions.iter().map(|a| a.kind).collect::<Vec<_>>(),
+            [ProblemActionKind::OpenShortcutSettings]
+        );
     }
 
     #[test]

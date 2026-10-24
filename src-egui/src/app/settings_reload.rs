@@ -41,6 +41,9 @@ impl RigStatsApp {
             self.window.fullscreen_align = s.fullscreen_align.clone();
             self.window.dashboard_pinned = s.dashboard_pinned;
             let profile = s.dashboard_profile.clone();
+            // Settings → Shortcuts (#569): a no-op when they didn't change.
+            #[cfg(windows)]
+            rigstats_egui::hotkey::apply(&s.shortcuts);
             drop(s);
             // Settings → Display → GPU (live preview, Save, or Cancel revert).
             self.apply_preferred_gpu(preferred_gpu);

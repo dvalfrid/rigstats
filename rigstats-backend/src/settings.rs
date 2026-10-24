@@ -1,6 +1,7 @@
 //! Persistent user settings model and file I/O helpers.
 
 use crate::desktop_background::DesktopBackground;
+use crate::shortcut::Shortcuts;
 use crate::wallpaper_engine::{WeChoice, WeSlot};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -175,7 +176,7 @@ pub struct Settings {
     /// Whether to send notifications when a CRITICAL threshold is crossed.
     #[serde(default = "default_true")]
     pub notify_on_crit: bool,
-    /// Which microphone Ctrl+Alt+M and the tray mute (#425): a Windows
+    /// Which microphone its shortcut and the tray mute (#425): a Windows
     /// endpoint id from `microphone::list`, or `None` for the one Windows
     /// uses for calls (also the fallback when the chosen one isn't connected).
     #[serde(default)]
@@ -183,6 +184,10 @@ pub struct Settings {
     /// Whether muting or unmuting the microphone shows a notification (#425).
     #[serde(default = "default_true")]
     pub microphone_notify: bool,
+    /// The global shortcuts' chords, or off (#569); a file without them
+    /// gets the chords from before (`Shortcuts::default`).
+    #[serde(default)]
+    pub shortcuts: Shortcuts,
     /// Open each visible panel as its own frameless window instead of one portrait window.
     #[serde(default)]
     pub floating_mode: bool,
@@ -433,6 +438,7 @@ impl Default for Settings {
             notify_on_crit: true,
             microphone_device: None,
             microphone_notify: true,
+            shortcuts: Shortcuts::default(),
             floating_mode: false,
             floating_panel_scale: default_floating_panel_scale(),
             panel_layouts: HashMap::new(),
@@ -883,6 +889,28 @@ mod tests {
         assert!(s.overlay_background);
         assert!(!s.overlay_click_through);
         assert!(!s.overlay_enabled);
+    }
+
+    #[test]
+    fn a_settings_file_from_before_569_keeps_the_old_shortcuts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        std::fs::write(&path, r#"{"settingsVersion":1,"microphoneNotify":false}"#).unwrap();
+
+        let s = super::load_settings(dir.path());
+        assert!(!s.microphone_notify, "the file was read, not replaced");
+        assert_eq!(s.shortcuts, super::Shortcuts::default());
+    }
+
+    #[test]
+    fn changed_shortcuts_survive_save_and_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut s = super::Settings::default();
+        s.shortcuts.microphone = None;
+        s.shortcuts.overlay = crate::shortcut::Shortcut::parse("Ctrl+Shift+F10");
+        super::persist_settings(dir.path(), &s).unwrap();
+
+        assert_eq!(super::load_settings(dir.path()).shortcuts, s.shortcuts);
     }
 
     #[test]

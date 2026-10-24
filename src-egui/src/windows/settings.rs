@@ -1,5 +1,6 @@
 //! Settings window: what applies to the whole app — start-up, the
-//! dashboard window, the overlay's placement and notifications. What a
+//! dashboard window, the overlay's placement, notifications and the global
+//! shortcuts. What a
 //! Control Center profile holds (accent colour, panels, overlay content,
 //! alert thresholds) is edited in the Control Center (`profile_look.rs`);
 //! this window points there. Built from `ui_kit`: a sidebar of pages, each
@@ -10,7 +11,9 @@ use crate::theme::{self, DialogColors};
 use crate::windows::control;
 use crate::windows::ui_kit::{self, Icon};
 use crate::windows::{OpenRequest, OpenRequests};
+use rigstats_backend::control::Severity;
 use rigstats_backend::settings::{self, ProfileLook};
+use rigstats_backend::shortcut::{self, Action, Mods, Rejected, Shortcut, Shortcuts};
 use rigstats_backend::{autostart, debug, microphone};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -89,6 +92,7 @@ pub enum Page {
     Display,
     Overlay,
     Notifications,
+    Shortcuts,
 }
 
 const PAGES: &[(Page, Icon, &str)] = &[
@@ -96,6 +100,7 @@ const PAGES: &[(Page, Icon, &str)] = &[
     (Page::Display, Icon::Display, "Display"),
     (Page::Overlay, Icon::Overlay, "Overlay"),
     (Page::Notifications, Icon::Alerts, "Notifications"),
+    (Page::Shortcuts, Icon::Keyboard, "Shortcuts"),
 ];
 
 pub struct SettingsWindow {
@@ -114,6 +119,11 @@ pub struct SettingsWindow {
     microphones: Vec<microphone::Device>,
     /// The chosen microphone's level and live meter (#427).
     mic: MicPanel,
+    /// The shortcut waiting for its new keys (#569); the app's own
+    /// shortcuts are held off meanwhile (`hotkey::set_paused`).
+    capture: Option<Action>,
+    /// Why the last keys or choice for a shortcut weren't taken.
+    shortcut_note: Option<(Action, String)>,
 }
 
 /// The General page's microphone level and meter (#427), for one device —
@@ -150,6 +160,8 @@ impl SettingsWindow {
             gpu_names,
             microphones: microphone::list(),
             mic: MicPanel::for_device(s.microphone_device.clone()),
+            capture: None,
+            shortcut_note: None,
         }
     }
 
@@ -321,6 +333,8 @@ pub fn show(
                                 draft,
                                 saved_at,
                                 mic,
+                                capture,
+                                shortcut_note,
                                 ..
                             } = &mut *st;
                             match page {
@@ -347,12 +361,27 @@ pub fn show(
                                     saved_at,
                                 ),
                                 Page::Notifications => notifications_page(ui, dc, draft, requests),
+                                Page::Shortcuts => shortcuts_page(
+                                    ui,
+                                    dc,
+                                    &mut draft.shortcuts,
+                                    capture,
+                                    shortcut_note,
+                                ),
+                            }
+                            // Waiting for keys only while that page shows.
+                            if page != Page::Shortcuts {
+                                *capture = None;
                             }
                         });
                 });
         });
 
     // ── Apply deferred actions ────────────────────────────────────────────────
+
+    // A chord RIGStats holds would fire instead of reaching the capture.
+    #[cfg(windows)]
+    crate::hotkey::set_paused(state.lock_safe().capture.is_some());
 
     // Live preview: push the draft to the app on every change. The window
     // layer waits for Save; see `live_preview`.
@@ -369,6 +398,7 @@ pub fn show(
 
     if action_save {
         let mut st = state.lock_safe();
+        st.capture = None;
         let autostart_result = if st.draft.autostart_enabled {
             autostart::register_autostart()
         } else {
@@ -396,7 +426,8 @@ pub fn show(
     // Cancel, or closing the window: put back what was there when the
     // dialog opened — except what it never edited (`live_preview`).
     if action_cancel || ctx.input(|i| i.viewport().close_requested()) {
-        let st = state.lock_safe();
+        let mut st = state.lock_safe();
+        st.capture = None;
         let reverted = live_preview(&st.original, &saved.lock_safe());
         *saved.lock_safe() = reverted;
         reload.store(true, Ordering::Relaxed);
@@ -492,7 +523,7 @@ fn general_page(
         ui,
         dc,
         Some("Microphone"),
-        Some("Ctrl+Alt+M, the tray menu and the microphone in the dashboard header mute or unmute it. The level is Windows' own input level and applies at once. Whether muting shows a notification is under Notifications."),
+        Some(&microphone_footnote(draft.shortcuts.microphone)),
         |g| {
             g.row(
                 "Microphone",
@@ -521,8 +552,10 @@ fn general_page(
             if mic.device != draft.microphone_device {
                 *mic = MicPanel::for_device(draft.microphone_device.clone());
             }
-            g.row("Level", Some("How loud the microphone records"), |ui| {
-                match mic.level.as_mut() {
+            g.row(
+                "Level",
+                Some("How loud the microphone records"),
+                |ui| match mic.level.as_mut() {
                     Some(level) => {
                         if ui_kit::slider_pct(ui, dc, level, 0.0..=1.0) {
                             match microphone::set_level(mic.device.as_deref(), *level as f32) {
@@ -530,18 +563,31 @@ fn general_page(
                                     *level = f64::from(read);
                                     *saved_at = Some(std::time::Instant::now());
                                 }
-                                Err(_) => mic.level = microphone::level(mic.device.as_deref()).map(f64::from),
+                                Err(_) => {
+                                    mic.level =
+                                        microphone::level(mic.device.as_deref()).map(f64::from)
+                                }
                             }
                         }
                     }
                     None => {
-                        ui.label(egui::RichText::new("No microphone").size(12.0).color(dc.muted));
+                        ui.label(
+                            egui::RichText::new("No microphone")
+                                .size(12.0)
+                                .color(dc.muted),
+                        );
                     }
-                }
-            });
+                },
+            );
             if mic.level.is_some() {
                 g.row("Hearing now", Some("Speak to check the level"), |ui| {
-                    ui_kit::meter(ui, dc, "settings_mic", mic.meter.level(), ui_kit::SLIDER_PCT_W);
+                    ui_kit::meter(
+                        ui,
+                        dc,
+                        "settings_mic",
+                        mic.meter.level(),
+                        ui_kit::SLIDER_PCT_W,
+                    );
                 });
             }
         },
@@ -950,7 +996,7 @@ fn notifications_page(
         });
         g.row(
             "Microphone muted or unmuted",
-            Some("After Ctrl+Alt+M or the tray menu"),
+            Some("After its shortcut or the tray menu"),
             |ui| {
                 ui_kit::toggle(ui, dc, &mut draft.microphone_notify);
             },
@@ -972,6 +1018,350 @@ fn notifications_page(
         );
     });
 }
+/// The General page's microphone footnote, naming its shortcut (#569).
+fn microphone_footnote(chord: Option<Shortcut>) -> String {
+    let rest = "The level is Windows' own input level and applies at once. Whether muting \
+                shows a notification is under Notifications.";
+    match chord {
+        Some(chord) => format!(
+            "{chord} (under Shortcuts), the tray menu and the microphone in the dashboard \
+             header mute or unmute it. {rest}"
+        ),
+        None => format!(
+            "The tray menu and the microphone in the dashboard header mute or unmute it; its \
+             shortcut is off under Shortcuts. {rest}"
+        ),
+    }
+}
+
+// ── Shortcuts ─────────────────────────────────────────────────────────────────
+
+/// The Shortcuts page's rows: the action, its title and what it does.
+const SHORTCUT_ROWS: &[(Action, &str, &str)] = &[
+    (
+        Action::Overlay,
+        "Show or hide the overlay",
+        "Without leaving the game",
+    ),
+    (
+        Action::NextProfile,
+        "Next profile",
+        "Switches to the next Control Center profile",
+    ),
+    (
+        Action::Profiles,
+        "Profile 1–9",
+        "Straight to the profile at that place in the profile bar — bind a macro key to it",
+    ),
+    (
+        Action::Microphone,
+        "Mute the microphone",
+        "Mutes or unmutes it; which one is under General",
+    ),
+];
+
+/// The chord a key press makes: egui's key for the layout, or where it sits
+/// when the layout's key has no name (AltGr turned it into a symbol).
+fn captured_chord(
+    key: egui::Key,
+    physical_key: Option<egui::Key>,
+    modifiers: egui::Modifiers,
+) -> Option<Shortcut> {
+    let vk = crate::hotkey::vk_for(key).or_else(|| physical_key.and_then(crate::hotkey::vk_for))?;
+    Some(Shortcut::new(
+        Mods {
+            ctrl: modifiers.ctrl,
+            alt: modifiers.alt,
+            shift: modifiers.shift,
+        },
+        vk,
+    ))
+}
+
+/// Ctrl, Shift, Alt or the Windows key on its own: part of a chord, never
+/// its key.
+fn is_modifier_key(key: egui::Key) -> bool {
+    use egui::Key as K;
+    matches!(
+        key,
+        K::ShiftLeft
+            | K::ShiftRight
+            | K::ControlLeft
+            | K::ControlRight
+            | K::AltLeft
+            | K::AltRight
+            | K::SuperLeft
+            | K::SuperRight
+    )
+}
+
+/// Why `chord` can't be `action`'s, in words; `None` when it can.
+/// `alt_gr_char` is `hotkey::alt_gr_char` (Windows asks the keyboard
+/// layouts), a stand-in in the tests.
+fn shortcut_rejection(
+    shortcuts: &Shortcuts,
+    action: Action,
+    chord: Shortcut,
+    alt_gr_char: impl Fn(Shortcut) -> Option<char>,
+) -> Option<String> {
+    match shortcuts.check(action, chord) {
+        Some(Rejected::TooFewModifiers) => {
+            return Some(
+                "Hold two of Ctrl, Alt and Shift with the key, so the shortcut doesn't take a \
+                 key other programs use."
+                    .to_owned(),
+            )
+        }
+        Some(Rejected::InUse(other)) => return Some(in_use(chord, other)),
+        None => {}
+    }
+    let typed = alt_gr_char(chord)?;
+    let key = shortcut::key_name(chord.vk).unwrap_or_default();
+    Some(format!(
+        "On your keyboard AltGr+{key} types “{typed}”, and {chord} would stop that. Pick another \
+         key — an F-key never types one."
+    ))
+}
+
+fn in_use(chord: Shortcut, other: Action) -> String {
+    format!("{chord} already {}.", other.purpose())
+}
+
+/// Reads the keys for `action` while Settings waits for them: Esc cancels,
+/// a chord that passes the rules is taken, one that doesn't says why and
+/// keeps waiting.
+fn capture_keys(
+    ui: &egui::Ui,
+    shortcuts: &mut Shortcuts,
+    action: Action,
+    capture: &mut Option<Action>,
+    note: &mut Option<(Action, String)>,
+) {
+    // Keys pressed in another window never come here: stop waiting.
+    if ui.input(|i| i.viewport().focused) == Some(false) {
+        *capture = None;
+        return;
+    }
+    let presses: Vec<_> = ui.input(|i| {
+        i.events
+            .iter()
+            .filter_map(|e| match e {
+                egui::Event::Key {
+                    key,
+                    physical_key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => Some((*key, *physical_key, *modifiers)),
+                _ => None,
+            })
+            .collect()
+    });
+    for (key, physical_key, modifiers) in presses {
+        // egui (0.37) reports the modifiers' own presses too: holding Ctrl
+        // before the key is no wrong key.
+        if is_modifier_key(key) {
+            continue;
+        }
+        if key == egui::Key::Escape && modifiers.is_none() {
+            *capture = None;
+            *note = None;
+            return;
+        }
+        let Some(chord) = captured_chord(key, physical_key, modifiers) else {
+            *note = Some((
+                action,
+                "Use a letter, a digit, an F-key, Space, an arrow, Insert, Delete, Home, End, \
+                 Page Up or Page Down."
+                    .to_owned(),
+            ));
+            continue;
+        };
+        #[cfg(windows)]
+        let alt_gr = crate::hotkey::alt_gr_char;
+        #[cfg(not(windows))]
+        let alt_gr = |_| None;
+        match shortcut_rejection(shortcuts, action, chord, alt_gr) {
+            Some(why) => *note = Some((action, why)),
+            None => {
+                shortcuts.set(action, Some(chord));
+                *capture = None;
+                *note = None;
+                return;
+            }
+        }
+    }
+}
+
+/// The drop-down of a single shortcut: a new one (pressed), its default, or
+/// off.
+fn shortcut_dropdown(
+    ui: &mut egui::Ui,
+    shortcuts: &mut Shortcuts,
+    action: Action,
+    capture: &mut Option<Action>,
+    note: &mut Option<(Action, String)>,
+) {
+    let current = shortcuts.get(action);
+    let default = Shortcuts::default().get(action);
+    let shown = if *capture == Some(action) {
+        "Press the keys…".to_owned()
+    } else {
+        current.map_or_else(|| "Off".to_owned(), |c| c.to_string())
+    };
+    ui_kit::dropdown(ui, ("shortcut", action as u8), shown, |ui| {
+        if ui.selectable_label(false, "New shortcut…").clicked() {
+            *capture = Some(action);
+            *note = None;
+        }
+        if let Some(default) = default {
+            let label = format!("Default ({default})");
+            if ui
+                .selectable_label(current == Some(default), label)
+                .clicked()
+            {
+                *capture = None;
+                // Another action may use the default now.
+                *note = match shortcuts.check(action, default) {
+                    Some(Rejected::InUse(other)) => Some((action, in_use(default, other))),
+                    _ => None,
+                };
+                if note.is_none() {
+                    shortcuts.set(action, Some(default));
+                }
+            }
+        }
+        if ui.selectable_label(current.is_none(), "Off").clicked() {
+            *capture = None;
+            *note = None;
+            shortcuts.set(action, None);
+        }
+    });
+}
+
+/// The profile shortcuts' drop-down: F1…F9 with one of a few modifier sets,
+/// or off.
+fn profiles_dropdown(
+    ui: &mut egui::Ui,
+    shortcuts: &mut Shortcuts,
+    capture: &mut Option<Action>,
+    note: &mut Option<(Action, String)>,
+) {
+    let shown = shortcuts
+        .profiles
+        .map_or_else(|| "Off".to_owned(), Shortcuts::profiles_label);
+    ui_kit::dropdown(ui, "shortcut_profiles", shown, |ui| {
+        for mods in shortcut::PROFILE_MODS {
+            let label = Shortcuts::profiles_label(mods);
+            if ui
+                .selectable_label(shortcuts.profiles == Some(mods), label.as_str())
+                .clicked()
+            {
+                *capture = None;
+                *note = match shortcuts.check_profiles(mods) {
+                    Some(Rejected::InUse(other)) => Some((
+                        Action::Profiles,
+                        format!(
+                            "{label} would take a shortcut that already {}.",
+                            other.purpose()
+                        ),
+                    )),
+                    _ => None,
+                };
+                if note.is_none() {
+                    shortcuts.profiles = Some(mods);
+                }
+            }
+        }
+        if ui
+            .selectable_label(shortcuts.profiles.is_none(), "Off")
+            .clicked()
+        {
+            *capture = None;
+            *note = None;
+            shortcuts.profiles = None;
+        }
+    });
+}
+
+/// The chords a row registers: one, or F1…F9 for the profiles.
+fn row_chords(shortcuts: &Shortcuts, action: Action) -> Vec<Shortcut> {
+    match action {
+        Action::Profiles => (0..shortcut::PROFILE_SHORTCUTS)
+            .filter_map(|i| shortcuts.profile(i))
+            .collect(),
+        _ => shortcuts.get(action).into_iter().collect(),
+    }
+}
+
+fn shortcuts_page(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    shortcuts: &mut Shortcuts,
+    capture: &mut Option<Action>,
+    note: &mut Option<(Action, String)>,
+) {
+    ui_kit::page_header(
+        ui,
+        dc,
+        "Shortcuts",
+        "Keys that work in every program, games too, whichever profile is on.",
+    );
+    if let Some(action) = *capture {
+        capture_keys(ui, shortcuts, action, capture, note);
+    }
+    #[cfg(windows)]
+    let taken = crate::hotkey::taken();
+    #[cfg(not(windows))]
+    let taken: Vec<(String, String)> = Vec::new();
+    ui_kit::group(
+        ui,
+        dc,
+        None,
+        Some(
+            "Choose New shortcut…, then press the keys: two of Ctrl, Alt and Shift with a \
+             letter, digit or F-key. Esc cancels. A shortcut another program already uses \
+             never reaches RIGStats.",
+        ),
+        |g| {
+            for &(action, title, subtitle) in SHORTCUT_ROWS {
+                g.row(title, Some(subtitle), |ui| match action {
+                    Action::Profiles => profiles_dropdown(ui, shortcuts, capture, note),
+                    _ => shortcut_dropdown(ui, shortcuts, action, capture, note),
+                });
+                // This row's chords another program holds.
+                let held: Vec<String> = row_chords(shortcuts, action)
+                    .iter()
+                    .map(Shortcut::to_string)
+                    .filter(|name| taken.iter().any(|(t, _)| t == name))
+                    .collect();
+                if *capture == Some(action) && note.is_none() {
+                    g.block(|ui| {
+                        ui_kit::footnote(
+                            ui,
+                            dc,
+                            "Press the new shortcut now — Esc cancels. If nothing happens, another \n                             program already uses those keys.",
+                        );
+                    });
+                } else if let Some((_, why)) = note.as_ref().filter(|(a, _)| *a == action) {
+                    g.block(|ui| {
+                        ui_kit::row_problem(ui, dc, Severity::Attention, why);
+                    });
+                } else if !held.is_empty() && *capture != Some(action) {
+                    g.block(|ui| {
+                        ui_kit::row_problem(
+                            ui,
+                            dc,
+                            Severity::Attention,
+                            &crate::problems::hotkey_taken_in_row(&held),
+                        );
+                    });
+                }
+            }
+        },
+    );
+}
+
 fn send_test_notification() {
     let _ = crate::notify::send(
         "Test notification",
@@ -1051,5 +1441,83 @@ mod tests {
             written.wallpaper_engine_before,
             live.wallpaper_engine_before
         );
+    }
+
+    /// Holding Ctrl or Shift before the key sends those presses first
+    /// (egui 0.37); they must not read as a wrong key (seen live, #569).
+    #[test]
+    fn a_modifier_on_its_own_is_not_a_key() {
+        assert!(is_modifier_key(egui::Key::ControlLeft));
+        assert!(is_modifier_key(egui::Key::ShiftLeft));
+        assert!(is_modifier_key(egui::Key::AltRight));
+        assert!(!is_modifier_key(egui::Key::M));
+        assert!(!is_modifier_key(egui::Key::F10));
+    }
+
+    #[test]
+    fn a_pressed_chord_is_taken_only_when_it_passes_the_rules() {
+        let shortcuts = Shortcuts::default();
+        let no_alt_gr = |_: Shortcut| None;
+        let chord = |t| Shortcut::parse(t).unwrap();
+        assert_eq!(
+            shortcut_rejection(
+                &shortcuts,
+                Action::Microphone,
+                chord("Ctrl+Shift+M"),
+                no_alt_gr
+            ),
+            None
+        );
+        assert_eq!(
+            shortcut_rejection(
+                &shortcuts,
+                Action::Microphone,
+                chord("Ctrl+Alt+O"),
+                no_alt_gr
+            )
+            .as_deref(),
+            Some("Ctrl+Alt+O already shows or hides the overlay.")
+        );
+        assert!(
+            shortcut_rejection(&shortcuts, Action::Overlay, chord("Alt+O"), no_alt_gr)
+                .unwrap()
+                .starts_with("Hold two of Ctrl, Alt and Shift")
+        );
+        // A layout where AltGr+E types the euro sign (Swedish, German).
+        let euro = |c: Shortcut| (c.mods.is_alt_gr() && c.vk == 0x45).then_some('€');
+        assert_eq!(
+            shortcut_rejection(&shortcuts, Action::Microphone, chord("Ctrl+Alt+E"), euro)
+                .as_deref(),
+            Some(
+                "On your keyboard AltGr+E types “€”, and Ctrl+Alt+E would stop that. Pick \
+                 another key — an F-key never types one."
+            )
+        );
+    }
+
+    #[test]
+    fn a_key_alt_gr_turned_into_a_symbol_is_read_where_it_sits() {
+        let ctrl_alt = egui::Modifiers {
+            ctrl: true,
+            alt: true,
+            command: true,
+            ..Default::default()
+        };
+        // AltGr+7 is { on a Swedish layout: egui names the symbol, which no
+        // chord can end in, so the key is read where it sits.
+        let chord = captured_chord(egui::Key::OpenCurlyBracket, Some(egui::Key::Num7), ctrl_alt);
+        assert_eq!(chord.map(|c| c.to_string()).as_deref(), Some("Ctrl+Alt+7"));
+        let chord = captured_chord(egui::Key::M, Some(egui::Key::M), ctrl_alt);
+        assert_eq!(chord.map(|c| c.to_string()).as_deref(), Some("Ctrl+Alt+M"));
+        let chord = captured_chord(egui::Key::F7, Some(egui::Key::F7), ctrl_alt);
+        assert_eq!(chord.map(|c| c.to_string()).as_deref(), Some("Ctrl+Alt+F7"));
+        assert_eq!(captured_chord(egui::Key::Tab, None, ctrl_alt), None);
+    }
+
+    #[test]
+    fn the_microphone_footnote_names_its_shortcut_or_says_it_is_off() {
+        assert!(microphone_footnote(Shortcut::parse("Ctrl+Shift+M"))
+            .starts_with("Ctrl+Shift+M (under Shortcuts), the tray menu"));
+        assert!(microphone_footnote(None).contains("its shortcut is off under Shortcuts"));
     }
 }

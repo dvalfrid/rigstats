@@ -899,6 +899,7 @@ pub fn show(
     control_cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
     hardware_problems: &[rigstats_backend::control::Problem],
     dc: &DialogColors,
+    requests: &crate::windows::OpenRequests,
 ) {
     let ctx = &ui.ctx().clone();
     dc.apply_to_ctx(ctx);
@@ -1041,7 +1042,10 @@ pub fn show(
         use crate::windows::{ActionEffect, OpenRequest};
         match crate::windows::action_effect(&action) {
             ActionEffect::Open(OpenRequest::Diagnostics) => action_collect_diag = true,
-            ActionEffect::Open(_) => {}
+            // The log is on this page; anything else (Settings → Shortcuts)
+            // is another window.
+            ActionEffect::Open(OpenRequest::Status) => {}
+            ActionEffect::Open(request) => *requests.lock_safe() = Some(request),
             effect => crate::windows::perform_local(ctx, &effect),
         }
     }
