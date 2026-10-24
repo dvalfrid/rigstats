@@ -571,6 +571,23 @@ pub fn dialog_btn_secondary_compact(
     })
 }
 
+/// Small L-shaped brackets at TL and BR corners of the panel.
+fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
+    let bracket_a = (128.0 * opacity) as u8;
+    let c = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), bracket_a);
+    let stroke = Stroke::new(1.0_f32, c);
+    let size = 8.0;
+    let inset = 5.0;
+
+    let tl = rect.left_top() + egui::Vec2::new(inset, inset);
+    painter.line_segment([tl, tl + egui::Vec2::new(size, 0.0)], stroke);
+    painter.line_segment([tl, tl + egui::Vec2::new(0.0, size)], stroke);
+
+    let br = rect.right_bottom() - egui::Vec2::new(inset, inset);
+    painter.line_segment([br, br - egui::Vec2::new(size, 0.0)], stroke);
+    painter.line_segment([br, br - egui::Vec2::new(0.0, size)], stroke);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -675,21 +692,4 @@ mod tests {
         assert_ne!(th.stat_label, th.accent);
         assert_ne!(th.text_muted, th.accent);
     }
-}
-
-/// Small L-shaped brackets at TL and BR corners of the panel.
-fn draw_corner_brackets(painter: &egui::Painter, rect: egui::Rect, accent: Color32, opacity: f32) {
-    let bracket_a = (128.0 * opacity) as u8;
-    let c = Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), bracket_a);
-    let stroke = Stroke::new(1.0_f32, c);
-    let size = 8.0;
-    let inset = 5.0;
-
-    let tl = rect.left_top() + egui::Vec2::new(inset, inset);
-    painter.line_segment([tl, tl + egui::Vec2::new(size, 0.0)], stroke);
-    painter.line_segment([tl, tl + egui::Vec2::new(0.0, size)], stroke);
-
-    let br = rect.right_bottom() - egui::Vec2::new(inset, inset);
-    painter.line_segment([br, br - egui::Vec2::new(size, 0.0)], stroke);
-    painter.line_segment([br, br - egui::Vec2::new(0.0, size)], stroke);
 }

@@ -152,7 +152,7 @@ impl BackgroundPicker {
     fn refresh(&mut self, kept: Option<&DesktopBackground>) {
         if self
             .screens_at
-            .map_or(true, |t| t.elapsed() > Duration::from_secs(3))
+            .is_none_or(|t| t.elapsed() > Duration::from_secs(3))
         {
             self.screens = desktop_background::screens();
             self.own = kept.cloned().or_else(desktop_background::current);
@@ -411,7 +411,7 @@ pub fn desktop_page(
     let picker = &mut editor.background;
     let reopened = picker
         .we_page_seen
-        .map_or(true, |t| t.elapsed() > Duration::from_secs(1));
+        .is_none_or(|t| t.elapsed() > Duration::from_secs(1));
     picker.we_page_seen = Some(Instant::now());
     if reopened {
         picker.load_library(ui.ctx());

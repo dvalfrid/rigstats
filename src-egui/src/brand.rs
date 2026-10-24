@@ -109,6 +109,14 @@ pub fn gpu_vendor(name: &str) -> Option<&'static str> {
     }
 }
 
+fn load_png(ctx: &Context, name: &str, bytes: &[u8]) -> TextureHandle {
+    let img = image::load_from_memory(bytes).expect("logo png").to_rgba8();
+    let (w, h) = img.dimensions();
+    let color_image =
+        egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
+    ctx.load_texture(name, color_image, TextureOptions::LINEAR)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,12 +175,4 @@ mod tests {
     fn gpu_unknown() {
         assert_eq!(gpu_vendor("VirtualBox Graphics Adapter"), None);
     }
-}
-
-fn load_png(ctx: &Context, name: &str, bytes: &[u8]) -> TextureHandle {
-    let img = image::load_from_memory(bytes).expect("logo png").to_rgba8();
-    let (w, h) = img.dimensions();
-    let color_image =
-        egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], img.as_raw());
-    ctx.load_texture(name, color_image, TextureOptions::LINEAR)
 }

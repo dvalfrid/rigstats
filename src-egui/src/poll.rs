@@ -291,7 +291,7 @@ impl BatteryPoll {
         present
             && self
                 .asked
-                .map_or(true, |t| now.duration_since(t) >= BATTERY_TTL)
+                .is_none_or(|t| now.duration_since(t) >= BATTERY_TTL)
     }
 
     /// Stores a reading. Returns `true` when `probe_wmi_status` should run:

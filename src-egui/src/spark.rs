@@ -11,7 +11,7 @@ impl Sparkline {
     /// Creates a sparkline pre-filled with zeros so the graph spans the full width from frame 1.
     pub fn new(capacity: usize) -> Self {
         let mut values = VecDeque::with_capacity(capacity);
-        values.extend(std::iter::repeat(0.0_f32).take(capacity));
+        values.extend(std::iter::repeat_n(0.0_f32, capacity));
         Self { values }
     }
 
@@ -96,6 +96,16 @@ impl Sparkline {
     }
 }
 
+pub fn premul_color(c: Color32, a: u8) -> Color32 {
+    let af = a as u32;
+    Color32::from_rgba_premultiplied(
+        (c.r() as u32 * af / 255) as u8,
+        (c.g() as u32 * af / 255) as u8,
+        (c.b() as u32 * af / 255) as u8,
+        a,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -156,14 +166,4 @@ mod tests {
         let c = premul_color(Color32::from_rgb(200, 100, 50), 128);
         assert_eq!(c, Color32::from_rgba_premultiplied(100, 50, 25, 128));
     }
-}
-
-pub fn premul_color(c: Color32, a: u8) -> Color32 {
-    let af = a as u32;
-    Color32::from_rgba_premultiplied(
-        (c.r() as u32 * af / 255) as u8,
-        (c.g() as u32 * af / 255) as u8,
-        (c.b() as u32 * af / 255) as u8,
-        a,
-    )
 }

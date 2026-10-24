@@ -401,7 +401,7 @@ impl RigStatsApp {
             let due = self
                 .alert_cooldowns
                 .get(&key)
-                .map_or(true, |last| last.elapsed().as_secs() >= cooldown_secs);
+                .is_none_or(|last| last.elapsed().as_secs() >= cooldown_secs);
             if !due {
                 continue;
             }
@@ -429,7 +429,7 @@ impl RigStatsApp {
         let now = Instant::now();
         let effects = self.wallpaper.transition(
             want,
-            || wallpaper_supervisor::host_path().map_or(true, |p| !p.exists()),
+            || wallpaper_supervisor::host_path().is_none_or(|p| !p.exists()),
             &mut self.wallpaper_host,
             now,
         );

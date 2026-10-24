@@ -206,7 +206,7 @@ impl WallpaperSupervisor {
         if let Some(code_desc) = exit_code {
             let fast_fail = self
                 .last_spawn
-                .map_or(true, |t| now.duration_since(t) < FAST_FAIL);
+                .is_none_or(|t| now.duration_since(t) < FAST_FAIL);
             if fast_fail {
                 self.spawn_fails = self.spawn_fails.saturating_add(1);
                 effects.push(Effect::Log(
