@@ -442,9 +442,11 @@ fn icon_image_com(path: &str) -> Option<egui::ColorImage> {
             return None;
         }
         // Old icons carry no alpha: treat them as opaque.
-        let has_alpha = bgra.chunks_exact(4).any(|px| px[3] != 0);
+        let has_alpha = bgra.as_chunks::<4>().0.iter().any(|px| px[3] != 0);
         let rgba: Vec<u8> = bgra
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|px| [px[2], px[1], px[0], if has_alpha { px[3] } else { 255 }])
             .collect();
         Some(egui::ColorImage::from_rgba_unmultiplied(

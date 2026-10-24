@@ -1821,7 +1821,7 @@ fn keyboard_page(
             // key wakes it (the owner took the old "doesn't answer" for an error).
             let due = ui_state
                 .keyboard_retry_at
-                .map_or(true, |at| at.elapsed() >= KEYBOARD_RETRY);
+                .is_none_or(|at| at.elapsed() >= KEYBOARD_RETRY);
             if due && !control.keyboard_busy {
                 ui_state.keyboard_retry_at = Some(Instant::now());
                 let _ = cmd_tx.try_send(ControlCmd::ReadKeyboards);
@@ -2465,10 +2465,10 @@ fn hue_card(
 /// colour change leaves a lamp switched from the tray alone, and the other
 /// way round. `None` when nothing that can be shown changed.
 fn preview_delta(before: Option<&AuraPart>, after: &AuraPart) -> Option<AuraPart> {
-    let rgb_changed = before.map_or(true, |b| {
+    let rgb_changed = before.is_none_or(|b| {
         (&b.effect, &b.color, b.brightness) != (&after.effect, &after.color, after.brightness)
     });
-    let lamp_changed = before.map_or(true, |b| b.lamp != after.lamp);
+    let lamp_changed = before.is_none_or(|b| b.lamp != after.lamp);
     let rgb = rgb_changed && after.effect.is_some();
     let lamp = lamp_changed && after.lamp.is_some();
     match (rgb, lamp) {

@@ -2,7 +2,7 @@
 name = "rigstats-egui"
 version = "1.51.0" # x-release-please-version
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.89"
 
 [lib]
 name = "rigstats_egui"

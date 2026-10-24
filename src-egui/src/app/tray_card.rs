@@ -52,7 +52,7 @@ pub(crate) fn hover_step(
     let Some([x, y, w, h]) = state.icon else {
         return (false, HoverState::default());
     };
-    let inside = cursor.map_or(true, |[cx, cy]| {
+    let inside = cursor.is_none_or(|[cx, cy]| {
         cx >= x - SLACK && cx < x + w + SLACK && cy >= y - SLACK && cy < y + h + SLACK
     });
     if !inside {

@@ -71,7 +71,7 @@ pub fn detect_gpu_name() -> Option<String> { ... }
 
 ### Minimum Rust version
 
-Both crates declare `rust-version = "1.77"`, and clippy enforces it: a standard-library API stabilised later fails `cargo xtask clippy` even though the pinned toolchain compiles it (e.g. `Option::is_none_or`, 1.82 — use `map_or(true, …)`). Raise `rust-version` deliberately, not to make one call compile.
+Both crates declare `rust-version = "1.89"` (raised from 1.77 for `File::lock` in the debug log, #563, and ureq 3, which needs 1.85, #545), and clippy enforces it: a standard-library API stabilised later fails `cargo xtask clippy` even though the pinned toolchain compiles it. Raise `rust-version` deliberately, not to make one call compile.
 
 ### Unsafe and global mutable state
 

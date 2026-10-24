@@ -197,7 +197,7 @@ impl RigStatsApp {
         }
         if sync
             .we_checked
-            .map_or(true, |t| t.elapsed() > Duration::from_secs(5))
+            .is_none_or(|t| t.elapsed() > Duration::from_secs(5))
             || !requests.is_empty()
         {
             sync.we_checked = Some(Instant::now());
