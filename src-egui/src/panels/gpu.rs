@@ -69,8 +69,11 @@ pub fn draw(
         };
 
         // Header: title (+ optional selector dots) and model name stacked on left; logo sibling.
+        let logo = tex.gpu_logo(&stats.gpu_name);
+        let logo_size = logo.map(|l| super::logo_size(l, sc));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
+                super::leave_room_for_logo(ui, logo_size, sc);
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("GPU LOAD")
@@ -121,17 +124,16 @@ pub fn draw(
                 if !stats.gpu_name.is_empty() {
                     let name = &stats.gpu_name;
                     let name = if name.len() > 44 { &name[..44] } else { name };
-                    ui.label(RichText::new(name).size(11.0 * sc).color(th.text_muted));
+                    ui.add(
+                        egui::Label::new(RichText::new(name).size(11.0 * sc).color(th.text_muted))
+                            .truncate(),
+                    );
                 }
             });
-            if let Some(logo) = tex.gpu_logo(&stats.gpu_name) {
-                let [lw, lh] = logo.size();
-                let target_h = 38.0 * sc;
-                let w = lw as f32 * (target_h / lh as f32);
+            if let (Some(logo), Some(size)) = (logo, logo_size) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(6.0 * sc);
-                    let sized =
-                        egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(w, target_h));
+                    let sized = egui::load::SizedTexture::new(logo.id(), size);
                     ui.add(egui::Image::new(sized));
                 });
             }

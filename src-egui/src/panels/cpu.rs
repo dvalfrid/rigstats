@@ -38,8 +38,11 @@ pub fn draw(
         let tc = temp_color(stats.cpu_temp, warn, crit);
 
         // Header: title + model name stacked vertically on the left; logo right-aligned.
+        let logo = tex.cpu_logo(&stats.cpu_model);
+        let logo_size = logo.map(|l| super::logo_size(l, sc));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
+                super::leave_room_for_logo(ui, logo_size, sc);
                 ui.label(
                     RichText::new("CPU LOAD")
                         .strong()
@@ -53,16 +56,16 @@ pub fn draw(
                     } else {
                         model
                     };
-                    ui.label(RichText::new(model).size(11.0 * sc).color(th.text_muted));
+                    ui.add(
+                        egui::Label::new(RichText::new(model).size(11.0 * sc).color(th.text_muted))
+                            .truncate(),
+                    );
                 }
             });
-            if let Some(logo) = tex.cpu_logo(&stats.cpu_model) {
-                let [lw, lh] = logo.size();
-                let target_h = 38.0 * sc;
-                let w = lw as f32 * (target_h / lh as f32);
+            if let (Some(logo), Some(size)) = (logo, logo_size) {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.add_space(6.0 * sc);
-                    let sized = egui::load::SizedTexture::new(logo.id(), Vec2::new(w, target_h));
+                    let sized = egui::load::SizedTexture::new(logo.id(), size);
                     ui.add(egui::Image::new(sized));
                 });
             }

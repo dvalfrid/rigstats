@@ -752,7 +752,11 @@ temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
 with USED/FREE, Network without its graph — no graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. Which panels offer it: `panels::COMPACT_PANELS`;
 each panel's `draw` takes `compact`, passed by `DashboardView::draw_one_panel`
-and by the floating panels (`DashboardRuntime::is_compact`). The landscape grid
+and by the floating panels (`DashboardRuntime::is_compact`). A compact floating
+card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead
+of 450, so it can be scaled up to read without growing as wide as a full one;
+the CPU/GPU header cuts a long model name short (…) before the logo
+(`panels::leave_room_for_logo`). The landscape grid
 keeps its uniform cells, so a compact panel there is shorter than its cell.
 
 ---

@@ -171,7 +171,8 @@ order, the overlay's metrics and the alert levels — belongs to each
   the key values only, no graphs or bars. The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact
   beside each panel), so they take less room on a small screen or as floating
-  cards.
+  cards — a compact floating card is also narrower, so it can be scaled up for
+  easier reading without growing as wide as a full one.
 
 <p align="center">
   <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact as floating cards: load and temperature rings with clock and power for the CPU and GPU, a usage ring with used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">

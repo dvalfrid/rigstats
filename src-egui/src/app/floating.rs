@@ -52,7 +52,12 @@ impl RigStatsApp {
                 guard_panel_position(saved, default_pos)
             };
 
-            let panel_w = 450.0 * scale;
+            let base_w = if self.runtime.is_compact(&key) {
+                panels::COMPACT_FLOATING_W
+            } else {
+                450.0
+            };
+            let panel_w = base_w * scale;
             let initial_h = panel_initial_h(&key) * scale;
 
             // Only set window position on first creation.  After that the OS
