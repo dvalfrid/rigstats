@@ -1196,13 +1196,22 @@ impl RigStatsApp {
             return;
         };
         let ids: Vec<&str> = control.profiles.iter().map(|p| p.id.as_str()).collect();
-        let mut s = self.current_settings.lock_safe();
+        let settings = self.current_settings.clone();
+        let mut s = settings.lock_safe();
+        if s.look_profile.as_deref() != Some(id.as_str()) {
+            // A drag not yet flushed belongs to the outgoing profile (#599).
+            self.write_floating_positions(&mut s);
+            self.floating
+                .positions_dirty
+                .store(false, Ordering::Relaxed);
+        }
         let switched = settings::switch_profile_look(&mut s, &id);
         let pruned = !ids.is_empty() && settings::prune_profile_looks(&mut s, &ids);
         if switched.is_some() || pruned {
             self.persist_settings_logged(&s);
         }
         if switched == Some(true) {
+            self.load_floating_positions(&s);
             self.settings_reload.store(true, Ordering::Relaxed);
         }
     }

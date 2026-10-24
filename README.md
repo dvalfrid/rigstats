@@ -171,7 +171,8 @@ alert levels — belongs to each
   On or off and the panels' size belong to the Control Center profile
   (**Control Center → Dashboard**, *coming in v1.52.0*), so one profile can
   float while another shows the fixed dashboard — switch profile (tray,
-  shortcut or app rule) to switch layout.
+  shortcut or app rule) to switch layout. Each profile also remembers where
+  you placed its panels.
 - **Compact panels** *(coming in v1.52.0)* — CPU, GPU, RAM and Network can each be drawn compact:
   the key values only, no graphs or bars. The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact

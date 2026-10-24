@@ -581,7 +581,15 @@ needed:
   (`x: i32, y: i32`) per panel key. Positions are tracked directly in
   `render_floating_panels` (`src-egui/src/main.rs`) from each panel viewport's
   `outer_rect` and persisted to `rigstats-settings.json`; no JavaScript or
-  debounce is involved.
+  debounce is involved. They are the active profile's (#599).
+- **`profile_panel_layouts: HashMap<String, HashMap<String, PanelLayout>>`** —
+  the other Control Center profiles' panel positions, keyed by profile id.
+  `switch_profile_look` stores `panel_layouts` in the outgoing profile and lays
+  the incoming one's over it (a panel it has no place for stays put); the app
+  writes a drag not yet flushed first (`write_floating_positions`) and moves the
+  panels after (`load_floating_positions`, which clears `panels_positioned`).
+  Kept beside `ProfileLook`, not in it, so the Control Center's preview and
+  Revert never move a panel.
 
 Multi-GPU pinning adds one field:
 
@@ -648,7 +656,8 @@ separate `windows.rs` module:
 - A panel's position is only set on first creation (`with_position`); after
   that the OS owns it via drag, and the viewport's `outer_rect` is read back
   each frame to update `floating_positions` (persisted to
-  `settings.panel_layouts` on Save). Panels without a saved position stagger
+  `settings.panel_layouts` when it changes). A profile switch re-sends each
+  panel's position once (#599). Panels without a saved position stagger
   diagonally from `[100.0, 80.0]`.
 - Each panel draws its own drag zone (top 24 px) and padlock hit-rect inline;
   dragging is triggered by a raw `just_pressed` check in that zone rather than
@@ -1038,7 +1047,7 @@ it, not the app. No drift.
 
 - **Stats delivery** — the single egui window receives `StatsPayload` from the poll thread via `mpsc::Receiver` and passes data to each panel's `draw()` call. No separate broadcast needed.
 - **Drag** — panels in floating mode render a drag-zone overlay (three dots + padlock icon) painted directly onto the panel rect via `ui.painter()`. A click on the padlock toggles lock state via an egui temp-data key `"toggle_lock"`.
-- **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key) and written to `rigstats-settings.json` on every `Save` in Settings.
+- **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key), per Control Center profile (`profile_panel_layouts`, #599), and written to `rigstats-settings.json` when a panel moves.
 
 ### Desktop wallpaper mode (WorkerW)
 

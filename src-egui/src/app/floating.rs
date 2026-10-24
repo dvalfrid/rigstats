@@ -563,8 +563,16 @@ impl RigStatsApp {
 
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     pub(crate) fn persist_floating_positions(&self) {
-        let positions = self.floating.positions.lock_safe();
         let mut s = self.current_settings.lock_safe();
+        self.write_floating_positions(&mut s);
+        self.persist_settings_logged(&s);
+    }
+
+    /// The panels' positions as they are now → `panel_layouts`, without
+    /// persisting — also before a profile switch stores them in the
+    /// outgoing profile (#599), so a drag not yet flushed isn't lost.
+    pub(crate) fn write_floating_positions(&self, s: &mut settings::Settings) {
+        let positions = self.floating.positions.lock_safe();
         for (key, &[x, y]) in positions.iter() {
             s.panel_layouts.insert(
                 key.clone(),
@@ -574,7 +582,21 @@ impl RigStatsApp {
                 },
             );
         }
-        drop(positions);
-        self.persist_settings_logged(&s);
+    }
+
+    /// After a profile switch (#599): the panels move to the incoming
+    /// profile's positions. Clearing `panels_positioned` makes each one send
+    /// its position once more, as on creation.
+    pub(crate) fn load_floating_positions(&mut self, s: &settings::Settings) {
+        let new: std::collections::HashMap<String, [f32; 2]> = s
+            .panel_layouts
+            .iter()
+            .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
+            .collect();
+        let mut positions = self.floating.positions.lock_safe();
+        if *positions != new {
+            *positions = new;
+            self.floating.panels_positioned.clear();
+        }
     }
 }
