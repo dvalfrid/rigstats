@@ -491,8 +491,9 @@ impl Default for Settings {
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
-/// dashboard looks, the overlay's content, the alert thresholds, the
-/// desktop background and what Wallpaper Engine does. A
+/// dashboard looks (floating or not, and the floating panels' size, #599),
+/// the overlay's content, the alert thresholds, the desktop background and
+/// what Wallpaper Engine does. A
 /// profile always holds all of them. Everything else (window layer,
 /// display profile, overlay placement, notifications, start-up, …) applies
 /// to the whole app and stays out of profiles.
@@ -519,6 +520,14 @@ pub struct ProfileLook {
     pub desktop_background: Option<DesktopBackground>,
     #[serde(default)]
     pub wallpaper_engine: Option<WeChoice>,
+    /// Floating panels or the fixed dashboard (#599). `None` in a look
+    /// saved before it was part of the profile: the mode is left as it is,
+    /// so nobody's floating panels turn off at the first switch.
+    #[serde(default)]
+    pub floating_mode: Option<bool>,
+    /// The floating panels' size (#599); `None` as for `floating_mode`.
+    #[serde(default)]
+    pub floating_panel_scale: Option<f64>,
 }
 
 impl ProfileLook {
@@ -535,6 +544,8 @@ impl ProfileLook {
             thresholds: s.thresholds.clone(),
             desktop_background: s.desktop_background.clone(),
             wallpaper_engine: s.wallpaper_engine.clone(),
+            floating_mode: Some(s.floating_mode),
+            floating_panel_scale: Some(s.floating_panel_scale),
         }
     }
 
@@ -551,6 +562,12 @@ impl ProfileLook {
         s.thresholds = self.thresholds.clone();
         s.desktop_background = self.desktop_background.clone();
         s.wallpaper_engine = self.wallpaper_engine.clone();
+        if let Some(on) = self.floating_mode {
+            s.floating_mode = on;
+        }
+        if let Some(scale) = self.floating_panel_scale {
+            s.floating_panel_scale = scale.clamp(0.4, 2.0);
+        }
         Self::capture(s) != before
     }
 }
@@ -1120,5 +1137,40 @@ mod profile_look_tests {
 
         let json = serde_json::to_string(&s).unwrap();
         assert!(json.contains(r#""compactPanels":["cpu","net"]"#), "{json}");
+    }
+
+    #[test]
+    fn floating_mode_and_size_follow_the_profile() {
+        let mut s = Settings::default();
+        assert_eq!(switch_profile_look(&mut s, "balanced"), Some(false));
+        s.floating_mode = true;
+        s.floating_panel_scale = 1.7;
+        // To Gaming (first time: it starts from the current look), then the
+        // fixed dashboard there.
+        switch_profile_look(&mut s, "gaming");
+        s.floating_mode = false;
+        s.floating_panel_scale = 1.0;
+        // Back to Balanced: floating again, at its own size.
+        assert_eq!(switch_profile_look(&mut s, "balanced"), Some(true));
+        assert!(s.floating_mode);
+        assert_eq!(s.floating_panel_scale, 1.7);
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(true));
+        assert!(!s.floating_mode);
+        assert_eq!(s.floating_panel_scale, 1.0);
+    }
+
+    #[test]
+    fn a_look_saved_before_floating_was_in_profiles_leaves_it_alone() {
+        // A look saved before #599 has no floatingMode / floatingPanelScale.
+        let old: ProfileLook = serde_json::from_str(r#"{"theme":"red"}"#).unwrap();
+        assert_eq!(old.floating_mode, None);
+        assert_eq!(old.floating_panel_scale, None);
+        let mut s = Settings::default();
+        s.floating_mode = true;
+        s.floating_panel_scale = 1.2;
+        old.apply_to(&mut s);
+        assert!(s.floating_mode, "floating stays on");
+        assert_eq!(s.floating_panel_scale, 1.2);
+        assert_eq!(s.theme, "red");
     }
 }

@@ -155,7 +155,8 @@ See [docs/architecture.md](docs/architecture.md) for module-level detail and [do
 The dashboard renders on a secondary monitor. Where it goes is set in
 **Settings** (pages: General, Display, Overlay, Notifications — what applies to
 the whole app); how it looks — accent colour, opacity, which panels in what
-order, the overlay's metrics and the alert levels — belongs to each
+order, floating panels or not and their size, the overlay's metrics and the
+alert levels — belongs to each
 **Control Center profile** and switches with it.
 
 - **Display profiles** — pick a portrait or landscape profile that matches the
@@ -167,6 +168,9 @@ order, the overlay's metrics and the alert levels — belongs to each
 - **Window layer** — `Normal`, `Always on Top`, `Always Behind`, or **Desktop
   Wallpaper**.
 - **Floating mode** — render panels as individually draggable/lockable cards.
+  On or off and the panels' size belong to the Control Center profile
+  (**Control Center → Dashboard**, *coming in v1.52.0*), so one profile can
+  float while another shows the fixed dashboard; the tray toggles it too.
 - **Compact panels** *(coming in v1.52.0)* — CPU, GPU, RAM and Network can each be drawn compact:
   the key values only, no graphs or bars. The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact
@@ -252,7 +256,7 @@ Each tab appears only when this PC's hardware supports it.
 
 | Tab | What it controls | Where it works |
 | --- | --- | --- |
-| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (CPU, GPU, RAM and Network full or compact — *coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
+| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (CPU, GPU, RAM and Network full or compact — *coming in v1.52.0*), floating panels and their size (*coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
 | Desktop | The Windows background picture (one per screen if you like), and Wallpaper Engine: as it is, chosen wallpapers per screen, paused, or off — with Start/Stop | Any PC; the Wallpaper Engine part when it is installed ([troubleshooting](docs/troubleshooting.md#wallpaper-engine)) |
 | App rules | Switch profile automatically while a program runs (e.g. Gaming while your game is open) | Any PC |
 | Power | The Windows power plan each profile switches to | Any PC |
