@@ -329,32 +329,48 @@ impl DashboardView<'_> {
         let (n_cols, n_rows, sc) = landscape_grid_layout(n, avail_w, ref_h);
 
         let cell_w = ((avail_w - gap * (n_cols as f32 - 1.0)) / n_cols as f32).max(40.0);
-        let cell_h = if fill {
+        let full_h = 224.0 * sc;
+        let fill_cell_h = {
             let avail_h = ui.available_height().max(40.0);
             ((avail_h - gap * (n_rows as f32 - 1.0)) / n_rows as f32).max(40.0)
-        } else {
-            224.0 * sc
+        };
+        let ctx = ui.ctx().clone();
+        let natural_id = |key: &str| egui::Id::unique(("landscape_compact_h", key));
+        // A row of compact panels only (#596) is as tall as its tallest panel,
+        // measured last frame, and every panel in it stretches to that, so the
+        // frames end in line; any other row keeps the full panel's height.
+        let row_content_h = |row: usize| -> (f32, bool) {
+            let keys = &panels[row * n_cols..((row + 1) * n_cols).min(n)];
+            if !keys.iter().all(|k| self.compact(k)) {
+                return (full_h, false);
+            }
+            let tallest = keys
+                .iter()
+                .filter_map(|k| ctx.data(|d| d.get_temp::<f32>(natural_id(k))))
+                .fold(None, |m: Option<f32>, h| Some(m.map_or(h, |m| m.max(h))));
+            (tallest.unwrap_or(full_h), true)
         };
 
         let origin = ui.cursor().min;
         let mut new_pref = None;
+        let mut y = origin.y;
         for row in 0..n_rows {
+            let (content_h, compact_row) = row_content_h(row);
+            let cell_h = if fill { fill_cell_h } else { content_h };
+            // In fill mode the cell can be taller than the panel's natural
+            // content (e.g. the scale clamp caps growth before the cell does) —
+            // center the panel within it instead of leaving dead space below.
+            let pad = if fill {
+                ((cell_h - content_h) * 0.5).max(0.0)
+            } else {
+                0.0
+            };
             for col in 0..n_cols {
                 let idx = row * n_cols + col;
                 if idx >= n {
                     break;
                 }
                 let x = origin.x + col as f32 * (cell_w + gap);
-                let y = origin.y + row as f32 * (cell_h + gap);
-                // In fill mode the cell can be taller than the panel's natural
-                // content (e.g. the scale clamp caps growth before the cell does) —
-                // center the panel within it instead of leaving dead space below.
-                let content_h = 224.0 * sc;
-                let pad = if fill {
-                    ((cell_h - content_h) * 0.5).max(0.0)
-                } else {
-                    0.0
-                };
                 let cell_rect = egui::Rect::from_min_size(
                     egui::pos2(x, y + pad),
                     egui::vec2(cell_w, cell_h - pad),
@@ -368,15 +384,33 @@ impl DashboardView<'_> {
                 // content exceeds its cell budget would otherwise bleed into
                 // neighbouring cells/rows instead of being contained.
                 child.set_clip_rect(cell_rect.intersect(child.clip_rect()));
+                if compact_row {
+                    ctx.data_mut(|d| d.insert_temp(theme::panel_stretch_id(), content_h));
+                }
+                ctx.data_mut(|d| d.remove::<f32>(theme::panel_natural_id()));
                 if let Some(p) =
                     self.draw_one_panel(&mut child, &panels[idx], sc, opacity, update_ver)
                 {
                     new_pref = Some(p);
                 }
+                ctx.data_mut(|d| d.remove::<f32>(theme::panel_stretch_id()));
+                // Remember the panel's own height for the next frame; a change
+                // (a panel switched to compact, a new scale) settles in a frame.
+                if let Some(h) = ctx.data(|d| d.get_temp::<f32>(theme::panel_natural_id())) {
+                    let key = natural_id(&panels[idx]);
+                    let old = ctx.data(|d| d.get_temp::<f32>(key));
+                    if old.is_none_or(|o| (o - h).abs() > 0.5) {
+                        ctx.data_mut(|d| d.insert_temp(key, h));
+                        if self.compact(&panels[idx]) {
+                            ctx.request_repaint();
+                        }
+                    }
+                }
             }
+            y += cell_h + gap;
         }
         // Advance the parent cursor past the whole grid.
-        let total_h = n_rows as f32 * cell_h + (n_rows as f32 - 1.0) * gap;
+        let total_h = (y - gap - origin.y).max(0.0);
         ui.allocate_space(egui::vec2(avail_w, total_h));
         new_pref
     }
@@ -485,5 +519,111 @@ impl DashboardRuntime {
             control: &self.control,
             compact_panels: &self.compact_panels,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The panels' frames the grid drew (their fill is the panel fill), left
+    /// to right, after a few passes so measured heights have settled.
+    fn grid_frames(compact: &[&str], fill: bool) -> Vec<egui::Rect> {
+        let ctx = egui::Context::default();
+        let tex = brand::Textures::load(&ctx);
+        let stats = PollStats {
+            cpu_model: "AMD Ryzen 7 9800X3D 8-Core Processor".into(),
+            gpu_name: "AMD Radeon RX 9070 XT".into(),
+            ram_spec: "DDR5 6000 MT/s (2 DIMMs)".into(),
+            ram_total: 32 << 30,
+            ram_used: 16 << 30,
+            ram_temp: Some(38.0),
+            lhm_connected: true,
+            ..Default::default()
+        };
+        let spark = Sparkline::new(60);
+        let th = theme::AppTheme::default();
+        let thresholds = PanelThresholds::default();
+        let control = ControlState::default();
+        let compact: Vec<String> = compact.iter().map(|k| k.to_string()).collect();
+        let view = DashboardView {
+            latest: &stats,
+            cpu_spark: &spark,
+            gpu_spark: &spark,
+            net_up_spark: &spark,
+            net_dn_spark: &spark,
+            textures: &tex,
+            app_theme: &th,
+            thresholds: &thresholds,
+            psu_watts: None,
+            control: &control,
+            compact_panels: &compact,
+        };
+        let panels: Vec<String> = ["cpu", "gpu", "ram", "net"].map(String::from).to_vec();
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(2560.0, 450.0),
+            )),
+            ..Default::default()
+        };
+        let mut shapes = Vec::new();
+        for _ in 0..4 {
+            let mut out = ctx.run_ui(input(), |ui| {
+                view.render_landscape_grid(ui, &panels, None, fill, 450.0, 1.0);
+            });
+            out.textures_delta.clear();
+            shapes = out.shapes;
+        }
+        let mut frames: Vec<egui::Rect> = shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Rect(r) if r.fill == theme::PANEL_FILL => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        frames.sort_by(|a, b| a.left().total_cmp(&b.left()));
+        frames
+    }
+
+    #[test]
+    fn a_row_of_compact_panels_ends_in_line_and_is_shorter() {
+        let all = ["cpu", "gpu", "ram", "net"];
+        let compact = grid_frames(&all, false);
+        let full = grid_frames(&[], false);
+        assert_eq!(compact.len(), 4, "{compact:?}");
+        let h = compact[0].height();
+        for f in &compact {
+            assert!((f.height() - h).abs() < 0.5, "{compact:?}");
+            assert!(
+                (f.bottom() - compact[0].bottom()).abs() < 0.5,
+                "{compact:?}"
+            );
+        }
+        assert!(
+            h < full[0].height() * 0.75,
+            "compact {h}, full {}",
+            full[0].height()
+        );
+    }
+
+    #[test]
+    fn a_row_with_a_full_panel_keeps_the_full_height() {
+        let mixed = grid_frames(&["cpu", "gpu", "ram"], false);
+        let full = grid_frames(&[], false);
+        // Network is full: its frame, and the row, are as before.
+        assert!((mixed[3].height() - full[3].height()).abs() < 0.5);
+    }
+
+    #[test]
+    fn filling_the_screen_centres_a_compact_row() {
+        let frames = grid_frames(&["cpu", "gpu", "ram", "net"], true);
+        let f = frames[0];
+        let above = f.top();
+        let below = 450.0 - f.bottom();
+        assert!(
+            (above - below).abs() < 2.0,
+            "{f:?}: {above} above, {below} below"
+        );
     }
 }

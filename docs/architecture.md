@@ -762,7 +762,7 @@ separate validation function; an unrecognized key is simply ignored by the
 renderer's key→panel match. `Settings.compact_panels` (#596, part of the profile's
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
-with USED/FREE, Network without its graph — no graphs or per-core bars, and no
+with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network without its graph — no graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Which panels
@@ -773,8 +773,16 @@ card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead
 of 450, so it can be scaled up to read without growing as wide as a full one;
 the CPU/GPU logo is 30 px tall instead of 38 (`panels::logo_size`), as tall
 as the title and model name. The model name is capped at 44 characters, so it
-ends before the logo at every scale (`panels::tests`). The landscape grid
-keeps its uniform cells, so a compact panel there is shorter than its cell.
+ends before the logo at every scale (`panels::tests`). In the landscape grid a
+row of compact panels only is as tall as its tallest panel, not a full
+panel's 224 px × scale: `theme::panel_frame` leaves each panel's own height
+(`panel_natural_id`), the grid keeps it per panel and sizes the row from
+last frame's values, and asks every panel in the row to stretch to it
+(`panel_stretch_id`) so the frames end in line. Outside Fill Screen the window
+fits the shorter strip; with Fill Screen (and in the wallpaper) the row is
+centred in its cell. A row with a full panel is as before (`dashboard::tests`).
+The GPU title row is as tall as its text (`interact_size.y = 0`), so its rings
+line up with the CPU's beside it.
 
 ---
 
