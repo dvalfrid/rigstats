@@ -6,8 +6,6 @@ use eframe::egui;
 use rigstats_backend::{control, debug, logging};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::tray::TrayCmd;
-#[cfg(windows)]
-use rigstats_egui::win_opacity;
 use rigstats_egui::windows;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -53,7 +51,6 @@ impl RigStatsApp {
             }
             TrayCmd::OpenUpdater => self.tray_open_updater(),
             TrayCmd::OpenDocs => self.tray_open_docs(ctx),
-            TrayCmd::ToggleFloating => self.tray_toggle_floating(ctx),
             TrayCmd::ToggleOverlay => self.toggle_overlay_mode(),
             TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
             TrayCmd::ToggleRecording => self.tray_toggle_recording(ctx),
@@ -129,50 +126,6 @@ impl RigStatsApp {
 
     fn tray_open_docs(&mut self, ctx: &egui::Context) {
         ctx.open_url(egui::OpenUrl::new_tab("https://rigstats.app"));
-    }
-
-    fn tray_toggle_floating(&mut self, ctx: &egui::Context) {
-        let new_mode = {
-            let mut s = self.current_settings.lock_safe();
-            s.floating_mode = !s.floating_mode;
-            self.persist_settings_logged(&s);
-            s.floating_mode
-        };
-        let was_floating = self.floating.mode;
-        self.floating.mode = new_mode;
-        if was_floating != new_mode {
-            if new_mode {
-                self.floating.panels_positioned.clear();
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
-                    -32000.0, -32000.0,
-                )));
-            } else {
-                let profile = self.current_settings.lock_safe().dashboard_profile.clone();
-                let ([px, py], [w, h]) = self.fixed_window_geometry(&profile);
-                // Apply level BEFORE moving on-screen so it is already
-                // in effect when the window becomes visible.
-                ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
-                    Self::window_level_from_layer(&self.window_layer),
-                ));
-                #[cfg(windows)]
-                if !self.dcomp_available {
-                    win_opacity::set_opacity(self.hwnd, self.opacity);
-                }
-                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::Pos2::new(
-                    px, py,
-                )));
-                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, h)));
-                // See note in the settings-reload transition: clear the
-                // fit-to-content guard so the next fixed frame snaps the
-                // window to the true content height instead of the
-                // compute_window_height estimate (which can clip the
-                // bottom panel).
-                self.window.last_fitted_height = None;
-                // Re-apply for the next few frames as winit may reset the
-                // window level when it processes the move event.
-                self.window.reapply_window_props_frames = 4;
-            }
-        }
     }
 
     fn tray_toggle_recording(&mut self, ctx: &egui::Context) {

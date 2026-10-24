@@ -22,7 +22,6 @@ pub enum TrayCmd {
     OpenDocs,
     OpenHistory,
     OpenControlCenter,
-    ToggleFloating,
     ToggleRecording,
     ToggleOverlay,
     ToggleOverlayLock,
@@ -197,7 +196,6 @@ pub struct Tray {
     pub history_id: tray_icon::menu::MenuId,
     pub control_id: tray_icon::menu::MenuId,
     pub quit_id: tray_icon::menu::MenuId,
-    pub floating_id: tray_icon::menu::MenuId,
     pub recording_id: tray_icon::menu::MenuId,
     pub overlay_id: tray_icon::menu::MenuId,
     pub overlay_lock_id: tray_icon::menu::MenuId,
@@ -244,12 +242,6 @@ pub fn build_tray(
     overlay_locked: bool,
     gpu_names_rx: mpsc::Receiver<Vec<String>>,
 ) -> Tray {
-    let floating_item = IconMenuItem::new(
-        "Toggle Floating Mode",
-        true,
-        Some(menu_icons::floating()),
-        None,
-    );
     let recording_label = if logging_enabled {
         "Stop Recording"
     } else {
@@ -327,7 +319,6 @@ pub fn build_tray(
         items: Vec::new(),
     };
 
-    let floating_id = floating_item.id().clone();
     let recording_id = recording_item.id().clone();
     let overlay_id = overlay_item.id().clone();
     let overlay_lock_id = overlay_lock_item.id().clone();
@@ -343,7 +334,6 @@ pub fn build_tray(
     let mic_id = mic_item.id().clone();
 
     let menu = Menu::new();
-    let _ = menu.append(&floating_item);
     let _ = menu.append(&overlay_item);
     let _ = menu.append(&overlay_lock_item);
     let _ = menu.append(&recording_item);
@@ -394,7 +384,6 @@ pub fn build_tray(
         history_id,
         control_id,
         quit_id,
-        floating_id,
         recording_id,
         overlay_id,
         overlay_lock_id,

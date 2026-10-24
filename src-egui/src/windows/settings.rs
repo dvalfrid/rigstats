@@ -1053,11 +1053,6 @@ const SHORTCUT_GROUPS: &[(&str, &[ShortcutRow])] = &[
                 "Lock or unlock the overlay",
                 "Unlocked, it can be dragged; locked, clicks pass through to the game",
             ),
-            (
-                Action::Floating,
-                "Floating panels on or off",
-                "Each panel as its own window, or the dashboard",
-            ),
         ],
     ),
     (
