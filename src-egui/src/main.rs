@@ -526,9 +526,7 @@ impl RigStatsApp {
         let next = &profiles[current_idx.map_or(0, |i| (i + 1) % profiles.len())];
         let (id, name) = (next.id.clone(), next.name.clone());
         self.apply_profile(id);
-        std::thread::spawn(move || {
-            let _ = rigstats_egui::notify::send("Profile", &name);
-        });
+        self.notify_profile_switched(name);
     }
 
     /// The profile shortcuts (Ctrl+Alt+F1…F9 by default): the profile at that position in the profile bar
@@ -544,6 +542,15 @@ impl RigStatsApp {
         }
         let (id, name) = (profile.id.clone(), profile.name.clone());
         self.apply_profile(id);
+        self.notify_profile_switched(name);
+    }
+
+    /// The profile's name after a shortcut switched to it, unless turned off
+    /// in Settings → Notifications (#601).
+    fn notify_profile_switched(&self, name: String) {
+        if !self.current_settings.lock_safe().profile_notify {
+            return;
+        }
         std::thread::spawn(move || {
             let _ = rigstats_egui::notify::send("Profile", &name);
         });
@@ -626,6 +633,11 @@ impl RigStatsApp {
         let Some(problem) = notification else {
             return;
         };
+        // Off in Settings → Notifications (#601): Status → Problems still
+        // lists it.
+        if !self.current_settings.lock_safe().profile_problem_notify {
+            return;
+        }
         let body = problem.detail.unwrap_or(problem.message);
         std::thread::spawn(move || {
             let _ = rigstats_egui::notify::send(&problem.title, &body);
