@@ -14,4 +14,4 @@ comment is ignored. See "Release routine" in docs/release.md.
 -->
 
 # 1.52.0
-- **Choose your own shortcuts** — Settings → Shortcuts lets you change or turn off each global shortcut (overlay, next profile, profile 1–9, microphone): choose New shortcut… and press the keys. Handy when another program already uses one, like NVIDIA App with Ctrl+Alt+M; Status points you there when that happens.
+- **Choose your own shortcuts** — Settings → Shortcuts lets you change or turn off each global shortcut (overlay, next profile, profile 1–9, microphone): choose New shortcut… and press the keys. You can also give a key to the tray menu's desk lamp, Control Center, Settings, Status, recording, overlay lock and floating panels (off until you choose one). Handy when another program already uses a shortcut, like NVIDIA App with Ctrl+Alt+M; Status points you there when that happens.

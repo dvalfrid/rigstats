@@ -795,6 +795,23 @@ impl eframe::App for RigStatsApp {
                 hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
                 hotkey::HotkeyEvent::ToggleMicMute => self.toggle_microphone(),
                 hotkey::HotkeyEvent::SwitchProfile(index) => self.switch_to_profile(index),
+                hotkey::HotkeyEvent::ToggleLamp => self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleLamp),
+                hotkey::HotkeyEvent::OpenControlCenter => {
+                    self.run_tray_cmd(ui.ctx(), TrayCmd::OpenControlCenter)
+                }
+                hotkey::HotkeyEvent::OpenSettings => {
+                    self.run_tray_cmd(ui.ctx(), TrayCmd::OpenSettings)
+                }
+                hotkey::HotkeyEvent::OpenStatus => self.run_tray_cmd(ui.ctx(), TrayCmd::OpenStatus),
+                hotkey::HotkeyEvent::ToggleRecording => {
+                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleRecording)
+                }
+                hotkey::HotkeyEvent::ToggleOverlayLock => {
+                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleOverlayLock)
+                }
+                hotkey::HotkeyEvent::ToggleFloating => {
+                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleFloating)
+                }
             }
         }
         // The header panel's microphone glyph was clicked last frame (#425;

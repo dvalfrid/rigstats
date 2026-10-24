@@ -50,6 +50,14 @@ pub enum HotkeyEvent {
     ToggleMicMute,
     /// The profile at this position in the profile bar (0-based).
     SwitchProfile(usize),
+    /// The tray menu's actions (#594), run as the tray runs them.
+    ToggleLamp,
+    OpenControlCenter,
+    OpenSettings,
+    OpenStatus,
+    ToggleRecording,
+    ToggleOverlayLock,
+    ToggleFloating,
 }
 
 /// One chord to register: its `RegisterHotKey` id, the chord and the event
@@ -67,6 +75,14 @@ fn bindings(shortcuts: &Shortcuts) -> Vec<Binding> {
         (1, shortcuts.overlay, HotkeyEvent::ToggleOverlay),
         (2, shortcuts.next_profile, HotkeyEvent::CycleProfile),
         (3, shortcuts.microphone, HotkeyEvent::ToggleMicMute),
+        (4, shortcuts.desk_lamp, HotkeyEvent::ToggleLamp),
+        (5, shortcuts.control_center, HotkeyEvent::OpenControlCenter),
+        (6, shortcuts.settings, HotkeyEvent::OpenSettings),
+        (7, shortcuts.status, HotkeyEvent::OpenStatus),
+        (8, shortcuts.recording, HotkeyEvent::ToggleRecording),
+        (9, shortcuts.overlay_lock, HotkeyEvent::ToggleOverlayLock),
+        // 10…18 are the profiles' F-keys below.
+        (20, shortcuts.floating, HotkeyEvent::ToggleFloating),
     ];
     let profiles = (0..PROFILE_SHORTCUTS).map(|i| {
         (
@@ -89,6 +105,13 @@ fn purpose(event: HotkeyEvent) -> String {
         HotkeyEvent::CycleProfile => "switch to the next profile".to_owned(),
         HotkeyEvent::ToggleMicMute => "mute the microphone".to_owned(),
         HotkeyEvent::SwitchProfile(i) => format!("switch to profile {}", i + 1),
+        HotkeyEvent::ToggleLamp => "turn the desk lamp on or off".to_owned(),
+        HotkeyEvent::OpenControlCenter => "open the Control Center".to_owned(),
+        HotkeyEvent::OpenSettings => "open Settings".to_owned(),
+        HotkeyEvent::OpenStatus => "open Status".to_owned(),
+        HotkeyEvent::ToggleRecording => "start or stop recording".to_owned(),
+        HotkeyEvent::ToggleOverlayLock => "lock or unlock the overlay".to_owned(),
+        HotkeyEvent::ToggleFloating => "turn floating panels on or off".to_owned(),
     }
 }
 
