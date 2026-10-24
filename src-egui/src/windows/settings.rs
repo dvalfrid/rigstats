@@ -954,7 +954,7 @@ fn notifications_page(
         ui,
         dc,
         "Notifications",
-        "Whether alerts notify you, for every profile.",
+        "Which notifications RIGStats shows, for every profile.",
     );
     // Turned off in Windows: say so here, where someone looks first (#449).
     #[cfg(windows)]
@@ -999,6 +999,20 @@ fn notifications_page(
             Some("After its shortcut or the tray menu"),
             |ui| {
                 ui_kit::toggle(ui, dc, &mut draft.microphone_notify);
+            },
+        );
+        g.row(
+            "Profile switched",
+            Some("Its name, after a profile shortcut"),
+            |ui| {
+                ui_kit::toggle(ui, dc, &mut draft.profile_notify);
+            },
+        );
+        g.row(
+            "Profile didn't fully apply",
+            Some("A switch that failed or only partly applied; Status still lists it"),
+            |ui| {
+                ui_kit::toggle(ui, dc, &mut draft.profile_problem_notify);
             },
         );
         g.row("Test", Some("Shows a sample notification"), |ui| {

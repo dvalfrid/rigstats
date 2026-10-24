@@ -249,6 +249,10 @@ RIGStats is listed under Windows **Settings → System → Notifications**.
   → Notifications**: Critical alerts / Warnings) and its level in the profile
   (**Control Center → Alerts**). The same alert repeats at most once per
   "Repeat at most every".
+- **Profile notifications you don't want** — the profile's name after a
+  profile shortcut, and "Profile didn't fully apply" after a switch, can each be
+  turned off in **Settings → Notifications** (Profile switched / Profile didn't
+  fully apply). Status still lists a profile that didn't apply.
 
 <a id="can-i-change-which-display-is-used"></a>
 <a id="can-i-switch-dashboard-size-manually"></a>

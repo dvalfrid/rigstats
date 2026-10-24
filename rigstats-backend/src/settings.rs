@@ -188,6 +188,15 @@ pub struct Settings {
     /// Whether muting or unmuting the microphone shows a notification (#425).
     #[serde(default = "default_true")]
     pub microphone_notify: bool,
+    /// Whether switching profile with a shortcut shows the profile's name
+    /// (#601).
+    #[serde(default = "default_true")]
+    pub profile_notify: bool,
+    /// Whether a profile switch that failed or only partly applied, with the
+    /// Control Center closed, shows a notification (#373, #601). Status →
+    /// Problems lists it either way.
+    #[serde(default = "default_true")]
+    pub profile_problem_notify: bool,
     /// The global shortcuts' chords, or off (#569); a file without them
     /// gets the chords from before (`Shortcuts::default`).
     #[serde(default)]
@@ -443,6 +452,8 @@ impl Default for Settings {
             notify_on_crit: true,
             microphone_device: None,
             microphone_notify: true,
+            profile_notify: true,
+            profile_problem_notify: true,
             shortcuts: Shortcuts::default(),
             floating_mode: false,
             floating_panel_scale: default_floating_panel_scale(),
@@ -715,6 +726,18 @@ pub fn persist_settings(dir: &Path, settings: &Settings) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_profile_notifications_are_on_unless_turned_off() {
+        assert!(super::Settings::default().profile_notify);
+        assert!(super::Settings::default().profile_problem_notify);
+        // A file from before #601 has neither.
+        let s: super::Settings = serde_json::from_str(r#"{"settingsVersion":1}"#).unwrap();
+        assert!(s.profile_notify && s.profile_problem_notify);
+        let s: super::Settings =
+            serde_json::from_str(r#"{"settingsVersion":1,"profileNotify":false}"#).unwrap();
+        assert!(!s.profile_notify && s.profile_problem_notify);
+    }
+
     use super::atomic_write;
 
     #[test]
