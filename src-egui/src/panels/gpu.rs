@@ -70,7 +70,7 @@ pub fn draw(
 
         // Header: title (+ optional selector dots) and model name stacked on left; logo sibling.
         let logo = tex.gpu_logo(&stats.gpu_name);
-        let logo_size = logo.map(|l| super::logo_size(l, sc));
+        let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 super::leave_room_for_logo(ui, logo_size, sc);

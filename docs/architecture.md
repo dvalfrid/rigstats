@@ -759,7 +759,8 @@ and by the floating panels (`DashboardRuntime::is_compact`). A compact floating
 card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead
 of 450, so it can be scaled up to read without growing as wide as a full one;
 the CPU/GPU header cuts a long model name short (…) before the logo
-(`panels::leave_room_for_logo`). The landscape grid
+(`panels::leave_room_for_logo`), and the logo is 30 px tall instead of 38
+(`panels::logo_size`), as tall as the title and model name. The landscape grid
 keeps its uniform cells, so a compact panel there is shorter than its cell.
 
 ---

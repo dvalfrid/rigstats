@@ -39,7 +39,7 @@ pub fn draw(
 
         // Header: title + model name stacked vertically on the left; logo right-aligned.
         let logo = tex.cpu_logo(&stats.cpu_model);
-        let logo_size = logo.map(|l| super::logo_size(l, sc));
+        let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 super::leave_room_for_logo(ui, logo_size, sc);

@@ -21,10 +21,12 @@ pub const COMPACT_PANELS: [&str; 4] = ["cpu", "gpu", "ram", "net"];
 /// without growing as wide as a full one.
 pub const COMPACT_FLOATING_W: f32 = 360.0;
 
-/// A CPU/GPU brand logo's size in the panel header: 38 px tall, its own aspect.
-pub(crate) fn logo_size(logo: &egui::TextureHandle, sc: f32) -> egui::Vec2 {
+/// A CPU/GPU brand logo's size in the panel header, its own aspect: 38 px
+/// tall, 30 px in the compact layout — as tall as the title and model name, so
+/// it doesn't outweigh the rings in the shorter panel.
+pub(crate) fn logo_size(logo: &egui::TextureHandle, sc: f32, compact: bool) -> egui::Vec2 {
     let [lw, lh] = logo.size();
-    let h = 38.0 * sc;
+    let h = if compact { 30.0 } else { 38.0 } * sc;
     egui::Vec2::new(lw as f32 * (h / lh as f32), h)
 }
 
