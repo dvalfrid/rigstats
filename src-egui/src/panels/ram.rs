@@ -6,6 +6,7 @@ use crate::PollStats;
 
 const GIB: f64 = 1_073_741_824.0;
 
+#[allow(clippy::too_many_arguments)] // like the other panels: the frame's inputs
 pub fn draw(
     ui: &mut egui::Ui,
     stats: &PollStats,
@@ -14,9 +15,14 @@ pub fn draw(
     crit: u8,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#596): a usage ring with USED and FREE (and TEMP
+    // when it's read), no spec lines and no bar.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
 
         let used_gb = stats.ram_used as f64 / GIB;
         let total_gb = stats.ram_total as f64 / GIB;
@@ -35,6 +41,10 @@ pub fn draw(
                 .color(theme::C_PANEL_TITLE)
                 .size(theme::FONT_PANEL_TITLE * sc),
         );
+        if compact {
+            compact_body(ui, stats, frac, used_gb, free_gb, warn, crit, th, sc);
+            return;
+        }
         // Spec  (e.g. "DDR5 6000 MT/s (2 DIMMs)")
         if !stats.ram_spec.is_empty() {
             ui.label(
@@ -121,4 +131,61 @@ pub fn draw(
             );
         });
     })
+}
+
+/// The compact RAM panel's body (#596): memory in use as a ring, then USED
+/// and FREE, and TEMP only on boards that read it.
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
+fn compact_body(
+    ui: &mut egui::Ui,
+    stats: &PollStats,
+    frac: f32,
+    used_gb: f64,
+    free_gb: f64,
+    warn: u8,
+    crit: u8,
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    ui.horizontal(|ui| {
+        crate::ring::show(
+            ui,
+            theme::RING_SIZE * sc,
+            frac,
+            theme::C_RAM,
+            &format!("{:.0}%", frac * 100.0),
+        );
+        ui.add_space(16.0 * sc);
+        ui.vertical(|ui| {
+            egui::Grid::new("ram_compact")
+                .num_columns(if stats.ram_temp.is_some() { 3 } else { 2 })
+                .min_col_width(50.0 * sc)
+                .show(ui, |ui| {
+                    ui.label(RichText::new("USED").size(11.0 * sc).color(th.stat_label));
+                    ui.label(RichText::new("FREE").size(11.0 * sc).color(th.stat_label));
+                    if stats.ram_temp.is_some() {
+                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                    }
+                    ui.end_row();
+                    ui.label(
+                        RichText::new(format!("{used_gb:.1}G"))
+                            .size(14.0 * sc)
+                            .color(theme::C_RAM),
+                    );
+                    ui.label(
+                        RichText::new(format!("{free_gb:.1}G"))
+                            .size(14.0 * sc)
+                            .color(theme::C_TEXT),
+                    );
+                    if let Some(t) = stats.ram_temp {
+                        ui.label(
+                            RichText::new(format!("{t:.0}°C"))
+                                .size(14.0 * sc)
+                                .color(temp_color(stats.ram_temp, warn, crit)),
+                        );
+                    }
+                    ui.end_row();
+                });
+        });
+    });
 }

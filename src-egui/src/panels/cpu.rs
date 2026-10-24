@@ -26,9 +26,14 @@ pub fn draw(
     sc: f32,
     // The active profile's CPU power limit (#189), shown under POWER.
     ppt_limit: Option<f64>,
+    // The compact layout (#596): a temperature ring beside the load ring,
+    // FREQ and POWER, no per-core bars and no graph.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         let load_frac = stats.cpu_load as f32 / 100.0;
         let tc = temp_color(stats.cpu_temp, warn, crit);
 
@@ -73,6 +78,10 @@ pub fn draw(
                 &format!("{}%", stats.cpu_load),
             );
             ui.add_space(16.0 * sc);
+            if compact {
+                temp_ring(ui, stats.cpu_temp, tc, sc);
+                ui.add_space(16.0 * sc);
+            }
 
             let freq_str = if stats.cpu_freq_mhz > 0.0 {
                 format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
@@ -88,14 +97,19 @@ pub fn draw(
 
             ui.vertical(|ui| {
                 egui::Grid::new("cpu_meta")
-                    .num_columns(3)
+                    .num_columns(if compact { 2 } else { 3 })
                     .min_col_width(50.0 * sc)
                     .show(ui, |ui| {
-                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                        // Compact shows the temperature as its ring instead.
+                        if !compact {
+                            ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
+                        }
                         ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
                         ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
                         ui.end_row();
-                        ui.label(RichText::new(temp_str).size(14.0 * sc).color(tc));
+                        if !compact {
+                            ui.label(RichText::new(temp_str).size(14.0 * sc).color(tc));
+                        }
                         ui.label(RichText::new(freq_str).size(14.0 * sc).color(theme::C_TEXT));
                         ui.label(
                             RichText::new(power_str)
@@ -104,7 +118,9 @@ pub fn draw(
                         );
                         ui.end_row();
                         if let Some(limit) = ppt_limit {
-                            ui.label("");
+                            if !compact {
+                                ui.label("");
+                            }
                             ui.label("");
                             ui.label(
                                 RichText::new(format!("PPT {limit:.0} W"))
@@ -117,6 +133,9 @@ pub fn draw(
             });
         });
 
+        if compact {
+            return;
+        }
         ui.add_space(6.0 * sc);
 
         // Per-core bars — two equal columns, 2 rows visible, scrollable.
@@ -193,4 +212,13 @@ pub fn draw(
         ui.add_space(filler);
         spark.draw(ui, SPARK_H * sc, theme::C_ACCENT, opacity);
     })
+}
+
+/// The compact layout's temperature ring (#596): 0–100 °C, coloured like the
+/// TEMP value (`color`, from the alert thresholds); `--°C` without a reading.
+/// Shared with the GPU panel.
+pub fn temp_ring(ui: &mut Ui, temp: Option<f64>, color: egui::Color32, sc: f32) {
+    let frac = temp.map_or(0.0, |t| (t as f32 / 100.0).clamp(0.0, 1.0));
+    let label = temp.map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
+    ring::show(ui, theme::RING_SIZE * sc, frac, color, &label);
 }

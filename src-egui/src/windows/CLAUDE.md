@@ -9,7 +9,7 @@ Every setting has exactly one home:
 | A Control Center profile holds (`ProfileLook` + the service's profile) | Settings holds (applies to the whole app) |
 |---|---|
 | Power plan, fans, CPU/GPU limits, lighting | Start with Windows, model name, recordings |
-| Accent colour, opacity, panels and their order, desktop background | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
+| Accent colour, opacity, panels, their order and which are compact, desktop background | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval, the microphone mute toast |
 | — | Which microphone the mute shortcut mutes (#425) |
@@ -70,7 +70,7 @@ The Control Center adds a profile bar under the hero (`ui_kit::chip` per profile
 | A device's own scale below zero, or with a unit (angle −30…30°, 10–50 %) | `slider_range` |
 | A live level (the microphone) | `meter` — segments lit in green, smooth fall; `SLIDER_PCT_W` wide under a slider |
 | A colour from a few | `swatches` |
-| Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place) |
+| Show/hide + order of a list | `ordered_rows` (switch + arrows; a shown item returns to its natural place); `ordered_rows_with` adds a control per shown item (the panels' Full / Compact, #596) |
 | Warn/crit number | `threshold_field` |
 | Navigate | `nav_item` with an `Icon` (tinted badge, one colour per kind of setting) |
 | One of several devices of a kind (two mice, two keyboards) | `device_tabs` in `control.rs` — a row of chips over the page, shown only with more than one; the page shows the picked device (#296) |

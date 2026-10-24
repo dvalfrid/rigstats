@@ -32,7 +32,7 @@ impl RigStatsApp {
             let was_floating = self.floating.mode;
             self.floating.mode = s.floating_mode;
             self.floating.panels_locked = s.floating_panels_locked;
-            self.floating.panel_scale = s.floating_panel_scale.clamp(0.4, 1.0) as f32;
+            self.floating.panel_scale = s.floating_panel_scale.clamp(0.4, 2.0) as f32;
             self.overlay.click_through = s.overlay_click_through;
             self.overlay.enabled = s.overlay_enabled;
             let preferred_gpu = s.preferred_gpu.clone();

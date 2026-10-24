@@ -42,11 +42,16 @@ pub fn draw(
     sc: f32,
     // The active profile's power limit for this GPU (#190), shown under POWER.
     power_limit_pct: Option<i32>,
+    // The compact layout (#596): a temperature ring beside the load ring,
+    // FREQ and POWER; no hotspot/VRAM columns, no bars and no graph.
+    compact: bool,
 ) -> (Option<String>, egui::Rect) {
     let mut new_gpu: Option<String> = None;
 
     let rect = theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         let load = stats.gpu_load.unwrap_or(0.0);
         let load_frac = (load / 100.0) as f32;
         let tc = stats.gpu_temp.map_or(theme::C_UNAVAILABLE, |_| {
@@ -148,6 +153,10 @@ pub fn draw(
                 &ring_label,
             );
             ui.add_space(12.0 * sc);
+            if compact {
+                super::cpu::temp_ring(ui, stats.gpu_temp, tc, sc);
+                ui.add_space(12.0 * sc);
+            }
 
             let temp_s = stats
                 .gpu_temp
@@ -160,7 +169,8 @@ pub fn draw(
             });
             // VRAM temperature: its own column only on GPUs that report it,
             // so the grid stays as it was everywhere else.
-            let mem_t = stats.gpu_mem_temp;
+            // Compact shows neither (its temperature is the ring).
+            let mem_t = stats.gpu_mem_temp.filter(|_| !compact);
             let freq_s = fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2);
             let pwr_s = fmt_opt(stats.gpu_power, " W", 0);
             let freq_c = theme::avail_color(&stats.gpu_freq_mhz, theme::C_TEXT);
@@ -168,20 +178,31 @@ pub fn draw(
 
             // TEMP | HOT | [MEM] | FREQ | POWER
             ui.vertical(|ui| {
+                // Columns before FREQ: TEMP, HOT and MEM when it's read; none
+                // in compact.
+                let lead = if compact {
+                    0
+                } else if mem_t.is_some() {
+                    3
+                } else {
+                    2
+                };
                 egui::Grid::new("gpu_meta")
-                    .num_columns(if mem_t.is_some() { 5 } else { 4 })
+                    .num_columns(lead + 2)
                     .min_col_width(38.0 * sc)
                     .show(ui, |ui| {
-                        ui.label(
-                            RichText::new("TEMP")
-                                .size(11.0 * sc)
-                                .color(theme::avail_color(&stats.gpu_temp, th.stat_label)),
-                        );
-                        ui.label(
-                            RichText::new("HOT")
-                                .size(11.0 * sc)
-                                .color(theme::avail_color(&stats.gpu_hotspot, th.stat_label)),
-                        );
+                        if !compact {
+                            ui.label(
+                                RichText::new("TEMP")
+                                    .size(11.0 * sc)
+                                    .color(theme::avail_color(&stats.gpu_temp, th.stat_label)),
+                            );
+                            ui.label(
+                                RichText::new("HOT")
+                                    .size(11.0 * sc)
+                                    .color(theme::avail_color(&stats.gpu_hotspot, th.stat_label)),
+                            );
+                        }
                         if mem_t.is_some() {
                             ui.label(RichText::new("MEM").size(11.0 * sc).color(th.stat_label));
                         }
@@ -196,8 +217,10 @@ pub fn draw(
                                 .color(theme::avail_color(&stats.gpu_power, th.stat_label)),
                         );
                         ui.end_row();
-                        ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
-                        ui.label(RichText::new(&hotspot_s).size(14.0 * sc).color(hotspot_c));
+                        if !compact {
+                            ui.label(RichText::new(&temp_s).size(14.0 * sc).color(tc));
+                            ui.label(RichText::new(&hotspot_s).size(14.0 * sc).color(hotspot_c));
+                        }
                         if let Some(t) = mem_t {
                             ui.label(
                                 RichText::new(format!("{t:.0}°C"))
@@ -209,7 +232,8 @@ pub fn draw(
                         ui.label(RichText::new(&pwr_s).size(14.0 * sc).color(pwr_c));
                         ui.end_row();
                         if let Some(pct) = power_limit_pct {
-                            for _ in 0..if mem_t.is_some() { 4 } else { 3 } {
+                            // Under POWER: skip the columns before it and FREQ.
+                            for _ in 0..lead + 1 {
                                 ui.label("");
                             }
                             ui.label(
@@ -223,6 +247,9 @@ pub fn draw(
             });
         });
 
+        if compact {
+            return;
+        }
         ui.add_space(4.0 * sc);
 
         // ── Bar section: 2 rows (VRAM+3D, FAN+VDEC) ─────────────────────────────

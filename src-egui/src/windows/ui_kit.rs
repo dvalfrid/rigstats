@@ -727,6 +727,19 @@ pub fn ordered_rows(
     items: &[(&str, String)],
     unavailable: impl Fn(&str) -> bool,
 ) {
+    ordered_rows_with(g, list, items, unavailable, |_, _| {});
+}
+
+/// [`ordered_rows`] with one more control per shown item, left of its arrows:
+/// `extra(ui, key)` (the row lays out right to left) — the panels' Full /
+/// Compact choice (#596).
+pub fn ordered_rows_with(
+    g: &mut Group<'_>,
+    list: &mut Vec<String>,
+    items: &[(&str, String)],
+    unavailable: impl Fn(&str) -> bool,
+    mut extra: impl FnMut(&mut Ui, &str),
+) {
     let dc = g.dc;
     let order: Vec<&str> = items.iter().map(|(k, _)| *k).collect();
     let mut rows: Vec<&(&str, String)> = list
@@ -762,6 +775,7 @@ pub fn ordered_rows(
                     } else {
                         ui.add_space(22.0);
                     }
+                    extra(ui, key);
                 }
             });
         });

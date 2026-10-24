@@ -281,6 +281,7 @@ impl RigStatsApp {
                                     &app_theme,
                                     scale,
                                     self.runtime.control.active_ppt_limit(),
+                                    self.runtime.is_compact("cpu"),
                                 ),
                                 "gpu" => {
                                     let r = panels::gpu::draw(
@@ -296,6 +297,7 @@ impl RigStatsApp {
                                         self.runtime.thresholds.gpu_mem,
                                         scale,
                                         self.runtime.control.active_gpu_limit(&stats.gpu_name),
+                                        self.runtime.is_compact("gpu"),
                                     );
                                     new_pref = r.0;
                                     r.1
@@ -308,6 +310,7 @@ impl RigStatsApp {
                                     self.runtime.thresholds.ram.1,
                                     &app_theme,
                                     scale,
+                                    self.runtime.is_compact("ram"),
                                 ),
                                 "net" => panels::net::draw(
                                     ui,
@@ -317,6 +320,7 @@ impl RigStatsApp {
                                     content_opacity,
                                     &app_theme,
                                     scale,
+                                    self.runtime.is_compact("net"),
                                 ),
                                 "disk" => panels::disk::draw(
                                     ui,

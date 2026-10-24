@@ -153,6 +153,10 @@ pub struct Settings {
     /// Ordered list of visible dashboard panels.
     #[serde(default = "default_visible_panels")]
     pub visible_panels: Vec<String>,
+    /// Panels drawn in their compact layout: the key values only, no graphs
+    /// or per-core bars (#596). Empty = every panel full.
+    #[serde(default)]
+    pub compact_panels: Vec<String>,
     /// Launch the dashboard automatically when the user logs in.
     #[serde(default)]
     pub autostart_enabled: bool,
@@ -429,6 +433,7 @@ impl Default for Settings {
             dashboard_profile: default_dashboard_profile(),
             always_on_top: false,
             visible_panels: default_visible_panels(),
+            compact_panels: Vec::new(),
             autostart_enabled: false,
             last_seen_version: String::new(),
             update_channel: UpdateChannel::Stable,
@@ -501,6 +506,8 @@ pub struct ProfileLook {
     #[serde(default = "default_visible_panels")]
     pub visible_panels: Vec<String>,
     #[serde(default)]
+    pub compact_panels: Vec<String>,
+    #[serde(default)]
     pub overlay_enabled: bool,
     #[serde(default = "default_overlay_metrics")]
     pub overlay_metrics: Vec<String>,
@@ -521,6 +528,7 @@ impl ProfileLook {
             theme: s.theme.clone(),
             opacity: s.opacity,
             visible_panels: s.visible_panels.clone(),
+            compact_panels: s.compact_panels.clone(),
             overlay_enabled: s.overlay_enabled,
             overlay_metrics: s.overlay_metrics.clone(),
             overlay_columns: s.overlay_columns,
@@ -536,6 +544,7 @@ impl ProfileLook {
         s.theme = self.theme.clone();
         s.opacity = self.opacity.clamp(0.1, 1.0);
         s.visible_panels = self.visible_panels.clone();
+        s.compact_panels = self.compact_panels.clone();
         s.overlay_enabled = self.overlay_enabled;
         s.overlay_metrics = self.overlay_metrics.clone();
         s.overlay_columns = self.overlay_columns.min(6);
@@ -1088,5 +1097,28 @@ mod profile_look_tests {
         // A look written by an older version without a field gets its default.
         let look: ProfileLook = serde_json::from_str(r#"{"theme":"red"}"#).unwrap();
         assert_eq!(look.visible_panels, default_visible_panels());
+        assert!(look.compact_panels.is_empty());
+    }
+
+    /// The compact panels (#596) belong to the profile's look: switching
+    /// profiles switches them, and a profile without the field stays full.
+    #[test]
+    fn compact_panels_follow_the_profile() {
+        let mut s = Settings::default();
+        assert!(s.compact_panels.is_empty());
+        s.compact_panels = vec!["cpu".into(), "net".into()];
+        let gaming = ProfileLook::capture(&s);
+        assert_eq!(gaming.compact_panels, ["cpu", "net"]);
+
+        s.compact_panels.clear();
+        assert!(
+            gaming.apply_to(&mut s),
+            "applying a different look changes it"
+        );
+        assert_eq!(s.compact_panels, ["cpu", "net"]);
+        assert!(!gaming.apply_to(&mut s), "the same look again is no change");
+
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(r#""compactPanels":["cpu","net"]"#), "{json}");
     }
 }

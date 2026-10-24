@@ -114,6 +114,7 @@ fn draw_dual(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // like the other panels: the frame's inputs
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -122,9 +123,13 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#596): up/down and the ping, no graph.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
 
         // Title + interface subtitle (mirrors GPU/CPU model name pattern)
         ui.label(
@@ -238,6 +243,9 @@ pub fn draw(
             );
         });
 
+        if compact {
+            return;
+        }
         // Push sparkline to bottom using cursor tracking.
         let cursor_y = ui.cursor().top();
         let filler =
