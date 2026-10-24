@@ -22,10 +22,62 @@ that are publicly documented, never guesses.
 - **USBPcap**, which lets Wireshark see USB:
   <https://github.com/desowin/usbpcap/releases>. Get the newest
   `USBPcapSetup-….exe`.
-- Your device's **vendor id**, a four-digit hex number. RIGStats shows it in a
-  diagnostics file: **Status → Collect diagnostics**, then in the ZIP open
-  `lighting-devices.json` and look under `hid_scan` for your device's
-  `vendor_id`. Or ask us in your issue; we'll tell you.
+- Your device's **vendor id**, a four-digit hex number such as `0DB0`. See
+  [Find your device's vendor id](#find-your-devices-vendor-id) below, or ask us
+  in your issue; we'll tell you.
+
+## Find your device's vendor id
+
+Every USB device reports two four-digit hex numbers: a **vendor id** (who made
+the chip it uses) and a **product id** (which model). The vendor id is what the
+filter in step 4 needs.
+
+**On your own PC (most reliable):**
+
+1. Right-click Start → **Device Manager**.
+2. Open **Human Interface Devices** (or **Keyboards**, **Mice and other pointing
+   devices**, **Sound, video and game controllers**) and double-click your
+   device. Many entries are called *USB Input Device* or *HID-compliant
+   device*; try the ones that appear and disappear when you unplug it.
+3. **Details** tab → *Property* → **Hardware Ids**. A line like
+   `HID\VID_0DB0&PID_0076` means vendor id **`0DB0`** and product id `0076`.
+
+**Or from RIGStats:** **Status → Collect diagnostics**, then in the ZIP open
+`lighting-devices.json`. Under `hid_scan`, every USB device is listed with its
+`vendor_id`, `product_id` and name.
+
+**Common brands**, from the public [USB ID list](http://www.linux-usb.org/usb.ids)
+(version 2026.06.26). Search this page with Ctrl+F:
+
+| Brand | Vendor id |
+|---|---|
+| ASUS / ROG | `0B05` |
+| Corsair | `1B1C` |
+| Creative | `041E` |
+| Gigabyte | `0414` |
+| HP (also newer HyperX) | `03F0` |
+| Kingston (older HyperX) | `0951` |
+| Logitech | `046D` |
+| Mad Catz | `0738` |
+| MSI | `0DB0`, `1462` |
+| NZXT | `1E71` |
+| Razer | `1532` |
+| Roccat | `1E7D` |
+| Sennheiser | `1377` |
+| SteelSeries | `1038` |
+| Thermaltake | `264A` |
+| Turtle Beach | `10F5` |
+| Cooler Master | `2516` |
+| ASRock | `1849` |
+| Elgato | `0FD9` |
+| Sharkoon | `1EA7` |
+
+**A device can use its chip maker's id instead of its brand's.** For example:
+- RGB controllers built on ITE chips report `048D` (ITE). Many motherboards' RGB controllers are these.
+- Many keyboards report `04D9` (Holtek) or `0C45` (SONiX / Microdia).
+
+Your own PC (above) always shows the real one. To look an id up, search
+[DeviceHunt](https://devicehunt.com/) or the [USB ID list](http://www.linux-usb.org/usb.ids).
 
 ## 1. Install
 
