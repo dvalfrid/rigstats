@@ -405,18 +405,21 @@ impl RigStatsApp {
 
                             // ── Drag zone: top 24 px of the panel inner area ──
                             // inner_margin top = 8 px; title row is ~20 px tall,
-                            // so top+24 covers the title row comfortably.
+                            // so top+24 covers the title row comfortably. All
+                            // of it × the panel scale, like the panel itself —
+                            // unscaled, at 170 % the zone was little more than
+                            // the top margin and hard to find.
                             let drag_zone = egui::Rect::from_min_max(
                                 panel_rect.min,
-                                egui::pos2(panel_rect.right(), panel_rect.top() + 24.0),
+                                egui::pos2(panel_rect.right(), panel_rect.top() + 24.0 * scale),
                             );
                             // Padlock hit area: right 20 px of the drag zone.
-                            let padlock_cx = drag_zone.right() - 14.0;
+                            let padlock_cx = drag_zone.right() - 14.0 * scale;
                             let padlock_cy = drag_zone.center().y;
                             let padlock_center = egui::pos2(padlock_cx, padlock_cy);
                             let padlock_hit = egui::Rect::from_center_size(
                                 padlock_center,
-                                egui::Vec2::new(22.0, drag_zone.height()),
+                                egui::Vec2::new(22.0 * scale, drag_zone.height()),
                             );
 
                             let in_drag_zone =
@@ -472,8 +475,8 @@ impl RigStatsApp {
                                 let cx = drag_zone.center().x;
                                 for i in [-5.0f32, 0.0, 5.0] {
                                     painter.circle_filled(
-                                        egui::pos2(cx + i, cy),
-                                        1.5,
+                                        egui::pos2(cx + i * scale, cy),
+                                        1.5 * scale,
                                         egui::Color32::from_gray(160),
                                     );
                                 }
