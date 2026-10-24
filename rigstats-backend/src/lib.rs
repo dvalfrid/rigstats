@@ -11,5 +11,6 @@ pub mod pipe_server;
 pub mod process_list;
 pub mod profile_rules;
 pub mod settings;
+pub mod shortcut;
 pub mod stats;
 pub mod wallpaper_engine;

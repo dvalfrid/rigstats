@@ -44,11 +44,11 @@ struct RigStatsApp {
     runtime: DashboardRuntime,
     receiver: mpsc::Receiver<PollStats>,
     tray_rx: mpsc::Receiver<TrayCmd>,
-    /// Fires on the fixed global hotkeys (see `hotkey.rs`): Ctrl+Alt+O to
-    /// show/hide the overlay (same as the tray's "Toggle Overlay Mode" row),
-    /// Ctrl+Alt+P to cycle the Control Center profile, Ctrl+Alt+F1…F9 to
-    /// switch straight to one (#456), Ctrl+Alt+M to mute
-    /// or unmute the microphone (#425).
+    /// Fires on the global hotkeys (see `hotkey.rs`; chords from Settings →
+    /// Shortcuts, #569 — Ctrl+Alt+… by default): O to show/hide the overlay
+    /// (same as the tray's "Toggle Overlay Mode" row), P to cycle the Control
+    /// Center profile, F1…F9 to switch straight to one (#456), M to mute or
+    /// unmute the microphone (#425).
     hotkey_rx: mpsc::Receiver<hotkey::HotkeyEvent>,
     /// The microphone's mute as the last telemetry tick saw it (#425,
     /// `PollStats::microphone`), so the tray row and hover card follow a
@@ -507,7 +507,7 @@ impl RigStatsApp {
             .try_send(control::ControlCmd::ApplyProfile(id));
     }
 
-    /// Ctrl+Alt+P: advances to the next profile in `runtime.control.profiles`
+    /// The next-profile shortcut (Ctrl+Alt+P by default): advances to the next profile in `runtime.control.profiles`
     /// (wrapping), applies it, and fires a toast — same notification
     /// mechanism as temperature alerts (`check_alerts`) — so the switch is
     /// visible even when the dashboard itself isn't (floating/overlay/
@@ -531,7 +531,7 @@ impl RigStatsApp {
         });
     }
 
-    /// Ctrl+Alt+F1…F9: the profile at that position in the profile bar
+    /// The profile shortcuts (Ctrl+Alt+F1…F9 by default): the profile at that position in the profile bar
     /// (#456), with the same toast as cycling; nothing when there is no such
     /// profile or it is already active.
     fn switch_to_profile(&mut self, index: usize) {
@@ -560,7 +560,7 @@ impl RigStatsApp {
         }
     }
 
-    /// Ctrl+Alt+M and the tray's "Mute/Unmute Microphone" row: flips the
+    /// The microphone shortcut (Ctrl+Alt+M by default) and the tray's "Mute/Unmute Microphone" row: flips the
     /// chosen microphone's mute in Windows (Settings → General; by default
     /// the one Windows uses for calls) and — unless turned off under
     /// Notifications — says which way it went in a toast, since a hotkey
@@ -1329,13 +1329,18 @@ fn main() {
             let gpu_names_rx = app::background::spawn_gpu_name_detection(&dir, &cc.egui_ctx);
             let tray = build_tray(false, overlay_locked_init, gpu_names_rx);
 
-            // Global hotkey (fixed Ctrl+Alt+O in v1) to toggle overlay
-            // click-through without leaving the game. The listener thread
-            // outlives this closure (runs for the process lifetime), so the
-            // JoinHandle is intentionally dropped rather than joined.
+            // Global hotkeys (Settings → Shortcuts, #569). The listener
+            // thread outlives this closure (runs for the process lifetime),
+            // so the JoinHandle is intentionally dropped rather than joined;
+            // `apply_reloaded_settings` hands it changed chords.
             let (hotkey_tx, hotkey_rx) = mpsc::channel::<hotkey::HotkeyEvent>();
             #[cfg(windows)]
-            let _ = rigstats_egui::hotkey::spawn(dir.clone(), hotkey_tx, cc.egui_ctx.clone());
+            let _ = rigstats_egui::hotkey::spawn(
+                dir.clone(),
+                current_settings_shared.lock_safe().shortcuts.clone(),
+                hotkey_tx,
+                cc.egui_ctx.clone(),
+            );
 
             let (control_cmd_tx, control_rx) = app::background::spawn_control_task(&runtime, &dir);
 

@@ -19,7 +19,7 @@ RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple p
 It's a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView.
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
-- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O**.
+- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts**).
 - **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), and the settings of ROG headsets (sidetone, noise reduction) and ROG mice (DPI, polling rate, button bindings, energy — and which of the mouse's own profiles each profile uses), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
@@ -233,7 +233,8 @@ browse and chart past sessions.
 Hardware control per profile — **Silent, Balanced, Gaming, Eco** and your own
 — switched from the tray, the header chip, **Ctrl+Alt+P** (the next one) or
 **Ctrl+Alt+F1**…**F9** (the first … ninth, in the profile bar's order — bind a
-macro key to one in your keyboard's software). Open it from the
+macro key to one in your keyboard's software; both can be changed under
+**Settings → Shortcuts**). Open it from the
 tray (**Control Center…**). Everything runs inside the `rigstats-sensor`
 service, so fan curves keep working with the app closed and after a reboot.
 Each tab appears only when this PC's hardware supports it.

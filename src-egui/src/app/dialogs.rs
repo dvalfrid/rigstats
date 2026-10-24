@@ -179,6 +179,11 @@ impl RigStatsApp {
                 &focus,
                 visible,
             );
+        } else {
+            // However Settings closed, never leave the shortcuts held off
+            // for a capture it was waiting for (#569). A no-op otherwise.
+            #[cfg(windows)]
+            rigstats_egui::hotkey::set_paused(false);
         }
 
         if self.dialogs.about_open.load(Ordering::Relaxed) {
@@ -289,6 +294,7 @@ impl RigStatsApp {
             let wallpaper_active = self.wallpaper.is_active();
             let control_state = self.runtime.control.clone();
             let cmd_tx = self.control_cmd_tx.clone();
+            let requests = self.dialogs.open_requests.clone();
             let visible = self.dialogs.dialog_reveal.visible("status");
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
@@ -320,6 +326,7 @@ impl RigStatsApp {
                         &cmd_tx,
                         &hardware_problems,
                         &dc,
+                        &requests,
                     );
                 },
             );

@@ -875,14 +875,15 @@ pub fn overlay_page(
     let Some(look) = editor.look.as_mut() else {
         return;
     };
+    // Its shortcut is app-wide, set in Settings → Shortcuts (#569).
+    let shortcut = crate::hotkey::current().overlay.map_or_else(
+        || "Its shortcut is off (Settings → Shortcuts)".to_owned(),
+        |chord| format!("{chord} shows or hides it at any time"),
+    );
     ui_kit::group(ui, dc, None, None, |g| {
-        g.row(
-            "Show overlay",
-            Some("Ctrl+Alt+O shows or hides it at any time"),
-            |ui| {
-                ui_kit::toggle(ui, dc, &mut look.overlay_enabled);
-            },
-        );
+        g.row("Show overlay", Some(&shortcut), |ui| {
+            ui_kit::toggle(ui, dc, &mut look.overlay_enabled);
+        });
         g.row("Layout", None, |ui| {
             ui_kit::dropdown(
                 ui,

@@ -775,6 +775,8 @@ pub enum ProblemActionKind {
     /// App-only: open Windows' notification settings (#449). A fixed target,
     /// so nothing from the service can open another page.
     OpenNotificationSettings,
+    /// App-only: open Settings → Shortcuts (#569).
+    OpenShortcutSettings,
     /// A kind this app doesn't know (a newer service): not shown.
     #[serde(other)]
     Unknown,

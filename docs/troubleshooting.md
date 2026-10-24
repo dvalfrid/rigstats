@@ -213,16 +213,18 @@ Panels**) and the card over the tray icon show the battery of wireless devices
 
 ## A Shortcut Doesn't Work
 
-RIGStats' shortcuts are **Ctrl+Alt+O** (overlay), **Ctrl+Alt+P** (next
-profile), **Ctrl+Alt+F1**…**F9** (a profile) and **Ctrl+Alt+M** (microphone).
-Windows gives each shortcut to the program that asked first, so another program
-can hold one. Since 1.51, **Status → Problems** says which one is taken
-("A shortcut is used by another program"). The rest keep working.
+RIGStats' shortcuts are, unless you changed them, **Ctrl+Alt+O** (overlay),
+**Ctrl+Alt+P** (next profile), **Ctrl+Alt+F1**…**F9** (a profile) and
+**Ctrl+Alt+M** (microphone). Windows gives each shortcut to the program that
+asked first, so another program can hold one. **Status → Problems** says which
+one is taken ("A shortcut is used by another program"), and so does its row
+under **Settings → Shortcuts**. The rest keep working.
 
-**What to do:** change or turn off the shortcut in the other program, then
-restart RIGStats. A common one: **NVIDIA App** uses Ctrl+Alt+M for its own
-microphone switch. RIGStats' shortcuts can't be changed yet (#569); the tray
-menu does the same things.
+**What to do:** under **Settings → Shortcuts**, choose **New shortcut…** for
+that row and press other keys (two of Ctrl, Alt and Shift with a letter, digit
+or F-key), or turn it **Off**. It works at once. Or change it in the other
+program and restart RIGStats. A common one: **NVIDIA App** uses Ctrl+Alt+M for
+its own microphone switch. The tray menu does the same things.
 
 ## Notifications Don't Show
 

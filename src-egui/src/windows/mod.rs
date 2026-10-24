@@ -60,6 +60,9 @@ pub fn action_effect(action: &ProblemAction) -> ActionEffect {
         // The debug log is in Status.
         ProblemActionKind::OpenLog => ActionEffect::Open(OpenRequest::Status),
         ProblemActionKind::OpenNotificationSettings => ActionEffect::OpenNotificationSettings,
+        ProblemActionKind::OpenShortcutSettings => {
+            ActionEffect::Open(OpenRequest::Settings(settings::Page::Shortcuts))
+        }
         // Only the window showing the problem knows what to try again.
         ProblemActionKind::Retry | ProblemActionKind::Unknown => ActionEffect::None,
     }
@@ -110,6 +113,7 @@ fn parse_open_request(value: &str) -> Option<OpenRequest> {
             "display" => settings::Page::Display,
             "overlay" => settings::Page::Overlay,
             "notifications" => settings::Page::Notifications,
+            "shortcuts" => settings::Page::Shortcuts,
             _ => settings::Page::General,
         })),
         "control" => Some(OpenRequest::Control(match page {
@@ -201,6 +205,10 @@ mod tests {
                 Some("file:///C:/x.exe")
             )),
             ActionEffect::OpenNotificationSettings
+        );
+        assert_eq!(
+            action_effect(&action(K::OpenShortcutSettings, None)),
+            ActionEffect::Open(OpenRequest::Settings(settings::Page::Shortcuts))
         );
         assert_eq!(action_effect(&action(K::Retry, None)), ActionEffect::None);
         assert_eq!(action_effect(&action(K::Unknown, None)), ActionEffect::None);

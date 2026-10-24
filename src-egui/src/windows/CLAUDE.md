@@ -12,7 +12,8 @@ Every setting has exactly one home:
 | Accent colour, opacity, panels and their order, desktop background | Display profile, window layer, floating, fill screen, displayed GPU, PSU |
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval, the microphone mute toast |
-| — | Which microphone Ctrl+Alt+M mutes (#425) |
+| — | Which microphone the mute shortcut mutes (#425) |
+| — | The global shortcuts (#569) — Settings → Shortcuts |
 | — | A device's own settings (headset sidetone, noise reduction, #428; headset equalizer bands, #483; mouse DPI, polling, energy …, #431; keyboard sleep, power saving, low-battery level, #460) — kept in the device, edited on the Control Center's Headset / Mouse / Keyboard page, sent at once |
 | Which onboard mouse profile a profile uses (#431) | — |
 | Which onboard keyboard profile a profile uses (#458) | — |
