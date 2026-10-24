@@ -41,17 +41,19 @@ pub fn draw(
                 .color(theme::C_PANEL_TITLE)
                 .size(theme::FONT_PANEL_TITLE * sc),
         );
-        if compact {
-            compact_body(ui, stats, frac, used_gb, free_gb, warn, crit, th, sc);
-            return;
-        }
-        // Spec  (e.g. "DDR5 6000 MT/s (2 DIMMs)")
+        // Spec  (e.g. "DDR5 6000 MT/s (2 DIMMs)") — compact too, where it is
+        // the line under the title like the CPU's and GPU's model names, so
+        // the rings line up beside them.
         if !stats.ram_spec.is_empty() {
             ui.label(
                 RichText::new(&stats.ram_spec)
                     .size(11.0 * sc)
                     .color(th.text_muted),
             );
+        }
+        if compact {
+            compact_body(ui, stats, frac, used_gb, free_gb, warn, crit, th, sc);
+            return;
         }
         // Details  (e.g. "2x16 GB | Team Group Inc | UD5-6000")
         if !stats.ram_details.is_empty() {

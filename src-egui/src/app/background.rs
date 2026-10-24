@@ -80,7 +80,6 @@ struct TrayMenuIds {
     docs: MenuId,
     lamp: MenuId,
     mic: MenuId,
-    floating: MenuId,
     recording: MenuId,
     overlay: MenuId,
     overlay_lock: MenuId,
@@ -99,7 +98,6 @@ impl TrayMenuIds {
             docs: tray.docs_id.clone(),
             lamp: tray.lamp_id.clone(),
             mic: tray.mic_id.clone(),
-            floating: tray.floating_id.clone(),
             recording: tray.recording_id.clone(),
             overlay: tray.overlay_id.clone(),
             overlay_lock: tray.overlay_lock_id.clone(),
@@ -109,9 +107,7 @@ impl TrayMenuIds {
     /// The command for a clicked menu item — `None` for Quit (handled on
     /// the tray thread itself) and for ids that aren't commands.
     fn command(&self, id: &MenuId) -> Option<TrayCmd> {
-        if *id == self.floating {
-            Some(TrayCmd::ToggleFloating)
-        } else if *id == self.recording {
+        if *id == self.recording {
             Some(TrayCmd::ToggleRecording)
         } else if *id == self.overlay {
             Some(TrayCmd::ToggleOverlay)
@@ -398,7 +394,6 @@ mod tests {
             docs: id("docs"),
             lamp: id("lamp"),
             mic: id("mic"),
-            floating: id("floating"),
             recording: id("recording"),
             overlay: id("overlay"),
             overlay_lock: id("overlay_lock"),
@@ -418,7 +413,6 @@ mod tests {
             ("docs", TrayCmd::OpenDocs),
             ("lamp", TrayCmd::ToggleLamp),
             ("mic", TrayCmd::ToggleMicMute),
-            ("floating", TrayCmd::ToggleFloating),
             ("recording", TrayCmd::ToggleRecording),
             ("overlay", TrayCmd::ToggleOverlay),
             ("overlay_lock", TrayCmd::ToggleOverlayLock),

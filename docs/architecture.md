@@ -261,7 +261,7 @@ rig-dashboard/
 | `gpu_process.rs` | `GpuEngineQuery` — persistent PDH query on `\GPU Engine(*)\Utilization Percentage` (Task Manager's data source); `adapter_luid_map()` maps each sample's LUID to a physical GPU via DXGI. Vendor-neutral, unelevated. Pure `parse_instance`/`aggregate` are unit-tested; the Win32 FFI carries a scoped `#![allow(unsafe_code)]` |
 | `gpu_guard.rs` | `install_gpu_loss_guard` — wgpu `on_uncaptured_error`/`set_device_lost_callback` handlers that flag a fatal device error instead of letting wgpu panic the process. `render_power_preference` — the adapter choice for every wgpu setup: `LowPower` when the system has a battery (`GetSystemPowerStatus`), else egui-wgpu's `HighPerformance`; `WGPU_POWER_PREF` overrides. On a hybrid laptop this keeps the app off the dGPU, so Eco mode — G-Helper/Armoury Crate kill every app with a dGPU context before powering it off — can't terminate it, and the dGPU can sleep on battery. `log_render_adapter` logs the result (`gpu: render adapter=…`). The preference alone isn't enough: stock egui-wgpu keeps every enumerated adapter — each with its own D3D12 device — for the app's lifetime, so `third_party/egui-wgpu` (via `[patch.crates-io]`, see its `RIGSTATS-PATCH.md`) drops that list after the adapter is chosen |
 | `overlay.rs` | `ALL_OVERLAY_METRICS` registry (key/label/unit/`extract` fn/`color` fn) and `draw_overlay` — the compact column renderer (label left, value right, dividers) for the overlay add-on |
-| `hotkey.rs` | Global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on a dedicated thread). The chords come from `Settings.shortcuts` (#569, `rigstats_backend::shortcut`); `apply` re-registers them when Settings change, without a restart; `set_paused` holds them off while Settings → Shortcuts waits for new keys; `taken()` lists the chords another program holds (Status → Problems and the row in Settings, #568); `alt_gr_char` asks Windows whether AltGr types a character with a chord on the installed layouts, which is refused. The tray menu's desk lamp, Control Center, Settings, Status, recording, overlay lock and floating panels can have one too (#594, off by default; run through `RigStatsApp::run_tray_cmd`, the same code as the tray). Defaults, unchanged from before: `Ctrl+Alt+O` shows/hides the overlay, `Ctrl+Alt+P` cycles the profile, `Ctrl+Alt+F1`…`F9` switch to the profile at that place in the profile bar (#456; F-keys because Ctrl+Alt is AltGr, which types characters with digits), `Ctrl+Alt+M` mutes/unmutes the microphone (#425) |
+| `hotkey.rs` | Global hotkey listener (`RegisterHotKey`/`WM_HOTKEY` on a dedicated thread). The chords come from `Settings.shortcuts` (#569, `rigstats_backend::shortcut`); `apply` re-registers them when Settings change, without a restart; `set_paused` holds them off while Settings → Shortcuts waits for new keys; `taken()` lists the chords another program holds (Status → Problems and the row in Settings, #568); `alt_gr_char` asks Windows whether AltGr types a character with a chord on the installed layouts, which is refused. The tray menu's desk lamp, Control Center, Settings, Status, recording and overlay lock can have one too (#594, off by default; run through `RigStatsApp::run_tray_cmd`, the same code as the tray). Defaults, unchanged from before: `Ctrl+Alt+O` shows/hides the overlay, `Ctrl+Alt+P` cycles the profile, `Ctrl+Alt+F1`…`F9` switch to the profile at that place in the profile bar (#456; F-keys because Ctrl+Alt is AltGr, which types characters with digits), `Ctrl+Alt+M` mutes/unmutes the microphone (#425) |
 | `tray.rs` | System tray icon + menu, `TrayCmd` channel, `load_app_icon`, `panel_label`/`panel_initial_h`. `GpuMenu`: the "GPU ▸" submenu (Automatic + one check row per adapter), filled in once background adapter detection reports back; rows use deterministic ids decoded by `gpu_choice_from_menu_id`. "Toggle Desk Lamp" (`TrayCmd::ToggleLamp` → `ControlCmd::ToggleLamp`) is inserted into the menu only while a lighting device with a lamp is connected (`set_lamp_available`, from `ControlState::has_lamp`) |
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
 | `lock_ext.rs` | `LockSafe` trait — `.lock_safe()` recovers a poisoned `Mutex` instead of panicking; used throughout `windows/*.rs` |
@@ -451,7 +451,9 @@ are `"cpu"`, `"gpu"`, `"ram"`, `"disk"`, `"cpu_load"`, `"gpu_load"`,
 
 Dashboard look per Control Center profile (#305): a `ProfileLook` is the part
 of a profile that is the app's own — accent colour (`theme`), opacity,
-visible panels and their order, which of them are compact (#596), overlay shown, overlay metrics and columns,
+visible panels and their order, which of them are compact (#596), floating
+or not and the floating panels' size (#599: `Option`s, `None` in a look saved
+before — applying it leaves the current value), overlay shown, overlay metrics and columns,
 alert thresholds, desktop background (#306). A profile always holds all of it. The current settings *are*
 the active profile's look; `profile_looks` keeps the others by profile id and
 `look_profile` names the profile the current look belongs to.
@@ -565,9 +567,11 @@ never written back.
 Floating panel layout adds four fields — all `#[serde(default)]`, no migration
 needed:
 
-- **`floating_mode: bool`** — whether the app starts in floating mode.
+- **`floating_mode: bool`** — whether the app runs floating panels; part of
+  the profile's look (#599), set in Control Center → Dashboard; switching profile
+  switches it. The tray's Toggle Floating Mode and its shortcut are gone (#599).
 - **`floating_panel_scale: f64`** — floating panel size multiplier in the
-  range `0.4..=1.0` (sanitized in command handlers before persistence).
+  range `0.4..=2.0` (clamped where it is read); part of the profile's look (#599).
 - **`floating_panels_locked: bool`** — when true, drag handles are disabled on
   all panel windows. The per-panel padlock toggles a shared `floating_lock_arc`
   (`AtomicBool`); each frame's `update()` compares it against
@@ -577,7 +581,22 @@ needed:
   (`x: i32, y: i32`) per panel key. Positions are tracked directly in
   `render_floating_panels` (`src-egui/src/main.rs`) from each panel viewport's
   `outer_rect` and persisted to `rigstats-settings.json`; no JavaScript or
-  debounce is involved.
+  debounce is involved. They are the active profile's (#599).
+- **`profile_panel_layouts: HashMap<String, HashMap<String, PanelLayout>>`** —
+  the other Control Center profiles' panel positions, keyed by profile id.
+  `switch_profile_look` stores `panel_layouts` in the outgoing profile and lays
+  the incoming one's over it (a panel it has no place for stays put); the app
+  writes a drag not yet flushed first (`write_floating_positions`) and moves the
+  panels after (`load_floating_positions`, which clears `panels_positioned`).
+  A panel being placed gets `ViewportCommand::OuterPosition` itself: the
+  builder's `with_position` only sends one when the position differs from the
+  last one the builder sent, and a drag since then doesn't count, so a switch
+  back to that place left the panel where it was dragged and the tracking stored
+  that in the profile (seen live: Silent took Eco's places). Each switch logs
+  `floating: profile A → B: leaving with …` and `floating: profile loaded … —
+  moving the panels` / `no move` in `rigstats-debug.log`.
+  Kept beside `ProfileLook`, not in it, so the Control Center's preview and
+  Revert never move a panel.
 
 Multi-GPU pinning adds one field:
 
@@ -644,7 +663,8 @@ separate `windows.rs` module:
 - A panel's position is only set on first creation (`with_position`); after
   that the OS owns it via drag, and the viewport's `outer_rect` is read back
   each frame to update `floating_positions` (persisted to
-  `settings.panel_layouts` on Save). Panels without a saved position stagger
+  `settings.panel_layouts` when it changes). A profile switch re-sends each
+  panel's position once (#599). Panels without a saved position stagger
   diagonally from `[100.0, 80.0]`.
 - Each panel draws its own drag zone (top 24 px) and padlock hit-rect inline;
   dragging is triggered by a raw `just_pressed` check in that zone rather than
@@ -749,7 +769,7 @@ separate validation function; an unrecognized key is simply ignored by the
 renderer's key→panel match. `Settings.compact_panels` (#596, part of the profile's
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
-with USED/FREE, Network without its graph — no graphs or per-core bars, and no
+with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network without its graph — no graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Which panels
@@ -760,8 +780,16 @@ card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead
 of 450, so it can be scaled up to read without growing as wide as a full one;
 the CPU/GPU logo is 30 px tall instead of 38 (`panels::logo_size`), as tall
 as the title and model name. The model name is capped at 44 characters, so it
-ends before the logo at every scale (`panels::tests`). The landscape grid
-keeps its uniform cells, so a compact panel there is shorter than its cell.
+ends before the logo at every scale (`panels::tests`). In the landscape grid a
+row of compact panels only is as tall as its tallest panel, not a full
+panel's 224 px × scale: `theme::panel_frame` leaves each panel's own height
+(`panel_natural_id`), the grid keeps it per panel and sizes the row from
+last frame's values, and asks every panel in the row to stretch to it
+(`panel_stretch_id`) so the frames end in line. Outside Fill Screen the window
+fits the shorter strip; with Fill Screen (and in the wallpaper) the row is
+centred in its cell. A row with a full panel is as before (`dashboard::tests`).
+The GPU title row is as tall as its text (`interact_size.y = 0`), so its rings
+line up with the CPU's beside it.
 
 ---
 
@@ -1034,7 +1062,7 @@ it, not the app. No drift.
 
 - **Stats delivery** — the single egui window receives `StatsPayload` from the poll thread via `mpsc::Receiver` and passes data to each panel's `draw()` call. No separate broadcast needed.
 - **Drag** — panels in floating mode render a drag-zone overlay (three dots + padlock icon) painted directly onto the panel rect via `ui.painter()`. A click on the padlock toggles lock state via an egui temp-data key `"toggle_lock"`.
-- **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key) and written to `rigstats-settings.json` on every `Save` in Settings.
+- **Position persistence** — floating panel positions are stored in `settings.panel_layouts` (keyed by panel key), per Control Center profile (`profile_panel_layouts`, #599), and written to `rigstats-settings.json` when a panel moves.
 
 ### Desktop wallpaper mode (WorkerW)
 
@@ -1043,6 +1071,6 @@ it, not the app. No drift.
 - **Host** (`bin/wallpaper.rs`) — a minimal eframe app whose window fits the dashboard rather than filling the monitor (that would break panel proportions): **landscape** uses the fixed profile size (the adaptive grid fills it), **portrait** fits the panel-stack content height (`compute_window_height` at creation, then a per-frame fit to `ui.min_rect()` exactly as the main app does in normal mode — otherwise the leftover of the full profile height renders as a black gap below the stack). Centred on the matching monitor, so the wallpaper shows around it. Renders the shared `DashboardView`. On the first frame it caches its HWND (via `FindWindow`, before reparenting — afterwards the window is a WorkerW *child* and `FindWindow` can no longer find it) and attaches. It re-attaches each tick if `is_attached` reports it was detached, and exits if its parent PID (`RIGSTATS_PARENT_PID`) disappears so it never orphans.
 - **Positioning** — the host window is placed at `Settings::wallpaper_position` (absolute screen coords, so it encodes both *which* monitor and *where*) when that point is still on a connected monitor, else centred on the profile-matching monitor. The supervisor captures that position from the main window's last on-screen position when **entering** wallpaper mode and persists it before spawning the host, so the workflow is: position the window in a normal layer, then switch to wallpaper. Leaving wallpaper mode restores the window to that spot. Verified to coexist with Wallpaper Engine (WE paints the wallpaper into the WorkerW; our child window sits above it).
 - **WorkerW discovery** (`win32_wallpaper::find_wallpaper_workerw`) — Windows 11 keeps the wallpaper `WorkerW` as a *child* of `Progman` (checked first, no spawn); older Windows 10 needs `SendMessageTimeout(Progman, 0x052C)` then the top-level `WorkerW` sibling after Progman; a legacy `SHELLDLL_DefView`-sibling enumeration is the final fallback. Reparented coordinates are translated to WorkerW-client space so the window stays on the correct monitor.
-- **v1 is display-only** — no mouse hook; drag/padlock are N/A, and the displayed GPU is chosen from the tray "GPU ▸" submenu or Settings → Display → Graphics card shown (the host picks the change up on its next settings refresh). The host binary is also the artifact a future Wallpaper Engine "Application wallpaper" integration (ROADMAP, v3.0) will reuse. While `window_layer == "wallpaper"` is selected, Settings disables the controls that have no effect in this mode — Floating Mode and Fill Screen + Alignment — with an explanatory note. Opacity is supported (see below).
+- **v1 is display-only** — no mouse hook; drag/padlock are N/A, and the displayed GPU is chosen from the tray "GPU ▸" submenu or Settings → Display → Graphics card shown (the host picks the change up on its next settings refresh). The host binary is also the artifact a future Wallpaper Engine "Application wallpaper" integration (ROADMAP, v3.0) will reuse. While `window_layer == "wallpaper"` is selected, Settings disables the controls that have no effect in this mode — Fill Screen + Alignment — with an explanatory note; when the active profile uses floating panels, the Window layer row says they show instead (#599). Opacity is supported (see below).
 - **Settings apply on Save, not live preview** — the host is a separate process that reads `rigstats-settings.json` from disk (~1 Hz), while Settings live-preview only pushes the draft to the main app's in-memory `current_settings`. So theme/panel/threshold changes appear on **Save**, not while dragging. (A future enhancement could persist the draft to disk during preview in wallpaper mode.) A **display-profile** change on Save is applied by the host **self-exiting** when its `refresh_settings` sees the disk `dashboard_profile` differ from the one it started with; the supervisor's respawn-if-exited path then relaunches a fresh host for the new profile (new size/orientation/monitor), so a profile change in wallpaper mode takes effect on Save with a brief ~1 s relaunch flicker.
 - **Opacity in wallpaper mode is per-pixel, via DirectComposition, not `WS_EX_LAYERED`** — `WS_EX_LAYERED`/`LWA_ALPHA` (used for window opacity in the normal/behind modes) cannot be applied to a WorkerW *child* window (`SetParent` strips the layered ex-style; setting it on a child is rejected — verified). Instead, the host forces the DX12 backend with `wgpu::Dx12SwapchainKind::DxgiFromVisual` (`NativeOptions.wgpu_options` in `bin/wallpaper.rs`), which makes wgpu create a DirectComposition-backed, per-pixel-alpha swap chain from the window's HWND automatically, and applies `WS_EX_NOREDIRECTIONBITMAP` after window creation (`win_opacity::set_no_redirection_bitmap`) — required for the swap chain to actually composite over the wallpaper instead of being masked by DWM's own opaque redirection bitmap. `clear_color()` and `theme::panel_frame()` premultiply the dashboard's fill/border colors by the opacity setting to match the swap chain's `PreMultiplied` composite alpha mode. Verified empirically (issue #131) that `WS_EX_NOREDIRECTIONBITMAP` can be applied *after* the wgpu surface already exists — despite Microsoft's docs suggesting creation-time-only — so no eframe replacement was needed.

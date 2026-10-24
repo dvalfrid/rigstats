@@ -2,7 +2,7 @@
 
 use crate::{draw_padlock, take_fan_curve_request, BehindEnforce, RigStatsApp};
 use eframe::egui;
-use rigstats_backend::settings;
+use rigstats_backend::{debug, settings};
 use rigstats_egui::geometry::{floating_drag_zone, floating_panel_w, guard_panel_position};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::tray::{panel_initial_h, panel_label};
@@ -139,6 +139,20 @@ impl RigStatsApp {
                 vp_builder,
                 |child_ui, _class| {
                     let ctx = &child_ui.ctx().clone();
+
+                    // A panel told where to be (created, or moved by a
+                    // profile switch, #599) gets the command itself: the
+                    // builder's `with_position` only sends one when the
+                    // position differs from the last one the builder sent —
+                    // a drag since then doesn't count — so a switch back to
+                    // that same place left the panel where it was dragged,
+                    // and the tracking below stored that in the profile.
+                    if skip_pos_tracking {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(egui::pos2(
+                            init_pos[0],
+                            init_pos[1],
+                        )));
+                    }
 
                     // ── Track window position for persistence ─────────────────
                     if !skip_pos_tracking {
@@ -563,8 +577,16 @@ impl RigStatsApp {
 
     /// Flush `floating_positions` → `panel_layouts` in settings and persist to disk.
     pub(crate) fn persist_floating_positions(&self) {
-        let positions = self.floating.positions.lock_safe();
         let mut s = self.current_settings.lock_safe();
+        self.write_floating_positions(&mut s);
+        self.persist_settings_logged(&s);
+    }
+
+    /// The panels' positions as they are now → `panel_layouts`, without
+    /// persisting — also before a profile switch stores them in the
+    /// outgoing profile (#599), so a drag not yet flushed isn't lost.
+    pub(crate) fn write_floating_positions(&self, s: &mut settings::Settings) {
+        let positions = self.floating.positions.lock_safe();
         for (key, &[x, y]) in positions.iter() {
             s.panel_layouts.insert(
                 key.clone(),
@@ -574,7 +596,55 @@ impl RigStatsApp {
                 },
             );
         }
-        drop(positions);
-        self.persist_settings_logged(&s);
     }
+
+    /// Logs the positions a profile switch stores in the outgoing profile.
+    pub(crate) fn log_leaving_positions(&self, s: &settings::Settings, to: &str) {
+        debug::log_debug(
+            &self.dir,
+            &format!(
+                "floating: profile {} → {to}: leaving with {}",
+                s.look_profile.as_deref().unwrap_or("-"),
+                layouts_line(&s.panel_layouts)
+            ),
+        );
+    }
+
+    /// After a profile switch (#599): the panels move to the incoming
+    /// profile's positions. Clearing `panels_positioned` makes each one send
+    /// its position once more, as on creation.
+    pub(crate) fn load_floating_positions(&mut self, s: &settings::Settings) {
+        let new: std::collections::HashMap<String, [f32; 2]> = s
+            .panel_layouts
+            .iter()
+            .map(|(k, v)| (k.clone(), [v.x as f32, v.y as f32]))
+            .collect();
+        let mut positions = self.floating.positions.lock_safe();
+        let moved = *positions != new;
+        debug::log_debug(
+            &self.dir,
+            &format!(
+                "floating: profile loaded {} — {}",
+                layouts_line(&s.panel_layouts),
+                if moved {
+                    "moving the panels"
+                } else {
+                    "no move"
+                }
+            ),
+        );
+        if moved {
+            *positions = new;
+            self.floating.panels_positioned.clear();
+        }
+    }
+}
+
+/// The CPU, GPU, RAM and Network panels' positions, for the log (#599).
+fn layouts_line(layouts: &std::collections::HashMap<String, settings::PanelLayout>) -> String {
+    ["cpu", "gpu", "ram", "net"]
+        .iter()
+        .filter_map(|k| layouts.get(*k).map(|p| format!("{k} {},{}", p.x, p.y)))
+        .collect::<Vec<_>>()
+        .join(", ")
 }

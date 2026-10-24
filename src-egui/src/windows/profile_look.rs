@@ -368,6 +368,29 @@ pub fn dashboard_page(
             settings_win::Page::Display,
         );
     });
+    // Floating or the fixed dashboard, and the floating panels' size (#599).
+    // A look saved before they were in profiles has neither: it shows what
+    // runs now until changed.
+    ui_kit::group(ui, dc, Some("Layout"), None, |g| {
+        let mut floating = look.floating_mode.unwrap_or(false);
+        g.row(
+            "Floating panels",
+            Some("Each panel in its own window, placed anywhere"),
+            |ui| {
+                if ui_kit::toggle(ui, dc, &mut floating).clicked() {
+                    look.floating_mode = Some(floating);
+                }
+            },
+        );
+        if floating {
+            let mut scale = look.floating_panel_scale.unwrap_or(1.0);
+            g.row("Panel size", None, |ui| {
+                if ui_kit::slider_pct(ui, dc, &mut scale, 0.4..=2.0) {
+                    look.floating_panel_scale = Some(scale);
+                }
+            });
+        }
+    });
     let battery = link.battery_present.load(Ordering::Relaxed);
     let items: Vec<(&str, String)> = ALL_PANELS
         .iter()

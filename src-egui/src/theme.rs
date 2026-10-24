@@ -256,6 +256,19 @@ pub fn premul(color: Color32, opacity: f32) -> Color32 {
 /// `opacity` (0.0–1.0) is baked into all fills, borders, and decorations so
 /// the panel blends correctly over the transparent window background.
 /// Returns the outer bounding rect of the card (useful for overlay painting).
+/// Where the landscape grid asks the next `panel_frame` to stretch to this
+/// outer height, so a row of compact panels ends in line (#596). Set before a
+/// panel is drawn and removed after; absent everywhere else.
+pub fn panel_stretch_id() -> egui::Id {
+    egui::Id::unique("panel_frame_stretch")
+}
+
+/// Where `panel_frame` leaves the outer height the panel just drawn has on
+/// its own, before a stretch.
+pub fn panel_natural_id() -> egui::Id {
+    egui::Id::unique("panel_frame_natural")
+}
+
 pub fn panel_frame(
     ui: &mut Ui,
     opacity: f32,
@@ -272,9 +285,21 @@ pub fn panel_frame(
         ..Default::default()
     };
 
+    let margin = frame.total_margin().sum().y;
+    let stretch = ui.ctx().data(|d| d.get_temp::<f32>(panel_stretch_id()));
     let fr = frame.show(ui, |ui| {
         ui.set_min_width(ui.available_width());
         add_contents(ui);
+        // The panel's own height, before any stretch: the landscape grid
+        // sizes a row of compact panels to its tallest one (#596).
+        let natural = ui.min_rect().height() + margin;
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(panel_natural_id(), natural));
+        // From the frame's top: `set_min_height` counts from the cursor,
+        // which is below the content by now.
+        if let Some(h) = stretch {
+            ui.expand_to_include_y(ui.max_rect().top() + h - margin);
+        }
     });
     let rect = fr.response.rect;
     let painter = ui.painter();
