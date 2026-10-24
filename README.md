@@ -167,6 +167,16 @@ order, the overlay's metrics and the alert levels — belongs to each
 - **Window layer** — `Normal`, `Always on Top`, `Always Behind`, or **Desktop
   Wallpaper**.
 - **Floating mode** — render panels as individually draggable/lockable cards.
+- **Compact panels** — CPU, GPU, RAM and Network can each be drawn compact:
+  the key values only, no graphs or bars. The choice is per panel and per
+  Control Center profile (**Control Center → Dashboard**, Full / Compact
+  beside each panel), so they take less room on a small screen or as floating
+  cards.
+
+<p align="center">
+  <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact as floating cards: load and temperature rings with clock and power for the CPU and GPU, a usage ring with used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">
+</p>
+
 - **Fill Screen** — fill the height of the monitor the window currently sits on
   (panel proportions are preserved).
 
