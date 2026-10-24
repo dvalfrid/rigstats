@@ -19,7 +19,7 @@ RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple p
 It's a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView.
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
-- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts**).
+- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts** — *coming in v1.52.0*).
 - **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), and the settings of ROG headsets (sidetone, noise reduction) and ROG mice (DPI, polling rate, button bindings, energy — and which of the mouse's own profiles each profile uses), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
@@ -167,7 +167,7 @@ order, the overlay's metrics and the alert levels — belongs to each
 - **Window layer** — `Normal`, `Always on Top`, `Always Behind`, or **Desktop
   Wallpaper**.
 - **Floating mode** — render panels as individually draggable/lockable cards.
-- **Compact panels** — CPU, GPU, RAM and Network can each be drawn compact:
+- **Compact panels** *(coming in v1.52.0)* — CPU, GPU, RAM and Network can each be drawn compact:
   the key values only, no graphs or bars. The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact
   beside each panel), so they take less room on a small screen or as floating
@@ -244,14 +244,14 @@ Hardware control per profile — **Silent, Balanced, Gaming, Eco** and your own
 — switched from the tray, the header chip, **Ctrl+Alt+P** (the next one) or
 **Ctrl+Alt+F1**…**F9** (the first … ninth, in the profile bar's order — bind a
 macro key to one in your keyboard's software; both can be changed under
-**Settings → Shortcuts**). Open it from the
+**Settings → Shortcuts**, *coming in v1.52.0*). Open it from the
 tray (**Control Center…**). Everything runs inside the `rigstats-sensor`
 service, so fan curves keep working with the app closed and after a reboot.
 Each tab appears only when this PC's hardware supports it.
 
 | Tab | What it controls | Where it works |
 | --- | --- | --- |
-| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (CPU, GPU, RAM and Network full or compact), the game overlay's metrics, alert levels — previewed live | Any PC |
+| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (CPU, GPU, RAM and Network full or compact — *coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
 | Desktop | The Windows background picture (one per screen if you like), and Wallpaper Engine: as it is, chosen wallpapers per screen, paused, or off — with Start/Stop | Any PC; the Wallpaper Engine part when it is installed ([troubleshooting](docs/troubleshooting.md#wallpaper-engine)) |
 | App rules | Switch profile automatically while a program runs (e.g. Gaming while your game is open) | Any PC |
 | Power | The Windows power plan each profile switches to | Any PC |

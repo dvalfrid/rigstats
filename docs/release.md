@@ -544,9 +544,10 @@ src-egui/Cargo.toml`) before merging the release PR:
 - **Fresh install vs. upgrade** — if `settings.rs` migration logic changed
   this cycle, test loading an old-format `rigstats-settings.json` in addition
   to a clean install.
-- **Website "Coming in vX" badges** — remove the `badge-soon` spans for
-  features this release ships (`website/index.html`), in the last commit
-  before merging the release PR, so the site and the release go out together.
+- **"Coming in vX" markers** — remove the `badge-soon` spans
+  (`website/index.html`) and the *coming in vX* notes (`README.md`) for
+  features this release ships, in the last commit before merging the release
+  PR, so the site, the README and the release go out together.
 - **Control Center on the signed installer** — debug builds and the Build
   workflow's installer artifact are unsigned, so the service refuses their
   Control Center connection by design (`PipeClientVerifier`); only the signed
