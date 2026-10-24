@@ -1036,62 +1036,84 @@ fn microphone_footnote(chord: Option<Shortcut>) -> String {
 
 // ── Shortcuts ─────────────────────────────────────────────────────────────────
 
-/// The Shortcuts page's rows: the action, its title and what it does.
-const SHORTCUT_ROWS: &[(Action, &str, &str)] = &[
-    (
-        Action::Overlay,
-        "Show or hide the overlay",
-        "Without leaving the game",
-    ),
-    (
-        Action::NextProfile,
-        "Next profile",
-        "Switches to the next Control Center profile",
-    ),
-    (
-        Action::Profiles,
-        "Profile 1–9",
-        "Straight to the profile at that place in the profile bar — bind a macro key to it",
-    ),
-    (
-        Action::Microphone,
-        "Mute the microphone",
-        "Mutes or unmutes it; which one is under General",
-    ),
-];
+/// One row on the Shortcuts page: the action, its title and what it does.
+type ShortcutRow = (Action, &'static str, &'static str);
 
-/// The tray menu's actions (#594), off until chosen.
-const TRAY_SHORTCUT_ROWS: &[(Action, &str, &str)] = &[
+/// The Shortcuts page, grouped by what the shortcuts do (#594).
+const SHORTCUT_GROUPS: &[(&str, &[ShortcutRow])] = &[
     (
-        Action::DeskLamp,
-        "Desk lamp on or off",
-        "The ROG light bar's lamp; does nothing without one",
+        "Overlay and dashboard",
+        &[
+            (
+                Action::Overlay,
+                "Show or hide the overlay",
+                "Without leaving the game",
+            ),
+            (
+                Action::OverlayLock,
+                "Lock or unlock the overlay",
+                "Unlocked, it can be dragged; locked, clicks pass through to the game",
+            ),
+            (
+                Action::Floating,
+                "Floating panels on or off",
+                "Each panel as its own window, or the dashboard",
+            ),
+        ],
     ),
     (
-        Action::ControlCenter,
-        "Open the Control Center",
-        "Profiles, fans, lighting and the rest",
-    ),
-    (Action::Settings, "Open Settings", "This window"),
-    (
-        Action::Status,
-        "Open Status",
-        "What's wrong, the logs and diagnostics",
-    ),
-    (
-        Action::Recording,
-        "Start or stop recording",
-        "A session of every reading, kept in Session History",
-    ),
-    (
-        Action::OverlayLock,
-        "Lock or unlock the overlay",
-        "Unlocked, it can be dragged; locked, clicks pass through to the game",
+        "Profiles",
+        &[
+            (
+                Action::NextProfile,
+                "Next profile",
+                "Switches to the next Control Center profile",
+            ),
+            (
+                Action::Profiles,
+                "Profile 1–9",
+                "Straight to the profile at that place in the profile bar — bind a macro key to it",
+            ),
+        ],
     ),
     (
-        Action::Floating,
-        "Floating panels on or off",
-        "Each panel as its own window, or the dashboard",
+        "Devices",
+        &[
+            (
+                Action::Microphone,
+                "Mute the microphone",
+                "Mutes or unmutes it; which one is under General",
+            ),
+            (
+                Action::DeskLamp,
+                "Desk lamp on or off",
+                "The ROG light bar's lamp; does nothing without one",
+            ),
+        ],
+    ),
+    (
+        "Windows",
+        &[
+            (
+                Action::ControlCenter,
+                "Open the Control Center",
+                "Profiles, fans, lighting and the rest",
+            ),
+            (Action::Settings, "Open Settings", "This window"),
+            (
+                Action::Status,
+                "Open Status",
+                "What's wrong, the logs and diagnostics",
+            ),
+        ],
+    ),
+    (
+        "Recording",
+        &[(
+            Action::Recording,
+            "Start or stop recording",
+            "A session of every reading, kept in Session History",
+        )],
     ),
 ];
 
@@ -1340,7 +1362,7 @@ fn shortcuts_page(
         ui,
         dc,
         "Shortcuts",
-        "Keys that work in every program, games too, whichever profile is on.",
+        "Keys that work in every program, games too, whichever profile is on. The overlay, the profiles and the microphone have keys from the start; the rest are off until you choose some.",
     );
     if let Some(action) = *capture {
         capture_keys(ui, shortcuts, action, capture, note);
@@ -1349,21 +1371,15 @@ fn shortcuts_page(
     let taken = crate::hotkey::taken();
     #[cfg(not(windows))]
     let taken: Vec<(String, String)> = Vec::new();
-    ui_kit::group(
+    for &(heading, rows) in SHORTCUT_GROUPS {
+        ui_kit::group(ui, dc, Some(heading), None, |g| {
+            shortcut_rows(g, dc, rows, shortcuts, capture, note, &taken);
+        });
+    }
+    ui_kit::footnote(
         ui,
         dc,
-        None,
-        Some(
-            "Choose New shortcut…, then press the keys: two of Ctrl, Alt and Shift with a letter, digit or F-key. Esc cancels. A shortcut another program already uses never reaches RIGStats.",
-        ),
-        |g| shortcut_rows(g, dc, SHORTCUT_ROWS, shortcuts, capture, note, &taken),
-    );
-    ui_kit::group(
-        ui,
-        dc,
-        Some("From the tray menu"),
-        Some("Off until you choose keys for one."),
-        |g| shortcut_rows(g, dc, TRAY_SHORTCUT_ROWS, shortcuts, capture, note, &taken),
+        "Choose New shortcut…, then press the keys: two of Ctrl, Alt and Shift with a letter, digit or F-key. Esc cancels. A shortcut another program already uses never reaches RIGStats.",
     );
 }
 
@@ -1499,9 +1515,9 @@ mod tests {
     #[test]
     fn every_shortcut_has_one_row() {
         use rigstats_backend::shortcut::SINGLE_ACTIONS;
-        let rows: Vec<Action> = SHORTCUT_ROWS
+        let rows: Vec<Action> = SHORTCUT_GROUPS
             .iter()
-            .chain(TRAY_SHORTCUT_ROWS)
+            .flat_map(|(_, rows)| rows.iter())
             .map(|&(a, _, _)| a)
             .collect();
         for action in SINGLE_ACTIONS.into_iter().chain([Action::Profiles]) {
