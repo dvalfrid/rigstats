@@ -750,7 +750,10 @@ renderer's key→panel match. `Settings.compact_panels` (#596, part of the profi
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
 with USED/FREE, Network without its graph — no graphs or per-core bars, and no
-fixed `PANEL_DATA_H` height. Which panels offer it: `panels::COMPACT_PANELS`;
+fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
+`panels::compact_row`: each ring and value in an equal column across the
+panel, centred, so they spread evenly at any width and scale. Which panels
+offer it: `panels::COMPACT_PANELS`;
 each panel's `draw` takes `compact`, passed by `DashboardView::draw_one_panel`
 and by the floating panels (`DashboardRuntime::is_compact`). A compact floating
 card is `panels::COMPACT_FLOATING_W` (360) wide before the panel scale instead

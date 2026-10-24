@@ -71,6 +71,43 @@ pub fn draw(
             }
         });
 
+        let freq_str = if stats.cpu_freq_mhz > 0.0 {
+            format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
+        } else {
+            "--".to_string()
+        };
+        let power_str = stats
+            .cpu_power
+            .map_or("-- W".to_string(), |p| format!("{p:.0} W"));
+
+        if compact {
+            use super::CompactCell;
+            super::compact_row(
+                ui,
+                &[
+                    CompactCell::Ring(load_frac, theme::C_ACCENT, format!("{}%", stats.cpu_load)),
+                    super::temp_cell(stats.cpu_temp, tc),
+                    CompactCell::Stat {
+                        label: "FREQ",
+                        label_color: th.stat_label,
+                        value: freq_str,
+                        value_color: theme::C_TEXT,
+                        note: None,
+                    },
+                    CompactCell::Stat {
+                        label: "POWER",
+                        label_color: th.stat_label,
+                        value: power_str,
+                        value_color: theme::C_TEXT,
+                        note: ppt_limit.map(|l| format!("PPT {l:.0} W")),
+                    },
+                ],
+                th,
+                sc,
+            );
+            return;
+        }
+
         // Ring gauge + metadata side by side.
         ui.horizontal(|ui| {
             ring::show(
@@ -81,38 +118,21 @@ pub fn draw(
                 &format!("{}%", stats.cpu_load),
             );
             ui.add_space(16.0 * sc);
-            if compact {
-                temp_ring(ui, stats.cpu_temp, tc, sc);
-                ui.add_space(16.0 * sc);
-            }
 
-            let freq_str = if stats.cpu_freq_mhz > 0.0 {
-                format!("{:.2} GHz", stats.cpu_freq_mhz / 1000.0)
-            } else {
-                "--".to_string()
-            };
             let temp_str = stats
                 .cpu_temp
                 .map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-            let power_str = stats
-                .cpu_power
-                .map_or("-- W".to_string(), |p| format!("{p:.0} W"));
 
             ui.vertical(|ui| {
                 egui::Grid::new("cpu_meta")
-                    .num_columns(if compact { 2 } else { 3 })
+                    .num_columns(3)
                     .min_col_width(50.0 * sc)
                     .show(ui, |ui| {
-                        // Compact shows the temperature as its ring instead.
-                        if !compact {
-                            ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
-                        }
+                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
                         ui.label(RichText::new("FREQ").size(11.0 * sc).color(th.stat_label));
                         ui.label(RichText::new("POWER").size(11.0 * sc).color(th.stat_label));
                         ui.end_row();
-                        if !compact {
-                            ui.label(RichText::new(temp_str).size(14.0 * sc).color(tc));
-                        }
+                        ui.label(RichText::new(temp_str).size(14.0 * sc).color(tc));
                         ui.label(RichText::new(freq_str).size(14.0 * sc).color(theme::C_TEXT));
                         ui.label(
                             RichText::new(power_str)
@@ -121,9 +141,7 @@ pub fn draw(
                         );
                         ui.end_row();
                         if let Some(limit) = ppt_limit {
-                            if !compact {
-                                ui.label("");
-                            }
+                            ui.label("");
                             ui.label("");
                             ui.label(
                                 RichText::new(format!("PPT {limit:.0} W"))
@@ -136,9 +154,6 @@ pub fn draw(
             });
         });
 
-        if compact {
-            return;
-        }
         ui.add_space(6.0 * sc);
 
         // Per-core bars — two equal columns, 2 rows visible, scrollable.
@@ -215,13 +230,4 @@ pub fn draw(
         ui.add_space(filler);
         spark.draw(ui, SPARK_H * sc, theme::C_ACCENT, opacity);
     })
-}
-
-/// The compact layout's temperature ring (#596): 0–100 °C, coloured like the
-/// TEMP value (`color`, from the alert thresholds); `--°C` without a reading.
-/// Shared with the GPU panel.
-pub fn temp_ring(ui: &mut Ui, temp: Option<f64>, color: egui::Color32, sc: f32) {
-    let frac = temp.map_or(0.0, |t| (t as f32 / 100.0).clamp(0.0, 1.0));
-    let label = temp.map_or("--°C".to_string(), |t| format!("{t:.0}°C"));
-    ring::show(ui, theme::RING_SIZE * sc, frac, color, &label);
 }

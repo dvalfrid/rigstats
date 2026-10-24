@@ -147,45 +147,32 @@ fn compact_body(
     th: &theme::AppTheme,
     sc: f32,
 ) {
-    ui.horizontal(|ui| {
-        crate::ring::show(
-            ui,
-            theme::RING_SIZE * sc,
-            frac,
-            theme::C_RAM,
-            &format!("{:.0}%", frac * 100.0),
-        );
-        ui.add_space(16.0 * sc);
-        ui.vertical(|ui| {
-            egui::Grid::new("ram_compact")
-                .num_columns(if stats.ram_temp.is_some() { 3 } else { 2 })
-                .min_col_width(50.0 * sc)
-                .show(ui, |ui| {
-                    ui.label(RichText::new("USED").size(11.0 * sc).color(th.stat_label));
-                    ui.label(RichText::new("FREE").size(11.0 * sc).color(th.stat_label));
-                    if stats.ram_temp.is_some() {
-                        ui.label(RichText::new("TEMP").size(11.0 * sc).color(th.stat_label));
-                    }
-                    ui.end_row();
-                    ui.label(
-                        RichText::new(format!("{used_gb:.1}G"))
-                            .size(14.0 * sc)
-                            .color(theme::C_RAM),
-                    );
-                    ui.label(
-                        RichText::new(format!("{free_gb:.1}G"))
-                            .size(14.0 * sc)
-                            .color(theme::C_TEXT),
-                    );
-                    if let Some(t) = stats.ram_temp {
-                        ui.label(
-                            RichText::new(format!("{t:.0}°C"))
-                                .size(14.0 * sc)
-                                .color(temp_color(stats.ram_temp, warn, crit)),
-                        );
-                    }
-                    ui.end_row();
-                });
+    use super::CompactCell;
+    let mut cells = vec![
+        CompactCell::Ring(frac, theme::C_RAM, format!("{:.0}%", frac * 100.0)),
+        CompactCell::Stat {
+            label: "USED",
+            label_color: th.stat_label,
+            value: format!("{used_gb:.1}G"),
+            value_color: theme::C_RAM,
+            note: None,
+        },
+        CompactCell::Stat {
+            label: "FREE",
+            label_color: th.stat_label,
+            value: format!("{free_gb:.1}G"),
+            value_color: theme::C_TEXT,
+            note: None,
+        },
+    ];
+    if let Some(t) = stats.ram_temp {
+        cells.push(CompactCell::Stat {
+            label: "TEMP",
+            label_color: th.stat_label,
+            value: format!("{t:.0}°C"),
+            value_color: temp_color(stats.ram_temp, warn, crit),
+            note: None,
         });
-    });
+    }
+    super::compact_row(ui, &cells, th, sc);
 }
