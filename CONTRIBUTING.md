@@ -37,6 +37,7 @@ What you need depends on what you change:
 | The app — dashboard, panels, dialogs, tray (`src-egui/`, `rigstats-backend/`) | Rust and the Visual Studio C++ Build Tools (below). That's it: the app runs against the installed RIGStats service. |
 | The sensor service or Control Center hardware control (`sensor-sidecar/`) | Also the .NET 10 SDK, and the dev sidecar (`tools\dev-sidecar.ps1`, run elevated) — the installed service only accepts the signed release app, so a debug build talks to the dev sidecar instead. See "Live testing on real hardware" in [docs/control-architecture.md](docs/control-architecture.md). |
 | Docs or the website | Nothing to build. |
+| Support for your device, without code | A diagnostics ZIP, and when the device's protocol isn't documented anywhere, a [USB recording of its maker's software](docs/usb-capture.md) (Wireshark + USBPcap, about 20 minutes). |
 
 Then: fork, clone, `cargo build --manifest-path src-egui/Cargo.toml`, run
 `target\debug\rigstats.exe`. Small fixes can go straight to a pull request;

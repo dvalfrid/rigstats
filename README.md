@@ -47,6 +47,7 @@ RIGStats' sensor readings have been checked on seven machines — AMD and Intel 
 
 - **Test it on your hardware — no programming needed.** Install it, try the Control Center, and tell us what works and what doesn't. Wanted in particular:
   - lighting devices marked *"not yet verified"* ([#341](https://github.com/dvalfrid/rigstats/issues/341)) — the [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) takes two minutes
+  - a device RIGStats doesn't support yet, whose protocol nobody has documented: a short [USB recording of what its maker's software sends](docs/usb-capture.md) is often the missing piece
   - ASUS laptops ([#234](https://github.com/dvalfrid/rigstats/issues/234)), Intel CPUs ([#209](https://github.com/dvalfrid/rigstats/issues/209)), NVIDIA graphics cards ([#210](https://github.com/dvalfrid/rigstats/issues/210)), Bluetooth headsets and mice ([#291](https://github.com/dvalfrid/rigstats/issues/291))
 
   Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix. It holds your hardware details and RIGStats' logs and settings, including your computer and Windows user name (`environment.txt`); look through it before you share it, and remove anything you'd rather not.
@@ -469,6 +470,7 @@ The Status dialog has a **Collect Diagnostics…** button that writes a ZIP file
 | [Release & CI](docs/release.md) | Verify workflow, branch protection, release pipeline |
 | [Control Center](docs/control-architecture.md) | Hardware control design, protocols, live testing |
 | [Supported devices](docs/supported-devices.md) | Every lighting device RIGStats drives and every device whose battery it shows, verified or not yet |
+| [Record a device's USB traffic](docs/usb-capture.md) | How to record what a device's own software sends, with Wireshark and USBPcap, so support for it can be built |
 | [Troubleshooting](docs/troubleshooting.md) | Common problems and what to do, for users |
 | [Developer troubleshooting](docs/developer-troubleshooting.md) | Logs, the diagnostics ZIP's files, crash causes, running from source |
 | [Changelog](CHANGELOG.md) | Full version history |

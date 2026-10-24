@@ -132,7 +132,8 @@ public static class LightingCatalog
         md.Append(CultureInfo.InvariantCulture, $"**{FromGearLink}**: from ASUS Gear Link's own device definitions, same commands as a verified device — likewise; ");
         md.Append(CultureInfo.InvariantCulture, $"**{FromOpenRazer}**: Razer's protocol as documented by the openrazer project, for that model — not yet seen on a device; ");
         md.Append(CultureInfo.InvariantCulture, $"**{FromOpenRgbNewProtocol}**: a protocol as OpenRGB documents it for that model, not yet seen on any device; ");
-        md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does.\n\n");
+        md.Append("[report it](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml) with your diagnostics ZIP if it doesn't, or to confirm it does. ");
+        md.Append("A device that isn't listed and whose protocol isn't documented anywhere can still be added from a [USB recording of its maker's software](usb-capture.md).\n\n");
         md.Append("## Lighting\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())

@@ -19,6 +19,9 @@ body:
 
         It also holds your computer and Windows user name (`environment.txt`); look through it before attaching.
 
+        For a device RIGStats doesn't support yet, we may ask for a short USB recording of what its maker's software
+        sends — [how to make one](https://github.com/dvalfrid/rigstats/blob/main/docs/usb-capture.md).
+
   - type: dropdown
     id: kind
     attributes:
