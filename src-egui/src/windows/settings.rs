@@ -288,8 +288,7 @@ pub fn show(
                 ui_kit::footnote(
                     ui,
                     dc,
-                    "Accent colour, panels, overlay metrics and alerts belong to your \
-                     profile — set them in the Control Center.",
+                    "Accent colour, panels, floating panels, overlay metrics and alerts belong to your profile — set them in the Control Center.",
                 );
             });
         });
@@ -316,9 +315,13 @@ pub fn show(
                             // running is the live value, not the draft (and
                             // not a dialog-open-time snapshot — the tray can
                             // change it while this dialog is open).
-                            let (applied_layer, wallpaper_running) = {
+                            let (applied_layer, wallpaper_running, floating) = {
                                 let live = saved.lock_safe();
-                                (live.window_layer.clone(), wallpaper_running(&live))
+                                (
+                                    live.window_layer.clone(),
+                                    wallpaper_running(&live),
+                                    live.floating_mode,
+                                )
                             };
                             let page = st.page;
                             // In wallpaper mode the visible dashboard is the
@@ -347,7 +350,9 @@ pub fn show(
                                     draft,
                                     &applied_layer,
                                     wallpaper_running,
+                                    floating,
                                     &gpu_names,
+                                    requests,
                                 ),
                                 Page::Overlay => overlay_page(
                                     ui,
@@ -624,13 +629,18 @@ fn layer_label(layer: &str) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // the page's state, passed through
 fn display_page(
     ui: &mut egui::Ui,
     dc: &DialogColors,
     draft: &mut settings::Settings,
     applied_layer: &str,
     wallpaper_running: bool,
+    // Floating panels running now — the profile's choice (#599), not this
+    // dialog's to change.
+    floating: bool,
     gpu_names: &[String],
+    requests: &OpenRequests,
 ) {
     ui_kit::page_header(
         ui,
@@ -655,7 +665,7 @@ fn display_page(
             "Desktop wallpaper puts the dashboard behind every window, where you placed it."
         }),
         |g| {
-            let profile_note = if draft.floating_mode {
+            let profile_note = if floating {
                 Some("Not used for floating panels")
             } else if is_wallpaper {
                 Some("Switch away from desktop wallpaper to change it")
@@ -663,7 +673,7 @@ fn display_page(
                 Some("The size of the monitor it is shown on")
             };
             g.row("Display profile", profile_note, |ui| {
-                ui.add_enabled_ui(!draft.floating_mode && !is_wallpaper, |ui| {
+                ui.add_enabled_ui(!floating && !is_wallpaper, |ui| {
                     let current = ALL_PROFILES
                         .iter()
                         .find(|(k, _)| *k == draft.dashboard_profile.as_str())
@@ -686,24 +696,19 @@ fn display_page(
                     });
                 });
             });
-            g.row("Window layer", None, |ui| {
+            // Floating panels win over the wallpaper layer
+            // (`update_wallpaper_mode`); they belong to the profile, so say so
+            // rather than turn them off from here.
+            let layer_note = (floating && draft.window_layer == "wallpaper")
+                .then_some("Floating panels show instead while your profile uses them");
+            g.row("Window layer", layer_note, |ui| {
                 ui_kit::dropdown(ui, "window_layer", layer_label(&draft.window_layer), |ui| {
                     for layer in ["normal", "on_top", "behind", "wallpaper"] {
-                        let picked = ui
-                            .selectable_value(
-                                &mut draft.window_layer,
-                                layer.to_string(),
-                                layer_label(layer),
-                            )
-                            .clicked();
-                        // Choosing the wallpaper means the docked dashboard
-                        // in it, so floating goes off. Only on that choice:
-                        // floating turned on over the wallpaper (the tray)
-                        // is a state the app runs, and opening this page
-                        // must not undo it.
-                        if picked && layer == "wallpaper" {
-                            draft.floating_mode = false;
-                        }
+                        ui.selectable_value(
+                            &mut draft.window_layer,
+                            layer.to_string(),
+                            layer_label(layer),
+                        );
                     }
                 });
             });
@@ -711,22 +716,16 @@ fn display_page(
     );
 
     let is_landscape = crate::geometry::profile_is_landscape(&draft.dashboard_profile);
-    let fill_enabled = !draft.floating_mode && !is_wallpaper;
+    let fill_enabled = !floating && !is_wallpaper;
     ui_kit::group(ui, dc, Some("Layout"), None, |g| {
-        g.row(
+        control_center_row(
+            g,
+            dc,
+            requests,
             "Floating panels",
-            Some("Each panel in its own window, placed anywhere"),
-            // Floating wins over the wallpaper layer (`update_wallpaper_mode`),
-            // so it can be switched in any layer, as from the tray.
-            |ui| {
-                ui_kit::toggle(ui, dc, &mut draft.floating_mode);
-            },
+            "On or off and their size belong to your profile",
+            control::Page::Dashboard,
         );
-        if draft.floating_mode {
-            g.row("Panel size", None, |ui| {
-                ui_kit::slider_pct(ui, dc, &mut draft.floating_panel_scale, 0.4..=2.0);
-            });
-        }
         g.row(
             "Fill screen",
             Some(if fill_enabled {
@@ -1053,11 +1052,6 @@ const SHORTCUT_GROUPS: &[(&str, &[ShortcutRow])] = &[
                 Action::OverlayLock,
                 "Lock or unlock the overlay",
                 "Unlocked, it can be dragged; locked, clicks pass through to the game",
-            ),
-            (
-                Action::Floating,
-                "Floating panels on or off",
-                "Each panel as its own window, or the dashboard",
             ),
         ],
     ),
@@ -1452,6 +1446,21 @@ mod tests {
         s.window_layer = "normal".into();
         s.floating_mode = false;
         assert!(!wallpaper_running(&s));
+    }
+
+    #[test]
+    fn saving_settings_keeps_the_profiles_floating_choice() {
+        // Floating and its size belong to the profile (#599): a draft from
+        // before the Control Center turned floating on must not turn it off.
+        let mut live = settings::Settings::default();
+        let mut draft = live.clone();
+        live.floating_mode = true;
+        live.floating_panel_scale = 1.7;
+        draft.window_layer = "on_top".into();
+        carry_live(&mut draft, &live);
+        assert!(draft.floating_mode);
+        assert_eq!(draft.floating_panel_scale, 1.7);
+        assert_eq!(draft.window_layer, "on_top", "its own change stays");
     }
 
     #[test]

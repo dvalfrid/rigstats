@@ -115,15 +115,6 @@ fn in_triangle(x: f32, y: f32, v0: (f32, f32), v1: (f32, f32), v2: (f32, f32)) -
     !(has_neg && has_pos)
 }
 
-/// Two overlapping window outlines — Toggle Floating Mode.
-pub fn floating() -> Icon {
-    rasterize(|x, y| {
-        let hit = rect_stroke(x, y, 7.0, 7.0, 21.0, 21.0, 2.0)
-            || rect_stroke(x, y, 12.0, 12.0, 26.0, 26.0, 2.0);
-        hit.then_some(NEUTRAL)
-    })
-}
-
 /// Green play triangle — shown on the recording row while stopped.
 pub fn record_start() -> Icon {
     rasterize(|x, y| {

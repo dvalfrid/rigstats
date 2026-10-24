@@ -73,6 +73,11 @@ pub fn draw(
         let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
+                // The title row as tall as its text, like the CPU panel's plain
+                // title: a horizontal row is otherwise at least a button high
+                // (`interact_size`), which put this panel's rings a few pixels
+                // below the CPU's beside it.
+                ui.spacing_mut().interact_size.y = 0.0;
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("GPU LOAD")

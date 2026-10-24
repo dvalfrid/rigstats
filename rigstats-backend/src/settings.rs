@@ -195,12 +195,19 @@ pub struct Settings {
     /// Open each visible panel as its own frameless window instead of one portrait window.
     #[serde(default)]
     pub floating_mode: bool,
-    /// Scale factor for floating panel windows in the range [0.4, 1.0].
+    /// Scale factor for floating panel windows in the range [0.4, 2.0].
     #[serde(default = "default_floating_panel_scale")]
     pub floating_panel_scale: f64,
-    /// Last known screen position for each floating panel, keyed by panel key.
+    /// Last known screen position for each floating panel, keyed by panel
+    /// key — the active profile's (#599).
     #[serde(default)]
     pub panel_layouts: HashMap<String, PanelLayout>,
+    /// The floating panels' positions of the other Control Center profiles
+    /// (#599), keyed by profile id, swapped in `switch_profile_look`. Kept
+    /// beside the profile's look, not in it: positions change by dragging,
+    /// not in the Control Center's edit with its preview and Revert.
+    #[serde(default)]
+    pub profile_panel_layouts: HashMap<String, HashMap<String, PanelLayout>>,
     /// Schema version used to detect and apply one-time migrations.
     /// 0 = legacy flat threshold fields (pre-map), 1 = current map format.
     #[serde(default)]
@@ -447,6 +454,7 @@ impl Default for Settings {
             floating_mode: false,
             floating_panel_scale: default_floating_panel_scale(),
             panel_layouts: HashMap::new(),
+            profile_panel_layouts: HashMap::new(),
             settings_version: 1, // New installs start at current version — no migration needed.
             preferred_gpu: None,
             window_layer: default_window_layer(),
@@ -491,8 +499,9 @@ impl Default for Settings {
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
-/// dashboard looks, the overlay's content, the alert thresholds, the
-/// desktop background and what Wallpaper Engine does. A
+/// dashboard looks (floating or not, and the floating panels' size, #599),
+/// the overlay's content, the alert thresholds, the desktop background and
+/// what Wallpaper Engine does. A
 /// profile always holds all of them. Everything else (window layer,
 /// display profile, overlay placement, notifications, start-up, …) applies
 /// to the whole app and stays out of profiles.
@@ -519,6 +528,14 @@ pub struct ProfileLook {
     pub desktop_background: Option<DesktopBackground>,
     #[serde(default)]
     pub wallpaper_engine: Option<WeChoice>,
+    /// Floating panels or the fixed dashboard (#599). `None` in a look
+    /// saved before it was part of the profile: the mode is left as it is,
+    /// so nobody's floating panels turn off at the first switch.
+    #[serde(default)]
+    pub floating_mode: Option<bool>,
+    /// The floating panels' size (#599); `None` as for `floating_mode`.
+    #[serde(default)]
+    pub floating_panel_scale: Option<f64>,
 }
 
 impl ProfileLook {
@@ -535,6 +552,8 @@ impl ProfileLook {
             thresholds: s.thresholds.clone(),
             desktop_background: s.desktop_background.clone(),
             wallpaper_engine: s.wallpaper_engine.clone(),
+            floating_mode: Some(s.floating_mode),
+            floating_panel_scale: Some(s.floating_panel_scale),
         }
     }
 
@@ -551,6 +570,12 @@ impl ProfileLook {
         s.thresholds = self.thresholds.clone();
         s.desktop_background = self.desktop_background.clone();
         s.wallpaper_engine = self.wallpaper_engine.clone();
+        if let Some(on) = self.floating_mode {
+            s.floating_mode = on;
+        }
+        if let Some(scale) = self.floating_panel_scale {
+            s.floating_panel_scale = scale.clamp(0.4, 2.0);
+        }
         Self::capture(s) != before
     }
 }
@@ -559,24 +584,34 @@ impl ProfileLook {
 /// `None` when the current look already belongs to it (a restart or pipe
 /// reconnect). Otherwise the current look is stored in the outgoing
 /// profile and the incoming one's is loaded — a profile seen for the first
-/// time starts from the current look — and it returns whether the look
-/// changed. Either way the caller persists.
+/// time starts from the current look — and it returns whether the look or
+/// the floating panels' positions changed. Either way the caller persists.
 pub fn switch_profile_look(s: &mut Settings, profile_id: &str) -> Option<bool> {
     if s.look_profile.as_deref() == Some(profile_id) {
         return None;
     }
     let current = ProfileLook::capture(s);
     if let Some(old) = s.look_profile.take() {
-        s.profile_looks.insert(old, current.clone());
+        s.profile_looks.insert(old.clone(), current.clone());
+        s.profile_panel_layouts.insert(old, s.panel_layouts.clone());
     }
     s.look_profile = Some(profile_id.to_string());
-    match s.profile_looks.get(profile_id).cloned() {
-        Some(look) => Some(look.apply_to(s)),
+    let look_changed = match s.profile_looks.get(profile_id).cloned() {
+        Some(look) => look.apply_to(s),
         None => {
             s.profile_looks.insert(profile_id.to_string(), current);
-            Some(false)
+            false
         }
+    };
+    // The incoming profile's positions over the current ones: a panel it
+    // has none for (never placed there, or a profile from before #599)
+    // stays where it is.
+    let before = s.panel_layouts.clone();
+    if let Some(layouts) = s.profile_panel_layouts.get(profile_id) {
+        s.panel_layouts
+            .extend(layouts.iter().map(|(k, v)| (k.clone(), v.clone())));
     }
+    Some(look_changed || s.panel_layouts != before)
 }
 
 /// Stores the current look in the active profile, e.g. after a Save in the
@@ -590,10 +625,12 @@ pub fn store_active_look(s: &mut Settings) {
 
 /// Forgets the looks of profiles that no longer exist.
 pub fn prune_profile_looks(s: &mut Settings, profile_ids: &[&str]) -> bool {
-    let before = s.profile_looks.len();
+    let before = s.profile_looks.len() + s.profile_panel_layouts.len();
     s.profile_looks
         .retain(|id, _| profile_ids.contains(&id.as_str()));
-    s.profile_looks.len() != before
+    s.profile_panel_layouts
+        .retain(|id, _| profile_ids.contains(&id.as_str()));
+    s.profile_looks.len() + s.profile_panel_layouts.len() != before
 }
 
 /// Maps the old `overlayLayout` onto `overlay_columns`: vertical → 1 column,
@@ -1120,5 +1157,91 @@ mod profile_look_tests {
 
         let json = serde_json::to_string(&s).unwrap();
         assert!(json.contains(r#""compactPanels":["cpu","net"]"#), "{json}");
+    }
+
+    #[test]
+    fn floating_mode_and_size_follow_the_profile() {
+        let mut s = Settings::default();
+        assert_eq!(switch_profile_look(&mut s, "balanced"), Some(false));
+        s.floating_mode = true;
+        s.floating_panel_scale = 1.7;
+        // To Gaming (first time: it starts from the current look), then the
+        // fixed dashboard there.
+        switch_profile_look(&mut s, "gaming");
+        s.floating_mode = false;
+        s.floating_panel_scale = 1.0;
+        // Back to Balanced: floating again, at its own size.
+        assert_eq!(switch_profile_look(&mut s, "balanced"), Some(true));
+        assert!(s.floating_mode);
+        assert_eq!(s.floating_panel_scale, 1.7);
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(true));
+        assert!(!s.floating_mode);
+        assert_eq!(s.floating_panel_scale, 1.0);
+    }
+
+    #[test]
+    fn a_look_saved_before_floating_was_in_profiles_leaves_it_alone() {
+        // A look saved before #599 has no floatingMode / floatingPanelScale.
+        let old: ProfileLook = serde_json::from_str(r#"{"theme":"red"}"#).unwrap();
+        assert_eq!(old.floating_mode, None);
+        assert_eq!(old.floating_panel_scale, None);
+        let mut s = Settings::default();
+        s.floating_mode = true;
+        s.floating_panel_scale = 1.2;
+        old.apply_to(&mut s);
+        assert!(s.floating_mode, "floating stays on");
+        assert_eq!(s.floating_panel_scale, 1.2);
+        assert_eq!(s.theme, "red");
+    }
+
+    fn at(x: i32, y: i32) -> PanelLayout {
+        PanelLayout { x, y }
+    }
+
+    #[test]
+    fn floating_positions_follow_the_profile() {
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "silent");
+        s.panel_layouts.insert("cpu".into(), at(100, 100));
+        s.panel_layouts.insert("gpu".into(), at(100, 400));
+        // Gaming, first time: the panels stay where they are, then move.
+        switch_profile_look(&mut s, "gaming");
+        assert_eq!(s.panel_layouts["cpu"], at(100, 100));
+        s.panel_layouts.insert("cpu".into(), at(2000, 50));
+        // Back to Silent: its own places, and the switch says so.
+        assert_eq!(switch_profile_look(&mut s, "silent"), Some(true));
+        assert_eq!(s.panel_layouts["cpu"], at(100, 100));
+        assert_eq!(s.panel_layouts["gpu"], at(100, 400));
+        assert_eq!(switch_profile_look(&mut s, "gaming"), Some(true));
+        assert_eq!(s.panel_layouts["cpu"], at(2000, 50));
+    }
+
+    #[test]
+    fn a_panel_without_a_place_in_the_profile_stays_where_it_is() {
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "silent");
+        s.panel_layouts.insert("cpu".into(), at(10, 10));
+        switch_profile_look(&mut s, "gaming");
+        // Shown for the first time in Gaming, placed there.
+        s.panel_layouts.insert("ram".into(), at(500, 500));
+        switch_profile_look(&mut s, "silent");
+        assert_eq!(s.panel_layouts["cpu"], at(10, 10));
+        assert_eq!(
+            s.panel_layouts["ram"],
+            at(500, 500),
+            "Silent has none for it"
+        );
+    }
+
+    #[test]
+    fn deleted_profiles_lose_their_positions_too() {
+        let mut s = Settings::default();
+        switch_profile_look(&mut s, "silent");
+        switch_profile_look(&mut s, "custom");
+        switch_profile_look(&mut s, "silent");
+        assert!(s.profile_panel_layouts.contains_key("custom"));
+        assert!(prune_profile_looks(&mut s, &["silent"]));
+        assert!(!s.profile_panel_layouts.contains_key("custom"));
+        assert!(!s.profile_looks.contains_key("custom"));
     }
 }

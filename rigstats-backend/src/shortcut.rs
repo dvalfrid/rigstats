@@ -195,11 +195,10 @@ pub enum Action {
     Status,
     Recording,
     OverlayLock,
-    Floating,
 }
 
 /// Every action with one chord of its own (all but [`Action::Profiles`]).
-pub const SINGLE_ACTIONS: [Action; 10] = [
+pub const SINGLE_ACTIONS: [Action; 9] = [
     Action::Overlay,
     Action::NextProfile,
     Action::Microphone,
@@ -209,7 +208,6 @@ pub const SINGLE_ACTIONS: [Action; 10] = [
     Action::Status,
     Action::Recording,
     Action::OverlayLock,
-    Action::Floating,
 ];
 
 impl Action {
@@ -226,7 +224,6 @@ impl Action {
             Action::Status => "opens Status",
             Action::Recording => "starts or stops recording",
             Action::OverlayLock => "locks or unlocks the overlay",
-            Action::Floating => "turns floating panels on or off",
         }
     }
 }
@@ -257,7 +254,6 @@ pub struct Shortcuts {
     pub status: Option<Shortcut>,
     pub recording: Option<Shortcut>,
     pub overlay_lock: Option<Shortcut>,
-    pub floating: Option<Shortcut>,
 }
 
 fn serialize_mods<S: Serializer>(mods: &Option<Mods>, serializer: S) -> Result<S::Ok, S::Error> {
@@ -283,7 +279,6 @@ impl Default for Shortcuts {
             status: None,
             recording: None,
             overlay_lock: None,
-            floating: None,
         }
     }
 }
@@ -315,7 +310,6 @@ impl<'de> Deserialize<'de> for Shortcuts {
             status: chord("status", defaults.status),
             recording: chord("recording", defaults.recording),
             overlay_lock: chord("overlayLock", defaults.overlay_lock),
-            floating: chord("floating", defaults.floating),
         })
     }
 }
@@ -334,7 +328,6 @@ impl Shortcuts {
             Action::Status => self.status,
             Action::Recording => self.recording,
             Action::OverlayLock => self.overlay_lock,
-            Action::Floating => self.floating,
         }
     }
 
@@ -352,7 +345,6 @@ impl Shortcuts {
             Action::Status => self.status = chord,
             Action::Recording => self.recording = chord,
             Action::OverlayLock => self.overlay_lock = chord,
-            Action::Floating => self.floating = chord,
         }
     }
 
@@ -479,9 +471,21 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(
             json,
-            r#"{"overlay":"Ctrl+Shift+F10","nextProfile":"Ctrl+Alt+P","profiles":"Alt+Shift","microphone":null,"deskLamp":null,"controlCenter":null,"settings":null,"status":null,"recording":null,"overlayLock":null,"floating":null}"#
+            r#"{"overlay":"Ctrl+Shift+F10","nextProfile":"Ctrl+Alt+P","profiles":"Alt+Shift","microphone":null,"deskLamp":null,"controlCenter":null,"settings":null,"status":null,"recording":null,"overlayLock":null}"#
         );
         assert_eq!(serde_json::from_str::<Shortcuts>(&json).unwrap(), s);
+    }
+
+    #[test]
+    fn a_file_with_the_removed_floating_shortcut_still_reads() {
+        // An RC-era file from before #599 removed it: the key is ignored.
+        let s: Shortcuts = serde_json::from_str(
+            r#"{"overlay":"Ctrl+Alt+O","recording":"Ctrl+Alt+R","floating":"Ctrl+Alt+L"}"#,
+        )
+        .unwrap();
+        assert_eq!(s.recording, Shortcut::parse("Ctrl+Alt+R"));
+        assert_eq!(s.overlay, Shortcut::parse("Ctrl+Alt+O"));
+        assert!(!serde_json::to_string(&s).unwrap().contains("floating"));
     }
 
     #[test]
@@ -531,7 +535,6 @@ mod tests {
             Action::Status,
             Action::Recording,
             Action::OverlayLock,
-            Action::Floating,
         ] {
             assert_eq!(d.get(action), None, "{action:?}");
         }

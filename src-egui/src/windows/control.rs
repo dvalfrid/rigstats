@@ -3606,9 +3606,14 @@ fn overview_page(
             Icon::Dashboard,
             "Dashboard",
             format!(
-                "{} · {} panels",
+                "{} · {} panels{}",
                 profile_look::theme_name(&look.theme),
-                look.visible_panels.len()
+                look.visible_panels.len(),
+                if look.floating_mode == Some(true) {
+                    " · floating"
+                } else {
+                    ""
+                }
             ),
             Some(theme::AppTheme::from_key(&look.theme).accent),
         ),

@@ -57,7 +57,6 @@ pub enum HotkeyEvent {
     OpenStatus,
     ToggleRecording,
     ToggleOverlayLock,
-    ToggleFloating,
 }
 
 impl HotkeyEvent {
@@ -73,7 +72,6 @@ impl HotkeyEvent {
             HotkeyEvent::OpenStatus => Some(TrayCmd::OpenStatus),
             HotkeyEvent::ToggleRecording => Some(TrayCmd::ToggleRecording),
             HotkeyEvent::ToggleOverlayLock => Some(TrayCmd::ToggleOverlayLock),
-            HotkeyEvent::ToggleFloating => Some(TrayCmd::ToggleFloating),
             HotkeyEvent::ToggleOverlay
             | HotkeyEvent::CycleProfile
             | HotkeyEvent::ToggleMicMute
@@ -104,7 +102,6 @@ fn bindings(shortcuts: &Shortcuts) -> Vec<Binding> {
         (8, shortcuts.recording, HotkeyEvent::ToggleRecording),
         (9, shortcuts.overlay_lock, HotkeyEvent::ToggleOverlayLock),
         // 10…18 are the profiles' F-keys below.
-        (20, shortcuts.floating, HotkeyEvent::ToggleFloating),
     ];
     let profiles = (0..PROFILE_SHORTCUTS).map(|i| {
         (
@@ -133,7 +130,6 @@ fn purpose(event: HotkeyEvent) -> String {
         HotkeyEvent::OpenStatus => "open Status".to_owned(),
         HotkeyEvent::ToggleRecording => "start or stop recording".to_owned(),
         HotkeyEvent::ToggleOverlayLock => "lock or unlock the overlay".to_owned(),
-        HotkeyEvent::ToggleFloating => "turn floating panels on or off".to_owned(),
     }
 }
 
@@ -557,11 +553,6 @@ mod tests {
                 Action::OverlayLock,
                 HotkeyEvent::ToggleOverlayLock,
                 Some(TrayCmd::ToggleOverlayLock),
-            ),
-            (
-                Action::Floating,
-                HotkeyEvent::ToggleFloating,
-                Some(TrayCmd::ToggleFloating),
             ),
         ];
         assert_eq!(expected.len(), SINGLE_ACTIONS.len());
