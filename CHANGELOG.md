@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.52.0](https://github.com/dvalfrid/rigstats/compare/v1.51.0...v1.52.0) (2026-10-24)
+
+
+### Features
+
+* **dashboard:** a compact style for the CPU, GPU, RAM and Network panels ([#598](https://github.com/dvalfrid/rigstats/issues/598)) ([887d6e8](https://github.com/dvalfrid/rigstats/commit/887d6e83eeee2629933197a11ee7e6e4afd337e1))
+* **dashboard:** floating panels, their size and positions per Control Center profile ([#600](https://github.com/dvalfrid/rigstats/issues/600)) ([432296c](https://github.com/dvalfrid/rigstats/commit/432296c69ecdc4a599b104f0eafc549e26788143))
+* **settings:** change or turn off the global shortcuts ([#589](https://github.com/dvalfrid/rigstats/issues/589)) ([6dc2927](https://github.com/dvalfrid/rigstats/commit/6dc2927919e9deaaa1502b17ced835f0b99e4ff4)), closes [#569](https://github.com/dvalfrid/rigstats/issues/569)
+* **settings:** shortcuts for the tray menu's actions ([#595](https://github.com/dvalfrid/rigstats/issues/595)) ([6615600](https://github.com/dvalfrid/rigstats/commit/66156007ba0508191fcc86897db74c002449f9e2))
+* **settings:** turn off the profile-switch notifications ([#602](https://github.com/dvalfrid/rigstats/issues/602)) ([358cfba](https://github.com/dvalfrid/rigstats/commit/358cfbab57f9db45069c55a929c2feb095c877cb)), closes [#601](https://github.com/dvalfrid/rigstats/issues/601)
+
+
+### Bug Fixes
+
+* **log:** bound rigstats-debug.log while running and limit the gpu change line ([a2594a9](https://github.com/dvalfrid/rigstats/commit/a2594a98a0bbd2eaa9008435c0958c31a050feae)), closes [#563](https://github.com/dvalfrid/rigstats/issues/563)
+
 ## [1.51.0](https://github.com/dvalfrid/rigstats/compare/v1.50.0...v1.51.0) (2026-10-23)
 
 
