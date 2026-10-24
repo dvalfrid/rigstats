@@ -60,6 +60,28 @@ pub enum HotkeyEvent {
     ToggleFloating,
 }
 
+impl HotkeyEvent {
+    /// The tray command a tray-action shortcut runs (#594): the shortcut does
+    /// exactly what the tray menu's row does. `None` for the shortcuts with a
+    /// handler of their own.
+    pub fn tray_cmd(self) -> Option<crate::tray::TrayCmd> {
+        use crate::tray::TrayCmd;
+        match self {
+            HotkeyEvent::ToggleLamp => Some(TrayCmd::ToggleLamp),
+            HotkeyEvent::OpenControlCenter => Some(TrayCmd::OpenControlCenter),
+            HotkeyEvent::OpenSettings => Some(TrayCmd::OpenSettings),
+            HotkeyEvent::OpenStatus => Some(TrayCmd::OpenStatus),
+            HotkeyEvent::ToggleRecording => Some(TrayCmd::ToggleRecording),
+            HotkeyEvent::ToggleOverlayLock => Some(TrayCmd::ToggleOverlayLock),
+            HotkeyEvent::ToggleFloating => Some(TrayCmd::ToggleFloating),
+            HotkeyEvent::ToggleOverlay
+            | HotkeyEvent::CycleProfile
+            | HotkeyEvent::ToggleMicMute
+            | HotkeyEvent::SwitchProfile(_) => None,
+        }
+    }
+}
+
 /// One chord to register: its `RegisterHotKey` id, the chord and the event
 /// it raises.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -481,6 +503,89 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), all.len());
+    }
+
+    /// Shortcuts with only `action` on (a chord of its own), the rest off.
+    fn only(action: rigstats_backend::shortcut::Action) -> Shortcuts {
+        use rigstats_backend::shortcut::SINGLE_ACTIONS;
+        let mut s = Shortcuts::default();
+        for a in SINGLE_ACTIONS {
+            s.set(a, None);
+        }
+        s.profiles = None;
+        s.set(action, Shortcut::parse("Ctrl+Shift+F10"));
+        s
+    }
+
+    /// Every action with a chord is registered, each with its own event and
+    /// id (#594) — an action added to `Shortcuts` but forgotten in
+    /// `bindings` fails here.
+    #[test]
+    fn every_action_registers_its_own_event() {
+        use crate::tray::TrayCmd;
+        use rigstats_backend::shortcut::{Action, SINGLE_ACTIONS};
+        let expected = [
+            (Action::Overlay, HotkeyEvent::ToggleOverlay, None),
+            (Action::NextProfile, HotkeyEvent::CycleProfile, None),
+            (Action::Microphone, HotkeyEvent::ToggleMicMute, None),
+            (
+                Action::DeskLamp,
+                HotkeyEvent::ToggleLamp,
+                Some(TrayCmd::ToggleLamp),
+            ),
+            (
+                Action::ControlCenter,
+                HotkeyEvent::OpenControlCenter,
+                Some(TrayCmd::OpenControlCenter),
+            ),
+            (
+                Action::Settings,
+                HotkeyEvent::OpenSettings,
+                Some(TrayCmd::OpenSettings),
+            ),
+            (
+                Action::Status,
+                HotkeyEvent::OpenStatus,
+                Some(TrayCmd::OpenStatus),
+            ),
+            (
+                Action::Recording,
+                HotkeyEvent::ToggleRecording,
+                Some(TrayCmd::ToggleRecording),
+            ),
+            (
+                Action::OverlayLock,
+                HotkeyEvent::ToggleOverlayLock,
+                Some(TrayCmd::ToggleOverlayLock),
+            ),
+            (
+                Action::Floating,
+                HotkeyEvent::ToggleFloating,
+                Some(TrayCmd::ToggleFloating),
+            ),
+        ];
+        assert_eq!(expected.len(), SINGLE_ACTIONS.len());
+        let mut ids = Vec::new();
+        for (action, event, tray) in expected {
+            let bound = bindings(&only(action));
+            assert_eq!(bound.len(), 1, "{action:?}");
+            assert_eq!(bound[0].event, event, "{action:?}");
+            assert_eq!(event.tray_cmd(), tray, "{action:?}");
+            ids.push(bound[0].id);
+        }
+        // With all of them and the profiles on, every id is still unique.
+        let mut all = Shortcuts::default();
+        for (n, a) in SINGLE_ACTIONS.into_iter().enumerate() {
+            all.set(a, Some(Shortcut::new(Mods::CTRL_SHIFT, 0x41 + n as u32)));
+        }
+        let mut every: Vec<_> = bindings(&all).iter().map(|b| b.id).collect();
+        assert_eq!(every.len(), SINGLE_ACTIONS.len() + PROFILE_SHORTCUTS);
+        every.sort_unstable();
+        every.dedup();
+        assert_eq!(every.len(), SINGLE_ACTIONS.len() + PROFILE_SHORTCUTS);
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), SINGLE_ACTIONS.len());
     }
 
     #[test]

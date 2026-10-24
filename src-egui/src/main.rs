@@ -788,29 +788,17 @@ impl eframe::App for RigStatsApp {
             match event {
                 // Same action as the tray's "Toggle Overlay Mode" row:
                 // show/hide the overlay itself, the conventional in-game-
-                // overlay hotkey behavior (not the click-through lock, which
-                // has no reason to be toggled as often and stays tray/
-                // Settings-only).
+                // overlay hotkey behavior (the click-through lock has its own
+                // shortcut, off by default, #594).
                 hotkey::HotkeyEvent::ToggleOverlay => self.toggle_overlay_mode(),
                 hotkey::HotkeyEvent::CycleProfile => self.cycle_profile(),
                 hotkey::HotkeyEvent::ToggleMicMute => self.toggle_microphone(),
                 hotkey::HotkeyEvent::SwitchProfile(index) => self.switch_to_profile(index),
-                hotkey::HotkeyEvent::ToggleLamp => self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleLamp),
-                hotkey::HotkeyEvent::OpenControlCenter => {
-                    self.run_tray_cmd(ui.ctx(), TrayCmd::OpenControlCenter)
-                }
-                hotkey::HotkeyEvent::OpenSettings => {
-                    self.run_tray_cmd(ui.ctx(), TrayCmd::OpenSettings)
-                }
-                hotkey::HotkeyEvent::OpenStatus => self.run_tray_cmd(ui.ctx(), TrayCmd::OpenStatus),
-                hotkey::HotkeyEvent::ToggleRecording => {
-                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleRecording)
-                }
-                hotkey::HotkeyEvent::ToggleOverlayLock => {
-                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleOverlayLock)
-                }
-                hotkey::HotkeyEvent::ToggleFloating => {
-                    self.run_tray_cmd(ui.ctx(), TrayCmd::ToggleFloating)
+                // The tray menu's actions (#594): exactly what its row does.
+                other => {
+                    if let Some(cmd) = other.tray_cmd() {
+                        self.run_tray_cmd(ui.ctx(), cmd);
+                    }
                 }
             }
         }

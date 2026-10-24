@@ -1494,6 +1494,26 @@ mod tests {
         );
     }
 
+    /// Every action has exactly one row on the Shortcuts page (#594): one
+    /// added to `Shortcuts` but not to the page could never be chosen.
+    #[test]
+    fn every_shortcut_has_one_row() {
+        use rigstats_backend::shortcut::SINGLE_ACTIONS;
+        let rows: Vec<Action> = SHORTCUT_ROWS
+            .iter()
+            .chain(TRAY_SHORTCUT_ROWS)
+            .map(|&(a, _, _)| a)
+            .collect();
+        for action in SINGLE_ACTIONS.into_iter().chain([Action::Profiles]) {
+            assert_eq!(
+                rows.iter().filter(|&&a| a == action).count(),
+                1,
+                "{action:?}"
+            );
+        }
+        assert_eq!(rows.len(), SINGLE_ACTIONS.len() + 1);
+    }
+
     /// Holding Ctrl or Shift before the key sends those presses first
     /// (egui 0.37); they must not read as a wrong key (seen live, #569).
     #[test]
