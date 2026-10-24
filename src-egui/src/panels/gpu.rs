@@ -152,10 +152,13 @@ pub fn draw(
                 ring_color,
                 &ring_label,
             );
-            ui.add_space(12.0 * sc);
+            // Compact uses the CPU panel's spacing, so their columns line up
+            // when the two are stacked.
+            let gap = if compact { 16.0 } else { 12.0 } * sc;
+            ui.add_space(gap);
             if compact {
                 super::cpu::temp_ring(ui, stats.gpu_temp, tc, sc);
-                ui.add_space(12.0 * sc);
+                ui.add_space(gap);
             }
 
             let temp_s = stats
@@ -189,7 +192,9 @@ pub fn draw(
                 };
                 egui::Grid::new("gpu_meta")
                     .num_columns(lead + 2)
-                    .min_col_width(38.0 * sc)
+                    // Compact: the CPU panel's column width, so FREQ and
+                    // POWER line up with it.
+                    .min_col_width(if compact { 50.0 } else { 38.0 } * sc)
                     .show(ui, |ui| {
                         if !compact {
                             ui.label(
