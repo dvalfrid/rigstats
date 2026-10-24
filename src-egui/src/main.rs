@@ -1201,6 +1201,7 @@ impl RigStatsApp {
         if s.look_profile.as_deref() != Some(id.as_str()) {
             // A drag not yet flushed belongs to the outgoing profile (#599).
             self.write_floating_positions(&mut s);
+            self.log_leaving_positions(&s, &id);
             self.floating
                 .positions_dirty
                 .store(false, Ordering::Relaxed);

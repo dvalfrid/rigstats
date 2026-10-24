@@ -588,6 +588,13 @@ needed:
   the incoming one's over it (a panel it has no place for stays put); the app
   writes a drag not yet flushed first (`write_floating_positions`) and moves the
   panels after (`load_floating_positions`, which clears `panels_positioned`).
+  A panel being placed gets `ViewportCommand::OuterPosition` itself: the
+  builder's `with_position` only sends one when the position differs from the
+  last one the builder sent, and a drag since then doesn't count, so a switch
+  back to that place left the panel where it was dragged and the tracking stored
+  that in the profile (seen live: Silent took Eco's places). Each switch logs
+  `floating: profile A → B: leaving with …` and `floating: profile loaded … —
+  moving the panels` / `no move` in `rigstats-debug.log`.
   Kept beside `ProfileLook`, not in it, so the Control Center's preview and
   Revert never move a panel.
 
