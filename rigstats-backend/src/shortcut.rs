@@ -477,6 +477,18 @@ mod tests {
     }
 
     #[test]
+    fn a_file_with_the_removed_floating_shortcut_still_reads() {
+        // An RC-era file from before #599 removed it: the key is ignored.
+        let s: Shortcuts = serde_json::from_str(
+            r#"{"overlay":"Ctrl+Alt+O","recording":"Ctrl+Alt+R","floating":"Ctrl+Alt+L"}"#,
+        )
+        .unwrap();
+        assert_eq!(s.recording, Shortcut::parse("Ctrl+Alt+R"));
+        assert_eq!(s.overlay, Shortcut::parse("Ctrl+Alt+O"));
+        assert!(!serde_json::to_string(&s).unwrap().contains("floating"));
+    }
+
+    #[test]
     fn a_missing_or_unreadable_value_is_that_actions_default() {
         let s: Shortcuts =
             serde_json::from_str(r#"{"overlay":"Ctrl+Alt+Nope","profiles":42,"microphone":null}"#)

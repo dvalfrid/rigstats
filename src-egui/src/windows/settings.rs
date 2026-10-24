@@ -1449,6 +1449,21 @@ mod tests {
     }
 
     #[test]
+    fn saving_settings_keeps_the_profiles_floating_choice() {
+        // Floating and its size belong to the profile (#599): a draft from
+        // before the Control Center turned floating on must not turn it off.
+        let mut live = settings::Settings::default();
+        let mut draft = live.clone();
+        live.floating_mode = true;
+        live.floating_panel_scale = 1.7;
+        draft.window_layer = "on_top".into();
+        carry_live(&mut draft, &live);
+        assert!(draft.floating_mode);
+        assert_eq!(draft.floating_panel_scale, 1.7);
+        assert_eq!(draft.window_layer, "on_top", "its own change stays");
+    }
+
+    #[test]
     fn writing_the_draft_back_keeps_what_this_window_does_not_edit() {
         // The live settings: wallpaper layer, click-through on, a look the
         // Control Center set, and a profile's stored look.
