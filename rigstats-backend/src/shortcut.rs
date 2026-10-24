@@ -188,7 +188,29 @@ pub enum Action {
     /// F1…F9: the profile at that place in the profile bar.
     Profiles,
     Microphone,
+    /// The tray menu's actions, off unless chosen (#594).
+    DeskLamp,
+    ControlCenter,
+    Settings,
+    Status,
+    Recording,
+    OverlayLock,
+    Floating,
 }
+
+/// Every action with one chord of its own (all but [`Action::Profiles`]).
+pub const SINGLE_ACTIONS: [Action; 10] = [
+    Action::Overlay,
+    Action::NextProfile,
+    Action::Microphone,
+    Action::DeskLamp,
+    Action::ControlCenter,
+    Action::Settings,
+    Action::Status,
+    Action::Recording,
+    Action::OverlayLock,
+    Action::Floating,
+];
 
 impl Action {
     /// What it does, in the words Settings and Status use.
@@ -198,6 +220,13 @@ impl Action {
             Action::NextProfile => "switches to the next profile",
             Action::Profiles => "switches to a profile",
             Action::Microphone => "mutes the microphone",
+            Action::DeskLamp => "turns the desk lamp on or off",
+            Action::ControlCenter => "opens the Control Center",
+            Action::Settings => "opens Settings",
+            Action::Status => "opens Status",
+            Action::Recording => "starts or stops recording",
+            Action::OverlayLock => "locks or unlocks the overlay",
+            Action::Floating => "turns floating panels on or off",
         }
     }
 }
@@ -222,6 +251,13 @@ pub struct Shortcuts {
     #[serde(serialize_with = "serialize_mods")]
     pub profiles: Option<Mods>,
     pub microphone: Option<Shortcut>,
+    pub desk_lamp: Option<Shortcut>,
+    pub control_center: Option<Shortcut>,
+    pub settings: Option<Shortcut>,
+    pub status: Option<Shortcut>,
+    pub recording: Option<Shortcut>,
+    pub overlay_lock: Option<Shortcut>,
+    pub floating: Option<Shortcut>,
 }
 
 fn serialize_mods<S: Serializer>(mods: &Option<Mods>, serializer: S) -> Result<S::Ok, S::Error> {
@@ -232,13 +268,22 @@ fn serialize_mods<S: Serializer>(mods: &Option<Mods>, serializer: S) -> Result<S
 }
 
 impl Default for Shortcuts {
-    /// The chords from before #569: Ctrl+Alt+O, P, F1…F9 and M.
+    /// The chords from before #569: Ctrl+Alt+O, P, F1…F9 and M. The tray
+    /// actions added in #594 are off: a chord of ours could take one another
+    /// program uses, and these are wanted by fewer people.
     fn default() -> Self {
         Self {
             overlay: Some(Shortcut::new(Mods::CTRL_ALT, 0x4F)),
             next_profile: Some(Shortcut::new(Mods::CTRL_ALT, 0x50)),
             profiles: Some(Mods::CTRL_ALT),
             microphone: Some(Shortcut::new(Mods::CTRL_ALT, 0x4D)),
+            desk_lamp: None,
+            control_center: None,
+            settings: None,
+            status: None,
+            recording: None,
+            overlay_lock: None,
+            floating: None,
         }
     }
 }
@@ -264,6 +309,13 @@ impl<'de> Deserialize<'de> for Shortcuts {
                 Some(v) => v.as_str().and_then(Mods::parse).or(defaults.profiles),
             },
             microphone: chord("microphone", defaults.microphone),
+            desk_lamp: chord("deskLamp", defaults.desk_lamp),
+            control_center: chord("controlCenter", defaults.control_center),
+            settings: chord("settings", defaults.settings),
+            status: chord("status", defaults.status),
+            recording: chord("recording", defaults.recording),
+            overlay_lock: chord("overlayLock", defaults.overlay_lock),
+            floating: chord("floating", defaults.floating),
         })
     }
 }
@@ -276,6 +328,13 @@ impl Shortcuts {
             Action::NextProfile => self.next_profile,
             Action::Profiles => self.profiles.map(|mods| Shortcut::new(mods, VK_F1)),
             Action::Microphone => self.microphone,
+            Action::DeskLamp => self.desk_lamp,
+            Action::ControlCenter => self.control_center,
+            Action::Settings => self.settings,
+            Action::Status => self.status,
+            Action::Recording => self.recording,
+            Action::OverlayLock => self.overlay_lock,
+            Action::Floating => self.floating,
         }
     }
 
@@ -287,6 +346,13 @@ impl Shortcuts {
             Action::NextProfile => self.next_profile = chord,
             Action::Profiles => self.profiles = chord.map(|c| c.mods),
             Action::Microphone => self.microphone = chord,
+            Action::DeskLamp => self.desk_lamp = chord,
+            Action::ControlCenter => self.control_center = chord,
+            Action::Settings => self.settings = chord,
+            Action::Status => self.status = chord,
+            Action::Recording => self.recording = chord,
+            Action::OverlayLock => self.overlay_lock = chord,
+            Action::Floating => self.floating = chord,
         }
     }
 
@@ -304,7 +370,7 @@ impl Shortcuts {
 
     /// The action other than `except` that uses `chord`.
     fn user_of(&self, chord: Shortcut, except: Action) -> Option<Action> {
-        [Action::Overlay, Action::NextProfile, Action::Microphone]
+        SINGLE_ACTIONS
             .into_iter()
             .filter(|&a| a != except)
             .find(|&a| self.get(a) == Some(chord))
@@ -330,7 +396,7 @@ impl Shortcuts {
         if mods.count() < 2 {
             return Some(Rejected::TooFewModifiers);
         }
-        [Action::Overlay, Action::NextProfile, Action::Microphone]
+        SINGLE_ACTIONS
             .into_iter()
             .find(|&a| {
                 self.get(a)
@@ -413,7 +479,7 @@ mod tests {
         let json = serde_json::to_string(&s).unwrap();
         assert_eq!(
             json,
-            r#"{"overlay":"Ctrl+Shift+F10","nextProfile":"Ctrl+Alt+P","profiles":"Alt+Shift","microphone":null}"#
+            r#"{"overlay":"Ctrl+Shift+F10","nextProfile":"Ctrl+Alt+P","profiles":"Alt+Shift","microphone":null,"deskLamp":null,"controlCenter":null,"settings":null,"status":null,"recording":null,"overlayLock":null,"floating":null}"#
         );
         assert_eq!(serde_json::from_str::<Shortcuts>(&json).unwrap(), s);
     }
@@ -451,6 +517,57 @@ mod tests {
         // Its own chord is no clash.
         assert_eq!(s.check(Action::Overlay, chord("Ctrl+Alt+O")), None);
         assert_eq!(s.check(Action::Overlay, chord("Ctrl+Shift+O")), None);
+    }
+
+    /// The tray actions (#594) are off by default, and a settings file from
+    /// #569 (without them) reads as off too — nothing new starts taking keys.
+    #[test]
+    fn the_tray_actions_are_off_until_chosen() {
+        let d = Shortcuts::default();
+        for action in [
+            Action::DeskLamp,
+            Action::ControlCenter,
+            Action::Settings,
+            Action::Status,
+            Action::Recording,
+            Action::OverlayLock,
+            Action::Floating,
+        ] {
+            assert_eq!(d.get(action), None, "{action:?}");
+        }
+        let older: Shortcuts = serde_json::from_str(
+            r#"{"overlay":"Ctrl+Alt+O","nextProfile":"Ctrl+Alt+P","profiles":"Ctrl+Alt","microphone":"Ctrl+Alt+M"}"#,
+        )
+        .unwrap();
+        assert_eq!(older, d);
+    }
+
+    #[test]
+    fn a_tray_action_is_stored_and_clashes_like_the_others() {
+        let mut s = Shortcuts::default();
+        let lamp = Shortcut::parse("Ctrl+Shift+L").unwrap();
+        s.set(Action::DeskLamp, Some(lamp));
+        assert_eq!(s.desk_lamp, Some(lamp));
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains(r#""deskLamp":"Ctrl+Shift+L""#), "{json}");
+        assert_eq!(serde_json::from_str::<Shortcuts>(&json).unwrap(), s);
+        // Taken by the lamp now, for any other action; free for the lamp itself.
+        assert_eq!(
+            s.check(Action::Status, lamp),
+            Some(Rejected::InUse(Action::DeskLamp))
+        );
+        assert_eq!(s.check(Action::DeskLamp, lamp), None);
+        // And a tray action can't take a profile's F-key.
+        assert_eq!(
+            s.check(Action::Recording, Shortcut::parse("Ctrl+Alt+F2").unwrap()),
+            Some(Rejected::InUse(Action::Profiles))
+        );
+        // Nor can the profiles take a tray action's F-key.
+        s.set(Action::Status, Shortcut::parse("Ctrl+Shift+F3"));
+        assert_eq!(
+            s.check_profiles(Mods::CTRL_SHIFT),
+            Some(Rejected::InUse(Action::Status))
+        );
     }
 
     #[test]

@@ -1036,27 +1036,84 @@ fn microphone_footnote(chord: Option<Shortcut>) -> String {
 
 // ── Shortcuts ─────────────────────────────────────────────────────────────────
 
-/// The Shortcuts page's rows: the action, its title and what it does.
-const SHORTCUT_ROWS: &[(Action, &str, &str)] = &[
+/// One row on the Shortcuts page: the action, its title and what it does.
+type ShortcutRow = (Action, &'static str, &'static str);
+
+/// The Shortcuts page, grouped by what the shortcuts do (#594).
+const SHORTCUT_GROUPS: &[(&str, &[ShortcutRow])] = &[
     (
-        Action::Overlay,
-        "Show or hide the overlay",
-        "Without leaving the game",
+        "Overlay and dashboard",
+        &[
+            (
+                Action::Overlay,
+                "Show or hide the overlay",
+                "Without leaving the game",
+            ),
+            (
+                Action::OverlayLock,
+                "Lock or unlock the overlay",
+                "Unlocked, it can be dragged; locked, clicks pass through to the game",
+            ),
+            (
+                Action::Floating,
+                "Floating panels on or off",
+                "Each panel as its own window, or the dashboard",
+            ),
+        ],
     ),
     (
-        Action::NextProfile,
-        "Next profile",
-        "Switches to the next Control Center profile",
+        "Profiles",
+        &[
+            (
+                Action::NextProfile,
+                "Next profile",
+                "Switches to the next Control Center profile",
+            ),
+            (
+                Action::Profiles,
+                "Profile 1–9",
+                "Straight to the profile at that place in the profile bar — bind a macro key to it",
+            ),
+        ],
     ),
     (
-        Action::Profiles,
-        "Profile 1–9",
-        "Straight to the profile at that place in the profile bar — bind a macro key to it",
+        "Devices",
+        &[
+            (
+                Action::Microphone,
+                "Mute the microphone",
+                "Mutes or unmutes it; which one is under General",
+            ),
+            (
+                Action::DeskLamp,
+                "Desk lamp on or off",
+                "The ROG light bar's lamp; does nothing without one",
+            ),
+        ],
     ),
     (
-        Action::Microphone,
-        "Mute the microphone",
-        "Mutes or unmutes it; which one is under General",
+        "Windows",
+        &[
+            (
+                Action::ControlCenter,
+                "Open the Control Center",
+                "Profiles, fans, lighting and the rest",
+            ),
+            (Action::Settings, "Open Settings", "This window"),
+            (
+                Action::Status,
+                "Open Status",
+                "What's wrong, the logs and diagnostics",
+            ),
+        ],
+    ),
+    (
+        "Recording",
+        &[(
+            Action::Recording,
+            "Start or stop recording",
+            "A session of every reading, kept in Session History",
+        )],
     ),
 ];
 
@@ -1305,7 +1362,7 @@ fn shortcuts_page(
         ui,
         dc,
         "Shortcuts",
-        "Keys that work in every program, games too, whichever profile is on.",
+        "Keys that work in every program, games too, whichever profile is on. The overlay, the profiles and the microphone have keys from the start; the rest are off until you choose some.",
     );
     if let Some(action) = *capture {
         capture_keys(ui, shortcuts, action, capture, note);
@@ -1314,52 +1371,62 @@ fn shortcuts_page(
     let taken = crate::hotkey::taken();
     #[cfg(not(windows))]
     let taken: Vec<(String, String)> = Vec::new();
-    ui_kit::group(
+    for &(heading, rows) in SHORTCUT_GROUPS {
+        ui_kit::group(ui, dc, Some(heading), None, |g| {
+            shortcut_rows(g, dc, rows, shortcuts, capture, note, &taken);
+        });
+    }
+    ui_kit::footnote(
         ui,
         dc,
-        None,
-        Some(
-            "Choose New shortcut…, then press the keys: two of Ctrl, Alt and Shift with a \
-             letter, digit or F-key. Esc cancels. A shortcut another program already uses \
-             never reaches RIGStats.",
-        ),
-        |g| {
-            for &(action, title, subtitle) in SHORTCUT_ROWS {
-                g.row(title, Some(subtitle), |ui| match action {
-                    Action::Profiles => profiles_dropdown(ui, shortcuts, capture, note),
-                    _ => shortcut_dropdown(ui, shortcuts, action, capture, note),
-                });
-                // This row's chords another program holds.
-                let held: Vec<String> = row_chords(shortcuts, action)
-                    .iter()
-                    .map(Shortcut::to_string)
-                    .filter(|name| taken.iter().any(|(t, _)| t == name))
-                    .collect();
-                if *capture == Some(action) && note.is_none() {
-                    g.block(|ui| {
-                        ui_kit::footnote(
-                            ui,
-                            dc,
-                            "Press the new shortcut now — Esc cancels. If nothing happens, another \n                             program already uses those keys.",
-                        );
-                    });
-                } else if let Some((_, why)) = note.as_ref().filter(|(a, _)| *a == action) {
-                    g.block(|ui| {
-                        ui_kit::row_problem(ui, dc, Severity::Attention, why);
-                    });
-                } else if !held.is_empty() && *capture != Some(action) {
-                    g.block(|ui| {
-                        ui_kit::row_problem(
-                            ui,
-                            dc,
-                            Severity::Attention,
-                            &crate::problems::hotkey_taken_in_row(&held),
-                        );
-                    });
-                }
-            }
-        },
+        "Choose New shortcut…, then press the keys: two of Ctrl, Alt and Shift with a letter, digit or F-key. Esc cancels. A shortcut another program already uses never reaches RIGStats.",
     );
+}
+
+/// A row per action: its dropdown, then what's wrong with it, if anything.
+fn shortcut_rows(
+    g: &mut ui_kit::Group<'_>,
+    dc: &DialogColors,
+    rows: &[(Action, &str, &str)],
+    shortcuts: &mut Shortcuts,
+    capture: &mut Option<Action>,
+    note: &mut Option<(Action, String)>,
+    taken: &[(String, String)],
+) {
+    for &(action, title, subtitle) in rows {
+        g.row(title, Some(subtitle), |ui| match action {
+            Action::Profiles => profiles_dropdown(ui, shortcuts, capture, note),
+            _ => shortcut_dropdown(ui, shortcuts, action, capture, note),
+        });
+        // This row's chords another program holds.
+        let held: Vec<String> = row_chords(shortcuts, action)
+            .iter()
+            .map(Shortcut::to_string)
+            .filter(|name| taken.iter().any(|(t, _)| t == name))
+            .collect();
+        if *capture == Some(action) && note.is_none() {
+            g.block(|ui| {
+                ui_kit::footnote(
+                    ui,
+                    dc,
+                    "Press the new shortcut now — Esc cancels. If nothing happens, another program already uses those keys.",
+                );
+            });
+        } else if let Some((_, why)) = note.as_ref().filter(|(a, _)| *a == action) {
+            g.block(|ui| {
+                ui_kit::row_problem(ui, dc, Severity::Attention, why);
+            });
+        } else if !held.is_empty() && *capture != Some(action) {
+            g.block(|ui| {
+                ui_kit::row_problem(
+                    ui,
+                    dc,
+                    Severity::Attention,
+                    &crate::problems::hotkey_taken_in_row(&held),
+                );
+            });
+        }
+    }
 }
 
 fn send_test_notification() {
@@ -1441,6 +1508,26 @@ mod tests {
             written.wallpaper_engine_before,
             live.wallpaper_engine_before
         );
+    }
+
+    /// Every action has exactly one row on the Shortcuts page (#594): one
+    /// added to `Shortcuts` but not to the page could never be chosen.
+    #[test]
+    fn every_shortcut_has_one_row() {
+        use rigstats_backend::shortcut::SINGLE_ACTIONS;
+        let rows: Vec<Action> = SHORTCUT_GROUPS
+            .iter()
+            .flat_map(|(_, rows)| rows.iter())
+            .map(|&(a, _, _)| a)
+            .collect();
+        for action in SINGLE_ACTIONS.into_iter().chain([Action::Profiles]) {
+            assert_eq!(
+                rows.iter().filter(|&&a| a == action).count(),
+                1,
+                "{action:?}"
+            );
+        }
+        assert_eq!(rows.len(), SINGLE_ACTIONS.len() + 1);
     }
 
     /// Holding Ctrl or Shift before the key sends those presses first

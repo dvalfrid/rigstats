@@ -35,30 +35,36 @@ impl RigStatsApp {
             None => {}
         }
         while let Ok(cmd) = self.tray_rx.try_recv() {
-            match cmd {
-                TrayCmd::OpenSettings => self.tray_open_settings(),
-                TrayCmd::OpenAbout => self.tray_open_about(),
-                TrayCmd::OpenStatus => self.tray_open_status(ctx),
-                TrayCmd::OpenHistory => self.tray_open_history(ctx),
-                TrayCmd::OpenControlCenter => {
-                    self.dialogs.control_open.store(true, Ordering::Relaxed);
-                    self.dialogs.control_focus.store(true, Ordering::Relaxed);
-                }
-                TrayCmd::OpenUpdater => self.tray_open_updater(),
-                TrayCmd::OpenDocs => self.tray_open_docs(ctx),
-                TrayCmd::ToggleFloating => self.tray_toggle_floating(ctx),
-                TrayCmd::ToggleOverlay => self.toggle_overlay_mode(),
-                TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
-                TrayCmd::ToggleRecording => self.tray_toggle_recording(ctx),
-                TrayCmd::ToggleLamp => {
-                    let _ = self
-                        .control_cmd_tx
-                        .try_send(control::ControlCmd::ToggleLamp);
-                }
-                TrayCmd::ToggleMicMute => self.toggle_microphone(),
-                TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
-                TrayCmd::SelectProfile(id) => self.apply_profile(id),
+            self.run_tray_cmd(ctx, cmd);
+        }
+    }
+
+    /// One tray command — also what a global shortcut for a tray action
+    /// runs (#594), so the two can't drift apart.
+    pub(crate) fn run_tray_cmd(&mut self, ctx: &egui::Context, cmd: TrayCmd) {
+        match cmd {
+            TrayCmd::OpenSettings => self.tray_open_settings(),
+            TrayCmd::OpenAbout => self.tray_open_about(),
+            TrayCmd::OpenStatus => self.tray_open_status(ctx),
+            TrayCmd::OpenHistory => self.tray_open_history(ctx),
+            TrayCmd::OpenControlCenter => {
+                self.dialogs.control_open.store(true, Ordering::Relaxed);
+                self.dialogs.control_focus.store(true, Ordering::Relaxed);
             }
+            TrayCmd::OpenUpdater => self.tray_open_updater(),
+            TrayCmd::OpenDocs => self.tray_open_docs(ctx),
+            TrayCmd::ToggleFloating => self.tray_toggle_floating(ctx),
+            TrayCmd::ToggleOverlay => self.toggle_overlay_mode(),
+            TrayCmd::ToggleOverlayLock => self.toggle_overlay_lock(),
+            TrayCmd::ToggleRecording => self.tray_toggle_recording(ctx),
+            TrayCmd::ToggleLamp => {
+                let _ = self
+                    .control_cmd_tx
+                    .try_send(control::ControlCmd::ToggleLamp);
+            }
+            TrayCmd::ToggleMicMute => self.toggle_microphone(),
+            TrayCmd::SelectGpu(pref) => self.select_gpu(pref),
+            TrayCmd::SelectProfile(id) => self.apply_profile(id),
         }
     }
 

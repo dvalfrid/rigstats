@@ -226,6 +226,10 @@ or F-key), or turn it **Off**. It works at once. Or change it in the other
 program and restart RIGStats. A common one: **NVIDIA App** uses Ctrl+Alt+M for
 its own microphone switch. The tray menu does the same things.
 
+The tray menu's other actions (desk lamp, Control Center, Settings, Status,
+recording, overlay lock, floating panels) have no shortcut until you give them
+one in the same place.
+
 ## Notifications Don't Show
 
 Alerts and other notifications come from **RIGStats** (with its icon), and
