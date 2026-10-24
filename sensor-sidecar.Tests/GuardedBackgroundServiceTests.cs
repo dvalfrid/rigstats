@@ -41,7 +41,9 @@ public class GuardedBackgroundServiceTests
     {
         var worker = new FlakyWorker(failures: int.MaxValue);
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(100);
+        // Stop only once it has failed and paused at least once: a fixed wait
+        // could stop it before a starved CI thread pool started it at all.
+        Assert.True(SpinWait.SpinUntil(() => worker.Runs > 1, TimeSpan.FromSeconds(10)), "the worker never ran twice");
 
         await worker.StopAsync(CancellationToken.None);
 

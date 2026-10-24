@@ -13,6 +13,21 @@ namespace SensorSidecar.Tests;
 /// </summary>
 public class HardwareHostTests
 {
+    /// The first telemetry line `wanted` accepts, asking again for up to 10 s:
+    /// a sample that finishes in the background takes as long as the runner
+    /// gives it, so a test waits for the outcome, not for a fixed time.
+    private static async Task<JsonElement> NextLineAsync(HardwareHost host, Func<JsonElement, bool> wanted)
+    {
+        var until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (true)
+        {
+            var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+            if (wanted(line) || DateTime.UtcNow > until)
+                return line;
+            await Task.Delay(20);
+        }
+    }
+
     private sealed class FakeHardware : ISensorHardware
     {
         private int _concurrent;
@@ -226,8 +241,9 @@ public class HardwareHostTests
         gate.Set();
         hardware.Gate = null;
         now += 1_000;
-        await Task.Delay(100);
-        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        // The released sample finishes in the background; ask until a live
+        // line comes rather than guessing how long that takes on a busy runner.
+        var live = await NextLineAsync(host, l => !l.TryGetProperty("sample_age_ms", out _));
         Assert.False(live.TryGetProperty("sample_age_ms", out _));
     }
 
@@ -249,8 +265,7 @@ public class HardwareHostTests
 
         hardware.SampleFails = () => null;
         now += 1_000;
-        await Task.Delay(100);
-        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var live = await NextLineAsync(host, l => !l.TryGetProperty("sample_age_ms", out _));
         Assert.Equal("RTX isn't read any more", live.GetProperty("hardware_problems")[0].GetProperty("title").GetString());
     }
 
