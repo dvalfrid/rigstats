@@ -3,7 +3,7 @@
 use crate::{draw_padlock, take_fan_curve_request, BehindEnforce, RigStatsApp};
 use eframe::egui;
 use rigstats_backend::settings;
-use rigstats_egui::geometry::guard_panel_position;
+use rigstats_egui::geometry::{floating_drag_zone, floating_panel_w, guard_panel_position};
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::tray::{panel_initial_h, panel_label};
 use rigstats_egui::{panels, theme, windows};
@@ -52,12 +52,7 @@ impl RigStatsApp {
                 guard_panel_position(saved, default_pos)
             };
 
-            let base_w = if self.runtime.is_compact(&key) {
-                panels::COMPACT_FLOATING_W
-            } else {
-                450.0
-            };
-            let panel_w = base_w * scale;
+            let panel_w = floating_panel_w(self.runtime.is_compact(&key), scale);
             let initial_h = panel_initial_h(&key) * scale;
 
             // Only set window position on first creation.  After that the OS
@@ -403,16 +398,10 @@ impl RigStatsApp {
                                 *new_pref_arc.lock_safe() = Some(p);
                             }
 
-                            // ── Drag zone: top 24 px of the panel inner area ──
-                            // inner_margin top = 8 px; title row is ~20 px tall,
-                            // so top+24 covers the title row comfortably. All
-                            // of it × the panel scale, like the panel itself —
-                            // unscaled, at 170 % the zone was little more than
-                            // the top margin and hard to find.
-                            let drag_zone = egui::Rect::from_min_max(
-                                panel_rect.min,
-                                egui::pos2(panel_rect.right(), panel_rect.top() + 24.0 * scale),
-                            );
+                            // ── Drag zone: top 24 px of the panel × the scale ──
+                            // Unscaled, at 170 % it was little more than the
+                            // top margin and hard to find.
+                            let drag_zone = floating_drag_zone(panel_rect, scale);
                             // Padlock hit area: right 20 px of the drag zone.
                             let padlock_cx = drag_zone.right() - 14.0 * scale;
                             let padlock_cy = drag_zone.center().y;

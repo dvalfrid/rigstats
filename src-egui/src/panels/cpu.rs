@@ -42,7 +42,6 @@ pub fn draw(
         let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                super::leave_room_for_logo(ui, logo_size, sc);
                 ui.label(
                     RichText::new("CPU LOAD")
                         .strong()
@@ -56,10 +55,7 @@ pub fn draw(
                     } else {
                         model
                     };
-                    ui.add(
-                        egui::Label::new(RichText::new(model).size(11.0 * sc).color(th.text_muted))
-                            .truncate(),
-                    );
+                    ui.label(RichText::new(model).size(11.0 * sc).color(th.text_muted));
                 }
             });
             if let (Some(logo), Some(size)) = (logo, logo_size) {

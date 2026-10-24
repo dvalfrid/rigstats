@@ -73,7 +73,6 @@ pub fn draw(
         let logo_size = logo.map(|l| super::logo_size(l, sc, compact));
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                super::leave_room_for_logo(ui, logo_size, sc);
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new("GPU LOAD")
@@ -124,10 +123,7 @@ pub fn draw(
                 if !stats.gpu_name.is_empty() {
                     let name = &stats.gpu_name;
                     let name = if name.len() > 44 { &name[..44] } else { name };
-                    ui.add(
-                        egui::Label::new(RichText::new(name).size(11.0 * sc).color(th.text_muted))
-                            .truncate(),
-                    );
+                    ui.label(RichText::new(name).size(11.0 * sc).color(th.text_muted));
                 }
             });
             if let (Some(logo), Some(size)) = (logo, logo_size) {
