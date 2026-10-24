@@ -39,8 +39,9 @@ filter in step 4 needs.
    devices**, **Sound, video and game controllers**) and double-click your
    device. Many entries are called *USB Input Device* or *HID-compliant
    device*; try the ones that appear and disappear when you unplug it.
-3. **Details** tab → *Property* → **Hardware Ids**. A line like
-   `HID\VID_0DB0&PID_0076` means vendor id **`0DB0`** and product id `0076`.
+3. **Details** tab → *Property* → **Hardware Ids**. A line starting with
+   `HID\VID_0DB0&PID_0076` means vendor id **`0DB0`** and product id `0076`
+   (what follows, such as `&MI_02`, doesn't matter here).
 
 **Or from RIGStats:** **Status → Collect diagnostics**, then in the ZIP open
 `lighting-devices.json`. Under `hid_scan`, every USB device is listed with its
