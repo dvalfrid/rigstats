@@ -761,19 +761,25 @@ pub fn ordered_rows_with(
                 }
                 ui.add_space(8.0);
                 if let Some(i) = pos {
+                    // A missing arrow keeps its place — allocated like the
+                    // arrow, so the item spacing after it is the same too and
+                    // what `extra` draws lines up on every row.
+                    let blank = |ui: &mut Ui| {
+                        ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
+                    };
                     if i + 1 < shown {
                         if arrow_btn(ui, dc, true).on_hover_text("Move down").clicked() {
                             shift = Some((key, 1));
                         }
                     } else {
-                        ui.add_space(22.0);
+                        blank(ui);
                     }
                     if i > 0 {
                         if arrow_btn(ui, dc, false).on_hover_text("Move up").clicked() {
                             shift = Some((key, -1));
                         }
                     } else {
-                        ui.add_space(22.0);
+                        blank(ui);
                     }
                     extra(ui, key);
                 }
@@ -1438,6 +1444,34 @@ mod tests {
     use super::*;
 
     const ORDER: &[&str] = &["header", "clock", "cpu", "gpu", "ram"];
+
+    #[test]
+    fn what_comes_after_the_arrows_lines_up_on_every_row() {
+        // The first row has no up arrow and the last no down arrow; what
+        // `extra` draws (Full / Compact) must still start at the same x.
+        let ctx = egui::Context::default();
+        let dc = DialogColors::dark();
+        let items: Vec<(&str, String)> = ORDER.iter().map(|k| (*k, k.to_string())).collect();
+        let mut shown = list(&["cpu", "gpu", "ram"]);
+        let mut at = Vec::new();
+        for _ in 0..2 {
+            at.clear();
+            let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+                group(ui, &dc, None, None, |g| {
+                    ordered_rows_with(
+                        g,
+                        &mut shown,
+                        &items,
+                        |_| false,
+                        |ui, key| at.push((key.to_string(), ui.cursor().max.x)),
+                    );
+                });
+            });
+            out.textures_delta.clear();
+        }
+        assert_eq!(at.len(), 3, "{at:?}");
+        assert!(at.iter().all(|(_, x)| (x - at[1].1).abs() < 0.5), "{at:?}");
+    }
 
     fn list(keys: &[&str]) -> Vec<String> {
         keys.iter().map(|k| k.to_string()).collect()
