@@ -489,6 +489,10 @@ impl RigStatsApp {
                         -32000.0, -32000.0,
                     )));
                 }
+                // Left because floating mode was switched on: the window must
+                // stay parked off-screen — restoring it would show an empty
+                // dashboard-sized window where the panels were.
+                Effect::Leave if self.floating.mode => {}
                 Effect::Leave => self.restore_main_window(ctx),
                 Effect::Log(LogLevel::Debug, m) => debug::log_debug(&self.dir, &m),
                 Effect::Log(LogLevel::Warn, m) => debug::log_warn(&self.dir, &m),

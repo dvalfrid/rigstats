@@ -57,7 +57,9 @@ pub enum Effect {
     /// Entered the mode: hand the window's position to the host and park
     /// the window off-screen.
     Enter,
-    /// Left the mode: restore the window on-screen.
+    /// Left the mode: restore the window on-screen — unless floating mode
+    /// is on: its panels are the windows then, and the main window stays
+    /// parked off-screen (#625).
     Leave,
     Log(LogLevel, String),
 }
