@@ -1368,8 +1368,10 @@ What phase 6 (#193) shipped, and what it deliberately didn't:
   from users: the service logs one line at start-up —
   `Other hardware software running: Armoury Crate (AsusFanControlService) →
   fan control; also seen: ArmouryCrateService, AsusCertService` — listing
-  every known program that runs plus any other process named ASUS, Armoury
-  or Aura. A diagnostics ZIP from a user whose fans still fight (RIGStats'
+  every known program that runs plus any other process whose name has a
+  vendor word (`OtherSoftware.VendorWords`: ASUS, Armoury, Aura, and since
+  #621 SteelSeries, Corsair, iCUE, Razer, Logitech G Hub, HyperX, SignalRGB,
+  MSI Mystic Light, Gigabyte, NZXT, Kingston Fury). A diagnostics ZIP from a user whose fans still fight (RIGStats'
   `Fan verify failed … firmware override?` lines while the table says no
   conflict) names the component to add; one where fans were skipped while
   the user had no Fan Xpert at all says the row is too broad.

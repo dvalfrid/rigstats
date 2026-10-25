@@ -43,9 +43,23 @@ public static class OtherSoftware
     public static string? Conflict(string domain, Func<string, bool> running) =>
         Known.FirstOrDefault(p => p.Domain == domain && running(p.Process))?.Name;
 
+    /// Words in a process name that point to other hardware software, for the
+    /// start-up line's "also seen". ASUS's first (#193); then the other
+    /// vendors whose devices RIGStats drives or is about to, so a user's ZIP
+    /// names their program before a `Blocked` rule is written for it (#621:
+    /// SteelSeries GG ran on a tester's PC and this line didn't show it).
+    /// Whole vendor or product words only: "msi" alone would match `msiexec`.
+    public static readonly IReadOnlyList<string> VendorWords =
+    [
+        "asus", "armoury", "aura",
+        "steelseries", "corsair", "icue", "razer", "synapse", "lghub", "logioptions",
+        "hyperx", "ngenuity", "signalrgb", "mysticlight", "rgbfusion", "gigabyte",
+        "nzxt", "kingston", "fury",
+    ];
+
     /// One line for the service log at start: every known program that is
-    /// running, plus any other process whose name says ASUS, Armoury or Aura —
-    /// the evidence for which component owns what on boards we don't have.
+    /// running, plus any other process whose name has a `VendorWords` word —
+    /// the evidence for which program owns what on hardware we don't have.
     public static string Summary(IEnumerable<string> processes)
     {
         var running = processes.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
@@ -55,9 +69,7 @@ public static class OtherSoftware
             .ToList();
         var vendor = running
             .Where(name => Known.All(p => !string.Equals(p.Process, name, StringComparison.OrdinalIgnoreCase)))
-            .Where(name => name.Contains("asus", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("armoury", StringComparison.OrdinalIgnoreCase)
-                || name.Contains("aura", StringComparison.OrdinalIgnoreCase))
+            .Where(name => VendorWords.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase)))
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToList();
         var parts = new List<string>();
