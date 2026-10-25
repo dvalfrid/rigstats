@@ -28,7 +28,7 @@ $proc = Get-Process rigstats -ErrorAction SilentlyContinue
 if ($proc) { Stop-Process -Id $proc.Id -Force }
 cargo build --manifest-path src-egui/Cargo.toml
 (Get-Item .\target\debug\rigstats.exe).LastWriteTime   # must have advanced
-Start-Process .\target\debug\rigstats.exe
+Start-Process .\target\debug\rigstats.exe -WindowStyle Minimized   # debug builds are console apps: the console starts minimized, the dashboard shows normally
 
 # Check egui + backend for errors
 cargo check --manifest-path src-egui/Cargo.toml

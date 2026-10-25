@@ -20,8 +20,10 @@ cargo build --manifest-path src-egui/Cargo.toml
 # 3. Verify timestamp changed — if it didn't, the exe was still locked
 (Get-Item .\target\debug\rigstats.exe).LastWriteTime
 
-# 4. Launch
-Start-Process .\target\debug\rigstats.exe
+# 4. Launch — minimized: a debug build is a console app, so this starts its
+#    console minimized (out of the owner's way and out of screenshots) while
+#    the dashboard itself shows normally
+Start-Process .\target\debug\rigstats.exe -WindowStyle Minimized
 
 # 5. Confirm it started
 Start-Sleep 2
