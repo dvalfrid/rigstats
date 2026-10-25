@@ -304,6 +304,10 @@ pub fn panel_frame(
     let stretch = ui.ctx().data(|d| d.get_temp::<f32>(panel_stretch_id()));
     let fr = frame.show(ui, |ui| {
         ui.set_min_width(ui.available_width());
+        // A panel's text is read, not copied: egui's selectable labels let a
+        // click-drag over a title select it (a blue box behind the letters,
+        // seen in a floating screenshot).
+        ui.style_mut().interaction.selectable_labels = false;
         add_contents(ui);
         // The panel's own height, before any stretch: the landscape grid
         // sizes a row of compact panels to its tallest one (#596).
@@ -638,6 +642,19 @@ mod tests {
 
     fn color_approx_eq(a: Color32, b: Color32, tol: u8) -> bool {
         approx_eq(a.r(), b.r(), tol) && approx_eq(a.g(), b.g(), tol) && approx_eq(a.b(), b.b(), tol)
+    }
+
+    #[test]
+    fn panel_text_cannot_be_selected() {
+        let ctx = egui::Context::default();
+        let mut senses_drag = None;
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            panel_frame(ui, 1.0, &AppTheme::default(), 1.0, |ui| {
+                senses_drag = Some(ui.label("RAM USAGE").sense.senses_drag());
+            });
+        });
+        out.textures_delta.clear();
+        assert_eq!(senses_drag, Some(false));
     }
 
     #[test]
