@@ -54,13 +54,26 @@ the app's own updates, which all download from GitHub) and **checks**
 (`latest.json` — the app's update checks, about 10 s after start and then every
 6 h; the best measure of active installations). The table also shows each
 release per day while it was the newest, so short- and long-lived releases
-compare. Needs `gh`, logged in.
+compare; release candidates are left out (they never become
+`releases/latest`). `-ByMinor` sums each minor version (1.49.0 + 1.49.1), RCs
+on their own rows. `-Trend` lays each release's checks over the days it was
+the newest and shows checks per day week by week, with the change from the
+week before and an estimate of active installations (2–5 checks a day each —
+an estimate, the owner's own PCs included). Needs `gh`, logged in.
 
 ```powershell
 pwsh -File tools\download-stats.ps1              # recent releases
 pwsh -File tools\download-stats.ps1 -Top 0       # every release
+pwsh -File tools\download-stats.ps1 -ByMinor     # summed per minor version
+pwsh -File tools\download-stats.ps1 -Trend       # checks per day, week by week
 pwsh -File tools\download-stats.ps1 -Append x.csv  # add a snapshot to a CSV
+pwsh -File tools\download-stats.ps1 -Report reports -Csv x.csv  # the weekly report
 ```
+
+`-Report` writes `<year>-W<week>.md` for the last complete week (and
+`latest.md`) into the folder: the week in numbers, downloads per release since
+the CSV's previous snapshot, the last 12 weeks of the trend and the totals per
+minor version.
 
 GitHub keeps only running totals, so `.github/workflows/download-stats.yml`
 appends a snapshot every Monday to `downloads.csv` on the `stats` branch (see

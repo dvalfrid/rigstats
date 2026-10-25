@@ -1,7 +1,8 @@
 name: Download stats
 
 # A weekly snapshot of download counts per release (tools/download-stats.ps1),
-# appended to downloads.csv on the `stats` branch. GitHub keeps only running
+# appended to downloads.csv on the `stats` branch, and a report of the week
+# in reports/<year>-W<week>.md (and reports/latest.md). GitHub keeps only running
 # totals, so these snapshots are the history. `main` is protected, so the data
 # lives on its own branch and never touches main or a release.
 # Not triggered on release: releases are created with GITHUB_TOKEN, and GitHub
@@ -43,11 +44,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pwsh -File tools/download-stats.ps1 -Repo $env:GITHUB_REPOSITORY -Append "$env:RUNNER_TEMP/stats/downloads.csv"
 
+      - name: Write the weekly report
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pwsh -File tools/download-stats.ps1 -Repo $env:GITHUB_REPOSITORY -Report "$env:RUNNER_TEMP/stats/reports" -Csv "$env:RUNNER_TEMP/stats/downloads.csv"
+          # The same page in the run's summary.
+          Get-Content "$env:RUNNER_TEMP/stats/reports/latest.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+
       - name: Push the snapshot
         working-directory: ${{ runner.temp }}/stats
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add downloads.csv
+          git add downloads.csv reports
           git commit -m "stats: download snapshot $(date -u +%Y-%m-%d)"
           git push origin stats
