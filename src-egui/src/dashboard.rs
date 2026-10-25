@@ -102,6 +102,8 @@ pub struct DashboardView<'a> {
     pub control: &'a ControlState,
     /// Panels drawn in their compact layout (#596).
     pub compact_panels: &'a [String],
+    /// The space between panels in px (#606, `Settings.panel_spacing`).
+    pub panel_spacing: f32,
 }
 
 impl DashboardView<'_> {
@@ -360,9 +362,9 @@ impl DashboardView<'_> {
         if n == 0 {
             return None;
         }
-        let gap = 6.0_f32;
+        let gap = self.panel_spacing;
         let avail_w = ui.available_width().max(40.0);
-        let (n_cols, n_rows, sc) = landscape_grid_layout(n, avail_w, ref_h);
+        let (n_cols, n_rows, sc) = landscape_grid_layout(n, avail_w, ref_h, gap);
 
         let cell_w = ((avail_w - gap * (n_cols as f32 - 1.0)) / n_cols as f32).max(40.0);
         let full_h = 224.0 * sc;
@@ -475,6 +477,8 @@ pub struct DashboardRuntime {
     pub visible_panels: Vec<String>,
     /// Panels drawn compact (#596), from the profile's look.
     pub compact_panels: Vec<String>,
+    /// The space between panels in px (#606).
+    pub panel_spacing: f32,
     /// Control Center state (#187) — see `DashboardView::control`'s doc.
     pub control: ControlState,
 }
@@ -493,6 +497,7 @@ impl DashboardRuntime {
             psu_watts: s.psu_watts,
             visible_panels: s.visible_panels.clone(),
             compact_panels: s.compact_panels.clone(),
+            panel_spacing: f32::from(s.panel_spacing),
             control: ControlState::default(),
         }
     }
@@ -537,8 +542,11 @@ impl DashboardRuntime {
         self.app_theme = theme::AppTheme::from_key(&s.theme);
         self.thresholds = PanelThresholds::from_settings(s);
         self.psu_watts = s.psu_watts;
-        let panels_changed =
-            self.visible_panels != s.visible_panels || self.compact_panels != s.compact_panels;
+        let spacing = f32::from(s.panel_spacing);
+        let panels_changed = self.visible_panels != s.visible_panels
+            || self.compact_panels != s.compact_panels
+            || self.panel_spacing != spacing;
+        self.panel_spacing = spacing;
         if panels_changed {
             self.visible_panels = s.visible_panels.clone();
             self.compact_panels = s.compact_panels.clone();
@@ -560,6 +568,7 @@ impl DashboardRuntime {
             psu_watts: self.psu_watts,
             control: &self.control,
             compact_panels: &self.compact_panels,
+            panel_spacing: self.panel_spacing,
         }
     }
 }
@@ -571,6 +580,10 @@ mod tests {
     /// The panels' frames the grid drew (their fill is the panel fill), left
     /// to right, after a few passes so measured heights have settled.
     fn grid_frames(compact: &[&str], fill: bool) -> Vec<egui::Rect> {
+        grid_frames_spaced(compact, fill, 6.0)
+    }
+
+    fn grid_frames_spaced(compact: &[&str], fill: bool, spacing: f32) -> Vec<egui::Rect> {
         let ctx = egui::Context::default();
         let tex = brand::Textures::load(&ctx);
         let stats = PollStats {
@@ -600,6 +613,7 @@ mod tests {
             psu_watts: None,
             control: &control,
             compact_panels: &compact,
+            panel_spacing: spacing,
         };
         let panels: Vec<String> = ["cpu", "gpu", "ram", "net"].map(String::from).to_vec();
         let input = || egui::RawInput {
@@ -647,6 +661,21 @@ mod tests {
             "compact {h}, full {}",
             full[0].height()
         );
+    }
+
+    #[test]
+    fn the_landscape_grid_spaces_its_cells_by_the_setting() {
+        for spacing in [0.0, 6.0, 20.0] {
+            let frames = grid_frames_spaced(&[], false, spacing);
+            assert_eq!(frames.len(), 4, "{frames:?}");
+            for pair in frames.windows(2) {
+                let gap = pair[1].left() - pair[0].right();
+                assert!(
+                    (gap - spacing).abs() < 1.0,
+                    "spacing {spacing}: {gap} px between {pair:?}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -739,6 +768,7 @@ mod tests {
             psu_watts: None,
             control: &control,
             compact_panels: &keys,
+            panel_spacing: 6.0,
         };
         let input = || egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(

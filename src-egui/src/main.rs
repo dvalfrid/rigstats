@@ -1153,10 +1153,19 @@ impl RigStatsApp {
         } else if profile_is_landscape(profile) {
             // Landscape, not fullscreen: content-fit estimate (the per-frame fit
             // then refines it), same as the portrait branch below.
-            let h = compute_landscape_window_height(&self.runtime.visible_panels, w, profile_h);
+            let h = compute_landscape_window_height(
+                &self.runtime.visible_panels,
+                w,
+                profile_h,
+                self.runtime.panel_spacing,
+            );
             ([mx, my], [w, h])
         } else {
-            let h = compute_window_height(&self.runtime.visible_panels, profile_scale(profile));
+            let h = compute_window_height(
+                &self.runtime.visible_panels,
+                profile_scale(profile),
+                self.runtime.panel_spacing,
+            );
             ([mx, my], [w, h])
         };
         // Pinned override: keep the computed size but restore the saved position
