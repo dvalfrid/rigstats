@@ -779,7 +779,7 @@ with USED/FREE under its spec line (in line with the CPU's and GPU's model names
 Header (name as the title, model and profile chip centred beside a 90 px
 logo), Clock (TIME, DATE, UPTIME), Disk (READ, WRITE, the hottest drive's
 temperature labelled "TEMP D:"),
-Motherboard (HOTTEST, VCORE, FAN under the board's name), System Power (the
+Motherboard (HOTTEST, VCORE — only when the board names a Vcore rail — and FAN under the board's name), System Power (the
 total as a ring of the PSU or reference watts, then CPU, GPU, OTHER), Battery
 (a charge ring, TIME LEFT or STATUS while charging, POWER), and the list panels
 Processes / GPU Apps (top `COMPACT_LIST_ROWS` = 3; GPU Apps shows the GPU
