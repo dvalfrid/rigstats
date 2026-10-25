@@ -244,6 +244,10 @@ code {
   display: block;
   margin: 0 auto;
 }
+/* Two shots in one frame (floating mode: full, then compact). */
+.hero-img + .hero-img {
+  margin-top: 12px;
+}
 
 /* Hero: portrait + landscape shots stacked to show both orientations. */
 .hero-shots {
