@@ -114,7 +114,11 @@ pub fn draw(
             super::body_pad(ui);
         }
         paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3], sc);
-        ui.add_space((2.0 * sc).round());
+        // Compact: no extra gap under the header, so three rows fit the ring
+        // panels' height (#604).
+        if !compact {
+            ui.add_space((2.0 * sc).round());
+        }
 
         ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
         let shown = if compact {

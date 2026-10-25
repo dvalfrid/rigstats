@@ -123,7 +123,8 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
-    // The compact layout (#596): up/down and the ping, no graph.
+    // The compact layout (#596, #604): UP, DOWN, LAN and WAN in one row of
+    // columns like the other compact panels, no graph.
     compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
@@ -146,10 +147,11 @@ pub fn draw(
             );
         }
 
-        ui.add_space(4.0 * sc);
         if compact {
-            super::body_pad(ui);
+            compact_body(ui, stats, th, sc);
+            return;
         }
+        ui.add_space(4.0 * sc);
 
         // UP | DOWN — two columns with arrow, label, and number
         let number_w = 68.0 * sc;
@@ -246,9 +248,6 @@ pub fn draw(
             );
         });
 
-        if compact {
-            return;
-        }
         // Push sparkline to bottom using cursor tracking.
         let cursor_y = ui.cursor().top();
         let filler =
@@ -265,6 +264,41 @@ pub fn draw(
             opacity,
         );
     })
+}
+
+/// The compact NETWORK row (#604): UP and DOWN with the unit under the
+/// value, LAN and WAN ping — the other compact panels' columns, so it is no
+/// taller than they are.
+fn compact_body(ui: &mut Ui, stats: &PollStats, th: &theme::AppTheme, sc: f32) {
+    use super::CompactCell;
+    let speed = |label, color, mbps: f64| {
+        let (v, unit) = fmt_mbps_parts(mbps);
+        CompactCell::Stat {
+            label,
+            label_color: color,
+            value: v,
+            value_color: theme::C_VALUE,
+            note: Some(unit.to_string()),
+        }
+    };
+    let ping = |label, ms: Option<f64>| CompactCell::Stat {
+        label,
+        label_color: theme::avail_color(&ms, th.stat_label),
+        value: ms.map_or("--".to_string(), |ms| format!("{ms:.1} ms")),
+        value_color: theme::avail_color(&ms, theme::C_VALUE),
+        note: None,
+    };
+    super::compact_row(
+        ui,
+        &[
+            speed("UP", theme::C_GRN, stats.net_up_mbps),
+            speed("DOWN", theme::C_NET_DOWN, stats.net_down_mbps),
+            ping("LAN", stats.net_ping_ms),
+            ping("WAN", stats.net_ping_wan_ms),
+        ],
+        th,
+        sc,
+    );
 }
 
 #[cfg(test)]

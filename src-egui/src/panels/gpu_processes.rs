@@ -178,7 +178,10 @@ pub fn draw(
                 [th.stat_label; 3],
                 sc,
             );
-            ui.add_space((2.0 * sc).round());
+            // Compact: no extra gap under the header (#604).
+            if !compact {
+                ui.add_space((2.0 * sc).round());
+            }
 
             ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
             let shown = if compact {

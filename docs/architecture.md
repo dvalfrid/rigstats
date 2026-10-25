@@ -769,7 +769,7 @@ separate validation function; an unrecognized key is simply ignored by the
 renderer's key→panel match. `Settings.compact_panels` (#596, part of the profile's
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
-with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network without its graph; since #604 every other panel too —
+with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network as UP / DOWN (the unit under the value) / LAN / WAN in the same columns; since #604 every other panel too —
 Header (name as the title, model and profile chip, a 54 px logo), Clock (TIME,
 DATE, UPTIME), Disk (READ, WRITE, the hottest drive's TEMP with its letter),
 Motherboard (HOTTEST, VCORE, FAN under the board's name), System Power (the
@@ -781,8 +781,12 @@ panels are one height: `panels::with_compact_height` (called by
 `DashboardView::draw_one_panel` and the floating panels) records each one's own
 height and stretches it to the tallest compact panel's from the last frame
 (`compact_height`; Peripherals, which grows with its devices, doesn't set it).
-The height is measured, not fixed, because some egui spacing doesn't scale:
-Network is the tallest at 100 % and below, CPU and Processes above
+The height is measured, not fixed, because some egui spacing doesn't scale.
+The ring panels (CPU, GPU, RAM) are the tallest and set it; every other one
+fits in their height with real-looking data
+(`dashboard::tests::the_ring_panels_set_the_compact_height`; the Network
+panel's old two-row layout was 140 px against their 120, which left every other
+panel airy), and all are one height
 (`dashboard::tests::every_compact_panel_is_one_height_at_every_scale`). A
 shorter panel isn't packed to the top: half of what it lacks goes above its
 body (`panels::body_pad`, after the title; Header and Clock, which have none,

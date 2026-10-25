@@ -688,6 +688,37 @@ mod tests {
             hostname: "Unvork".into(),
             model_name: "ROG GM700TZ".into(),
             lhm_connected: true,
+            // As in the app: the network's interface and ping, a full process
+            // and GPU app list, two peripherals — what makes a panel tall.
+            net_iface: "Ethernet".into(),
+            net_ping_ms: Some(0.7),
+            net_ping_wan_ms: Some(1.9),
+            net_up_mbps: 350.7,
+            net_down_mbps: 999.9,
+            mb_board: Some("ASUS PRIME B650M-A AX6 II".into()),
+            mb_temps: vec![("Temperature #1".into(), 40.0)],
+            mb_fans: vec![("Fan #1".into(), 2_800.0)],
+            mb_voltages: vec![("Vcore".into(), 1.18)],
+            disk_drives: vec![crate::poll::DriveInfo {
+                fs: "D:\\".into(),
+                temp: Some(54.0),
+                ..Default::default()
+            }],
+            processes: (0..8)
+                .map(|i| crate::poll::ProcessInfo {
+                    name: format!("process{i}"),
+                    cpu: 6.5,
+                    mem_mb: 1_500,
+                })
+                .collect(),
+            gpu_processes: (0..8)
+                .map(|i| crate::gpu_process::GpuProcessInfo {
+                    name: format!("app{i}"),
+                    util_pct: 5.0,
+                    ..Default::default()
+                })
+                .collect(),
+            peripherals: vec![rigstats_backend::lhm::Peripheral::default(); 2],
             ..Default::default()
         };
         let spark = Sparkline::new(60);
@@ -725,6 +756,7 @@ mod tests {
             out.textures_delta.clear();
             shapes = out.shapes;
         }
+        NATURALS.with(|n| *n.borrow_mut() = panels::compact_naturals(&ctx));
         let mut frames: Vec<egui::Rect> = shapes
             .iter()
             .filter_map(|c| match &c.shape {
@@ -776,6 +808,35 @@ mod tests {
                 (above - below).abs() < 12.0 * sc,
                 "at {sc}: {above} above the body, {below} below it"
             );
+        }
+    }
+
+    thread_local! {
+        /// The compact panels' own heights from the last `portrait_compact`.
+        static NATURALS: std::cell::RefCell<Vec<(String, f32)>> = const {
+            std::cell::RefCell::new(Vec::new())
+        };
+    }
+
+    #[test]
+    fn the_ring_panels_set_the_compact_height() {
+        // CPU, GPU and RAM are the tallest compact panels (a ring plus a
+        // title and a line under it); every other one, with real-looking
+        // data, fits in their height, so none of them gets extra air.
+        // Peripherals grows with its devices and may pass it.
+        for sc in [0.4, 1.0, 1.2, 1.7, 2.0] {
+            let _ = portrait_compact(sc);
+            let naturals = NATURALS.with(|n| n.borrow().clone());
+            let ring = naturals.iter().find(|(k, _)| k == "cpu").expect("cpu").1;
+            for (key, h) in &naturals {
+                if key == "peripherals" {
+                    continue;
+                }
+                assert!(
+                    *h <= ring + 0.5,
+                    "at {sc}: {key} is {h} px, taller than CPU's {ring}"
+                );
+            }
         }
     }
 

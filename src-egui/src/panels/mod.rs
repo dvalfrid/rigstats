@@ -124,6 +124,14 @@ pub fn compact_height(ctx: &egui::Context) -> Option<f32> {
         .reduce(f32::max)
 }
 
+/// Each compact panel's own height, as last measured (tests).
+#[cfg(test)]
+pub(crate) fn compact_naturals(ctx: &egui::Context) -> Vec<(String, f32)> {
+    ctx.data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))
+        .map(|h| h.natural.into_iter().map(|(k, (h, _))| (k, h)).collect())
+        .unwrap_or_default()
+}
+
 fn compact_heights_id() -> egui::Id {
     egui::Id::unique("compact_panel_heights")
 }
@@ -152,9 +160,10 @@ pub(crate) fn body_pad(ui: &mut egui::Ui) {
 pub const COMPACT_LIST_ROWS: usize = 3;
 
 /// A compact list panel's rows (#604) are drawn this much bigger than the full
-/// panel's 11 px, about 14 px, near the 17 px values of the other compact
-/// panels; their header row keeps 11 px, like those panels' labels.
-pub const COMPACT_LIST_SCALE: f32 = 1.3;
+/// panel's 11 px, about 13 px — as big as three rows can be and still fit the
+/// ring panels' height (`dashboard::tests::the_ring_panels_set_the_compact_height`);
+/// their header row keeps 11 px, like the other compact panels' labels.
+pub const COMPACT_LIST_SCALE: f32 = 1.2;
 
 /// A compact panel's width as a floating card, before the panel scale (a full
 /// one is 450). Narrower, so a compact card can be scaled up for reading
@@ -345,6 +354,11 @@ mod tests {
             ram_temp: Some(55.0),
             lhm_connected: true,
             total_gpu_power: Some(575.0),
+            net_iface: "Intel(R) Ethernet Controller I226-V".into(),
+            net_up_mbps: 999.9,
+            net_down_mbps: 999.9,
+            net_ping_ms: Some(999.9),
+            net_ping_wan_ms: Some(999.9),
             hostname: "WORKSTATION-PRO-01".into(),
             model_name: "ROG Strix SCAR 18 G835LX".into(),
             system_brand: "rog".into(),
