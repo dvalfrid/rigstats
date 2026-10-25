@@ -774,7 +774,9 @@ fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Their plain values (FREQ, POWER, FREE) are
 `theme::C_VALUE` (white, like Network's), not the full panels' `C_TEXT`, for
-contrast over a bright desktop behind see-through panels. Which panels
+contrast over a bright desktop behind see-through panels, and 17 px × scale
+(full panels: 14) — as big as the rings' numbers, so a row reads as one; it
+still fits the 360 px floating card (`panels::tests`). Which panels
 offer it: `panels::COMPACT_PANELS`;
 each panel's `draw` takes `compact`, passed by `DashboardView::draw_one_panel`
 and by the floating panels (`DashboardRuntime::is_compact`). A compact floating
