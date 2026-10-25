@@ -489,7 +489,11 @@ branch: one row per release with the snapshot date, tag, publish date,
 **installer** downloads and update **checks**. `main` is protected, so the
 data lives on its own branch and never touches `main` or a release; the
 workflow creates the branch on its first run. GitHub shows the CSV as a table:
-`https://github.com/dvalfrid/rigstats/blob/stats/downloads.csv`.
+`https://github.com/dvalfrid/rigstats/blob/stats/downloads.csv`. It is one
+block per snapshot, oldest first, and within a block the newest release first;
+the counts are totals since each release, so a week's downloads are the
+difference between two blocks. The run's summary in Actions shows the
+`-Trend` table (checks per day, week by week).
 
 - **installer** — `RIGStats_*_x64-setup.exe`: new installs from the website or
   GitHub, winget installs and upgrades (winget fetches the file from GitHub),
@@ -497,7 +501,10 @@ workflow creates the branch on its first run. GitHub shows the CSV as a table:
 - **checks** — `latest.json`: the app's update checks (about 10 s after start,
   then every 6 h). The app fetches `releases/latest/download/latest.json`, so a
   check counts on the release that was newest at the time — the best measure
-  of active installations (roughly: checks per day ÷ 3–4).
+  of active installations: roughly checks per day ÷ 2–5 (twice a day for a PC
+  on for a working day, five times for one on around the clock).
+  `pwsh -File tools\download-stats.ps1 -Trend` shows it week by week,
+  `-ByMinor` the totals per minor version.
 
 It isn't triggered by a release: releases are created with `GITHUB_TOKEN`, and
 GitHub starts no workflow from a `GITHUB_TOKEN`-caused event. For a quick look

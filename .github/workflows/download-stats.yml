@@ -43,6 +43,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pwsh -File tools/download-stats.ps1 -Repo $env:GITHUB_REPOSITORY -Append "$env:RUNNER_TEMP/stats/downloads.csv"
 
+      - name: Trend in the run summary
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $trend = pwsh -File tools/download-stats.ps1 -Repo $env:GITHUB_REPOSITORY -Trend | Out-String -Width 200
+          @('### Update checks per day, week by week', '', '```', $trend.TrimEnd(), '```') | Add-Content $env:GITHUB_STEP_SUMMARY
+
       - name: Push the snapshot
         working-directory: ${{ runner.temp }}/stats
         run: |
