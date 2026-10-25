@@ -166,6 +166,9 @@ pub fn draw(
             );
         } else {
             ui.add_space((2.0 * sc).round());
+            if compact {
+                super::body_pad(ui);
+            }
             paint_row(
                 ui,
                 inner_w,

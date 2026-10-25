@@ -399,6 +399,9 @@ pub fn draw(
             return;
         }
 
+        if compact {
+            super::body_pad(ui);
+        }
         let inner_w = ui.available_width();
         for device in &stats.peripherals {
             // Compact: rows near the other compact panels' value size (#604).

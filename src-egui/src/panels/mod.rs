@@ -67,14 +67,35 @@ pub fn with_compact_height<R>(
         ctx.data_mut(|d| d.insert_temp(stretch, h));
     }
     ctx.data_mut(|d| d.remove::<f32>(natural));
+    // Half of what this panel lacks of the shared height goes above its body
+    // (`body_pad`), so the extra space is split above and below it instead of
+    // all below — the panel stays balanced, its title still at the top.
+    let own_before = ctx
+        .data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))
+        .and_then(|h| h.natural.get(key).map(|(h, _)| *h));
+    let pad = match (h, own_before) {
+        (Some(h), Some(own)) => ((h - own) / 2.0).max(0.0),
+        _ => 0.0,
+    };
+    ctx.data_mut(|d| {
+        d.insert_temp(body_pad_id(), pad);
+        d.remove::<f32>(body_pad_used_id());
+    });
     let out = draw();
+    let used = ctx.data_mut(|d| {
+        d.remove::<f32>(body_pad_id());
+        d.remove_temp::<f32>(body_pad_used_id())
+    });
     ctx.data_mut(|d| match before {
         Some(b) => {
             d.insert_temp(stretch, b);
         }
         None => d.remove::<f32>(stretch),
     });
-    if let Some(own) = ctx.data(|d| d.get_temp::<f32>(natural)) {
+    if let Some(drawn) = ctx.data(|d| d.get_temp::<f32>(natural)) {
+        // Its own height, without the pad it was given.
+        let own = drawn - used.unwrap_or(0.0);
+        ctx.data_mut(|d| d.insert_temp(natural, own));
         let pass = ctx.cumulative_pass_nr();
         let id = compact_heights_id();
         let mut heights = ctx
@@ -105,6 +126,26 @@ pub fn compact_height(ctx: &egui::Context) -> Option<f32> {
 
 fn compact_heights_id() -> egui::Id {
     egui::Id::unique("compact_panel_heights")
+}
+
+fn body_pad_id() -> egui::Id {
+    egui::Id::unique("compact_body_pad")
+}
+
+fn body_pad_used_id() -> egui::Id {
+    egui::Id::unique("compact_body_pad_used")
+}
+
+/// Where a compact panel's body starts — after its title (none for Header and
+/// Clock) — the space `with_compact_height` set aside to centre it: once per
+/// panel, the first call takes it.
+pub(crate) fn body_pad(ui: &mut egui::Ui) {
+    let pad = ui.ctx().data_mut(|d| d.remove_temp::<f32>(body_pad_id()));
+    if let Some(pad) = pad {
+        ui.add_space(pad);
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(body_pad_used_id(), pad));
+    }
 }
 
 /// How many rows a compact list panel shows (#604): Processes, GPU Apps.
@@ -155,11 +196,26 @@ pub(crate) fn compact_row(
 ) {
     use crate::theme;
     use egui::RichText;
+    body_pad(ui);
+    // Beside a ring, a stat's value sits on the line of the ring's number
+    // (its centre), its label above — "12%  52°C  4.70 GHz  38 W" in one line.
+    let ring_h = theme::RING_SIZE * sc;
+    let has_ring = cells.iter().any(|c| matches!(c, CompactCell::Ring(..)));
+    let text_h = |ui: &egui::Ui, px: f32| {
+        ui.painter()
+            .layout_no_wrap(
+                "0".into(),
+                egui::FontId::proportional(px * sc),
+                egui::Color32::WHITE,
+            )
+            .size()
+            .y
+    };
     ui.columns(cells.len(), |cols| {
         for (col, cell) in cols.iter_mut().zip(cells) {
             col.vertical_centered(|ui| match cell {
                 CompactCell::Ring(frac, color, label) => {
-                    crate::ring::show(ui, theme::RING_SIZE * sc, *frac, *color, label);
+                    crate::ring::show(ui, ring_h, *frac, *color, label);
                 }
                 CompactCell::Stat {
                     label,
@@ -168,6 +224,11 @@ pub(crate) fn compact_row(
                     value_color,
                     note,
                 } => {
+                    if has_ring {
+                        let gap = ui.spacing().item_spacing.y;
+                        let above = ring_h / 2.0 - text_h(ui, 11.0) - gap - text_h(ui, 17.0) / 2.0;
+                        ui.add_space(above.max(0.0));
+                    }
                     ui.label(RichText::new(*label).size(11.0 * sc).color(*label_color));
                     // As big as the rings' numbers (64 px × 0.26 ≈ 17), so a row
                     // reads as one; full panels keep 14 px.
@@ -560,6 +621,33 @@ mod tests {
                             "{key} at {sc}: {a:?} {ra:?} runs into {b:?} {rb:?}"
                         );
                     }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn values_beside_a_ring_sit_on_the_line_of_its_number() {
+        for sc in [0.4, 1.0, 1.7] {
+            for (key, _, shapes, _) in draw_all(true, sc) {
+                let (ring, values): (&str, &[&str]) = match key {
+                    "cpu" => ("100%", &["5.70 GHz", "250 W"]),
+                    "ram" => ("94%", &["120.0G", "8.0G", "55°C"]),
+                    _ => continue,
+                };
+                let y = |start: &str| {
+                    text_rect(&shapes, start)
+                        .unwrap_or_else(|| panic!("{key}: no {start:?}"))
+                        .center()
+                        .y
+                };
+                for v in values {
+                    assert!(
+                        (y(v) - y(ring)).abs() < 1.5,
+                        "{key} at {sc}: {v:?} at {}, the ring's {ring:?} at {}",
+                        y(v),
+                        y(ring)
+                    );
                 }
             }
         }

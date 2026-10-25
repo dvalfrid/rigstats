@@ -672,6 +672,11 @@ mod tests {
     /// All thirteen panels compact, stacked as in portrait, at `sc`: their
     /// frames, top to bottom, after a few passes.
     fn portrait_compact_frames(sc: f32) -> Vec<egui::Rect> {
+        portrait_compact(sc).0
+    }
+
+    /// The frames and every painted text with its rect.
+    fn portrait_compact(sc: f32) -> (Vec<egui::Rect>, Vec<(String, egui::Rect)>) {
         let ctx = egui::Context::default();
         let tex = brand::Textures::load(&ctx);
         let stats = PollStats {
@@ -728,7 +733,50 @@ mod tests {
             })
             .collect();
         frames.sort_by(|a, b| a.top().total_cmp(&b.top()));
-        frames
+        let texts = shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some((
+                    t.galley.text().to_string(),
+                    t.galley.rect.translate(t.pos.to_vec2()),
+                )),
+                _ => None,
+            })
+            .collect();
+        (frames, texts)
+    }
+
+    #[test]
+    fn a_short_compact_panel_has_its_body_centred_below_the_title() {
+        for sc in [1.0, 1.7] {
+            let (frames, texts) = portrait_compact(sc);
+            let at = |t: &str| {
+                texts
+                    .iter()
+                    .find(|(s, _)| s == t)
+                    .unwrap_or_else(|| panic!("no {t:?}"))
+                    .1
+            };
+            // Disk: title, then READ / WRITE / TEMP; the shortest of the
+            // column panels.
+            let title = at("DISK");
+            let frame = frames
+                .iter()
+                .find(|f| f.contains(title.center()))
+                .expect("the Disk frame");
+            let body_top = at("READ").top();
+            let body_bottom = texts
+                .iter()
+                .filter(|(_, r)| frame.contains(r.center()) && r.top() >= body_top)
+                .map(|(_, r)| r.bottom())
+                .fold(body_top, f32::max);
+            let above = body_top - title.bottom();
+            let below = frame.bottom() - body_bottom;
+            assert!(
+                (above - below).abs() < 12.0 * sc,
+                "at {sc}: {above} above the body, {below} below it"
+            );
+        }
     }
 
     #[test]

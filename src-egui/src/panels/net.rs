@@ -147,6 +147,9 @@ pub fn draw(
         }
 
         ui.add_space(4.0 * sc);
+        if compact {
+            super::body_pad(ui);
+        }
 
         // UP | DOWN — two columns with arrow, label, and number
         let number_w = 68.0 * sc;

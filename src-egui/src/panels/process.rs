@@ -110,6 +110,9 @@ pub fn draw(
         }
 
         ui.add_space((2.0 * sc).round());
+        if compact {
+            super::body_pad(ui);
+        }
         paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3], sc);
         ui.add_space((2.0 * sc).round());
 

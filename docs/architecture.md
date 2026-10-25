@@ -783,7 +783,12 @@ height and stretches it to the tallest compact panel's from the last frame
 (`compact_height`; Peripherals, which grows with its devices, doesn't set it).
 The height is measured, not fixed, because some egui spacing doesn't scale:
 Network is the tallest at 100 % and below, CPU and Processes above
-(`dashboard::tests::every_compact_panel_is_one_height_at_every_scale`). No graphs or per-core bars, and no
+(`dashboard::tests::every_compact_panel_is_one_height_at_every_scale`). A
+shorter panel isn't packed to the top: half of what it lacks goes above its
+body (`panels::body_pad`, after the title; Header and Clock, which have none,
+are centred whole), the rest below, and its own height is recorded without that
+pad. In `compact_row` a stat beside a ring has its value on the line of the
+ring's number ("12%  54°C  4.70 GHz  37 W"), its label above. No graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Their plain values (FREQ, POWER, FREE) are

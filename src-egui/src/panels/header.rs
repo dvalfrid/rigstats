@@ -47,7 +47,9 @@ pub fn draw(
     compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        if !compact {
+        if compact {
+            super::body_pad(ui);
+        } else {
             ui.set_min_height(theme::PANEL_HEADER_H * sc);
         }
 
