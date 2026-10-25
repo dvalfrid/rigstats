@@ -96,7 +96,7 @@ pub fn draw(
             use super::CompactCell;
             let time_or_status = if charging {
                 CompactCell::Stat {
-                    label: "STATUS",
+                    label: "STATUS".into(),
                     label_color: th.stat_label,
                     value: "Charging".to_string(),
                     value_color: theme::C_ACCENT,
@@ -104,7 +104,7 @@ pub fn draw(
                 }
             } else {
                 CompactCell::Stat {
-                    label: "TIME LEFT",
+                    label: "TIME LEFT".into(),
                     label_color: th.stat_label,
                     value: fake_time.map_or("\u{2014}".to_string(), |m| {
                         format!("{}h {:02}m", m / 60, m % 60)
@@ -126,7 +126,7 @@ pub fn draw(
                     CompactCell::Ring(frac, color, format!("{charge}%")),
                     time_or_status,
                     CompactCell::Stat {
-                        label: "POWER",
+                        label: "POWER".into(),
                         label_color: th.stat_label,
                         value: power,
                         value_color: power_c,

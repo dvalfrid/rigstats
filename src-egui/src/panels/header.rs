@@ -29,9 +29,11 @@ fn brand_subtitle(brand: &str) -> &'static str {
     }
 }
 
-/// The compact header's logo height (#604): as tall as its name, model and
-/// profile chip.
-const COMPACT_LOGO_H: f32 = 54.0;
+/// The compact header's logo height (#604): most of the shared compact
+/// height, so the logo fills the panel as in the full header; the name, model
+/// and profile chip are centred beside it. It stays under the ring panels'
+/// height (`dashboard::tests::the_ring_panels_set_the_compact_height`).
+const COMPACT_LOGO_H: f32 = 90.0;
 
 #[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
@@ -68,10 +70,20 @@ pub fn draw(
         // Single horizontal row spanning full panel height so the logo fills edge-to-edge.
         // Reserve the logo's width up front so a long hostname truncates instead of
         // crowding into (or overlapping) the logo.
+        // Compact: the text centred beside the taller logo, from its height last
+        // frame (a horizontal row places it before it knows the logo's).
+        let text_h_id = egui::Id::unique("compact_header_text_h");
+        let text_h = ui.ctx().data(|d| d.get_temp::<f32>(text_h_id));
         ui.horizontal(|ui| {
             let text_w = (ui.available_width() - logo_w - ui.spacing().item_spacing.x).max(0.0);
-            ui.vertical(|ui| {
+            let block = ui.vertical(|ui| {
                 ui.set_max_width(text_w);
+                if compact && logo.is_some() {
+                    if let Some(h) = text_h {
+                        ui.add_space(((logo_h - h) / 2.0).max(0.0));
+                    }
+                }
+                let top = ui.cursor().top();
                 if !compact {
                     ui.add_space(6.0 * sc);
                     ui.label(RichText::new(subtitle).size(11.0 * sc).color(th.stat_label));
@@ -107,7 +119,15 @@ pub fn draw(
                     stats.microphone,
                     sc,
                 );
+                ui.min_rect().bottom() - top
             });
+            if compact {
+                let h = block.inner;
+                if text_h.is_none_or(|old| (old - h).abs() > 0.5) {
+                    ui.ctx().data_mut(|d| d.insert_temp(text_h_id, h));
+                    ui.ctx().request_repaint();
+                }
+            }
 
             if let Some(logo) = logo {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

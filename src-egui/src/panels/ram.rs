@@ -153,14 +153,14 @@ fn compact_body(
     let mut cells = vec![
         CompactCell::Ring(frac, theme::C_RAM, format!("{:.0}%", frac * 100.0)),
         CompactCell::Stat {
-            label: "USED",
+            label: "USED".into(),
             label_color: th.stat_label,
             value: format!("{used_gb:.1}G"),
             value_color: theme::C_RAM,
             note: None,
         },
         CompactCell::Stat {
-            label: "FREE",
+            label: "FREE".into(),
             label_color: th.stat_label,
             value: format!("{free_gb:.1}G"),
             value_color: theme::C_VALUE,
@@ -169,7 +169,7 @@ fn compact_body(
     ];
     if let Some(t) = stats.ram_temp {
         cells.push(CompactCell::Stat {
-            label: "TEMP",
+            label: "TEMP".into(),
             label_color: th.stat_label,
             value: format!("{t:.0}°C"),
             value_color: temp_color(stats.ram_temp, warn, crit),

@@ -34,8 +34,9 @@ pub const COMPACT_PANELS: [&str; 13] = [
 /// height, measured last frame — at most scales the Network, CPU or Processes
 /// panel — so shorter ones stretch to it, their title at the top as in full
 /// panels. A fixed height can't do it: some of egui's spacing doesn't scale, so
-/// which panel is tallest changes with the scale. Peripherals doesn't set it
-/// (it grows with the devices); one with more to show grows past it.
+/// which panel is tallest changes with the scale. Every compact panel shows a
+/// bounded amount (Peripherals at most three devices and "+N more"), so the
+/// ring panels set it (`dashboard::tests::the_ring_panels_set_the_compact_height`).
 #[derive(Clone, Default)]
 struct CompactHeights {
     /// Each compact panel's own height and the pass it was drawn in.
@@ -119,7 +120,7 @@ pub fn compact_height(ctx: &egui::Context) -> Option<f32> {
     heights
         .natural
         .iter()
-        .filter(|(key, (_, at))| key.as_str() != "peripherals" && pass.saturating_sub(*at) <= 1)
+        .filter(|(_, (_, at))| pass.saturating_sub(*at) <= 1)
         .map(|(_, (h, _))| *h)
         .reduce(f32::max)
 }
@@ -186,7 +187,7 @@ pub(crate) enum CompactCell {
     /// A stat: label (and its colour), value (and its colour), and an optional
     /// muted note under it (a power limit).
     Stat {
-        label: &'static str,
+        label: std::borrow::Cow<'static, str>,
         label_color: egui::Color32,
         value: String,
         value_color: egui::Color32,
@@ -238,7 +239,11 @@ pub(crate) fn compact_row(
                         let above = ring_h / 2.0 - text_h(ui, 11.0) - gap - text_h(ui, 17.0) / 2.0;
                         ui.add_space(above.max(0.0));
                     }
-                    ui.label(RichText::new(*label).size(11.0 * sc).color(*label_color));
+                    ui.label(
+                        RichText::new(label.as_ref())
+                            .size(11.0 * sc)
+                            .color(*label_color),
+                    );
                     // As big as the rings' numbers (64 px × 0.26 ≈ 17), so a row
                     // reads as one; full panels keep 14 px.
                     ui.label(RichText::new(value).size(17.0 * sc).color(*value_color));

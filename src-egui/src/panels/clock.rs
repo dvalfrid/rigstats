@@ -23,8 +23,8 @@ pub fn draw(
         let now = chrono::Local::now();
         if compact {
             use super::CompactCell;
-            let stat = |label, value: String| CompactCell::Stat {
-                label,
+            let stat = |label: &'static str, value: String| CompactCell::Stat {
+                label: label.into(),
                 label_color: th.stat_label,
                 value,
                 value_color: theme::C_VALUE,

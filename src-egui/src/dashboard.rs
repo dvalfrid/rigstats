@@ -718,7 +718,8 @@ mod tests {
                     ..Default::default()
                 })
                 .collect(),
-            peripherals: vec![rigstats_backend::lhm::Peripheral::default(); 2],
+            // More than a compact panel shows: three and "+2 more".
+            peripherals: vec![rigstats_backend::lhm::Peripheral::default(); 5],
             ..Default::default()
         };
         let spark = Sparkline::new(60);
@@ -823,15 +824,11 @@ mod tests {
         // CPU, GPU and RAM are the tallest compact panels (a ring plus a
         // title and a line under it); every other one, with real-looking
         // data, fits in their height, so none of them gets extra air.
-        // Peripherals grows with its devices and may pass it.
         for sc in [0.4, 1.0, 1.2, 1.7, 2.0] {
             let _ = portrait_compact(sc);
             let naturals = NATURALS.with(|n| n.borrow().clone());
             let ring = naturals.iter().find(|(k, _)| k == "cpu").expect("cpu").1;
             for (key, h) in &naturals {
-                if key == "peripherals" {
-                    continue;
-                }
                 assert!(
                     *h <= ring + 0.5,
                     "at {sc}: {key} is {h} px, taller than CPU's {ring}"

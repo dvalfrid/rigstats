@@ -271,18 +271,18 @@ pub fn draw(
 /// taller than they are.
 fn compact_body(ui: &mut Ui, stats: &PollStats, th: &theme::AppTheme, sc: f32) {
     use super::CompactCell;
-    let speed = |label, color, mbps: f64| {
+    let speed = |label: &'static str, color, mbps: f64| {
         let (v, unit) = fmt_mbps_parts(mbps);
         CompactCell::Stat {
-            label,
+            label: label.into(),
             label_color: color,
             value: v,
             value_color: theme::C_VALUE,
             note: Some(unit.to_string()),
         }
     };
-    let ping = |label, ms: Option<f64>| CompactCell::Stat {
-        label,
+    let ping = |label: &'static str, ms: Option<f64>| CompactCell::Stat {
+        label: label.into(),
         label_color: theme::avail_color(&ms, th.stat_label),
         value: ms.map_or("--".to_string(), |ms| format!("{ms:.1} ms")),
         value_color: theme::avail_color(&ms, theme::C_VALUE),

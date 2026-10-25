@@ -84,14 +84,14 @@ pub fn draw(
                     CompactCell::Ring(load_frac, theme::C_ACCENT, format!("{}%", stats.cpu_load)),
                     super::temp_cell(stats.cpu_temp, tc),
                     CompactCell::Stat {
-                        label: "FREQ",
+                        label: "FREQ".into(),
                         label_color: th.stat_label,
                         value: freq_str,
                         value_color: theme::C_VALUE,
                         note: None,
                     },
                     CompactCell::Stat {
-                        label: "POWER",
+                        label: "POWER".into(),
                         label_color: th.stat_label,
                         value: power_str,
                         value_color: theme::C_VALUE,

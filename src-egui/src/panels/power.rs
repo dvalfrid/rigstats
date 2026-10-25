@@ -74,8 +74,8 @@ pub fn draw(
 
         if compact {
             use super::CompactCell;
-            let watts = |label, w: Option<f64>, prefix: &str| CompactCell::Stat {
-                label,
+            let watts = |label: &'static str, w: Option<f64>, prefix: &str| CompactCell::Stat {
+                label: label.into(),
                 label_color: th.stat_label,
                 value: w.map_or("-- W".to_string(), |w| format!("{prefix}{w:.0} W")),
                 value_color: theme::avail_color(&w, theme::C_VALUE),

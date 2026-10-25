@@ -770,17 +770,21 @@ renderer's key→panel match. `Settings.compact_panels` (#596, part of the profi
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
 with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network as UP / DOWN (the unit under the value) / LAN / WAN in the same columns; since #604 every other panel too —
-Header (name as the title, model and profile chip, a 54 px logo), Clock (TIME,
-DATE, UPTIME), Disk (READ, WRITE, the hottest drive's TEMP with its letter),
+Header (name as the title, model and profile chip centred beside a 90 px
+logo), Clock (TIME, DATE, UPTIME), Disk (READ, WRITE, the hottest drive's
+temperature labelled "TEMP D:"),
 Motherboard (HOTTEST, VCORE, FAN under the board's name), System Power (the
 total as a ring of the PSU or reference watts, then CPU, GPU, OTHER), Battery
 (a charge ring, TIME LEFT or STATUS while charging, POWER), and the list panels
-Processes / GPU Apps (top `COMPACT_LIST_ROWS` = 3, no engine column) and
-Peripherals (no bars), whose rows are `COMPACT_LIST_SCALE` bigger. All compact
+Processes / GPU Apps (top `COMPACT_LIST_ROWS` = 3; GPU Apps shows the GPU
+each app runs on, not its engines) and Peripherals (no bars; at most three,
+the lowest batteries, and "+N more" on the title's line), whose rows are
+`COMPACT_LIST_SCALE` bigger. A `CompactCell::Stat` label is a
+`Cow<'static, str>` so it can carry data ("TEMP D:"). All compact
 panels are one height: `panels::with_compact_height` (called by
 `DashboardView::draw_one_panel` and the floating panels) records each one's own
 height and stretches it to the tallest compact panel's from the last frame
-(`compact_height`; Peripherals, which grows with its devices, doesn't set it).
+(`compact_height`).
 The height is measured, not fixed, because some egui spacing doesn't scale.
 The ring panels (CPU, GPU, RAM) are the tallest and set it; every other one
 fits in their height with real-looking data

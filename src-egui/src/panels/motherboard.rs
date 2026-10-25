@@ -212,8 +212,8 @@ fn compact_body(
         .iter()
         .map(|(_, rpm)| *rpm)
         .fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.max(r))));
-    let stat = |label, value: Option<String>, color| CompactCell::Stat {
-        label,
+    let stat = |label: &'static str, value: Option<String>, color| CompactCell::Stat {
+        label: label.into(),
         label_color: th.stat_label,
         value_color: if value.is_some() {
             color

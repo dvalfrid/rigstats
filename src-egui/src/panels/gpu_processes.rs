@@ -126,8 +126,8 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
-    // The compact layout (#604): the top `super::COMPACT_LIST_ROWS` apps with
-    // their GPU %, no engine column, no fixed height.
+    // The compact layout (#604): the top `super::COMPACT_LIST_ROWS` apps, the
+    // GPU each runs on (no engines) and their GPU %, no fixed height.
     compact: bool,
 ) -> egui::Rect {
     let inner_w = theme::panel_inner_w(ui.max_rect().width(), sc);
@@ -144,7 +144,8 @@ pub fn draw(
     let show_adapter = distinct_adapters.len() > 1;
     let mid_header = if show_adapter { "GPU" } else { "ENG" };
 
-    let mid_header = if compact { "" } else { mid_header };
+    // Compact: the GPU each app runs on, without the engines (#604).
+    let mid_header = if compact { "GPU" } else { mid_header };
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         if !compact {
             ui.set_min_height(theme::PANEL_DATA_H * sc);
@@ -192,7 +193,7 @@ pub fn draw(
             for p in stats.gpu_processes.iter().take(shown) {
                 let name = p.name.trim_end_matches(".exe");
                 let mid = if compact {
-                    String::new()
+                    short_adapter(&p.adapter)
                 } else {
                     mid_cell(&p.adapter, &p.engines, show_adapter)
                 };

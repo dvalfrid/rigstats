@@ -155,14 +155,14 @@ pub fn draw(
                     CompactCell::Ring(load_frac, ring_color, ring_label),
                     super::temp_cell(stats.gpu_temp, tc),
                     CompactCell::Stat {
-                        label: "FREQ",
+                        label: "FREQ".into(),
                         label_color: theme::avail_color(&stats.gpu_freq_mhz, th.stat_label),
                         value: fmt_opt(stats.gpu_freq_mhz.map(|v| v / 1000.0), " GHz", 2),
                         value_color: theme::avail_color(&stats.gpu_freq_mhz, theme::C_VALUE),
                         note: None,
                     },
                     CompactCell::Stat {
-                        label: "POWER",
+                        label: "POWER".into(),
                         label_color: theme::avail_color(&stats.gpu_power, th.stat_label),
                         value: fmt_opt(stats.gpu_power, " W", 0),
                         value_color: theme::avail_color(&stats.gpu_power, theme::C_VALUE),
