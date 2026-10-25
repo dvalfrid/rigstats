@@ -201,7 +201,8 @@ impl RigStatsApp {
                 let center_pad = if center_fullscreen {
                     // Pure panel-stack height (excludes drag handle and pad).
                     let content = self.window.fullscreen_content_h.unwrap_or_else(|| {
-                        compute_window_height(&panels_to_draw, sc) - theme::DRAG_HANDLE_H
+                        compute_window_height(&panels_to_draw, sc, self.runtime.panel_spacing)
+                            - theme::DRAG_HANDLE_H
                     });
                     // Center the visible content with equal background above and below.
                     // The drag handle occupies the first DRAG_HANDLE_H px (invisible),
@@ -217,7 +218,7 @@ impl RigStatsApp {
                     if let Some(p) = self.draw_one_panel(ui, panel, sc, update_ver.as_deref()) {
                         new_preferred_gpu = Some(p);
                     }
-                    ui.add_space((6.0 * sc).round());
+                    ui.add_space((self.runtime.panel_spacing * sc).round());
                 }
                 // Cache the true panel-stack content height for exact centering next
                 // frame: min_rect = drag handle + center pad + content, so content =

@@ -226,7 +226,7 @@ impl eframe::App for WallpaperHost {
                 self.runtime
                     .view()
                     .draw_one_panel(ui, panel, sc, self.opacity, None);
-                ui.add_space((6.0 * sc).round());
+                ui.add_space((self.runtime.panel_spacing * sc).round());
             }
         }
 
@@ -296,12 +296,16 @@ fn main() {
     let size = if profile_is_landscape(&profile) {
         [
             pw,
-            compute_landscape_window_height(&s.visible_panels, pw, ph),
+            compute_landscape_window_height(&s.visible_panels, pw, ph, f32::from(s.panel_spacing)),
         ]
     } else {
         [
             pw,
-            compute_window_height(&s.visible_panels, profile_scale(&profile)),
+            compute_window_height(
+                &s.visible_panels,
+                profile_scale(&profile),
+                f32::from(s.panel_spacing),
+            ),
         ]
     };
     let [mx, my, mw, mh] = pick_window_rect_for_profile(&profile);

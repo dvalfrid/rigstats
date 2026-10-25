@@ -726,6 +726,24 @@ fn display_page(
             "On or off and their size belong to your profile",
             control::Page::Dashboard,
         );
+        // The space between panels (#606): the docked dashboard and the
+        // wallpaper, not floating panels (placed by hand).
+        g.row(
+            "Panel spacing",
+            Some(if floating {
+                "Not used for floating panels"
+            } else {
+                "The space between panels"
+            }),
+            |ui| {
+                ui.add_enabled_ui(!floating, |ui| {
+                    let mut px = i32::from(draft.panel_spacing);
+                    if ui_kit::slider_range(ui, dc, &mut px, 0..=30, 1, " px").changed() {
+                        draft.panel_spacing = px.clamp(0, 30) as u8;
+                    }
+                });
+            },
+        );
         g.row(
             "Fill screen",
             Some(if fill_enabled {

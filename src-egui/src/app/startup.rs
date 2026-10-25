@@ -51,10 +51,19 @@ pub(crate) fn initial_window(s: &Settings) -> ([f32; 2], [f32; 2]) {
     } else if landscape {
         // Landscape, not fullscreen: content-fit estimate (the per-frame fit
         // then refines it), same as the portrait branch below.
-        let h = compute_landscape_window_height(visible_panels, win_w, win_h);
+        let h = compute_landscape_window_height(
+            visible_panels,
+            win_w,
+            win_h,
+            f32::from(s.panel_spacing),
+        );
         (win_w, h, mx, my)
     } else {
-        let h = compute_window_height(visible_panels, profile_scale(&s.dashboard_profile));
+        let h = compute_window_height(
+            visible_panels,
+            profile_scale(&s.dashboard_profile),
+            f32::from(s.panel_spacing),
+        );
         (win_w - 2.0, h, mx, my)
     };
     // Pinned dashboard: restore the saved position for this profile (keeping the

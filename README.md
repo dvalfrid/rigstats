@@ -185,6 +185,9 @@ alert levels — belongs to each
   <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact in the dashboard: load and temperature rings with clock and power in white for the CPU and GPU, a usage ring with the memory spec, used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">
 </p>
 
+- **Panel spacing** *(coming in v1.52.0)* — the space between panels, 0–30 px
+  (6 by default), in portrait and between the cells of the landscape grid;
+  floating panels you place yourself.
 - **Fill Screen** — fill the height of the monitor the window currently sits on
   (panel proportions are preserved).
 

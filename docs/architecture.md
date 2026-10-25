@@ -567,6 +567,12 @@ never written back.
 Floating panel layout adds four fields — all `#[serde(default)]`, no migration
 needed:
 
+- **`panel_spacing: u8`** — the space between panels in px (#606, default 6,
+  Settings 0–30): `add_space(spacing × sc)` after each panel in the portrait
+  stack (`main_window.rs`, `bin/wallpaper.rs`), the gap between landscape grid
+  cells as is (`render_landscape_grid`, `landscape_grid_layout`), and in the
+  window-height estimates. Carried as `DashboardRuntime/DashboardView.panel_spacing`;
+  floating panels don't use it.
 - **`floating_mode: bool`** — whether the app runs floating panels; part of
   the profile's look (#599), set in Control Center → Dashboard; switching profile
   switches it. The tray's Toggle Floating Mode and its shortcut are gone (#599).

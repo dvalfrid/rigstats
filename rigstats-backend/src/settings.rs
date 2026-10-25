@@ -157,6 +157,11 @@ pub struct Settings {
     /// or per-core bars (#596). Empty = every panel full.
     #[serde(default)]
     pub compact_panels: Vec<String>,
+    /// The space between panels, in px (#606): in portrait × the content
+    /// scale, between landscape grid cells as is. 6 = the layout from before;
+    /// Settings offers 0–30. Not used by floating panels.
+    #[serde(default = "default_panel_spacing")]
+    pub panel_spacing: u8,
     /// Launch the dashboard automatically when the user logs in.
     #[serde(default)]
     pub autostart_enabled: bool,
@@ -370,6 +375,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_panel_spacing() -> u8 {
+    6
+}
+
 fn default_floating_panel_scale() -> f64 {
     1.0
 }
@@ -450,6 +459,7 @@ impl Default for Settings {
             always_on_top: false,
             visible_panels: default_visible_panels(),
             compact_panels: Vec::new(),
+            panel_spacing: default_panel_spacing(),
             autostart_enabled: false,
             last_seen_version: String::new(),
             update_channel: UpdateChannel::Stable,
@@ -763,6 +773,14 @@ pub fn persist_settings(dir: &Path, settings: &Settings) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn panel_spacing_is_six_unless_set() {
+        assert_eq!(super::Settings::default().panel_spacing, 6);
+        // A file from before #606 has none: the layout from before.
+        let s: super::Settings = serde_json::from_str(r#"{"settingsVersion":1}"#).unwrap();
+        assert_eq!(s.panel_spacing, 6);
+    }
+
     #[test]
     fn the_profile_notifications_are_on_unless_turned_off() {
         assert!(super::Settings::default().profile_notify);

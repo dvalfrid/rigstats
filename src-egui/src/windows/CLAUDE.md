@@ -9,7 +9,7 @@ Every setting has exactly one home:
 | A Control Center profile holds (`ProfileLook` + the service's profile) | Settings holds (applies to the whole app) |
 |---|---|
 | Power plan, fans, CPU/GPU limits, lighting | Start with Windows, model name, recordings |
-| Accent colour, opacity, panels, their order and which are compact, floating panels, their size and positions (#599), desktop background | Display profile, window layer, fill screen, displayed GPU, PSU |
+| Accent colour, opacity, panels, their order and which are compact, floating panels, their size and positions (#599), desktop background | Display profile, window layer, panel spacing (#606), fill screen, displayed GPU, PSU |
 | Overlay shown, its metrics and layout | Overlay position, size, background, click-through |
 | Alert thresholds | Notifications on/off, repeat interval, the microphone mute toast, the profile-switch toasts (#601) |
 | — | Which microphone the mute shortcut mutes (#425) |
