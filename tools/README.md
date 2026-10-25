@@ -67,7 +67,13 @@ pwsh -File tools\download-stats.ps1 -Top 0       # every release
 pwsh -File tools\download-stats.ps1 -ByMinor     # summed per minor version
 pwsh -File tools\download-stats.ps1 -Trend       # checks per day, week by week
 pwsh -File tools\download-stats.ps1 -Append x.csv  # add a snapshot to a CSV
+pwsh -File tools\download-stats.ps1 -Report reports -Csv x.csv  # the weekly report
 ```
+
+`-Report` writes `<year>-W<week>.md` for the last complete week (and
+`latest.md`) into the folder: the week in numbers, downloads per release since
+the CSV's previous snapshot, the last 12 weeks of the trend and the totals per
+minor version.
 
 GitHub keeps only running totals, so `.github/workflows/download-stats.yml`
 appends a snapshot every Monday to `downloads.csv` on the `stats` branch (see

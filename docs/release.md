@@ -492,8 +492,12 @@ workflow creates the branch on its first run. GitHub shows the CSV as a table:
 `https://github.com/dvalfrid/rigstats/blob/stats/downloads.csv`. It is one
 block per snapshot, oldest first, and within a block the newest release first;
 the counts are totals since each release, so a week's downloads are the
-difference between two blocks. The run's summary in Actions shows the
-`-Trend` table (checks per day, week by week).
+difference between two blocks. Easier to read: the weekly report next to
+it, `reports/latest.md` (`https://github.com/dvalfrid/rigstats/blob/stats/reports/latest.md`;
+every week as `reports/<year>-W<week>.md`) — the week in numbers, the
+downloads per release since the snapshot before, checks per day for the last
+12 weeks and the totals per minor version. The run's summary in Actions
+shows the same page.
 
 - **installer** — `RIGStats_*_x64-setup.exe`: new installs from the website or
   GitHub, winget installs and upgrades (winget fetches the file from GitHub),
