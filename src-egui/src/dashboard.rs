@@ -134,6 +134,21 @@ impl DashboardView<'_> {
         opacity: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
+        let ctx = ui.ctx().clone();
+        panels::with_compact_height(&ctx, panel, self.compact(panel), || {
+            self.draw_panel(ui, panel, sc, opacity, update_ver)
+        })
+    }
+
+    /// `draw_one_panel`'s body: the panel's own `draw`.
+    fn draw_panel(
+        &self,
+        ui: &mut egui::Ui,
+        panel: &str,
+        sc: f32,
+        opacity: f32,
+        update_ver: Option<&str>,
+    ) -> Option<String> {
         let mut new_pref = None;
         match panel {
             "header" => {
@@ -369,7 +384,13 @@ impl DashboardView<'_> {
                 .iter()
                 .filter_map(|k| ctx.data(|d| d.get_temp::<f32>(natural_id(k))))
                 .fold(None, |m: Option<f32>, h| Some(m.map_or(h, |m| m.max(h))));
-            (tallest.unwrap_or(full_h), true)
+            // At least the shared compact height (#604), which
+            // `draw_one_panel` stretches every compact panel to.
+            let all = match (tallest, panels::compact_height(&ctx)) {
+                (Some(t), Some(s)) => Some(t.max(s)),
+                (t, s) => t.or(s),
+            };
+            (all.unwrap_or(full_h), true)
         };
 
         let origin = ui.cursor().min;
@@ -646,5 +667,83 @@ mod tests {
             (above - below).abs() < 2.0,
             "{f:?}: {above} above, {below} below"
         );
+    }
+
+    /// All thirteen panels compact, stacked as in portrait, at `sc`: their
+    /// frames, top to bottom, after a few passes.
+    fn portrait_compact_frames(sc: f32) -> Vec<egui::Rect> {
+        let ctx = egui::Context::default();
+        let tex = brand::Textures::load(&ctx);
+        let stats = PollStats {
+            cpu_model: "AMD Ryzen 7 9800X3D 8-Core Processor".into(),
+            gpu_name: "AMD Radeon RX 9070 XT".into(),
+            ram_spec: "DDR5 6000 MT/s (2 DIMMs)".into(),
+            ram_total: 32 << 30,
+            ram_used: 16 << 30,
+            hostname: "Unvork".into(),
+            model_name: "ROG GM700TZ".into(),
+            lhm_connected: true,
+            ..Default::default()
+        };
+        let spark = Sparkline::new(60);
+        let th = theme::AppTheme::default();
+        let thresholds = PanelThresholds::default();
+        let control = ControlState::default();
+        let keys: Vec<String> = panels::COMPACT_PANELS.map(String::from).to_vec();
+        let view = DashboardView {
+            latest: &stats,
+            cpu_spark: &spark,
+            gpu_spark: &spark,
+            net_up_spark: &spark,
+            net_dn_spark: &spark,
+            textures: &tex,
+            app_theme: &th,
+            thresholds: &thresholds,
+            psu_watts: None,
+            control: &control,
+            compact_panels: &keys,
+        };
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(450.0 * sc, 6000.0),
+            )),
+            ..Default::default()
+        };
+        let mut shapes = Vec::new();
+        for _ in 0..4 {
+            let mut out = ctx.run_ui(input(), |ui| {
+                for key in &keys {
+                    view.draw_one_panel(ui, key, sc, 1.0, None);
+                }
+            });
+            out.textures_delta.clear();
+            shapes = out.shapes;
+        }
+        let mut frames: Vec<egui::Rect> = shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Rect(r) if r.fill == theme::PANEL_FILL => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        frames.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        frames
+    }
+
+    #[test]
+    fn every_compact_panel_is_one_height_at_every_scale() {
+        for sc in [0.4, 0.7, 1.0, 1.2, 1.7, 2.0] {
+            let frames = portrait_compact_frames(sc);
+            assert_eq!(frames.len(), 13, "at {sc}: {frames:?}");
+            let h = frames.iter().map(|f| f.height()).fold(0.0, f32::max);
+            for f in &frames {
+                assert!(
+                    (f.height() - h).abs() < 0.5,
+                    "at {sc}: a frame is {} px, the tallest {h}",
+                    f.height()
+                );
+            }
+        }
     }
 }

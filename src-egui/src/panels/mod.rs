@@ -30,6 +30,83 @@ pub const COMPACT_PANELS: [&str; 13] = [
     "peripherals",
 ];
 
+/// Compact panels are one height (#604): the tallest compact panel's own
+/// height, measured last frame — at most scales the Network, CPU or Processes
+/// panel — so shorter ones stretch to it, their title at the top as in full
+/// panels. A fixed height can't do it: some of egui's spacing doesn't scale, so
+/// which panel is tallest changes with the scale. Peripherals doesn't set it
+/// (it grows with the devices); one with more to show grows past it.
+#[derive(Clone, Default)]
+struct CompactHeights {
+    /// Each compact panel's own height and the pass it was drawn in.
+    natural: std::collections::HashMap<String, (f32, u64)>,
+}
+
+/// Draws the compact panel `key` (`draw`) at the shared compact height when it
+/// is `compact`, through `theme::panel_stretch_id`, keeping a taller stretch
+/// the caller (the landscape grid) already asked for; and records its own
+/// height for the next frame's.
+pub fn with_compact_height<R>(
+    ctx: &egui::Context,
+    key: &str,
+    compact: bool,
+    draw: impl FnOnce() -> R,
+) -> R {
+    if !compact {
+        return draw();
+    }
+    let stretch = crate::theme::panel_stretch_id();
+    let natural = crate::theme::panel_natural_id();
+    let before = ctx.data(|d| d.get_temp::<f32>(stretch));
+    let standard = compact_height(ctx);
+    let h = match (before, standard) {
+        (Some(b), Some(s)) => Some(b.max(s)),
+        (b, s) => b.or(s),
+    };
+    if let Some(h) = h {
+        ctx.data_mut(|d| d.insert_temp(stretch, h));
+    }
+    ctx.data_mut(|d| d.remove::<f32>(natural));
+    let out = draw();
+    ctx.data_mut(|d| match before {
+        Some(b) => {
+            d.insert_temp(stretch, b);
+        }
+        None => d.remove::<f32>(stretch),
+    });
+    if let Some(own) = ctx.data(|d| d.get_temp::<f32>(natural)) {
+        let pass = ctx.cumulative_pass_nr();
+        let id = compact_heights_id();
+        let mut heights = ctx
+            .data(|d| d.get_temp::<CompactHeights>(id))
+            .unwrap_or_default();
+        let old = heights.natural.insert(key.to_string(), (own, pass));
+        ctx.data_mut(|d| d.insert_temp(id, heights));
+        // A new height settles in a frame; don't wait for the next tick.
+        if old.is_none_or(|(o, _)| (o - own).abs() > 0.5) {
+            ctx.request_repaint();
+        }
+    }
+    out
+}
+
+/// The shared compact height: the tallest compact panel drawn in this pass or
+/// the one before (a panel hidden or set to Full since then drops out).
+pub fn compact_height(ctx: &egui::Context) -> Option<f32> {
+    let pass = ctx.cumulative_pass_nr();
+    let heights = ctx.data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))?;
+    heights
+        .natural
+        .iter()
+        .filter(|(key, (_, at))| key.as_str() != "peripherals" && pass.saturating_sub(*at) <= 1)
+        .map(|(_, (h, _))| *h)
+        .reduce(f32::max)
+}
+
+fn compact_heights_id() -> egui::Id {
+    egui::Id::unique("compact_panel_heights")
+}
+
 /// How many rows a compact list panel shows (#604): Processes, GPU Apps.
 pub const COMPACT_LIST_ROWS: usize = 3;
 

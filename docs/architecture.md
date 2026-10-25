@@ -776,7 +776,14 @@ Motherboard (HOTTEST, VCORE, FAN under the board's name), System Power (the
 total as a ring of the PSU or reference watts, then CPU, GPU, OTHER), Battery
 (a charge ring, TIME LEFT or STATUS while charging, POWER), and the list panels
 Processes / GPU Apps (top `COMPACT_LIST_ROWS` = 3, no engine column) and
-Peripherals (no bars), whose rows are `COMPACT_LIST_SCALE` bigger — no graphs or per-core bars, and no
+Peripherals (no bars), whose rows are `COMPACT_LIST_SCALE` bigger. All compact
+panels are one height: `panels::with_compact_height` (called by
+`DashboardView::draw_one_panel` and the floating panels) records each one's own
+height and stretches it to the tallest compact panel's from the last frame
+(`compact_height`; Peripherals, which grows with its devices, doesn't set it).
+The height is measured, not fixed, because some egui spacing doesn't scale:
+Network is the tallest at 100 % and below, CPU and Processes above
+(`dashboard::tests::every_compact_panel_is_one_height_at_every_scale`). No graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Their plain values (FREQ, POWER, FREE) are
