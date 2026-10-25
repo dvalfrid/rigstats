@@ -70,7 +70,9 @@ pub(crate) fn compact_row(
                     note,
                 } => {
                     ui.label(RichText::new(*label).size(11.0 * sc).color(*label_color));
-                    ui.label(RichText::new(value).size(14.0 * sc).color(*value_color));
+                    // As big as the rings' numbers (64 px × 0.26 ≈ 17), so a row
+                    // reads as one; full panels keep 14 px.
+                    ui.label(RichText::new(value).size(17.0 * sc).color(*value_color));
                     if let Some(note) = note {
                         ui.label(RichText::new(note).size(10.0 * sc).color(th.text_muted));
                     }

@@ -772,7 +772,11 @@ temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
 with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network without its graph — no graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
-panel, centred, so they spread evenly at any width and scale. Which panels
+panel, centred, so they spread evenly at any width and scale. Their plain values (FREQ, POWER, FREE) are
+`theme::C_VALUE` (white, like Network's), not the full panels' `C_TEXT`, for
+contrast over a bright desktop behind see-through panels, and 17 px × scale
+(full panels: 14) — as big as the rings' numbers, so a row reads as one; it
+still fits the 360 px floating card (`panels::tests`). Which panels
 offer it: `panels::COMPACT_PANELS`;
 each panel's `draw` takes `compact`, passed by `DashboardView::draw_one_panel`
 and by the floating panels (`DashboardRuntime::is_compact`). A compact floating

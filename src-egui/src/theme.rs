@@ -124,6 +124,10 @@ pub const C_NET_DOWN: Color32 = Color32::from_rgb(0x3a, 0xa5, 0xff); // Network 
 
 // ── Text colours ─────────────────────────────────────────────────────────────
 pub const C_TEXT: Color32 = Color32::from_rgb(0xb8, 0xcc, 0xe8);
+/// A compact panel's plain values (FREQ, POWER, FREE): white like the
+/// Network panel's, for contrast over a bright desktop behind see-through
+/// panels (#596 feedback).
+pub const C_VALUE: Color32 = Color32::WHITE;
 pub const C_DIM: Color32 = Color32::from_rgb(0x2e, 0x3d, 0x5a);
 /// Colour for sensors/fields not supported by the current hardware.
 /// Use via `avail_color` rather than directly.

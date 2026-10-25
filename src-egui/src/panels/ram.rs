@@ -163,7 +163,7 @@ fn compact_body(
             label: "FREE",
             label_color: th.stat_label,
             value: format!("{free_gb:.1}G"),
-            value_color: theme::C_TEXT,
+            value_color: theme::C_VALUE,
             note: None,
         },
     ];
