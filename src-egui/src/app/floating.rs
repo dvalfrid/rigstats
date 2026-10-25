@@ -249,6 +249,7 @@ impl RigStatsApp {
                                         &app_theme,
                                         scale,
                                         control,
+                                        self.runtime.is_compact("header"),
                                     );
                                     if ui
                                         .ctx()
@@ -272,6 +273,7 @@ impl RigStatsApp {
                                         &app_theme,
                                         float_update_ver.as_deref(),
                                         scale,
+                                        self.runtime.is_compact("clock"),
                                     );
                                     if ui
                                         .ctx()
@@ -346,6 +348,7 @@ impl RigStatsApp {
                                     self.runtime.thresholds.disk_usage.1,
                                     &app_theme,
                                     scale,
+                                    self.runtime.is_compact("disk"),
                                 ),
                                 "motherboard" => {
                                     let r = panels::motherboard::draw(
@@ -356,6 +359,7 @@ impl RigStatsApp {
                                         &app_theme,
                                         scale,
                                         control.has_fan_control(),
+                                        self.runtime.is_compact("motherboard"),
                                     );
                                     if take_fan_curve_request(ui.ctx()) {
                                         control_open_arc.store(true, Ordering::Relaxed);
@@ -369,6 +373,7 @@ impl RigStatsApp {
                                     content_opacity,
                                     &app_theme,
                                     scale,
+                                    self.runtime.is_compact("process"),
                                 ),
                                 "gpu_processes" => panels::gpu_processes::draw(
                                     ui,
@@ -376,6 +381,7 @@ impl RigStatsApp {
                                     content_opacity,
                                     &app_theme,
                                     scale,
+                                    self.runtime.is_compact("gpu_processes"),
                                 ),
                                 "power" => panels::power::draw(
                                     ui,
@@ -384,6 +390,7 @@ impl RigStatsApp {
                                     &app_theme,
                                     scale,
                                     self.runtime.psu_watts,
+                                    self.runtime.is_compact("power"),
                                 ),
                                 "peripherals" => panels::peripherals::draw(
                                     ui,
@@ -393,6 +400,7 @@ impl RigStatsApp {
                                     scale,
                                     self.runtime.thresholds.battery.0,
                                     self.runtime.thresholds.battery.1,
+                                    self.runtime.is_compact("peripherals"),
                                 ),
                                 "battery" => panels::battery::draw(
                                     ui,
@@ -404,6 +412,7 @@ impl RigStatsApp {
                                     self.runtime.thresholds.battery.1,
                                     self.runtime.thresholds.battery_power.0,
                                     self.runtime.thresholds.battery_power.1,
+                                    self.runtime.is_compact("battery"),
                                 ),
                                 _ => egui::Rect::NOTHING,
                             };

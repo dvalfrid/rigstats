@@ -145,6 +145,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.control,
+                    self.compact("header"),
                 );
             }
             "clock" => {
@@ -155,6 +156,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     update_ver,
                     sc,
+                    self.compact("clock"),
                 );
             }
             "cpu" => {
@@ -228,6 +230,7 @@ impl DashboardView<'_> {
                     self.thresholds.disk_usage.1,
                     self.app_theme,
                     sc,
+                    self.compact("disk"),
                 );
             }
             "motherboard" => {
@@ -239,13 +242,28 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.control.has_fan_control(),
+                    self.compact("motherboard"),
                 );
             }
             "process" => {
-                let _ = panels::process::draw(ui, self.latest, opacity, self.app_theme, sc);
+                let _ = panels::process::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.compact("process"),
+                );
             }
             "gpu_processes" => {
-                let _ = panels::gpu_processes::draw(ui, self.latest, opacity, self.app_theme, sc);
+                let _ = panels::gpu_processes::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.compact("gpu_processes"),
+                );
             }
             "power" => {
                 let _ = panels::power::draw(
@@ -255,6 +273,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.psu_watts,
+                    self.compact("power"),
                 );
             }
             "peripherals" => {
@@ -266,6 +285,7 @@ impl DashboardView<'_> {
                     sc,
                     self.thresholds.battery.0,
                     self.thresholds.battery.1,
+                    self.compact("peripherals"),
                 );
             }
             "battery" => {
@@ -279,6 +299,7 @@ impl DashboardView<'_> {
                     self.thresholds.battery.1,
                     self.thresholds.battery_power.0,
                     self.thresholds.battery_power.1,
+                    self.compact("battery"),
                 );
             }
             _ => {}

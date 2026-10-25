@@ -200,6 +200,8 @@ pub fn paint_device_row(
     charge_warn: u8,
     charge_crit: u8,
     sc: f32,
+    // The compact layout (#604): no bar — the name runs up to the percentage.
+    bar: bool,
 ) {
     let row_h = (ROW_H * sc).round();
     let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, row_h), Sense::hover());
@@ -214,7 +216,12 @@ pub fn paint_device_row(
         .layout_no_wrap("100%".to_string(), font.clone(), color)
         .size()
         .x;
-    let (name_w, bar_x0, bar_w) = row_columns(inner_w, pct_w, sc);
+    let (name_w, bar_x0, bar_w) = if bar {
+        row_columns(inner_w, pct_w, sc)
+    } else {
+        let x1 = inner_w - pct_w - MARK_W * sc;
+        ((x1 - CELL_PAD * sc).max(0.0), x1, 0.0)
+    };
 
     let icon_w = ICON_W * sc;
     if let Some(link) = link_of(&device.connection) {
@@ -244,8 +251,10 @@ pub fn paint_device_row(
         pos2(rect.min.x + bar_x0, cy - bar_h / 2.0),
         Vec2::new(bar_w, bar_h),
     );
-    ui.painter()
-        .rect_filled(track, 0.0, egui::Color32::from_gray(42));
+    if bar {
+        ui.painter()
+            .rect_filled(track, 0.0, egui::Color32::from_gray(42));
+    }
     let fill_w = bar_w * f32::from(device.battery.min(100)) / 100.0;
     if fill_w > 0.0 {
         let fill = Rect::from_min_size(track.min, Vec2::new(fill_w, bar_h));
@@ -356,6 +365,7 @@ pub fn paint_card_row(
     );
 }
 
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -364,9 +374,14 @@ pub fn draw(
     sc: f32,
     charge_warn: u8,
     charge_crit: u8,
+    // The compact layout (#604): a row per device without its bar, no fixed
+    // height.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.label(
             RichText::new("PERIPHERALS")
                 .strong()
@@ -386,7 +401,17 @@ pub fn draw(
 
         let inner_w = ui.available_width();
         for device in &stats.peripherals {
-            paint_device_row(ui, inner_w, device, charge_warn, charge_crit, sc);
+            // Compact: rows near the other compact panels' value size (#604).
+            let row_sc = if compact { sc * 1.15 } else { sc };
+            paint_device_row(
+                ui,
+                inner_w,
+                device,
+                charge_warn,
+                charge_crit,
+                row_sc,
+                !compact,
+            );
         }
     })
 }

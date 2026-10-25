@@ -47,9 +47,14 @@ pub fn draw(
     th: &theme::AppTheme,
     sc: f32,
     psu_watts: Option<u16>,
+    // The compact layout (#604): the estimated total as a ring (of the PSU or
+    // reference watts), then CPU, GPU and OTHER in columns; no bars.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.label(
             RichText::new("SYSTEM POWER")
                 .strong()
@@ -66,6 +71,38 @@ pub fn draw(
         let est = estimate_total(stats.cpu_power, stats.total_gpu_power, is_laptop);
         let has_data = est.is_some();
         let (total_w, cpu_w, gpu_w, other_w, complete) = est.unwrap_or((0.0, 0.0, 0.0, 0.0, false));
+
+        if compact {
+            use super::CompactCell;
+            let watts = |label, w: Option<f64>, prefix: &str| CompactCell::Stat {
+                label,
+                label_color: th.stat_label,
+                value: w.map_or("-- W".to_string(), |w| format!("{prefix}{w:.0} W")),
+                value_color: theme::avail_color(&w, theme::C_VALUE),
+                note: None,
+            };
+            let ring = if has_data {
+                CompactCell::Ring(
+                    (total_w / reference_w).clamp(0.0, 1.0) as f32,
+                    th.accent,
+                    format!("{total_w:.0}W"),
+                )
+            } else {
+                CompactCell::Ring(0.0, theme::C_UNAVAILABLE, "--".to_string())
+            };
+            super::compact_row(
+                ui,
+                &[
+                    ring,
+                    watts("CPU", stats.cpu_power, ""),
+                    watts("GPU", stats.total_gpu_power, ""),
+                    watts("OTHER", has_data.then_some(other_w), "~"),
+                ],
+                th,
+                sc,
+            );
+            return;
+        }
 
         // Hero: ~245 W  est.
         let (hero_str, hero_color, total_frac) = if has_data {

@@ -29,6 +29,11 @@ fn brand_subtitle(brand: &str) -> &'static str {
     }
 }
 
+/// The compact header's logo height (#604): as tall as its name, model and
+/// profile chip.
+const COMPACT_LOGO_H: f32 = 54.0;
+
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -37,16 +42,25 @@ pub fn draw(
     th: &theme::AppTheme,
     sc: f32,
     control: &ControlState,
+    // The compact layout (#604): the name as a panel title, the model and the
+    // profile chip under it, a logo as tall as that — no brand line.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_HEADER_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_HEADER_H * sc);
+        }
 
         let subtitle = brand_subtitle(&stats.system_brand);
         let logo = tex.rig_logo(&stats.system_brand);
+        let logo_h = if compact {
+            COMPACT_LOGO_H
+        } else {
+            theme::PANEL_HEADER_H
+        } * sc;
         let logo_w = logo.map_or(0.0, |logo| {
             let [lw, lh] = logo.size();
-            let target_h = theme::PANEL_HEADER_H * sc;
-            lw as f32 * (target_h / lh as f32)
+            lw as f32 * (logo_h / lh as f32)
         });
 
         // Single horizontal row spanning full panel height so the logo fills edge-to-edge.
@@ -56,12 +70,19 @@ pub fn draw(
             let text_w = (ui.available_width() - logo_w - ui.spacing().item_spacing.x).max(0.0);
             ui.vertical(|ui| {
                 ui.set_max_width(text_w);
-                ui.add_space(6.0 * sc);
-                ui.label(RichText::new(subtitle).size(11.0 * sc).color(th.stat_label));
+                if !compact {
+                    ui.add_space(6.0 * sc);
+                    ui.label(RichText::new(subtitle).size(11.0 * sc).color(th.stat_label));
+                }
+                let (name_px, model_px) = if compact {
+                    (theme::FONT_PANEL_TITLE, 11.0)
+                } else {
+                    (36.0, 16.0)
+                };
                 ui.add(
                     egui::Label::new(
                         RichText::new(&stats.hostname)
-                            .size(36.0 * sc)
+                            .size(name_px * sc)
                             .strong()
                             .color(egui::Color32::WHITE),
                     )
@@ -71,7 +92,7 @@ pub fn draw(
                     ui.add(
                         egui::Label::new(
                             RichText::new(&stats.model_name)
-                                .size(16.0 * sc)
+                                .size(model_px * sc)
                                 .color(theme::C_ACCENT),
                         )
                         .truncate(),
@@ -87,10 +108,9 @@ pub fn draw(
             });
 
             if let Some(logo) = logo {
-                let target_h = theme::PANEL_HEADER_H * sc;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let sized =
-                        egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(logo_w, target_h));
+                        egui::load::SizedTexture::new(logo.id(), egui::Vec2::new(logo_w, logo_h));
                     ui.add(egui::Image::new(sized));
                 });
             }

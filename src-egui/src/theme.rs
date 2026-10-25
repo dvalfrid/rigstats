@@ -273,6 +273,17 @@ pub fn panel_natural_id() -> egui::Id {
     egui::Id::unique("panel_frame_natural")
 }
 
+/// The width `panel_frame` leaves inside a panel `outer_w` wide: per side its
+/// margin, 12 px × scale rounded to whole pixels like the frame does (at 40 %
+/// that is 5, not 4.8), and its 0.5 px stroke — the unrounded 24 × scale
+/// overflowed the card.
+pub fn panel_inner_w(outer_w: f32, sc: f32) -> f32 {
+    outer_w - 2.0 * ((12.0 * sc).round() + PANEL_STROKE_W)
+}
+
+/// The panel frame's border width.
+const PANEL_STROKE_W: f32 = 0.5;
+
 pub fn panel_frame(
     ui: &mut Ui,
     opacity: f32,
@@ -285,7 +296,7 @@ pub fn panel_frame(
         outer_margin: Margin::ZERO,
         corner_radius: CornerRadius::ZERO,
         fill: premul(PANEL_FILL, opacity),
-        stroke: Stroke::new(0.5_f32, premul(PANEL_BORDER, opacity)),
+        stroke: Stroke::new(PANEL_STROKE_W, premul(PANEL_BORDER, opacity)),
         ..Default::default()
     };
 

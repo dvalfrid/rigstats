@@ -3,8 +3,6 @@ use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Ui, Vec2};
 use crate::theme;
 use crate::PollStats;
 
-// inner_margin: Margin::symmetric(12, 8) → 24 px total horizontal
-const FRAME_H_MARGIN: f32 = 24.0;
 const ROW_H: f32 = 14.0;
 const CELL_PAD: f32 = 4.0;
 
@@ -128,8 +126,11 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#604): the top `super::COMPACT_LIST_ROWS` apps with
+    // their GPU %, no engine column, no fixed height.
+    compact: bool,
 ) -> egui::Rect {
-    let inner_w = ui.max_rect().width() - FRAME_H_MARGIN * sc;
+    let inner_w = theme::panel_inner_w(ui.max_rect().width(), sc);
 
     // Show the physical-GPU column only when more than one adapter is actually in
     // play — on a single-GPU box it would just repeat the same name, so fall back
@@ -143,8 +144,11 @@ pub fn draw(
     let show_adapter = distinct_adapters.len() > 1;
     let mid_header = if show_adapter { "GPU" } else { "ENG" };
 
+    let mid_header = if compact { "" } else { mid_header };
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.allocate_space(Vec2::new(inner_w, 0.0));
 
         ui.label(
@@ -174,9 +178,18 @@ pub fn draw(
             ui.add_space((2.0 * sc).round());
 
             ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
-            for p in &stats.gpu_processes {
+            let shown = if compact {
+                super::COMPACT_LIST_ROWS
+            } else {
+                usize::MAX
+            };
+            for p in stats.gpu_processes.iter().take(shown) {
                 let name = p.name.trim_end_matches(".exe");
-                let mid = mid_cell(&p.adapter, &p.engines, show_adapter);
+                let mid = if compact {
+                    String::new()
+                } else {
+                    mid_cell(&p.adapter, &p.engines, show_adapter)
+                };
                 paint_row(
                     ui,
                     inner_w,
@@ -184,11 +197,18 @@ pub fn draw(
                     &mid,
                     &format!("{:.0}%", p.util_pct),
                     [theme::C_TEXT, th.text_muted, theme::C_PROC],
-                    sc,
+                    if compact {
+                        sc * super::COMPACT_LIST_SCALE
+                    } else {
+                        sc
+                    },
                 );
             }
         }
 
+        if compact {
+            return;
+        }
         // Fill remaining space to reach PANEL_DATA_H (same pattern as PROCESSES).
         let cursor_y = ui.cursor().top();
         let filler = (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()))

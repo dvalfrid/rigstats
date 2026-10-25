@@ -14,6 +14,7 @@ fn short_label(label: &str) -> String {
     label.chars().take(8).collect()
 }
 
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -22,9 +23,14 @@ pub fn draw(
     th: &theme::AppTheme,
     sc: f32,
     fans_clickable: bool,
+    // The compact layout (#604): the hottest board sensor, Vcore and the
+    // fastest fan in one row of columns, under the board's name.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.horizontal(|ui| {
             ui.label(
                 RichText::new("MOTHERBOARD")
@@ -40,6 +46,10 @@ pub fn draw(
                     .size(11.0 * sc)
                     .color(th.text_muted),
             );
+        }
+        if compact {
+            compact_body(ui, stats, (warn, crit), th, sc);
+            return;
         }
         if let Some(ref chip) = stats.mb_chip {
             ui.label(
@@ -183,9 +193,78 @@ pub fn draw(
     })
 }
 
+/// The compact MOTHERBOARD row (#604).
+fn compact_body(
+    ui: &mut Ui,
+    stats: &PollStats,
+    (warn, crit): (u8, u8),
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    use super::CompactCell;
+    let hottest = stats
+        .mb_temps
+        .iter()
+        .map(|(_, t)| *t)
+        .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.max(t))));
+    let fastest = stats
+        .mb_fans
+        .iter()
+        .map(|(_, rpm)| *rpm)
+        .fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.max(r))));
+    let stat = |label, value: Option<String>, color| CompactCell::Stat {
+        label,
+        label_color: th.stat_label,
+        value_color: if value.is_some() {
+            color
+        } else {
+            theme::C_UNAVAILABLE
+        },
+        value: value.unwrap_or_else(|| "--".to_string()),
+        note: None,
+    };
+    super::compact_row(
+        ui,
+        &[
+            stat(
+                "HOTTEST",
+                hottest.map(|t| format!("{t:.0}°C")),
+                temp_color(hottest, warn, crit),
+            ),
+            stat(
+                "VCORE",
+                vcore(&stats.mb_voltages).map(|v| format!("{v:.2} V")),
+                theme::C_VALUE,
+            ),
+            stat(
+                "FAN",
+                fastest.map(|r| format!("{r:.0} rpm")),
+                theme::C_VALUE,
+            ),
+        ],
+        th,
+        sc,
+    );
+}
+
+/// The CPU core voltage among the board's rails: the one named Vcore.
+fn vcore(voltages: &[(String, f64)]) -> Option<f64> {
+    voltages
+        .iter()
+        .find(|(label, _)| label.to_ascii_lowercase().contains("vcore"))
+        .map(|(_, v)| *v)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::short_label;
+    use super::{short_label, vcore};
+
+    #[test]
+    fn vcore_is_the_rail_named_so() {
+        let rails = vec![("AVCC".to_string(), 3.38), ("Vcore".to_string(), 1.18)];
+        assert_eq!(vcore(&rails), Some(1.18));
+        assert_eq!(vcore(&[("+3.3V".to_string(), 3.36)]), None);
+    }
 
     #[test]
     fn temperature_number_becomes_t_prefix() {
