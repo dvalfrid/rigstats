@@ -181,7 +181,7 @@ alert levels — belongs to each
   easier reading without growing as wide as a full one.
 
 <p align="center">
-  <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact as floating cards: load and temperature rings with clock and power for the CPU and GPU, a usage ring with used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">
+  <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact in the dashboard: load and temperature rings with clock and power in white for the CPU and GPU, a usage ring with the memory spec, used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">
 </p>
 
 - **Fill Screen** — fill the height of the monitor the window currently sits on
