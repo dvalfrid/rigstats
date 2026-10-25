@@ -1,0 +1,96 @@
+{
+  "cpu_temp": 54,
+  "cpu_power": 79.76286,
+  "gpu_devices": [
+    {
+      "name": "NVIDIA GeForce RTX 5070 Ti",
+      "sensor_family": "gpu-nvidia",
+      "load": 6,
+      "temp": 51.38672,
+      "hotspot_temp": 59.1875,
+      "mem_temp": 60,
+      "core_clock": 2685,
+      "mem_clock": 14001,
+      "power": 61.05,
+      "fan": 0,
+      "vram_used_mb": 3428.3672,
+      "vram_total_mb": 16303,
+      "d3d_3d": 12.531208,
+      "d3d_vdec": 1.6993538
+    },
+    {
+      "name": "Intel(R) Graphics",
+      "sensor_family": "gpu-intel-integrated",
+      "load": null,
+      "temp": null,
+      "hotspot_temp": null,
+      "mem_temp": null,
+      "core_clock": 550,
+      "mem_clock": null,
+      "power": 0.06967597,
+      "fan": null,
+      "vram_used_mb": null,
+      "vram_total_mb": null,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "Samsung SSD 870 QVO 1TB": 29,
+    "Samsung SSD 870 EVO 1TB": 33,
+    "Samsung SSD 860 EVO 500GB": 29,
+    "Samsung SSD 990 PRO 1TB": 56.850006,
+    "Samsung SSD 990 PRO 2TB": 53.850006,
+    "WDC WD30EZRZ-00Z5HB0": 38,
+    "WDC WD20EARS-00MVWB0": 36,
+    "WDC WD10EFRX-68JCSN0": 35
+  },
+  "ram_temp": 44,
+  "mb_fans": [
+    {
+      "label": "Fan #1",
+      "rpm": 1436.1702
+    },
+    {
+      "label": "Fan #6",
+      "rpm": 1161.79
+    }
+  ],
+  "mb_temps": [
+    {
+      "label": "Temperature #1",
+      "celsius": 31
+    },
+    {
+      "label": "Temperature #2",
+      "celsius": 45
+    },
+    {
+      "label": "Temperature #3",
+      "celsius": 62
+    },
+    {
+      "label": "Temperature #4",
+      "celsius": 41
+    },
+    {
+      "label": "Temperature #5",
+      "celsius": 49
+    },
+    {
+      "label": "Temperature #6",
+      "celsius": 34
+    }
+  ],
+  "mb_voltages": [
+    {
+      "label": "\u002B3V Standby",
+      "volts": 3.336
+    },
+    {
+      "label": "CMOS Battery",
+      "volts": 3.168
+    }
+  ],
+  "mb_chip": "ITE IT8696E"
+}

@@ -1,0 +1,23 @@
+{
+  "written_utc": "2026-10-25T12:25:42.1826839\u002B00:00",
+  "adlx_installed": false,
+  "nvml": {
+    "driver_version": "621.01",
+    "gpus": [
+      {
+        "index": 0,
+        "name": "NVIDIA GeForce RTX 5070 Ti",
+        "laptop": false,
+        "refused_write": false,
+        "min_mw": 250000,
+        "max_mw": 330000,
+        "default_mw": 300000,
+        "limit_mw": 300000,
+        "enforced_mw": 300000,
+        "range_pct": "-16..10",
+        "offered": true
+      }
+    ]
+  },
+  "drivers": "amdadlx64.dll -; nvml.dll 8.17.16.2101"
+}

@@ -20,6 +20,8 @@
     }
   ],
   "disk_temps": {
+    "Hitachi HTS545032B9SA02": 26,
+    "Samsung SSD 850 EVO 250GB": 32,
     "SAMSUNG MZVLW256HEHP-000H1": 36.850006
   },
   "ram_temp": null,

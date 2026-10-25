@@ -1,0 +1,20 @@
+{
+  "slug": "gigabyte-z890-ultra9-285k-rtx5070ti",
+  "synthetic": false,
+  "contributor": "SirBlacky21",
+  "collected_at_unix": 1792931288,
+  "rigstats_version": "1.52.0-rc.3",
+  "os": "Microsoft Windows 11 Pro (build 26300)",
+  "gpu_driver": "NVIDIA 32.0.16.2101 (621.01), Intel 32.0.101.8331",
+  "adapters": [
+    "NVIDIA GeForce RTX 5070 Ti (dGPU, LUID 0x0001D0F7 — 760 engine instances)",
+    "Intel(R) Graphics (iGPU, LUID 0x000205ED — 65 instances)",
+    "Microsoft Basic Render Driver (software, Flags=2, LUID 0x0002057F — 200 instances)",
+    "LUID 0x00020B15 — 2 instances, not listed by DXGI"
+  ],
+  "gpu_state": "dual-active",
+  "notes": "From SirBlacky21's diagnostics ZIP (#598), same machine as the sensor-sidecar fixture of this slug. First Intel desktop: RTX 5070 Ti + Intel Graphics (Arrow Lake). New shapes: the Microsoft Basic Render Driver has many engine instances here (200; elsewhere few or none), and two instances sit on a LUID DXGI doesn't list. Intel engine types include GSC; NVIDIA Blackwell OFA_0, JPEG_Decode_1, VR, Security_1.",
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}
