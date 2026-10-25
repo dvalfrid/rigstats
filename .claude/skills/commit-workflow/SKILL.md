@@ -33,7 +33,7 @@ $proc = Get-Process rigstats -ErrorAction SilentlyContinue
 if ($proc) { Stop-Process -Id $proc.Id -Force }
 cargo build --manifest-path src-egui/Cargo.toml
 (Get-Item .\target\debug\rigstats.exe).LastWriteTime   # must have advanced
-Start-Process .\target\debug\rigstats.exe
+Start-Process .\target\debug\rigstats.exe -WindowStyle Minimized   # console minimized, dashboard normal
 ```
 
 Verify the golden path **and** edge cases. Do not commit until the fix is confirmed working in the running app — passing tests and clean clippy verify code correctness, not behaviour.

@@ -120,7 +120,8 @@ try {
         [System.IO.File]::WriteAllText($settingsPath, ($s | ConvertTo-Json -Depth 20))
 
         $argList = @($mode.Args | Where-Object { $_ })
-        $p = if ($argList) { Start-Process $Exe -ArgumentList $argList -PassThru } else { Start-Process $Exe -PassThru }
+        # Minimized: a debug build's console starts minimized, the app normally.
+        $p = if ($argList) { Start-Process $Exe -ArgumentList $argList -WindowStyle Minimized -PassThru } else { Start-Process $Exe -WindowStyle Minimized -PassThru }
         Start-Sleep -Seconds $Wait
 
         $alive = -not $p.HasExited

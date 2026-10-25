@@ -18,7 +18,9 @@ cargo build --manifest-path src-egui/Cargo.toml
 
 # Verify timestamp advanced before launching
 (Get-Item .\target\debug\rigstats.exe).LastWriteTime
-Start-Process .\target\debug\rigstats.exe
+# Minimized: the debug build's console window starts minimized (not in front
+# of the owner or in screenshots); the dashboard shows normally.
+Start-Process .\target\debug\rigstats.exe -WindowStyle Minimized
 Start-Sleep 3
 ```
 
@@ -50,7 +52,7 @@ Debug builds read `RIGSTATS_OPEN` at start-up and open that dialog themselves â€
 $env:RIGSTATS_OPEN = "control:overview"   # or control:dashboard|overlay|alerts|power|fans|cpu|gpu|lighting|headset|mouse
                                           # or settings:general|display|overlay|notifications
                                           # or about | status | updates | history
-Start-Process .\target\debug\rigstats.exe
+Start-Process .\target\debug\rigstats.exe -WindowStyle Minimized
 Remove-Item Env:RIGSTATS_OPEN
 ```
 
