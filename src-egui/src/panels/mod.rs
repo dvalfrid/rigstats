@@ -12,9 +12,159 @@ pub mod power;
 pub mod process;
 pub mod ram;
 
-/// The panels with a compact layout (#596), offered Full / Compact in the
-/// Control Center's Dashboard page.
-pub const COMPACT_PANELS: [&str; 4] = ["cpu", "gpu", "ram", "net"];
+/// The panels with a compact layout (#596, every panel since #604), offered
+/// Full / Compact in the Control Center's Dashboard page.
+pub const COMPACT_PANELS: [&str; 13] = [
+    "header",
+    "clock",
+    "cpu",
+    "gpu",
+    "ram",
+    "net",
+    "disk",
+    "motherboard",
+    "process",
+    "gpu_processes",
+    "power",
+    "battery",
+    "peripherals",
+];
+
+/// Compact panels are one height (#604): the tallest compact panel's own
+/// height, measured last frame — at most scales the Network, CPU or Processes
+/// panel — so shorter ones stretch to it, their title at the top as in full
+/// panels. A fixed height can't do it: some of egui's spacing doesn't scale, so
+/// which panel is tallest changes with the scale. Every compact panel shows a
+/// bounded amount (Peripherals at most three devices and "+N more"), so the
+/// ring panels set it (`dashboard::tests::the_ring_panels_set_the_compact_height`).
+#[derive(Clone, Default)]
+struct CompactHeights {
+    /// Each compact panel's own height and the pass it was drawn in.
+    natural: std::collections::HashMap<String, (f32, u64)>,
+}
+
+/// Draws the compact panel `key` (`draw`) at the shared compact height when it
+/// is `compact`, through `theme::panel_stretch_id`, keeping a taller stretch
+/// the caller (the landscape grid) already asked for; and records its own
+/// height for the next frame's.
+pub fn with_compact_height<R>(
+    ctx: &egui::Context,
+    key: &str,
+    compact: bool,
+    draw: impl FnOnce() -> R,
+) -> R {
+    if !compact {
+        return draw();
+    }
+    let stretch = crate::theme::panel_stretch_id();
+    let natural = crate::theme::panel_natural_id();
+    let before = ctx.data(|d| d.get_temp::<f32>(stretch));
+    let standard = compact_height(ctx);
+    let h = match (before, standard) {
+        (Some(b), Some(s)) => Some(b.max(s)),
+        (b, s) => b.or(s),
+    };
+    if let Some(h) = h {
+        ctx.data_mut(|d| d.insert_temp(stretch, h));
+    }
+    ctx.data_mut(|d| d.remove::<f32>(natural));
+    // Half of what this panel lacks of the shared height goes above its body
+    // (`body_pad`), so the extra space is split above and below it instead of
+    // all below — the panel stays balanced, its title still at the top.
+    let own_before = ctx
+        .data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))
+        .and_then(|h| h.natural.get(key).map(|(h, _)| *h));
+    let pad = match (h, own_before) {
+        (Some(h), Some(own)) => ((h - own) / 2.0).max(0.0),
+        _ => 0.0,
+    };
+    ctx.data_mut(|d| {
+        d.insert_temp(body_pad_id(), pad);
+        d.remove::<f32>(body_pad_used_id());
+    });
+    let out = draw();
+    let used = ctx.data_mut(|d| {
+        d.remove::<f32>(body_pad_id());
+        d.remove_temp::<f32>(body_pad_used_id())
+    });
+    ctx.data_mut(|d| match before {
+        Some(b) => {
+            d.insert_temp(stretch, b);
+        }
+        None => d.remove::<f32>(stretch),
+    });
+    if let Some(drawn) = ctx.data(|d| d.get_temp::<f32>(natural)) {
+        // Its own height, without the pad it was given.
+        let own = drawn - used.unwrap_or(0.0);
+        ctx.data_mut(|d| d.insert_temp(natural, own));
+        let pass = ctx.cumulative_pass_nr();
+        let id = compact_heights_id();
+        let mut heights = ctx
+            .data(|d| d.get_temp::<CompactHeights>(id))
+            .unwrap_or_default();
+        let old = heights.natural.insert(key.to_string(), (own, pass));
+        ctx.data_mut(|d| d.insert_temp(id, heights));
+        // A new height settles in a frame; don't wait for the next tick.
+        if old.is_none_or(|(o, _)| (o - own).abs() > 0.5) {
+            ctx.request_repaint();
+        }
+    }
+    out
+}
+
+/// The shared compact height: the tallest compact panel drawn in this pass or
+/// the one before (a panel hidden or set to Full since then drops out).
+pub fn compact_height(ctx: &egui::Context) -> Option<f32> {
+    let pass = ctx.cumulative_pass_nr();
+    let heights = ctx.data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))?;
+    heights
+        .natural
+        .iter()
+        .filter(|(_, (_, at))| pass.saturating_sub(*at) <= 1)
+        .map(|(_, (h, _))| *h)
+        .reduce(f32::max)
+}
+
+/// Each compact panel's own height, as last measured (tests).
+#[cfg(test)]
+pub(crate) fn compact_naturals(ctx: &egui::Context) -> Vec<(String, f32)> {
+    ctx.data(|d| d.get_temp::<CompactHeights>(compact_heights_id()))
+        .map(|h| h.natural.into_iter().map(|(k, (h, _))| (k, h)).collect())
+        .unwrap_or_default()
+}
+
+fn compact_heights_id() -> egui::Id {
+    egui::Id::unique("compact_panel_heights")
+}
+
+fn body_pad_id() -> egui::Id {
+    egui::Id::unique("compact_body_pad")
+}
+
+fn body_pad_used_id() -> egui::Id {
+    egui::Id::unique("compact_body_pad_used")
+}
+
+/// Where a compact panel's body starts — after its title (none for Header and
+/// Clock) — the space `with_compact_height` set aside to centre it: once per
+/// panel, the first call takes it.
+pub(crate) fn body_pad(ui: &mut egui::Ui) {
+    let pad = ui.ctx().data_mut(|d| d.remove_temp::<f32>(body_pad_id()));
+    if let Some(pad) = pad {
+        ui.add_space(pad);
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(body_pad_used_id(), pad));
+    }
+}
+
+/// How many rows a compact list panel shows (#604): Processes, GPU Apps.
+pub const COMPACT_LIST_ROWS: usize = 3;
+
+/// A compact list panel's rows (#604) are drawn this much bigger than the full
+/// panel's 11 px, about 13 px — as big as three rows can be and still fit the
+/// ring panels' height (`dashboard::tests::the_ring_panels_set_the_compact_height`);
+/// their header row keeps 11 px, like the other compact panels' labels.
+pub const COMPACT_LIST_SCALE: f32 = 1.2;
 
 /// A compact panel's width as a floating card, before the panel scale (a full
 /// one is 450). Narrower, so a compact card can be scaled up for reading
@@ -37,7 +187,7 @@ pub(crate) enum CompactCell {
     /// A stat: label (and its colour), value (and its colour), and an optional
     /// muted note under it (a power limit).
     Stat {
-        label: &'static str,
+        label: std::borrow::Cow<'static, str>,
         label_color: egui::Color32,
         value: String,
         value_color: egui::Color32,
@@ -56,11 +206,26 @@ pub(crate) fn compact_row(
 ) {
     use crate::theme;
     use egui::RichText;
+    body_pad(ui);
+    // Beside a ring, a stat's value sits on the line of the ring's number
+    // (its centre), its label above — "12%  52°C  4.70 GHz  38 W" in one line.
+    let ring_h = theme::RING_SIZE * sc;
+    let has_ring = cells.iter().any(|c| matches!(c, CompactCell::Ring(..)));
+    let text_h = |ui: &egui::Ui, px: f32| {
+        ui.painter()
+            .layout_no_wrap(
+                "0".into(),
+                egui::FontId::proportional(px * sc),
+                egui::Color32::WHITE,
+            )
+            .size()
+            .y
+    };
     ui.columns(cells.len(), |cols| {
         for (col, cell) in cols.iter_mut().zip(cells) {
             col.vertical_centered(|ui| match cell {
                 CompactCell::Ring(frac, color, label) => {
-                    crate::ring::show(ui, theme::RING_SIZE * sc, *frac, *color, label);
+                    crate::ring::show(ui, ring_h, *frac, *color, label);
                 }
                 CompactCell::Stat {
                     label,
@@ -69,7 +234,16 @@ pub(crate) fn compact_row(
                     value_color,
                     note,
                 } => {
-                    ui.label(RichText::new(*label).size(11.0 * sc).color(*label_color));
+                    if has_ring {
+                        let gap = ui.spacing().item_spacing.y;
+                        let above = ring_h / 2.0 - text_h(ui, 11.0) - gap - text_h(ui, 17.0) / 2.0;
+                        ui.add_space(above.max(0.0));
+                    }
+                    ui.label(
+                        RichText::new(label.as_ref())
+                            .size(11.0 * sc)
+                            .color(*label_color),
+                    );
                     // As big as the rings' numbers (64 px × 0.26 ≈ 17), so a row
                     // reads as one; full panels keep 14 px.
                     ui.label(RichText::new(value).size(17.0 * sc).color(*value_color));
@@ -184,6 +358,66 @@ mod tests {
             ram_total: 128 * 1024 * 1024 * 1024,
             ram_temp: Some(55.0),
             lhm_connected: true,
+            total_gpu_power: Some(575.0),
+            net_iface: "Intel(R) Ethernet Controller I226-V".into(),
+            net_up_mbps: 999.9,
+            net_down_mbps: 999.9,
+            net_ping_ms: Some(999.9),
+            net_ping_wan_ms: Some(999.9),
+            hostname: "WORKSTATION-PRO-01".into(),
+            model_name: "ROG Strix SCAR 18 G835LX".into(),
+            system_brand: "rog".into(),
+            disk_read_mbps: 6_543.0,
+            disk_write_mbps: 1_234.5,
+            disk_drives: ["C:\\", "D:\\", "E:\\"]
+                .iter()
+                .map(|fs| crate::poll::DriveInfo {
+                    fs: fs.to_string(),
+                    used: 1 << 40,
+                    total: 2 << 40,
+                    pct: 50,
+                    temp: Some(71.0),
+                    model: "Samsung SSD 990 PRO 4TB".into(),
+                    kind: rigstats_backend::stats::DiskKind::NVMe,
+                })
+                .collect(),
+            mb_board: Some("ASUS ROG CROSSHAIR X870E HERO".into()),
+            mb_fans: (1..=7).map(|i| (format!("Fan #{i}"), 2_850.0)).collect(),
+            mb_temps: (1..=6)
+                .map(|i| (format!("Temperature #{i}"), 64.0))
+                .collect(),
+            mb_voltages: vec![("Vcore".into(), 1.35), ("AVCC".into(), 3.38)],
+            processes: (0..8)
+                .map(|i| crate::poll::ProcessInfo {
+                    name: format!("MicrosoftEdgeWebView2Host{i}.exe"),
+                    cpu: 99.9,
+                    mem_mb: 16_000,
+                })
+                .collect(),
+            gpu_processes: (0..8)
+                .map(|i| crate::gpu_process::GpuProcessInfo {
+                    pid: i,
+                    name: format!("Cyberpunk2077-{i}.exe"),
+                    util_pct: 100.0,
+                    engines: vec!["3D".into(), "Codec".into()],
+                    adapter: "NVIDIA GeForce RTX 5090".into(),
+                })
+                .collect(),
+            peripherals: vec![rigstats_backend::lhm::Peripheral {
+                id: "mouse".into(),
+                name: "ROG Harpe Ace Aim Lab Edition Wireless".into(),
+                kind: "mouse".into(),
+                battery: 100,
+                charging: true,
+                connection: "2.4ghz".into(),
+                connected: true,
+                ..Default::default()
+            }],
+            battery_present: true,
+            battery_charge_pct: Some(100),
+            battery_charging: Some(false),
+            battery_time_mins: Some(1_439),
+            battery_power_w: Some(199.9),
             ..Default::default()
         }
     }
@@ -254,6 +488,70 @@ mod tests {
                 }),
                 w,
             ),
+            (
+                "header",
+                draw_at(&ctx, w, |ui| {
+                    let control = rigstats_backend::control::ControlState::default();
+                    super::header::draw(ui, &s, &tex, 1.0, &th, sc, &control, compact)
+                }),
+                w,
+            ),
+            (
+                "clock",
+                draw_at(&ctx, w, |ui| {
+                    super::clock::draw(ui, 3_599_999, 1.0, &th, Some("1.52.0-rc.10"), sc, compact)
+                }),
+                w,
+            ),
+            (
+                "disk",
+                draw_at(&ctx, w, |ui| {
+                    super::disk::draw(ui, &s, 1.0, 60, 70, 80, 90, &th, sc, compact)
+                }),
+                w,
+            ),
+            (
+                "motherboard",
+                draw_at(&ctx, w, |ui| {
+                    super::motherboard::draw(ui, &s, 1.0, (60, 70), &th, sc, true, compact)
+                }),
+                w,
+            ),
+            (
+                "process",
+                draw_at(&ctx, w, |ui| {
+                    super::process::draw(ui, &s, 1.0, &th, sc, compact)
+                }),
+                w,
+            ),
+            (
+                "gpu_processes",
+                draw_at(&ctx, w, |ui| {
+                    super::gpu_processes::draw(ui, &s, 1.0, &th, sc, compact)
+                }),
+                w,
+            ),
+            (
+                "power",
+                draw_at(&ctx, w, |ui| {
+                    super::power::draw(ui, &s, 1.0, &th, sc, Some(1600), compact)
+                }),
+                w,
+            ),
+            (
+                "battery",
+                draw_at(&ctx, w, |ui| {
+                    super::battery::draw(ui, &s, 1.0, &th, sc, 20, 10, 15, 25, compact)
+                }),
+                w,
+            ),
+            (
+                "peripherals",
+                draw_at(&ctx, w, |ui| {
+                    super::peripherals::draw(ui, &s, 1.0, &th, sc, 20, 10, compact)
+                }),
+                w,
+            ),
         ];
         table
             .into_iter()
@@ -303,6 +601,71 @@ mod tests {
                     assert!(
                         name.right() < logo.left() && logo.right() <= w + 0.5,
                         "{key} compact={compact} at {sc}: name {name:?}, logo {logo:?}, card {w}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn no_text_in_a_compact_panel_runs_into_other_text() {
+        for sc in [0.4, 1.0, 1.2, 1.7, 2.0] {
+            for (key, _, shapes, _) in draw_all(true, sc) {
+                // A value too wide for its column wraps rather than overlap:
+                // that is as broken ("6.54" over "GB/s"), so one line each.
+                for s in flat(&shapes) {
+                    if let egui::Shape::Text(t) = s {
+                        assert_eq!(
+                            t.galley.rows.len(),
+                            1,
+                            "{key} at {sc}: {:?} wraps",
+                            t.galley.text()
+                        );
+                    }
+                }
+                let texts: Vec<(String, egui::Rect)> = flat(&shapes)
+                    .into_iter()
+                    .filter_map(|s| match s {
+                        egui::Shape::Text(t) if !t.galley.text().trim().is_empty() => Some((
+                            t.galley.text().to_string(),
+                            t.galley.rect.translate(t.pos.to_vec2()).shrink(0.5),
+                        )),
+                        _ => None,
+                    })
+                    .collect();
+                for (i, (a, ra)) in texts.iter().enumerate() {
+                    for (b, rb) in &texts[i + 1..] {
+                        assert!(
+                            !ra.intersects(*rb),
+                            "{key} at {sc}: {a:?} {ra:?} runs into {b:?} {rb:?}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn values_beside_a_ring_sit_on_the_line_of_its_number() {
+        for sc in [0.4, 1.0, 1.7] {
+            for (key, _, shapes, _) in draw_all(true, sc) {
+                let (ring, values): (&str, &[&str]) = match key {
+                    "cpu" => ("100%", &["5.70 GHz", "250 W"]),
+                    "ram" => ("94%", &["120.0G", "8.0G", "55°C"]),
+                    _ => continue,
+                };
+                let y = |start: &str| {
+                    text_rect(&shapes, start)
+                        .unwrap_or_else(|| panic!("{key}: no {start:?}"))
+                        .center()
+                        .y
+                };
+                for v in values {
+                    assert!(
+                        (y(v) - y(ring)).abs() < 1.5,
+                        "{key} at {sc}: {v:?} at {}, the ring's {ring:?} at {}",
+                        y(v),
+                        y(ring)
                     );
                 }
             }

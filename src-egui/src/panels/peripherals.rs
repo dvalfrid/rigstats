@@ -200,6 +200,8 @@ pub fn paint_device_row(
     charge_warn: u8,
     charge_crit: u8,
     sc: f32,
+    // The compact layout (#604): no bar — the name runs up to the percentage.
+    bar: bool,
 ) {
     let row_h = (ROW_H * sc).round();
     let (rect, _) = ui.allocate_exact_size(Vec2::new(inner_w, row_h), Sense::hover());
@@ -214,7 +216,12 @@ pub fn paint_device_row(
         .layout_no_wrap("100%".to_string(), font.clone(), color)
         .size()
         .x;
-    let (name_w, bar_x0, bar_w) = row_columns(inner_w, pct_w, sc);
+    let (name_w, bar_x0, bar_w) = if bar {
+        row_columns(inner_w, pct_w, sc)
+    } else {
+        let x1 = inner_w - pct_w - MARK_W * sc;
+        ((x1 - CELL_PAD * sc).max(0.0), x1, 0.0)
+    };
 
     let icon_w = ICON_W * sc;
     if let Some(link) = link_of(&device.connection) {
@@ -244,8 +251,10 @@ pub fn paint_device_row(
         pos2(rect.min.x + bar_x0, cy - bar_h / 2.0),
         Vec2::new(bar_w, bar_h),
     );
-    ui.painter()
-        .rect_filled(track, 0.0, egui::Color32::from_gray(42));
+    if bar {
+        ui.painter()
+            .rect_filled(track, 0.0, egui::Color32::from_gray(42));
+    }
     let fill_w = bar_w * f32::from(device.battery.min(100)) / 100.0;
     if fill_w > 0.0 {
         let fill = Rect::from_min_size(track.min, Vec2::new(fill_w, bar_h));
@@ -356,6 +365,7 @@ pub fn paint_card_row(
     );
 }
 
+#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -364,15 +374,42 @@ pub fn draw(
     sc: f32,
     charge_warn: u8,
     charge_crit: u8,
+    // The compact layout (#604): a row per device without its bar, no fixed
+    // height.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
-        ui.label(
-            RichText::new("PERIPHERALS")
-                .strong()
-                .color(theme::C_PANEL_TITLE)
-                .size(theme::FONT_PANEL_TITLE * sc),
-        );
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
+        let shown = if compact {
+            compact_devices(&stats.peripherals)
+        } else {
+            stats.peripherals.iter().collect()
+        };
+        let more = stats.peripherals.len() - shown.len();
+        // The title row as tall as its text (a horizontal row is otherwise a
+        // button high, like the GPU panel's title).
+        ui.spacing_mut().interact_size.y = 0.0;
+        ui.horizontal(|ui| {
+            ui.label(
+                RichText::new("PERIPHERALS")
+                    .strong()
+                    .color(theme::C_PANEL_TITLE)
+                    .size(theme::FONT_PANEL_TITLE * sc),
+            );
+            // Compact: the devices left out, on the title's line so the
+            // panel keeps the shared height (#604).
+            if more > 0 {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(format!("+{more} more"))
+                            .size(11.0 * sc)
+                            .color(th.text_muted),
+                    );
+                });
+            }
+        });
         ui.add_space(4.0 * sc);
 
         if stats.peripherals.is_empty() {
@@ -384,16 +421,63 @@ pub fn draw(
             return;
         }
 
+        if compact {
+            super::body_pad(ui);
+        }
         let inner_w = ui.available_width();
-        for device in &stats.peripherals {
-            paint_device_row(ui, inner_w, device, charge_warn, charge_crit, sc);
+        for device in &shown {
+            // Compact: rows near the other compact panels' value size (#604).
+            let row_sc = if compact { sc * 1.15 } else { sc };
+            paint_device_row(
+                ui,
+                inner_w,
+                device,
+                charge_warn,
+                charge_crit,
+                row_sc,
+                !compact,
+            );
         }
     })
+}
+
+/// The devices a compact PERIPHERALS panel shows (#604): at most
+/// `COMPACT_LIST_ROWS`, the lowest batteries — what to charge — in the list's
+/// own order, so the panel keeps the shared compact height; the rest are
+/// counted in "+N more".
+fn compact_devices(devices: &[Peripheral]) -> Vec<&Peripheral> {
+    let mut lowest: Vec<usize> = (0..devices.len()).collect();
+    lowest.sort_by_key(|&i| devices[i].battery);
+    lowest.truncate(super::COMPACT_LIST_ROWS);
+    lowest.sort_unstable();
+    lowest.into_iter().map(|i| &devices[i]).collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn compact_shows_the_three_lowest_batteries_in_list_order() {
+        let device = |name: &str, battery| Peripheral {
+            name: name.into(),
+            battery,
+            ..Default::default()
+        };
+        let devices = vec![
+            device("keyboard", 80),
+            device("mouse", 10),
+            device("headset", 90),
+            device("pad", 40),
+            device("controller", 20),
+        ];
+        let names: Vec<&str> = compact_devices(&devices)
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(names, ["mouse", "pad", "controller"]);
+        assert_eq!(compact_devices(&devices[..2]).len(), 2);
+    }
 
     #[test]
     fn bar_ends_just_before_the_percentage_and_the_name_gets_the_rest() {

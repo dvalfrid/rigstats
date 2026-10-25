@@ -3,8 +3,6 @@ use egui::{pos2, Align2, FontId, Rect, RichText, Sense, Ui, Vec2};
 use crate::theme;
 use crate::PollStats;
 
-// inner_margin: Margin::symmetric(12, 8) → 24 px total horizontal
-const FRAME_H_MARGIN: f32 = 24.0;
 const ROW_H: f32 = 14.0;
 const CELL_PAD: f32 = 4.0; // inner padding so text doesn't sit flush at cell edges
 
@@ -82,12 +80,17 @@ pub fn draw(
     opacity: f32,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#604): the top `super::COMPACT_LIST_ROWS` processes,
+    // no fixed height.
+    compact: bool,
 ) -> egui::Rect {
     // Derive inner_w from the outer UI's max_rect — set once by window width, never changes.
-    let inner_w = ui.max_rect().width() - FRAME_H_MARGIN * sc;
+    let inner_w = theme::panel_inner_w(ui.max_rect().width(), sc);
 
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.allocate_space(Vec2::new(inner_w, 0.0));
 
         ui.label(
@@ -107,11 +110,28 @@ pub fn draw(
         }
 
         ui.add_space((2.0 * sc).round());
+        if compact {
+            super::body_pad(ui);
+        }
         paint_row(ui, inner_w, "NAME", "CPU", "RAM", [th.stat_label; 3], sc);
-        ui.add_space((2.0 * sc).round());
+        // Compact: no extra gap under the header, so three rows fit the ring
+        // panels' height (#604).
+        if !compact {
+            ui.add_space((2.0 * sc).round());
+        }
 
         ui.spacing_mut().item_spacing.y = (3.0 * sc).round();
-        for p in &stats.processes {
+        let shown = if compact {
+            super::COMPACT_LIST_ROWS
+        } else {
+            usize::MAX
+        };
+        let row_sc = if compact {
+            sc * super::COMPACT_LIST_SCALE
+        } else {
+            sc
+        };
+        for p in stats.processes.iter().take(shown) {
             let name = p.name.trim_end_matches(".exe");
             paint_row(
                 ui,
@@ -120,10 +140,13 @@ pub fn draw(
                 &format!("{:.1}%", p.cpu),
                 &fmt_ram(p.mem_mb),
                 [theme::C_TEXT, theme::C_PROC, th.text_muted],
-                sc,
+                row_sc,
             );
         }
 
+        if compact {
+            return;
+        }
         // Fill remaining space to reach PANEL_DATA_H (same pattern as NET/RAM/DISK).
         let cursor_y = ui.cursor().top();
         let filler = (theme::PANEL_DATA_H * sc - (cursor_y - ui.min_rect().top()))

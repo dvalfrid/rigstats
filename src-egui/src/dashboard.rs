@@ -134,6 +134,21 @@ impl DashboardView<'_> {
         opacity: f32,
         update_ver: Option<&str>,
     ) -> Option<String> {
+        let ctx = ui.ctx().clone();
+        panels::with_compact_height(&ctx, panel, self.compact(panel), || {
+            self.draw_panel(ui, panel, sc, opacity, update_ver)
+        })
+    }
+
+    /// `draw_one_panel`'s body: the panel's own `draw`.
+    fn draw_panel(
+        &self,
+        ui: &mut egui::Ui,
+        panel: &str,
+        sc: f32,
+        opacity: f32,
+        update_ver: Option<&str>,
+    ) -> Option<String> {
         let mut new_pref = None;
         match panel {
             "header" => {
@@ -145,6 +160,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.control,
+                    self.compact("header"),
                 );
             }
             "clock" => {
@@ -155,6 +171,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     update_ver,
                     sc,
+                    self.compact("clock"),
                 );
             }
             "cpu" => {
@@ -228,6 +245,7 @@ impl DashboardView<'_> {
                     self.thresholds.disk_usage.1,
                     self.app_theme,
                     sc,
+                    self.compact("disk"),
                 );
             }
             "motherboard" => {
@@ -239,13 +257,28 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.control.has_fan_control(),
+                    self.compact("motherboard"),
                 );
             }
             "process" => {
-                let _ = panels::process::draw(ui, self.latest, opacity, self.app_theme, sc);
+                let _ = panels::process::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.compact("process"),
+                );
             }
             "gpu_processes" => {
-                let _ = panels::gpu_processes::draw(ui, self.latest, opacity, self.app_theme, sc);
+                let _ = panels::gpu_processes::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.compact("gpu_processes"),
+                );
             }
             "power" => {
                 let _ = panels::power::draw(
@@ -255,6 +288,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.psu_watts,
+                    self.compact("power"),
                 );
             }
             "peripherals" => {
@@ -266,6 +300,7 @@ impl DashboardView<'_> {
                     sc,
                     self.thresholds.battery.0,
                     self.thresholds.battery.1,
+                    self.compact("peripherals"),
                 );
             }
             "battery" => {
@@ -279,6 +314,7 @@ impl DashboardView<'_> {
                     self.thresholds.battery.1,
                     self.thresholds.battery_power.0,
                     self.thresholds.battery_power.1,
+                    self.compact("battery"),
                 );
             }
             _ => {}
@@ -348,7 +384,13 @@ impl DashboardView<'_> {
                 .iter()
                 .filter_map(|k| ctx.data(|d| d.get_temp::<f32>(natural_id(k))))
                 .fold(None, |m: Option<f32>, h| Some(m.map_or(h, |m| m.max(h))));
-            (tallest.unwrap_or(full_h), true)
+            // At least the shared compact height (#604), which
+            // `draw_one_panel` stretches every compact panel to.
+            let all = match (tallest, panels::compact_height(&ctx)) {
+                (Some(t), Some(s)) => Some(t.max(s)),
+                (t, s) => t.or(s),
+            };
+            (all.unwrap_or(full_h), true)
         };
 
         let origin = ui.cursor().min;
@@ -625,5 +667,189 @@ mod tests {
             (above - below).abs() < 2.0,
             "{f:?}: {above} above, {below} below"
         );
+    }
+
+    /// All thirteen panels compact, stacked as in portrait, at `sc`: their
+    /// frames, top to bottom, after a few passes.
+    fn portrait_compact_frames(sc: f32) -> Vec<egui::Rect> {
+        portrait_compact(sc).0
+    }
+
+    /// The frames and every painted text with its rect.
+    fn portrait_compact(sc: f32) -> (Vec<egui::Rect>, Vec<(String, egui::Rect)>) {
+        let ctx = egui::Context::default();
+        let tex = brand::Textures::load(&ctx);
+        let stats = PollStats {
+            cpu_model: "AMD Ryzen 7 9800X3D 8-Core Processor".into(),
+            gpu_name: "AMD Radeon RX 9070 XT".into(),
+            ram_spec: "DDR5 6000 MT/s (2 DIMMs)".into(),
+            ram_total: 32 << 30,
+            ram_used: 16 << 30,
+            hostname: "Unvork".into(),
+            model_name: "ROG GM700TZ".into(),
+            lhm_connected: true,
+            // As in the app: the network's interface and ping, a full process
+            // and GPU app list, two peripherals — what makes a panel tall.
+            net_iface: "Ethernet".into(),
+            net_ping_ms: Some(0.7),
+            net_ping_wan_ms: Some(1.9),
+            net_up_mbps: 350.7,
+            net_down_mbps: 999.9,
+            mb_board: Some("ASUS PRIME B650M-A AX6 II".into()),
+            mb_temps: vec![("Temperature #1".into(), 40.0)],
+            mb_fans: vec![("Fan #1".into(), 2_800.0)],
+            mb_voltages: vec![("Vcore".into(), 1.18)],
+            disk_drives: vec![crate::poll::DriveInfo {
+                fs: "D:\\".into(),
+                temp: Some(54.0),
+                ..Default::default()
+            }],
+            processes: (0..8)
+                .map(|i| crate::poll::ProcessInfo {
+                    name: format!("process{i}"),
+                    cpu: 6.5,
+                    mem_mb: 1_500,
+                })
+                .collect(),
+            gpu_processes: (0..8)
+                .map(|i| crate::gpu_process::GpuProcessInfo {
+                    name: format!("app{i}"),
+                    util_pct: 5.0,
+                    ..Default::default()
+                })
+                .collect(),
+            // More than a compact panel shows: three and "+2 more".
+            peripherals: vec![rigstats_backend::lhm::Peripheral::default(); 5],
+            ..Default::default()
+        };
+        let spark = Sparkline::new(60);
+        let th = theme::AppTheme::default();
+        let thresholds = PanelThresholds::default();
+        let control = ControlState::default();
+        let keys: Vec<String> = panels::COMPACT_PANELS.map(String::from).to_vec();
+        let view = DashboardView {
+            latest: &stats,
+            cpu_spark: &spark,
+            gpu_spark: &spark,
+            net_up_spark: &spark,
+            net_dn_spark: &spark,
+            textures: &tex,
+            app_theme: &th,
+            thresholds: &thresholds,
+            psu_watts: None,
+            control: &control,
+            compact_panels: &keys,
+        };
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(450.0 * sc, 6000.0),
+            )),
+            ..Default::default()
+        };
+        let mut shapes = Vec::new();
+        for _ in 0..4 {
+            let mut out = ctx.run_ui(input(), |ui| {
+                for key in &keys {
+                    view.draw_one_panel(ui, key, sc, 1.0, None);
+                }
+            });
+            out.textures_delta.clear();
+            shapes = out.shapes;
+        }
+        NATURALS.with(|n| *n.borrow_mut() = panels::compact_naturals(&ctx));
+        let mut frames: Vec<egui::Rect> = shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Rect(r) if r.fill == theme::PANEL_FILL => Some(r.rect),
+                _ => None,
+            })
+            .collect();
+        frames.sort_by(|a, b| a.top().total_cmp(&b.top()));
+        let texts = shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some((
+                    t.galley.text().to_string(),
+                    t.galley.rect.translate(t.pos.to_vec2()),
+                )),
+                _ => None,
+            })
+            .collect();
+        (frames, texts)
+    }
+
+    #[test]
+    fn a_short_compact_panel_has_its_body_centred_below_the_title() {
+        for sc in [1.0, 1.7] {
+            let (frames, texts) = portrait_compact(sc);
+            let at = |t: &str| {
+                texts
+                    .iter()
+                    .find(|(s, _)| s == t)
+                    .unwrap_or_else(|| panic!("no {t:?}"))
+                    .1
+            };
+            // Disk: title, then READ / WRITE / TEMP; the shortest of the
+            // column panels.
+            let title = at("DISK");
+            let frame = frames
+                .iter()
+                .find(|f| f.contains(title.center()))
+                .expect("the Disk frame");
+            let body_top = at("READ").top();
+            let body_bottom = texts
+                .iter()
+                .filter(|(_, r)| frame.contains(r.center()) && r.top() >= body_top)
+                .map(|(_, r)| r.bottom())
+                .fold(body_top, f32::max);
+            let above = body_top - title.bottom();
+            let below = frame.bottom() - body_bottom;
+            assert!(
+                (above - below).abs() < 12.0 * sc,
+                "at {sc}: {above} above the body, {below} below it"
+            );
+        }
+    }
+
+    thread_local! {
+        /// The compact panels' own heights from the last `portrait_compact`.
+        static NATURALS: std::cell::RefCell<Vec<(String, f32)>> = const {
+            std::cell::RefCell::new(Vec::new())
+        };
+    }
+
+    #[test]
+    fn the_ring_panels_set_the_compact_height() {
+        // CPU, GPU and RAM are the tallest compact panels (a ring plus a
+        // title and a line under it); every other one, with real-looking
+        // data, fits in their height, so none of them gets extra air.
+        for sc in [0.4, 1.0, 1.2, 1.7, 2.0] {
+            let _ = portrait_compact(sc);
+            let naturals = NATURALS.with(|n| n.borrow().clone());
+            let ring = naturals.iter().find(|(k, _)| k == "cpu").expect("cpu").1;
+            for (key, h) in &naturals {
+                assert!(
+                    *h <= ring + 0.5,
+                    "at {sc}: {key} is {h} px, taller than CPU's {ring}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_compact_panel_is_one_height_at_every_scale() {
+        for sc in [0.4, 0.7, 1.0, 1.2, 1.7, 2.0] {
+            let frames = portrait_compact_frames(sc);
+            assert_eq!(frames.len(), 13, "at {sc}: {frames:?}");
+            let h = frames.iter().map(|f| f.height()).fold(0.0, f32::max);
+            for f in &frames {
+                assert!(
+                    (f.height() - h).abs() < 0.5,
+                    "at {sc}: a frame is {} px, the tallest {h}",
+                    f.height()
+                );
+            }
+        }
     }
 }

@@ -275,7 +275,7 @@ rig-dashboard/
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `gpu_processes`, `power`, `battery`, `clock`, `header` |
-| `windows/` | Secondary windows, all built from `ui_kit.rs` (the design system: hero, sidebar `nav_item`s with tinted `Icon`s, `page_header`, `group`s of `row`s, `toggle`, `segmented`, `dropdown`, `slider_pct`, `swatches`, `ordered_rows`, `chip`, `tile`; contract in `src-egui/src/windows/CLAUDE.md`). `settings.rs` — app-wide settings: General, Display, Overlay (placement), Notifications and Shortcuts (#569: a dropdown per global shortcut — New shortcut… waits for the keys, Default, Off) pages. `control.rs` — the Control Center: a profile bar (chips, + copy, ⋯ rename/delete/reset) over a sidebar of the profile's pages — Overview (a compact tile per page summarising what the profile does, the mouse's onboard profile included, #440), Dashboard / Overlay / Alerts (`profile_look.rs`, #305: accent colour, opacity, panels and order with a Full / Compact choice per CPU, GPU, RAM and Network panel (`ui_kit::ordered_rows_with`, #596), overlay content, thresholds — live preview, Save/Revert in the footer) and the hardware pages Power (Windows power plan), Fans (curve editor, identify, "Automatic (BIOS)" / "Custom curve"), CPU (PPT/TDC/EDC, Eco presets, Curve Optimizer), Graphics card (power limit per adapter), Lighting (effect, colour dots, desk lamp, the devices — a wireless one with its connection and battery from the telemetry, matched by id — and Philips Hue #215; live preview of only what changed), Headset (#428: sidetone and noise reduction, kept in the headset, sent at once), Mouse (#431: the onboard profile the RIGStats profile uses, and that profile's DPI levels, performance, button bindings on a drawing of the mouse (`mouse_drawing.rs`, #433/#435) and energy, kept in the mouse, sent at once), and in an Automation section the App rules page (`rules_page.rs`, #307: a status line, a row per rule — the program's icon and own name (`app_icons.rs`: `SHGetFileInfo` icon, `FileDescription` from its version info, else the file name without .exe), profile, "Runs / In front", Remove — and an Add form: pick a running program, Choose… one with the Open dialog (it needn't be running), or type its file name); the Overview shows which programs start each profile; limit changes go Try → Keep/Undo. The two windows link to each other where a setting lives in the other (`windows::OpenRequest`, handled in `app/tray_actions.rs`); debug builds open either at start-up with `RIGSTATS_OPEN=control:<page>` / `settings:<page>`. Also `about.rs`, `status.rs`, `updater.rs`, `history.rs`. The Control Center opens from the tray, the header's profile chip, or a fan name in the Motherboard panel (the curve of the channel that drives that fan, as measured by identify — never matched by name) |
+| `windows/` | Secondary windows, all built from `ui_kit.rs` (the design system: hero, sidebar `nav_item`s with tinted `Icon`s, `page_header`, `group`s of `row`s, `toggle`, `segmented`, `dropdown`, `slider_pct`, `swatches`, `ordered_rows`, `chip`, `tile`; contract in `src-egui/src/windows/CLAUDE.md`). `settings.rs` — app-wide settings: General, Display, Overlay (placement), Notifications and Shortcuts (#569: a dropdown per global shortcut — New shortcut… waits for the keys, Default, Off) pages. `control.rs` — the Control Center: a profile bar (chips, + copy, ⋯ rename/delete/reset) over a sidebar of the profile's pages — Overview (a compact tile per page summarising what the profile does, the mouse's onboard profile included, #440), Dashboard / Overlay / Alerts (`profile_look.rs`, #305: accent colour, opacity, panels and order with a Full / Compact choice per panel (`ui_kit::ordered_rows_with`, #596, every panel since #604), overlay content, thresholds — live preview, Save/Revert in the footer) and the hardware pages Power (Windows power plan), Fans (curve editor, identify, "Automatic (BIOS)" / "Custom curve"), CPU (PPT/TDC/EDC, Eco presets, Curve Optimizer), Graphics card (power limit per adapter), Lighting (effect, colour dots, desk lamp, the devices — a wireless one with its connection and battery from the telemetry, matched by id — and Philips Hue #215; live preview of only what changed), Headset (#428: sidetone and noise reduction, kept in the headset, sent at once), Mouse (#431: the onboard profile the RIGStats profile uses, and that profile's DPI levels, performance, button bindings on a drawing of the mouse (`mouse_drawing.rs`, #433/#435) and energy, kept in the mouse, sent at once), and in an Automation section the App rules page (`rules_page.rs`, #307: a status line, a row per rule — the program's icon and own name (`app_icons.rs`: `SHGetFileInfo` icon, `FileDescription` from its version info, else the file name without .exe), profile, "Runs / In front", Remove — and an Add form: pick a running program, Choose… one with the Open dialog (it needn't be running), or type its file name); the Overview shows which programs start each profile; limit changes go Try → Keep/Undo. The two windows link to each other where a setting lives in the other (`windows::OpenRequest`, handled in `app/tray_actions.rs`); debug builds open either at start-up with `RIGSTATS_OPEN=control:<page>` / `settings:<page>`. Also `about.rs`, `status.rs`, `updater.rs`, `history.rs`. The Control Center opens from the tray, the header's profile chip, or a fan name in the Motherboard panel (the curve of the channel that drives that fan, as measured by identify — never matched by name) |
 
 ### Module details
 
@@ -769,7 +769,34 @@ separate validation function; an unrecognized key is simply ignored by the
 renderer's key→panel match. `Settings.compact_panels` (#596, part of the profile's
 look) lists the panels drawn in their compact layout: CPU and GPU with a
 temperature ring beside the load ring plus FREQ and POWER, RAM as a usage ring
-with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network without its graph — no graphs or per-core bars, and no
+with USED/FREE under its spec line (in line with the CPU's and GPU's model names), Network as UP / DOWN (the unit under the value) / LAN / WAN in the same columns; since #604 every other panel too —
+Header (name as the title, model and profile chip centred beside a 90 px
+logo), Clock (TIME, DATE, UPTIME), Disk (READ, WRITE, the hottest drive's
+temperature labelled "TEMP D:"),
+Motherboard (HOTTEST, VCORE, FAN under the board's name), System Power (the
+total as a ring of the PSU or reference watts, then CPU, GPU, OTHER), Battery
+(a charge ring, TIME LEFT or STATUS while charging, POWER), and the list panels
+Processes / GPU Apps (top `COMPACT_LIST_ROWS` = 3; GPU Apps shows the GPU
+each app runs on, not its engines) and Peripherals (no bars; at most three,
+the lowest batteries, and "+N more" on the title's line), whose rows are
+`COMPACT_LIST_SCALE` bigger. A `CompactCell::Stat` label is a
+`Cow<'static, str>` so it can carry data ("TEMP D:"). All compact
+panels are one height: `panels::with_compact_height` (called by
+`DashboardView::draw_one_panel` and the floating panels) records each one's own
+height and stretches it to the tallest compact panel's from the last frame
+(`compact_height`).
+The height is measured, not fixed, because some egui spacing doesn't scale.
+The ring panels (CPU, GPU, RAM) are the tallest and set it; every other one
+fits in their height with real-looking data
+(`dashboard::tests::the_ring_panels_set_the_compact_height`; the Network
+panel's old two-row layout was 140 px against their 120, which left every other
+panel airy), and all are one height
+(`dashboard::tests::every_compact_panel_is_one_height_at_every_scale`). A
+shorter panel isn't packed to the top: half of what it lacks goes above its
+body (`panels::body_pad`, after the title; Header and Clock, which have none,
+are centred whole), the rest below, and its own height is recorded without that
+pad. In `compact_row` a stat beside a ring has its value on the line of the
+ring's number ("12%  54°C  4.70 GHz  37 W"), its label above. No graphs or per-core bars, and no
 fixed `PANEL_DATA_H` height. The CPU, GPU and RAM rows are laid out by
 `panels::compact_row`: each ring and value in an equal column across the
 panel, centred, so they spread evenly at any width and scale. Their plain values (FREQ, POWER, FREE) are

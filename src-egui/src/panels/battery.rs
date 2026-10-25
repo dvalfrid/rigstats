@@ -45,9 +45,14 @@ pub fn draw(
     charge_crit: u8,
     power_warn: u8,
     power_crit: u8,
+    // The compact layout (#604): the charge as a ring, then TIME LEFT (or
+    // STATUS while charging) and POWER; no big number, no bar.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         ui.label(
             RichText::new("BATTERY")
                 .strong()
@@ -86,6 +91,53 @@ pub fn draw(
 
         let frac = charge as f32 / 100.0;
         let color = charge_color(charge, charging, charge_warn, charge_crit);
+
+        if compact {
+            use super::CompactCell;
+            let time_or_status = if charging {
+                CompactCell::Stat {
+                    label: "STATUS".into(),
+                    label_color: th.stat_label,
+                    value: "Charging".to_string(),
+                    value_color: theme::C_ACCENT,
+                    note: None,
+                }
+            } else {
+                CompactCell::Stat {
+                    label: "TIME LEFT".into(),
+                    label_color: th.stat_label,
+                    value: fake_time.map_or("\u{2014}".to_string(), |m| {
+                        format!("{}h {:02}m", m / 60, m % 60)
+                    }),
+                    value_color: theme::C_VALUE,
+                    note: None,
+                }
+            };
+            let (power, power_c) =
+                fake_power.map_or(("\u{2014}".to_string(), th.text_muted), |w| {
+                    (
+                        format!("{w:.1} W"),
+                        power_color(w, charging, power_warn, power_crit, th),
+                    )
+                });
+            super::compact_row(
+                ui,
+                &[
+                    CompactCell::Ring(frac, color, format!("{charge}%")),
+                    time_or_status,
+                    CompactCell::Stat {
+                        label: "POWER".into(),
+                        label_color: th.stat_label,
+                        value: power,
+                        value_color: power_c,
+                        note: None,
+                    },
+                ],
+                th,
+                sc,
+            );
+            return;
+        }
 
         // Large percentage: big number + small subscript %
         ui.horizontal(|ui| {

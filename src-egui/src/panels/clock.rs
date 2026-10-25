@@ -16,10 +16,34 @@ pub fn draw(
     th: &theme::AppTheme,
     update_version: Option<&str>,
     sc: f32,
+    // The compact layout (#604): TIME, DATE and UPTIME in one row of columns.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_HEADER_H * sc);
         let now = chrono::Local::now();
+        if compact {
+            use super::CompactCell;
+            let stat = |label: &'static str, value: String| CompactCell::Stat {
+                label: label.into(),
+                label_color: th.stat_label,
+                value,
+                value_color: theme::C_VALUE,
+                note: None,
+            };
+            super::compact_row(
+                ui,
+                &[
+                    stat("TIME", now.format("%H:%M:%S").to_string()),
+                    stat("DATE", now.format("%a %-d %b").to_string()),
+                    stat("UPTIME", format_uptime(uptime_secs).replace("UP ", "")),
+                ],
+                th,
+                sc,
+            );
+            update_badge(ui, update_version, sc);
+            return;
+        }
+        ui.set_min_height(theme::PANEL_HEADER_H * sc);
 
         // ── Main row: big time (left) + date/uptime stack (right) ────────────
         ui.horizontal(|ui| {
@@ -59,29 +83,34 @@ pub fn draw(
                 .color(theme::C_GRN),
         );
 
-        // ── Update badge ─────────────────────────────────────────────────────
-        if let Some(ver) = update_version {
-            let label = format!("⬆  UPDATE v{ver} AVAILABLE");
-            let badge_color = egui::Color32::from_rgb(0x39, 0xff, 0x88);
-            let border_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
-            let bg_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 26);
-
-            ui.add_space(4.0 * sc);
-            let resp = ui.add(
-                egui::Button::new(RichText::new(&label).size(11.0 * sc).color(badge_color))
-                    .fill(bg_color)
-                    .stroke(egui::Stroke::new(1.0_f32, border_color))
-                    .corner_radius(egui::CornerRadius::same(2)),
-            );
-            if resp.hovered() {
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-            }
-            if resp.clicked() {
-                ui.ctx()
-                    .data_mut(|d| d.insert_temp(egui::Id::unique("open_updater"), true));
-            }
-        }
+        update_badge(ui, update_version, sc);
     })
+}
+
+/// "UPDATE vX AVAILABLE" under the time while an update is ready; a click
+/// sets the `"open_updater"` temp flag.
+fn update_badge(ui: &mut Ui, update_version: Option<&str>, sc: f32) {
+    if let Some(ver) = update_version {
+        let label = format!("⬆  UPDATE v{ver} AVAILABLE");
+        let badge_color = egui::Color32::from_rgb(0x39, 0xff, 0x88);
+        let border_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
+        let bg_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 26);
+
+        ui.add_space(4.0 * sc);
+        let resp = ui.add(
+            egui::Button::new(RichText::new(&label).size(11.0 * sc).color(badge_color))
+                .fill(bg_color)
+                .stroke(egui::Stroke::new(1.0_f32, border_color))
+                .corner_radius(egui::CornerRadius::same(2)),
+        );
+        if resp.hovered() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        }
+        if resp.clicked() {
+            ui.ctx()
+                .data_mut(|d| d.insert_temp(egui::Id::unique("open_updater"), true));
+        }
+    }
 }
 
 #[cfg(test)]

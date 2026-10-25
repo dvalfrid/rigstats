@@ -173,8 +173,9 @@ alert levels — belongs to each
   float while another shows the fixed dashboard — switch profile (tray,
   shortcut or app rule) to switch layout. Each profile also remembers where
   you placed its panels.
-- **Compact panels** *(coming in v1.52.0)* — CPU, GPU, RAM and Network can each be drawn compact:
-  the key values only, no graphs or bars. The choice is per panel and per
+- **Compact panels** *(coming in v1.52.0)* — every panel can be drawn compact:
+  the key values only, no graphs or bars, in one common style (rings and
+  columns of values; Processes and GPU Apps keep their top 3). The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact
   beside each panel), so they take less room on a small screen or as floating
   cards — a compact floating card is also narrower, so it can be scaled up for
@@ -258,7 +259,7 @@ Each tab appears only when this PC's hardware supports it.
 
 | Tab | What it controls | Where it works |
 | --- | --- | --- |
-| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (CPU, GPU, RAM and Network full or compact — *coming in v1.52.0*), floating panels and their size (*coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
+| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (each full or compact — *coming in v1.52.0*), floating panels and their size (*coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
 | Desktop | The Windows background picture (one per screen if you like), and Wallpaper Engine: as it is, chosen wallpapers per screen, paused, or off — with Start/Stop | Any PC; the Wallpaper Engine part when it is installed ([troubleshooting](docs/troubleshooting.md#wallpaper-engine)) |
 | App rules | Switch profile automatically while a program runs (e.g. Gaming while your game is open) | Any PC |
 | Power | The Windows power plan each profile switches to | Any PC |

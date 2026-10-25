@@ -239,174 +239,190 @@ impl RigStatsApp {
                             // Each draw() returns the panel's outer Rect so we can
                             // overlay the drag dots and padlock without extra height.
                             let mut new_pref: Option<String> = None;
-                            let panel_rect = match key.as_str() {
-                                "header" => {
-                                    let r = panels::header::draw(
+                            let panel_rect = panels::with_compact_height(
+                                ctx,
+                                &key,
+                                self.runtime.is_compact(&key),
+                                || match key.as_str() {
+                                    "header" => {
+                                        let r = panels::header::draw(
+                                            ui,
+                                            stats,
+                                            tex,
+                                            content_opacity,
+                                            &app_theme,
+                                            scale,
+                                            control,
+                                            self.runtime.is_compact("header"),
+                                        );
+                                        if ui
+                                            .ctx()
+                                            .data_mut(|d| {
+                                                d.remove_temp::<bool>(egui::Id::unique(
+                                                    "open_control_center",
+                                                ))
+                                            })
+                                            .unwrap_or(false)
+                                        {
+                                            control_open_arc.store(true, Ordering::Relaxed);
+                                            control_focus_arc.store(true, Ordering::Relaxed);
+                                        }
+                                        r
+                                    }
+                                    "clock" => {
+                                        let r = panels::clock::draw(
+                                            ui,
+                                            stats.uptime_secs,
+                                            content_opacity,
+                                            &app_theme,
+                                            float_update_ver.as_deref(),
+                                            scale,
+                                            self.runtime.is_compact("clock"),
+                                        );
+                                        if ui
+                                            .ctx()
+                                            .data_mut(|d| {
+                                                d.remove_temp::<bool>(egui::Id::unique(
+                                                    "open_updater",
+                                                ))
+                                            })
+                                            .unwrap_or(false)
+                                        {
+                                            updater_open_arc.store(true, Ordering::Relaxed);
+                                        }
+                                        r
+                                    }
+                                    "cpu" => panels::cpu::draw(
                                         ui,
                                         stats,
+                                        cspark,
                                         tex,
                                         content_opacity,
+                                        self.runtime.thresholds.cpu.0,
+                                        self.runtime.thresholds.cpu.1,
                                         &app_theme,
                                         scale,
-                                        control,
-                                    );
-                                    if ui
-                                        .ctx()
-                                        .data_mut(|d| {
-                                            d.remove_temp::<bool>(egui::Id::unique(
-                                                "open_control_center",
-                                            ))
-                                        })
-                                        .unwrap_or(false)
-                                    {
-                                        control_open_arc.store(true, Ordering::Relaxed);
-                                        control_focus_arc.store(true, Ordering::Relaxed);
+                                        self.runtime.control.active_ppt_limit(),
+                                        self.runtime.is_compact("cpu"),
+                                    ),
+                                    "gpu" => {
+                                        let r = panels::gpu::draw(
+                                            ui,
+                                            stats,
+                                            gspark,
+                                            tex,
+                                            content_opacity,
+                                            &app_theme,
+                                            self.runtime.thresholds.gpu.0,
+                                            self.runtime.thresholds.gpu.1,
+                                            self.runtime.thresholds.gpu_hotspot,
+                                            self.runtime.thresholds.gpu_mem,
+                                            scale,
+                                            self.runtime.control.active_gpu_limit(&stats.gpu_name),
+                                            self.runtime.is_compact("gpu"),
+                                        );
+                                        new_pref = r.0;
+                                        r.1
                                     }
-                                    r
-                                }
-                                "clock" => {
-                                    let r = panels::clock::draw(
-                                        ui,
-                                        stats.uptime_secs,
-                                        content_opacity,
-                                        &app_theme,
-                                        float_update_ver.as_deref(),
-                                        scale,
-                                    );
-                                    if ui
-                                        .ctx()
-                                        .data_mut(|d| {
-                                            d.remove_temp::<bool>(egui::Id::unique("open_updater"))
-                                        })
-                                        .unwrap_or(false)
-                                    {
-                                        updater_open_arc.store(true, Ordering::Relaxed);
-                                    }
-                                    r
-                                }
-                                "cpu" => panels::cpu::draw(
-                                    ui,
-                                    stats,
-                                    cspark,
-                                    tex,
-                                    content_opacity,
-                                    self.runtime.thresholds.cpu.0,
-                                    self.runtime.thresholds.cpu.1,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.control.active_ppt_limit(),
-                                    self.runtime.is_compact("cpu"),
-                                ),
-                                "gpu" => {
-                                    let r = panels::gpu::draw(
-                                        ui,
-                                        stats,
-                                        gspark,
-                                        tex,
-                                        content_opacity,
-                                        &app_theme,
-                                        self.runtime.thresholds.gpu.0,
-                                        self.runtime.thresholds.gpu.1,
-                                        self.runtime.thresholds.gpu_hotspot,
-                                        self.runtime.thresholds.gpu_mem,
-                                        scale,
-                                        self.runtime.control.active_gpu_limit(&stats.gpu_name),
-                                        self.runtime.is_compact("gpu"),
-                                    );
-                                    new_pref = r.0;
-                                    r.1
-                                }
-                                "ram" => panels::ram::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    self.runtime.thresholds.ram.0,
-                                    self.runtime.thresholds.ram.1,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.is_compact("ram"),
-                                ),
-                                "net" => panels::net::draw(
-                                    ui,
-                                    stats,
-                                    nuspark,
-                                    ndspark,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.is_compact("net"),
-                                ),
-                                "disk" => panels::disk::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    self.runtime.thresholds.disk.0,
-                                    self.runtime.thresholds.disk.1,
-                                    self.runtime.thresholds.disk_usage.0,
-                                    self.runtime.thresholds.disk_usage.1,
-                                    &app_theme,
-                                    scale,
-                                ),
-                                "motherboard" => {
-                                    let r = panels::motherboard::draw(
+                                    "ram" => panels::ram::draw(
                                         ui,
                                         stats,
                                         content_opacity,
-                                        self.runtime.thresholds.mb,
+                                        self.runtime.thresholds.ram.0,
+                                        self.runtime.thresholds.ram.1,
                                         &app_theme,
                                         scale,
-                                        control.has_fan_control(),
-                                    );
-                                    if take_fan_curve_request(ui.ctx()) {
-                                        control_open_arc.store(true, Ordering::Relaxed);
-                                        control_focus_arc.store(true, Ordering::Relaxed);
+                                        self.runtime.is_compact("ram"),
+                                    ),
+                                    "net" => panels::net::draw(
+                                        ui,
+                                        stats,
+                                        nuspark,
+                                        ndspark,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.is_compact("net"),
+                                    ),
+                                    "disk" => panels::disk::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        self.runtime.thresholds.disk.0,
+                                        self.runtime.thresholds.disk.1,
+                                        self.runtime.thresholds.disk_usage.0,
+                                        self.runtime.thresholds.disk_usage.1,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.is_compact("disk"),
+                                    ),
+                                    "motherboard" => {
+                                        let r = panels::motherboard::draw(
+                                            ui,
+                                            stats,
+                                            content_opacity,
+                                            self.runtime.thresholds.mb,
+                                            &app_theme,
+                                            scale,
+                                            control.has_fan_control(),
+                                            self.runtime.is_compact("motherboard"),
+                                        );
+                                        if take_fan_curve_request(ui.ctx()) {
+                                            control_open_arc.store(true, Ordering::Relaxed);
+                                            control_focus_arc.store(true, Ordering::Relaxed);
+                                        }
+                                        r
                                     }
-                                    r
-                                }
-                                "process" => panels::process::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                ),
-                                "gpu_processes" => panels::gpu_processes::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                ),
-                                "power" => panels::power::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.psu_watts,
-                                ),
-                                "peripherals" => panels::peripherals::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.thresholds.battery.0,
-                                    self.runtime.thresholds.battery.1,
-                                ),
-                                "battery" => panels::battery::draw(
-                                    ui,
-                                    stats,
-                                    content_opacity,
-                                    &app_theme,
-                                    scale,
-                                    self.runtime.thresholds.battery.0,
-                                    self.runtime.thresholds.battery.1,
-                                    self.runtime.thresholds.battery_power.0,
-                                    self.runtime.thresholds.battery_power.1,
-                                ),
-                                _ => egui::Rect::NOTHING,
-                            };
+                                    "process" => panels::process::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.is_compact("process"),
+                                    ),
+                                    "gpu_processes" => panels::gpu_processes::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.is_compact("gpu_processes"),
+                                    ),
+                                    "power" => panels::power::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.psu_watts,
+                                        self.runtime.is_compact("power"),
+                                    ),
+                                    "peripherals" => panels::peripherals::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.thresholds.battery.0,
+                                        self.runtime.thresholds.battery.1,
+                                        self.runtime.is_compact("peripherals"),
+                                    ),
+                                    "battery" => panels::battery::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.thresholds.battery.0,
+                                        self.runtime.thresholds.battery.1,
+                                        self.runtime.thresholds.battery_power.0,
+                                        self.runtime.thresholds.battery_power.1,
+                                        self.runtime.is_compact("battery"),
+                                    ),
+                                    _ => egui::Rect::NOTHING,
+                                },
+                            );
 
                             if let Some(p) = new_pref {
                                 *new_pref_arc.lock_safe() = Some(p);

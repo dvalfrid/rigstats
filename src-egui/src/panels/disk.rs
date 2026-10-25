@@ -45,9 +45,14 @@ pub fn draw(
     usage_crit: u8,
     th: &theme::AppTheme,
     sc: f32,
+    // The compact layout (#604): READ, WRITE and the hottest drive's
+    // temperature in one row of columns; no bars.
+    compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        ui.set_min_height(theme::PANEL_DATA_H * sc);
+        if !compact {
+            ui.set_min_height(theme::PANEL_DATA_H * sc);
+        }
         let drives = &stats.disk_drives;
 
         ui.label(
@@ -56,6 +61,10 @@ pub fn draw(
                 .color(theme::C_PANEL_TITLE)
                 .size(theme::FONT_PANEL_TITLE * sc),
         );
+        if compact {
+            compact_body(ui, stats, temp_warn, temp_crit, th, sc);
+            return;
+        }
         ui.add_space(4.0 * sc);
 
         let number_w = 68.0 * sc;
@@ -230,6 +239,63 @@ pub fn draw(
                 }
             });
     })
+}
+
+/// The compact DISK row (#604): READ, WRITE and the hottest drive's
+/// temperature, its letter in the label ("TEMP D:") — three columns keep
+/// "6.54 GB/s" on one line on the narrowest card.
+fn compact_body(
+    ui: &mut Ui,
+    stats: &PollStats,
+    temp_warn: u8,
+    temp_crit: u8,
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    use super::CompactCell;
+    let speed = |label: &'static str, mb: f64| {
+        let (v, unit) = fmt_speed_parts(mb);
+        CompactCell::Stat {
+            label: label.into(),
+            label_color: th.stat_label,
+            value: format!("{v} {unit}"),
+            value_color: theme::C_VALUE,
+            note: None,
+        }
+    };
+    let hottest = stats
+        .disk_drives
+        .iter()
+        .filter_map(|d| d.temp.map(|t| (t, d.fs.trim_end_matches(['\\', '/']))))
+        .max_by(|a, b| a.0.total_cmp(&b.0));
+    let temp = match hottest {
+        // The hottest drive's letter in the label ("TEMP D:"), not as a
+        // note under the value, where it looked stray.
+        Some((t, fs)) => CompactCell::Stat {
+            label: format!("TEMP {fs}").into(),
+            label_color: th.stat_label,
+            value: format!("{t:.0}°C"),
+            value_color: temp_color(Some(t), temp_warn, temp_crit),
+            note: None,
+        },
+        None => CompactCell::Stat {
+            label: "TEMP".into(),
+            label_color: th.stat_label,
+            value: "--".to_string(),
+            value_color: theme::C_UNAVAILABLE,
+            note: None,
+        },
+    };
+    super::compact_row(
+        ui,
+        &[
+            speed("READ", stats.disk_read_mbps),
+            speed("WRITE", stats.disk_write_mbps),
+            temp,
+        ],
+        th,
+        sc,
+    );
 }
 
 #[cfg(test)]
