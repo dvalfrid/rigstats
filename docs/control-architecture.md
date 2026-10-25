@@ -939,6 +939,9 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   `83 r g b`, `93 03 80`; off is black. Both never throw on a write (the
   device's `Problem` shows it) and are skipped while their vendor's software
   runs (process names not yet seen on a machine).
+- **Corsair V2 protocol** (M65 RGB Ultra wired `1B9E`, MM700 `1B9B`, #620)
+  — not built yet; the frames, from OpenRGB as documentation, are in
+  [corsair-v2-protocol.md](corsair-v2-protocol.md).
 - **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
   standard behind Windows Dynamic Lighting (usage page `0x59`), so one
   implementation covers every current keyboard, mouse or accessory that
