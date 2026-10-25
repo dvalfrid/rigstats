@@ -56,6 +56,18 @@ public class OtherSoftwareTests
     }
 
     [Fact]
+    public void The_start_up_line_also_names_other_vendors_programs()
+    {
+        // A tester ran SteelSeries GG with iCUE installed (#621); msiexec and
+        // explorer are Windows' own and stay out.
+        var line = OtherSoftware.Summary(["explorer", "msiexec", "SteelSeriesGG", "SteelSeriesPrismSync", "iCUE", "lghub_agent", "FuryCtrl"]);
+
+        Assert.Equal(
+            "Other hardware software running: also seen: FuryCtrl, iCUE, lghub_agent, SteelSeriesGG, SteelSeriesPrismSync",
+            line);
+    }
+
+    [Fact]
     public void The_fan_problem_sends_armoury_crate_users_to_the_uninstall_tool()
     {
         var problem = ControlProblems.FansTakenBy("Armoury Crate (AsusFanControlService)");
