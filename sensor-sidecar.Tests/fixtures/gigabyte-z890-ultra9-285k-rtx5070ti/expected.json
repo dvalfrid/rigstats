@@ -21,7 +21,7 @@
     {
       "name": "Intel(R) Graphics",
       "sensor_family": "gpu-intel-integrated",
-      "load": null,
+      "load": 0,
       "temp": null,
       "hotspot_temp": null,
       "mem_temp": null,

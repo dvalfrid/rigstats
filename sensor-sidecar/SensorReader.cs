@@ -127,7 +127,7 @@ public static class SensorReader
         float? load = null, temp = null, hotspot = null, memTemp = null, coreClock = null,
                memClock = null, power = null, fan = null,
                vramUsed = null, vramTotal = null, d3d3d = null, d3dVdec = null,
-               gpuCorePower = null, gpuSocPower = null;
+               gpuCorePower = null, gpuSocPower = null, busiestEngine = null;
 
         foreach (var s in hw.Sensors)
         {
@@ -135,6 +135,9 @@ public static class SensorReader
             switch (s.SensorType)
             {
                 case SensorType.Load:
+                    if (s.Name.StartsWith("D3D", StringComparison.Ordinal)
+                        || s.Name.StartsWith("GPU D3D", StringComparison.Ordinal))
+                        busiestEngine = Math.Max(busiestEngine ?? 0f, s.Value.Value);
                     if (s.Name == "GPU Core") load = s.Value;
                     else if (s.Name is "GPU D3D 3D" or "D3D 3D") d3d3d = s.Value;
                     // Video-decode engine load. NVIDIA exposes "D3D Video Decode";
@@ -178,6 +181,11 @@ public static class SensorReader
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault(p => p.StartsWith("gpu", StringComparison.OrdinalIgnoreCase))
             ?? "gpu";
+
+        // Intel GPUs have no "GPU Core" load, only per-engine D3D loads: take
+        // the busiest engine, as Task Manager's GPU % does (seen on every
+        // Intel iGPU in the corpus — UHD 630, Core Ultra's Intel Graphics).
+        load ??= busiestEngine;
 
         // AMD iGPU fallback: no GPU Package/Power — sum Core + SoC instead
         if (power is null && (gpuCorePower.HasValue || gpuSocPower.HasValue))

@@ -311,7 +311,7 @@ Data is merged from three sources each tick: **LibreHardwareMonitor 0.9.7-pre749
 
 | Metric | Source |
 | --- | --- |
-| Core load (%) | LHM — `GPU Core` load |
+| Core load (%) | LHM — `GPU Core` load; Intel GPUs, which have none, the busiest D3D engine (as Task Manager) |
 | Core temperature (°C) | LHM — `GPU Core` temperature |
 | Hot spot temperature (°C) | LHM — `GPU Hot Spot` temperature |
 | VRAM temperature (°C) | LHM — `GPU Memory Junction` (NVIDIA) / `GPU Memory` (AMD) temperature — its MEM column appears only on GPUs that report it |
