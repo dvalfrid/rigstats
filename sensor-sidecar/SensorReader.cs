@@ -187,11 +187,16 @@ public static class SensorReader
                              power, fan, vramUsed, vramTotal, d3d3d, d3dVdec);
     }
 
+    private static readonly string[] StoragePrefixes =
+        ["/nvme/", "/ahci/", "/ata/", "/hdd/", "/ssd/", "/scsi/", "/usb/"];
+
     private static void ExtractDisk(IHardware hw, Dictionary<string, float> diskTemps)
     {
         var id = hw.Identifier.ToString();
-        if (!id.StartsWith("/nvme/", StringComparison.Ordinal) && !id.StartsWith("/hdd/", StringComparison.Ordinal) && !id.StartsWith("/ata/", StringComparison.Ordinal) &&
-            !id.StartsWith("/scsi/", StringComparison.Ordinal) && !id.StartsWith("/ssd/", StringComparison.Ordinal))
+        // LibreHardwareMonitor 0.9.x names SATA drives /ahci/… and USB-attached
+        // ones /usb/…; without them their temperatures were dropped (seen on
+        // SirBlacky21's PC, four SATA and two USB drives).
+        if (!StoragePrefixes.Any(p => id.StartsWith(p, StringComparison.Ordinal)))
             return;
 
         float? highest = null;
@@ -203,8 +208,12 @@ public static class SensorReader
             if (s.Value > (highest ?? float.MinValue)) highest = s.Value;
         }
 
+        // Two drives of one model share a name — the app matches temperatures
+        // to drives by model — so the hottest of them is what it shows.
         if (highest.HasValue)
-            diskTemps[hw.Name] = highest.Value;
+            diskTemps[hw.Name] = diskTemps.TryGetValue(hw.Name, out var other)
+                ? Math.Max(other, highest.Value)
+                : highest.Value;
     }
 
     private static void ExtractRam(IHardware hw, ref float? ramTemp)
