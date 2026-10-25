@@ -1,0 +1,11 @@
+{
+  "slug": "gigabyte-z890-ultra9-285k-rtx5070ti",
+  "synthetic": false,
+  "contributor": "SirBlacky21",
+  "collected_at_unix": 1792931288,
+  "rigstats_version": "1.52.0-rc.3",
+  "os": "Microsoft Windows 11 Pro (build 26300)",
+  "gpu_driver": "NVIDIA 32.0.16.2101 (621.01), Intel 32.0.101.8331",
+  "notes": "From SirBlacky21's diagnostics ZIP (#598), the first Intel desktop and first Gigabyte Z890 board: Z890 EAGLE WIFI7 (CSL Computer case) with ITE IT8696E Super I/O, whose voltages are unnamed (Voltage #1..#7, +3V Standby, CMOS Battery). Intel Core Ultra 9 285K (/intelcpu/0), RTX 5070 Ti (/gpu-nvidia/0, preferred) + Intel Graphics iGPU (/gpu-intel-integrated). 2x Kingston KF560C36-32 DDR5-6000. Nine drives: 3x NVMe Samsung 990 PRO, 4x SATA (Samsung 870 QVO/EVO, 860 EVO, WD10EFRX) and 2x USB (WD30EZRZ, WD20EARS). Six fan headers, two spinning.",
+  "anonymized": true
+}

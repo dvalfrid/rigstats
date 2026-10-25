@@ -1,0 +1,12 @@
+{
+  "gpu_name": "NVIDIA GeForce RTX 5070 Ti",
+  "gpu_names": [
+    "Intel(R) Graphics",
+    "NVIDIA GeForce RTX 5070 Ti"
+  ],
+  "ram_mt_s": [
+    6000,
+    6000
+  ],
+  "system_brand": "gigabyte"
+}

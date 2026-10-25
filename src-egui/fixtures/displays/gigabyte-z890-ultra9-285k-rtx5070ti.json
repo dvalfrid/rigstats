@@ -1,0 +1,35 @@
+{
+  "dashboard_profile": "portrait-slim",
+  "monitors": [
+    {
+      "bottom": 1440,
+      "height": 1440,
+      "is_primary": true,
+      "is_selected": true,
+      "left": 0,
+      "right": 3440,
+      "top": 0,
+      "width": 3440
+    },
+    {
+      "bottom": 0,
+      "height": 1440,
+      "is_primary": false,
+      "is_selected": false,
+      "left": 0,
+      "right": 3440,
+      "top": -1440,
+      "width": 3440
+    },
+    {
+      "bottom": 1920,
+      "height": 1920,
+      "is_primary": false,
+      "is_selected": false,
+      "left": 3440,
+      "right": 4640,
+      "top": 0,
+      "width": 1200
+    }
+  ]
+}
