@@ -21,7 +21,7 @@
     {
       "name": "Intel(R) UHD Graphics 630",
       "sensor_family": "gpu-intel-integrated",
-      "load": null,
+      "load": 15.8655205,
       "temp": null,
       "hotspot_temp": null,
       "mem_temp": null,
