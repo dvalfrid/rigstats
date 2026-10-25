@@ -54,6 +54,13 @@ struct WallpaperHost {
     parent_pid: Option<u32>,
     last_settings_check: Instant,
     last_attach_check: Instant,
+    /// Since when the window has been waiting for a WorkerW to attach to
+    /// (#579): the first try can come while Explorer is replacing it after a
+    /// new desktop background, and the 1 Hz check below attaches it a moment
+    /// later. `None` while attached.
+    unattached_since: Option<Instant>,
+    /// Whether "still not attached" was logged for the current wait.
+    attach_warned: bool,
     last_parent_check: Instant,
     /// Last window height we fit to the portrait content, so we only re-dispatch
     /// `InnerSize` when the rendered content height actually changes. `None`
@@ -175,7 +182,11 @@ impl eframe::App for WallpaperHost {
                 if win32_wallpaper::attach(self.hwnd) {
                     debug::append_debug_log(&self.dir, "rigstats-wallpaper: attached to WorkerW");
                 } else {
-                    debug::log_warn(&self.dir, "rigstats-wallpaper: WorkerW attach failed");
+                    debug::append_debug_log(
+                        &self.dir,
+                        "rigstats-wallpaper: no wallpaper WorkerW yet — trying again every second",
+                    );
+                    self.unattached_since = Some(Instant::now());
                 }
             }
         }
@@ -200,7 +211,27 @@ impl eframe::App for WallpaperHost {
         if self.last_attach_check.elapsed() >= Duration::from_secs(1) {
             self.last_attach_check = Instant::now();
             if self.hwnd != 0 && !win32_wallpaper::is_attached(self.hwnd) {
-                win32_wallpaper::attach(self.hwnd);
+                if win32_wallpaper::attach(self.hwnd) {
+                    if let Some(since) = self.unattached_since.take() {
+                        debug::append_debug_log(
+                            &self.dir,
+                            &format!(
+                                "rigstats-wallpaper: attached to WorkerW after {:.1} s",
+                                since.elapsed().as_secs_f32()
+                            ),
+                        );
+                    }
+                    self.attach_warned = false;
+                } else {
+                    let since = *self.unattached_since.get_or_insert_with(Instant::now);
+                    if !self.attach_warned && since.elapsed() >= Duration::from_secs(10) {
+                        debug::log_warn(
+                            &self.dir,
+                            "rigstats-wallpaper: still no wallpaper WorkerW after 10 s — the                              dashboard is a normal window, not in the desktop background",
+                        );
+                        self.attach_warned = true;
+                    }
+                }
             }
         }
 
@@ -460,6 +491,8 @@ fn main() {
                 parent_pid,
                 last_settings_check: Instant::now(),
                 last_attach_check: Instant::now(),
+                unattached_since: None,
+                attach_warned: false,
                 last_parent_check: Instant::now(),
                 last_fitted_height: None,
                 startup_fit_frames: 8,
