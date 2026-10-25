@@ -895,6 +895,14 @@ code {
   color: var(--text-dim);
 }
 
+/* Its own line under the footer row. */
+.footer-privacy {
+  flex-basis: 100%;
+  font-size: .75rem;
+  color: var(--text-dim);
+}
+.footer-privacy a { color: var(--text-muted); }
+
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 1024px) {
   .panels-grid { grid-template-columns: repeat(2, 1fr); }
