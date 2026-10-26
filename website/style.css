@@ -895,6 +895,11 @@ code {
   color: var(--text-dim);
 }
 
+/* Buy Me a Coffee under the download button. */
+.support-note { margin-top: 18px; }
+.support-button { display: inline-block; margin-top: 6px; }
+.support-button img { display: block; height: 51px; width: auto; }
+
 /* Its own line under the footer row. */
 .footer-privacy {
   flex-basis: 100%;

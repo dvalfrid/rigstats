@@ -28,6 +28,10 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
 
+RIGStats is free and open source. If it's useful to you, you can support its development:
+
+<a href="https://www.buymeacoffee.com/dvalfrid"><img src="assets/buy-me-a-coffee.png" alt="Buy Me a Coffee" width="181" height="51"></a>
+
 <p align="center">
   <img src="assets/rigStats.png" width="220" alt="The RIGStats dashboard on a portrait secondary display: CPU, GPU, RAM, network and disk panels">
   &nbsp;
