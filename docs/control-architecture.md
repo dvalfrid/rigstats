@@ -1104,11 +1104,15 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   Reports come in through the "Device" issue form
   (`.github/ISSUE_TEMPLATE/device.yml`), which also asks for Gear
   Link's console log (its `HID OUT`/`HID IN` lines name every command).
-- **Per-device blockers.** While Windows Dynamic Lighting is on for a
-  signed-in user (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
-  Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the
-  LampArray devices itself: they report `blocked` and Aura Sync skips them,
-  the Lighting tab explains it per device, and the rest keep syncing.
+- **Per-device blockers.** While Windows Dynamic Lighting is on for the
+  user at the screen (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
+  Microsoft\Lighting` for the active console session's user — the service
+  runs as SYSTEM), Windows drives the LampArray devices itself: they report
+  `blocked` and Aura Sync skips them, the Lighting tab explains it per
+  device, and the rest keep syncing. Another account signed in in the
+  background (fast user switching) doesn't count (#636); only when the
+  active user can't be told (the sign-in screen) does any signed-in user
+  with it on block, as before.
 - **Researched, not driven yet.** Devices seen in a user's HID scan
   (`known_as: null`) whose protocol was looked up but isn't documented
   well enough to write to them:
