@@ -54,6 +54,8 @@ RIGStats' sensor readings have been checked on seven machines — AMD and Intel 
 - **Write code** — start with a [good first issue](https://github.com/dvalfrid/rigstats/labels/good%20first%20issue) or one marked [help wanted](https://github.com/dvalfrid/rigstats/labels/help%20wanted). [CONTRIBUTING.md](CONTRIBUTING.md) gets you building in a few minutes; a change to the app's UI needs only Rust.
 - **Buy me a coffee** — RIGStats is free and open source, with no ads and no paid version. If it's useful to you, [a coffee](https://www.buymeacoffee.com/dvalfrid) helps cover the domain and code signing, and makes it easier to find time to keep improving it.
 
+  <a href="https://www.buymeacoffee.com/dvalfrid"><img src="assets/buy-me-a-coffee.png" alt="Buy Me a Coffee" width="150"></a>
+
 Contributions are welcome with or without AI tools.
 
 ## Repository Layout
