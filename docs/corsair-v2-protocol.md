@@ -1,7 +1,17 @@
 # Corsair V2 peripheral protocol: M65 RGB Ultra (wired) and MM700
 
-Protocol notes for Corsair lighting (#620, step 1), 2026-10-25. Nothing here
-is implemented and **nothing has been sent to a device**. Everything below
+Protocol notes for Corsair lighting (#620, step 1), 2026-10-25.
+
+**Implemented in** `sensor-sidecar/Control/Lighting/CorsairV2Device.cs`
+(#620, step 2), frames pinned byte for byte by
+`sensor-sidecar.Tests/CorsairV2Tests.cs`; both models `Verified = false`.
+Choices on the open points: the endpoint is checked the way OpenRGB does it
+(START `22`, `01` only on a non-zero status; no reply at all stays on `22`,
+as OpenRGB's zeroed buffer would), GET `5F` is sent, GET `12` / `11` / `41`
+are not, there is no keep-alive, and SET mode = hardware is sent on release
+only when RIGStats switched the device to software mode. The first use logs
+the replies (endpoint, mode, `5F`) to answer questions 1, 3 and 5 below.
+Still **nothing has been sent to a real device**. Everything below
 was read from OpenRGB's `Controllers/CorsairPeripheralV2Controller/`
 (GPL-2.0-or-later, master at `f7e5cae9`, 2026-10-25) as documentation; no
 code is copied. Facts are cited as *file, function*; anything the source
@@ -219,7 +229,7 @@ sends nothing, as for the other families):
 | GET `5F` | OpenRGB's initialisation step after the mode switch; kept until a test shows it isn't needed |
 | START `0D 00 22`, falling back to `0D 00 01` only on a non-zero status | Endpoint check, the way OpenRGB does it |
 | START / block write first packet (9 bytes) / STOP | Every colour or off |
-| SET mode `01 03 00 01` (hardware) | `ReleaseToFirmware()` and service stop — always, best-effort |
+| SET mode `01 03 00 01` (hardware) | `ReleaseToFirmware()` and service stop — best-effort, whenever RIGStats switched the device to software mode (a device it never wrote, e.g. one iCUE owns, is left alone) |
 
 **Optional, OpenRGB sends them but RIGStats has no use for them:** GET `12`
 (PID; RIGStats already knows it from USB) and GET `11` (VID), GET `41`
@@ -241,8 +251,10 @@ decision belongs to the implementer.
 
 **Other software:** iCUE takes these devices over while it runs (#620), so
 the family is reported as taken and skipped while iCUE runs, like Armoury
-Crate and SteelSeries GG; the process names are still to be taken from a
-machine. OpenRGB itself does not check for iCUE.
+Crate and SteelSeries GG. The implementation checks for the process `iCUE`
+(the app) only — not yet seen on a machine; Corsair's background services
+are left out because they run while the app is closed. OpenRGB itself does
+not check for iCUE.
 
 ## Open questions for the first live test
 
@@ -256,3 +268,4 @@ All of these are **unconfirmed** until a device answers:
    30 s?
 5. Do the reply bytes 1–2 echo `08` and the command?
 6. What the device shows after SET mode = hardware.
+7. The iCUE process name(s) on a real machine.

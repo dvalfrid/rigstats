@@ -261,7 +261,7 @@
       "feature_len": 0,
       "output_report_id": 0,
       "product": "CORSAIR MM700 RGB Gaming Mousepad",
-      "known_as": null
+      "known_as": "corsair_v2"
     },
     {
       "vendor_id": "1B1C",
@@ -287,7 +287,7 @@
       "feature_len": 0,
       "output_report_id": 0,
       "product": "CORSAIR M65 RGB ULTRA Gaming Mouse",
-      "known_as": null
+      "known_as": "corsair_v2"
     },
     {
       "vendor_id": "1B1C",
