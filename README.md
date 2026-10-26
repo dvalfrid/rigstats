@@ -13,6 +13,10 @@
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
 [![Release pipeline](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/release.yml)
 
+<br>
+
+<img src="assets/floating-mode-compact.png" width="820" alt="RIGStats floating panels on a desktop wallpaper, drawn compact: the header with the ROG logo and the Balanced profile, CPU and GPU load and temperature rings, RAM usage, Network, Motherboard, Disk and GPU Apps">
+
 </div>
 
 RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple program that does what it should, does it well, and stays out of your way. No bloat, no accounts, no telemetry — just your hardware, under your control.
@@ -28,12 +32,6 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
-
-<p align="center">
-  <img src="assets/rigStats.png" width="220" alt="The RIGStats dashboard on a portrait secondary display: CPU, GPU, RAM, network and disk panels">
-  &nbsp;
-  <img src="assets/control-center-overview.png" width="560" alt="The Control Center's Overview: a profile bar, a sidebar of pages, and a tile per page summarising what the profile does — dashboard look, overlay, alerts, desktop, app rules, power, fans, CPU, graphics card, lighting and mouse">
-</p>
 
 ## Installation
 
