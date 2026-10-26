@@ -7,6 +7,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![winget](https://img.shields.io/winget/v/Codeby.RIGStats?label=winget&color=0078D4)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/Codeby/RIGStats)
 [![egui](https://img.shields.io/badge/egui-0.34-4A90D9?logo=rust&logoColor=white)](https://github.com/emilk/egui)
+[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/dvalfrid)
 
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
@@ -27,10 +28,6 @@ It's a free hardware monitor and control center for Windows gaming PCs, built as
 - **Session history** — record a session and chart it afterwards.
 
 For the full product overview, screenshots, and download, see [rigstats.app](https://rigstats.app).
-
-RIGStats is free and open source. If it's useful to you, you can support its development:
-
-<a href="https://www.buymeacoffee.com/dvalfrid"><img src="assets/buy-me-a-coffee.png" alt="Buy Me a Coffee" width="181" height="51"></a>
 
 <p align="center">
   <img src="assets/rigStats.png" width="220" alt="The RIGStats dashboard on a portrait secondary display: CPU, GPU, RAM, network and disk panels">
@@ -57,6 +54,7 @@ RIGStats' sensor readings have been checked on seven machines — AMD and Intel 
   Attach a diagnostics ZIP (Status → **Collect Diagnostics…**) — it's what turns "it doesn't work" into a fix. It holds your hardware details and RIGStats' logs and settings, including your computer and Windows user name (`environment.txt`); look through it before you share it, and remove anything you'd rather not.
 - **Ask, share, suggest** — in [Discussions](https://github.com/dvalfrid/rigstats/discussions): questions, ideas, or show your setup. Bugs go in [issues](https://github.com/dvalfrid/rigstats/issues/new/choose).
 - **Write code** — start with a [good first issue](https://github.com/dvalfrid/rigstats/labels/good%20first%20issue) or one marked [help wanted](https://github.com/dvalfrid/rigstats/labels/help%20wanted). [CONTRIBUTING.md](CONTRIBUTING.md) gets you building in a few minutes; a change to the app's UI needs only Rust.
+- **Buy me a coffee** — RIGStats is free and open source, with no ads and no paid version. If it's useful to you, [a coffee](https://www.buymeacoffee.com/dvalfrid) helps cover the domain and code signing, and makes it easier to find time to keep improving it.
 
 Contributions are welcome with or without AI tools.
 
