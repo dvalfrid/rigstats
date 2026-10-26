@@ -17,7 +17,7 @@ use rigstats_backend::settings;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-const OWNER_TITLE: &str = "RigStats \u{2014} Control Center";
+const OWNER_TITLE: &str = "RIGStats \u{2014} Control Center";
 
 /// The page's state: the "Add a rule" form, the open dialog's answer to
 /// come, and the program names and icons loaded so far.

@@ -142,7 +142,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("settings"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Settings")
+                    .with_title("RIGStats — Settings")
                     .with_visible(visible)
                     .with_inner_size(SETTINGS_SIZE)
                     .with_position([px, py])
@@ -154,7 +154,7 @@ impl RigStatsApp {
                     // Capture HWND while we're inside the callback — window definitely exists here.
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Settings");
+                        found_hwnd = win_opacity::find_hwnd("RIGStats \u{2014} Settings");
                     }
                     windows::settings::show(
                         child_ui,
@@ -198,7 +198,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("about"),
                 egui::ViewportBuilder::default()
-                    .with_title("About RigStats")
+                    .with_title("About RIGStats")
                     .with_visible(visible)
                     .with_inner_size([380.0, 460.0])
                     .with_position([px, py])
@@ -209,7 +209,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("About RigStats");
+                        found_hwnd = win_opacity::find_hwnd("About RIGStats");
                     }
                     windows::about::show(child_ui, &mctx, &open, &focus, &dir, &dc);
                 },
@@ -241,7 +241,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Control Center")
+                    .with_title("RIGStats — Control Center")
                     .with_visible(visible)
                     .with_inner_size(CONTROL_SIZE)
                     .with_position([px, py])
@@ -252,7 +252,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats — Control Center");
+                        found_hwnd = win_opacity::find_hwnd("RIGStats — Control Center");
                     }
                     windows::control::show(
                         child_ui,
@@ -299,7 +299,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("status"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Status")
+                    .with_title("RIGStats — Status")
                     .with_visible(visible)
                     .with_inner_size([680.0, 820.0])
                     .with_position([px, py])
@@ -309,7 +309,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Status");
+                        found_hwnd = win_opacity::find_hwnd("RIGStats \u{2014} Status");
                     }
                     windows::status::show(
                         child_ui,
@@ -348,7 +348,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("history"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Session History")
+                    .with_title("RIGStats — Session History")
                     .with_visible(visible)
                     .with_inner_size([820.0, 720.0])
                     .with_position([px, py])
@@ -358,7 +358,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats \u{2014} Session History");
+                        found_hwnd = win_opacity::find_hwnd("RIGStats \u{2014} Session History");
                     }
                     windows::history::show(
                         child_ui,
@@ -395,7 +395,7 @@ impl RigStatsApp {
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("updater"),
                 egui::ViewportBuilder::default()
-                    .with_title("RigStats — Updates")
+                    .with_title("RIGStats — Updates")
                     .with_visible(visible)
                     .with_inner_size([600.0, 620.0])
                     .with_position([px, py])
@@ -406,7 +406,7 @@ impl RigStatsApp {
                 |child_ui, _class| {
                     #[cfg(windows)]
                     {
-                        found_hwnd = win_opacity::find_hwnd("RigStats — Updates");
+                        found_hwnd = win_opacity::find_hwnd("RIGStats — Updates");
                     }
                     windows::updater::show(child_ui, &mctx, &open, &focus, &state, &dc);
                 },

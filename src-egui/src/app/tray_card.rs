@@ -87,12 +87,12 @@ pub(crate) fn watchdog(anchor: &TrayAnchor, ctx: &egui::Context) {
     } else {
         win_opacity::hide_window_async(win_opacity::find_hwnd(TITLE));
         // Let the UI thread catch up and tear the viewport down properly.
-        win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
+        win_opacity::force_repaint(win_opacity::find_hwnd("RIGStats"));
     }
 }
 
 const ID: &str = "tray_card";
-const TITLE: &str = "RigStats \u{2014} Tray card";
+const TITLE: &str = "RIGStats \u{2014} Tray card";
 const CARD_W: f32 = 380.0;
 const MARGIN: f32 = 10.0;
 const TITLE_H: f32 = 22.0;
