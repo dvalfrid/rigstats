@@ -7,7 +7,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![winget](https://img.shields.io/winget/v/Codeby.RIGStats?label=winget&color=0078D4)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/Codeby/RIGStats)
 [![egui](https://img.shields.io/badge/egui-0.34-4A90D9?logo=rust&logoColor=white)](https://github.com/emilk/egui)
-[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/dvalfrid)
 
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
