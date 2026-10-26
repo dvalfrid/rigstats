@@ -27,6 +27,13 @@ const LINKS: &[(&str, &str, &str)] = &[
         "MIT License",
         "https://github.com/dvalfrid/rigstats/blob/main/LICENSE",
     ),
+    // The one place in the app that mentions support: a link here, no
+    // reminder anywhere else (#631).
+    (
+        "Support",
+        "Buy me a coffee",
+        "https://www.buymeacoffee.com/dvalfrid",
+    ),
 ];
 
 pub fn show(
