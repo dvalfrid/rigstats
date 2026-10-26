@@ -612,7 +612,7 @@ fn collect_and_open_diagnostics_impl(
 
     let sysinfo_json = {
         let mut sys = System::new();
-        sys.refresh_cpu();
+        sys.refresh_cpu_all();
         sys.refresh_memory();
         let cpu_brand = sys
             .cpus()

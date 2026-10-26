@@ -27,7 +27,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "
 # No `multithread` (rayon): a pool of one thread per core woken every
 # second for the process refresh cost ~1.2 % of a core, the work itself next
 # to nothing (#463). Off in both crates — Cargo unifies features.
-sysinfo = { version = "0.30", default-features = false }
+sysinfo = { version = "0.39", default-features = false, features = ["system", "disk", "network"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 tray-icon = "0.23"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "webp", "gif"] }
