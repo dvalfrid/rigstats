@@ -396,7 +396,7 @@ The Control Center must read as part of RIGStats, not an add-on.
 | --- | --- | --- |
 | `PowerPlanProvider` | `PowerGetActiveScheme` / `PowerSetActiveScheme` (powrprof) | Trivial, no driver. Phase 0 reference provider. |
 | `FanProvider` | LHM `ISensor.Control.SetSoftware()` / `SetDefault()` on the shared `Computer` | Depends on Super I/O support per board; some firmware overrides writes — detect via `Verify`. Yields to Armoury Crate's fan service (`OtherSoftware`, [Phase 6](#phase-6--armoury-crate-coexistence-as-built)). |
-| `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is the lower of the two. Not built yet (#209): LHM's bundled IntelMSR module is read-only. |
+| `CpuLimitProvider` (Intel) | MSR `0x610` (`PKG_POWER_LIMIT`) via PawnIO IntelMSR module, units from `0x606` | Honour lock bit 63 → report "locked by BIOS". Many boards also enforce the MCHBAR MMIO mirror; the effective limit is believed to be the lower of the two (unverified). Not built yet (#209). Research, register layouts and the proposed design: [intel-power-limits.md](intel-power-limits.md). |
 | `CpuLimitProvider` (AMD) | RSMU mailbox (PPT/TDC/EDC) via LHM's signed `RyzenSMU` PawnIO module; readback from the PM table | Command IDs are per CPU generation and PM table layouts per table version; only combinations verified on hardware are advertised. See [Phase 2](#phase-2--cpu-power-limits-as-built). |
 | `CurveOptimizerProvider` | RSMU mailbox (per-core / all-core offset, readback per core) via the same `RyzenSMU` module | Highest risk. Boot-crash guard + preview mandatory. See [Phase 4](#phase-4--curve-optimizer-as-built). |
 | `GpuPowerProvider` | AMD: ADLX manual power tuning (`amdadlx64.dll`, ships with Adrenalin). NVIDIA desktop GPUs: NVML `nvmlDeviceSetPowerManagementLimit` (ships with the driver, #210); laptop GPUs are firmware-owned (#234). | Official SDKs only in v1 — no undocumented clock offsets. See [Phase 3](#phase-3--gpu-power-limit-as-built). |
@@ -619,8 +619,10 @@ What phase 2 (#189) shipped — AMD only; Intel is #209:
   `\\.\PawnIO` directly and loads LHM's own signed `RyzenSMU.bin`, which
   exports `ioctl_send_smu_command` (RSMU mailbox) and the PM table reads.
   Every SMU access holds the `Global\Access_PCI` mutex, shared with LHM.
-  LHM's bundled `IntelMSR.bin` only exports `ioctl_read_msr`, hence the
-  Intel split.
+  At the time, LHM 0.9.6's bundled `IntelMSR.bin` only exported
+  `ioctl_read_msr`, hence the Intel split. LHM 0.9.7-pre749 (#256) bundles
+  the 0.2.11 module with `ioctl_write_msr`; see
+  [intel-power-limits.md](intel-power-limits.md).
 - **Two keys must both be known** (`AmdSmuMap`): the CPU generation
   (CPUID family/model/package) for the command ids — Zen 2/3 use
   `0x53/0x54/0x55`, Zen 4/5 `0x56/0x57/0x58`, and Zen 4's SetPPT id is Zen

@@ -292,8 +292,8 @@ public sealed class CpuLimitPart
 {
     public AmdCpuLimit? Amd { get; init; }
 
-    /// Intel PL1/PL2 — not implemented yet (needs a newer signed IntelMSR
-    /// module); kept as passthrough so stored values survive a round trip.
+    /// Intel PL1/PL2 — not implemented yet (#209, docs/intel-power-limits.md);
+    /// kept as passthrough so stored values survive a round trip.
     public JsonNode? Intel { get; init; }
 }
 
