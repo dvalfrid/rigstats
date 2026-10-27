@@ -28,14 +28,21 @@ public sealed class PawnIoModule : IPawnIoModule
     private PawnIoModule(SafeFileHandle device) => _device = device;
 
     /// Opens the driver and loads `LibreHardwareMonitor.Resources.PawnIo.<name>`.
-    /// Throws when PawnIO isn't installed or the caller isn't elevated.
-    public static PawnIoModule LoadFromLhm(string name)
+    /// Throws when PawnIO isn't installed, the caller isn't elevated, or the
+    /// blob doesn't match `sha256` when one is given.
+    public static PawnIoModule LoadFromLhm(string name, string? sha256 = null)
     {
         using var blob = typeof(LibreHardwareMonitor.Hardware.Computer).Assembly
             .GetManifestResourceStream($"LibreHardwareMonitor.Resources.PawnIo.{name}")
             ?? throw new InvalidOperationException($"PawnIO module {name} not found in LibreHardwareMonitorLib.");
         using var bytes = new MemoryStream();
         blob.CopyTo(bytes);
+        if (sha256 is not null)
+        {
+            var actual = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes.ToArray()));
+            if (actual != sha256)
+                throw new InvalidOperationException($"PawnIO module {name} is not the expected build (SHA-256 {actual}).");
+        }
 
         var device = CreateFileW(@"\\.\PawnIO", GenericRead | GenericWrite, FileShareReadWrite,
             IntPtr.Zero, OpenExisting, 0, IntPtr.Zero);

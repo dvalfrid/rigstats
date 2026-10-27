@@ -159,6 +159,10 @@ builder.Services.AddSingleton(_ => new BootCrashGuard(
 var smu = new Lazy<(RyzenSmu? Smu, string Reason)>(() =>
 {
     var opened = RyzenSmu.TryOpen(out var reason);
+    // Intel PL1/PL2 (#209): read-only for now — log the RAPL registers once
+    // so a diagnostics export shows what the write path will need.
+    if (opened is null)
+        IntelRapl.LogSnapshot();
     return (opened, reason);
 });
 builder.Services.AddSingleton<IControlProvider>(sp => new CpuLimitProvider(

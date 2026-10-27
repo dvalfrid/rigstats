@@ -2,7 +2,12 @@
 
 Research notes for #209 (Control Center phase 2b), 2026-10-27.
 
-**Nothing is built and nothing has been sent to any hardware.** Everything
+**Built so far (step 1, read-only):** `IntelRapl`
+(`sensor-sidecar/Control/Providers/IntelRapl.cs`) — the decode/encode below
+with these vectors as unit tests (`IntelRaplTests`), the pinned
+`IntelMSR.bin` hash, and a start-up log of 0x606/0x610/0x614/0x1B1/0x613 on
+Intel CPUs (lines `Intel RAPL (family … model …), read-only:` and
+`Intel RAPL decoded:`). Nothing writes to hardware yet. Everything
 below was read from primary sources (the Intel SDM, an Intel datasheet, the
 PawnIO and PawnIO.Modules source, the Linux `intel_rapl` driver, coreboot and
 LibreHardwareMonitor) or from files already in this repository. Every claim
@@ -380,8 +385,8 @@ from the SDM; that they show this cleanly on a desktop part is not).
 ## Proposed design
 
 Fits the existing AMD provider (`CpuLimitProvider` + `RyzenSmu`), the safety
-rules in `sensor-sidecar/Control/CLAUDE.md`, and #209's checklist. Nothing
-here is built.
+rules in `sensor-sidecar/Control/CLAUDE.md`, and #209's checklist. Built so
+far: `IntelRapl` (the pure part and step 1's read-only log); the rest is not.
 
 ### Module and gating
 
