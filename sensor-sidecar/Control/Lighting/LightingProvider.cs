@@ -245,6 +245,8 @@ public sealed class LightingProvider : IControlProvider, IRetryPart
                     ["firmware"] = d.Firmware,
                     ["blocked"] = d.Blocked,
                     ["problem"] = d.Problem,
+                    // Breathing and colour cycle show as the colour (#659).
+                    ["static_only"] = d.StaticOnly,
                     ["lamp"] = d is ILampDevice { HasLamp: true },
                     // What the lamp shows now — the tray or its own button may
                     // have switched it since the profile set it.

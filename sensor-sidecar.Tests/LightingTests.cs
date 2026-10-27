@@ -185,6 +185,7 @@ public class LightingProviderTests
         }
 
         public bool HandsBack { get; init; }
+        public bool StaticOnly { get; init; }
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new() { ["product_id"] = "19AF", ["config_table"] = "1E9F" };
         public string Id => id;
         public string Name => $"Device {id}";
@@ -587,6 +588,19 @@ public class LightingProviderTests
         public void SwitchLamp(bool on) => Lit = on;
         public bool Release() => false;
         public System.Text.Json.Nodes.JsonObject Diagnostics() => new();
+    }
+
+    [Fact]
+    public void Devices_that_only_hold_a_colour_say_so()
+    {
+        // #659: breathing and colour cycle show as the colour on these, and
+        // the Lighting tab says so on their row.
+        var provider = Provider(new FakeDevice("a"), new FakeDevice("b") { StaticOnly = true });
+
+        var devices = provider.Probe().Details!["devices"]!.AsArray();
+
+        Assert.False(devices[0]!["static_only"]!.GetValue<bool>());
+        Assert.True(devices[1]!["static_only"]!.GetValue<bool>());
     }
 
     [Fact]

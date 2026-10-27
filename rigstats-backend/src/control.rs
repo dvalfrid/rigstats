@@ -508,6 +508,10 @@ pub struct AuraDeviceCap {
     /// as of when the capabilities were asked for.
     #[serde(default)]
     pub problem: Option<String>,
+    /// Only a fixed colour in our protocol: breathing and colour cycle show
+    /// as the colour (#659).
+    #[serde(default)]
+    pub static_only: bool,
     /// Has a white lamp beside its RGB (`AuraPart::lamp`).
     #[serde(default)]
     pub lamp: bool,
@@ -3513,7 +3517,7 @@ mod tests {
                         "zones": [{"id": "argb1", "name": "ARGB header 1", "addressable": true, "leds": 1}],
                     }, {
                         "id": "lamparray-0b05-1ace-2", "name": "ROG Harpe Ace Aim Lab Edition", "kind": "mouse",
-                        "wdl_on": false, "wdl_toggle": true, "zones": [],
+                        "wdl_on": false, "wdl_toggle": true, "static_only": true, "zones": [],
                     }],
                 }),
             )],
@@ -3527,6 +3531,9 @@ mod tests {
         assert_eq!(caps.devices[1].wdl_on, Some(false));
         assert_eq!(caps.devices[1].wdl_toggle, Some(true));
         assert_eq!(caps.devices[0].wdl_toggle, None);
+        // Absent (an older service) = animates (#659).
+        assert!(!caps.devices[0].static_only);
+        assert!(caps.devices[1].static_only);
         assert_eq!(supported.aura_unavailable(), None);
 
         let blocked = ControlState {

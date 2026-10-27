@@ -227,6 +227,7 @@ public sealed class RazerDevice : ILightingDevice, IDisposable
 
     /// Why the last write failed, for the Lighting tab, or null.
     public string? Problem { get; private set; }
+    public bool StaticOnly => true;
 
     /// Never throws: these models aren't confirmed yet, so a write that
     /// fails is shown on the device (`Problem`) and logged — it must not

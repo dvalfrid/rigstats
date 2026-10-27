@@ -1013,6 +1013,7 @@ fn lighting_tab(
     }
 
     // ── The devices ──────────────────────────────────────────────────────
+    let effect = part.as_ref().and_then(|p| p.effect.clone());
     ui_kit::group(ui, dc, Some("Devices"), None, |g| {
         for device in &caps.devices {
             let zones = device
@@ -1053,12 +1054,24 @@ fn lighting_tab(
                 && device.wdl_toggle != Some(false)
                 && device.id.starts_with("lamparray-0b05-")
                 && device.kind != "keyboard";
-            if warnings.is_empty() && !wdl_off && !wdl_hint {
+            // One effect for every device: a device that can only hold a
+            // colour shows breathing and colour cycle as that colour (#659).
+            let still = device.static_only
+                && matches!(effect.as_deref(), Some("breathing" | "spectrum_cycle"));
+            if warnings.is_empty() && !wdl_off && !wdl_hint && !still {
                 continue;
             }
             g.block(|ui| {
                 for w in &warnings {
                     ui_kit::row_problem(ui, dc, Severity::Attention, w);
+                }
+                if still {
+                    ui_kit::footnote(
+                        ui,
+                        dc,
+                        "Shows this effect as a steady colour: RIGStats can only set one colour on \
+                         this device.",
+                    );
                 }
                 if wdl_off {
                     ui_kit::row_problem(
