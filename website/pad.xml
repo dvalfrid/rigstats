@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.51.0</Program_Version>
+		<Program_Version>1.52.0</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
-		<Program_Release_Day>23</Program_Release_Day>
+		<Program_Release_Day>27</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>diagnostics: add the sensor tree as read when the ZIP is collected; diagnostics: what the dashboard shows, when a GPU reading drops, driver resets and sleep; gpu: show when the chosen graphics card isn't read; lighting: drive Razer, HyperX and SteelSeries devices on their own protocols; release: thank the contributors by name on the GitHub release; status: show a global shortcut another program already holds; updates: an update channel for release candidates; gpu: handle an empty engine type in GPU Engine instance names; gpu: leave USB display adapters out of the GPU list; header: drop the profile chip's dot and keep its size on hover; installer: start RIGStats as the signed-in user, not the account that approved UAC; lighting: drive LampArrays without an intensity channel, and wait out Razer's "not taken up yet" [#538](https://github.com/dvalfrid/rigstats/issues/538); ram: show the real data rate on boards that report the speed in MHz; release: hold a new release back until its installer and latest.json are up; sensors: say why the CPU values are empty when PawnIO is missing; sensors: stop counting sleep as a hardware worker hang; settings: keep floating mode turned on over the desktop wallpaper; tray: draw the Control Center icon as a whole dial; wallpaper: restart the host when a new desktop background destroys its window; app: let the tray thread rest, and ping only for someone who looks; app: read the process list in one Windows call per tick; app: read the process list without a thread pool, halving idle CPU; app: two tokio workers, and a release profile with thin LTO; battery: ask Windows whether there is a battery, WMI only when there is one; battery: ask WMI about the battery once a minute on a PC without one; recording: parse the sessions index only when it changed; tools: measure what RIGStats costs the PC and record a baseline</Program_Change_Info>
+		<Program_Change_Info>dashboard: a compact layout for every panel; dashboard: a compact style for the CPU, GPU, RAM and Network panels; dashboard: floating panels, their size and positions per Control Center profile; settings: change or turn off the global shortcuts; settings: choose the space between panels; settings: shortcuts for the tray menu's actions; settings: turn off the profile-switch notifications; dashboard: panel text can no longer be selected; dashboard: white, larger values in the compact panels; gpu: Intel GPUs show their load; lighting: only the user at the screen's Dynamic Lighting setting counts; log: bound rigstats-debug.log while running and limit the gpu change line; motherboard: compact panel drops VCORE on boards without a Vcore rail; sidecar: SATA and USB drive temperatures are read; wallpaper: floating panels no longer leave a dark empty window; wallpaper: log a WorkerW retry instead of a false attach failure</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.51.0/RIGStats_1.51.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.52.0/RIGStats_1.52.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
