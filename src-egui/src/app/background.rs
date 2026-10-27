@@ -217,7 +217,7 @@ pub(crate) fn spawn_tray_event_thread(
             _ => {}
         }
         #[cfg(windows)]
-        win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
+        win_opacity::force_repaint(win_opacity::find_hwnd("RIGStats"));
     }));
 
     let ids = TrayMenuIds::of(tray);
@@ -248,7 +248,7 @@ pub(crate) fn spawn_tray_event_thread(
                 #[allow(unsafe_code)]
                 unsafe {
                     winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
-                    let parent_hwnd = win_opacity::find_hwnd("RigStats");
+                    let parent_hwnd = win_opacity::find_hwnd("RIGStats");
                     if parent_hwnd != 0 {
                         winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
                     }
@@ -282,7 +282,7 @@ pub(crate) fn spawn_tray_event_thread(
             // is — lands a real WM_PAINT no matter how it closed.
             if recording_active.load(Ordering::Relaxed) {
                 #[cfg(windows)]
-                win_opacity::force_repaint(win_opacity::find_hwnd("RigStats"));
+                win_opacity::force_repaint(win_opacity::find_hwnd("RIGStats"));
             }
             // The tray hover card's guard, independent of the UI thread's
             // frames (see `tray_card::watchdog`).

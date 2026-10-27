@@ -1116,11 +1116,15 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   Reports come in through the "Device" issue form
   (`.github/ISSUE_TEMPLATE/device.yml`), which also asks for Gear
   Link's console log (its `HID OUT`/`HID IN` lines name every command).
-- **Per-device blockers.** While Windows Dynamic Lighting is on for a
-  signed-in user (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
-  Microsoft\Lighting` — the service runs as SYSTEM), Windows drives the
-  LampArray devices itself: they report `blocked` and Aura Sync skips them,
-  the Lighting tab explains it per device, and the rest keep syncing.
+- **Per-device blockers.** While Windows Dynamic Lighting is on for the
+  user at the screen (`AmbientLightingEnabled` under `HKEY_USERS\<sid>\Software\
+  Microsoft\Lighting` for the active console session's user — the service
+  runs as SYSTEM), Windows drives the LampArray devices itself: they report
+  `blocked` and Aura Sync skips them, the Lighting tab explains it per
+  device, and the rest keep syncing. Another account signed in in the
+  background (fast user switching) doesn't count (#636); only when the
+  active user can't be told (the sign-in screen) does any signed-in user
+  with it on block, as before.
 - **Researched, not driven yet.** Devices seen in a user's HID scan
   (`known_as: null`) whose protocol was looked up but isn't documented
   well enough to write to them:
@@ -1480,6 +1484,32 @@ device of each type, so all three layouts below are confirmed on hardware.
   `18, 4`; a keyboard family reading `getDeviceInfo(CurrentPower)` with battery
   at its `n[5]`; a JSON `class_id:"10020000"` protocol). Check a device's own
   module before assuming one of the three above.
+
+**SteelSeries Arctis Nova Pro Wireless** (#621, `SteelSeriesBaseStation.cs`,
+not yet verified): the headset's battery from its base station `1038:12E0`
+(Wireless X `12E5`). One question, `06 B0`, on interface 4's collection
+whose output reports carry id 6 (usage page FFC0 on the tester's; FF00 there
+uses id 7), zero-padded to its 64-byte report. Two sources agree, both
+GPL-3.0, read as documentation: HeadsetControl
+(`steelseries_arctis_nova_pro_wireless.hpp`) and Arctis Sound Manager
+(`devices/nova_pro_wireless.yaml`).
+
+| Reply byte (incl. report id) | Meaning |
+| --- | --- |
+| 0–1 | `06 B0`, the echo; any other report on the handle is skipped |
+| 6 | headset battery, 0–8 (eighths; shown as `level × 100 / 8`) |
+| 7 | the spare battery in the base station's charge slot, 0–8 (not shown yet) |
+| 15 | headset state: `01` offline (no reading), `02` charging over the cable, `08` online |
+
+- The base station needs 5 s after it enumerates before it takes a command
+  (Arctis Sound Manager's `init_sleep_length_ms`, GG's own wait), so a newly
+  found one is asked only after that.
+- SteelSeries GG talks to the same base station. Windows gives every open
+  handle a copy of every input report, so GG's replies (`07 25` volume and so
+  on) arrive on ours too; the `06 B0` echo is what picks our answer.
+- `06 BF` (HeadsetControl's "lights") is the brightness of the mic-mute LED
+  (Arctis Sound Manager's `mic_led_brightness`), not RGB; the headset has
+  none (the tester, #598).
 
 ### Settings (for #292 — documented, not used)
 

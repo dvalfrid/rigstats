@@ -7,7 +7,6 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows&logoColor=white)](https://github.com/dvalfrid/rigstats/releases/latest)
 [![winget](https://img.shields.io/winget/v/Codeby.RIGStats?label=winget&color=0078D4)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/c/Codeby/RIGStats)
 [![egui](https://img.shields.io/badge/egui-0.34-4A90D9?logo=rust&logoColor=white)](https://github.com/emilk/egui)
-[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/dvalfrid)
 
 [![Verify](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/verify.yml)
 [![Build](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml/badge.svg)](https://github.com/dvalfrid/rigstats/actions/workflows/build.yml)
@@ -24,7 +23,7 @@ RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple p
 It's a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView.
 
 - **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper.
-- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts** — *coming in v1.52.0*).
+- **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts**).
 - **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), and the settings of ROG headsets (sidetone, noise reduction) and ROG mice (DPI, polling rate, button bindings, energy — and which of the mouse's own profiles each profile uses), run by a background service so it keeps working with the app closed.
 - **Profiles that follow you** — switch by themselves while a program runs (Gaming while your game is open), and set your desktop too: a background picture per profile or per screen, and **Wallpaper Engine** wallpapers per screen, paused while you game or off in a profile of its own.
@@ -171,11 +170,11 @@ alert levels — belongs to each
   Wallpaper**.
 - **Floating mode** — render panels as individually draggable/lockable cards.
   On or off and the panels' size belong to the Control Center profile
-  (**Control Center → Dashboard**, *coming in v1.52.0*), so one profile can
+  (**Control Center → Dashboard**), so one profile can
   float while another shows the fixed dashboard — switch profile (tray,
   shortcut or app rule) to switch layout. Each profile also remembers where
   you placed its panels.
-- **Compact panels** *(coming in v1.52.0)* — every panel can be drawn compact:
+- **Compact panels** — every panel can be drawn compact:
   the key values only, no graphs or bars, in one common style (rings and
   columns of values; Processes and GPU Apps keep their top 3). The choice is per panel and per
   Control Center profile (**Control Center → Dashboard**, Full / Compact
@@ -187,7 +186,7 @@ alert levels — belongs to each
   <img src="assets/compact-panels.png" width="300" alt="The CPU, GPU, RAM and Network panels drawn compact in the dashboard: load and temperature rings with clock and power in white for the CPU and GPU, a usage ring with the memory spec, used, free and temperature for RAM, and up/down speeds with LAN and WAN ping for the network">
 </p>
 
-- **Panel spacing** *(coming in v1.52.0)* — the space between panels, 0–30 px
+- **Panel spacing** — the space between panels, 0–30 px
   (6 by default), in portrait and between the cells of the landscape grid;
   floating panels you place yourself.
 - **Fill Screen** — fill the height of the monitor the window currently sits on
@@ -257,14 +256,14 @@ Hardware control per profile — **Silent, Balanced, Gaming, Eco** and your own
 — switched from the tray, the header chip, **Ctrl+Alt+P** (the next one) or
 **Ctrl+Alt+F1**…**F9** (the first … ninth, in the profile bar's order — bind a
 macro key to one in your keyboard's software; both can be changed under
-**Settings → Shortcuts**, *coming in v1.52.0*). Open it from the
+**Settings → Shortcuts**). Open it from the
 tray (**Control Center…**). Everything runs inside the `rigstats-sensor`
 service, so fan curves keep working with the app closed and after a reboot.
 Each tab appears only when this PC's hardware supports it.
 
 | Tab | What it controls | Where it works |
 | --- | --- | --- |
-| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (each full or compact — *coming in v1.52.0*), floating panels and their size (*coming in v1.52.0*), the game overlay's metrics, alert levels — previewed live | Any PC |
+| Dashboard, Overlay, Alerts | The profile's own look: accent colour, opacity, panels and their order (each full or compact), floating panels and their size, the game overlay's metrics, alert levels — previewed live | Any PC |
 | Desktop | The Windows background picture (one per screen if you like), and Wallpaper Engine: as it is, chosen wallpapers per screen, paused, or off — with Start/Stop | Any PC; the Wallpaper Engine part when it is installed ([troubleshooting](docs/troubleshooting.md#wallpaper-engine)) |
 | App rules | Switch profile automatically while a program runs (e.g. Gaming while your game is open) | Any PC |
 | Power | The Windows power plan each profile switches to | Any PC |

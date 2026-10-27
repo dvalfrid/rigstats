@@ -16,7 +16,7 @@ hostname = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [target.'cfg(windows)'.dependencies]
-wmi = "0.13"
+wmi = "0.18"
 winreg = "0.52"
 winapi = { version = "0.3", features = ["winbase", "processthreadsapi", "combaseapi", "objbase", "shobjidl_core", "winerror", "windef", "wtypes", "wtypesbase", "tlhelp32", "handleapi", "mmdeviceapi", "endpointvolume", "functiondiscoverykeys_devpkey", "propsys", "propidl", "audioclient", "audiosessiontypes", "mmreg"] }
 

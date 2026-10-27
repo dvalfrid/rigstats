@@ -8,6 +8,32 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.52.0](https://github.com/dvalfrid/rigstats/compare/v1.51.0...v1.52.0) (2026-10-27)
+
+
+### Features
+
+* **dashboard:** a compact layout for every panel ([#605](https://github.com/dvalfrid/rigstats/issues/605)) ([6d2c5dc](https://github.com/dvalfrid/rigstats/commit/6d2c5dc408c7f90f81d12323fb6ab5bfdc2813fb))
+* **dashboard:** a compact style for the CPU, GPU, RAM and Network panels ([#598](https://github.com/dvalfrid/rigstats/issues/598)) ([887d6e8](https://github.com/dvalfrid/rigstats/commit/887d6e83eeee2629933197a11ee7e6e4afd337e1))
+* **dashboard:** floating panels, their size and positions per Control Center profile ([#600](https://github.com/dvalfrid/rigstats/issues/600)) ([432296c](https://github.com/dvalfrid/rigstats/commit/432296c69ecdc4a599b104f0eafc549e26788143))
+* **settings:** change or turn off the global shortcuts ([#589](https://github.com/dvalfrid/rigstats/issues/589)) ([6dc2927](https://github.com/dvalfrid/rigstats/commit/6dc2927919e9deaaa1502b17ced835f0b99e4ff4)), closes [#569](https://github.com/dvalfrid/rigstats/issues/569)
+* **settings:** choose the space between panels ([#608](https://github.com/dvalfrid/rigstats/issues/608)) ([52bcf06](https://github.com/dvalfrid/rigstats/commit/52bcf06fe98c3173bd3b58b5e10e4729d851ab5a)), closes [#606](https://github.com/dvalfrid/rigstats/issues/606)
+* **settings:** shortcuts for the tray menu's actions ([#595](https://github.com/dvalfrid/rigstats/issues/595)) ([6615600](https://github.com/dvalfrid/rigstats/commit/66156007ba0508191fcc86897db74c002449f9e2))
+* **settings:** turn off the profile-switch notifications ([#602](https://github.com/dvalfrid/rigstats/issues/602)) ([358cfba](https://github.com/dvalfrid/rigstats/commit/358cfbab57f9db45069c55a929c2feb095c877cb)), closes [#601](https://github.com/dvalfrid/rigstats/issues/601)
+
+
+### Bug Fixes
+
+* **dashboard:** panel text can no longer be selected ([#616](https://github.com/dvalfrid/rigstats/issues/616)) ([a780dc2](https://github.com/dvalfrid/rigstats/commit/a780dc2d8f7885234f69ab067208512f4da94067)), closes [#615](https://github.com/dvalfrid/rigstats/issues/615)
+* **dashboard:** white, larger values in the compact panels ([#603](https://github.com/dvalfrid/rigstats/issues/603)) ([f032a2a](https://github.com/dvalfrid/rigstats/commit/f032a2ad5a26ce207524c944d8fd2d6369ff0a63))
+* **gpu:** Intel GPUs show their load ([#619](https://github.com/dvalfrid/rigstats/issues/619)) ([64b98c5](https://github.com/dvalfrid/rigstats/commit/64b98c5e546d2e95fb2989db5bba58da483c597e)), closes [#618](https://github.com/dvalfrid/rigstats/issues/618)
+* **lighting:** only the user at the screen's Dynamic Lighting setting counts ([#637](https://github.com/dvalfrid/rigstats/issues/637)) ([761a90c](https://github.com/dvalfrid/rigstats/commit/761a90c9b8ed131369f5816d232467f3a1498b47)), closes [#636](https://github.com/dvalfrid/rigstats/issues/636)
+* **log:** bound rigstats-debug.log while running and limit the gpu change line ([a2594a9](https://github.com/dvalfrid/rigstats/commit/a2594a98a0bbd2eaa9008435c0958c31a050feae)), closes [#563](https://github.com/dvalfrid/rigstats/issues/563)
+* **motherboard:** compact panel drops VCORE on boards without a Vcore rail ([#612](https://github.com/dvalfrid/rigstats/issues/612)) ([739436e](https://github.com/dvalfrid/rigstats/commit/739436e163b8373c130587535f545dba2c784198)), closes [#611](https://github.com/dvalfrid/rigstats/issues/611)
+* **sidecar:** SATA and USB drive temperatures are read ([#610](https://github.com/dvalfrid/rigstats/issues/610)) ([9a490c5](https://github.com/dvalfrid/rigstats/commit/9a490c5c8aa12c65810e88035d8c09d6aa6d9329))
+* **wallpaper:** floating panels no longer leave a dark empty window ([#626](https://github.com/dvalfrid/rigstats/issues/626)) ([9aa7e9a](https://github.com/dvalfrid/rigstats/commit/9aa7e9a75bcd149979a50d4fa567ca35075dc5b4))
+* **wallpaper:** log a WorkerW retry instead of a false attach failure ([#617](https://github.com/dvalfrid/rigstats/issues/617)) ([9f2a795](https://github.com/dvalfrid/rigstats/commit/9f2a795c99d80ea5a67ed68752ebf3b758f8f3a5)), closes [#579](https://github.com/dvalfrid/rigstats/issues/579)
+
 ## [1.51.0](https://github.com/dvalfrid/rigstats/compare/v1.50.0...v1.51.0) (2026-10-23)
 
 

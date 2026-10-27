@@ -82,7 +82,7 @@ impl RigStatsApp {
             }
 
             // Title shared between ViewportBuilder and Win32 FindWindowW lookup.
-            let win_title = format!("RigStats \u{2014} {}", panel_label(&key));
+            let win_title = format!("RIGStats \u{2014} {}", panel_label(&key));
             let mut vp_builder = egui::ViewportBuilder::default()
                 .with_title(win_title.clone())
                 .with_inner_size([panel_w, initial_h])

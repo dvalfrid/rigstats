@@ -181,7 +181,7 @@ The older models (Gladius II, Strix Impact I / II, Pugio I / II, Chakram / Core,
 
 ## Battery
 
-The PERIPHERALS panel and the tray icon's hover card show the battery of these devices, read every 20 s. **From Solaar, not yet verified**: built from Solaar's implementation of Logitech's protocol, read as documentation.
+The PERIPHERALS panel and the tray icon's hover card show the battery of these devices, read every 20 s. **From Solaar, not yet verified**: built from Solaar's implementation of Logitech's protocol, read as documentation. **From HeadsetControl, not yet verified**: built from HeadsetControl's and Arctis Sound Manager's implementations, read as documentation.
 
 | Device | Type | USB id | Status | Notes |
 |---|---|---|---|---|
@@ -222,5 +222,6 @@ The PERIPHERALS panel and the tray icon's hover card show the battery of these d
 | Logitech devices on Bluetooth | Mouse, keyboard | — (Bluetooth) | Verified on hardware (MX Anywhere 3 for Mac, MX Keys Mini, MX Mechanical Mini for Mac) | Battery and charging, asked in Logitech's HID++ protocol |
 | Logitech devices on a Bolt receiver | Mouse, keyboard | C548 (receiver) | Verified on hardware (Logi M650) | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
 | Logitech devices on a Unifying receiver | Mouse, keyboard | C52B, C532 (receiver) | From Solaar, not yet verified | Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver |
+| SteelSeries Arctis Nova Pro Wireless / Wireless X | Headset | 12E0, 12E5 (base station) | From HeadsetControl, not yet verified | Battery and charging, asked at the base station |
 
 Not read: ROG mice on their own 2.4 GHz dongle or cable, Logitech Nano and Lightspeed receivers, and Logitech devices that report only a coarse level, not a percentage. A device that doesn't show, or one that works: the service log (`rigstats-sensor.log`, in the diagnostics ZIP) has a line starting with `Battery:` for every device it found — send it with a [device report](https://github.com/dvalfrid/rigstats/issues/new?template=device.yml).

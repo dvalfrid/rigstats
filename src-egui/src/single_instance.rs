@@ -7,7 +7,7 @@
 //!    can't: the first instance takes time (settings load, GPU adapter
 //!    probe) before its window exists, and two near-simultaneous launches
 //!    could otherwise both slip past a `FindWindowW` check.
-//! 2. `FindWindowW` on the main window's title (`"RigStats"`, set in
+//! 2. `FindWindowW` on the main window's title (`"RIGStats"`, set in
 //!    `main.rs`, unchanged even when hidden off-screen in wallpaper mode or
 //!    behind other windows in "Always Behind" mode) and winit's window class
 //!    to actually bring the running instance to the foreground. The class
@@ -28,7 +28,7 @@ use winapi::um::winuser::{
 };
 
 const MUTEX_NAME: &str = "Local\\se.codeby.rigstats.SingleInstance";
-const MAIN_WINDOW_TITLE: &str = "RigStats";
+const MAIN_WINDOW_TITLE: &str = "RIGStats";
 /// winit's window class, which every RigStats window has.
 const MAIN_WINDOW_CLASS: &str = "Window Class";
 

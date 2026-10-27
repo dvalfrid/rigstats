@@ -80,6 +80,8 @@ public static class LightingDiagnostics
             return "steelseries_headset";
         if (CorsairV2Device.IsChannel(h))
             return "corsair_v2";
+        if (SteelSeriesBaseStation.Stations([h]).Any())
+            return "steelseries_base_station";
         if (h.VendorId != AuraUsb.AsusVendorId || h.UsagePage != AuraUsb.AuraUsagePage)
             return null;
         if (AuraUsb.Family(h.ProductId) is { } family)

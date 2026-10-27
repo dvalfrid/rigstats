@@ -113,7 +113,7 @@ pub(crate) fn native_options(
 ) -> eframe::NativeOptions {
     let always_on_top = s.window_layer == "on_top";
     let mut viewport = egui::ViewportBuilder::default()
-        .with_title("RigStats")
+        .with_title("RIGStats")
         .with_icon(load_app_icon())
         .with_inner_size([inner_w, inner_h])
         .with_position([pos_x, pos_y])

@@ -1,9 +1,9 @@
 ---
 name: verifier-gui
-description: Verify GUI changes in RigStats by building, launching, and screenshotting the running app. Use for any /verify task involving the egui UI, panels, settings windows, or dialog boxes.
+description: Verify GUI changes in RIGStats by building, launching, and screenshotting the running app. Use for any /verify task involving the egui UI, panels, settings windows, or dialog boxes.
 ---
 
-RigStats is a Windows-native egui app. There is no DOM or Playwright — observation is via PowerShell screenshots. See `run-rigstats.md` for build/launch/monitor details.
+RIGStats is a Windows-native egui app. There is no DOM or Playwright — observation is via PowerShell screenshots. See `run-rigstats.md` for build/launch/monitor details.
 
 ## Verification workflow
 
@@ -58,7 +58,7 @@ Remove-Item Env:RIGSTATS_OPEN
 
 The window can take 20–40 s to appear after a fresh start (hardware detection runs first). Then switch pages by clicking the sidebar (step 5) — items sit at x≈90, 37 px apart.
 
-Finding the window: enumerate top-level windows (`EnumWindows` + `GetWindowText`) and match a title that **starts with `RigStats`** and contains `Control Center` / `Settings`. Don't use `FindWindow("Settings")` — that finds Windows' own Settings app (with the user's account details). Don't use `(Get-Process rigstats).MainWindowHandle` either: with the overlay shown it points at the overlay. The Control Center needs the control pipe: with the installed service a debug build is refused, so it shows "Waiting…" unless the owner runs `tools\dev-sidecar.ps1`.
+Finding the window: enumerate top-level windows (`EnumWindows` + `GetWindowText`) and match a title that **starts with `RIGStats`** and contains `Control Center` / `Settings`. Don't use `FindWindow("Settings")` — that finds Windows' own Settings app (with the user's account details). Don't use `(Get-Process rigstats).MainWindowHandle` either: with the overlay shown it points at the overlay. The Control Center needs the control pipe: with the installed service a debug build is refused, so it shows "Waiting…" unless the owner runs `tools\dev-sidecar.ps1`.
 
 ### 4. Screenshot a specific dialog window
 

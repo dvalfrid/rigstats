@@ -398,26 +398,57 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
 
     // ── Windows Dynamic Lighting ───────────────────────────────────────
 
-    /// Whether any signed-in user has Windows Dynamic Lighting on (Settings
-    /// → Personalization → Dynamic Lighting → "Use Dynamic Lighting on my
-    /// devices"). The service runs as SYSTEM, so it reads the loaded user
-    /// hives under HKEY_USERS rather than HKCU.
+    /// Whether Windows Dynamic Lighting is on for the user at the screen
+    /// (Settings → Personalization → Dynamic Lighting → "Use Dynamic Lighting
+    /// on my devices"). The setting is per user, and the service runs as
+    /// SYSTEM, so it reads the user's hive under HKEY_USERS rather than HKCU.
+    /// Only the active console session's user counts: with fast user
+    /// switching another account stays signed in, and its setting blocked the
+    /// lighting of the user actually at the PC (#636). When that user can't be
+    /// told (the sign-in screen, an error), any signed-in user with it on
+    /// counts, as before — yield rather than fight.
     public static bool WindowsDynamicLightingOn()
     {
         try
         {
-            foreach (var sid in Registry.Users.GetSubKeyNames().Where(s => s.StartsWith("S-1-5-21-", StringComparison.Ordinal) && !s.EndsWith("_Classes", StringComparison.Ordinal)))
-            {
-                using var key = Registry.Users.OpenSubKey($@"{sid}\Software\Microsoft\Lighting");
-                if (key?.GetValue("AmbientLightingEnabled") is int enabled && enabled != 0)
-                    return true;
-            }
+            var settings = Registry.Users.GetSubKeyNames()
+                .Where(s => s.StartsWith("S-1-5-21-", StringComparison.Ordinal) && !s.EndsWith("_Classes", StringComparison.Ordinal))
+                .Select(sid =>
+                {
+                    using var key = Registry.Users.OpenSubKey($@"{sid}\Software\Microsoft\Lighting");
+                    return (sid, key?.GetValue("AmbientLightingEnabled") is int enabled ? enabled != 0 : (bool?)null);
+                })
+                .ToList();
+            return DynamicLightingOn(ActiveConsoleUser(), settings);
         }
         catch
         {
             // Can't tell — assume off rather than hide devices.
+            return false;
         }
-        return false;
+    }
+
+    /// Pure: the active user's setting when that user is known and signed in,
+    /// otherwise whether any signed-in user has it on. A user without the
+    /// value has it off.
+    public static bool DynamicLightingOn(string? activeSid, IReadOnlyList<(string Sid, bool? On)> users)
+    {
+        if (activeSid is not null && users.Any(u => string.Equals(u.Sid, activeSid, StringComparison.OrdinalIgnoreCase)))
+            return users.First(u => string.Equals(u.Sid, activeSid, StringComparison.OrdinalIgnoreCase)).On == true;
+        return users.Any(u => u.On == true);
+    }
+
+    /// The SID of the user signed in to the physical console session, or null
+    /// (nobody signed in there, or the service can't ask). Windows' own
+    /// wtsapi32; needs SYSTEM, which the service is.
+    private static string? ActiveConsoleUser()
+    {
+        var session = WTSGetActiveConsoleSessionId();
+        if (session == 0xFFFFFFFF || !WTSQueryUserToken(session, out var token))
+            return null;
+        using (token)
+        using (var identity = new System.Security.Principal.WindowsIdentity(token.DangerousGetHandle()))
+            return identity.User?.Value;
     }
 
     // ── Win32 ──────────────────────────────────────────────────────────
@@ -475,6 +506,12 @@ public sealed class LampArrayDevice : ILightingDevice, IWdlDevice, IBatteryDevic
         public int LogicalMin, LogicalMax, PhysicalMin, PhysicalMax;
         public ushort UsageMin, UsageMax, StringMin, StringMax, DesignatorMin, DesignatorMax, DataIndexMin, DataIndexMax;
     }
+
+    [DllImport("kernel32.dll")]
+    private static extern uint WTSGetActiveConsoleSessionId();
+
+    [DllImport("wtsapi32.dll", SetLastError = true)]
+    private static extern bool WTSQueryUserToken(uint sessionId, out SafeAccessTokenHandle token);
 
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern SafeFileHandle CreateFile(string name, uint access, uint share, IntPtr security,

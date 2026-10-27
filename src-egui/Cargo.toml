@@ -1,6 +1,6 @@
 [package]
 name = "rigstats-egui"
-version = "1.51.0" # x-release-please-version
+version = "1.52.0" # x-release-please-version
 edition = "2021"
 rust-version = "1.89"
 
@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "
 # to nothing (#463). Off in both crates — Cargo unifies features.
 sysinfo = { version = "0.30", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
-tray-icon = "0.23"
+tray-icon = "0.26"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp", "webp", "gif"] }
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }

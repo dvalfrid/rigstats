@@ -53,6 +53,8 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
     private bool _logitechFailureLogged;
     private readonly LogitechReceivers _receivers = new();
     private bool _receiversFailureLogged;
+    private readonly SteelSeriesBaseStations _baseStations = new();
+    private bool _baseStationsFailureLogged;
 
     protected override async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -68,7 +70,7 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
                 var ids = devices.Select(d => d.Id).ToList();
                 if (ShouldRead(lastRead, DateTime.UtcNow, lastIds, ids))
                 {
-                    store.Set(BluetoothBatteries.Merge(ReadAll([.. devices.OfType<IBatteryDevice>(), .. ReceiverDevices()]), ReadBluetooth()));
+                    store.Set(BluetoothBatteries.Merge(ReadAll([.. devices.OfType<IBatteryDevice>(), .. ReceiverDevices(), .. BaseStationDevices()]), ReadBluetooth()));
                     lastRead = DateTime.UtcNow;
                     lastIds = ids;
                 }
@@ -98,6 +100,25 @@ public sealed class PeripheralBatteryMonitor(LightingProvider lighting, Peripher
             if (!_receiversFailureLogged)
                 SidecarLog.Log($"[rigstats-control] Battery: Logitech receivers not read: {e.Message}");
             _receiversFailureLogged = true;
+            return [];
+        }
+    }
+
+    /// SteelSeries headsets behind their base station (#621); a failure costs
+    /// only them.
+    private IReadOnlyList<IBatteryDevice> BaseStationDevices()
+    {
+        try
+        {
+            var devices = _baseStations.Devices(Hid.Enumerate(), DateTime.UtcNow);
+            _baseStationsFailureLogged = false;
+            return devices;
+        }
+        catch (Exception e)
+        {
+            if (!_baseStationsFailureLogged)
+                SidecarLog.Log($"[rigstats-control] Battery: SteelSeries base stations not read: {e.Message}");
+            _baseStationsFailureLogged = true;
             return [];
         }
     }
