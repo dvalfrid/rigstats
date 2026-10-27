@@ -42,7 +42,7 @@ cargo xtask test
 # Full verification (sidecar + tests + clippy + fmt check)
 cargo xtask verify
 
-# Production build
+# Production build (also writes target/THIRD-PARTY-NOTICES.txt; needs cargo-about 0.9.2, see docs/release.md)
 cargo xtask build
 
 # Setup (install git hooks, first-time only)

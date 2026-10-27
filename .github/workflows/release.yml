@@ -89,10 +89,10 @@ jobs:
           path: ~/.nuget/packages
           key: nuget-${{ hashFiles('sensor-sidecar/**/*.csproj') }}
 
-      - name: Install cargo-deny
+      - name: Install cargo-deny and cargo-about
         uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283 # v2.87.29
         with:
-          tool: cargo-deny@0.20.2
+          tool: cargo-deny@0.20.2,cargo-about@0.9.2
 
       - name: Run verification
         run: cargo xtask verify
@@ -114,6 +114,7 @@ jobs:
           path: |
             target\release\rigstats.exe
             target\release\rigstats-wallpaper.exe
+            target\THIRD-PARTY-NOTICES.txt
             sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\
           if-no-files-found: error
           retention-days: 1

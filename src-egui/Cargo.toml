@@ -3,6 +3,7 @@ name = "rigstats-egui"
 version = "1.52.0" # x-release-please-version
 edition = "2021"
 rust-version = "1.89"
+publish = false
 
 [lib]
 name = "rigstats_egui"
