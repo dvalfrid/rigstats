@@ -150,6 +150,22 @@ by pid. The numbers go into "Resource budget" in
 pwsh -File tools\measure-resources.ps1 -Minutes 30 -Label release-normal
 ```
 
+## `measure-startup-cpu.ps1`
+
+**The app's CPU over time after it starts** (#663): starts `-Exe` in a window
+layer (default the desktop wallpaper; `-Floating` for floating panels) and
+prints the CPU of `rigstats` and `rigstats-wallpaper` (% of one core) over a
+20 s window at each of `-At` seconds after start. AMD's driver takes a whole
+core for ~30–120 s after a process starts rendering (#515), so a window right
+after start measures that burst, not the steady cost — compare the later
+windows. Stops every running RIGStats first (the installed app too) and puts
+your settings back afterwards.
+
+```powershell
+pwsh -File tools\measure-startup-cpu.ps1 -Exe "$env:ProgramFiles\RIGStats\rigstats.exe"
+pwsh -File tools\measure-startup-cpu.ps1 -Exe .\target\release\rigstats.exe -Layer normal
+```
+
 ## `openrgb-asus-watch.ps1`
 
 Reports ASUS lighting devices **added to OpenRGB** since the last review, so
