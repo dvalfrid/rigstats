@@ -69,7 +69,10 @@ public static class BatteryCatalog
         rows.Add(new SupportedDevice(
             "SteelSeries Arctis Nova Pro Wireless / Wireless X", "Headset",
             string.Join(", ", SteelSeriesBaseStation.Models.Keys.Order().Select(Hex)) + " (base station)",
-            FromHeadsetControl, "Battery and charging, asked at the base station"));
+            SteelSeriesBaseStation.Models.Keys.Any(SteelSeriesBaseStation.Verified.Contains)
+                ? $"{LightingCatalog.Verified} ({string.Join(", ", SteelSeriesBaseStation.Models.Where(m => SteelSeriesBaseStation.Verified.Contains(m.Key)).Select(m => m.Value.Replace("SteelSeries ", "")))})"
+                : FromHeadsetControl,
+            "Battery and charging, asked at the base station"));
 
         return rows;
     }

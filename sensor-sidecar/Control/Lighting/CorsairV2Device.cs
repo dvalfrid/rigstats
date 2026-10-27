@@ -25,7 +25,7 @@ namespace SensorSidecar.Control.Lighting;
 /// (keyboard layout; neither device has a matrix), the wireless write ids,
 /// `BLK_WN`, anything that saves to the device. No keep-alive: OpenRGB
 /// re-sends every 30 s for the K55 RGB PRO's sake; whether these two need it
-/// is unconfirmed. `Verified = false` until a user confirms.
+/// is unconfirmed. Both models verified by a tester (#620).
 public sealed class CorsairV2Device : ILightingDevice, IDisposable
 {
     public const ushort CorsairVendorId = 0x1B1C;
@@ -77,8 +77,10 @@ public sealed class CorsairV2Device : ILightingDevice, IDisposable
     /// with its software controller and that a tester has (#598).
     public static readonly IReadOnlyDictionary<ushort, Model> Models = new Dictionary<ushort, Model>
     {
-        [0x1B9E] = new("Corsair M65 RGB Ultra (wired)", "mouse", "Mouse"),
-        [0x1B9B] = new("Corsair MM700 RGB", "mousepad", "Mousepad"),
+        // Both verified by SirBlacky21 on 1.53.0-rc.1: found, and the colour
+        // applied (#620). Breathing and spectrum show as the colour (#659).
+        [0x1B9E] = new("Corsair M65 RGB Ultra (wired)", "mouse", "Mouse", Verified: true),
+        [0x1B9B] = new("Corsair MM700 RGB", "mousepad", "Mousepad", Verified: true),
     };
 
     /// Corsair's own software — while it runs it owns these devices (#620).
