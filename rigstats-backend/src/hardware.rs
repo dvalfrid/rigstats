@@ -104,9 +104,8 @@ pub fn probe_wmi_status() -> Result<(), String> {
     #[cfg(windows)]
     {
         let com_probe_result = (|| -> Result<(), String> {
-            let com = wmi::COMLibrary::new().map_err(|e| format!("COM init failed: {}", e))?;
-            let conn = wmi::WMIConnection::new(com)
-                .map_err(|e| format!("WMI connection failed: {}", e))?;
+            let conn =
+                wmi::WMIConnection::new().map_err(|e| format!("WMI connection failed: {}", e))?;
 
             #[derive(Deserialize)]
             struct ProbeRow {
@@ -244,13 +243,11 @@ fn get_gpu_name_from_shell() -> Option<String> {
 pub fn detect_gpu_name() -> Option<String> {
     #[cfg(windows)]
     {
-        if let Ok(com) = wmi::COMLibrary::new() {
-            if let Ok(conn) = wmi::WMIConnection::new(com) {
-                if let Ok(rows) = conn.query::<VideoControllerName>() {
-                    let names = rows.into_iter().filter_map(|r| r.name).collect::<Vec<_>>();
-                    if let Some(best) = pick_best_gpu_name(names) {
-                        return Some(best);
-                    }
+        if let Ok(conn) = wmi::WMIConnection::new() {
+            if let Ok(rows) = conn.query::<VideoControllerName>() {
+                let names = rows.into_iter().filter_map(|r| r.name).collect::<Vec<_>>();
+                if let Some(best) = pick_best_gpu_name(names) {
+                    return Some(best);
                 }
             }
         }
@@ -293,9 +290,8 @@ fn clean_gpu_names(raw: Vec<String>) -> Vec<String> {
 pub fn detect_gpu_names() -> Vec<String> {
     #[cfg(windows)]
     {
-        let wmi_names: Vec<String> = wmi::COMLibrary::new()
+        let wmi_names: Vec<String> = wmi::WMIConnection::new()
             .ok()
-            .and_then(|com| wmi::WMIConnection::new(com).ok())
             .and_then(|conn| conn.query::<VideoControllerName>().ok())
             .map(|rows| rows.into_iter().filter_map(|r| r.name).collect())
             .unwrap_or_default();
@@ -416,29 +412,27 @@ fn gpu_drivers_from_shell() -> Vec<GpuDriverInfo> {
 pub fn detect_gpu_drivers() -> Vec<GpuDriverInfo> {
     #[cfg(windows)]
     {
-        if let Ok(com) = wmi::COMLibrary::new() {
-            if let Ok(conn) = wmi::WMIConnection::new(com) {
-                if let Ok(rows) = conn.query::<VideoControllerDriver>() {
-                    let list: Vec<GpuDriverInfo> = rows
-                        .into_iter()
-                        .filter_map(|r| {
-                            let name = r.name?;
-                            if is_ignored_adapter_name(&name) {
-                                return None;
-                            }
-                            let date = r.driver_date.map(|d| d.0.format("%Y-%m-%d").to_string());
-                            let age_days = date.as_deref().and_then(driver_age_days);
-                            Some(GpuDriverInfo {
-                                name,
-                                version: r.driver_version,
-                                date,
-                                age_days,
-                            })
+        if let Ok(conn) = wmi::WMIConnection::new() {
+            if let Ok(rows) = conn.query::<VideoControllerDriver>() {
+                let list: Vec<GpuDriverInfo> = rows
+                    .into_iter()
+                    .filter_map(|r| {
+                        let name = r.name?;
+                        if is_ignored_adapter_name(&name) {
+                            return None;
+                        }
+                        let date = r.driver_date.map(|d| d.0.format("%Y-%m-%d").to_string());
+                        let age_days = date.as_deref().and_then(driver_age_days);
+                        Some(GpuDriverInfo {
+                            name,
+                            version: r.driver_version,
+                            date,
+                            age_days,
                         })
-                        .collect();
-                    if !list.is_empty() {
-                        return list;
-                    }
+                    })
+                    .collect();
+                if !list.is_empty() {
+                    return list;
                 }
             }
         }
@@ -510,41 +504,39 @@ pub fn classify_system_brand(fields: &[&str]) -> &'static str {
 pub fn detect_system_brand() -> String {
     #[cfg(windows)]
     {
-        if let Ok(com) = wmi::COMLibrary::new() {
-            if let Ok(conn) = wmi::WMIConnection::new(com) {
-                let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
-                let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
-                let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
+        if let Ok(conn) = wmi::WMIConnection::new() {
+            let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
+            let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
+            let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
 
-                let mut fields = Vec::new();
-                if let Some(s) = systems.first() {
-                    if let Some(v) = s.manufacturer.as_deref() {
-                        fields.push(v);
-                    }
-                    if let Some(v) = s.model.as_deref() {
-                        fields.push(v);
-                    }
+            let mut fields = Vec::new();
+            if let Some(s) = systems.first() {
+                if let Some(v) = s.manufacturer.as_deref() {
+                    fields.push(v);
                 }
-                if let Some(p) = products.first() {
-                    if let Some(v) = p.name.as_deref() {
-                        fields.push(v);
-                    }
-                    if let Some(v) = p.version.as_deref() {
-                        fields.push(v);
-                    }
+                if let Some(v) = s.model.as_deref() {
+                    fields.push(v);
                 }
-                if let Some(b) = boards.first() {
-                    if let Some(v) = b.manufacturer.as_deref() {
-                        fields.push(v);
-                    }
-                    if let Some(v) = b.product.as_deref() {
-                        fields.push(v);
-                    }
+            }
+            if let Some(p) = products.first() {
+                if let Some(v) = p.name.as_deref() {
+                    fields.push(v);
                 }
+                if let Some(v) = p.version.as_deref() {
+                    fields.push(v);
+                }
+            }
+            if let Some(b) = boards.first() {
+                if let Some(v) = b.manufacturer.as_deref() {
+                    fields.push(v);
+                }
+                if let Some(v) = b.product.as_deref() {
+                    fields.push(v);
+                }
+            }
 
-                if !fields.is_empty() {
-                    return classify_system_brand(&fields).to_string();
-                }
+            if !fields.is_empty() {
+                return classify_system_brand(&fields).to_string();
             }
         }
 
@@ -624,18 +616,16 @@ fn normalize_manufacturer(raw: &str) -> String {
 pub fn detect_motherboard_name() -> Option<String> {
     #[cfg(windows)]
     {
-        if let Ok(com) = wmi::COMLibrary::new() {
-            if let Ok(conn) = wmi::WMIConnection::new(com) {
-                let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
-                if let Some(b) = boards.first() {
-                    let product = b.product.as_deref().and_then(normalize_model_name)?;
-                    let mfr = normalize_manufacturer(b.manufacturer.as_deref().unwrap_or(""));
-                    return Some(if mfr.is_empty() {
-                        product
-                    } else {
-                        format!("{mfr} {product}")
-                    });
-                }
+        if let Ok(conn) = wmi::WMIConnection::new() {
+            let boards: Vec<BaseBoardInfo> = conn.query().ok().unwrap_or_default();
+            if let Some(b) = boards.first() {
+                let product = b.product.as_deref().and_then(normalize_model_name)?;
+                let mfr = normalize_manufacturer(b.manufacturer.as_deref().unwrap_or(""));
+                return Some(if mfr.is_empty() {
+                    product
+                } else {
+                    format!("{mfr} {product}")
+                });
             }
         }
 
@@ -720,31 +710,29 @@ pub fn is_placeholder_model_name(name: &str) -> bool {
 pub fn detect_model_name() -> Option<String> {
     #[cfg(windows)]
     {
-        if let Ok(com) = wmi::COMLibrary::new() {
-            if let Ok(conn) = wmi::WMIConnection::new(com) {
-                let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
-                if let Some(v) = products
-                    .iter()
-                    .filter_map(|p| p.version.as_deref().and_then(normalize_model_name))
-                    .next()
-                {
-                    return Some(v);
-                }
-                if let Some(v) = products
-                    .iter()
-                    .filter_map(|p| p.name.as_deref().and_then(normalize_model_name))
-                    .next()
-                {
-                    return Some(v);
-                }
-                let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
-                if let Some(v) = systems
-                    .iter()
-                    .filter_map(|s| s.model.as_deref().and_then(normalize_model_name))
-                    .next()
-                {
-                    return Some(v);
-                }
+        if let Ok(conn) = wmi::WMIConnection::new() {
+            let products: Vec<ComputerSystemProduct> = conn.query().ok().unwrap_or_default();
+            if let Some(v) = products
+                .iter()
+                .filter_map(|p| p.version.as_deref().and_then(normalize_model_name))
+                .next()
+            {
+                return Some(v);
+            }
+            if let Some(v) = products
+                .iter()
+                .filter_map(|p| p.name.as_deref().and_then(normalize_model_name))
+                .next()
+            {
+                return Some(v);
+            }
+            let systems: Vec<ComputerSystem> = conn.query().ok().unwrap_or_default();
+            if let Some(v) = systems
+                .iter()
+                .filter_map(|s| s.model.as_deref().and_then(normalize_model_name))
+                .next()
+            {
+                return Some(v);
             }
         }
 
@@ -846,11 +834,7 @@ pub fn detect_ram_spec() -> String {
 
     #[cfg(windows)]
     {
-        let com = match wmi::COMLibrary::new() {
-            Ok(c) => c,
-            Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
-        };
-        let conn = match wmi::WMIConnection::new(com) {
+        let conn = match wmi::WMIConnection::new() {
             Ok(c) => c,
             Err(_) => return detect_ram_spec_from_shell().unwrap_or_else(|| "RAM".to_string()),
         };
@@ -946,11 +930,7 @@ pub fn detect_ram_details() -> String {
 
     #[cfg(windows)]
     {
-        let com = match wmi::COMLibrary::new() {
-            Ok(c) => c,
-            Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
-        };
-        let conn = match wmi::WMIConnection::new(com) {
+        let conn = match wmi::WMIConnection::new() {
             Ok(c) => c,
             Err(_) => return detect_ram_details_from_shell().unwrap_or_default(),
         };
@@ -1038,10 +1018,8 @@ fn first_ipv4_gateway<'a>(gateways: impl IntoIterator<Item = &'a str>) -> Option
 pub fn detect_ping_target() -> String {
     #[cfg(windows)]
     {
-        let wmi_rows: Option<Vec<NetAdapterGatewayRow>> = wmi::COMLibrary::new()
-            .ok()
-            .and_then(|com| wmi::WMIConnection::new(com).ok())
-            .and_then(|conn| {
+        let wmi_rows: Option<Vec<NetAdapterGatewayRow>> =
+            wmi::WMIConnection::new().ok().and_then(|conn| {
                 conn.raw_query(
                     "SELECT DefaultIPGateway FROM Win32_NetworkAdapterConfiguration \
                      WHERE IPEnabled = TRUE",
@@ -1168,9 +1146,8 @@ pub fn detect_battery_present() -> bool {
             #[serde(rename = "DeviceID")]
             _device_id: Option<String>,
         }
-        wmi::COMLibrary::new()
+        wmi::WMIConnection::new()
             .ok()
-            .and_then(|com| wmi::WMIConnection::new(com).ok())
             .and_then(|conn| {
                 conn.raw_query::<BatteryIdRow>("SELECT DeviceID FROM Win32_Battery")
                     .ok()
@@ -1191,8 +1168,7 @@ pub fn detect_battery_present() -> bool {
 pub fn sample_battery_wmi() -> Option<(u8, bool, Option<u32>, Option<f64>)> {
     #[cfg(windows)]
     {
-        let com = wmi::COMLibrary::new().ok()?;
-        let conn = wmi::WMIConnection::new(com).ok()?;
+        let conn = wmi::WMIConnection::new().ok()?;
         let rows: Vec<Win32BatteryRow> = conn
       .raw_query("SELECT EstimatedChargeRemaining, BatteryStatus, EstimatedRunTime FROM Win32_Battery")
       .ok()?;
@@ -1207,7 +1183,7 @@ pub fn sample_battery_wmi() -> Option<(u8, bool, Option<u32>, Option<f64>)> {
 
         // root\wmi BatteryStatus gives ChargeRate / DischargeRate in mW.
         let power_w = (|| -> Option<f64> {
-            let wmi_conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI", com).ok()?;
+            let wmi_conn = wmi::WMIConnection::with_namespace_path("ROOT\\WMI").ok()?;
             let status_rows: Vec<WmiBatteryStatusRow> = wmi_conn
                 .raw_query("SELECT ChargeRate, DischargeRate FROM BatteryStatus")
                 .ok()?;
@@ -1453,8 +1429,7 @@ fn try_disk_model_map_via_wmi() -> Option<std::collections::HashMap<String, Stri
         Some(value)
     }
 
-    let com = wmi::COMLibrary::new().ok()?;
-    let conn = wmi::WMIConnection::new(com).ok()?;
+    let conn = wmi::WMIConnection::new().ok()?;
 
     let drives: Vec<DiskDriveRow> = conn
         .raw_query("SELECT DeviceID, Model FROM Win32_DiskDrive")
@@ -1594,9 +1569,7 @@ fn try_disk_type_map_via_wmi() -> Option<std::collections::HashMap<String, DiskK
         bus_type: Option<u16>,
     }
 
-    let com = wmi::COMLibrary::new().ok()?;
-    let conn =
-        wmi::WMIConnection::with_namespace_path("ROOT\\microsoft\\windows\\storage", com).ok()?;
+    let conn = wmi::WMIConnection::with_namespace_path("ROOT\\microsoft\\windows\\storage").ok()?;
     let disks: Vec<PhysicalDiskRow> = conn
         .raw_query("SELECT FriendlyName, MediaType, BusType FROM MSFT_PhysicalDisk")
         .ok()?;
