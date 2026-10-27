@@ -54,6 +54,7 @@ public sealed class SteelSeriesHeadsetDevice : ILightingDevice, IDisposable
     public IReadOnlyList<AuraZone> Zones { get; } = [new AuraZone("headset", "Headset", Addressable: false, EffectChannel: 0, Leds: 1)];
     public string? Blocked => _ownSoftware() is { } program ? $"{program} is running" : null;
     public string? Problem { get; private set; }
+    public bool StaticOnly => true;
 
     public static IReadOnlyList<SteelSeriesHeadsetDevice> Discover(IReadOnlyList<HidDeviceInfo> hid,
         Func<HidDeviceInfo, IHidDevice>? open = null)

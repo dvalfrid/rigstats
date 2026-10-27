@@ -115,6 +115,7 @@ public sealed class CorsairV2Device : ILightingDevice, IDisposable
     public IReadOnlyList<AuraZone> Zones { get; }
     public string? Blocked => _ownSoftware() is { } program ? $"{program} is running" : null;
     public string? Problem { get; private set; }
+    public bool StaticOnly => true;
 
     /// Opens the collection only — nothing is sent until a profile asks.
     public static IReadOnlyList<CorsairV2Device> Discover(IReadOnlyList<HidDeviceInfo> hid,
