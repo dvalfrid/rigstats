@@ -2,8 +2,11 @@
 
 Research notes for #234 (Control Center: ASUS laptops), 2026-10-27.
 
-**Built so far:** nothing. No code opens `\\.\ATKACPI` and nothing has been
-sent to a real laptop. Everything below was read from primary sources — the
+**Built so far:** step 1 of the live-test plan only. `AsusAcpi`
+(`sensor-sidecar/Control/Providers/AsusAcpi.cs`) opens `\\.\ATKACPI` once at
+start and logs `DSTS` (read) on the ids listed there. It never sends `DEVS`
+or `INIT`, and the list is pinned by `AsusAcpiTests`. Nothing has been sent
+to a real laptop yet. Everything below was read from primary sources — the
 Linux `asus-wmi` and `asus-armoury` drivers and G-Helper's source and wiki —
 or from files already in this repository. G-Helper (GPL-3.0) and the Linux
 drivers (GPL-2.0) are read as documentation of an interface: device ids,
@@ -667,8 +670,10 @@ reset, brings everything back.
    (`Mode = 1 : OK`, `Default Curve: CPU - …`, `PowerLimit A3 = … : OK`)
    already show which ids answer on this laptop and its firmware curves.
 
-**Step 1 — read-only (no `DEVS` anywhere).** The build logs once at start
-(lines `ASUS ACPI (board …, BIOS …), read-only:`):
+**Step 1 — read-only (no `DEVS` anywhere).** Built (`AsusAcpi.LogSnapshot`,
+called from the service's start-up checks). The build logs once at start
+(lines `ASUS ACPI (board …, BIOS …), read-only; ASUS software running: …`,
+`ASUS ACPI DSTS: …` and one `ASUS ACPI curve 0x…` line per fan curve):
 
 1. Start the dev sidecar; let it run a minute; Ctrl+C. Collect diagnostics.
 2. The log holds: whether the device opened (and with which ASUS software
