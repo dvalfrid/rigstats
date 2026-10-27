@@ -101,7 +101,9 @@ impl RigStatsApp {
             // Toggle main window position when floating mode changes.
             // We move it off-screen instead of hiding it — a hidden window is not
             // ticked by eframe, so the floating panels would not update.
-            if was_floating != self.floating.mode {
+            // Not in wallpaper mode: the host draws either way (#170) and this
+            // window stays parked off-screen.
+            if was_floating != self.floating.mode && !self.wallpaper.is_active() {
                 if self.floating.mode {
                     // Clear positioned-set so restored positions are re-applied
                     // from the saved layout the first time each panel is shown.
