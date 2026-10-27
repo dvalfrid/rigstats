@@ -187,10 +187,11 @@ fn carry_live(dst: &mut settings::Settings, live: &settings::Settings) {
     dst.wallpaper_engine_before = live.wallpaper_engine_before.clone();
 }
 
-/// Whether the desktop wallpaper is what runs: its layer, and floating off —
-/// floating turned on over it (the tray) wins, as in `update_wallpaper_mode`.
+/// Whether the desktop wallpaper is what runs — with floating panels too,
+/// which then sit in it as their own windows (#170), as in
+/// `update_wallpaper_mode`.
 fn wallpaper_running(live: &settings::Settings) -> bool {
-    live.window_layer == "wallpaper" && !live.floating_mode
+    live.window_layer == "wallpaper"
 }
 
 /// The draft as the app should run it now: the window layer stays what is
@@ -658,6 +659,9 @@ fn display_page(
         Some("Window"),
         Some(if draft.window_layer != applied_layer {
             "The new window layer takes effect when you click Save."
+        } else if is_wallpaper && floating {
+            "In the desktop wallpaper your floating panels stay behind every window and survive \
+             Win+D. Place them in Normal mode first, then switch."
         } else if is_wallpaper {
             "In the desktop wallpaper the dashboard stays behind every window and survives \
              Win+D. Place it in Normal mode first, then switch."
@@ -696,11 +700,10 @@ fn display_page(
                     });
                 });
             });
-            // Floating panels win over the wallpaper layer
-            // (`update_wallpaper_mode`); they belong to the profile, so say so
-            // rather than turn them off from here.
+            // Floating panels follow the window layer, the wallpaper too
+            // (#170) — say where they go.
             let layer_note = (floating && draft.window_layer == "wallpaper")
-                .then_some("Floating panels show instead while your profile uses them");
+                .then_some("Your floating panels sit in the desktop background");
             g.row("Window layer", layer_note, |ui| {
                 ui_kit::dropdown(ui, "window_layer", layer_label(&draft.window_layer), |ui| {
                     for layer in ["normal", "on_top", "behind", "wallpaper"] {
@@ -1467,16 +1470,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn floating_over_the_wallpaper_layer_is_not_the_wallpaper_running() {
-        // Floating turned on from the tray while the layer is the wallpaper:
-        // floating runs, and the Display page must treat it so.
+    fn floating_panels_on_the_wallpaper_layer_run_in_the_wallpaper() {
+        // #170: floating panels follow the layer into the desktop
+        // background, so the wallpaper runs either way.
         let mut s = settings::Settings::default();
         s.window_layer = "wallpaper".into();
         assert!(wallpaper_running(&s));
         s.floating_mode = true;
-        assert!(!wallpaper_running(&s));
+        assert!(wallpaper_running(&s));
         s.window_layer = "normal".into();
-        s.floating_mode = false;
         assert!(!wallpaper_running(&s));
     }
 

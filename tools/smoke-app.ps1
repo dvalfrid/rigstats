@@ -85,6 +85,17 @@ $modes = [ordered]@{
             'no wallpaper host'      = { -not $r.HostRunning }
         }
     }
+    # Floating panels on the wallpaper layer (#170): the host draws each panel
+    # in its own window in WorkerW, the main app none of its own.
+    'wallpaper-floating' = @{
+        Settings = @{ windowLayer = 'wallpaper'; floatingMode = $true; overlayEnabled = $false }
+        Checks   = [ordered]@{
+            'main window parked'      = { $r.Main.X -le $parked }
+            'wallpaper host running'  = { $r.HostRunning }
+            'a panel attached'        = { $r.Log -match 'rigstats-wallpaper: panel \S+ attached to WorkerW' }
+            'no panel of the main app' = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -like "RIGStats $em *" -and $_.Title -notmatch 'Overlay' }).Count -eq 0 }
+        }
+    }
     overlay = @{
         Settings = @{ windowLayer = 'normal'; floatingMode = $false; overlayEnabled = $true }
         Checks   = [ordered]@{

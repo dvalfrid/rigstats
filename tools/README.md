@@ -116,6 +116,7 @@ to start-up, window modes or `main.rs` structure. It launches
 | --- | --- |
 | `normal` | main window on-screen, no wallpaper host |
 | `wallpaper` | main window parked, `rigstats-wallpaper` running and attached to WorkerW |
+| `wallpaper-floating` | floating panels on the wallpaper layer (#170): main window parked, host running, a panel attached to WorkerW, no panel window in the main app |
 | `floating` | main window parked, a floating panel shown |
 | `overlay` | main window on-screen, overlay shown |
 | `just-updated` | `--just-updated=…` opens the update window |

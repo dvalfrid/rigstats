@@ -29,6 +29,17 @@ impl RigStatsApp {
             }
         }
 
+        // Floating panels on the wallpaper layer: the wallpaper host draws
+        // them in the desktop background (#170), not this process. Our own
+        // panel windows close while they aren't shown, so forget them: when
+        // they show again (another layer) each is created at its saved place
+        // with a fresh DComp burst.
+        if self.floating.mode && self.window_layer == "wallpaper" {
+            self.floating.panels_positioned.clear();
+            self.floating.dcomp.borrow_mut().clear();
+            return;
+        }
+
         if self.floating.mode {
             // ── Floating mode — each panel in its own borderless viewport ─────
             self.render_floating_panels(ui);
