@@ -14,6 +14,6 @@ comment is ignored. See "Release routine" in docs/release.md.
 -->
 
 # 1.53.0
-- **Corsair lighting, first devices** — the Corsair M65 RGB Ultra (by cable) and the MM700 mousepad can follow your Control Center lighting: one colour or off (breathing and colour cycle show as that colour, and the Lighting tab says so on such devices), back on their own lighting when RIGStats stops, and left alone while iCUE runs. Not yet tested on a real device: tell us how it goes.
-- **SteelSeries Arctis Nova Pro Wireless battery** — the headset's battery level and charging, read from its base station, now show in the Peripherals panel and the tray card. Not yet tested on a real device.
+- **Corsair lighting, first devices** — the Corsair M65 RGB Ultra (by cable) and the MM700 mousepad can follow your Control Center lighting: one colour or off (breathing and colour cycle show as that colour, and the Lighting tab says so on such devices), back on their own lighting when RIGStats stops, and left alone while iCUE runs. Tested by a beta tester on both devices.
+- **SteelSeries Arctis Nova Pro Wireless battery** — the headset's battery level and charging, read from its base station, now show in the Peripherals panel and the tray card. Tested by a beta tester: the level matches SteelSeries GG.
 - **Support RIGStats** — About has a link to Buy Me a Coffee, marked by a small coffee cup, for anyone who wants to say thanks. That's the only place the app mentions it.

@@ -36,6 +36,11 @@ public static class SteelSeriesBaseStation
         [0x12E5] = "SteelSeries Arctis Nova Pro Wireless X",
     };
 
+    /// Seen working: SirBlacky21 on 1.53.0-rc.1, 50 % matching SteelSeries GG
+    /// (#621). He named the non-X model; his diagnostics (with the product id)
+    /// didn't arrive, so 0x12E0 rests on his wording.
+    public static readonly IReadOnlySet<ushort> Verified = new HashSet<ushort> { 0x12E0 };
+
     /// The base station's start-up: no question before it has been there
     /// this long.
     public static readonly TimeSpan Settle = TimeSpan.FromSeconds(5);

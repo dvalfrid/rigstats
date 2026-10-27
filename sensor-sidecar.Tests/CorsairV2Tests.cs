@@ -323,8 +323,10 @@ public class CorsairV2Tests
     }
 
     [Fact]
-    public void Every_model_is_unverified_until_seen_on_a_device() =>
-        Assert.All(CorsairV2Device.Models.Values, m => Assert.False(m.Verified));
+    public void Both_models_are_verified_by_a_tester() =>
+        // SirBlacky21 on 1.53.0-rc.1 (#620): found, and the colour applied.
+        // A model added later starts unverified.
+        Assert.All(CorsairV2Device.Models.Values, m => Assert.True(m.Verified));
 
     [Fact]
     public void Disposing_closes_the_device_without_sending()
