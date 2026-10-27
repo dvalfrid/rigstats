@@ -78,6 +78,8 @@ public static class LightingDiagnostics
             return "hyperx_keyboard";
         if (SteelSeriesHeadsetDevice.IsChannel(h))
             return "steelseries_headset";
+        if (CorsairV2Device.IsChannel(h))
+            return "corsair_v2";
         if (SteelSeriesBaseStation.Stations([h]).Any())
             return "steelseries_base_station";
         if (h.VendorId != AuraUsb.AsusVendorId || h.UsagePage != AuraUsb.AuraUsagePage)

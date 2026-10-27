@@ -939,9 +939,21 @@ Each is one more `ILightingDevice`; all verified on the dev rig:
   `83 r g b`, `93 03 80`; off is black. Both never throw on a write (the
   device's `Problem` shows it) and are skipped while their vendor's software
   runs (process names not yet seen on a machine).
-- **Corsair V2 protocol** (M65 RGB Ultra wired `1B9E`, MM700 `1B9B`, #620)
-  — not built yet; the frames, from OpenRGB as documentation, are in
-  [corsair-v2-protocol.md](corsair-v2-protocol.md).
+- **Corsair V2 protocol** (`CorsairV2Device`, M65 RGB Ultra wired `1B9E`,
+  MM700 `1B9B`, #620) — not verified yet; the frames, from OpenRGB as
+  documentation, and every open question are in
+  [corsair-v2-protocol.md](corsair-v2-protocol.md). Vendor collection
+  (interface 1, usage page `0xFF42`, usage 1, 65-byte output, report id 0),
+  write id `08`. First use: endpoint check (START `0D 00 22`; START
+  `0D 00 01` only when the reply's status byte is non-zero; STOP `05 01 00`),
+  SET mode = software `01 03 00 02`, GET `5F`. Every colour: START on the
+  endpoint, one block write `06 00 09 00 00 00` + nine planar bytes from
+  report byte 8, STOP; off is nine zeros; breathing and spectrum show as the
+  colour. One reply is read after every write, as OpenRGB does. Release /
+  service stop: SET mode = hardware `01 03 00 01`, only when RIGStats took
+  control. GET `12` / `11` / `41` are not sent; no keep-alive (OpenRGB's is
+  for the K55). Never throws on a write; skipped while iCUE runs (`iCUE`,
+  process name not yet seen on a machine).
 - **Any HID LampArray device** (`LampArrayDevice`) — the vendor-neutral
   standard behind Windows Dynamic Lighting (usage page `0x59`), so one
   implementation covers every current keyboard, mouse or accessory that

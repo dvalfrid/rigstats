@@ -84,6 +84,15 @@ public static class LightingCatalog
                 m.Value.Verified ? Verified : FromOpenRgbNewProtocol,
                 "One colour; off is black; breathing and spectrum show as the colour; left alone while SteelSeries GG runs")));
 
+        // Corsair's V2 protocol, from OpenRGB (#620).
+        rows.AddRange(CorsairV2Device.Models
+            .OrderBy(m => m.Value.Name)
+            .Select(m => new SupportedDevice(m.Value.Name, m.Value.Kind == "mouse" ? "Mouse" : "Mousepad",
+                $"{CorsairV2Device.CorsairVendorId:X4}:{m.Key:X4}",
+                m.Value.Verified ? Verified : FromOpenRgbNewProtocol,
+                "By cable; one colour on all three LEDs; off is black; breathing and spectrum show as the colour; " +
+                "back on its own lighting when RIGStats stops; left alone while Corsair iCUE runs")));
+
         rows.Add(new SupportedDevice(
             "Any Windows Dynamic Lighting (HID LampArray) device, any brand",
             "Keyboard, mouse, other",

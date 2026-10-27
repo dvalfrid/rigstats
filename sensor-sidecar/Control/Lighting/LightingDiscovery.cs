@@ -32,6 +32,9 @@ public static class LightingDiscovery
         // headsets (#512), from OpenRGB's documentation.
         devices.AddRange(HyperXKeyboardDevice.Discover(hid));
         devices.AddRange(SteelSeriesHeadsetDevice.Discover(hid));
+        // Corsair M65 RGB Ultra (wired) and MM700 on Corsair's V2 protocol
+        // (#620), from OpenRGB's documentation.
+        devices.AddRange(CorsairV2Device.Discover(hid));
         // Any HID LampArray device (Windows Dynamic Lighting standard), any
         // brand — except keyboards already driven by their own protocol above.
         devices.AddRange(LampArrayDevice.Discover(
