@@ -72,17 +72,19 @@ pub fn spawn(
                 }
                 // Paths only for the picker's icons, read once per process.
                 let kind = if list_wanted {
-                    sysinfo::ProcessRefreshKind::new().with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
+                    sysinfo::ProcessRefreshKind::nothing()
+                        .with_exe(sysinfo::UpdateKind::OnlyIfNotSet)
                 } else {
-                    sysinfo::ProcessRefreshKind::new()
+                    sysinfo::ProcessRefreshKind::nothing()
                 };
-                sys.refresh_processes_specifics(kind);
+                // All processes; the ones that ended are removed, as 0.30 did.
+                sys.refresh_processes_specifics(sysinfo::ProcessesToUpdate::All, true, kind);
                 let now_unix = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .map_or(0, |d| d.as_secs());
                 let name_of = |pid: u32| {
                     sys.process(sysinfo::Pid::from_u32(pid))
-                        .map(|p| p.name().to_ascii_lowercase())
+                        .map(|p| p.name().to_string_lossy().to_ascii_lowercase())
                 };
                 let snap = Snapshot {
                     now_unix,
@@ -90,7 +92,7 @@ pub fn spawn(
                         .processes()
                         .values()
                         .map(|p| RunningProgram {
-                            exe: p.name().to_ascii_lowercase(),
+                            exe: p.name().to_string_lossy().to_ascii_lowercase(),
                             started_unix: p.start_time(),
                         })
                         .collect(),
@@ -102,7 +104,7 @@ pub fn spawn(
                         .into_iter()
                         .filter_map(|pid| sys.process(sysinfo::Pid::from_u32(pid)))
                         .map(|p| RunningApp {
-                            exe: p.name().to_ascii_lowercase(),
+                            exe: p.name().to_string_lossy().to_ascii_lowercase(),
                             path: p.exe().map(|x| x.display().to_string()),
                         })
                         .filter(|a| a.exe != "rigstats.exe" && a.exe != "explorer.exe")

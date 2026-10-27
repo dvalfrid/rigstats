@@ -625,7 +625,11 @@ mod tests {
         assert!((0..36_000_000_000).contains(&age), "age {age}");
         // The working set agrees with sysinfo's own (separate API) reading.
         let mut sys = sysinfo::System::new();
-        sys.refresh_processes_specifics(sysinfo::ProcessRefreshKind::new().with_memory());
+        sys.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::All,
+            true,
+            sysinfo::ProcessRefreshKind::nothing().with_memory(),
+        );
         let theirs = sys
             .process(sysinfo::Pid::from_u32(std::process::id()))
             .unwrap()

@@ -13,7 +13,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
-use sysinfo::{CpuRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System};
+use sysinfo::{
+    CpuRefreshKind, DiskRefreshKind, Disks, MemoryRefreshKind, Networks, RefreshKind, System,
+};
 
 // ── Poll mode ─────────────────────────────────────────────────────────────────
 
@@ -408,7 +410,7 @@ pub async fn poll_loop(
     let mut last_luid_refresh = Instant::now();
 
     let mut sys = System::new();
-    sys.refresh_cpu();
+    sys.refresh_cpu_all();
     let cpu_model = sys
         .cpus()
         .first()
@@ -444,8 +446,8 @@ pub async fn poll_loop(
         let light = mode.get() == PollMode::Light;
 
         sys.refresh_specifics(
-            RefreshKind::new()
-                .with_cpu(CpuRefreshKind::new().with_cpu_usage().with_frequency())
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::nothing().with_cpu_usage().with_frequency())
                 .with_memory(MemoryRefreshKind::everything()),
         );
         // Every process in one call; kept in Light too, for the disk
@@ -465,7 +467,7 @@ pub async fn poll_loop(
             }
         };
 
-        let cpu_load = sys.global_cpu_info().cpu_usage() as u8;
+        let cpu_load = sys.global_cpu_usage() as u8;
         // global_cpu_info().frequency() returns 0 on Windows in sysinfo 0.30; use per-core average.
         let cpu_freq_mhz = {
             let cpus = sys.cpus();
@@ -526,7 +528,12 @@ pub async fn poll_loop(
         };
 
         // Kept in Light too: disk temperature alerts need the drive list.
-        disks.refresh();
+        // Only each drive's space, as sysinfo 0.30's `refresh()` did: from
+        // 0.33 `Disks::refresh` lists the volumes again and opens every
+        // drive for its kind and I/O counters, each tick (#546).
+        for disk in disks.list_mut() {
+            disk.refresh_specifics(DiskRefreshKind::nothing().with_storage());
+        }
         let mut disk_drives: Vec<DriveInfo> = disks
             .iter()
             .filter(|d| d.total_space() > 1_000_000_000)
@@ -559,7 +566,7 @@ pub async fn poll_loop(
         let total_write_bytes: u64 = procs.iter().map(|p| p.write_bytes).sum();
         let disk_read_mbps = total_read_bytes as f64 / elapsed / 1_048_576.0;
         let disk_write_mbps = total_write_bytes as f64 / elapsed / 1_048_576.0;
-        networks.refresh();
+        networks.refresh(true);
         let mut best_iface = "--".to_string();
         let mut best_up = 0.0f64;
         let mut best_down = 0.0f64;
