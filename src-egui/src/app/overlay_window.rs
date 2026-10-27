@@ -151,7 +151,7 @@ impl RigStatsApp {
         // whole-window opacity instead (see the `overlay-addon-wholewindow-fade`
         // tag for that fallback's history).
         let mut vp_builder = egui::ViewportBuilder::default()
-            .with_title("RigStats \u{2014} Overlay")
+            .with_title("RIGStats \u{2014} Overlay")
             .with_inner_size(size)
             .with_decorations(false)
             // No DWM frame behind a transparent window (third_party/egui-winit).
@@ -197,7 +197,7 @@ impl RigStatsApp {
                 {
                     if dcomp_available {
                         let tick = dcomp.tick(
-                            || win_opacity::find_hwnd("RigStats \u{2014} Overlay"),
+                            || win_opacity::find_hwnd("RIGStats \u{2014} Overlay"),
                             dcomp_available,
                         );
                         if tick.just_started {
@@ -244,7 +244,7 @@ impl RigStatsApp {
                                 .send_viewport_cmd(egui::ViewportCommand::Visible(true));
                         }
                     } else {
-                        let hwnd = win_opacity::find_hwnd("RigStats \u{2014} Overlay");
+                        let hwnd = win_opacity::find_hwnd("RIGStats \u{2014} Overlay");
                         win_opacity::set_opacity(hwnd, opacity);
                     }
                 }

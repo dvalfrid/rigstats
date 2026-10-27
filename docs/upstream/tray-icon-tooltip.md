@@ -10,6 +10,7 @@ whenever something happens.
 |---|---|
 | 2026-10-14 | RIGStats works around it locally: #359. No upstream issue yet. |
 | 2026-10-20 | Issue filed with the patch and the `NIF_SHOWTIP` note: <https://github.com/tauri-apps/tray-icon/issues/389>. |
+| 2026-10-26 | Not fixed in 0.26.1; the local copy moved from 0.23.1 to 0.26.1 with the same patch (#548). |
 
 **Next step:** wait for a maintainer reply on tray-icon#389; open the PR (with `NIF_SHOWTIP` when a tooltip is set) if asked. Check with:
 `gh issue view 389 --repo tauri-apps/tray-icon --comments`
