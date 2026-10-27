@@ -200,7 +200,8 @@ impl RigStatsApp {
                 egui::ViewportBuilder::default()
                     .with_title("About RigStats")
                     .with_visible(visible)
-                    .with_inner_size([380.0, 460.0])
+                    // One row taller for the Support link (#631).
+                    .with_inner_size([380.0, 500.0])
                     .with_position([px, py])
                     .with_resizable(false)
                     .with_taskbar(false)
