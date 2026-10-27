@@ -12,6 +12,7 @@ It runs on Windows for every push and pull request and executes `cargo xtask ver
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
 - `cargo deny check advisories` (RustSec; see [Supply chain](#supply-chain))
+- Third-party notices: every NuGet package is named in `build/notices/sidecar.txt`, and cargo-about accepts every Rust licence (see [Supply chain](#supply-chain))
 
 **`main` is protected:** a pull request — Dependabot's, release-please's or
 anyone's — can only be merged once `Verify (Windows)` has passed (required
@@ -75,6 +76,28 @@ CI. Bumping the pin is a deliberate, standalone commit with two parts:
   a new advisory shows up without a push.
 - Locally, verify skips the Rust audit with a hint when cargo-deny is missing:
   `cargo install cargo-deny --locked`. In CI it is required.
+- **Third-party notices** (#649): the installer ships
+  `THIRD-PARTY-NOTICES.txt` next to the exes, with the licence text of
+  everything the app includes. `cargo xtask build` writes it to
+  `target/THIRD-PARTY-NOTICES.txt` (`cargo xtask notices` alone does the same).
+  It is never committed, so a Dependabot bump can't make it stale. The file
+  has two parts:
+  - **The sensor service's .NET side,** kept by hand in
+    `build/notices/sidecar.txt`: the .NET runtime pack's own `LICENSE.TXT` and
+    `THIRD-PARTY-NOTICES.TXT`, LibreHardwareMonitorLib and its MPL-2.0
+    libraries, PawnIO.Modules (LGPL-2.1, inside LHM), HidSharp and
+    Mono.Posix.
+  - **The Rust crates,** from cargo-about (`build/notices/about.toml`,
+    `about.hbs`).
+
+  `cargo xtask verify` fails on a new NuGet package that `sidecar.txt`
+  doesn't name, and on a Rust licence that `about.toml` doesn't accept. Check
+  the licence first, then add it there. cargo-about is pinned to **0.9.2** in
+  CI, the newest version the pinned `taiki-e/install-action` knows. Versions
+  word the text differently, so install the same one locally:
+  `cargo install cargo-about --version 0.9.2 --locked --features cli`.
+  Without it, verify skips the Rust part with a hint, and `cargo xtask build`
+  fails.
 
 ## Build Workflow
 

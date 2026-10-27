@@ -1,0 +1,26 @@
+# cargo-about (#649): licence texts of the Rust crates in rigstats.exe and
+# rigstats-wallpaper.exe, for THIRD-PARTY-NOTICES.txt. Run through
+# `cargo xtask notices`, never by hand.
+targets = ["x86_64-pc-windows-msvc"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# Our own crates (publish = false) are RIGStats itself, under LICENSE.
+private = { ignore = true }
+
+# Every licence that appears in the dependency tree. A new one fails the
+# build until it is checked and added here.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "Zlib",
+    "Unlicense",
+    "0BSD",
+    "CDLA-Permissive-2.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]

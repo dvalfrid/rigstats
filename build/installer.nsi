@@ -14,6 +14,7 @@
 ;   build\pawnio\PawnIO_setup.exe  (official setup, pinned by PAWNIO_SETUP_SHA256)
 ;   assets\icon.ico
 ;   CHANGELOG.md
+;   target\THIRD-PARTY-NOTICES.txt  (licences of what the app includes; written by cargo xtask build, #649)
 
 Unicode True
 SetCompressor /SOLID lzma
@@ -173,6 +174,7 @@ Section "RIGStats" SecMain
   File /nonfatal "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\MonoPosixHelper.dll"
   File /nonfatal "sensor-sidecar\bin\Release\net10.0-windows\win-x64\publish\libMonoPosixHelper.dll"
   File "CHANGELOG.md"
+  File "target\THIRD-PARTY-NOTICES.txt"
 
   ; Driver files staged here by versions before the PawnIO setup was bundled.
   RMDir /r "$INSTDIR\pawnio"
@@ -319,6 +321,7 @@ Section "Uninstall"
   Delete "$INSTDIR\MonoPosixHelper.dll"
   Delete "$INSTDIR\libMonoPosixHelper.dll"
   Delete "$INSTDIR\CHANGELOG.md"
+  Delete "$INSTDIR\THIRD-PARTY-NOTICES.txt"
   Delete "$INSTDIR\uninstall.exe"
   RMDir /r "$INSTDIR\pawnio"
   RMDir "$INSTDIR"
