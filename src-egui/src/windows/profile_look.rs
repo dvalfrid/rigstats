@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// The Control Center's window title — the Open dialog's owner.
-const CONTROL_TITLE: &str = "RigStats — Control Center";
+const CONTROL_TITLE: &str = "RIGStats — Control Center";
 
 /// What the pages need to read and save the settings.
 pub struct LookLink<'a> {

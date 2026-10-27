@@ -81,7 +81,7 @@ $modes = [ordered]@{
         Settings = @{ windowLayer = 'normal'; floatingMode = $true; overlayEnabled = $false }
         Checks   = [ordered]@{
             'main window parked'     = { $r.Main.X -le $parked }
-            'a floating panel shown' = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -like "RigStats $em *" -and $_.Title -notmatch 'Overlay' }).Count -gt 0 }
+            'a floating panel shown' = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -like "RIGStats $em *" -and $_.Title -notmatch 'Overlay' }).Count -gt 0 }
             'no wallpaper host'      = { -not $r.HostRunning }
         }
     }
@@ -89,7 +89,7 @@ $modes = [ordered]@{
         Settings = @{ windowLayer = 'normal'; floatingMode = $false; overlayEnabled = $true }
         Checks   = [ordered]@{
             'main window on-screen'  = { $r.Main.Visible -and $r.Main.X -gt $parked }
-            'overlay shown'          = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq "RigStats $em Overlay" }).Count -eq 1 }
+            'overlay shown'          = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq "RIGStats $em Overlay" }).Count -eq 1 }
         }
     }
     'just-updated' = @{
@@ -97,7 +97,7 @@ $modes = [ordered]@{
         Args     = @('--just-updated=0.0.0-smoke')
         Checks   = [ordered]@{
             'main window on-screen'  = { $r.Main.Visible -and $r.Main.X -gt $parked }
-            'update window shown'    = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq ('RigStats ' + [char]0x2014 + ' Updates') }).Count -eq 1 }
+            'update window shown'    = { @($r.Windows | Where-Object { $_.Visible -and $_.Title -eq ('RIGStats ' + [char]0x2014 + ' Updates') }).Count -eq 1 }
         }
     }
 }
@@ -129,7 +129,7 @@ try {
         $r = [pscustomobject]@{
             Alive       = $alive
             Windows     = $wins
-            Main        = ($wins | Where-Object { $_.Title -eq 'RigStats' } | Select-Object -First 1)
+            Main        = ($wins | Where-Object { $_.Title -eq 'RIGStats' } | Select-Object -First 1)
             HostRunning = [bool](Get-Process rigstats-wallpaper -ErrorAction SilentlyContinue)
             Log         = (Get-Content $logPath -Raw -ErrorAction SilentlyContinue) ?? ''
         }

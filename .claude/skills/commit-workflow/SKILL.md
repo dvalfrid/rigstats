@@ -1,6 +1,6 @@
 ---
 name: commit-workflow
-description: Full ceremony for shipping any bug fix or feature in RigStats — from opening a GitHub issue through roadmap sync. Run when starting work on a feature/bug or when ready to commit.
+description: Full ceremony for shipping any bug fix or feature in RIGStats — from opening a GitHub issue through roadmap sync. Run when starting work on a feature/bug or when ready to commit.
 ---
 
 This is the mandatory sequence for every bug fix and feature. Do not skip steps or reorder them.

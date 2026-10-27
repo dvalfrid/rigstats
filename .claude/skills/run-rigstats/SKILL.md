@@ -1,9 +1,9 @@
 ---
 name: run-rigstats
-description: Build and launch the RigStats egui binary on Windows. Use when asked to run, start, restart, or build the app.
+description: Build and launch the RIGStats egui binary on Windows. Use when asked to run, start, restart, or build the app.
 ---
 
-RigStats is a Windows-native egui binary (`target\debug\rigstats.exe`). There is no web frontend — UI is pure Rust/egui. Use PowerShell for all steps.
+RIGStats is a Windows-native egui binary (`target\debug\rigstats.exe`). There is no web frontend — UI is pure Rust/egui. Use PowerShell for all steps.
 
 ## Kill → Build → Launch
 
@@ -36,7 +36,7 @@ Get-Process rigstats -ErrorAction SilentlyContinue | Select-Object Id, StartTime
 |---|---|---|---|---|---|
 | DISPLAY1 (primary) | 0 | 0 | 2560 | 1440 | Main desktop — Settings/About windows appear here |
 | DISPLAY2 | -2560 | 0 | 2560 | 1440 | Secondary left monitor |
-| DISPLAY6 (portrait) | 2560 | 0 | 450 | 1920 | The RigStats dashboard lives here |
+| DISPLAY6 (portrait) | 2560 | 0 | 450 | 1920 | The RIGStats dashboard lives here |
 
 ```powershell
 # Re-enumerate if layout seems wrong:
@@ -68,4 +68,4 @@ $bmp.Save("$env:TEMP\rigstats_header.png"); $g.Dispose(); $bmp.Dispose()
 - **`Stop-Process -Name rigstats` silently fails** if the exe is in use. Always use `-Id`.
 - **Cargo no-ops silently** if the exe is still locked by a running process. Check the timestamp.
 - **The app window is on DISPLAY6 (X=2560)**, not the primary monitor. Primary screenshots will not show the dashboard.
-- **Settings/About/Updater viewports** open as secondary egui windows on the primary monitor. The process `MainWindowTitle` becomes `"RigStats — Settings"` (etc.) while they are open.
+- **Settings/About/Updater viewports** open as secondary egui windows on the primary monitor. The process `MainWindowTitle` becomes `"RIGStats — Settings"` (etc.) while they are open.

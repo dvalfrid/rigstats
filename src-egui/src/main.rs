@@ -781,7 +781,7 @@ impl eframe::App for RigStatsApp {
         // startup), fall back to the old WS_EX_LAYERED opacity mechanism.
         #[cfg(windows)]
         if self.hwnd == 0 {
-            self.hwnd = win_opacity::find_hwnd("RigStats");
+            self.hwnd = win_opacity::find_hwnd("RIGStats");
             if self.hwnd != 0 {
                 if self.dcomp_available {
                     win_opacity::set_no_redirection_bitmap(self.hwnd);
@@ -852,7 +852,7 @@ impl eframe::App for RigStatsApp {
                 // alone is not reliable on Windows. Only needed at startup/transition;
                 // normal operation won't bring the window back to front on its own.
                 if self.window_layer == "behind" && !self.floating.mode {
-                    win32_behind::keep_behind("RigStats");
+                    win32_behind::keep_behind("RIGStats");
                 }
             }
         }
@@ -1348,6 +1348,8 @@ fn main() {
         app::startup::native_options(&s, [inner_w, inner_h], [pos_x, pos_y], dcomp_available);
 
     eframe::run_native(
+        // eframe's app id, not a window title (those are "RIGStats …"):
+        // kept as it was.
         "RigStats",
         options,
         Box::new(|cc| {
