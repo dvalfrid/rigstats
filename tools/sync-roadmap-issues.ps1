@@ -11,6 +11,11 @@
 # Run:  pwsh -NoProfile -File tools/sync-roadmap-issues.ps1
 $ErrorActionPreference = "Stop"
 $gh = "C:\Program Files\GitHub CLI\gh.exe"
+# gh writes UTF-8; PowerShell decodes a native command's output with the
+# console's code page, which is 850 on a Swedish Windows under -NoProfile.
+# A pinned issue's body is read and written back (the marker stamp), so a
+# wrong decode turned every "—" into "ÔÇö" in #234 and #353.
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
 function Norm([string]$s) { if ($null -eq $s) { return "" } ($s -replace "`r`n", "`n").Trim() }
 
