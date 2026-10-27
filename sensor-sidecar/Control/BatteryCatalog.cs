@@ -12,6 +12,7 @@ namespace SensorSidecar.Control;
 public static class BatteryCatalog
 {
     public const string FromSolaar = "From Solaar, not yet verified";
+    public const string FromHeadsetControl = "From HeadsetControl, not yet verified";
 
     /// Batteries seen on hardware for models whose lighting isn't verified:
     /// the ROG Azoth (2.4 GHz) and the Harpe Ace Mini on a second Omni
@@ -65,6 +66,11 @@ public static class BatteryCatalog
                     : FromSolaar,
                 "Battery and charging, asked in Logitech's HID++ protocol, up to six devices per receiver")));
 
+        rows.Add(new SupportedDevice(
+            "SteelSeries Arctis Nova Pro Wireless / Wireless X", "Headset",
+            string.Join(", ", SteelSeriesBaseStation.Models.Keys.Order().Select(Hex)) + " (base station)",
+            FromHeadsetControl, "Battery and charging, asked at the base station"));
+
         return rows;
     }
 
@@ -74,7 +80,7 @@ public static class BatteryCatalog
         var md = new StringBuilder();
         md.Append("## Battery\n\n");
         md.Append("The PERIPHERALS panel and the tray icon's hover card show the battery of these devices, read every 20 s. ");
-        md.Append(CultureInfo.InvariantCulture, $"**{FromSolaar}**: built from Solaar's implementation of Logitech's protocol, read as documentation.\n\n");
+        md.Append(CultureInfo.InvariantCulture, $"**{FromSolaar}**: built from Solaar's implementation of Logitech's protocol, read as documentation. **{FromHeadsetControl}**: built from HeadsetControl's and Arctis Sound Manager's implementations, read as documentation.\n\n");
         md.Append("| Device | Type | USB id | Status | Notes |\n|---|---|---|---|---|\n");
         foreach (var row in All())
             md.Append(CultureInfo.InvariantCulture, $"| {row.Name} | {row.Type} | {row.UsbIds} | {row.Status} | {row.Notes} |\n");
