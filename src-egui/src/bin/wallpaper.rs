@@ -63,14 +63,6 @@ struct WallpaperHost {
     /// Whether "still not attached" was logged for the current wait.
     attach_warned: bool,
     last_parent_check: Instant,
-    /// Last window height we fit to the portrait content, so we only re-dispatch
-    /// `InnerSize` when the rendered content height actually changes. `None`
-    /// forces a fit on the next frame (startup, or after a panel-set change).
-    last_fitted_height: Option<f32>,
-    /// Re-fit for a few frames after launch: early `InnerSize` commands can be
-    /// dropped before the window is fully realized, which would leave a black gap
-    /// or a clipped bottom panel until something else triggers a resize.
-    startup_fit_frames: u8,
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error (e.g. a hybrid iGPU/dGPU switch). The
     /// main app's `update_wallpaper_mode` supervisor already respawns this
@@ -88,6 +80,8 @@ struct WallpaperHost {
     /// The profile uses floating panels (`Settings::floating_mode`) — fixed
     /// for this host's life; a change restarts it.
     floating: bool,
+    /// The dashboard window's starting size (#663).
+    dashboard_size: [f32; 2],
     /// Floating panels' scale (`Settings::floating_panel_scale`).
     panel_scale: f32,
     /// What the panel windows were built from; a change (another profile's
@@ -96,6 +90,9 @@ struct WallpaperHost {
     /// fresh host is the simple way to move them.
     panels_layout: String,
 }
+
+/// The key of the one window that draws the whole dashboard (#663).
+const DASHBOARD: &str = "dashboard";
 
 /// One floating panel's window in the wallpaper (#170).
 struct PanelWindow {
@@ -162,8 +159,18 @@ impl WallpaperHost {
                 p.started = true;
             }
             let title = format!("RIGStats Wallpaper \u{2014} {}", p.key);
-            let w = floating_panel_w(self.runtime.is_compact(&p.key), sc);
-            let h = panel_initial_h(&p.key) * sc;
+            let is_dashboard = p.key == DASHBOARD;
+            let [w, h] = if is_dashboard {
+                self.dashboard_size
+            } else {
+                [
+                    floating_panel_w(self.runtime.is_compact(&p.key), sc),
+                    panel_initial_h(&p.key) * sc,
+                ]
+            };
+            let profile = self.profile.clone();
+            let shown = self.runtime.visible_panels.clone();
+            let spacing = self.runtime.panel_spacing;
             let builder = egui::ViewportBuilder::default()
                 .with_title(title.clone())
                 .with_inner_size([w, h])
@@ -183,9 +190,24 @@ impl WallpaperHost {
                 |cui, _class| {
                     let cctx = cui.ctx().clone();
                     egui::CentralPanel::default()
-                        .frame(egui::Frame::NONE.fill(egui::Color32::TRANSPARENT))
+                        .frame(egui::Frame::NONE.fill(if is_dashboard {
+                            theme::premul(theme::PANEL_FILL, opacity)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        }))
                         .show(cui, |ui| {
-                            view.draw_one_panel(ui, &p.key, sc, opacity, None);
+                            if !is_dashboard {
+                                view.draw_one_panel(ui, &p.key, sc, opacity, None);
+                            } else if profile_is_landscape(&profile) {
+                                let ref_h = profile_to_size(&profile)[1];
+                                view.render_landscape_grid(ui, &shown, None, false, ref_h, opacity);
+                            } else {
+                                let psc = profile_scale(&profile);
+                                for panel in &shown {
+                                    view.draw_one_panel(ui, panel, psc, opacity, None);
+                                    ui.add_space((spacing * psc).round());
+                                }
+                            }
                             // Fit the height to the content, only when it changed.
                             let used_h = ui.min_rect().height().round();
                             let current_h = cctx
@@ -290,39 +312,19 @@ impl WallpaperHost {
         // Picked from the main app's tray "GPU" submenu or Settings — the
         // only ways to change it while the dashboard is click-through.
         *self.preferred_gpu.lock_safe() = s.preferred_gpu.clone();
-        if self.runtime.apply_settings(&s) {
-            // Panel set changed → content height changed; force a re-fit.
-            self.last_fitted_height = None;
-        }
-        let new_op = s.opacity.clamp(0.1, 1.0) as f32;
-        if (new_op - self.opacity).abs() > f32::EPSILON {
-            self.opacity = new_op;
-            #[cfg(windows)]
-            win_opacity::set_opacity(self.hwnd, self.opacity);
-        }
+        // The dashboard window fits its height to the content each frame.
+        self.runtime.apply_settings(&s);
+        // Read by every window each frame.
+        self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
         false
     }
 }
 
 impl eframe::App for WallpaperHost {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // Floating panels (#170): the host's own window is only an invisible
-        // anchor — the panels are their own windows.
-        if self.floating {
-            return [0.0; 4];
-        }
-        // Premultiplied, opacity-driven fill for the DComp-composited swap chain
-        // (see `wgpu_options` in `main()`) — WS_EX_LAYERED-based window opacity
-        // is rejected once reparented into WorkerW, so per-pixel alpha here is
-        // the replacement (issue #131). `theme::premul` returns values already
-        // premultiplied, matching the swap chain's `PreMultiplied` alpha mode.
-        let c = theme::premul(theme::PANEL_FILL, self.opacity);
-        [
-            c.r() as f32 / 255.0,
-            c.g() as f32 / 255.0,
-            c.b() as f32 / 255.0,
-            c.a() as f32 / 255.0,
-        ]
+        // Only an invisible anchor: the dashboard (#663) or the floating
+        // panels (#170) are their own windows.
+        [0.0; 4]
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -356,7 +358,6 @@ impl eframe::App for WallpaperHost {
         if self.hwnd == 0 {
             self.hwnd = win_opacity::find_hwnd(TITLE);
             if self.hwnd != 0 {
-                win_opacity::set_opacity(self.hwnd, self.opacity);
                 // Required for the DComp-backed swap chain (see `wgpu_options` in
                 // `main()`) to actually composite transparently — see doc comment
                 // on `set_no_redirection_bitmap` (issue #131 spike).
@@ -417,64 +418,15 @@ impl eframe::App for WallpaperHost {
             }
         }
 
-        // Floating panels (#170): each panel in its own window; the host's own
-        // window stays an invisible 1x1 anchor.
-        if self.floating {
-            #[cfg(windows)]
-            {
-                let ctx = ui.ctx().clone();
-                self.render_panel_windows(&ctx);
-            }
-            ui.ctx().request_repaint_after(Duration::from_secs(1));
-            return;
+        // Every window the host shows is its own viewport: the dashboard, or
+        // each floating panel (#170). The host's own window stays a 1x1
+        // anchor — drawing the dashboard in it kept a thread of AMD's DX12
+        // driver at 100 % of a core (#663).
+        #[cfg(windows)]
+        {
+            let ctx = ui.ctx().clone();
+            self.render_panel_windows(&ctx);
         }
-
-        // Render the dashboard filling the window (no drag handle in wallpaper
-        // mode — it is display-only). There is no Fill Screen toggle in wallpaper
-        // mode (the whole point is a small widget over the real desktop), so the
-        // landscape grid always uses natural, non-stretched cell sizes just like
-        // the portrait stack — both fit the window to their actual content below.
-        let panels = self.runtime.visible_panels.clone();
-        if profile_is_landscape(&self.profile) {
-            let ref_h = profile_to_size(&self.profile)[1];
-            self.runtime.view().render_landscape_grid(
-                ui,
-                &panels,
-                None,
-                false,
-                ref_h,
-                self.opacity,
-            );
-        } else {
-            let sc = profile_scale(&self.profile);
-            for panel in &panels {
-                self.runtime
-                    .view()
-                    .draw_one_panel(ui, panel, sc, self.opacity, None);
-                ui.add_space((self.runtime.panel_spacing * sc).round());
-            }
-        }
-
-        // Fit the window height to the rendered content so no black gap appears
-        // below it (the profile height is the full monitor span; the actual
-        // content is usually shorter). Mirrors the main app's per-frame fit.
-        let used_h = ui.min_rect().height();
-        if self.startup_fit_frames > 0 {
-            self.startup_fit_frames -= 1;
-            self.last_fitted_height = None;
-            ui.ctx().request_repaint();
-        }
-        let changed = self
-            .last_fitted_height
-            .map(|h| (h - used_h).abs() > 0.5)
-            .unwrap_or(true);
-        if used_h > 10.0 && changed {
-            self.last_fitted_height = Some(used_h);
-            let [w, _] = profile_to_size(&self.profile);
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, used_h)));
-        }
-
         ui.ctx().request_repaint_after(Duration::from_secs(1));
     }
 }
@@ -546,11 +498,19 @@ fn main() {
     // Floating panels (#170): the host's own window is a 1x1 anchor; the
     // panels get their own windows.
     let floating = s.floating_mode;
-    let size = if floating { [1.0, 1.0] } else { size };
+    let dashboard_size = size;
+    let size = [1.0, 1.0];
     let panels = if floating {
         panel_windows(&s)
     } else {
-        Vec::new()
+        vec![PanelWindow {
+            key: DASHBOARD.to_string(),
+            pos,
+            dcomp: Default::default(),
+            started: false,
+            hwnd: 0,
+            attached: false,
+        }]
     };
     let layout = if floating {
         panels_layout(&s)
@@ -711,11 +671,10 @@ fn main() {
                 unattached_since: None,
                 attach_warned: false,
                 last_parent_check: Instant::now(),
-                last_fitted_height: None,
-                startup_fit_frames: 8,
                 gpu_lost,
                 preferred_gpu: preferred_gpu_arc,
                 floating,
+                dashboard_size,
                 panel_scale,
                 panels,
                 panels_layout: layout,
