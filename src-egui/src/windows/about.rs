@@ -36,6 +36,30 @@ const LINKS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// A small cup in Buy Me a Coffee's yellow, painted so it stays sharp at any
+/// DPI (#650): handle, then the body over it, then the lid.
+fn coffee_cup(ui: &mut egui::Ui, dc: &DialogColors) {
+    use egui::{pos2, vec2, Color32, Rect, Shape, Stroke};
+    let (r, _) = ui.allocate_exact_size(vec2(14.0, 14.0), egui::Sense::hover());
+    let p = ui.painter();
+    let at = |x: f32, y: f32| pos2(r.left() + x, r.top() + y);
+    let yellow = Color32::from_rgb(255, 221, 0);
+    let edge = Stroke::new(1.0, dc.title);
+    p.circle_stroke(at(10.5, 7.5), 2.5, Stroke::new(1.5, dc.title));
+    p.add(Shape::convex_polygon(
+        vec![at(2.0, 4.0), at(11.0, 4.0), at(9.5, 13.0), at(3.5, 13.0)],
+        yellow,
+        edge,
+    ));
+    p.rect(
+        Rect::from_min_max(at(1.0, 2.0), at(12.0, 4.0)),
+        1.0,
+        yellow,
+        edge,
+        egui::StrokeKind::Middle,
+    );
+}
+
 pub fn show(
     ui: &mut egui::Ui,
     main_ctx: &egui::Context,
@@ -111,6 +135,10 @@ pub fn show(
                             egui::RichText::new(text).size(12.0).color(dc.link),
                             url,
                         ));
+                        // Right-to-left row: this lands left of the link.
+                        if url.contains("buymeacoffee") {
+                            coffee_cup(ui, dc);
+                        }
                     });
                 }
             });
