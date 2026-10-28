@@ -130,6 +130,7 @@ prints the log's errors and the app's windows.
 cargo build --manifest-path src-egui/Cargo.toml
 pwsh -File tools\smoke-app.ps1                  # all modes
 pwsh -File tools\smoke-app.ps1 -Only wallpaper  # one mode
+pwsh -File tools\smoke-app.ps1 -Only wallpaper,wallpaper-floating  # several
 pwsh -File tools\smoke-app.ps1 -Restart         # start the installed app afterwards
 ```
 
@@ -159,11 +160,14 @@ prints the CPU of `rigstats` and `rigstats-wallpaper` (% of one core) over a
 core for ~30–120 s after a process starts rendering (#515), so a window right
 after start measures that burst, not the steady cost — compare the later
 windows. Stops every running RIGStats first (the installed app too) and puts
-your settings back afterwards.
+your settings back afterwards. If the PC sleeps during a window, that window
+is reported as invalid and the run ends: the process's CPU time stops while
+the clock runs on, so it and every later window would be wrong.
 
 ```powershell
 pwsh -File tools\measure-startup-cpu.ps1 -Exe "$env:ProgramFiles\RIGStats\rigstats.exe"
 pwsh -File tools\measure-startup-cpu.ps1 -Exe .\target\release\rigstats.exe -Layer normal
+pwsh -File tools\measure-startup-cpu.ps1 -Exe .\target\release\rigstats.exe -At 1,12,24,36 -Window 10
 ```
 
 ## `openrgb-asus-watch.ps1`

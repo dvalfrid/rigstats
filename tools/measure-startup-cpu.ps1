@@ -12,19 +12,23 @@
 # wallpaper), floating panels and no overlay, starts -Exe, and prints the CPU
 # of rigstats and rigstats-wallpaper (% of one core) over a 20 s window
 # starting at each of -At seconds after start. Then stops them and puts your
-# settings back; a copy stays next to them (.measure-backup) if that fails.
+# settings back; a copy stays next to them (.measure-backup-<pid>) if that
+# fails. A window the PC slept in is reported as invalid and ends the run.
 # See tools/README.md.
 param(
     [Parameter(Mandatory)][string]$Exe,
     [string]$Layer = 'wallpaper',
     [switch]$Floating,
-    [int[]]$At = @(15, 60, 120, 180, 240),
+    # Strings: `pwsh -File` passes `-At 15,60` as one string "15,60".
+    [string[]]$At = @('15', '60', '120', '180', '240'),
     [int]$Window = 20
 )
+$times = @($At -split ',' | ForEach-Object { [int]$_ })
 
 $settingsPath = Join-Path $env:APPDATA 'se.codeby.rigstats\rigstats-settings.json'
 $orig = [IO.File]::ReadAllBytes($settingsPath)
-$backup = "$settingsPath.measure-backup"
+# One backup per run: another run's clean-up must not delete this one's.
+$backup = "$settingsPath.measure-backup-$PID"
 [IO.File]::WriteAllBytes($backup, $orig)
 
 function Stop-RigStats {
@@ -44,16 +48,26 @@ try {
     "$Exe — layer $Layer, floating $([bool]$Floating)"
     $start = Get-Date
     Start-Process $Exe | Out-Null
-    foreach ($t in $At) {
+    foreach ($t in $times) {
         $wait = $t - ((Get-Date) - $start).TotalSeconds
         if ($wait -gt 0) { Start-Sleep -Seconds $wait }
         $procs = @(Get-Process rigstats, rigstats-wallpaper -ErrorAction SilentlyContinue)
         $t0 = @{}
         $procs | ForEach-Object { $t0[$_.Id] = $_.TotalProcessorTime }
+        $w0 = Get-Date
         Start-Sleep -Seconds $Window
+        # The PC slept (or the script stalled) inside the window: the CPU time
+        # no longer covers it, and every later window is off too.
+        $took = ((Get-Date) - $w0).TotalSeconds
+        if ($took -gt $Window + 5) {
+            '{0,4}-{1,-4}s: invalid — the window took {2:N0} s (the PC slept?); stopping' -f $t, ($t + $Window), $took
+            break
+        }
         $cpu = $procs | ForEach-Object {
             $_.Refresh()
-            '{0} {1:N1} %' -f $_.ProcessName, (($_.TotalProcessorTime - $t0[$_.Id]).TotalMilliseconds / ($Window * 10))
+            if ($_.HasExited) { "$($_.ProcessName) exited" } else {
+                '{0} {1:N1} %' -f $_.ProcessName, (($_.TotalProcessorTime - $t0[$_.Id]).TotalMilliseconds / ($Window * 10))
+            }
         }
         '{0,4}-{1,-4}s: {2}' -f $t, ($t + $Window), ($cpu -join ', ')
     }
