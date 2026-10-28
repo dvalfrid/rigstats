@@ -319,6 +319,16 @@ impl BatteryPoll {
     }
 }
 
+/// A Windows filter binding on an adapter (`WiFi-Native WiFi Filter
+/// Driver-0000`, `Ethernet-QoS Packet Scheduler-0000`): sysinfo lists it
+/// beside the adapter with the same traffic, so picking the busiest
+/// interface flipped between the two each tick (#668).
+fn is_filter_binding(name: &str) -> bool {
+    name.rsplit_once('-').is_some_and(|(adapter, suffix)| {
+        !adapter.is_empty() && suffix.len() == 4 && suffix.bytes().all(|b| b.is_ascii_digit())
+    })
+}
+
 // ── Poll loop (tokio runtime) ─────────────────────────────────────────────────
 
 /// Which pings this tick sends (#468): the gateway's while the Network panel
@@ -570,7 +580,7 @@ pub async fn poll_loop(
         let mut best_iface = "--".to_string();
         let mut best_up = 0.0f64;
         let mut best_down = 0.0f64;
-        for (name, data) in networks.iter() {
+        for (name, data) in networks.iter().filter(|(n, _)| !is_filter_binding(n)) {
             let up = data.transmitted() as f64 * 8.0 / 1_000_000.0 / elapsed;
             let down = data.received() as f64 * 8.0 / 1_000_000.0 / elapsed;
             if up + down > best_up + best_down {
@@ -887,6 +897,27 @@ mod tests {
         assert_eq!(pings_wanted(&s, true, false), (false, false));
         s.overlay_enabled = true;
         assert_eq!(pings_wanted(&s, true, false), (true, false));
+    }
+
+    #[test]
+    fn filter_bindings_are_not_adapters() {
+        for name in [
+            "WiFi-Native WiFi Filter Driver-0000",
+            "WiFi-WFP Native MAC Layer LightWeight Filter-0000",
+            "Ethernet-QoS Packet Scheduler-0000",
+            "Ethernet 2-Npcap Packet Driver (NPCAP)-0001",
+        ] {
+            assert!(is_filter_binding(name), "{name}");
+        }
+        for name in [
+            "WiFi",
+            "Ethernet",
+            "Ethernet 2",
+            "vEthernet (Default Switch)",
+            "Wi-Fi",
+        ] {
+            assert!(!is_filter_binding(name), "{name}");
+        }
     }
 
     #[test]
