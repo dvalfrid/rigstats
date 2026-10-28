@@ -78,6 +78,8 @@ if (SidecarLog.FileEnabled)
     builder.Services.AddHostedService(_ => new BackgroundStartupTask("Start-up checks", () =>
     {
         SidecarLog.Log($"[rigstats-control] {OtherSoftware.Summary()}");
+        // ASUS laptops (#234): read-only for now, for the first live test.
+        AsusAcpi.LogSnapshot();
         LogEarlierCrashes(Path.Combine(DataDirectory.DefaultPath, "crash-report-mark.txt"), DataDirectory.DumpPath);
     }));
 }
