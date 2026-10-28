@@ -220,16 +220,20 @@ impl WallpaperHost {
                     egui::CentralPanel::default()
                         .frame(egui::Frame::NONE.fill(fill))
                         .show(cui, |ui| {
-                            match &p.content {
+                            // Measured on the content: a CentralPanel's own
+                            // `min_rect` is the whole window, so it could only
+                            // grow — a landscape dashboard stayed at its
+                            // start-up estimate, ~200 px too tall.
+                            let content = ui.scope(|ui| match &p.content {
                                 WindowContent::Dashboard { .. } => {
                                     draw_dashboard(ui, &view, profile, shown, opacity);
                                 }
                                 WindowContent::Panel(key) => {
                                     view.draw_one_panel(ui, key, sc, opacity, None);
                                 }
-                            }
+                            });
                             // Fit the height to the content, only when it changed.
-                            let used_h = ui.min_rect().height().round();
+                            let used_h = content.response.rect.height().round();
                             let current_h = cctx
                                 .input(|i| i.viewport().inner_rect)
                                 .map_or(0.0, |r| r.height().round());
