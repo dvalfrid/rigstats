@@ -422,10 +422,10 @@ impl RigStatsApp {
 
     /// Drive wallpaper mode each frame — the decisions are in
     /// `wallpaper_supervisor`; this carries out the window side. Wallpaper
-    /// mode is on when `window_layer == "wallpaper"` and floating mode is off
-    /// (floating wins if both are set).
+    /// mode is on when `window_layer == "wallpaper"` — with floating panels
+    /// too: the host then draws each panel in its own window (#170).
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
-        let want = self.window_layer == "wallpaper" && !self.floating.mode;
+        let want = self.window_layer == "wallpaper";
         let now = Instant::now();
         let effects = self.wallpaper.transition(
             want,
@@ -489,9 +489,9 @@ impl RigStatsApp {
                         -32000.0, -32000.0,
                     )));
                 }
-                // Left because floating mode was switched on: the window must
-                // stay parked off-screen — restoring it would show an empty
-                // dashboard-sized window where the panels were.
+                // Left with floating panels on: the window must stay parked
+                // off-screen — restoring it would show an empty dashboard-sized
+                // window where the panels were.
                 Effect::Leave if self.floating.mode => {}
                 Effect::Leave => self.restore_main_window(ctx),
                 Effect::Log(LogLevel::Debug, m) => debug::log_debug(&self.dir, &m),
@@ -1335,7 +1335,7 @@ fn main() {
 
     // Wallpaper mode at startup: the host owns the on-screen dashboard, so place
     // our own window off-screen from the start to avoid a one-frame flash.
-    let start_wallpaper = s.window_layer == "wallpaper" && !s.floating_mode;
+    let start_wallpaper = s.window_layer == "wallpaper";
     if start_wallpaper {
         pos_x = -32000.0;
         pos_y = -32000.0;

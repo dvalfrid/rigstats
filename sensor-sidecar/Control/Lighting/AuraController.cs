@@ -25,6 +25,11 @@ public interface ILightingDevice
     /// fail the profile apply. Null when fine.
     string? Problem => null;
 
+    /// True where our protocol has only a fixed colour, so breathing and
+    /// colour cycle show as that colour — the Lighting tab says so on the
+    /// device's row (#659).
+    bool StaticOnly => false;
+
     /// One effect and colour on every zone. Throws when the device is gone.
     void Apply(AuraEffect effect, byte red, byte green, byte blue);
 

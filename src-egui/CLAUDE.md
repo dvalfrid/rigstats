@@ -9,7 +9,7 @@ Module catalogue for `src-egui/src/`. The dialog design and lifecycle contract i
 - **`wallpaper_supervisor.rs`** — `WallpaperSupervisor`: wallpaper-mode enter/leave and host spawn/backoff/teardown decisions behind a `Host` trait, unit-tested
 - Start-up smoke test for every window mode: `pwsh -File tools\smoke-app.ps1` (see `tools/README.md`) — run it after changes to start-up, window modes or `RigStatsApp`'s structure
 - **`dashboard.rs`** — `DashboardRuntime`: owned telemetry→renderer glue (sparklines, theme, thresholds, textures, `drain`/`apply_settings`/`view`); `DashboardView<'a>`: borrowed per-frame render state; `PanelThresholds` (warn/crit pairs)
-- **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears
+- **`bin/wallpaper.rs`** — `rigstats-wallpaper` host: attaches into WorkerW, runs own `poll_loop`, exits when parent PID disappears; the host window is a 1×1 anchor and the dashboard — or, with floating panels on, each panel (#170) — is its own transparent window in WorkerW (`HostWindow` / `WindowContent`, `render_windows`; a layout change restarts the host)
 - **`geometry.rs`** — `profile_to_size`, monitor enumeration, pinned/auto-target position resolution; bulk of the unit tests
 - **`poll.rs`** — `poll_loop` (tokio, ~1 Hz); `PollStats`/`DriveInfo`/`ProcessInfo` data types; `PollMode` (`Full`, or `Light` in wallpaper mode; shared via `PollModeHandle`)
 - **`we_link.rs`** — `WeLink`: shared between the Control Center's Wallpaper Engine group and the main app — Start/Stop/Resume requests in, running / stopped / starting / last error out (#306)

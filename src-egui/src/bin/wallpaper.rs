@@ -1,12 +1,14 @@
 //! `rigstats-wallpaper` — the WorkerW desktop-wallpaper host process.
 //!
 //! Spawned and supervised by the main `rigstats` app when the user selects the
-//! "Desktop Wallpaper" window layer. It is a minimal eframe app: a single
-//! borderless window that fills the target monitor, renders the dashboard via
-//! [`rigstats_egui::dashboard::DashboardView`], and reparents itself into the
-//! desktop `WorkerW` layer. Kept as a separate process so that an Explorer
-//! restart (which destroys the WorkerW hierarchy and any child window) cannot
-//! take down the main app — the supervisor relaunches the host instead. While
+//! "Desktop Wallpaper" window layer. It is a minimal eframe app: its own
+//! window is a transparent 1x1 anchor, and the dashboard (or each floating
+//! panel) is a borderless viewport drawn via
+//! [`rigstats_egui::dashboard::DashboardView`]; all of them are reparented
+//! into the desktop `WorkerW` layer. Kept as a separate process so that an
+//! Explorer restart (which destroys the WorkerW hierarchy and any child
+//! window) cannot take down the main app — the supervisor relaunches the host
+//! instead. While
 //! active the host is the telemetry owner: it runs `poll_loop`, owns the sensor
 //! pipe, and does CSV logging (the main app stops polling in wallpaper mode, or
 //! only polls in light mode to feed the game overlay). See `docs/architecture.md`.
@@ -14,9 +16,9 @@
 
 use eframe::egui;
 use rigstats_backend::{debug, settings};
-use rigstats_egui::dashboard::DashboardRuntime;
+use rigstats_egui::dashboard::{DashboardRuntime, DashboardView};
 use rigstats_egui::geometry::{
-    compute_landscape_window_height, compute_window_height, guard_panel_position,
+    compute_landscape_window_height, compute_window_height, floating_panel_w, guard_panel_position,
     pick_window_rect_for_profile, profile_is_landscape, profile_scale, profile_to_size,
 };
 use rigstats_egui::gpu_guard::{
@@ -24,6 +26,7 @@ use rigstats_egui::gpu_guard::{
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
+use rigstats_egui::tray::panel_initial_h;
 use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
 use rigstats_egui::{win32_wallpaper, win_opacity};
@@ -62,14 +65,6 @@ struct WallpaperHost {
     /// Whether "still not attached" was logged for the current wait.
     attach_warned: bool,
     last_parent_check: Instant,
-    /// Last window height we fit to the portrait content, so we only re-dispatch
-    /// `InnerSize` when the rendered content height actually changes. `None`
-    /// forces a fit on the next frame (startup, or after a panel-set change).
-    last_fitted_height: Option<f32>,
-    /// Re-fit for a few frames after launch: early `InnerSize` commands can be
-    /// dropped before the window is fully realized, which would leave a black gap
-    /// or a clipped bottom panel until something else triggers a resize.
-    startup_fit_frames: u8,
     /// Set by `gpu_guard::install_gpu_loss_guard`'s callbacks when wgpu
     /// reports a fatal device error (e.g. a hybrid iGPU/dGPU switch). The
     /// main app's `update_wallpaper_mode` supervisor already respawns this
@@ -79,6 +74,250 @@ struct WallpaperHost {
     /// Shared with `poll_loop`; refreshed from settings so a GPU picked in the
     /// main app applies here without a relaunch.
     preferred_gpu: Arc<Mutex<Option<String>>>,
+    /// The windows the host shows in WorkerW: the one dashboard, or each
+    /// visible floating panel (#170). The host's own window is a transparent
+    /// 1x1 px anchor either way.
+    windows: Vec<HostWindow>,
+    /// The profile uses floating panels (`Settings::floating_mode`) — fixed
+    /// for this host's life; a change restarts it.
+    floating: bool,
+    /// Floating panels' scale (`Settings::floating_panel_scale`).
+    panel_scale: f32,
+    /// The host is closing (left wallpaper mode, another profile or layout):
+    /// no window is shown again.
+    closing: bool,
+    /// What the panel windows were built from; a change (another profile's
+    /// positions, a panel shown or hidden, a new size) restarts the host —
+    /// positions are only given while a window is still top-level, so a
+    /// fresh host is the simple way to move them.
+    panels_layout: String,
+}
+
+/// What one of the host's windows draws.
+enum WindowContent {
+    /// The whole dashboard, starting at `size` and fitting its height to the
+    /// content.
+    Dashboard { size: [f32; 2] },
+    /// One floating panel (#170), by its panel key.
+    Panel(String),
+}
+
+impl WindowContent {
+    /// The name in the window's title and the log.
+    fn name(&self) -> &str {
+        match self {
+            Self::Dashboard { .. } => "dashboard",
+            Self::Panel(key) => key,
+        }
+    }
+}
+
+/// One window the host shows in WorkerW.
+struct HostWindow {
+    content: WindowContent,
+    /// Screen position: the dashboard's from `wallpaper_position`, a panel's
+    /// from the profile's `panel_layouts` like floating mode.
+    pos: [f32; 2],
+    dcomp: rigstats_egui::dcomp_burst::DcompRevealBurst,
+    started: bool,
+    hwnd: isize,
+    attached: bool,
+}
+
+impl HostWindow {
+    fn new(content: WindowContent, pos: [f32; 2]) -> Self {
+        Self {
+            content,
+            pos,
+            dcomp: Default::default(),
+            started: false,
+            hwnd: 0,
+            attached: false,
+        }
+    }
+}
+
+/// The panel windows for floating panels in the wallpaper: every visible
+/// panel at its saved floating position, or the floating mode's default.
+fn panel_windows(s: &settings::Settings) -> Vec<HostWindow> {
+    s.visible_panels
+        .iter()
+        .enumerate()
+        .map(|(idx, key)| {
+            let default_pos = [100.0 + idx as f32 * 20.0, 80.0 + idx as f32 * 30.0];
+            let saved = s
+                .panel_layouts
+                .get(key)
+                .map_or(default_pos, |p| [p.x as f32, p.y as f32]);
+            HostWindow::new(
+                WindowContent::Panel(key.clone()),
+                guard_panel_position(saved, default_pos),
+            )
+        })
+        .collect()
+}
+
+/// Everything the panel windows are built from, as one comparable string.
+fn panels_layout(s: &settings::Settings) -> String {
+    let mut parts = vec![
+        format!("scale {:.2}", s.floating_panel_scale),
+        format!("compact {:?}", s.compact_panels),
+    ];
+    for key in &s.visible_panels {
+        let pos = s.panel_layouts.get(key).map(|p| (p.x, p.y));
+        parts.push(format!("{key} {pos:?}"));
+    }
+    parts.join("; ")
+}
+
+impl WallpaperHost {
+    /// The host's windows — the dashboard, or the floating panels (#170): each
+    /// gets the floating panels' hide-until-settled DComp burst
+    /// (`app/floating.rs`, #169) and is reparented into WorkerW as soon as its
+    /// window exists, still hidden — the host's own window is attached the
+    /// same way. Display-only: no drag or padlock here.
+    #[cfg(windows)]
+    fn render_windows(&mut self, ctx: &egui::Context) {
+        let mut windows = std::mem::take(&mut self.windows);
+        let sc = self.panel_scale;
+        let opacity = self.opacity;
+        for p in &mut windows {
+            if !p.started {
+                p.dcomp.start(true);
+                p.started = true;
+            }
+            let title = format!("RIGStats Wallpaper \u{2014} {}", p.content.name());
+            let ([w, h], fill) = match &p.content {
+                WindowContent::Dashboard { size } => {
+                    (*size, theme::premul(theme::PANEL_FILL, opacity))
+                }
+                // A floating panel paints its own frame.
+                WindowContent::Panel(key) => (
+                    [
+                        floating_panel_w(self.runtime.is_compact(key), sc),
+                        panel_initial_h(key) * sc,
+                    ],
+                    egui::Color32::TRANSPARENT,
+                ),
+            };
+            let profile = &self.profile;
+            let shown = &self.runtime.visible_panels;
+            let builder = egui::ViewportBuilder::default()
+                .with_title(title.clone())
+                .with_inner_size([w, h])
+                .with_position(p.pos)
+                .with_decorations(false)
+                // No DWM frame behind a transparent window (third_party/egui-winit).
+                .with_has_shadow(false)
+                .with_resizable(false)
+                .with_taskbar(false)
+                .with_transparent(true)
+                .with_visible(!p.dcomp.pending_reveal());
+            let view = self.runtime.view();
+            let dir = &self.dir;
+            ctx.show_viewport_immediate(
+                egui::ViewportId::from_hash_of(&title),
+                builder,
+                |cui, _class| {
+                    let cctx = cui.ctx().clone();
+                    egui::CentralPanel::default()
+                        .frame(egui::Frame::NONE.fill(fill))
+                        .show(cui, |ui| {
+                            // Measured on the content: a CentralPanel's own
+                            // `min_rect` is the whole window, so it could only
+                            // grow — a landscape dashboard stayed at its
+                            // start-up estimate, ~200 px too tall.
+                            let content = ui.scope(|ui| match &p.content {
+                                WindowContent::Dashboard { .. } => {
+                                    draw_dashboard(ui, &view, profile, shown, opacity);
+                                }
+                                WindowContent::Panel(key) => {
+                                    view.draw_one_panel(ui, key, sc, opacity, None);
+                                }
+                            });
+                            // Fit the height to the content, only when it changed.
+                            let used_h = content.response.rect.height().round();
+                            let current_h = cctx
+                                .input(|i| i.viewport().inner_rect)
+                                .map_or(0.0, |r| r.height().round());
+                            if used_h > 10.0 && (used_h - current_h).abs() > 0.5 {
+                                cctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(
+                                    egui::Vec2::new(w, used_h),
+                                ));
+                            }
+                        });
+                    let tick = p.dcomp.tick(|| win_opacity::find_hwnd(&title), true);
+                    if tick.just_started {
+                        p.hwnd = p.dcomp.hwnd();
+                        // A genuine resize on creation, as floating mode does.
+                        cctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
+                            w + 2.0,
+                            h,
+                        )));
+                    }
+                    if tick.reapply_style {
+                        win_opacity::set_no_redirection_bitmap(p.dcomp.hwnd());
+                    }
+                    // Into WorkerW once the window exists, and back in if
+                    // Explorer rebuilt the hierarchy; logged only on a change.
+                    if p.hwnd != 0 && (!p.attached || !win32_wallpaper::is_attached(p.hwnd)) {
+                        let was = p.attached;
+                        p.attached = win32_wallpaper::attach(p.hwnd);
+                        if p.attached != was || was {
+                            debug::append_debug_log(
+                                dir,
+                                &format!(
+                                    "rigstats-wallpaper: panel {} {}",
+                                    p.content.name(),
+                                    match (was, p.attached) {
+                                        (_, false) => "waits for a wallpaper WorkerW",
+                                        (true, true) => "attached to WorkerW again",
+                                        (false, true) => "attached to WorkerW",
+                                    }
+                                ),
+                            );
+                        }
+                    }
+                    if tick.force_repaint {
+                        win_opacity::force_repaint(p.dcomp.hwnd());
+                        cctx.request_repaint();
+                    }
+                    if tick.reveal {
+                        cctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    }
+                },
+            );
+        }
+        self.windows = windows;
+    }
+}
+
+/// The whole dashboard: the landscape grid at natural cell sizes (there is no
+/// Fill Screen in wallpaper mode), or the portrait stack.
+#[cfg(windows)]
+fn draw_dashboard(
+    ui: &mut egui::Ui,
+    view: &DashboardView<'_>,
+    profile: &str,
+    shown: &[String],
+    opacity: f32,
+) {
+    // The main window's drag strip (`app/main_window.rs`), empty here: the
+    // panels sit where they do in the other layers, not 17 px higher.
+    ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), theme::DRAG_HANDLE_H),
+        egui::Sense::hover(),
+    );
+    if profile_is_landscape(profile) {
+        let ref_h = profile_to_size(profile)[1];
+        view.render_landscape_grid(ui, shown, None, false, ref_h, opacity);
+    } else {
+        let sc = profile_scale(profile);
+        for panel in shown {
+            view.draw_one_panel(ui, panel, sc, opacity, None);
+            ui.add_space((view.panel_spacing * sc).round());
+        }
+    }
 }
 
 impl WallpaperHost {
@@ -91,12 +330,27 @@ impl WallpaperHost {
     #[must_use]
     fn refresh_settings(&mut self) -> bool {
         let s = settings::load_settings(&self.dir);
-        // Left wallpaper mode (toggled floating on, or switched window layer):
-        // the supervisor expects us to exit so it can take the dashboard back.
-        if s.floating_mode || s.window_layer != "wallpaper" {
+        // Left wallpaper mode (another window layer): the supervisor expects
+        // us to exit so it can take the dashboard back.
+        if s.window_layer != "wallpaper" {
             debug::append_debug_log(
                 &self.dir,
                 "rigstats-wallpaper: wallpaper mode left, closing",
+            );
+            return true;
+        }
+        // Floating panels switched on or off (the profile's choice, #599), or
+        // the panels moved, shown, hidden or resized (#170): a fresh host
+        // builds the right windows at the right places.
+        let layout = if s.floating_mode {
+            panels_layout(&s)
+        } else {
+            String::new()
+        };
+        if s.floating_mode != self.floating || layout != self.panels_layout {
+            debug::log_debug(
+                &self.dir,
+                "rigstats-wallpaper: floating panels changed, closing for relaunch",
             );
             return true;
         }
@@ -113,34 +367,19 @@ impl WallpaperHost {
         // Picked from the main app's tray "GPU" submenu or Settings — the
         // only ways to change it while the dashboard is click-through.
         *self.preferred_gpu.lock_safe() = s.preferred_gpu.clone();
-        if self.runtime.apply_settings(&s) {
-            // Panel set changed → content height changed; force a re-fit.
-            self.last_fitted_height = None;
-        }
-        let new_op = s.opacity.clamp(0.1, 1.0) as f32;
-        if (new_op - self.opacity).abs() > f32::EPSILON {
-            self.opacity = new_op;
-            #[cfg(windows)]
-            win_opacity::set_opacity(self.hwnd, self.opacity);
-        }
+        // The dashboard window fits its height to the content each frame.
+        self.runtime.apply_settings(&s);
+        // Read by every window each frame.
+        self.opacity = s.opacity.clamp(0.1, 1.0) as f32;
         false
     }
 }
 
 impl eframe::App for WallpaperHost {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        // Premultiplied, opacity-driven fill for the DComp-composited swap chain
-        // (see `wgpu_options` in `main()`) — WS_EX_LAYERED-based window opacity
-        // is rejected once reparented into WorkerW, so per-pixel alpha here is
-        // the replacement (issue #131). `theme::premul` returns values already
-        // premultiplied, matching the swap chain's `PreMultiplied` alpha mode.
-        let c = theme::premul(theme::PANEL_FILL, self.opacity);
-        [
-            c.r() as f32 / 255.0,
-            c.g() as f32 / 255.0,
-            c.b() as f32 / 255.0,
-            c.a() as f32 / 255.0,
-        ]
+        // Only an invisible anchor: the dashboard or the floating panels
+        // (#170) are their own windows.
+        [0.0; 4]
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
@@ -174,7 +413,6 @@ impl eframe::App for WallpaperHost {
         if self.hwnd == 0 {
             self.hwnd = win_opacity::find_hwnd(TITLE);
             if self.hwnd != 0 {
-                win_opacity::set_opacity(self.hwnd, self.opacity);
                 // Required for the DComp-backed swap chain (see `wgpu_options` in
                 // `main()`) to actually composite transparently — see doc comment
                 // on `set_no_redirection_bitmap` (issue #131 spike).
@@ -200,9 +438,16 @@ impl eframe::App for WallpaperHost {
         if self.last_settings_check.elapsed() >= Duration::from_millis(900) {
             self.last_settings_check = Instant::now();
             if self.refresh_settings() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                return;
+                self.closing = true;
             }
+        }
+        // Closing takes a few frames. Show no window in them: a viewport left
+        // out of one frame is destroyed, and showing it again would create a
+        // fresh top-level window outside WorkerW — a white flash on leaving
+        // wallpaper mode.
+        if self.closing {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
         }
 
         // Re-attach safety net (~1 Hz): if Explorer rebuilt the WorkerW hierarchy
@@ -227,7 +472,8 @@ impl eframe::App for WallpaperHost {
                     if !self.attach_warned && since.elapsed() >= Duration::from_secs(10) {
                         debug::log_warn(
                             &self.dir,
-                            "rigstats-wallpaper: still no wallpaper WorkerW after 10 s — the                              dashboard is a normal window, not in the desktop background",
+                            "rigstats-wallpaper: still no wallpaper WorkerW after 10 s — the \
+                             dashboard is a normal window, not in the desktop background",
                         );
                         self.attach_warned = true;
                     }
@@ -235,52 +481,15 @@ impl eframe::App for WallpaperHost {
             }
         }
 
-        // Render the dashboard filling the window (no drag handle in wallpaper
-        // mode — it is display-only). There is no Fill Screen toggle in wallpaper
-        // mode (the whole point is a small widget over the real desktop), so the
-        // landscape grid always uses natural, non-stretched cell sizes just like
-        // the portrait stack — both fit the window to their actual content below.
-        let panels = self.runtime.visible_panels.clone();
-        if profile_is_landscape(&self.profile) {
-            let ref_h = profile_to_size(&self.profile)[1];
-            self.runtime.view().render_landscape_grid(
-                ui,
-                &panels,
-                None,
-                false,
-                ref_h,
-                self.opacity,
-            );
-        } else {
-            let sc = profile_scale(&self.profile);
-            for panel in &panels {
-                self.runtime
-                    .view()
-                    .draw_one_panel(ui, panel, sc, self.opacity, None);
-                ui.add_space((self.runtime.panel_spacing * sc).round());
-            }
+        // Every window the host shows is its own viewport: the dashboard, or
+        // each floating panel (#170). The host's own window stays a 1x1
+        // anchor, so the dashboard takes the floating panels' path — one way
+        // to create, reveal, attach and fit a window (#664).
+        #[cfg(windows)]
+        {
+            let ctx = ui.ctx().clone();
+            self.render_windows(&ctx);
         }
-
-        // Fit the window height to the rendered content so no black gap appears
-        // below it (the profile height is the full monitor span; the actual
-        // content is usually shorter). Mirrors the main app's per-frame fit.
-        let used_h = ui.min_rect().height();
-        if self.startup_fit_frames > 0 {
-            self.startup_fit_frames -= 1;
-            self.last_fitted_height = None;
-            ui.ctx().request_repaint();
-        }
-        let changed = self
-            .last_fitted_height
-            .map(|h| (h - used_h).abs() > 0.5)
-            .unwrap_or(true);
-        if used_h > 10.0 && changed {
-            self.last_fitted_height = Some(used_h);
-            let [w, _] = profile_to_size(&self.profile);
-            ui.ctx()
-                .send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(w, used_h)));
-        }
-
         ui.ctx().request_repaint_after(Duration::from_secs(1));
     }
 }
@@ -315,11 +524,13 @@ fn main() {
     let profile = s.dashboard_profile.clone();
     let opacity = s.opacity.clamp(0.1, 1.0) as f32;
 
-    // Size the window to fit the dashboard content (the per-frame fit in `ui()`
-    // then refines this estimate): the landscape grid uses natural cell sizes,
-    // the portrait stack its panel-stack height. Never stretch to the full
+    // Size the dashboard window to fit its content (the per-frame fit in
+    // `render_windows` then refines this estimate): the landscape grid uses
+    // natural cell sizes, the portrait stack its panel-stack height. Never stretch to the full
     // profile height — that leaves a black gap below the content. Width is
-    // always the profile width so panel proportions are preserved. Use the
+    // the profile width so panel proportions are preserved, less 2 px in
+    // portrait like the main window (`app/main_window.rs`), so the dashboard
+    // covers the same pixels in every layer. Use the
     // position the user set in a normal layer before switching
     // (s.wallpaper_position) when it is still on a connected monitor; otherwise
     // centre on the matching monitor. The wallpaper shows around it.
@@ -331,7 +542,7 @@ fn main() {
         ]
     } else {
         [
-            pw,
+            pw - 2.0,
             compute_window_height(
                 &s.visible_panels,
                 profile_scale(&profile),
@@ -349,12 +560,35 @@ fn main() {
         Some(p) => guard_panel_position([p[0] as f32, p[1] as f32], centered),
         None => centered,
     };
+    // The host's own window is a 1x1 anchor; the dashboard or the floating
+    // panels (#170) get their own windows.
+    let floating = s.floating_mode;
+    let windows = if floating {
+        panel_windows(&s)
+    } else {
+        vec![HostWindow::new(WindowContent::Dashboard { size }, pos)]
+    };
+    let size = [1.0, 1.0];
+    let layout = if floating {
+        panels_layout(&s)
+    } else {
+        String::new()
+    };
+    let panel_scale = s.floating_panel_scale.clamp(0.4, 2.0) as f32;
 
     debug::log_debug(
         &dir,
         &format!(
-            "wallpaper host: profile={profile} pos=({:.0},{:.0}) size=({:.0}x{:.0})",
-            pos[0], pos[1], size[0], size[1]
+            "wallpaper host: profile={profile} pos=({:.0},{:.0}) size=({:.0}x{:.0}){}",
+            pos[0],
+            pos[1],
+            size[0],
+            size[1],
+            if floating {
+                format!(", floating panels: {}", panels_layout(&s))
+            } else {
+                String::new()
+            }
         ),
     );
 
@@ -494,10 +728,13 @@ fn main() {
                 unattached_since: None,
                 attach_warned: false,
                 last_parent_check: Instant::now(),
-                last_fitted_height: None,
-                startup_fit_frames: 8,
                 gpu_lost,
                 preferred_gpu: preferred_gpu_arc,
+                floating,
+                panel_scale,
+                windows,
+                closing: false,
+                panels_layout: layout,
             };
             Ok(Box::new(host))
         }),
@@ -518,4 +755,53 @@ fn main() {
 
     // Hold the runtime until run_native returns (window closed).
     drop(runtime);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn floating() -> settings::Settings {
+        let mut s = settings::Settings::default();
+        s.floating_mode = true;
+        s.visible_panels = vec!["cpu".into(), "gpu".into()];
+        s.panel_layouts
+            .insert("cpu".into(), settings::PanelLayout { x: 300, y: 400 });
+        s
+    }
+
+    #[test]
+    fn panels_open_where_floating_mode_left_them() {
+        // #170: the saved floating position, else floating mode's default.
+        let w = panel_windows(&floating());
+        assert_eq!(
+            w.iter().map(|p| p.content.name()).collect::<Vec<_>>(),
+            ["cpu", "gpu"]
+        );
+        assert_eq!(w[0].pos, [300.0, 400.0]);
+        assert_eq!(w[1].pos, [120.0, 110.0]);
+    }
+
+    #[test]
+    fn a_moved_shown_or_resized_panel_rebuilds_the_windows() {
+        let s = floating();
+        let before = panels_layout(&s);
+        let mut moved = s.clone();
+        moved
+            .panel_layouts
+            .insert("gpu".into(), settings::PanelLayout { x: 900, y: 100 });
+        assert_ne!(panels_layout(&moved), before);
+        let mut shown = s.clone();
+        shown.visible_panels.push("ram".into());
+        assert_ne!(panels_layout(&shown), before);
+        let mut bigger = s.clone();
+        bigger.floating_panel_scale = 1.5;
+        assert_ne!(panels_layout(&bigger), before);
+        // A hidden panel's position isn't part of it.
+        let mut other = s.clone();
+        other
+            .panel_layouts
+            .insert("disk".into(), settings::PanelLayout { x: 1, y: 1 });
+        assert_eq!(panels_layout(&other), before);
+    }
 }
