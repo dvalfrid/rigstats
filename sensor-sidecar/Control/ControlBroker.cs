@@ -90,6 +90,35 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         }
     }
 
+    /// Writes `profile`'s lighting again — the active profile's, after the
+    /// display came back on (#670): a keyboard or other device that lost
+    /// power in sleep shows its own effect until then. Only the lighting;
+    /// the onboard profiles are saved on the devices. A device that hasn't
+    /// woken yet is tried again like after an apply (#489). Skipped while a
+    /// preview is pending, so it doesn't overwrite the previewed lighting.
+    public async Task<ApplyResult?> ReapplyLightingAsync(Profile profile, CancellationToken ct)
+    {
+        await _transactionLock.WaitAsync(ct);
+        try
+        {
+            if (_preview is not null)
+                return null;
+            _retry?.Cancel();
+            _retry = null;
+            var (result, _, asleep) = Apply(profile, d => d == "aura");
+            if (result.Ok && asleep.Count > 0)
+            {
+                _retry = new CancellationTokenSource();
+                _ = RetryAsleepAsync(profile, asleep, _retry.Token);
+            }
+            return result;
+        }
+        finally
+        {
+            _transactionLock.Release();
+        }
+    }
+
     private bool HasAny(Profile profile, IReadOnlySet<string> domains) =>
         Affected(profile, domains.Contains).Count > 0;
 

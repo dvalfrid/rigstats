@@ -334,7 +334,8 @@ built-ins — saved right away, logged, and announced by `get_state`'s
   (LHM cannot tell which header is the CPU cooler — see *CPU fan speed* in
   ROADMAP); `identify_fan` makes labelling easy.
 - The service re-applies the active profile at start-up (subject to the
-  boot-crash guard), so profiles work before anyone logs in.
+  boot-crash guard), so profiles work before anyone logs in; after a sleep
+  it writes only the profile's lighting again (see Lighting, #670).
 - The Rust side mirrors the schema in `rigstats-backend/src/control.rs` with
   serde.
 
@@ -874,7 +875,14 @@ controller, not one board:
   their own). Motherboard family: an effect report (`0x35`) and a colour
   report with an LED bit mask (`0x36`) per zone; addressable family: one
   `0x3B` report with the colour. Nothing is committed to the controller's
-  flash (no wear) — the service re-applies the active profile at start.
+  flash (no wear) — the service re-applies the active profile at start,
+  and writes its lighting again when the display comes back on after sleep
+  (`LightingAfterWake`, `GUID_CONSOLE_DISPLAY_STATE` off → on, #670): a
+  device that lost power in sleep (the ROG Omni receiver and its keyboard,
+  a laptop keyboard) otherwise shows its own effect until the next apply.
+  Only the lighting — the onboard profiles are saved on the devices; a
+  device not awake yet gets it through the 5-minute retry (#489); skipped
+  while a preview is pending.
 - **A profile without a lighting part leaves the lights alone**, so the
   built-ins change nobody's lighting. The controller can't report its
   effect: `Verify` trusts a successful write, `Capture` returns what the
