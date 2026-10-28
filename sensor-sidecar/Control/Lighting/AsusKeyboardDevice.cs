@@ -23,8 +23,9 @@ public sealed record KeyboardModel(string Name, bool PerKey, int BrightnessMax, 
 /// with a layout — found, not hard-coded. The keyboard's own effects are
 /// used (static, breathing, colour cycle), so nothing is animated over a
 /// radio. Effects are not saved to the keyboard (no 0x50 0x55): its own
-/// effect returns after it sleeps or reconnects, and the service re-applies
-/// the profile.
+/// effect returns after it loses power or reconnects. After the PC's own
+/// sleep `LightingAfterWake` writes the active profile's lighting again
+/// when the display comes back on (#670).
 ///
 /// Not covered: the ROG Claymore (a different command layout, 2018) and the
 /// Strix Scope TKL family (direct per-key mode only, model key maps).

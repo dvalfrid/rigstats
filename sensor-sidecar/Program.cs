@@ -244,6 +244,9 @@ builder.Services.AddSingleton<IControlProvider>(sp => new SensorSidecar.Control.
 // Last: every provider exists and the hardware is open by the time the
 // stored active profile is re-applied.
 builder.Services.AddHostedService<ActiveProfileApplier>();
+// The active profile's lighting again when the display comes back on after
+// sleep — devices that lost power show their own effect until then (#670).
+builder.Services.AddHostedService<LightingAfterWake>();
 // Batteries of the wireless lighting devices, about once a minute (#290).
 builder.Services.AddHostedService<PeripheralBatteryMonitor>();
 // A profile switched on the keyboard (Fn + 1…6) switches the Control Center
