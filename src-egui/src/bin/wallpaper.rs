@@ -83,6 +83,9 @@ struct WallpaperHost {
     floating: bool,
     /// Floating panels' scale (`Settings::floating_panel_scale`).
     panel_scale: f32,
+    /// The host is closing (left wallpaper mode, another profile or layout):
+    /// no window is shown again.
+    closing: bool,
     /// What the panel windows were built from; a change (another profile's
     /// positions, a panel shown or hidden, a new size) restarts the host —
     /// positions are only given while a window is still top-level, so a
@@ -429,9 +432,16 @@ impl eframe::App for WallpaperHost {
         if self.last_settings_check.elapsed() >= Duration::from_millis(900) {
             self.last_settings_check = Instant::now();
             if self.refresh_settings() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                return;
+                self.closing = true;
             }
+        }
+        // Closing takes a few frames. Show no window in them: a viewport left
+        // out of one frame is destroyed, and showing it again would create a
+        // fresh top-level window outside WorkerW — a white flash on leaving
+        // wallpaper mode.
+        if self.closing {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
         }
 
         // Re-attach safety net (~1 Hz): if Explorer rebuilt the WorkerW hierarchy
@@ -715,6 +725,7 @@ fn main() {
                 floating,
                 panel_scale,
                 windows,
+                closing: false,
                 panels_layout: layout,
             };
             Ok(Box::new(host))
