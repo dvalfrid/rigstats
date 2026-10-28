@@ -452,7 +452,8 @@ impl eframe::App for WallpaperHost {
                     if !self.attach_warned && since.elapsed() >= Duration::from_secs(10) {
                         debug::log_warn(
                             &self.dir,
-                            "rigstats-wallpaper: still no wallpaper WorkerW after 10 s — the                              dashboard is a normal window, not in the desktop background",
+                            "rigstats-wallpaper: still no wallpaper WorkerW after 10 s — the \
+                             dashboard is a normal window, not in the desktop background",
                         );
                         self.attach_warned = true;
                     }
