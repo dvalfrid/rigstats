@@ -118,7 +118,8 @@ $common = [ordered]@{
     'no panic in the log'   = { -not ($r.Log -match 'panicked') }
 }
 
-$names = if ($Only) { $Only } else { $modes.Keys }
+# `pwsh -File` passes `-Only a,b` as one string "a,b".
+$names = if ($Only) { @($Only -split ',' | ForEach-Object { $_.Trim() }) } else { $modes.Keys }
 $original = [System.IO.File]::ReadAllBytes($settingsPath)
 $failed = @()
 try {
