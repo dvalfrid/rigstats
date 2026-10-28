@@ -41,4 +41,51 @@ public sealed class AsusAcpiTests
             AsusAcpi.ReadIds);
         Assert.Equal(new uint[] { 0x00110024, 0x00110025, 0x00110032 }, AsusAcpi.CurveIds);
     }
+
+    public static TheoryData<string> Fixtures()
+    {
+        var data = new TheoryData<string>();
+        var dir = Path.Combine(AppContext.BaseDirectory, "fixtures", "asus-acpi");
+        foreach (var file in Directory.GetFiles(dir, "*.log").Order())
+            data.Add(Path.GetFileName(file));
+        return data;
+    }
+
+    /// Real logs from laptops (fixtures/asus-acpi/): every id on the list is
+    /// in each snapshot, every word that answered is marked absent exactly
+    /// when the presence rule says so, and each curve is 16 bytes or a fail.
+    [Theory]
+    [MemberData(nameof(Fixtures))]
+    public void Logged_snapshots_follow_the_presence_rule(string name)
+    {
+        var lines = File.ReadLines(Path.Combine(AppContext.BaseDirectory, "fixtures", "asus-acpi", name))
+            .Where(l => l.StartsWith("[rigstats-control] ASUS ACPI", StringComparison.Ordinal))
+            .ToList();
+
+        var snapshots = lines.Where(l => l.StartsWith("[rigstats-control] ASUS ACPI DSTS: ", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(snapshots);
+        foreach (var line in snapshots)
+        {
+            var words = line["[rigstats-control] ASUS ACPI DSTS: ".Length..].Split(' ')
+                .Select(w => w.Split('='))
+                .ToDictionary(p => Convert.ToUInt32(p[0], 16), p => p[1]);
+            Assert.Equal(AsusAcpi.ReadIds.Order(), words.Keys.Order());
+            foreach (var word in words.Values.Where(w => w != "fail"))
+            {
+                var absent = word.EndsWith("(absent)", StringComparison.Ordinal);
+                var raw = Convert.ToUInt32(word.Replace("(absent)", "", StringComparison.Ordinal), 16);
+                Assert.Equal(!absent, AsusAcpi.IsPresent(raw));
+            }
+        }
+
+        var curves = lines.Where(l => l.StartsWith("[rigstats-control] ASUS ACPI curve ", StringComparison.Ordinal)).ToList();
+        Assert.Equal(AsusAcpi.CurveIds.Order(),
+            curves.Select(l => Convert.ToUInt32(l.Split(' ')[4], 16)).Order());
+        foreach (var line in curves)
+        {
+            var modes = line[(line.IndexOf("):", StringComparison.Ordinal) + 3)..].Split(" [").Select(m => m.Split("] ")[1]).ToList();
+            Assert.Equal(3, modes.Count);
+            Assert.All(modes, m => Assert.True(m == "fail" || m.Length == 32, m));
+        }
+    }
 }

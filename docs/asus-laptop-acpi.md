@@ -45,7 +45,9 @@ them, and some of them are dangerous; see "Risks").
    it back; both keep the mode in software and Linux writes Balanced at
    probe. So "restore the mode that was active before RIGStats" may not be
    possible; the way back is Balanced until the read-only test shows
-   otherwise.
+   otherwise. **On the GA403WR it doesn't (verified, step 1):** the word is
+   `0x00010003` in Balanced, Silent and Turbo alike, so the way back there is
+   Balanced.
 4. **Writing the mode again is the way back for fans and limits.** Linux:
    "For machines with throttle this is the only way to reset fans to default
    mode of operation"; G-Helper's *Factory defaults* is the same mode write.
@@ -57,8 +59,9 @@ them, and some of them are dangerous; see "Risks").
 5. **Fan curves are 8 temperature + 8 duty bytes, evaluated by the EC.**
    `DSTS` on the curve id with the mode as argument returns the firmware
    (factory) curve of that mode; `DEVS` writes a curve to the *active* mode.
-   The custom curve can't be read back through `DSTS` — **hypothesis**, from
-   Linux calling that read "factory default"; the write test checks it.
+   The custom curve can't be read back through `DSTS` — **verified** on the
+   GA403WR (step 1): the reads gave the same curves in every run although
+   G-Helper had written its own curves before each.
 6. **Power-limit ranges are not reported by the firmware.** Neither source
    reads a min, max or default from ACPI; Linux keeps a per-model table
    (`asus-armoury.h`, by DMI board name) and G-Helper a few per-model maxima.
@@ -395,13 +398,46 @@ only in Dynamic Boost (0–15 W) and TGP (55–85 W).
 should use the intersection (Linux's table) — the narrower range is the one
 two independent sources both accept.
 
+### Step 1 results (read-only, 2026-10-27/28)
+
+Seven runs of the start-up log with BIOS 310 and G-Helper 0.288 running (no
+Armoury Crate); the mode set in G-Helper before each run. The distinct
+readings are the fixture `sensor-sidecar.Tests/fixtures/asus-acpi/asus-ga403wr-ryzen-ai9-hx370-rtx5070ti.log`.
+
+| Question | Answer |
+|---|---|
+| Device opens while G-Helper runs | yes, every call answered — **verified** (Armoury Crate not tested) |
+| Present (presence bit) | `0x00120075`, `0x00110013`, `0x00110014`, `0x001200A3`, `0x001200A0`, `0x001200C1`, `0x001200C0`, `0x001200C2`, `0x00120099`, `0x00120098`, curves `0x00110024` / `0x00110025` — **verified** |
+| Absent | `0x00110019`, `0x00110031`, `0x00110032` (no middle fan), `0x001200B0`, `0x001200B1`: the IOCTL itself fails with Win32 error 1 (`ERROR_INVALID_FUNCTION`), not a `0xFFFFFFFE` word — **verified** |
+| Mode readable (`0x00120075`) | no: `0x00010003` in Balanced, Silent and Turbo — **verified**. What the 3 is: unknown |
+| Limits readable (`A3`/`A0`/`C1`/`C0`/`C2`) | no: `0x00010000` (value 0) after G-Helper wrote 9–13 W (Silent) and 80 W (Turbo) — **verified** |
+| Base TGP `0x00120099` | `0x50` = 80 — **hypothesis**: watts |
+| Added TGP `0x00120098` | 0 in the first run, 15 in every later one; G-Helper writes 15 in Turbo, but it already read 15 before that write once — not settled |
+| RPM | low 16 bits × 100 as documented: Balanced idle 2200–2300 / 2600, Silent idle 0 / 0, Silent at ~100 % CPU 2200 / 2500 (owner: faint), Turbo idle 3100–3600 / 3400–3800 — **verified** that it follows mode and load |
+| Firmware curves | 16 bytes per mode, the same in all seven runs — see below |
+
+Firmware curves (temperatures °C → duty):
+
+| Curve | Temperatures | Duty |
+|---|---|---|
+| CPU Balanced | 45 62 65 68 70 72 74 76 | 5 9 12 16 20 28 37 56 |
+| CPU Silent | 47 69 70 72 74 76 78 **255** | 1 5 9 12 16 20 28 28 |
+| CPU Turbo | 20 64 66 68 70 72 74 76 | 9 12 16 28 33 37 56 66 |
+| GPU Balanced | 42 59 62 65 67 69 71 73 | 5 7 12 16 20 28 39 60 |
+| GPU Silent | 47 67 68 **70 70 70 70** **255** | 1 5 7 12 16 20 28 28 |
+| GPU Turbo | 20 57 60 63 66 69 72 75 | 7 12 16 28 35 39 60 71 |
+
+The Silent curves break the phase B validation below: repeated
+temperatures, a last point at 255 °C, and equal duties at the end. Whether
+the duty is a percentage is a **hypothesis** (G-Helper treats it as one); if
+it is, the firmware tops out at 56–71 %.
+
+G-Helper also writes a CPU undervolt per mode (Silent −20, Turbo 0) — through
+the SMU, not ATKACPI, so it is a second writer for RIGStats' Curve Optimizer
+domain, not only for this one.
+
 ### Not known for the GA403WR
 
-- whether `0x00120075` is present (expected: every ROG uses it —
-  **hypothesis**);
-- whether a middle fan or curve (`0x00110031` / `0x00110032`) is present
-  (the G14 has two fans — **hypothesis**: absent);
-- whether `DSTS` returns the current mode or a limit's value;
 - whether a mode write resets the power limits, or the G14 2024 toggle is
   needed too;
 - whether power limits are really refused without a custom curve (Linux
@@ -610,7 +646,10 @@ table, `defaults` are the three `DSTS` curve reads.)
 - **Probe:** the three `DSTS` curve reads per present fan, mode arguments
   0/1/2 → `defaults`.
 - **Validate:** exactly 8 points; temperatures strictly ascending within
-  20–110 °C; duties 0–100 and non-decreasing.
+  20–110 °C; duties 0–100 and non-decreasing. This is for curves RIGStats
+  writes; the GA403WR's own Silent curves fail it (repeated temperatures, a
+  last point at 255 °C — "Step 1 results"), so the firmware defaults must be
+  shown and used for the clamp without passing through it.
 - **Clamp (service, at write time):** the duty of the last two points is at
   least the firmware default's duty at those points for the target mode —
   a curve may be quieter in the middle but never below what ASUS ships at
@@ -748,18 +787,23 @@ is taken otherwise).
 
 1. Does `DSTS 0x00120075` return the current mode on the GA403WR (and in
    which bits)? If yes, release can restore the mode from before RIGStats.
+   **Answered (step 1): no** — `0x00010003` in every mode.
 2. Does `DSTS` on a power-limit id return its value? Does `DSTS` on a curve
    id return the custom curve after a write, or always the factory one?
+   **Answered (step 1), for writes by G-Helper: the limits read 0, the
+   curves always the factory ones.**
 3. Is a custom fan curve really required for power limits on the GA403WR
    (Linux `requires_fan_curve`), when G-Helper doesn't act on it?
 4. Does writing the mode reset the power limits on the GA403WR, or does it
    need the G14-2024 toggle (another mode first)?
 5. Does the mode persist across a reboot, and do curves and limits reset?
    What do sleep, hibernate and an AC/DC change do to each?
-6. Is a middle fan (`0x00110031` / `0x00110032`) present?
+6. Is a middle fan (`0x00110031` / `0x00110032`) present? **Answered
+   (step 1): no.**
 7. Is `INIT` ever needed before `DEVS` for the mode to take?
 8. Does the device open, and do calls work, while Armoury Crate's services
-   or G-Helper have it open?
+   or G-Helper have it open? **Answered for G-Helper (step 1): yes.**
+   Armoury Crate is untested.
 9. Which process names does Armoury Crate run on a laptop (is
    `ArmouryCrate.Service` the one that writes the mode)? Should
    `AsusOptimization` count as a conflict?
@@ -769,7 +813,8 @@ is taken otherwise).
     advice)? And is "not offered on boards outside the table" the right
     rule?
 11. What does the added-TGP id `0x00120098` encode on the GA403WR (Linux's
-    80–95 W vs "additional on top of base")? Left out until known.
+    80–95 W vs "additional on top of base")? Left out until known. Step 1
+    read 0 once and 15 afterwards; not settled.
 12. Is a hung ACPI call possible, and does the provider need a timeout
     thread?
 13. Does Fn+F5 change the mode with no ASUS software running? If it does,
