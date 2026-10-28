@@ -302,6 +302,12 @@ fn draw_dashboard(
     shown: &[String],
     opacity: f32,
 ) {
+    // The main window's drag strip (`app/main_window.rs`), empty here: the
+    // panels sit where they do in the other layers, not 17 px higher.
+    ui.allocate_exact_size(
+        egui::vec2(ui.available_width(), theme::DRAG_HANDLE_H),
+        egui::Sense::hover(),
+    );
     if profile_is_landscape(profile) {
         let ref_h = profile_to_size(profile)[1];
         view.render_landscape_grid(ui, shown, None, false, ref_h, opacity);
@@ -522,7 +528,9 @@ fn main() {
     // `render_windows` then refines this estimate): the landscape grid uses
     // natural cell sizes, the portrait stack its panel-stack height. Never stretch to the full
     // profile height — that leaves a black gap below the content. Width is
-    // always the profile width so panel proportions are preserved. Use the
+    // the profile width so panel proportions are preserved, less 2 px in
+    // portrait like the main window (`app/main_window.rs`), so the dashboard
+    // covers the same pixels in every layer. Use the
     // position the user set in a normal layer before switching
     // (s.wallpaper_position) when it is still on a connected monitor; otherwise
     // centre on the matching monitor. The wallpaper shows around it.
@@ -534,7 +542,7 @@ fn main() {
         ]
     } else {
         [
-            pw,
+            pw - 2.0,
             compute_window_height(
                 &s.visible_panels,
                 profile_scale(&profile),
