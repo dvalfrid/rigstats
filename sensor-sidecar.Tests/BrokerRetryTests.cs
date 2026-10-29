@@ -130,4 +130,37 @@ public class BrokerRetryTests
 
         Assert.Equal(before, keyboard.ReceivedCalls().Count(c => c.GetMethodInfo().Name == nameof(IControlProvider.Apply)));
     }
+
+    /// #678: the retry of the switch before must not write that profile's
+    /// part over what is being previewed.
+    [Fact]
+    public async Task A_preview_ends_the_retry_of_the_switch_before()
+    {
+        // Asleep for good; every part it was asked to write is recorded.
+        var keyboard = Provider("keyboard");
+        var written = new List<ProfilePart>();
+        keyboard.When(k => k.Apply(Arg.Any<ProfilePart>())).Do(c =>
+        {
+            lock (written)
+                written.Add(c.Arg<ProfilePart>());
+            throw DomainUnavailableException.Silent(["ROG Azoth X"]);
+        });
+        var broker = new ControlBroker([Provider("power_plan"), keyboard])
+        {
+            RetryEvery = TimeSpan.FromMilliseconds(20),
+            RetryFor = TimeSpan.FromSeconds(10),
+        };
+        await broker.ApplyProfileAsync(Balanced, CancellationToken.None);
+        await broker.Settled; // the keyboard slept: its retry runs now
+
+        var tried = new ProfilePart { PowerPlan = "balanced", Keyboard = new KeyboardPart { Profile = 5 } };
+        await broker.PreviewAsync(new Profile { Id = "balanced", Name = "Balanced", Part = tried }, TimeSpan.FromSeconds(10), CancellationToken.None);
+        int before;
+        lock (written)
+            before = written.Count(p => ReferenceEquals(p, Part));
+        await Task.Delay(200);
+
+        lock (written)
+            Assert.Equal(before, written.Count(p => ReferenceEquals(p, Part)));
+    }
 }

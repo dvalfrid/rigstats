@@ -200,21 +200,36 @@ public sealed class ProfileStore
         }
     }
 
-    public async Task SaveProfileAsync(Profile profile, CancellationToken ct)
+    /// Most profiles the store keeps, and the longest id or name it takes
+    /// from a client (#678) — far above what anyone makes by hand, so
+    /// `profiles.json` can't be grown without end through the pipe.
+    public const int MaxProfiles = 100;
+    public const int MaxTextLength = 200;
+
+    /// Saves `profile`, replacing the one with its id. Whether it is a
+    /// built-in comes from the store's own list, never from the client
+    /// (#678). False when it is new and the list already holds MaxProfiles.
+    public async Task<bool> SaveProfileAsync(Profile profile, CancellationToken ct)
     {
         await _fileLock.WaitAsync(ct);
         try
         {
             var file = await LoadUnlockedAsync(ct);
+            var builtin = BuiltinProfiles().Any(b => b.Id == profile.Id);
+            if (profile.Builtin != builtin)
+                profile = new Profile { Id = profile.Id, Name = profile.Name, Icon = profile.Icon, Builtin = builtin, Part = profile.Part };
             // Replace in place: editing, renaming or resetting a profile must
             // not move it to the end of the list. New profiles are appended.
             var profiles = file.Profiles.ToList();
             var index = profiles.FindIndex(p => p.Id == profile.Id);
             if (index >= 0)
                 profiles[index] = profile;
+            else if (profiles.Count >= MaxProfiles)
+                return false;
             else
                 profiles.Add(profile);
             await SaveUnlockedAsync(new ProfileFile { Active = file.Active, Profiles = profiles }, ct);
+            return true;
         }
         finally
         {

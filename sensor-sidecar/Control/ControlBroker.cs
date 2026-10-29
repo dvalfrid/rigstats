@@ -228,6 +228,13 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         try
         {
             RevertPreviewLocked();
+            // The preview writes every part itself: a retry of sleeping
+            // devices, or the lighting still to follow a switch, would
+            // otherwise write the earlier profile over it (#678).
+            _retry?.Cancel();
+            _retry = null;
+            _afterwards?.Cancel();
+            _afterwards = null;
             var (result, snapshots, _) = Apply(profile);
             if (!result.Ok)
                 return result;
