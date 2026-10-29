@@ -23,6 +23,7 @@
 //! reaches the window instead of firing.
 
 #![allow(unsafe_code)]
+#![warn(clippy::undocumented_unsafe_blocks)]
 
 use crate::lock_ext::LockSafe;
 use eframe::egui;
@@ -188,6 +189,9 @@ fn update(change: impl FnOnce(&mut Wanted)) {
     // Before the thread has a queue it reads `WANTED` itself when it starts.
     let thread = THREAD_ID.load(Ordering::SeqCst);
     if thread != 0 {
+        // SAFETY: plain-value arguments; `thread` is the hotkey thread's id,
+        // stored only after its queue exists. Should that thread be gone the
+        // post just fails.
         unsafe {
             PostThreadMessageW(thread, WM_REREGISTER, 0, 0);
         }
@@ -216,6 +220,9 @@ pub fn alt_gr_char(chord: Shortcut) -> Option<char> {
         return None;
     }
     let mut layouts: [HKL; 32] = [std::ptr::null_mut(); 32];
+    // SAFETY: `layouts` has room for exactly the count passed (32), so
+    // Windows writes at most that many handles; the result is clamped to the
+    // array by `take` below as well.
     let count = unsafe { GetKeyboardLayoutList(layouts.len() as i32, layouts.as_mut_ptr()) };
     let mut state = [0u8; 256];
     for vk in [VK_CONTROL, VK_LCONTROL, VK_MENU, VK_RMENU] {
@@ -229,9 +236,14 @@ pub fn alt_gr_char(chord: Shortcut) -> Option<char> {
         .iter()
         .take(count.max(0) as usize)
         .find_map(|&layout| {
+            // SAFETY: plain-value arguments; `layout` is a handle Windows
+            // just listed (an unknown one only makes the call return 0).
             let scan = unsafe { MapVirtualKeyExW(chord.vk, 0, layout) }; // MAPVK_VK_TO_VSC
             let mut buf = [0u16; 8];
             // Flag 0x4: leave the keyboard state (dead keys) as it was.
+            // SAFETY: `state` is the 256-byte key-state array ToUnicodeEx
+            // reads; `buf`'s length is passed as its capacity, so at most 8
+            // UTF-16 units are written; both are locals alive for the call.
             let n = unsafe {
                 ToUnicodeEx(
                     chord.vk,
@@ -374,6 +386,8 @@ fn register_wanted(dir: &Path) -> Vec<Binding> {
     let registered = bindings(&shortcuts)
         .into_iter()
         .filter(|binding| {
+            // SAFETY: plain-value arguments; a null HWND ties the hotkey to
+            // this (the hotkey) thread's queue, where it is unregistered.
             let ok = unsafe {
                 RegisterHotKey(
                     std::ptr::null_mut(),
@@ -429,18 +443,25 @@ pub fn spawn(
     std::thread::spawn(move || {
         // A thread gets its message queue on its first message call; only
         // then can `apply` post to it.
+        // SAFETY: MSG is a plain C struct; all-zero is a valid value.
         let mut msg: MSG = unsafe { std::mem::zeroed() };
+        // SAFETY: `msg` is a valid, writable MSG; a null HWND means any
+        // message of this thread.
         unsafe {
             PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
         }
+        // SAFETY: no arguments; cannot fail.
         THREAD_ID.store(unsafe { GetCurrentThreadId() }, Ordering::SeqCst);
         let mut registered = register_wanted(&dir);
 
         loop {
+            // SAFETY: MSG is a plain C struct; all-zero is a valid value.
             let mut msg: MSG = unsafe { std::mem::zeroed() };
             // Blocks until a message arrives; returns 0 on WM_QUIT (never
             // posted here — this thread runs for the process lifetime), <0
             // on error.
+            // SAFETY: `msg` is a valid, writable MSG; a null HWND means any
+            // message of this thread.
             let ret = unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) };
             if ret <= 0 {
                 break;
@@ -458,6 +479,8 @@ pub fn spawn(
                 }
                 WM_REREGISTER => {
                     for binding in registered.drain(..) {
+                        // SAFETY: plain-value arguments; `binding.id` was
+                        // registered on this thread with a null HWND.
                         unsafe {
                             UnregisterHotKey(std::ptr::null_mut(), binding.id);
                         }
@@ -470,6 +493,8 @@ pub fn spawn(
             }
         }
         for binding in registered {
+            // SAFETY: plain-value arguments; `binding.id` was registered on
+            // this thread with a null HWND.
             unsafe {
                 UnregisterHotKey(std::ptr::null_mut(), binding.id);
             }

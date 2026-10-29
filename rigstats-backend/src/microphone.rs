@@ -10,6 +10,7 @@
 //! when) lives in the app.
 
 #![allow(unsafe_code)]
+#![warn(clippy::undocumented_unsafe_blocks)]
 
 /// One microphone Windows has right now, for the Settings dropdown.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,13 +196,63 @@ mod win {
     use winapi::um::propsys::IPropertyStore;
     use winapi::Interface;
 
+    use std::ops::Deref;
+    use winapi::um::unknwnbase::IUnknown;
+
     const STGM_READ: u32 = 0;
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
+    /// A COM interface pointer this code holds one reference to, released
+    /// when dropped — so an early return, or a panic in a caller's closure,
+    /// can't leak it. Every winapi interface here derefs to `IUnknown`.
+    struct Com<T: Deref<Target = IUnknown>>(NonNull<T>);
+
+    impl<T: Deref<Target = IUnknown>> Com<T> {
+        /// Takes over the reference a COM call returned in `raw` — `None`
+        /// when the call failed (`hr < 0`; `raw` is then left alone, as the
+        /// hand-written code did) or returned null.
+        ///
+        /// # Safety
+        ///
+        /// When `hr >= 0`, `raw` must be null or a live interface pointer
+        /// whose one reference the caller hands over (the COM out-param
+        /// contract), not released anywhere else.
+        unsafe fn from_hr(hr: i32, raw: *mut T) -> Option<Self> {
+            if hr < 0 {
+                return None;
+            }
+            NonNull::new(raw).map(Self)
+        }
+    }
+
+    impl<T: Deref<Target = IUnknown>> Deref for Com<T> {
+        type Target = T;
+        fn deref(&self) -> &T {
+            // SAFETY: the object stays alive while `self` holds its
+            // reference (see `from_hr`), and the borrow can't outlive `self`.
+            unsafe { self.0.as_ref() }
+        }
+    }
+
+    impl<T: Deref<Target = IUnknown>> Drop for Com<T> {
+        fn drop(&mut self) {
+            // SAFETY: `self` owns exactly one reference (see `from_hr`) and
+            // gives it back exactly once, here; no borrow from `deref`
+            // outlives `self`.
+            unsafe { self.0.as_ref().Release() };
+        }
+    }
+
     /// A COM-allocated string, freed.
+    ///
+    /// # Safety
+    ///
+    /// `p` must be null or a NUL-terminated UTF-16 string allocated with
+    /// `CoTaskMemAlloc` that the caller owns; it is freed here and must not
+    /// be used afterwards.
     unsafe fn take(p: *mut u16) -> String {
         if p.is_null() {
             return String::new();
@@ -219,33 +270,37 @@ mod win {
     /// this thread for the call if it isn't already (the same shape as
     /// `desktop_background::win::with_wallpaper`).
     fn with_enumerator<T>(f: impl FnOnce(&IMMDeviceEnumerator) -> T) -> Result<T, String> {
-        unsafe {
-            let init = CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED);
-            let mut raw: *mut IMMDeviceEnumerator = std::ptr::null_mut();
-            let hr = CoCreateInstance(
+        // SAFETY: the reserved first argument must be null, which it is.
+        let init = unsafe { CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED) };
+        let mut raw: *mut IMMDeviceEnumerator = std::ptr::null_mut();
+        // SAFETY: the CLSID and IID are winapi's statics; `raw` is a valid
+        // out-param of the IID's interface type.
+        let hr = unsafe {
+            CoCreateInstance(
                 &CLSID_MMDeviceEnumerator,
                 std::ptr::null_mut(),
                 CLSCTX_ALL,
                 &IMMDeviceEnumerator::uuidof(),
                 (&mut raw as *mut *mut IMMDeviceEnumerator).cast(),
-            );
-            let out = match NonNull::new(raw) {
-                Some(e) if hr >= 0 => {
-                    // SAFETY: a live COM object; we hold the one reference
-                    // CoCreateInstance gave us until the Release below.
-                    let e = e.as_ref();
-                    let r = f(e);
-                    e.Release();
-                    Ok(r)
-                }
-                _ => Err(format!("no audio device enumerator (0x{hr:08x})")),
-            };
-            // S_OK / S_FALSE: this call initialized (or re-counted) COM.
-            if init >= 0 {
-                CoUninitialize();
+            )
+        };
+        // SAFETY: on success CoCreateInstance hands us one reference in `raw`.
+        let out = match unsafe { Com::from_hr(hr, raw) } {
+            Some(enumerator) => {
+                let r = f(&enumerator);
+                // Released here, before CoUninitialize below.
+                drop(enumerator);
+                Ok(r)
             }
-            out
+            None => Err(format!("no audio device enumerator (0x{hr:08x})")),
+        };
+        // S_OK / S_FALSE: this call initialized (or re-counted) COM.
+        if init >= 0 {
+            // SAFETY: balances the successful CoInitializeEx above on this
+            // thread; every COM pointer made inside has been released.
+            unsafe { CoUninitialize() };
         }
+        out
     }
 
     /// Runs `f` with the capture endpoint `device` names, else (or when it
@@ -254,89 +309,100 @@ mod win {
         device: Option<&str>,
         f: impl FnOnce(&IMMDevice) -> T,
     ) -> Result<T, String> {
-        with_enumerator(|enumerator| unsafe {
+        with_enumerator(|enumerator| {
             let mut raw: *mut IMMDevice = std::ptr::null_mut();
             let mut hr = -1;
             if let Some(id) = device {
-                hr = enumerator.GetDevice(wide(id).as_ptr(), &mut raw);
+                // SAFETY: `enumerator` is live for the closure; the id is
+                // NUL-terminated and lives to the end of the statement;
+                // `raw` is a valid out-param.
+                hr = unsafe { enumerator.GetDevice(wide(id).as_ptr(), &mut raw) };
             }
             if raw.is_null() || hr < 0 {
                 raw = std::ptr::null_mut();
-                hr = enumerator.GetDefaultAudioEndpoint(eCapture, eCommunications, &mut raw);
+                // SAFETY: `enumerator` is live; `raw` is a valid out-param.
+                hr = unsafe {
+                    enumerator.GetDefaultAudioEndpoint(eCapture, eCommunications, &mut raw)
+                };
             }
-            match NonNull::new(raw) {
-                Some(device) if hr >= 0 => {
-                    let device = device.as_ref();
-                    let r = f(device);
-                    device.Release();
-                    Ok(r)
-                }
-                _ => Err(format!("no microphone (0x{hr:08x})")),
+            // SAFETY: on success GetDevice / GetDefaultAudioEndpoint hand us
+            // one reference in `raw`.
+            match unsafe { Com::from_hr(hr, raw) } {
+                Some(device) => Ok(f(&device)),
+                None => Err(format!("no microphone (0x{hr:08x})")),
             }
         })?
     }
 
     /// Every active capture endpoint.
     pub fn list() -> Result<Vec<Device>, String> {
-        with_enumerator(|enumerator| unsafe {
+        with_enumerator(|enumerator| {
             let mut raw: *mut IMMDeviceCollection = std::ptr::null_mut();
-            let hr = enumerator.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &mut raw);
-            let Some(collection) = NonNull::new(raw).filter(|_| hr >= 0) else {
+            // SAFETY: `enumerator` is live; `raw` is a valid out-param.
+            let hr =
+                unsafe { enumerator.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &mut raw) };
+            // SAFETY: on success EnumAudioEndpoints hands us one reference.
+            let Some(collection) = (unsafe { Com::from_hr(hr, raw) }) else {
                 return Vec::new();
             };
-            let collection = collection.as_ref();
             let mut count = 0u32;
             let mut out = Vec::new();
-            if collection.GetCount(std::ptr::addr_of_mut!(count).cast_const()) == S_OK {
+            // SAFETY: `collection` is live; `count` is a valid out-param (the
+            // winapi binding types it as a const pointer, the API writes it).
+            if unsafe { collection.GetCount(std::ptr::addr_of_mut!(count).cast_const()) } == S_OK {
                 for i in 0..count {
                     let mut raw: *mut IMMDevice = std::ptr::null_mut();
-                    if collection.Item(i, &mut raw) != S_OK {
+                    // SAFETY: `collection` is live, `i` < its count; `raw` is
+                    // a valid out-param.
+                    if unsafe { collection.Item(i, &mut raw) } != S_OK {
                         continue;
                     }
-                    if let Some(device) = NonNull::new(raw) {
-                        let device = device.as_ref();
+                    // SAFETY: Item returned S_OK and handed us one reference.
+                    if let Some(device) = unsafe { Com::from_hr(S_OK, raw) } {
                         out.push(Device {
-                            id: id(device),
-                            name: name(device),
+                            id: id(&device),
+                            name: name(&device),
                         });
-                        device.Release();
                     }
                 }
             }
-            collection.Release();
             out
         })
     }
 
     /// Runs `f` with the endpoint's volume control.
     fn with_volume<T>(device: &IMMDevice, f: impl FnOnce(&IAudioEndpointVolume) -> T) -> Option<T> {
-        unsafe {
-            let mut raw: *mut IAudioEndpointVolume = std::ptr::null_mut();
-            let hr = device.Activate(
+        let mut raw: *mut IAudioEndpointVolume = std::ptr::null_mut();
+        // SAFETY: `device` is a live endpoint borrowed from its guard; the
+        // IID matches `raw`'s interface type; `raw` is a valid out-param.
+        let hr = unsafe {
+            device.Activate(
                 &IAudioEndpointVolume::uuidof(),
                 CLSCTX_ALL,
                 std::ptr::null_mut(),
                 (&mut raw as *mut *mut IAudioEndpointVolume).cast(),
-            );
-            let volume = NonNull::new(raw).filter(|_| hr >= 0)?;
-            let volume = volume.as_ref();
-            let r = f(volume);
-            volume.Release();
-            Some(r)
-        }
+            )
+        };
+        // SAFETY: on success Activate hands us one reference in `raw`.
+        let volume = unsafe { Com::from_hr(hr, raw) }?;
+        Some(f(&volume))
     }
 
     pub fn muted(device: &IMMDevice) -> Option<bool> {
-        with_volume(device, |volume| unsafe {
+        with_volume(device, |volume| {
             let mut muted = 0;
-            (volume.GetMute(&mut muted) == S_OK).then_some(muted != 0)
+            // SAFETY: `volume` is live for the closure; `muted` is a valid
+            // out-param.
+            (unsafe { volume.GetMute(&mut muted) } == S_OK).then_some(muted != 0)
         })
         .flatten()
     }
 
     pub fn set_muted(device: &IMMDevice, muted: bool) -> Result<(), String> {
-        let hr = with_volume(device, |volume| unsafe {
-            volume.SetMute(i32::from(muted), std::ptr::null())
+        let hr = with_volume(device, |volume| {
+            // SAFETY: `volume` is live for the closure; a null event-context
+            // GUID is allowed.
+            unsafe { volume.SetMute(i32::from(muted), std::ptr::null()) }
         })
         .ok_or("no volume control on the microphone")?;
         if hr == S_OK {
@@ -347,16 +413,20 @@ mod win {
     }
 
     pub fn level(device: &IMMDevice) -> Option<f32> {
-        with_volume(device, |volume| unsafe {
+        with_volume(device, |volume| {
             let mut level = 0.0f32;
-            (volume.GetMasterVolumeLevelScalar(&mut level) == S_OK).then_some(level)
+            // SAFETY: `volume` is live for the closure; `level` is a valid
+            // out-param.
+            (unsafe { volume.GetMasterVolumeLevelScalar(&mut level) } == S_OK).then_some(level)
         })
         .flatten()
     }
 
     pub fn set_level(device: &IMMDevice, level: f32) -> Result<(), String> {
-        let hr = with_volume(device, |volume| unsafe {
-            volume.SetMasterVolumeLevelScalar(level, std::ptr::null())
+        let hr = with_volume(device, |volume| {
+            // SAFETY: `volume` is live for the closure; `level` is clamped
+            // to 0–1 by the caller; a null event-context GUID is allowed.
+            unsafe { volume.SetMasterVolumeLevelScalar(level, std::ptr::null()) }
         })
         .ok_or("no volume control on the microphone")?;
         if hr == S_OK {
@@ -367,91 +437,114 @@ mod win {
     }
 
     pub fn peak(device: &IMMDevice) -> Option<f32> {
-        unsafe {
-            let mut raw: *mut IAudioMeterInformation = std::ptr::null_mut();
-            let hr = device.Activate(
+        let mut raw: *mut IAudioMeterInformation = std::ptr::null_mut();
+        // SAFETY: `device` is a live endpoint borrowed from its guard; the
+        // IID matches `raw`'s interface type; `raw` is a valid out-param.
+        let hr = unsafe {
+            device.Activate(
                 &IAudioMeterInformation::uuidof(),
                 CLSCTX_ALL,
                 std::ptr::null_mut(),
                 (&mut raw as *mut *mut IAudioMeterInformation).cast(),
-            );
-            let meter = NonNull::new(raw).filter(|_| hr >= 0)?;
-            let meter = meter.as_ref();
-            let mut peak = 0.0f32;
-            let ok = meter.GetPeakValue(&mut peak) == S_OK;
-            meter.Release();
-            ok.then_some(peak)
-        }
+            )
+        };
+        // SAFETY: on success Activate hands us one reference in `raw`.
+        let meter = unsafe { Com::from_hr(hr, raw) }?;
+        let mut peak = 0.0f32;
+        // SAFETY: `meter` is live; `peak` is a valid out-param.
+        let ok = unsafe { meter.GetPeakValue(&mut peak) } == S_OK;
+        ok.then_some(peak)
     }
 
     /// `Meter`'s thread: opens a shared capture stream on the endpoint (never
     /// read — it only makes Windows meter the endpoint), then publishes the
     /// peak every 50 ms while `keep()` holds.
     pub fn run_meter(device: Option<&str>, level: &AtomicU32, keep: &dyn Fn() -> bool) {
-        let _ = with_endpoint(device, |endpoint| unsafe {
+        let _ = with_endpoint(device, |endpoint| {
             let mut raw: *mut IAudioClient = std::ptr::null_mut();
-            let hr = endpoint.Activate(
-                &IAudioClient::uuidof(),
-                CLSCTX_ALL,
-                std::ptr::null_mut(),
-                (&mut raw as *mut *mut IAudioClient).cast(),
-            );
-            let Some(client) = NonNull::new(raw).filter(|_| hr >= 0) else {
+            // SAFETY: `endpoint` is live for the closure; the IID matches
+            // `raw`'s interface type; `raw` is a valid out-param.
+            let hr = unsafe {
+                endpoint.Activate(
+                    &IAudioClient::uuidof(),
+                    CLSCTX_ALL,
+                    std::ptr::null_mut(),
+                    (&mut raw as *mut *mut IAudioClient).cast(),
+                )
+            };
+            // SAFETY: on success Activate hands us one reference in `raw`.
+            // Released when `client` drops at the end of this closure — after
+            // Stop and after the format is freed, the order used before.
+            let Some(client) = (unsafe { Com::from_hr(hr, raw) }) else {
                 return;
             };
-            let client = client.as_ref();
             let mut format: *mut WAVEFORMATEX = std::ptr::null_mut();
-            let started = client.GetMixFormat(&mut format) == S_OK
-                && client.Initialize(
-                    AUDCLNT_SHAREMODE_SHARED,
-                    0,
-                    1_000_000, // 100 ms buffer, in 100 ns units
-                    0,
-                    format,
-                    std::ptr::null(),
-                ) >= 0
-                && client.Start() >= 0;
+            // SAFETY: `client` is live; `format` is a valid out-param, and on
+            // S_OK points to a CoTaskMem WAVEFORMATEX that Initialize reads
+            // and that is freed only below, after the stream stopped.
+            let started = unsafe {
+                client.GetMixFormat(&mut format) == S_OK
+                    && client.Initialize(
+                        AUDCLNT_SHAREMODE_SHARED,
+                        0,
+                        1_000_000, // 100 ms buffer, in 100 ns units
+                        0,
+                        format,
+                        std::ptr::null(),
+                    ) >= 0
+                    && client.Start() >= 0
+            };
             if started {
                 while keep() {
                     let peak = self::peak(endpoint).unwrap_or(0.0);
                     level.store(peak.to_bits(), Ordering::Relaxed);
                     std::thread::sleep(std::time::Duration::from_millis(50));
                 }
-                client.Stop();
+                // SAFETY: `client` is live and was started above.
+                unsafe { client.Stop() };
             }
             if !format.is_null() {
-                CoTaskMemFree(format.cast());
+                // SAFETY: `format` came from GetMixFormat (CoTaskMemAlloc),
+                // is owned by us and freed once; nothing reads it afterwards.
+                unsafe { CoTaskMemFree(format.cast()) };
             }
-            client.Release();
         });
         level.store(0, Ordering::Relaxed);
     }
 
     /// Windows' endpoint id, or "" when it can't be read.
     pub fn id(device: &IMMDevice) -> String {
-        unsafe {
-            let mut raw: *mut u16 = std::ptr::null_mut();
-            if device.GetId(&mut raw) == S_OK {
-                take(raw)
-            } else {
-                String::new()
-            }
+        let mut raw: *mut u16 = std::ptr::null_mut();
+        // SAFETY: `device` is a live endpoint; `raw` is a valid out-param.
+        if unsafe { device.GetId(&mut raw) } == S_OK {
+            // SAFETY: on S_OK GetId returns a NUL-terminated CoTaskMem string
+            // the caller owns and must free — what `take` does.
+            unsafe { take(raw) }
+        } else {
+            String::new()
         }
     }
 
     /// Windows' friendly name for the endpoint, or "Microphone".
     pub fn name(device: &IMMDevice) -> String {
-        unsafe {
-            let mut raw: *mut IPropertyStore = std::ptr::null_mut();
-            let hr = device.OpenPropertyStore(STGM_READ, &mut raw);
-            let Some(store) = NonNull::new(raw).filter(|_| hr >= 0) else {
-                return "Microphone".to_owned();
-            };
-            let store = store.as_ref();
-            let mut value = std::mem::zeroed();
-            let mut name = None;
-            if store.GetValue(&PKEY_Device_FriendlyName, &mut value) == S_OK {
-                if value.vt == VT_LPWSTR as u16 {
+        let mut raw: *mut IPropertyStore = std::ptr::null_mut();
+        // SAFETY: `device` is a live endpoint; `raw` is a valid out-param.
+        let hr = unsafe { device.OpenPropertyStore(STGM_READ, &mut raw) };
+        // SAFETY: on success OpenPropertyStore hands us one reference.
+        let Some(store) = (unsafe { Com::from_hr(hr, raw) }) else {
+            return "Microphone".to_owned();
+        };
+        // SAFETY: PROPVARIANT is a C union; all-zero is VT_EMPTY, valid.
+        let mut value = unsafe { std::mem::zeroed() };
+        let mut name = None;
+        // SAFETY: `store` is live; the key is winapi's static; `value` is a
+        // valid out-param.
+        if unsafe { store.GetValue(&PKEY_Device_FriendlyName, &mut value) } == S_OK {
+            if value.vt == VT_LPWSTR as u16 {
+                // SAFETY: `vt` is VT_LPWSTR, so the union holds `pwszVal`: a
+                // NUL-terminated string owned by `value` until the
+                // PropVariantClear below; it is copied out before that.
+                unsafe {
                     let p = *value.data.pwszVal();
                     if !p.is_null() {
                         let mut len = 0;
@@ -461,13 +554,14 @@ mod win {
                         name = Some(String::from_utf16_lossy(std::slice::from_raw_parts(p, len)));
                     }
                 }
-                // The PROPVARIANT owns its string.
-                PropVariantClear(&mut value);
             }
-            store.Release();
-            name.filter(|n| !n.is_empty())
-                .unwrap_or_else(|| "Microphone".to_owned())
+            // The PROPVARIANT owns its string.
+            // SAFETY: `value` was filled by GetValue and is cleared once.
+            unsafe { PropVariantClear(&mut value) };
         }
+        // `store` is released when it drops, after the PropVariantClear.
+        name.filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "Microphone".to_owned())
     }
 }
 

@@ -4,6 +4,7 @@
 //! `cs2.exe`), the dialog is the common Open dialog on its own thread
 //! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
+#![warn(clippy::undocumented_unsafe_blocks)]
 
 use crate::lock_ext::LockSafe;
 use std::collections::HashMap;
@@ -320,11 +321,15 @@ pub fn file_description(path: &str) -> Option<String> {
     use winapi::um::winver::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW};
     let wpath = wide(path);
     let mut handle = 0u32;
+    // SAFETY: `wpath` is a NUL-terminated UTF-16 string that lives across the
+    // call; `handle` is a valid out-param.
     let size = unsafe { GetFileVersionInfoSizeW(wpath.as_ptr(), &mut handle) };
     if size == 0 {
         return None;
     }
     let mut data = vec![0u8; size as usize];
+    // SAFETY: `data` is exactly `size` bytes, the length passed in, so
+    // Windows writes only inside it; `wpath` is NUL-terminated.
     if unsafe { GetFileVersionInfoW(wpath.as_ptr(), 0, size, data.as_mut_ptr().cast()) } == 0 {
         return None;
     }
@@ -332,17 +337,28 @@ pub fn file_description(path: &str) -> Option<String> {
         let wsub = wide(sub);
         let mut ptr = std::ptr::null_mut();
         let mut len = 0u32;
+        // SAFETY: `data` holds the version block GetFileVersionInfoW filled
+        // and outlives the call; `wsub` is NUL-terminated; `ptr`/`len` are
+        // out-params. The pointer it returns points into `data`.
         let ok = unsafe { VerQueryValueW(data.as_ptr().cast(), wsub.as_ptr(), &mut ptr, &mut len) };
         (ok != 0 && !ptr.is_null() && len > 0).then_some((ptr, len))
     };
     // The first language/code page pair, else US English Unicode.
     let lang = query("\\VarFileInfo\\Translation")
         .map(|(ptr, _)| {
+            // SAFETY: `ptr` points into `data`, alive for the whole function,
+            // and in a well-formed version resource the Translation value is
+            // a DWORD (two u16). ASSUMED, not checked: only `len > 0` is
+            // tested, not `len >= 4`, so a malformed resource with a shorter
+            // Translation value could make this read past the value.
             let pair = unsafe { std::slice::from_raw_parts(ptr as *const u16, 2) };
             format!("{:04x}{:04x}", pair[0], pair[1])
         })
         .unwrap_or_else(|| "040904b0".to_owned());
     let (ptr, len) = query(&format!("\\StringFileInfo\\{lang}\\FileDescription"))?;
+    // SAFETY: for a string value VerQueryValueW returns a pointer into `data`
+    // (alive for the whole function) and its length in UTF-16 characters, so
+    // `len` u16 are readable there.
     let chars = unsafe { std::slice::from_raw_parts(ptr as *const u16, len as usize) };
     let text = String::from_utf16_lossy(chars);
     let text = text.trim_end_matches('\0').trim();
@@ -359,6 +375,7 @@ pub fn file_description(_path: &str) -> Option<String> {
 fn icon_image(path: &str) -> Option<egui::ColorImage> {
     // SHGetFileInfo needs COM on this thread (Microsoft's docs). The UI
     // thread already has it; anywhere else, set it up for this call.
+    // SAFETY: the reserved first argument must be null, which it is.
     let com = unsafe {
         winapi::um::combaseapi::CoInitializeEx(
             std::ptr::null_mut(),
@@ -368,22 +385,59 @@ fn icon_image(path: &str) -> Option<egui::ColorImage> {
     let image = icon_image_com(path);
     // S_OK / S_FALSE: this call initialized (or re-counted) COM — undo it.
     if com >= 0 {
+        // SAFETY: balances the successful CoInitializeEx above on this same
+        // thread, after `icon_image_com` has freed everything it made.
         unsafe { winapi::um::combaseapi::CoUninitialize() };
     }
     image
+}
+
+/// An icon this code owns, destroyed when dropped — so an early return or a
+/// panic can't leak it.
+#[cfg(windows)]
+struct OwnedIcon(winapi::shared::windef::HICON);
+
+#[cfg(windows)]
+impl Drop for OwnedIcon {
+    fn drop(&mut self) {
+        // SAFETY: the handle came from SHGetFileInfoW with SHGFI_ICON, which
+        // hands it to the caller to destroy; this guard is its only owner, so
+        // it is destroyed exactly once.
+        unsafe { winapi::um::winuser::DestroyIcon(self.0) };
+    }
+}
+
+/// A bitmap this code owns (one of the two GetIconInfo makes), deleted when
+/// dropped. A null handle (an icon without a colour bitmap) is skipped.
+#[cfg(windows)]
+struct OwnedBitmap(winapi::shared::windef::HBITMAP);
+
+#[cfg(windows)]
+impl Drop for OwnedBitmap {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            // SAFETY: GetIconInfo creates these bitmaps for the caller to
+            // delete; this guard is the only owner and the bitmap is never
+            // selected into a DC, so it is deleted exactly once, here.
+            unsafe { winapi::um::wingdi::DeleteObject(self.0.cast()) };
+        }
+    }
 }
 
 #[cfg(windows)]
 fn icon_image_com(path: &str) -> Option<egui::ColorImage> {
     use winapi::um::shellapi::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON};
     use winapi::um::wingdi::{
-        DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
-        DIB_RGB_COLORS,
+        GetDIBits, GetObjectW, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
     };
-    use winapi::um::winuser::{DestroyIcon, GetDC, GetIconInfo, ReleaseDC, ICONINFO};
+    use winapi::um::winuser::{GetDC, GetIconInfo, ReleaseDC, ICONINFO};
 
     let wpath = wide(path);
+    // SAFETY: SHFILEINFOW is a plain C struct (integers, a handle, u16
+    // arrays); all-zero is a valid value.
     let mut info: SHFILEINFOW = unsafe { std::mem::zeroed() };
+    // SAFETY: `wpath` is NUL-terminated and outlives the call; `info` is a
+    // live SHFILEINFOW and its exact size is passed.
     let got = unsafe {
         SHGetFileInfoW(
             wpath.as_ptr(),
@@ -396,74 +450,83 @@ fn icon_image_com(path: &str) -> Option<egui::ColorImage> {
     if got == 0 || info.hIcon.is_null() {
         return None;
     }
-    let hicon = info.hIcon;
+    // Declared before the bitmaps, so dropped after them: colour bitmap,
+    // mask, then the icon — the order the hand-written cleanup used.
+    let icon = OwnedIcon(info.hIcon);
+    // SAFETY: ICONINFO is a plain C struct; all-zero is a valid value.
     let mut ii: ICONINFO = unsafe { std::mem::zeroed() };
-    let image = (|| {
-        if unsafe { GetIconInfo(hicon, &mut ii) } == 0 || ii.hbmColor.is_null() {
-            return None;
-        }
-        let mut bm: BITMAP = unsafe { std::mem::zeroed() };
-        let read = unsafe {
-            GetObjectW(
-                ii.hbmColor.cast(),
-                std::mem::size_of::<BITMAP>() as i32,
-                (&mut bm as *mut BITMAP).cast(),
-            )
-        };
-        let (w, h) = (bm.bmWidth, bm.bmHeight);
-        if read == 0 || w <= 0 || h <= 0 || w > 256 || h > 256 {
-            return None;
-        }
-        let mut bmi: BITMAPINFO = unsafe { std::mem::zeroed() };
-        bmi.bmiHeader = BITMAPINFOHEADER {
-            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: w,
-            biHeight: -h, // top-down
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB,
-            ..unsafe { std::mem::zeroed() }
-        };
-        let mut bgra = vec![0u8; (w * h * 4) as usize];
-        let hdc = unsafe { GetDC(std::ptr::null_mut()) };
-        let lines = unsafe {
-            GetDIBits(
-                hdc,
-                ii.hbmColor,
-                0,
-                h as u32,
-                bgra.as_mut_ptr().cast(),
-                &mut bmi,
-                DIB_RGB_COLORS,
-            )
-        };
-        unsafe { ReleaseDC(std::ptr::null_mut(), hdc) };
-        if lines == 0 {
-            return None;
-        }
-        // Old icons carry no alpha: treat them as opaque.
-        let has_alpha = bgra.as_chunks::<4>().0.iter().any(|px| px[3] != 0);
-        let rgba: Vec<u8> = bgra
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .flat_map(|px| [px[2], px[1], px[0], if has_alpha { px[3] } else { 255 }])
-            .collect();
-        Some(egui::ColorImage::from_rgba_unmultiplied(
-            [w as usize, h as usize],
-            &rgba,
-        ))
-    })();
-    unsafe {
-        if !ii.hbmColor.is_null() {
-            DeleteObject(ii.hbmColor.cast());
-        }
-        if !ii.hbmMask.is_null() {
-            DeleteObject(ii.hbmMask.cast());
-        }
-        DestroyIcon(hicon);
+    // SAFETY: `icon.0` is the live icon from SHGetFileInfoW; `ii` is a valid
+    // out-param. On failure `ii` stays zeroed (no bitmaps to free).
+    if unsafe { GetIconInfo(icon.0, &mut ii) } == 0 {
+        return None;
     }
-    image
+    let _mask = OwnedBitmap(ii.hbmMask);
+    let color = OwnedBitmap(ii.hbmColor);
+    if color.0.is_null() {
+        return None;
+    }
+    // SAFETY: BITMAP is a plain C struct; all-zero is a valid value.
+    let mut bm: BITMAP = unsafe { std::mem::zeroed() };
+    // SAFETY: `color.0` is a live bitmap owned by `color`; `bm` is a BITMAP
+    // and its exact size is passed, so no more than that is written.
+    let read = unsafe {
+        GetObjectW(
+            color.0.cast(),
+            std::mem::size_of::<BITMAP>() as i32,
+            (&mut bm as *mut BITMAP).cast(),
+        )
+    };
+    let (w, h) = (bm.bmWidth, bm.bmHeight);
+    if read == 0 || w <= 0 || h <= 0 || w > 256 || h > 256 {
+        return None;
+    }
+    // SAFETY: BITMAPINFO is a plain C struct; all-zero is a valid value.
+    let mut bmi: BITMAPINFO = unsafe { std::mem::zeroed() };
+    bmi.bmiHeader = BITMAPINFOHEADER {
+        biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+        biWidth: w,
+        biHeight: -h, // top-down
+        biPlanes: 1,
+        biBitCount: 32,
+        biCompression: BI_RGB,
+        // SAFETY: the remaining BITMAPINFOHEADER fields are integers; zero is
+        // valid for each.
+        ..unsafe { std::mem::zeroed() }
+    };
+    let mut bgra = vec![0u8; (w * h * 4) as usize];
+    // SAFETY: a null HWND asks for the screen's DC, released right below.
+    let hdc = unsafe { GetDC(std::ptr::null_mut()) };
+    // SAFETY: `bgra` holds exactly w × h 32-bit pixels, what `bmi` describes
+    // (32 bpp, `h` lines of width `w`, both at most 256); `color.0` is live
+    // and not selected into a DC; a null `hdc` only makes the call fail.
+    let lines = unsafe {
+        GetDIBits(
+            hdc,
+            color.0,
+            0,
+            h as u32,
+            bgra.as_mut_ptr().cast(),
+            &mut bmi,
+            DIB_RGB_COLORS,
+        )
+    };
+    // SAFETY: `hdc` came from GetDC(null) above and is released once.
+    unsafe { ReleaseDC(std::ptr::null_mut(), hdc) };
+    if lines == 0 {
+        return None;
+    }
+    // Old icons carry no alpha: treat them as opaque.
+    let has_alpha = bgra.as_chunks::<4>().0.iter().any(|px| px[3] != 0);
+    let rgba: Vec<u8> = bgra
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|px| [px[2], px[1], px[0], if has_alpha { px[3] } else { 255 }])
+        .collect();
+    Some(egui::ColorImage::from_rgba_unmultiplied(
+        [w as usize, h as usize],
+        &rgba,
+    ))
 }
 
 #[cfg(not(windows))]
@@ -527,6 +590,8 @@ fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
     let title = wide(title);
     let mut file = vec![0u16; 2048];
     let owner = crate::win_opacity::find_hwnd(owner_title);
+    // SAFETY: OPENFILENAMEW is a plain C struct (sizes, flags, pointers);
+    // all-zero (null pointers) is a valid value.
     let mut ofn: OPENFILENAMEW = unsafe { std::mem::zeroed() };
     ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
     ofn.hwndOwner = owner as winapi::shared::windef::HWND;
@@ -535,6 +600,10 @@ fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
     ofn.nMaxFile = file.len() as u32;
     ofn.lpstrTitle = title.as_ptr();
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    // SAFETY: every pointer in `ofn` (`filter`, `file`, `title`) is a local
+    // that outlives this blocking call; `filter` ends in a double NUL (the
+    // callers' literals), `title` is NUL-terminated, `nMaxFile` is `file`'s
+    // length; `owner` is 0 or one of this process's windows.
     if unsafe { GetOpenFileNameW(&mut ofn) } == 0 {
         return None;
     }
