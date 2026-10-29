@@ -264,6 +264,31 @@ Transactions are serialised — there is never more than one in flight.
 {"id":1,"result":{"protocol":1,"service_version":"3.0.0"}}
 ```
 
+Both sides log the other's version on `hello` — the service "Hello from app
+… (protocol …); service … (protocol …)", the app "control: connected to
+rigstats-control (service …, app …, protocol …)" — so an app and service
+that don't match show in a diagnostics ZIP (#679). **Bump `ProtocolVersion`
+(`ControlPipeWorker.cs`, `PROTOCOL_VERSION` in `control.rs`) only for a
+breaking change**: a method or field removed or renamed, or a value that
+now means something else. Adding a method, or a field the app reads with
+`#[serde(default)]`, needs no bump — an older service answers a new method
+with `unknown_method`, and a missing optional field reads as its default.
+
+**The fixed contract** is the files in `sensor-sidecar.Tests/contract/`
+(#679): the service's tests write a fully filled-in example of each shape
+there, and the app's tests read it back into its own types and write it out
+again, which must give the same JSON (`round_trips_exactly` in `control.rs`)
+— a field renamed, added or dropped on one side fails one of the two. The
+profile is also read back by the service with unknown fields refused, so a
+field only the app has can't be dropped on save unseen. Covered: the
+profile, `apply_result`, `mouse_settings`, `headset_settings`,
+`keyboard_settings`, a capability's `problem`, and the telemetry line's
+`peripherals` and `hardware_problems`. Not yet: the capabilities' per-domain
+`details` and the events. A change to a shape: change both sides, run the
+service's tests with `RIGSTATS_UPDATE_CONTRACT=1`, commit the example with
+it. An answer the app can't parse is logged ("control: the … answer didn't
+parse — …"), not shown as an empty page.
+
 | Method | Purpose |
 | --- | --- |
 | `hello` | Protocol version handshake. On mismatch the UI disables control and says why. |
@@ -477,8 +502,9 @@ escalation vector:
   idea as `/sensor-fixture`), giving `Probe()` regression tests.
 - **Broker**: a provider that fails mid-transaction must trigger full rollback.
 - **Validation**: clamping and edge-case unit tests per domain.
-- **Protocol**: round-trip tests on both sides (C# and Rust serde) from shared
-  JSON fixtures.
+- **Protocol**: round-trip tests on both sides (C# and Rust serde) from the
+  shared examples in `sensor-sidecar.Tests/contract/` — see "Control pipe
+  protocol" (#679).
 - **Dry-run**: the whole flow can be exercised on any machine without writes.
 - All existing gates (`cargo xtask verify`) stay mandatory.
 

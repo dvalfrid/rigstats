@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using SensorSidecar.Control.Providers;
@@ -370,7 +371,7 @@ public sealed class ControlPipeWorker(
         {
             return request.Method switch
             {
-                "hello" => ControlResponse.Ok(request.Id, new { protocol = ProtocolVersion, service_version = AppVersion }),
+                "hello" => HandleHello(request),
                 "capabilities" => ControlResponse.Ok(request.Id, providers.Select(SafeProbe).ToList()),
                 "get_state" => await HandleGetStateAsync(request, ct),
                 "list_profiles" => ControlResponse.Ok(request.Id, await profiles.ListAsync(ct)),
@@ -380,12 +381,12 @@ public sealed class ControlPipeWorker(
                 "aura_preview" => HandleAuraPreview(request),
                 "lamp_toggle" => HandleLampToggle(request),
                 "aura_enable_wdl" => HandleAuraEnableWdl(request),
-                "headset_settings" => ControlResponse.Ok(request.Id, new { headsets = lighting.Headsets() }),
+                "headset_settings" => ControlResponse.Ok(request.Id, HeadsetsReply(lighting)),
                 "headset_set" => HandleHeadsetSet(request),
                 "headset_eq_set" => HandleHeadsetEqSet(request),
-                "keyboard_settings" => ControlResponse.Ok(request.Id, new { keyboards = lighting.KeyboardSettingsList() }),
+                "keyboard_settings" => ControlResponse.Ok(request.Id, KeyboardsReply(lighting)),
                 "keyboard_set" => HandleKeyboardSet(request),
-                "mouse_settings" => ControlResponse.Ok(request.Id, new { mice = mice.List() }),
+                "mouse_settings" => ControlResponse.Ok(request.Id, MiceReply(mice)),
                 "mouse_set" => HandleMouseSet(request),
                 "hue_discover" => await HandleHueDiscoverAsync(request, ct),
                 "hue_pair" => await HandleHuePairAsync(request, ct),
@@ -458,6 +459,12 @@ public sealed class ControlPipeWorker(
 
     private static T ObjectParam<T>(ControlRequest request, string name) => ObjectParam<T>(Param(request, name), name);
 
+    // The device pages' answers, built here for the pipe and for the shared
+    // contract examples the app's reader checks too (#679).
+    internal static JsonObject HeadsetsReply(Lighting.LightingProvider lighting) => new() { ["headsets"] = lighting.Headsets() };
+    internal static JsonObject KeyboardsReply(Lighting.LightingProvider lighting) => new() { ["keyboards"] = lighting.KeyboardSettingsList() };
+    internal static JsonObject MiceReply(Mice.MouseProvider mice) => new() { ["mice"] = mice.List() };
+
     /// The whole `params` object as `T` (save_profile sends the profile itself).
     private static T ParamsAs<T>(ControlRequest request, string what) =>
         request.Params is { ValueKind: JsonValueKind.Object } p
@@ -504,6 +511,25 @@ public sealed class ControlPipeWorker(
             crash_guard_notice = crashGuard.Notice,
             profiles_notice = profiles.Notice,
         });
+    }
+
+    /// `{"protocol": 1, "app_version": "1.53.0"}` — answered with the
+    /// service's own; both are logged, so an app and service that don't match
+    /// show in a diagnostics ZIP (#679). The app decides what a mismatch
+    /// means.
+    private static ControlResponse HandleHello(ControlRequest request)
+    {
+        string? app = null;
+        int? protocol = null;
+        if (request.Params is { ValueKind: JsonValueKind.Object } p)
+        {
+            if (p.TryGetProperty("app_version", out var v) && v.ValueKind == JsonValueKind.String)
+                app = Printable(v.GetString()!);
+            if (p.TryGetProperty("protocol", out var n) && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out var number))
+                protocol = number;
+        }
+        SidecarLog.Log($"[rigstats-control] Hello from app {app ?? "?"} (protocol {protocol?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}); service {AppVersion} (protocol {ProtocolVersion}).");
+        return ControlResponse.Ok(request.Id, new { protocol = ProtocolVersion, service_version = AppVersion });
     }
 
     private async Task<ControlResponse> HandleSaveProfileAsync(ControlRequest request, CancellationToken ct)

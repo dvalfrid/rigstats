@@ -290,6 +290,17 @@ public class MouseProtocolTests
         Assert.Equal(5, caps.Details!["mice"]![0]!["profiles"]!.GetValue<int>());
     }
 
+    /// `mouse_settings`'s answer as the shared example the app's reader parses
+    /// too (`control.rs`, #679) — the Harpe Ace on the Omni receiver, which
+    /// has buttons, debounce, angle tuning and the low-battery warning.
+    [Fact]
+    public void The_mouse_list_serializes_as_the_shared_contract_example()
+    {
+        var provider = new MouseProvider([new FakeMouse()], dryRun: false);
+        ContractExample.Check("control-mouse-settings.json",
+            JsonSerializer.Serialize(ControlPipeWorker.MiceReply(provider), ControlJson.Options));
+    }
+
     [Fact]
     public void A_profile_switches_the_onboard_profile_and_rolls_back()
     {

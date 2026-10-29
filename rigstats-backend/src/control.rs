@@ -195,6 +195,7 @@ pub struct MouseSettings {
 
 /// A mouse button that can be bound (#433): its own action code and name.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct MouseButton {
     pub source: u16,
     pub name: String,
@@ -202,6 +203,7 @@ pub struct MouseButton {
 
 /// Something a mouse button can do.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct MouseAction {
     pub code: u16,
     pub name: String,
@@ -209,6 +211,7 @@ pub struct MouseAction {
 
 /// What a mouse model offers (`MouseCatalog` in the service).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct MouseSpec {
     pub profiles: u8,
     pub dpi_stages: u8,
@@ -263,6 +266,7 @@ fn yes() -> bool {
 
 /// A connected ROG mouse with known settings (`mouse_settings`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct MouseInfo {
     pub id: String,
     pub name: String,
@@ -420,6 +424,7 @@ pub struct KeyboardSettings {
 
 /// A connected keyboard with energy settings (`keyboard_settings`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct KeyboardSettingsInfo {
     pub id: String,
     pub name: String,
@@ -432,6 +437,7 @@ pub struct KeyboardSettingsInfo {
 
 /// A connected headset with settings RIGStats knows (`headset_settings`).
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HeadsetInfo {
     /// The lighting device id — the same id as its battery in the telemetry.
     pub id: String,
@@ -472,6 +478,7 @@ pub struct HeadsetEq {
 
 /// An equalizer preset with its ten gains (G-Helper's tables).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HeadsetEqPreset {
     pub name: String,
     pub gains: Vec<u8>,
@@ -1427,6 +1434,9 @@ async fn control_task_on(
 
         let hello_params =
             serde_json::json!({ "protocol": PROTOCOL_VERSION, "app_version": app_version });
+        // Logged with "connected", so an app and service that don't match
+        // show in a diagnostics ZIP (#679).
+        let mut service_version = String::from("?");
         match request(
             &mut writer,
             &mut reader,
@@ -1439,6 +1449,9 @@ async fn control_task_on(
         .await
         {
             Ok(Some(result)) => {
+                if let Some(v) = result.get("service_version").and_then(|v| v.as_str()) {
+                    service_version = v.chars().filter(|c| !c.is_control()).take(40).collect();
+                }
                 let protocol = result
                     .get("protocol")
                     .and_then(serde_json::Value::as_u64)
@@ -1479,7 +1492,12 @@ async fn control_task_on(
         }
 
         refusals = 0;
-        append_debug_log(&dir, "control: connected to rigstats-control");
+        append_debug_log(
+            &dir,
+            &format!(
+                "control: connected to rigstats-control (service {service_version}, app {app_version}, protocol {PROTOCOL_VERSION})"
+            ),
+        );
         let _ = event_tx.send(ControlEvent::Connected);
         fetch_and_publish(&mut writer, &mut reader, &mut next_id, &event_tx, &dir).await;
         // Start the event stream (fan_duty, safety_tripped) — the service
@@ -1667,7 +1685,7 @@ async fn fetch_and_publish(
     if let Ok(Some(caps)) =
         request(writer, reader, next_id, "capabilities", None, event_tx, dir).await
     {
-        if let Ok(list) = serde_json::from_value::<Vec<CapabilitySet>>(caps) {
+        if let Some(list) = parse_reply::<Vec<CapabilitySet>>(&caps, "capabilities", dir) {
             let _ = event_tx.send(ControlEvent::Capabilities(list));
         }
     }
@@ -1682,7 +1700,7 @@ async fn fetch_and_publish(
     )
     .await
     {
-        if let Ok(list) = serde_json::from_value::<Vec<Profile>>(profiles) {
+        if let Some(list) = parse_reply::<Vec<Profile>>(&profiles, "list_profiles", dir) {
             let _ = event_tx.send(ControlEvent::Profiles(list));
         }
     }
@@ -1707,6 +1725,46 @@ async fn fetch_and_publish(
             .and_then(|v| v.as_str())
             .map(str::to_owned);
         let _ = event_tx.send(ControlEvent::ProfilesNotice(notice));
+    }
+}
+
+/// The device pages' answers (`mouse_settings`, `headset_settings`,
+/// `keyboard_settings`) — the same shapes the service's examples in
+/// `sensor-sidecar.Tests/contract/` have (#679).
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct MiceReply {
+    mice: Vec<MouseInfo>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct HeadsetsReply {
+    headsets: Vec<HeadsetInfo>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct KeyboardsReply {
+    keyboards: Vec<KeyboardSettingsInfo>,
+}
+
+/// An answer as `T`, or `None` with a warning in the log. A field renamed
+/// on one side used to show as an empty page with nothing logged (#679).
+fn parse_reply<T: serde::de::DeserializeOwned>(
+    value: &serde_json::Value,
+    method: &str,
+    dir: &Path,
+) -> Option<T> {
+    match T::deserialize(value) {
+        Ok(reply) => Some(reply),
+        Err(e) => {
+            log_warn(
+                dir,
+                &format!("control: the {method} answer didn't parse — {e}"),
+            );
+            None
+        }
     }
 }
 
@@ -1869,11 +1927,10 @@ async fn handle_cmd(
             match result
                 .as_ref()
                 .ok()
-                .and_then(|r| r.as_ref()?.get("mice").cloned())
+                .and_then(|r| parse_reply::<MiceReply>(r.as_ref()?, "mouse_settings", dir))
             {
-                Some(list) => {
-                    let list = serde_json::from_value(list).unwrap_or_default();
-                    let _ = event_tx.send(ControlEvent::Mice(list));
+                Some(reply) => {
+                    let _ = event_tx.send(ControlEvent::Mice(reply.mice));
                 }
                 None => {
                     let _ = event_tx.send(ControlEvent::MouseBusy(false));
@@ -1932,11 +1989,10 @@ async fn handle_cmd(
             match result
                 .as_ref()
                 .ok()
-                .and_then(|r| r.as_ref()?.get("headsets").cloned())
+                .and_then(|r| parse_reply::<HeadsetsReply>(r.as_ref()?, "headset_settings", dir))
             {
-                Some(list) => {
-                    let list = serde_json::from_value(list).unwrap_or_default();
-                    let _ = event_tx.send(ControlEvent::Headsets(list));
+                Some(reply) => {
+                    let _ = event_tx.send(ControlEvent::Headsets(reply.headsets));
                 }
                 None => {
                     let _ = event_tx.send(ControlEvent::HeadsetBusy(false));
@@ -2013,11 +2069,10 @@ async fn handle_cmd(
             match result
                 .as_ref()
                 .ok()
-                .and_then(|r| r.as_ref()?.get("keyboards").cloned())
+                .and_then(|r| parse_reply::<KeyboardsReply>(r.as_ref()?, "keyboard_settings", dir))
             {
-                Some(list) => {
-                    let list = serde_json::from_value(list).unwrap_or_default();
-                    let _ = event_tx.send(ControlEvent::KeyboardSettings(list));
+                Some(reply) => {
+                    let _ = event_tx.send(ControlEvent::KeyboardSettings(reply.keyboards));
                 }
                 None => {
                     let _ = event_tx.send(ControlEvent::KeyboardBusy(false));
@@ -2608,6 +2663,80 @@ mod tests {
         state.apply(ControlEvent::HeadsetUpdated(changed));
         assert_eq!(state.headsets.len(), 2);
         assert_eq!(state.headsets[1].settings, Some(settings));
+    }
+
+    /// The service's example `name` in `sensor-sidecar.Tests/contract/`,
+    /// read as `T` and written back, gives the same JSON (#679): a field
+    /// only one side has, or named differently, shows as a difference. The
+    /// service checks it writes the same files (`ControlContractTests`,
+    /// `MouseProtocolTests`); the reply types derive `Serialize` in tests
+    /// only, for this.
+    fn round_trips_exactly<T: serde::de::DeserializeOwned + Serialize>(name: &str) {
+        // 88 and 88.0 are the same number here: an f64 is written as 88.0.
+        fn numbers_as_f64(v: serde_json::Value) -> serde_json::Value {
+            use serde_json::Value;
+            match v {
+                Value::Number(n) => serde_json::json!(n.as_f64()),
+                Value::Array(a) => Value::Array(a.into_iter().map(numbers_as_f64).collect()),
+                Value::Object(o) => {
+                    Value::Object(o.into_iter().map(|(k, v)| (k, numbers_as_f64(v))).collect())
+                }
+                other => other,
+            }
+        }
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/contract")
+            .join(name);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
+        let file: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let read: T = serde_json::from_value(file.clone())
+            .unwrap_or_else(|e| panic!("{name} doesn't parse: {e}"));
+        assert_eq!(
+            numbers_as_f64(serde_json::to_value(&read).unwrap()),
+            numbers_as_f64(file),
+            "{name}: the app's shape differs from what the service sends"
+        );
+    }
+
+    /// #679: an answer that doesn't parse is logged, not an empty page
+    /// without a word.
+    #[test]
+    fn an_answer_that_does_not_parse_is_logged() {
+        let dir = tempfile::tempdir().unwrap();
+        let renamed = serde_json::json!({ "mouse_list": [] });
+
+        assert!(parse_reply::<MiceReply>(&renamed, "mouse_settings", dir.path()).is_none());
+
+        let log = std::fs::read_to_string(dir.path().join("rigstats-debug.log")).unwrap();
+        assert!(
+            log.contains("control: the mouse_settings answer didn't parse — missing field `mice`"),
+            "{log}"
+        );
+    }
+
+    #[test]
+    fn the_profile_contract_round_trips() {
+        round_trips_exactly::<Profile>("control-profile.json");
+    }
+
+    #[test]
+    fn the_apply_result_contract_round_trips() {
+        round_trips_exactly::<ApplyResult>("control-apply-result.json");
+    }
+
+    #[test]
+    fn the_mouse_settings_contract_round_trips() {
+        round_trips_exactly::<MiceReply>("control-mouse-settings.json");
+    }
+
+    #[test]
+    fn the_headset_settings_contract_round_trips() {
+        round_trips_exactly::<HeadsetsReply>("control-headset-settings.json");
+    }
+
+    #[test]
+    fn the_keyboard_settings_contract_round_trips() {
+        round_trips_exactly::<KeyboardsReply>("control-keyboard-settings.json");
     }
 
     /// The problem's wire shape against the example the service's

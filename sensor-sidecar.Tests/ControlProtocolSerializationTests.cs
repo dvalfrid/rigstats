@@ -7,9 +7,8 @@ namespace SensorSidecar.Tests;
 /// <summary>
 /// Wire-shape tests for the control pipe's NDJSON envelope and profile
 /// model — snake_case per `docs/control-architecture.md`'s examples. The
-/// cross-language round-trip against `rigstats-backend/src/control.rs`'s
-/// serde types happens once that side exists (Stage 2 of the #187 plan);
-/// this locks down the C# side of the contract in the meantime.
+/// cross-language contract with `rigstats-backend/src/control.rs` is the
+/// shared examples in `contract/` (`ControlContractTests`, #679).
 /// </summary>
 public class ControlProtocolSerializationTests
 {
