@@ -16,12 +16,14 @@
 //! 132 (`ShouldSystemUseDarkMode`) if the registry key is absent.
 
 #![allow(unsafe_code)]
+#![warn(clippy::undocumented_unsafe_blocks)]
 
 use winapi::um::libloaderapi::{FreeLibrary, GetProcAddress, LoadLibraryA};
 
 /// Call once at startup to opt the process into dark mode for OS-rendered elements.
 pub fn enable() {
     let lib_name = b"uxtheme.dll\0";
+    // SAFETY: `lib_name` is a NUL-terminated ASCII string with 'static life.
     let lib = unsafe { LoadLibraryA(lib_name.as_ptr().cast()) };
     if lib.is_null() {
         return;
@@ -29,19 +31,32 @@ pub fn enable() {
 
     // Ordinal 135: SetPreferredAppMode(PreferredAppMode) → i32
     // Passing ordinal as LPCSTR: value ≤ 0xFFFF is treated as ordinal by Windows.
+    // SAFETY: `lib` is the module loaded above and still loaded; an ordinal
+    // in the low word is GetProcAddress's documented MAKEINTRESOURCE form.
     let set_mode = unsafe { GetProcAddress(lib, 135usize as *const i8) };
     if !set_mode.is_null() {
+        // SAFETY: ASSUMED, not checkable: ordinal 135 is undocumented. On
+        // Windows 10 1903+ it is SetPreferredAppMode(int) -> int; on 1809 the
+        // same ordinal is AllowDarkModeForApp(BOOL) -> BOOL, also one 32-bit
+        // argument and a 32-bit return, so the call is ABI-compatible.
         let f: unsafe extern "system" fn(i32) -> i32 = unsafe { std::mem::transmute(set_mode) };
+        // SAFETY: `f` has the signature above and `lib` is still loaded.
         unsafe { f(1) }; // AllowDark = 1
     }
 
     // Ordinal 104: RefreshImmersiveColorPolicyState() — applies the mode change.
+    // SAFETY: as for ordinal 135 above.
     let refresh = unsafe { GetProcAddress(lib, 104usize as *const i8) };
     if !refresh.is_null() {
+        // SAFETY: ASSUMED (undocumented): ordinal 104 takes no arguments; its
+        // return value, if any, is ignored, so `fn()` is ABI-safe either way.
         let f: unsafe extern "system" fn() = unsafe { std::mem::transmute(refresh) };
+        // SAFETY: `f` has the signature above and `lib` is still loaded.
         unsafe { f() };
     }
 
+    // SAFETY: `lib` came from LoadLibraryA above and is freed once; neither
+    // function pointer is used after this.
     unsafe { FreeLibrary(lib) };
 }
 
@@ -63,11 +78,15 @@ pub fn is_system_dark_mode() -> bool {
 
     // ── 2. Fallback: uxtheme.dll ordinal 132 ─────────────────────────────────
     let lib_name = b"uxtheme.dll\0";
+    // SAFETY: `lib_name` is a NUL-terminated ASCII string with 'static life.
     let lib = unsafe { LoadLibraryA(lib_name.as_ptr().cast()) };
     if lib.is_null() {
         return true;
     }
     // Ordinal 132: ShouldSystemUseDarkMode() → BOOL (non-zero = dark)
+    // SAFETY: `lib` is loaded until the FreeLibrary below; the ordinal is
+    // passed in GetProcAddress's MAKEINTRESOURCE form. ASSUMED (undocumented):
+    // ordinal 132 takes no arguments and returns a BOOL (i32).
     let result = unsafe {
         let f_ptr = GetProcAddress(lib, 132usize as *const i8);
         if f_ptr.is_null() {
@@ -77,6 +96,8 @@ pub fn is_system_dark_mode() -> bool {
             f() != 0
         }
     };
+    // SAFETY: `lib` came from LoadLibraryA above and is freed once; the
+    // function pointer is not used after this.
     unsafe { FreeLibrary(lib) };
     result
 }
@@ -94,6 +115,8 @@ fn read_apps_use_light_theme_hkcu() -> Option<u32> {
     let value_name: Vec<u16> = "AppsUseLightTheme\0".encode_utf16().collect();
 
     let mut hkey = std::ptr::null_mut();
+    // SAFETY: `subkey` is NUL-terminated and outlives the call; `hkey` is a
+    // valid out-param, set only on success.
     let open_res =
         unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, subkey.as_ptr(), 0, KEY_READ, &mut hkey) };
     if open_res as u32 != ERROR_SUCCESS {
@@ -103,6 +126,9 @@ fn read_apps_use_light_theme_hkcu() -> Option<u32> {
     let mut data: u32 = 0;
     let mut data_size = std::mem::size_of::<u32>() as u32;
     let mut reg_type: u32 = 0;
+    // SAFETY: `hkey` is open (the open succeeded); `value_name` is
+    // NUL-terminated; `data` is a u32 and `data_size` says 4 bytes, so a
+    // larger value fails with ERROR_MORE_DATA instead of overrunning it.
     let query_res = unsafe {
         RegQueryValueExW(
             hkey,
@@ -113,6 +139,7 @@ fn read_apps_use_light_theme_hkcu() -> Option<u32> {
             &mut data_size,
         )
     };
+    // SAFETY: `hkey` was opened above and is closed once.
     unsafe { RegCloseKey(hkey) };
 
     if query_res as u32 == ERROR_SUCCESS && reg_type == REG_DWORD {
@@ -132,6 +159,9 @@ pub fn apply_titlebar_theme(hwnd: isize, dark: bool) {
     use winapi::shared::windef::HWND;
     use winapi::um::dwmapi::DwmSetWindowAttribute;
     let value: u32 = if dark { 1 } else { 0 };
+    // SAFETY: `value` is a 4-byte BOOL-sized value that lives across the
+    // call and its exact size is passed; DWM validates `hwnd` (a stale one
+    // just fails).
     unsafe {
         DwmSetWindowAttribute(
             hwnd as HWND,
