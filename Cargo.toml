@@ -6,8 +6,12 @@ resolver = "2"
 
 # The lints every crate has (#680); a crate opts in with
 # `[lints] workspace = true`. rigstats-backend keeps its own, stricter set
-# (also clone_on_ref_ptr, redundant_clone, needless_pass_by_value) — on
-# src-egui those three find ~100 places, a change of its own.
+# (also clone_on_ref_ptr, redundant_clone, needless_pass_by_value). Measured
+# on src-egui 2026-10-30 and left off there: clone_on_ref_ptr finds 82
+# `arc.clone()` → `Arc::clone(&arc)` rewrites, style only; redundant_clone
+# finds 8, of which 6 are false (the value is used again — clippy's own fix
+# doesn't compile); needless_pass_by_value fits egui's move-into-closure
+# code poorly.
 [workspace.lints.rust]
 unsafe_code = "deny"
 
