@@ -76,6 +76,7 @@ Both crates declare `rust-version = "1.89"` (raised from 1.77 for `File::lock` i
 ### Unsafe and global mutable state
 
 - `unsafe_code = "deny"` applies to both crates. Raw Win32/FFI code opts out with a narrowly-scoped, documented `#[allow(unsafe_code)]` — a module-level `#![allow(unsafe_code)]` for modules that are thin FFI shims (`win_opacity.rs`, `win32_*.rs`, `gpu_process.rs`, `hotkey.rs`, `single_instance.rs`), or an item-level `#[allow(unsafe_code)]` on the single block elsewhere (e.g. `geometry.rs`, `update_check.rs`, the tray thread in `main.rs`). Everything else stays safe Rust.
+- **Win32 bindings:** new FFI is written against the `windows` crate (maintained, typed handles, COM interfaces released on drop), not `winapi` 0.3, unmaintained since 2019. Existing modules still use `winapi`; one moves over when it is reworked anyway (#680); `winapi` stays in the build either way, through `sysinfo` → `ntapi`.
 - Global `static` variables must use atomic types (`AtomicBool`, `AtomicI32`, `AtomicU64`) — never `static mut`
 - State shared across threads (`RigStatsApp` ↔ poll loop/tray/background threads) is always behind `Mutex` (via `lock_safe()`) or an `Arc<Atomic*>`
 
