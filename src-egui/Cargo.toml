@@ -35,7 +35,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rfd = "0.15"
+rfd = "0.17"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 # Already in the tree through ureq's TLS; hashes the downloaded update.
 ring = "0.17"
@@ -45,7 +45,7 @@ ring = "0.17"
 # accesskit); only these features are added.
 windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_WinRT"] }
 # The notification app id's registry key; the version rigstats-backend uses.
-winreg = "0.52"
+winreg = "0.56"
 winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "shellscalingapi", "shellapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "winbase", "handleapi", "winnt", "errhandlingapi", "pdh", "dxgi", "unknwnbase", "guiddef", "wintrust", "softpub", "wincrypt", "winver", "wingdi", "commdlg", "combaseapi", "objbase"] }
 
 [target.'cfg(windows)'.build-dependencies]
@@ -57,7 +57,7 @@ winres = "0.1"
 # the workspace's dependency resolution.
 wgpu = "30"
 winit = "=0.30.13"
-pollster = "=0.4.0"
+pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 
 [lints.rust]
