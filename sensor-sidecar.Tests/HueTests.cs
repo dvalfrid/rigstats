@@ -10,6 +10,33 @@ namespace SensorSidecar.Tests;
 /// <summary>Philips Hue via the Hue Bridge (#215): colour maths, commands, discovery.</summary>
 public class HueTests
 {
+    /// #680: the key file is created for SYSTEM and Administrators only —
+    /// no moment where the folder's "Users read" applies to it. (Moving it
+    /// into place needs those rights, which the service has and a test
+    /// account hasn't, so this checks the file as created.)
+    [Fact]
+    public void The_key_file_is_created_for_system_and_administrators_only()
+    {
+        var dir = Directory.CreateTempSubdirectory("rigstats-hue-acl-");
+        var path = Path.Combine(dir.FullName, "hue.json.tmp");
+        try
+        {
+            HueLink.WriteAdminsOnly(path, "{}");
+
+            var acl = new FileInfo(path).GetAccessControl();
+            var who = acl.GetAccessRules(true, true, typeof(System.Security.Principal.SecurityIdentifier))
+                .Cast<System.Security.AccessControl.FileSystemAccessRule>()
+                .Select(r => ((System.Security.Principal.SecurityIdentifier)r.IdentityReference).Value)
+                .Order().ToArray();
+            Assert.True(acl.AreAccessRulesProtected);
+            Assert.Equal(["S-1-5-18", "S-1-5-32-544"], who); // SYSTEM, Administrators
+        }
+        finally
+        {
+            try { dir.Delete(recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        }
+    }
+
     [Fact]
     public void Srgb_primaries_land_on_their_xy()
     {

@@ -154,7 +154,16 @@ public static class Hid
                 OpenExisting, FileFlagOverlapped, IntPtr.Zero);
             if (handle.IsInvalid)
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), $"HID device {info.Path} not opened");
-            _stream = new FileStream(handle, FileAccess.ReadWrite, 0, isAsync: true);
+            try
+            {
+                _stream = new FileStream(handle, FileAccess.ReadWrite, 0, isAsync: true);
+            }
+            catch
+            {
+                // The stream owns the handle only once it exists (#680).
+                handle.Dispose();
+                throw;
+            }
         }
 
         public void Write(byte[] report)

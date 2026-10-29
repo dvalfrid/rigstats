@@ -12,6 +12,7 @@ public sealed class LineTooLongException(int maxBytes)
 /// SYSTEM service hold any amount of memory. The app caps a frame the same way
 /// (`MAX_PIPE_LINE_BYTES` in `rigstats-backend`). Lines are decoded whole, so
 /// a character split across two reads is never cut.
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "A MemoryStream holds only memory; the reader lives as long as its connection.")]
 public sealed class BoundedLineReader(Stream stream, int maxBytes)
 {
     private readonly byte[] _buffer = new byte[4096];

@@ -443,6 +443,15 @@ write path into a LocalSystem service and must not become a privilege
 escalation vector:
 
 - Pipe ACL: SYSTEM full control; **interactive user** read/write only.
+  "Interactive" is every user logged on at the PC, not only the one at the
+  screen: with fast user switching or Remote Desktop a second user passes
+  the ACL too, and is then kept out by the client check below (only the
+  installed `rigstats.exe` gets in, whoever runs it).
+- The telemetry pipe takes at most 8 clients at a time
+  (`SensorWorker.MaxClients`) and any member of `BUILTIN\Users` may read
+  it — a process that holds all 8 keeps the app from its readings until it
+  lets go. It only ever sends readings, so that is all it can do; accepted,
+  not guarded against (#680).
 - Client verification: `GetNamedPipeClientProcessId` → image path (the
   kernel's, `QueryFullProcessImageNameW` — not `Process.MainModule`, which
   reads the module list in the client's own memory, #675) must be the
