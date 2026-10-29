@@ -20,55 +20,50 @@ use crate::stats::StatsPayload;
 /// process (this app and the `rigstats-wallpaper` host both prune once a day,
 /// and either can start/end/rename/pin/delete a session), and without this,
 /// two racing writes could silently discard each other's change — e.g. a
-/// rename overwritten by a concurrent prune. Built on plain atomic file
-/// creation so it needs no extra dependency and no `unsafe` code.
+/// rename overwritten by a concurrent prune. An OS lock on a separate file
+/// (`File::try_lock`, like the debug log's `DebugLogLock`): Windows releases
+/// it when the process ends, so a crash can't leave it held and nothing has
+/// to guess that a lock is stale. The lock file it replaced was cleared after
+/// 3 s, so a process holding it longer (a large start-up reconciliation)
+/// could lose it to another mid-write (#680).
 struct SessionsLock {
-    path: PathBuf,
-    held: bool,
+    // Held only to keep the OS lock: closing the file releases it.
+    _file: Option<fs::File>,
 }
 
 impl SessionsLock {
     /// Retries for up to ~250ms, far longer than a normal load-mutate-save
     /// cycle takes — 50ms proved too short on a busy machine (a CI runner
     /// stalled a thread past it), and a missed lock means a lost update. Only
-    /// contended calls ever wait. A lock file older than a few seconds is
-    /// assumed to be left behind by a process that crashed while holding it,
-    /// and is cleared rather than waited on. If the deadline is still reached
-    /// (e.g. another process is doing unusually large I/O, like startup
+    /// contended calls ever wait. If the deadline is still reached (e.g.
+    /// another process is doing unusually large I/O, like startup
     /// reconciliation), the caller proceeds without the lock — a missed update
     /// in that rare case is far better than hanging the caller, which may be
     /// the UI thread.
     fn acquire(dir: &Path) -> Self {
-        let path = dir.join("rigstats-sessions.lock");
+        let Ok(file) = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(dir.join("rigstats-sessions.lock"))
+        else {
+            return Self { _file: None };
+        };
         let deadline = Instant::now() + Duration::from_millis(250);
         loop {
-            match OpenOptions::new().write(true).create_new(true).open(&path) {
-                Ok(_) => return Self { path, held: true },
-                Err(_) => {
-                    let stale = fs::metadata(&path)
-                        .and_then(|m| m.modified())
-                        .ok()
-                        .and_then(|m| m.elapsed().ok())
-                        .is_some_and(|age| age > Duration::from_secs(3));
-                    if stale {
-                        let _ = fs::remove_file(&path);
-                        continue;
-                    }
-                    if Instant::now() >= deadline {
-                        return Self { path, held: false };
-                    }
+            match file.try_lock() {
+                Ok(()) => return Self { _file: Some(file) },
+                Err(fs::TryLockError::WouldBlock) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(2));
                 }
+                Err(_) => return Self { _file: None },
             }
         }
     }
-}
 
-impl Drop for SessionsLock {
-    fn drop(&mut self) {
-        if self.held {
-            let _ = fs::remove_file(&self.path);
-        }
+    #[cfg(test)]
+    fn held(&self) -> bool {
+        self._file.is_some()
     }
 }
 
@@ -1064,13 +1059,13 @@ mod tests {
     fn lock_waits_for_release_then_succeeds() {
         let dir = tempfile::tempdir().expect("tempdir");
         let first = SessionsLock::acquire(dir.path());
-        assert!(first.held);
+        assert!(first.held());
 
         let dir_path = dir.path().to_path_buf();
         let handle = std::thread::spawn(move || {
             let second = SessionsLock::acquire(&dir_path);
             assert!(
-                second.held,
+                second.held(),
                 "must wait for the first lock to be released, not give up"
             );
         });
@@ -1081,22 +1076,32 @@ mod tests {
     }
 
     #[test]
-    fn stale_lock_is_reclaimed_instead_of_blocking() {
+    fn a_lock_file_left_behind_does_not_block() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let lock_path = dir.path().join("rigstats-sessions.lock");
-        let file = fs::File::create(&lock_path).unwrap();
-        file.set_modified(SystemTime::now() - Duration::from_secs(10))
-            .unwrap();
-        drop(file);
+        // What a crash, or the lock file of an older version, leaves.
+        fs::write(dir.path().join("rigstats-sessions.lock"), b"").unwrap();
 
-        // Nothing else removes the file, so waiting could never succeed:
-        // `held` alone proves it was reclaimed (no timing assertion — those
-        // flake on a busy CI runner).
-        let lock = SessionsLock::acquire(dir.path());
-        assert!(
-            lock.held,
-            "a stale lock must be reclaimed, not just waited out"
-        );
+        assert!(SessionsLock::acquire(dir.path()).held());
+    }
+
+    /// #680: a lock held for long — its file old — is not taken over: the
+    /// lock file it replaced was cleared after 3 s, and two writers lost
+    /// each other's change.
+    #[test]
+    fn a_lock_held_for_long_is_not_taken_over() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let first = SessionsLock::acquire(dir.path());
+        assert!(first.held());
+        fs::File::options()
+            .write(true)
+            .open(dir.path().join("rigstats-sessions.lock"))
+            .unwrap()
+            .set_modified(SystemTime::now() - Duration::from_secs(10))
+            .unwrap();
+
+        assert!(!SessionsLock::acquire(dir.path()).held());
+        drop(first);
+        assert!(SessionsLock::acquire(dir.path()).held());
     }
 
     #[test]
