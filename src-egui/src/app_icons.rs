@@ -345,12 +345,12 @@ pub fn file_description(path: &str) -> Option<String> {
     };
     // The first language/code page pair, else US English Unicode.
     let lang = query("\\VarFileInfo\\Translation")
+        // Its length is in bytes; a malformed resource can be shorter than
+        // the pair read below (#680).
+        .filter(|&(_, len)| len >= 4)
         .map(|(ptr, _)| {
             // SAFETY: `ptr` points into `data`, alive for the whole function,
-            // and in a well-formed version resource the Translation value is
-            // a DWORD (two u16). ASSUMED, not checked: only `len > 0` is
-            // tested, not `len >= 4`, so a malformed resource with a shorter
-            // Translation value could make this read past the value.
+            // and the value is at least 4 bytes (checked above): two u16.
             let pair = unsafe { std::slice::from_raw_parts(ptr as *const u16, 2) };
             format!("{:04x}{:04x}", pair[0], pair[1])
         })
