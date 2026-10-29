@@ -44,13 +44,13 @@ mod tests {
 
         let mut own_session = 0u32;
         // SAFETY: the out-pointer is valid for the call.
-        let ok = unsafe {
-            winapi::um::processthreadsapi::ProcessIdToSessionId(
+        unsafe {
+            windows::Win32::System::RemoteDesktop::ProcessIdToSessionId(
                 std::process::id(),
                 &mut own_session,
             )
-        };
-        assert_ne!(ok, 0);
+        }
+        .expect("the test's own session");
         // The test itself is the server — a user session, never session 0.
         assert_eq!(server_session_id(&client), Some(own_session));
         assert_ne!(own_session, 0);

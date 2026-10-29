@@ -623,6 +623,48 @@ mod tests {
         (desktop, in_game)
     }
 
+    /// #702: the screen list against Windows' own count, before and after
+    /// it moves off winapi — names unique, one main screen at 0,0, and the
+    /// logical list the same screens as the named one.
+    #[cfg(windows)]
+    #[test]
+    #[allow(unsafe_code)] // one FFI call, the independent count
+    fn the_screen_list_matches_windows_own_count() {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CMONITORS};
+        let physical = super::win_monitor::screens(true);
+        // SAFETY: GetSystemMetrics takes an index and returns an int.
+        let count = unsafe { GetSystemMetrics(SM_CMONITORS) } as usize;
+        assert_eq!(physical.len(), count);
+
+        let mut names: Vec<&str> = physical.iter().map(|s| s.name.as_str()).collect();
+        assert!(
+            names.iter().all(|n| n.starts_with(r"\\.\DISPLAY")),
+            "{names:?}"
+        );
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count, "each screen once");
+
+        let at_origin = physical
+            .iter()
+            .filter(|s| s.rect[0] <= 0.0 && s.rect[2] > 0.0 && s.rect[1] <= 0.0 && s.rect[3] > 0.0)
+            .count();
+        assert_eq!(at_origin, 1, "one main screen holds 0,0");
+
+        let logical: Vec<[f32; 4]> = super::win_monitor::screens(false)
+            .iter()
+            .map(|s| s.rect)
+            .collect();
+        let listed: Vec<[f32; 4]> = super::win_monitor::list()
+            .iter()
+            .map(|&(l, t, r, b)| [l as f32, t as f32, r as f32, b as f32])
+            .collect();
+        assert_eq!(
+            logical, listed,
+            "list() and screens(false) see the same screens"
+        );
+    }
+
     #[test]
     fn a_window_follows_its_screen_when_the_game_starts_and_back_when_it_ends() {
         let (desktop, in_game) = spore();

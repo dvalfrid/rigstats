@@ -496,6 +496,14 @@ pub fn find() -> Option<Install> {
 /// Whether Wallpaper Engine is running.
 #[cfg(windows)]
 pub fn is_running() -> bool {
+    process_running(&["wallpaper64.exe", "wallpaper32.exe"])
+}
+
+/// Whether a process with one of these file names (lower case) runs — a
+/// seam so the process list can be tested against the test's own process
+/// (#702).
+#[cfg(windows)]
+fn process_running(names: &[&str]) -> bool {
     use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
     use winapi::um::tlhelp32::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
@@ -519,7 +527,7 @@ pub fn is_running() -> bool {
                 .position(|&c| c == 0)
                 .unwrap_or(entry.szExeFile.len());
             let name = String::from_utf16_lossy(&entry.szExeFile[..len]).to_ascii_lowercase();
-            found = name == "wallpaper64.exe" || name == "wallpaper32.exe";
+            found = names.contains(&name.as_str());
             ok = Process32NextW(snap, &mut entry) != 0;
         }
         CloseHandle(snap);
@@ -535,6 +543,20 @@ pub fn is_running() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #702: the process list, against the test's own process.
+    #[cfg(windows)]
+    #[test]
+    fn the_process_list_finds_the_test_itself_and_not_a_made_up_name() {
+        let exe = std::env::current_exe().unwrap();
+        let own = exe
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        assert!(process_running(&[own.as_str()]), "{own} runs this test");
+        assert!(!process_running(&["rigstats-no-such-process-702.exe"]));
+    }
 
     fn pic(screen: &str, path: &str) -> ScreenPicture {
         ScreenPicture {
