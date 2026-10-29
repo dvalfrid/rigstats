@@ -1,7 +1,7 @@
 //! Program icons and names for the app rules (#307), and the "Choose a
 //! program" dialog. Windows only: the icon comes from `SHGetFileInfo`, the
 //! name from the file's version information ("Counter-Strike 2" rather than
-//! `cs2.exe`), the dialog is the common Open dialog on its own thread
+//! `cs2.exe`), the dialog is Windows' Open dialog (through rfd) on its own thread
 //! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
 #![warn(clippy::undocumented_unsafe_blocks)]
@@ -539,12 +539,7 @@ pub fn pick_program(
     owner_title: &'static str,
     ctx: egui::Context,
 ) -> std::sync::mpsc::Receiver<Option<String>> {
-    pick_file(
-        owner_title,
-        "Choose a program",
-        "Programs (*.exe)\0*.exe\0\0",
-        ctx,
-    )
+    pick_file(owner_title, "Choose a program", ("Programs", &["exe"]), ctx)
 }
 
 /// Opens the Open dialog for pictures Windows can show as the desktop
@@ -556,19 +551,19 @@ pub fn pick_picture(
     pick_file(
         owner_title,
         "Choose a picture",
-        "Pictures (*.jpg, *.png, *.bmp, *.webp)\0*.jpg;*.jpeg;*.png;*.bmp;*.webp\0\0",
+        ("Pictures", &["jpg", "jpeg", "png", "bmp", "webp"]),
         ctx,
     )
 }
 
 /// Opens the Open dialog on its own thread (it blocks until closed), owned
 /// by the window titled `owner_title` so it stays on top of it. `filter` is
-/// the dialog's NUL-separated filter list. The chosen path arrives on the
+/// the file kind's name and its extensions. The chosen path arrives on the
 /// returned channel (`None` = cancelled).
 fn pick_file(
     owner_title: &'static str,
     title: &'static str,
-    filter: &'static str,
+    filter: (&'static str, &'static [&'static str]),
     ctx: egui::Context,
 ) -> std::sync::mpsc::Receiver<Option<String>> {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -582,37 +577,58 @@ fn pick_file(
 }
 
 #[cfg(windows)]
-fn open_dialog(owner_title: &str, title: &str, filter: &str) -> Option<String> {
-    use winapi::um::commdlg::{
-        GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
-    };
-    let filter: Vec<u16> = filter.encode_utf16().collect();
-    let title = wide(title);
-    let mut file = vec![0u16; 2048];
-    let owner = crate::win_opacity::find_hwnd(owner_title);
-    // SAFETY: OPENFILENAMEW is a plain C struct (sizes, flags, pointers);
-    // all-zero (null pointers) is a valid value.
-    let mut ofn: OPENFILENAMEW = unsafe { std::mem::zeroed() };
-    ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
-    ofn.hwndOwner = owner as winapi::shared::windef::HWND;
-    ofn.lpstrFilter = filter.as_ptr();
-    ofn.lpstrFile = file.as_mut_ptr();
-    ofn.nMaxFile = file.len() as u32;
-    ofn.lpstrTitle = title.as_ptr();
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
-    // SAFETY: every pointer in `ofn` (`filter`, `file`, `title`) is a local
-    // that outlives this blocking call; `filter` ends in a double NUL (the
-    // callers' literals), `title` is NUL-terminated, `nMaxFile` is `file`'s
-    // length; `owner` is 0 or one of this process's windows.
-    if unsafe { GetOpenFileNameW(&mut ofn) } == 0 {
-        return None;
+fn open_dialog(owner_title: &str, title: &str, filter: (&str, &[&str])) -> Option<String> {
+    // rfd's dialog is Windows' own Common Item Dialog (IFileOpenDialog); it
+    // replaced a hand-built GetOpenFileNameW call (#680). Owned by the window,
+    // so the window waits while it is open — a second "Choose…" can't start.
+    let mut dialog = rfd::FileDialog::new()
+        .set_title(title)
+        .add_filter(filter.0, filter.1);
+    if let Some(owner) = OwnerWindow::find(owner_title) {
+        dialog = dialog.set_parent(&owner);
     }
-    let len = file.iter().position(|&c| c == 0).unwrap_or(file.len());
-    Some(String::from_utf16_lossy(&file[..len]))
+    dialog
+        .pick_file()
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+/// One of this process's windows, found by its title, as rfd's owner.
+#[cfg(windows)]
+struct OwnerWindow(std::num::NonZeroIsize);
+
+#[cfg(windows)]
+impl OwnerWindow {
+    fn find(title: &str) -> Option<Self> {
+        std::num::NonZeroIsize::new(crate::win_opacity::find_hwnd(title)).map(Self)
+    }
+}
+
+#[cfg(windows)]
+impl raw_window_handle::HasWindowHandle for OwnerWindow {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+        let raw = raw_window_handle::RawWindowHandle::Win32(
+            raw_window_handle::Win32WindowHandle::new(self.0),
+        );
+        // SAFETY: the handle is one of this process's windows, found by title
+        // just before; the dialog only uses it as its owner while it is open,
+        // and Windows checks a handle that has gone stale.
+        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(raw) })
+    }
+}
+
+#[cfg(windows)]
+impl raw_window_handle::HasDisplayHandle for OwnerWindow {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+        Ok(raw_window_handle::DisplayHandle::windows())
+    }
 }
 
 #[cfg(not(windows))]
-fn open_dialog(_owner_title: &str, _title: &str, _filter: &str) -> Option<String> {
+fn open_dialog(_owner_title: &str, _title: &str, _filter: (&str, &[&str])) -> Option<String> {
     None
 }
 
