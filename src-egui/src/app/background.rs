@@ -249,10 +249,14 @@ pub(crate) fn spawn_tray_event_thread(
                 #[cfg(windows)]
                 #[allow(unsafe_code)]
                 unsafe {
-                    winapi::um::winuser::AllowSetForegroundWindow(0xFFFF_FFFFu32); // ASFW_ANY
+                    let _ = ::windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
+                        ::windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,
+                    );
                     let parent_hwnd = win_opacity::find_hwnd("RIGStats");
                     if parent_hwnd != 0 {
-                        winapi::um::winuser::SetForegroundWindow(parent_hwnd as _);
+                        let _ = ::windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow(
+                            ::windows::Win32::Foundation::HWND(parent_hwnd as _),
+                        );
                     }
                 }
 

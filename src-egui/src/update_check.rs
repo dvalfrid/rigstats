@@ -425,26 +425,26 @@ pub fn launch_installer(installer: &VerifiedInstaller) -> Result<(), String> {
         .encode_wide()
         .chain(std::iter::once(0))
         .collect();
-    let verb: Vec<u16> = "runas\0".encode_utf16().collect();
-    let params: Vec<u16> = "/autoupdate\0".encode_utf16().collect();
-
+    // ShellExecuteW's result is an HINSTANCE only for history's sake: above
+    // 32 means it started, 32 and below is the error code.
     let result = unsafe {
-        winapi::um::shellapi::ShellExecuteW(
-            std::ptr::null_mut(),
-            verb.as_ptr(),
-            path_wide.as_ptr(),
-            params.as_ptr(),
-            std::ptr::null(),
-            winapi::um::winuser::SW_SHOWNORMAL,
+        windows::Win32::UI::Shell::ShellExecuteW(
+            None,
+            windows::core::w!("runas"),
+            windows::core::PCWSTR(path_wide.as_ptr()),
+            windows::core::w!("/autoupdate"),
+            None,
+            windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL,
         )
-    };
+    }
+    .0 as usize;
 
-    if result as usize > 32 {
+    if result > 32 {
         Ok(())
     } else {
         Err(format!(
             "Failed to launch installer (ShellExecuteW returned {})",
-            result as usize
+            result
         ))
     }
 }

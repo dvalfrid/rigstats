@@ -138,16 +138,15 @@ fn off_for(setting: ::windows::UI::Notifications::NotificationSetting) -> Option
 
 /// Opens Windows' notification settings, where RIGStats is listed.
 pub fn open_windows_settings() {
-    let wide = |s: &str| -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() };
-    let (verb, target) = (wide("open"), wide("ms-settings:notifications"));
+    use windows::core::w;
     unsafe {
-        winapi::um::shellapi::ShellExecuteW(
-            std::ptr::null_mut(),
-            verb.as_ptr(),
-            target.as_ptr(),
-            std::ptr::null(),
-            std::ptr::null(),
-            winapi::um::winuser::SW_SHOWNORMAL,
+        windows::Win32::UI::Shell::ShellExecuteW(
+            None,
+            w!("open"),
+            w!("ms-settings:notifications"),
+            None,
+            None,
+            windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL,
         );
     }
 }

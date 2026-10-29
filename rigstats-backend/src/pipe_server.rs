@@ -18,10 +18,14 @@ pub fn server_session_id(pipe: &impl AsRawHandle) -> Option<u32> {
     let mut session = 0u32;
     // SAFETY: the handle is a live pipe handle borrowed from `pipe`; the
     // out-pointer is valid for the duration of the call.
-    let ok = unsafe {
-        winapi::um::winbase::GetNamedPipeServerSessionId(pipe.as_raw_handle().cast(), &mut session)
-    };
-    (ok != 0).then_some(session)
+    unsafe {
+        windows::Win32::System::Pipes::GetNamedPipeServerSessionId(
+            windows::Win32::Foundation::HANDLE(pipe.as_raw_handle()),
+            &mut session,
+        )
+    }
+    .ok()
+    .map(|()| session)
 }
 
 /// Whether `pipe` is served by a Windows service. Debug builds accept any

@@ -136,10 +136,10 @@ pub fn compute_landscape_window_height(
 
 #[cfg(windows)]
 pub mod win_monitor {
-    use winapi::shared::minwindef::LPARAM;
-    use winapi::shared::windef::{HDC, HMONITOR, LPRECT};
-    use winapi::um::shellscalingapi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
-    use winapi::um::winuser::EnumDisplayMonitors;
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{LPARAM, RECT, TRUE};
+    use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 
     struct MonitorData {
         rects: Vec<(i32, i32, i32, i32)>,
@@ -152,8 +152,13 @@ pub mod win_monitor {
     #[allow(unsafe_code)]
     pub fn list() -> Vec<(i32, i32, i32, i32)> {
         #[allow(unsafe_code)]
-        unsafe extern "system" fn callback(hm: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
-            let d = &mut *(data as *mut MonitorData);
+        unsafe extern "system" fn callback(
+            hm: HMONITOR,
+            _: HDC,
+            lp: *mut RECT,
+            data: LPARAM,
+        ) -> BOOL {
+            let d = &mut *(data.0 as *mut MonitorData);
             let r = *lp;
             let mut dpi_x: u32 = 96;
             let mut dpi_y: u32 = 96;
@@ -166,17 +171,17 @@ pub mod win_monitor {
                 (r.right as f32 / sx) as i32,
                 (r.bottom as f32 / sy) as i32,
             ));
-            1
+            TRUE
         }
 
         let mut data = MonitorData { rects: Vec::new() };
         #[allow(unsafe_code)]
         unsafe {
-            EnumDisplayMonitors(
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
+            let _ = EnumDisplayMonitors(
+                None,
+                None,
                 Some(callback),
-                &mut data as *mut _ as LPARAM,
+                LPARAM(&mut data as *mut _ as isize),
             );
         }
         data.rects
@@ -186,7 +191,7 @@ pub mod win_monitor {
     /// or, like [`list`], in logical ones.
     #[allow(unsafe_code)]
     pub fn screens(physical: bool) -> Vec<super::Screen> {
-        use winapi::um::winuser::{GetMonitorInfoW, MONITORINFO, MONITORINFOEXW};
+        use windows::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITORINFO, MONITORINFOEXW};
 
         struct Found {
             physical: bool,
@@ -195,11 +200,16 @@ pub mod win_monitor {
 
         // SAFETY: called by EnumDisplayMonitors with `data` pointing at the
         // `Found` below for the duration of the call; `lp` is a valid RECT.
-        unsafe extern "system" fn callback(hm: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
-            let found = &mut *(data as *mut Found);
-            let mut info: MONITORINFOEXW = std::mem::zeroed();
-            info.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
-            let name = if GetMonitorInfoW(hm, &mut info as *mut _ as *mut MONITORINFO) != 0 {
+        unsafe extern "system" fn callback(
+            hm: HMONITOR,
+            _: HDC,
+            lp: *mut RECT,
+            data: LPARAM,
+        ) -> BOOL {
+            let found = &mut *(data.0 as *mut Found);
+            let mut info = MONITORINFOEXW::default();
+            info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+            let name = if GetMonitorInfoW(hm, &mut info as *mut _ as *mut MONITORINFO).as_bool() {
                 let len = info
                     .szDevice
                     .iter()
@@ -227,7 +237,7 @@ pub mod win_monitor {
                     (r.bottom as f32 / sy).trunc(),
                 ],
             });
-            1
+            TRUE
         }
 
         let mut found = Found {
@@ -236,11 +246,11 @@ pub mod win_monitor {
         };
         // SAFETY: `found` outlives the call; the callback only writes into it.
         unsafe {
-            EnumDisplayMonitors(
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
+            let _ = EnumDisplayMonitors(
+                None,
+                None,
                 Some(callback),
-                &mut found as *mut _ as LPARAM,
+                LPARAM(&mut found as *mut _ as isize),
             );
         }
         found.screens

@@ -18,11 +18,10 @@
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
-use std::ptr;
-use winapi::shared::winerror::ERROR_ALREADY_EXISTS;
-use winapi::um::errhandlingapi::GetLastError;
-use winapi::um::synchapi::CreateMutexW;
-use winapi::um::winuser::{
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+use windows::Win32::System::Threading::CreateMutexW;
+use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GetWindowLongPtrW, IsIconic, SetForegroundWindow, SetWindowLongPtrW, ShowWindow,
     GWL_EXSTYLE, SW_RESTORE, WS_EX_NOACTIVATE,
 };
@@ -55,11 +54,11 @@ fn acquire_instance_mutex() -> bool {
 /// [`acquire_instance_mutex`] for any name — a seam for the tests (#702).
 fn acquire_named_mutex(name: &str) -> bool {
     let name_w: Vec<u16> = OsStr::new(name).encode_wide().chain(Some(0)).collect();
-    // SAFETY: name_w is null-terminated; null security attrs and
-    // initial-owner false are valid per CreateMutexW's contract.
+    // SAFETY: name_w is null-terminated; no security attributes and
+    // initial-owner false are valid per CreateMutexW's contract. The
+    // handle is never closed (see above); GetLastError is read right after.
     unsafe {
-        let handle = CreateMutexW(ptr::null_mut(), 0, name_w.as_ptr());
-        if handle.is_null() {
+        if CreateMutexW(None, false, PCWSTR(name_w.as_ptr())).is_err() {
             // Creation failed outright (rare) — don't block startup on it.
             return true;
         }
@@ -75,22 +74,23 @@ fn focus_existing_instance() {
     let class_w = wide(MAIN_WINDOW_CLASS);
     let title_w = wide(MAIN_WINDOW_TITLE);
     // SAFETY: both strings are null-terminated.
-    let hwnd = unsafe { FindWindowW(class_w.as_ptr(), title_w.as_ptr()) };
-    if hwnd.is_null() {
+    let Ok(hwnd) = (unsafe { FindWindowW(PCWSTR(class_w.as_ptr()), PCWSTR(title_w.as_ptr())) })
+    else {
         return;
-    }
+    };
+    // SAFETY: `hwnd` was just found; user32 checks a handle that went stale.
     unsafe {
-        if IsIconic(hwnd) != 0 {
-            ShowWindow(hwnd, SW_RESTORE);
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
         }
         // "Always Behind" mode sets WS_EX_NOACTIVATE, which blocks
         // SetForegroundWindow — strip it so the existing window can activate.
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let desired = ex_style & !(WS_EX_NOACTIVATE as isize);
+        let desired = ex_style & !(WS_EX_NOACTIVATE.0 as isize);
         if ex_style != desired {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
-        SetForegroundWindow(hwnd);
+        let _ = SetForegroundWindow(hwnd);
     }
 }
 

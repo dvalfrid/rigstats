@@ -504,22 +504,23 @@ pub fn is_running() -> bool {
 /// (#702).
 #[cfg(windows)]
 fn process_running(names: &[&str]) -> bool {
-    use winapi::um::handleapi::{CloseHandle, INVALID_HANDLE_VALUE};
-    use winapi::um::tlhelp32::{
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
         TH32CS_SNAPPROCESS,
     };
     // SAFETY: a process snapshot, walked with a correctly sized entry and
     // closed before returning.
     unsafe {
-        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-        if snap == INVALID_HANDLE_VALUE {
+        let Ok(snap) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else {
             return false;
-        }
-        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
-        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        };
+        let mut entry = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
         let mut found = false;
-        let mut ok = Process32FirstW(snap, &mut entry) != 0;
+        let mut ok = Process32FirstW(snap, &mut entry).is_ok();
         while ok && !found {
             let len = entry
                 .szExeFile
@@ -528,9 +529,9 @@ fn process_running(names: &[&str]) -> bool {
                 .unwrap_or(entry.szExeFile.len());
             let name = String::from_utf16_lossy(&entry.szExeFile[..len]).to_ascii_lowercase();
             found = names.contains(&name.as_str());
-            ok = Process32NextW(snap, &mut entry) != 0;
+            ok = Process32NextW(snap, &mut entry).is_ok();
         }
-        CloseHandle(snap);
+        let _ = CloseHandle(snap);
         found
     }
 }

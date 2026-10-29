@@ -1115,9 +1115,10 @@ struct WmiBatteryStatusRow {
 #[cfg(windows)]
 #[allow(unsafe_code)] // one FFI call filling a stack struct
 pub fn system_battery_present() -> bool {
-    use winapi::um::winbase::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
-    let mut status: SYSTEM_POWER_STATUS = unsafe { std::mem::zeroed() };
-    if unsafe { GetSystemPowerStatus(&mut status) } == 0 {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status = SYSTEM_POWER_STATUS::default();
+    // SAFETY: the out-pointer is a local struct, valid for the call.
+    if unsafe { GetSystemPowerStatus(&mut status) }.is_err() {
         return false;
     }
     battery_flag_means_battery(status.BatteryFlag)
