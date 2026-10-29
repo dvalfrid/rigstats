@@ -21,6 +21,16 @@ internal static class ContractExample
         Assert.Equal(File.ReadAllText(path).Trim(), json);
     }
 
+    /// One domain's `capabilities` entry, `details` included, as
+    /// `control-caps-<domain>.json`. Build it from a fake that offers
+    /// everything the domain can say, so every field is in the example.
+    public static void CheckCapability(Control.CapabilitySet caps)
+    {
+        Assert.True(caps.Supported, $"{caps.Domain}: the example must be a supported domain with its details");
+        Check($"control-caps-{caps.Domain}.json",
+            System.Text.Json.JsonSerializer.Serialize(caps, Control.ControlJson.Options));
+    }
+
     private static string RepoRoot()
     {
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

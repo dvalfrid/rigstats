@@ -210,6 +210,13 @@ public sealed class CpuLimitProviderTests : IDisposable
         Assert.Equal(Stock, smu.Current);
     }
 
+    /// The `cpu_limit` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_cpu_limit_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(Provider(new FakeSmu(Stock)).Probe());
+    }
+
     [Fact]
     public void A_new_boot_reads_the_baseline_again()
     {

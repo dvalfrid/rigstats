@@ -105,6 +105,78 @@ public class ControlContractTests
             JsonSerializer.Serialize(Control.ControlPipeWorker.KeyboardsReply(lighting), ControlJson.Options));
     }
 
+    /// Every event `subscribe` pushes, in one example.
+    [Fact]
+    public void The_events_serialize_as_the_shared_contract_example()
+    {
+        ControlEventMessage[] events =
+        [
+            ControlPipeWorker.ProfileChangedMessage("my-rig"),
+            ControlPipeWorker.ApplyResultMessage(ApplyResult.Success("my-rig", "Profile My rig applied; the keyboard gets it when it wakes.")),
+            ControlPipeWorker.PreviewRevertedMessage("my-rig"),
+            ControlPipeWorker.ToEventMessage(new Control.Providers.FanEvent.DutyUpdate(new Dictionary<string, double> { ["lpc/nct6799d/0/control/1"] = 42.5 })),
+            ControlPipeWorker.ToEventMessage(new Control.Providers.FanEvent.SafetyTripped("CPU 97 °C")),
+            ControlPipeWorker.ToIdentifiedMessage(new Control.Providers.FanIdentifyResult("lpc/nct6799d/0/control/1",
+                [new Control.Providers.FanResponder("Fan #2", 820, 1650)])),
+        ];
+        ContractExample.Check("control-events.json", JsonSerializer.Serialize(events, ControlJson.Options));
+    }
+
+    /// The `aura` capability, with a paired Hue Bridge and a device that has
+    /// a lamp, Dynamic Lighting and a problem, so every field is sent.
+    [Fact]
+    public void The_aura_capability_serializes_as_the_shared_contract_example()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"rigstats-hue-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(new HueFile(
+            new HueBridgeInfo("ecb5fafffe0a1b2c", "Hue Bridge", "BSB002", "1.68.1968145020", "192.168.1.224"),
+            "not-a-real-key",
+            [new HueGroup("room-1", "Office", "room", "grouped-1"), new HueGroup("zone-1", "Desk", "zone", "grouped-2")],
+            ["room-1"]), ControlJson.Options));
+        try
+        {
+            var lighting = new LightingProvider(() => [], _ => new LightingScan([new FakeLightBar(), new FakeHeadset()], ""),
+                () => null, dryRun: false, hue: new HueLink(path));
+
+            ContractExample.CheckCapability(lighting.Probe());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void The_headset_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(new Control.Headsets.HeadsetProvider(() => [new FakeHeadset()], dryRun: false).Probe());
+    }
+
+    private sealed class FakeLightBar : ILightingDevice, ILampDevice, IWdlDevice
+    {
+        public string Id => "asus-monitor-1ac8-1";
+        public string Name => "ROG Aura Monitor Light Bar";
+        public string Kind => "light_bar";
+        public string Firmware => "1.0.4";
+        public string? Blocked => null;
+        public string? Problem => "Set its Cross-device Lighting Toggle to on.";
+        public bool StaticOnly => true;
+        public IReadOnlyList<AuraZone> Zones { get; } = [new("bar", "Light bar", true, 0, 3)];
+        public void Apply(AuraEffect effect, byte red, byte green, byte blue) { }
+        public bool Release() => false;
+        public JsonObject Diagnostics() => [];
+
+        public bool HasLamp => true;
+        public void SetLamp(LampPart lamp) { }
+        public bool LampOn() => true;
+        public void SwitchLamp(bool on) { }
+
+        public bool HasWdl => true;
+        public bool KnownModel => true;
+        public bool? WdlOn() => false;
+        public void EnableWdl() { }
+    }
+
     /// A headset with settings and an equalizer, so every field is sent.
     private sealed class FakeHeadset : ILightingDevice, IHeadsetSettingsDevice, IHeadsetEqDevice
     {

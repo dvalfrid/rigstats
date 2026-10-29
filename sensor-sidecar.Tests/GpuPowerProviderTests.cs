@@ -107,6 +107,13 @@ public sealed class GpuPowerProviderTests : IDisposable
         Assert.True(provider.Affects(empty), "going back to the original is work to do");
     }
 
+    /// The `gpu` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_gpu_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(Provider(new FakeGpu(Rx9070Xt)).Probe());
+    }
+
     [Fact]
     public void A_driver_that_wont_initialize_is_unsupported_not_an_error()
     {

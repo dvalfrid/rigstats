@@ -1,0 +1,1 @@
+{"domain":"gpu","supported":true,"details":{"adapters":[{"id":"PCI\\VEN_1002\u0026DEV_7550\u0026SUBSYS_06331043\u0026REV_C0\\6\u0026196380D0\u00260\u002600000009","name":"AMD Radeon RX 9070 XT","min":-30,"max":10,"step":1,"default":0,"original":0,"current":0}]}}

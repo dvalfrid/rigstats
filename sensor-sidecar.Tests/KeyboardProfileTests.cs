@@ -122,6 +122,13 @@ public class KeyboardProfileTests
         Assert.Equal(1, keyboard.Current);
     }
 
+    /// The `keyboard` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_keyboard_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(new KeyboardProvider(() => [new FakeKeyboard()], dryRun: false).Probe());
+    }
+
     [Fact]
     public void No_keyboard_or_no_answer_skips_the_domain()
     {

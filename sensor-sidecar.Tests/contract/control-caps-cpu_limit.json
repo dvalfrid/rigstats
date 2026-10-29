@@ -1,0 +1,1 @@
+{"domain":"cpu_limit","supported":true,"details":{"vendor":"amd","generation":"Granite Ridge","pm_table":"0x620105","stock":{"ppt_w":162,"tdc_a":120,"edc_a":180},"min":{"ppt_w":45,"tdc_a":30,"edc_a":45},"current":{"ppt_w":162,"tdc_a":120,"edc_a":180}}}
