@@ -262,8 +262,13 @@ candidates too**.
   workflow passes the tag's version to the build (`RIGSTATS_VERSION`), so an RC
   shows and compares `1.51.0-rc.2`, not `Cargo.toml`'s. Local builds fall back
   to `CARGO_PKG_VERSION`. The order is semver: `1.50.0` < `1.51.0-rc.1` <
-  `1.51.0-rc.2` < `1.51.0`. The Control Center's handshake with the service
-  still sends `CARGO_PKG_VERSION`.
+  `1.51.0-rc.2` < `1.51.0`. The Control Center's handshake (`hello`) sends
+  `APP_VERSION` too, and `cargo xtask build` passes the same version to
+  `dotnet publish` (`-p:Version`), so both sides of the service log's "Hello
+  from app … service …" line name the RC, not the csproj's last release.
+  Seen on 1.53.0-rc.3, which still logged 1.52.0 for both; checked locally
+  with `RIGSTATS_VERSION=1.53.0-rc.9 cargo xtask build` (service product
+  version and the app both 1.53.0-rc.9).
 - **Testing it locally:** build with `RIGSTATS_VERSION=1.51.0-rc.1` and the
   channel set to Release candidates. The Updates window then offers the newest
   real RC. Seen 2026-10-20: it found, downloaded and verified `v1.51.0-rc.2`.
