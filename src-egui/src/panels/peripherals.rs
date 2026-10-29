@@ -365,7 +365,6 @@ pub fn paint_card_row(
     );
 }
 
-#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

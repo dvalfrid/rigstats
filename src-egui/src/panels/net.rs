@@ -25,7 +25,6 @@ fn fmt_mbps_parts(v: f64) -> (String, &'static str) {
 /// blend correctly over a transparent window background — the lines and
 /// gradient fills (the actual data) stay fully readable, matching how text
 /// and gauges elsewhere ignore `opacity`.
-#[allow(clippy::too_many_arguments)]
 fn draw_dual(
     ui: &mut Ui,
     height: f32,
@@ -114,7 +113,6 @@ fn draw_dual(
     }
 }
 
-#[allow(clippy::too_many_arguments)] // like the other panels: the frame's inputs
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

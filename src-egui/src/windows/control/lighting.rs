@@ -98,7 +98,6 @@ fn hex_color([r, g, b]: [u8; 3]) -> String {
 /// in the profile.
 // The page needs the control state, its caps, the saved part, the command
 // channel, the UI state and the telemetry's peripherals.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn lighting_tab(
     ui: &mut egui::Ui,
     dc: &DialogColors,

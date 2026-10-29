@@ -13,7 +13,6 @@ const SPARK_H: f32 = 36.0;
 const CORE_VAL_W: f32 = 36.0; // "100%"
 const CORE_ROW_H: f32 = 16.0;
 
-#[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

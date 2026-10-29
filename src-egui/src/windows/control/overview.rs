@@ -75,7 +75,6 @@ fn lighting_summary(aura: Option<&AuraPart>) -> (String, Option<egui::Color32>) 
 
 /// The profile at a glance: a tile per page with what it does; a click
 /// opens the page.
-#[allow(clippy::too_many_arguments)]
 pub(super) fn overview_page(
     ui: &mut egui::Ui,
     dc: &DialogColors,

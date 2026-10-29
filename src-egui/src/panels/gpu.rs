@@ -26,6 +26,7 @@ fn vram_frac(stats: &PollStats) -> f32 {
 }
 
 /// Returns `Some(gpu_name)` if the user clicked a GPU selector dot.
+// 13: three threshold pairs and the power limit on top of a panel's inputs.
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,

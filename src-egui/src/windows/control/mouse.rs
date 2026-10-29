@@ -157,7 +157,6 @@ pub(super) fn mouse_page(
 }
 
 /// One mouse on the Mouse page.
-#[allow(clippy::too_many_arguments)] // one card's inputs and its two outputs
 fn mouse_card(
     ui: &mut egui::Ui,
     dc: &DialogColors,

@@ -14,7 +14,6 @@ fn short_label(label: &str) -> String {
     label.chars().take(8).collect()
 }
 
-#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

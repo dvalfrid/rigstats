@@ -786,10 +786,17 @@ fn migrate_v0_thresholds(s: &mut Settings) {
 /// Writes `content` to `path` via an adjacent `.tmp` file that is renamed into
 /// place. On the same filesystem, `rename` is atomic, so a hard shutdown
 /// mid-write leaves either the old file intact or the new file complete —
-/// never a truncated or partially-written result.
+/// never a truncated or partially-written result. The data is flushed to
+/// disk before the rename (#680): without it a power cut can leave the
+/// renamed file empty, its contents still only in the cache.
 pub(crate) fn atomic_write(path: &std::path::Path, content: &str) -> Result<(), String> {
+    use std::io::Write;
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, content).map_err(|e| e.to_string())?;
+    let mut file = fs::File::create(&tmp).map_err(|e| e.to_string())?;
+    file.write_all(content.as_bytes())
+        .and_then(|()| file.sync_all())
+        .map_err(|e| e.to_string())?;
+    drop(file);
     fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
