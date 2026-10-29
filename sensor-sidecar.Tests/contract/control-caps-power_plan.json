@@ -1,0 +1,1 @@
+{"domain":"power_plan","supported":true,"details":{"schemes":[{"id":"power_saver","name":"Power saver"},{"id":"balanced","name":"Balanced"},{"id":"high_performance","name":"High performance"}]}}

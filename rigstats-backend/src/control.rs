@@ -66,6 +66,7 @@ struct ErrorBody {
 }
 
 #[derive(Debug, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 struct EventIn {
     event: String,
     #[serde(default)]
@@ -116,6 +117,7 @@ pub struct HeadsetPart {
 
 /// A headset with an equalizer, as the `headset` domain reports it (#483).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HeadsetEqInfo {
     pub id: String,
     pub name: String,
@@ -124,6 +126,7 @@ pub struct HeadsetEqInfo {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 struct HeadsetCaps {
     #[serde(default)]
     headsets: Vec<HeadsetEqInfo>,
@@ -140,6 +143,7 @@ pub struct KeyboardPart {
 
 /// A keyboard with onboard profiles, as the `keyboard` domain reports it (#458).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct KeyboardInfo {
     pub id: String,
     pub name: String,
@@ -147,6 +151,7 @@ pub struct KeyboardInfo {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 struct KeyboardCaps {
     #[serde(default)]
     keyboards: Vec<KeyboardInfo>,
@@ -357,6 +362,7 @@ impl LampPart {
 /// The "aura" capability's `details`, typed. Aura Sync: the profile's one
 /// effect goes to every device listed.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct AuraCaps {
     #[serde(default)]
     pub effects: Vec<String>,
@@ -368,6 +374,7 @@ pub struct AuraCaps {
 /// — present even when no other lighting device is, so a bridge can be
 /// paired there. Its chosen rooms are also among the `devices`.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HueCaps {
     #[serde(default)]
     pub paired: bool,
@@ -378,6 +385,7 @@ pub struct HueCaps {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HueBridgeCap {
     pub id: String,
     pub name: String,
@@ -391,6 +399,7 @@ pub struct HueBridgeCap {
 
 /// A room or zone on the bridge; `chosen` ones follow the rig.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct HueGroupCap {
     pub id: String,
     pub name: String,
@@ -500,6 +509,7 @@ pub struct HueBridgeFound {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct AuraDeviceCap {
     pub id: String,
     pub name: String,
@@ -544,6 +554,7 @@ pub struct AuraDeviceCap {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct AuraZoneCap {
     pub id: String,
     pub name: String,
@@ -556,6 +567,7 @@ pub struct AuraZoneCap {
 /// One Windows power scheme from the "power_plan" capability: `id` is the
 /// symbolic name for the well-known schemes ("balanced", ...) or the GUID.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct PowerScheme {
     pub id: String,
     pub name: String,
@@ -580,6 +592,7 @@ impl CurveOptPart {
 
 /// The "curve_opt" capability's `details`, typed.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct CurveOptCaps {
     pub min: i32,
     pub max: i32,
@@ -611,12 +624,14 @@ pub struct GpuAdapterConfig {
 
 /// The "gpu" capability's `details`, typed.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct GpuCaps {
     #[serde(default)]
     pub adapters: Vec<GpuAdapterCap>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct GpuAdapterCap {
     /// PNP device instance path.
     pub id: String,
@@ -641,6 +656,7 @@ fn one() -> i32 {
 /// The "cpu_limit" capability's `details`, typed. Limits only go down:
 /// `stock` (the BIOS values this boot) is the ceiling, `min` the floor.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct CpuLimitCaps {
     #[serde(default)]
     pub vendor: String,
@@ -652,6 +668,7 @@ pub struct CpuLimitCaps {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct AmdLimitValues {
     pub ppt_w: f64,
     pub tdc_a: f64,
@@ -677,6 +694,7 @@ fn default_hysteresis_c() -> f64 {
 
 /// The "fan" capability's `details`, typed.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct FanCaps {
     #[serde(default)]
     pub headers: Vec<FanHeaderCap>,
@@ -685,6 +703,7 @@ pub struct FanCaps {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct FanHeaderCap {
     pub id: String,
     pub label: String,
@@ -698,6 +717,7 @@ pub struct FanHeaderCap {
 
 /// An RPM sensor that sped up while a header was identified (#207).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
 pub struct FanResponder {
     pub label: String,
     pub before_rpm: f64,
@@ -2343,51 +2363,63 @@ fn publish_apply_result(r: ApplyResult, event_tx: &SyncSender<ControlEvent>, dir
     let _ = event_tx.send(ControlEvent::ApplyResult(r));
 }
 
+/// The events' data, as the service's example `contract/control-events.json`
+/// has it (#679). Not logged when one doesn't parse: `fan_duty` comes every
+/// second.
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct ProfileChangedData {
+    id: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct FanDutyData {
+    duty: BTreeMap<String, f64>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct SafetyTrippedData {
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(Serialize))]
+struct FanIdentifiedData {
+    header: String,
+    #[serde(default)]
+    responders: Vec<FanResponder>,
+}
+
+fn event_data<T: serde::de::DeserializeOwned>(ev: EventIn) -> Option<T> {
+    T::deserialize(ev.data?).ok()
+}
+
 fn handle_event(ev: EventIn, event_tx: &SyncSender<ControlEvent>, dir: &Path) {
     match ev.event.as_str() {
         "profile_changed" => {
-            let id = ev
-                .data
-                .as_ref()
-                .and_then(|d| d.get("id"))
-                .and_then(|v| v.as_str())
-                .map(str::to_owned);
+            let id = event_data::<ProfileChangedData>(ev).and_then(|d| d.id);
             let _ = event_tx.send(ControlEvent::ActiveProfile(id));
         }
         "apply_result" => {
-            if let Some(data) = ev.data {
-                if let Ok(result) = serde_json::from_value::<ApplyResult>(data) {
-                    publish_apply_result(result, event_tx, dir);
-                }
+            if let Some(result) = event_data::<ApplyResult>(ev) {
+                publish_apply_result(result, event_tx, dir);
             }
         }
         "fan_duty" => {
-            if let Some(duty) = ev
-                .data
-                .and_then(|mut d| d.get_mut("duty").map(serde_json::Value::take))
-                .and_then(|d| serde_json::from_value::<BTreeMap<String, f64>>(d).ok())
-            {
-                let _ = event_tx.send(ControlEvent::FanDuty(duty));
+            if let Some(d) = event_data::<FanDutyData>(ev) {
+                let _ = event_tx.send(ControlEvent::FanDuty(d.duty));
             }
         }
         "safety_tripped" => {
-            let reason = ev
-                .data
-                .as_ref()
-                .and_then(|d| d.get("reason"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("Critical temperature")
-                .to_owned();
+            let reason = event_data::<SafetyTrippedData>(ev)
+                .and_then(|d| d.reason)
+                .unwrap_or_else(|| "Critical temperature".to_owned());
             let _ = event_tx.send(ControlEvent::SafetyTripped(reason));
         }
         "fan_identified" => {
-            #[derive(Deserialize)]
-            struct Identified {
-                header: String,
-                #[serde(default)]
-                responders: Vec<FanResponder>,
-            }
-            if let Some(Ok(id)) = ev.data.map(serde_json::from_value::<Identified>) {
+            if let Some(id) = event_data::<FanIdentifiedData>(ev) {
                 let _ = event_tx.send(ControlEvent::FanIdentified {
                     header: id.header,
                     responders: id.responders,
@@ -2672,6 +2704,21 @@ mod tests {
     /// `MouseProtocolTests`); the reply types derive `Serialize` in tests
     /// only, for this.
     fn round_trips_exactly<T: serde::de::DeserializeOwned + Serialize>(name: &str) {
+        assert_round_trip::<T>(name, contract_example(name));
+    }
+
+    fn contract_example(name: &str) -> serde_json::Value {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../sensor-sidecar.Tests/contract")
+            .join(name);
+        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
+        serde_json::from_str(&text).unwrap()
+    }
+
+    fn assert_round_trip<T: serde::de::DeserializeOwned + Serialize>(
+        name: &str,
+        value: serde_json::Value,
+    ) {
         // 88 and 88.0 are the same number here: an f64 is written as 88.0.
         fn numbers_as_f64(v: serde_json::Value) -> serde_json::Value {
             use serde_json::Value;
@@ -2684,18 +2731,112 @@ mod tests {
                 other => other,
             }
         }
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../sensor-sidecar.Tests/contract")
-            .join(name);
-        let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {name}: {e}"));
-        let file: serde_json::Value = serde_json::from_str(&text).unwrap();
-        let read: T = serde_json::from_value(file.clone())
+        let read: T = serde_json::from_value(value.clone())
             .unwrap_or_else(|e| panic!("{name} doesn't parse: {e}"));
         assert_eq!(
             numbers_as_f64(serde_json::to_value(&read).unwrap()),
-            numbers_as_f64(file),
+            numbers_as_f64(value),
             "{name}: the app's shape differs from what the service sends"
         );
+    }
+
+    /// One domain's `capabilities` entry (`control-caps-<domain>.json`): the
+    /// part of its `details` at `pointer` round-trips exactly as `T`, after
+    /// taking out `unread` — the fields the app doesn't read there, by path
+    /// (`devices[].firmware`). Listing them is the point: a field the app
+    /// starts to need can't be missed, and a rename is still caught.
+    fn details_round_trip<T: serde::de::DeserializeOwned + Serialize>(
+        domain: &str,
+        pointer: &str,
+        unread: &[&str],
+    ) {
+        fn remove(v: &mut serde_json::Value, path: &[&str]) {
+            let Some((first, rest)) = path.split_first() else {
+                return;
+            };
+            let (key, each) = match first.strip_suffix("[]") {
+                Some(key) => (key, true),
+                None => (*first, false),
+            };
+            let Some(obj) = v.as_object_mut() else {
+                return;
+            };
+            if rest.is_empty() && !each {
+                assert!(
+                    obj.remove(key).is_some(),
+                    "`{key}` isn't in the example any more"
+                );
+                return;
+            }
+            match obj.get_mut(key) {
+                Some(serde_json::Value::Array(items)) if each => {
+                    items.iter_mut().for_each(|item| remove(item, rest));
+                }
+                Some(inner) => remove(inner, rest),
+                None => panic!("`{key}` isn't in the example any more"),
+            }
+        }
+        let name = format!("control-caps-{domain}.json");
+        let caps: CapabilitySet = serde_json::from_value(contract_example(&name))
+            .unwrap_or_else(|e| panic!("{name}: the capability doesn't parse: {e}"));
+        assert_eq!(caps.domain, domain);
+        assert!(caps.supported);
+        let mut details = caps
+            .details
+            .and_then(|d| d.pointer(pointer).cloned())
+            .unwrap_or_else(|| panic!("{name}: no details at `{pointer}`"));
+        for path in unread {
+            remove(&mut details, &path.split('.').collect::<Vec<_>>());
+        }
+        assert_round_trip::<T>(&name, details);
+    }
+
+    /// Every event the service pushes (`control-events.json`): its data
+    /// round-trips as the type the app reads it into; `preview_reverted`'s
+    /// `id` isn't read (the app ends whichever preview runs).
+    #[test]
+    fn the_event_contracts_round_trip() {
+        let events = contract_example("control-events.json");
+        let mut seen = Vec::new();
+        for event in events.as_array().expect("an array of events") {
+            let ev: EventIn = serde_json::from_value(event.clone()).expect("an event");
+            let data = ev.data.clone().expect("data");
+            let name = format!("control-events.json: {}", ev.event);
+            match ev.event.as_str() {
+                "profile_changed" => assert_round_trip::<ProfileChangedData>(&name, data),
+                "apply_result" => assert_round_trip::<ApplyResult>(&name, data),
+                "fan_duty" => assert_round_trip::<FanDutyData>(&name, data),
+                "safety_tripped" => assert_round_trip::<SafetyTrippedData>(&name, data),
+                "fan_identified" => assert_round_trip::<FanIdentifiedData>(&name, data),
+                "preview_reverted" => {}
+                other => panic!("the app doesn't handle the event `{other}`"),
+            }
+            seen.push(ev.event);
+        }
+        assert_eq!(
+            seen,
+            [
+                "profile_changed",
+                "apply_result",
+                "preview_reverted",
+                "fan_duty",
+                "safety_tripped",
+                "fan_identified"
+            ]
+        );
+    }
+
+    #[test]
+    fn the_capability_contracts_round_trip() {
+        details_round_trip::<FanCaps>("fan", "", &[]);
+        details_round_trip::<CpuLimitCaps>("cpu_limit", "", &["pm_table"]);
+        details_round_trip::<CurveOptCaps>("curve_opt", "", &[]);
+        details_round_trip::<GpuCaps>("gpu", "", &[]);
+        details_round_trip::<Vec<PowerScheme>>("power_plan", "/schemes", &[]);
+        details_round_trip::<AuraCaps>("aura", "", &["hue"]); // read as HueCaps below
+        details_round_trip::<HueCaps>("aura", "/hue", &[]);
+        details_round_trip::<HeadsetCaps>("headset", "", &[]);
+        details_round_trip::<KeyboardCaps>("keyboard", "", &[]);
     }
 
     /// #679: an answer that doesn't parse is logged, not an empty page

@@ -32,6 +32,13 @@ public class PowerPlanProviderTests
         public IReadOnlyList<(Guid Guid, string Name)> EnumerateSchemes() => Schemes;
     }
 
+    /// The `power_plan` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_power_plan_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(new PowerPlanProvider(new FakePowerPlanApi()).Probe());
+    }
+
     [Fact]
     public void Probe_reports_supported_with_available_schemes()
     {

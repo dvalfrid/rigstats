@@ -273,19 +273,19 @@ public sealed class ControlPipeWorker(
             void OnPreviewReverted(string id)
             {
                 if (connection.Subscribed)
-                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "preview_reverted", Data = new { id } });
+                    connection.Events.Writer.TryWrite(PreviewRevertedMessage(id));
             }
 
             void OnApplyResultChanged(ApplyResult result)
             {
                 if (connection.Subscribed)
-                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "apply_result", Data = result });
+                    connection.Events.Writer.TryWrite(ApplyResultMessage(result));
             }
 
             void OnProfileSwitched(string id)
             {
                 if (connection.Subscribed)
-                    connection.Events.Writer.TryWrite(new ControlEventMessage { Event = "profile_changed", Data = new { id } });
+                    connection.Events.Writer.TryWrite(ProfileChangedMessage(id));
             }
 
             fanLoop.EventRaised += OnFanEvent;
@@ -339,6 +339,12 @@ public sealed class ControlPipeWorker(
         catch (OperationCanceledException) { }
         catch (IOException) { } // client went away mid-write; the read loop notices too.
     }
+
+    // The events, built here for the pipe and for the shared contract
+    // example the app's reader checks too (#679).
+    internal static ControlEventMessage PreviewRevertedMessage(string id) => new() { Event = "preview_reverted", Data = new { id } };
+    internal static ControlEventMessage ApplyResultMessage(ApplyResult result) => new() { Event = "apply_result", Data = result };
+    internal static ControlEventMessage ProfileChangedMessage(string id) => new() { Event = "profile_changed", Data = new { id } };
 
     internal static ControlEventMessage ToEventMessage(FanEvent e) => e switch
     {

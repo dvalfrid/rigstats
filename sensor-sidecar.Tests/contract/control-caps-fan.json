@@ -1,0 +1,1 @@
+{"domain":"fan","supported":true,"details":{"headers":[{"id":"/lpc/nct6799d/0/control/0","label":"Fan #1","min":0,"max":100,"drives":["Fan #2","Fan #5"]}],"sources":["cpu_package","gpu","mb:System"]}}

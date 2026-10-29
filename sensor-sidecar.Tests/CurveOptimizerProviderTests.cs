@@ -210,6 +210,13 @@ public sealed class CurveOptimizerProviderTests : IDisposable
         provider.Apply(Co(allCore: -20)); // no throw
     }
 
+    /// The `curve_opt` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_curve_opt_capability_serializes_as_the_shared_contract_example()
+    {
+        ContractExample.CheckCapability(Provider(new FakeCo(), windowsCores: 8).Probe());
+    }
+
     [Fact]
     public void Probe_reports_bounds_cores_and_per_core_support()
     {

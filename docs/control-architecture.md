@@ -282,12 +282,18 @@ again, which must give the same JSON (`round_trips_exactly` in `control.rs`)
 profile is also read back by the service with unknown fields refused, so a
 field only the app has can't be dropped on save unseen. Covered: the
 profile, `apply_result`, `mouse_settings`, `headset_settings`,
-`keyboard_settings`, a capability's `problem`, and the telemetry line's
-`peripherals` and `hardware_problems`. Not yet: the capabilities' per-domain
-`details` and the events. A change to a shape: change both sides, run the
-service's tests with `RIGSTATS_UPDATE_CONTRACT=1`, commit the example with
-it. An answer the app can't parse is logged ("control: the … answer didn't
-parse — …"), not shown as an empty page.
+`keyboard_settings`, every domain's `capabilities` entry with its `details`
+(`control-caps-<domain>.json`; the mouse's details aren't read by the app),
+every event `subscribe` pushes (`control-events.json`), a capability's
+`problem`, and the telemetry line's `peripherals` and `hardware_problems`.
+A field the service sends and the app doesn't read is listed by name in
+the app's test (`details_round_trip`: `pm_table`, the aura's `hue`, which is
+read on its own), so one the app starts to need can't be missed. A change
+to a shape: change both sides, run the service's tests with
+`RIGSTATS_UPDATE_CONTRACT=1`, commit the example with it. An answer the app
+can't parse is logged ("control: the … answer didn't parse — …"), not
+shown as an empty page; an event that doesn't parse isn't (`fan_duty`
+comes every second).
 
 | Method | Purpose |
 | --- | --- |

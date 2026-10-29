@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using LibreHardwareMonitor.Hardware;
 using SensorSidecar.Control;
@@ -45,6 +46,28 @@ public class FanProviderTests
         Assert.Equal([FanSamples.HeaderId(0), FanSamples.HeaderId(1), FanSamples.HeaderId(2)], ids);
         var sources = caps.Details["sources"]!.AsArray().Select(s => s!.GetValue<string>()).ToList();
         Assert.Equal(["cpu_package", "gpu", "mb:System"], sources);
+    }
+
+    /// The `fan` capability as the shared example the app reads too (#679).
+    [Fact]
+    public void The_fan_capability_serializes_as_the_shared_contract_example()
+    {
+        // One header measured by identify, so `drives` is in the example.
+        var map = Path.Combine(Path.GetTempPath(), $"rigstats-fan-map-{Guid.NewGuid():N}.json");
+        File.WriteAllText(map, JsonSerializer.Serialize(new Dictionary<string, string[]> { [FanSamples.HeaderId(0)] = ["Fan #2", "Fan #5"] }));
+        try
+        {
+            var host = new FakeHardwareHost(FanSamples.Board(1))
+            {
+                Sample = FanSamples.Temps(cpu: 50, gpu: 45, mb: ("System", 30)),
+            };
+
+            ContractExample.CheckCapability(new FanProvider(host, dryRun: false, channelMapPath: map).Probe());
+        }
+        finally
+        {
+            File.Delete(map);
+        }
     }
 
     [Fact]
