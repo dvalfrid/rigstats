@@ -138,12 +138,15 @@ pub fn spawn(
 /// The process that owns the foreground window.
 #[cfg(windows)]
 fn foreground_pid() -> Option<u32> {
-    let hwnd = unsafe { winapi::um::winuser::GetForegroundWindow() };
-    if hwnd.is_null() {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    // SAFETY: no arguments; a null HWND when no window is in front.
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd.is_invalid() {
         return None;
     }
     let mut pid = 0u32;
-    unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid) };
+    // SAFETY: `hwnd` is a window handle; the out-pointer is a local.
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
     (pid != 0).then_some(pid)
 }
 
@@ -156,16 +159,19 @@ fn foreground_pid() -> Option<u32> {
 /// would recognise, for the picker.
 #[cfg(windows)]
 fn windowed_pids() -> HashSet<u32> {
-    use winapi::shared::minwindef::{BOOL, LPARAM, TRUE};
-    use winapi::shared::windef::HWND;
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::{HWND, LPARAM, TRUE};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextLengthW, GetWindowThreadProcessId, IsWindowVisible,
+    };
 
+    // SAFETY: called by EnumWindows with `lparam` pointing at the set below,
+    // for the duration of the call.
     unsafe extern "system" fn collect(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        let pids = &mut *(lparam as *mut HashSet<u32>);
-        if winapi::um::winuser::IsWindowVisible(hwnd) != 0
-            && winapi::um::winuser::GetWindowTextLengthW(hwnd) > 0
-        {
+        let pids = &mut *(lparam.0 as *mut HashSet<u32>);
+        if IsWindowVisible(hwnd).as_bool() && GetWindowTextLengthW(hwnd) > 0 {
             let mut pid = 0u32;
-            winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid);
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
             if pid != 0 {
                 pids.insert(pid);
             }
@@ -174,8 +180,9 @@ fn windowed_pids() -> HashSet<u32> {
     }
 
     let mut pids = HashSet::new();
+    // SAFETY: `pids` outlives the call; the callback only writes into it.
     unsafe {
-        winapi::um::winuser::EnumWindows(Some(collect), &mut pids as *mut _ as LPARAM);
+        let _ = EnumWindows(Some(collect), LPARAM(&mut pids as *mut _ as isize));
     }
     pids
 }
