@@ -91,6 +91,9 @@ struct WallpaperHost {
     /// positions are only given while a window is still top-level, so a
     /// fresh host is the simple way to move them.
     panels_layout: String,
+    /// The screens' layout (physical pixels), to move the windows along with
+    /// their screen when a game changes the main screen's resolution (#690).
+    screen_watch: rigstats_egui::geometry::LayoutWatch,
 }
 
 /// What one of the host's windows draws.
@@ -122,6 +125,9 @@ struct HostWindow {
     started: bool,
     hwnd: isize,
     attached: bool,
+    /// Where the window was on the screen (physical pixels) at the last
+    /// layout check — after a change, where it was on the old layout (#690).
+    screen_pos: Option<[f32; 2]>,
 }
 
 impl HostWindow {
@@ -133,6 +139,7 @@ impl HostWindow {
             started: false,
             hwnd: 0,
             attached: false,
+            screen_pos: None,
         }
     }
 }
@@ -289,6 +296,58 @@ impl WallpaperHost {
             );
         }
         self.windows = windows;
+    }
+}
+
+#[cfg(windows)]
+impl WallpaperHost {
+    /// When the screens' layout changes (#690) — a game in exclusive
+    /// fullscreen at a lower resolution narrows the main screen and Windows
+    /// moves a screen to its right — each window moves as far as its screen
+    /// did, and back when the game ends. In WorkerW a window keeps its place
+    /// relative to the virtual screen, not to its screen, so nothing else
+    /// moves it.
+    fn follow_screen_layout(&mut self) {
+        use rigstats_egui::geometry::{follow_layout, layout_line, LayoutPoll};
+        match self.screen_watch.poll() {
+            LayoutPoll::NotYet => {}
+            LayoutPoll::Same => {
+                for w in &mut self.windows {
+                    if w.attached {
+                        w.screen_pos = win32_wallpaper::screen_pos(w.hwnd);
+                    }
+                }
+            }
+            LayoutPoll::Changed(old, new) => {
+                let mut moved = Vec::new();
+                for w in &mut self.windows {
+                    let Some(to) = w
+                        .screen_pos
+                        .filter(|_| w.attached)
+                        .and_then(|pos| follow_layout(pos, &old, &new))
+                    else {
+                        continue;
+                    };
+                    if win32_wallpaper::move_to_screen(w.hwnd, to) {
+                        moved.push(format!("{} → {},{}", w.content.name(), to[0], to[1]));
+                        w.screen_pos = Some(to);
+                    }
+                }
+                debug::append_debug_log(
+                    &self.dir,
+                    &format!(
+                        "rigstats-wallpaper: screens changed — {} (was {}){}",
+                        layout_line(&new),
+                        layout_line(&old),
+                        if moved.is_empty() {
+                            String::new()
+                        } else {
+                            format!("; moved {}", moved.join(", "))
+                        }
+                    ),
+                );
+            }
+        }
     }
 }
 
@@ -480,6 +539,9 @@ impl eframe::App for WallpaperHost {
                 }
             }
         }
+
+        #[cfg(windows)]
+        self.follow_screen_layout();
 
         // Every window the host shows is its own viewport: the dashboard, or
         // each floating panel (#170). The host's own window stays a 1x1
@@ -735,6 +797,7 @@ fn main() {
                 windows,
                 closing: false,
                 panels_layout: layout,
+                screen_watch: rigstats_egui::geometry::LayoutWatch::new(true),
             };
             Ok(Box::new(host))
         }),
