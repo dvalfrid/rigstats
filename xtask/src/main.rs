@@ -498,16 +498,13 @@ fn check_pad_xml() -> Result<(), String> {
         match reader.read_event() {
             Ok(Event::Eof) => break,
             Ok(Event::Start(e)) => {
-                tag_stack.push(String::from_utf8_lossy(e.name().as_ref()).into_owned());
+                tag_stack.push(e.name().as_ref().to_owned());
             }
             Ok(Event::End(_)) => {
                 tag_stack.pop();
             }
             Ok(Event::Text(t)) => {
-                let text = t
-                    .decode()
-                    .map_err(|e| format!("{} is not well-formed XML: {e}", pad_path.display()))?
-                    .into_owned();
+                let text = t.xml10_content().into_owned();
                 match tag_stack.last().map(String::as_str) {
                     Some("Program_Version") => program_version = Some(text),
                     Some("Primary_Download_URL") => download_url = Some(text),
