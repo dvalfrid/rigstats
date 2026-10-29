@@ -72,6 +72,30 @@ public sealed class ProfileStoreTests : IDisposable
         Assert.Equal("V2", (await _store.GetAsync("x", CancellationToken.None))!.Name);
     }
 
+    /// #678: a client can't make a custom profile a built-in (which can't be
+    /// deleted), nor a built-in custom.
+    [Fact]
+    public async Task SaveProfile_takes_builtin_from_the_store_not_the_client()
+    {
+        await _store.SaveProfileAsync(new Profile { Id = "mine", Name = "Mine", Builtin = true, Part = new ProfilePart() }, CancellationToken.None);
+        await _store.SaveProfileAsync(new Profile { Id = "gaming", Name = "Gaming", Builtin = false, Part = new ProfilePart() }, CancellationToken.None);
+
+        Assert.False((await _store.GetAsync("mine", CancellationToken.None))!.Builtin);
+        Assert.True((await _store.GetAsync("gaming", CancellationToken.None))!.Builtin);
+    }
+
+    [Fact]
+    public async Task SaveProfile_adds_no_profile_past_the_cap_but_still_replaces_one()
+    {
+        var count = (await _store.ListAsync(CancellationToken.None)).Count;
+        for (var i = count; i < ProfileStore.MaxProfiles; i++)
+            Assert.True(await _store.SaveProfileAsync(new Profile { Id = $"p{i}", Name = $"P{i}", Part = new ProfilePart() }, CancellationToken.None));
+
+        Assert.False(await _store.SaveProfileAsync(new Profile { Id = "one-too-many", Name = "X", Part = new ProfilePart() }, CancellationToken.None));
+        Assert.True(await _store.SaveProfileAsync(new Profile { Id = "gaming", Name = "Gaming 2", Part = new ProfilePart() }, CancellationToken.None));
+        Assert.Equal(ProfileStore.MaxProfiles, (await _store.ListAsync(CancellationToken.None)).Count);
+    }
+
     [Fact]
     public async Task DeleteProfile_removes_a_custom_profile()
     {

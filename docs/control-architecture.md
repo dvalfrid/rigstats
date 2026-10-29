@@ -238,8 +238,8 @@ Every profile change is a **transaction**:
    its Headset / Mouse pages follow. They were the slow part — every
    wireless device read before and after, a slow one costing seconds — and
    can't harm the PC, so nothing else waits for them. A newer switch
-   cancels those not yet started. Previews still apply everything before
-   answering. The app shows a switch at once (`ControlEvent::Switching`:
+   cancels those not yet started, and so does a preview (#678). Previews
+   still apply everything before answering. The app shows a switch at once (`ControlEvent::Switching`:
    the active profile, so the dashboard's look, desktop background and
    Wallpaper Engine, change on the click) and puts the one before back if
    the service refuses it.
@@ -439,6 +439,9 @@ escalation vector:
   the app puts on a frame); a longer one ends the connection. An IP address
   from the client (`hue_discover`, `hue_pair`) must parse as one, and client
   text goes into the log without control characters (`Printable`).
+  `save_profile` takes an id of 1–200 characters and a name of at most 200,
+  adds no profile past 100 (`too_many_profiles`), and whether a profile is
+  a built-in comes from the store's own list, never the client (#678).
   Unknown JSON fields are **ignored**, not rejected (System.Text.Json's
   default in `ControlJson.Options`) — the app and service ship together.
 - Debug builds of the service accept any client (`PipeClientVerifier`), so
@@ -1698,7 +1701,7 @@ the `mouse` profile domain (`Control/Mice/`):
   says "<domain> applied now that it answered" and the service pushes
   `apply_result` (ok, no message), which clears the footer; after 5
   minutes it pushes the words that the device stayed asleep and kept its
-  own settings. A newer apply ends the retry. Not for previews. Asked for
+  own settings. A newer apply or a preview ends the retry (a preview writes every part itself, and the retry would write the earlier profile over it, #678); previews don't retry. Asked for
   by the owner after the #296 test (2026-10-19). The lighting too: a
   keyboard's lighting write is never answered, so after writing it a
   wireless keyboard is asked its version (`12 00`): awake, the reply

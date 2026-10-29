@@ -319,9 +319,13 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
     [InlineData("hue_pair", """{"ip":"bridge.local\n[fake] line"}""")]
     [InlineData("hue_discover", """{"ip":"not-an-ip"}""")]
     [InlineData("identify_fan", "[]")]
+    [InlineData("save_profile", """{"id":"","name":"Empty id","part":{}}""")]
+    [InlineData("save_profile", """{"id":"long","name":"{{LONG}}","part":{}}""")]
     public async Task A_wrong_or_missing_parameter_is_a_bad_request(string method, string? parameters)
     {
         using var client = await ConnectAsync();
+        // A name longer than the store takes (#678).
+        parameters = parameters?.Replace("{{LONG}}", new string('x', ProfileStore.MaxTextLength + 1), StringComparison.Ordinal);
 
         await client.SendAsync($$"""{"id":7,"method":"{{method}}"{{(parameters is null ? "" : $",\"params\":{parameters}")}}}""");
         var response = await client.ReadJsonAsync();

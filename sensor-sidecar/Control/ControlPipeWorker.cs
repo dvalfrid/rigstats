@@ -509,7 +509,11 @@ public sealed class ControlPipeWorker(
     private async Task<ControlResponse> HandleSaveProfileAsync(ControlRequest request, CancellationToken ct)
     {
         var profile = ParamsAs<Profile>(request, "profile");
-        await profiles.SaveProfileAsync(profile, ct);
+        if (string.IsNullOrWhiteSpace(profile.Id) || profile.Id.Length > ProfileStore.MaxTextLength
+            || profile.Name.Length > ProfileStore.MaxTextLength)
+            throw new BadRequestException($"a profile id must be 1–{ProfileStore.MaxTextLength} characters and its name at most {ProfileStore.MaxTextLength}.");
+        if (!await profiles.SaveProfileAsync(profile, ct))
+            return ControlResponse.Fail(request.Id, "too_many_profiles", $"There are already {ProfileStore.MaxProfiles} profiles. Delete one to add another.");
         return ControlResponse.Ok(request.Id, new { ok = true });
     }
 
