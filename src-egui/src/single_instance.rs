@@ -49,10 +49,12 @@ pub fn ensure_single_instance() -> bool {
 /// Windows releases it when the process exits, keeping the mutex held for
 /// the process's whole lifetime.
 fn acquire_instance_mutex() -> bool {
-    let name_w: Vec<u16> = OsStr::new(MUTEX_NAME)
-        .encode_wide()
-        .chain(Some(0))
-        .collect();
+    acquire_named_mutex(MUTEX_NAME)
+}
+
+/// [`acquire_instance_mutex`] for any name — a seam for the tests (#702).
+fn acquire_named_mutex(name: &str) -> bool {
+    let name_w: Vec<u16> = OsStr::new(name).encode_wide().chain(Some(0)).collect();
     // SAFETY: name_w is null-terminated; null security attrs and
     // initial-owner false are valid per CreateMutexW's contract.
     unsafe {
@@ -89,5 +91,20 @@ fn focus_existing_instance() {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
         SetForegroundWindow(hwnd);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #702: the named mutex — the first caller gets it, a second one sees
+    /// it taken. (Focusing the other instance isn't tested: it would bring
+    /// a real RIGStats window to the front.)
+    #[test]
+    fn the_first_takes_the_mutex_and_a_second_sees_it_taken() {
+        let name = format!("Local\\se.codeby.rigstats.test-702-{}", std::process::id());
+        assert!(acquire_named_mutex(&name), "the first caller is first");
+        assert!(!acquire_named_mutex(&name), "a second caller sees it taken");
     }
 }

@@ -184,3 +184,41 @@ fn windowed_pids() -> HashSet<u32> {
 fn windowed_pids() -> HashSet<u32> {
     HashSet::new()
 }
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use windows::core::w;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, WINDOW_EX_STYLE, WS_POPUP, WS_VISIBLE,
+    };
+
+    /// #702: a process with a visible, titled window is in the list — the
+    /// test makes one, off every screen.
+    #[test]
+    fn a_visible_titled_window_puts_its_process_in_the_list() {
+        // SAFETY: "STATIC" is a system class (nothing to register); the
+        // strings are static; no parent, menu, instance or parameter.
+        let hwnd = unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE(0),
+                w!("STATIC"),
+                w!("rigstats-test-702"),
+                WS_POPUP | WS_VISIBLE,
+                -32000,
+                -32000,
+                10,
+                10,
+                None,
+                None,
+                None,
+                None,
+            )
+        }
+        .expect("a test window");
+        let found = windowed_pids().contains(&std::process::id());
+        // SAFETY: the window made above, on this thread.
+        let _ = unsafe { DestroyWindow(hwnd) };
+        assert!(found);
+    }
+}

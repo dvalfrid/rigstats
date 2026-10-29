@@ -62,6 +62,10 @@ wgpu = "30"
 winit = "=0.30.13"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
+# The Win32 tests' own checks (an independent source to compare with): on the
+# windows crate already, so they don't change when the code under test moves
+# off winapi (#702).
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
 
 [lints]
 workspace = true
