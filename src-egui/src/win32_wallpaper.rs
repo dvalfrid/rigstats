@@ -32,7 +32,7 @@ use winapi::um::winnt::SYNCHRONIZE;
 use winapi::um::winuser::{
     EnumWindows, FindWindowExW, FindWindowW, GetAncestor, GetClassNameW, GetWindowRect,
     SendMessageTimeoutW, SetParent, SetWindowPos, GA_PARENT, SMTO_NORMAL, SWP_NOACTIVATE,
-    SWP_NOZORDER,
+    SWP_NOSIZE, SWP_NOZORDER,
 };
 
 /// The undocumented Progman message that forces creation of the split `WorkerW`
@@ -210,6 +210,48 @@ pub fn is_attached(hwnd: isize) -> bool {
     // matters because we don't set WS_CHILD on the reparented window.
     let parent = unsafe { GetAncestor(hwnd, GA_PARENT) };
     !parent.is_null() && window_class(parent) == "WorkerW"
+}
+
+/// The window's top-left on the screen, in physical pixels — for a window in
+/// WorkerW too (#690).
+pub fn screen_pos(hwnd: isize) -> Option<[f32; 2]> {
+    let hwnd = as_hwnd(hwnd);
+    if hwnd.is_null() {
+        return None;
+    }
+    // SAFETY: hwnd is a window handle; the RECT is written by GetWindowRect.
+    unsafe {
+        let mut r: RECT = std::mem::zeroed();
+        (GetWindowRect(hwnd, &mut r) != 0).then_some([r.left as f32, r.top as f32])
+    }
+}
+
+/// Moves a window in WorkerW so its top-left is at screen position `pos`
+/// (physical pixels): a child's position is relative to the WorkerW, which
+/// spans the virtual screen and moves with it (#690).
+pub fn move_to_screen(hwnd: isize, pos: [f32; 2]) -> bool {
+    let hwnd = as_hwnd(hwnd);
+    if hwnd.is_null() {
+        return false;
+    }
+    // SAFETY: hwnd is a window handle; its parent comes from GetAncestor and
+    // its RECT from GetWindowRect.
+    unsafe {
+        let parent = GetAncestor(hwnd, GA_PARENT);
+        let mut p: RECT = std::mem::zeroed();
+        if parent.is_null() || GetWindowRect(parent, &mut p) == 0 {
+            return false;
+        }
+        SetWindowPos(
+            hwnd,
+            ptr::null_mut(),
+            pos[0].round() as i32 - p.left,
+            pos[1].round() as i32 - p.top,
+            0,
+            0,
+            SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE,
+        ) != 0
+    }
 }
 
 /// True if the process with id `pid` is still running. Used by the host to exit

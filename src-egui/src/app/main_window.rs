@@ -15,6 +15,8 @@ impl RigStatsApp {
     /// Renders the main window for this frame — or, in floating mode, each
     /// panel in its own window — and applies any GPU picked in a panel.
     pub(crate) fn render_main_window(&mut self, ui: &mut egui::Ui) {
+        self.follow_screen_layout(ui.ctx());
+
         // On the first frame: move main window off-screen when floating mode is active.
         // We NEVER use Visible(false) in floating mode because a hidden window is not
         // ticked by eframe — show_viewport_immediate would stop being called and all
@@ -291,5 +293,59 @@ impl RigStatsApp {
                 self.select_gpu(Some(new_pref));
             }
         }
+    }
+
+    /// When the screens' layout changes while the app runs (#690) — a game in
+    /// exclusive fullscreen at a lower resolution narrows the main screen and
+    /// Windows moves a screen to its right — the dashboard or the floating
+    /// panels move as far as their screen did, and back when the game ends.
+    /// The wallpaper host follows its own windows (`bin/wallpaper.rs`).
+    fn follow_screen_layout(&mut self, ctx: &egui::Context) {
+        use rigstats_egui::geometry::{follow_layout, layout_line, LayoutPoll};
+        let LayoutPoll::Changed(old, new) = self.screen_watch.poll() else {
+            return;
+        };
+        let mut moved = Vec::new();
+        if self.floating.mode && self.window_layer != "wallpaper" {
+            let mut positions = self.floating.positions.lock_safe();
+            for (key, pos) in positions.iter_mut() {
+                if let Some(to) = follow_layout(*pos, &old, &new) {
+                    moved.push(format!("{key} → {},{}", to[0], to[1]));
+                    *pos = to;
+                }
+            }
+            drop(positions);
+            if !moved.is_empty() {
+                // Each panel sends its (new) position again, as after a
+                // profile switch (#599).
+                self.floating.panels_positioned.clear();
+            }
+        } else if !self.floating.mode && !self.wallpaper.is_active() {
+            if let Some(to) = self
+                .window
+                .last_fixed_pos
+                .and_then(|pos| follow_layout(pos, &old, &new))
+            {
+                moved.push(format!("dashboard → {},{}", to[0], to[1]));
+                self.window.last_fixed_pos = Some(to);
+                ctx.send_viewport_cmd_to(
+                    egui::ViewportId::ROOT,
+                    egui::ViewportCommand::OuterPosition(egui::pos2(to[0], to[1])),
+                );
+            }
+        }
+        rigstats_backend::debug::log_debug(
+            &self.dir,
+            &format!(
+                "screens: layout changed — {} (was {}){}",
+                layout_line(&new),
+                layout_line(&old),
+                if moved.is_empty() {
+                    String::new()
+                } else {
+                    format!("; moved {}", moved.join(", "))
+                }
+            ),
+        );
     }
 }

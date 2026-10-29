@@ -181,6 +181,162 @@ pub mod win_monitor {
         }
         data.rects
     }
+
+    /// Every screen with its device name (#690), its rect in physical pixels
+    /// or, like [`list`], in logical ones.
+    #[allow(unsafe_code)]
+    pub fn screens(physical: bool) -> Vec<super::Screen> {
+        use winapi::um::winuser::{GetMonitorInfoW, MONITORINFO, MONITORINFOEXW};
+
+        struct Found {
+            physical: bool,
+            screens: Vec<super::Screen>,
+        }
+
+        // SAFETY: called by EnumDisplayMonitors with `data` pointing at the
+        // `Found` below for the duration of the call; `lp` is a valid RECT.
+        unsafe extern "system" fn callback(hm: HMONITOR, _: HDC, lp: LPRECT, data: LPARAM) -> i32 {
+            let found = &mut *(data as *mut Found);
+            let mut info: MONITORINFOEXW = std::mem::zeroed();
+            info.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+            let name = if GetMonitorInfoW(hm, &mut info as *mut _ as *mut MONITORINFO) != 0 {
+                let len = info
+                    .szDevice
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(info.szDevice.len());
+                String::from_utf16_lossy(&info.szDevice[..len])
+            } else {
+                String::new()
+            };
+            let r = *lp;
+            let (sx, sy) = if found.physical {
+                (1.0, 1.0)
+            } else {
+                let mut dpi_x: u32 = 96;
+                let mut dpi_y: u32 = 96;
+                let _ = GetDpiForMonitor(hm, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
+                (dpi_x as f32 / 96.0, dpi_y as f32 / 96.0)
+            };
+            found.screens.push(super::Screen {
+                name,
+                rect: [
+                    (r.left as f32 / sx).trunc(),
+                    (r.top as f32 / sy).trunc(),
+                    (r.right as f32 / sx).trunc(),
+                    (r.bottom as f32 / sy).trunc(),
+                ],
+            });
+            1
+        }
+
+        let mut found = Found {
+            physical,
+            screens: Vec::new(),
+        };
+        // SAFETY: `found` outlives the call; the callback only writes into it.
+        unsafe {
+            EnumDisplayMonitors(
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                Some(callback),
+                &mut found as *mut _ as LPARAM,
+            );
+        }
+        found.screens
+    }
+}
+
+// ── Following the screens' layout (#690) ──────────────────────────────────────
+
+/// A screen in the layout: its device name (`\\.\DISPLAY2`), which stays the
+/// same when the screen moves, and its rect `[left, top, right, bottom]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Screen {
+    pub name: String,
+    pub rect: [f32; 4],
+}
+
+/// Where a window at `pos` goes when the screens' layout changes from `old`
+/// to `new`: as far as the screen it is on moved, so it stays at the same
+/// place on that screen. A game in exclusive fullscreen at a lower
+/// resolution narrows the main screen, and Windows moves a screen to its
+/// right left by the difference (#690); nothing moves the windows on it.
+/// `None` when the screen didn't move, is gone, or `pos` is on no screen.
+pub fn follow_layout(pos: [f32; 2], old: &[Screen], new: &[Screen]) -> Option<[f32; 2]> {
+    let [x, y] = pos;
+    let from = old.iter().find(|s| {
+        let [l, t, r, b] = s.rect;
+        x >= l && x < r && y >= t && y < b
+    })?;
+    let to = new.iter().find(|s| s.name == from.name)?;
+    let (dx, dy) = (to.rect[0] - from.rect[0], to.rect[1] - from.rect[1]);
+    (dx != 0.0 || dy != 0.0).then_some([x + dx, y + dy])
+}
+
+/// Notices the screens' layout changing while the app runs (#690): asks
+/// Windows at most once a second (`EnumDisplayMonitors`, cheap).
+pub struct LayoutWatch {
+    physical: bool,
+    last: Vec<Screen>,
+    checked: Option<std::time::Instant>,
+}
+
+/// What [`LayoutWatch::poll`] found.
+pub enum LayoutPoll {
+    /// Asked less than a second ago.
+    NotYet,
+    /// Asked; the same as before.
+    Same,
+    /// Asked; the layout changed from the first to the second.
+    Changed(Vec<Screen>, Vec<Screen>),
+}
+
+impl LayoutWatch {
+    /// `physical`: the screens in physical pixels (a window's `GetWindowRect`),
+    /// else in the logical pixels egui positions windows in.
+    pub fn new(physical: bool) -> Self {
+        Self {
+            physical,
+            last: Vec::new(),
+            checked: None,
+        }
+    }
+
+    pub fn poll(&mut self) -> LayoutPoll {
+        if self
+            .checked
+            .is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1))
+        {
+            return LayoutPoll::NotYet;
+        }
+        self.checked = Some(std::time::Instant::now());
+        #[cfg(windows)]
+        let now = win_monitor::screens(self.physical);
+        #[cfg(not(windows))]
+        let now: Vec<Screen> = Vec::new();
+        if now.is_empty() || now == self.last {
+            return LayoutPoll::Same;
+        }
+        let old = std::mem::replace(&mut self.last, now.clone());
+        if old.is_empty() {
+            LayoutPoll::Same // the first look
+        } else {
+            LayoutPoll::Changed(old, now)
+        }
+    }
+}
+
+/// The layout in a log line: `\\.\DISPLAY1 0,0 2560x1440; …`.
+pub fn layout_line(screens: &[Screen]) -> String {
+    screens
+        .iter()
+        .map(|s| {
+            let [l, t, r, b] = s.rect;
+            format!("{} {l},{t} {}x{}", s.name, r - l, b - t)
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 /// Returns the (x, y) top-left position to center a window of `w × h` on the
@@ -443,6 +599,59 @@ mod tests {
         position_on_any_monitor, profile_is_landscape, profile_to_size, resolve_pinned_position,
         select_profile_monitor, tray_card_position,
     };
+    use super::{follow_layout, Screen};
+
+    fn screen(name: &str, rect: [f32; 4]) -> Screen {
+        Screen {
+            name: name.into(),
+            rect,
+        }
+    }
+
+    /// #690, as seen: a 450 px wide screen to the right of a 2560 px main
+    /// screen; a game in exclusive fullscreen at 1920×1080 narrows the main
+    /// screen and Windows moves the small one left by 640.
+    fn spore() -> (Vec<Screen>, Vec<Screen>) {
+        let desktop = vec![
+            screen(r"\\.\DISPLAY1", [0.0, 0.0, 2560.0, 1440.0]),
+            screen(r"\\.\DISPLAY6", [2560.0, 0.0, 3010.0, 1920.0]),
+        ];
+        let in_game = vec![
+            screen(r"\\.\DISPLAY1", [0.0, 0.0, 1920.0, 1080.0]),
+            screen(r"\\.\DISPLAY6", [1920.0, 0.0, 2370.0, 1920.0]),
+        ];
+        (desktop, in_game)
+    }
+
+    #[test]
+    fn a_window_follows_its_screen_when_the_game_starts_and_back_when_it_ends() {
+        let (desktop, in_game) = spore();
+
+        let moved = follow_layout([2560.0, 12.0], &desktop, &in_game);
+        assert_eq!(moved, Some([1920.0, 12.0]));
+        assert_eq!(
+            follow_layout(moved.unwrap(), &in_game, &desktop),
+            Some([2560.0, 12.0])
+        );
+    }
+
+    #[test]
+    fn a_window_on_a_screen_that_did_not_move_stays() {
+        let (desktop, in_game) = spore();
+        // The main screen only got smaller: its top-left is still 0,0.
+        assert_eq!(follow_layout([100.0, 100.0], &desktop, &in_game), None);
+    }
+
+    #[test]
+    fn a_window_whose_screen_is_gone_or_on_no_screen_is_left_alone() {
+        let (desktop, _) = spore();
+        let main_only = vec![screen(r"\\.\DISPLAY1", [0.0, 0.0, 2560.0, 1440.0])];
+        assert_eq!(follow_layout([2600.0, 0.0], &desktop, &main_only), None);
+        assert_eq!(
+            follow_layout([-32000.0, -32000.0], &desktop, &main_only),
+            None
+        );
+    }
 
     #[test]
     fn tray_card_sits_centred_above_a_bottom_taskbar_icon() {

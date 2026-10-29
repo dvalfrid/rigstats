@@ -97,6 +97,9 @@ struct RigStatsApp {
     dcomp_available: bool,
     /// The fixed-mode window: fullscreen, pinned position, fit to content.
     window: WindowFit,
+    /// The screens' layout, to move the dashboard along with its screen when
+    /// a game changes the main screen's resolution (#690).
+    screen_watch: rigstats_egui::geometry::LayoutWatch,
     /// Floating mode's panels and their windows.
     floating: FloatingState,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
@@ -229,6 +232,7 @@ impl RigStatsApp {
             hwnd: 0,
             dcomp_available,
             window: WindowFit::new(&init_settings),
+            screen_watch: rigstats_egui::geometry::LayoutWatch::new(false),
             floating: FloatingState {
                 mode: init_settings.floating_mode,
                 panels_locked: init_settings.floating_panels_locked,
