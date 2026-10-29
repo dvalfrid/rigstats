@@ -598,3 +598,94 @@ mod win {
         "Microphone".to_owned()
     }
 }
+
+/// #702: what Windows reports about its microphones, read only — nothing
+/// here mutes, unmutes or changes a level. Checked against Windows' own
+/// list in the registry, so they stay the same when the COM code moves off
+/// winapi. On a PC without a microphone (a CI runner) the lists are empty.
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use winreg::{enums::HKEY_LOCAL_MACHINE, RegKey};
+
+    /// The active capture endpoints in the registry, by the GUID that ends
+    /// an endpoint id (`{0.0.1.00000000}.{guid}`); `DeviceState` 1 = active.
+    fn active_in_registry() -> Vec<String> {
+        let Ok(capture) = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture")
+        else {
+            return Vec::new();
+        };
+        let mut guids: Vec<String> = capture
+            .enum_keys()
+            .flatten()
+            .filter(|key| {
+                capture
+                    .open_subkey(key)
+                    .and_then(|endpoint| endpoint.get_value::<u32, _>("DeviceState"))
+                    .ok()
+                    == Some(1)
+            })
+            .map(|key| key.to_ascii_lowercase())
+            .collect();
+        guids.sort();
+        guids
+    }
+
+    #[test]
+    fn the_list_is_the_active_microphones_windows_registers() {
+        let mut listed: Vec<String> = list()
+            .iter()
+            .map(|d| {
+                d.id.rsplit('.')
+                    .next()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+            })
+            .collect();
+        listed.sort();
+        assert_eq!(listed, active_in_registry());
+    }
+
+    #[test]
+    fn each_listed_microphone_reads_back_by_its_id() {
+        for device in list() {
+            assert!(
+                !device.id.is_empty() && !device.name.is_empty(),
+                "{device:?}"
+            );
+            let mic = current(Some(&device.id)).expect("a listed microphone reads");
+            assert_eq!(
+                (mic.id.as_str(), mic.name.as_str()),
+                (device.id.as_str(), device.name.as_str())
+            );
+            let level = level(Some(&device.id)).expect("its level reads");
+            assert!((0.0..=1.0).contains(&level), "{level}");
+            let peak = peak(Some(&device.id)).expect("its peak reads");
+            assert!((0.0..=1.0).contains(&peak), "{peak}");
+        }
+    }
+
+    #[test]
+    fn the_one_for_calls_exists_exactly_when_there_is_a_microphone() {
+        assert_eq!(current(None).is_some(), !list().is_empty());
+    }
+
+    #[test]
+    fn an_unknown_id_falls_back_to_the_one_for_calls() {
+        assert_eq!(
+            current(Some("{0.0.1.00000000}.{no-such-microphone}")),
+            current(None)
+        );
+    }
+
+    #[test]
+    fn a_meter_reads_a_level_and_lets_go() {
+        let meter = Meter::new(None);
+        let _ = meter.level();
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        let level = meter.level();
+        assert!((0.0..=1.0).contains(&level), "{level}");
+        drop(meter);
+    }
+}
