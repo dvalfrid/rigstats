@@ -666,7 +666,7 @@ table, `defaults` are the three `DSTS` curve reads.)
   mode again (firmware curve) and raise `safety_tripped`. No
   `FanWatchdog` dependency.
 - **UI:** the Fans tab's curve editor (`curve_editor`,
-  `src-egui/src/windows/control.rs` line 4288) in a fixed-8-points mode (no
+  `src-egui/src/windows/control/fans.rs`) in a fixed-8-points mode (no
   add/remove), the source shown as "the laptop's firmware", the mode's
   default curve as a faint line and a "Firmware curve" reset.
 
