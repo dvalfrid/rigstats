@@ -20,6 +20,10 @@ pub const DOWNLOAD_URL: &str = "https://rigstats.app/#download";
 /// a page waits for it.
 pub const WAITING_FOR_SERVICE: &str = "Waiting for the RIGStats service…";
 
+/// A change the Control Center couldn't hand to the service (#677) — the
+/// footer shows it until dismissed or the next change goes out.
+pub const CHANGE_NOT_SENT: &str = "Not sent: the service is busy. Try again in a moment.";
+
 /// The control connection's state in a word — the Control Center's title bar
 /// and Status's Health row say the same.
 pub const STATE_CONNECTED: &str = "Connected";

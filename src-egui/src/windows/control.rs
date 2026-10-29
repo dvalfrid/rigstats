@@ -184,6 +184,9 @@ pub struct ControlUi {
     /// When a page that saves at once (Power, App rules) last saved — the
     /// footer confirms it for a moment.
     saved_at: Option<(Instant, &'static str)>,
+    /// A change that couldn't be queued for the service (#677) — the footer
+    /// says so until it is dismissed or the next change goes out.
+    unsent: bool,
     /// The App rules page's "Add a rule" form (#307).
     rule_form: crate::windows::rules_page::RulesPage,
     /// The Headset page asked the service for the headsets' settings since
@@ -323,6 +326,17 @@ impl ControlUi {
     /// CPU and GPU limit edits are tried first (preview, auto-revert).
     fn has_limit_draft(&self) -> bool {
         self.cpu_draft.is_some() || self.gpu_draft.is_some() || self.co_draft.is_some()
+    }
+
+    /// Queues a command that changes something. The queue is short and the
+    /// control task doesn't read it while it reconnects or waits for an
+    /// answer, so a full one would drop a save without a word (#677): the
+    /// footer then says it wasn't sent. Reads and live previews stay
+    /// best-effort `try_send`s. Returns whether it was queued.
+    fn send(&mut self, cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>, cmd: ControlCmd) -> bool {
+        let sent = cmd_tx.try_send(cmd).is_ok();
+        self.unsent = !sent;
+        sent
     }
 
     fn await_reply(&mut self, control: &ControlState) {
@@ -930,15 +944,7 @@ fn lighting_tab(
             });
         }
         if let Some(hue) = &hue {
-            hue_card(
-                ui,
-                dc,
-                control,
-                hue,
-                cmd_tx,
-                &mut ui_state.hue_ip,
-                &mut ui_state.saved_at,
-            );
+            hue_card(ui, dc, control, hue, cmd_tx, ui_state);
         }
         return;
     };
@@ -1089,8 +1095,8 @@ fn lighting_tab(
                                  the device.",
                             )
                             .clicked()
+                            && ui_state.send(cmd_tx, ControlCmd::EnableWdl(device.id.clone()))
                         {
-                            let _ = cmd_tx.try_send(ControlCmd::EnableWdl(device.id.clone()));
                             ui_state.saved_at = Some((Instant::now(), "Sent to the device"));
                         }
                     });
@@ -1126,15 +1132,7 @@ fn lighting_tab(
     }
     if let Some(hue) = &hue {
         ui.add_space(16.0);
-        hue_card(
-            ui,
-            dc,
-            control,
-            hue,
-            cmd_tx,
-            &mut ui_state.hue_ip,
-            &mut ui_state.saved_at,
-        );
+        hue_card(ui, dc, control, hue, cmd_tx, ui_state);
     }
 }
 
@@ -1353,10 +1351,7 @@ fn headset_page(
         }
     }
     if let Some((id, settings)) = send {
-        if cmd_tx
-            .try_send(ControlCmd::SetHeadset { id, settings })
-            .is_ok()
-        {
+        if ui_state.send(cmd_tx, ControlCmd::SetHeadset { id, settings }) {
             ui_state.saved_at = Some((Instant::now(), "Sent to the headset"));
         }
     }
@@ -1443,15 +1438,20 @@ fn headset_eq_profile(
     });
     if pick != chosen {
         profile.part.headset = pick.map(|p| HeadsetPart { eq_preset: Some(p) });
-        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-            profile: Box::new(profile),
-            apply: true,
-        });
+        let saved = ui_state.send(
+            cmd_tx,
+            ControlCmd::SaveProfile {
+                profile: Box::new(profile),
+                apply: true,
+            },
+        );
         // The control task runs commands in order, so this read comes after
         // the profile has put the preset on the headset.
         ui_state.eq_pending = None;
         let _ = cmd_tx.try_send(ControlCmd::ReadHeadsets);
-        ui_state.saved_at = Some((Instant::now(), "Saved"));
+        if saved {
+            ui_state.saved_at = Some((Instant::now(), "Saved"));
+        }
     }
 }
 
@@ -1554,13 +1554,13 @@ fn send_eq(
     id: &str,
     eq: HeadsetEq,
 ) {
-    if cmd_tx
-        .try_send(ControlCmd::SetHeadsetEq {
+    if ui_state.send(
+        cmd_tx,
+        ControlCmd::SetHeadsetEq {
             id: id.to_owned(),
             eq,
-        })
-        .is_ok()
-    {
+        },
+    ) {
         ui_state.saved_at = Some((Instant::now(), "Sent to the headset"));
     }
 }
@@ -1685,22 +1685,27 @@ fn mouse_page(
     }
     if let (Some(choice), Some(mut profile)) = (save_profile, profile) {
         profile.part.mouse = choice.map(|p| MousePart { profile: Some(p) });
-        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-            profile: Box::new(profile),
-            apply: true,
-        });
+        let saved = ui_state.send(
+            cmd_tx,
+            ControlCmd::SaveProfile {
+                profile: Box::new(profile),
+                apply: true,
+            },
+        );
         // The mouse may now use another onboard profile: show its settings.
         let _ = cmd_tx.try_send(ControlCmd::ReadMice);
-        ui_state.saved_at = Some((Instant::now(), "Saved"));
+        if saved {
+            ui_state.saved_at = Some((Instant::now(), "Saved"));
+        }
     }
     if let Some((id, settings)) = send {
-        if cmd_tx
-            .try_send(ControlCmd::SetMouse {
+        if ui_state.send(
+            cmd_tx,
+            ControlCmd::SetMouse {
                 id,
                 settings: Box::new(settings),
-            })
-            .is_ok()
-        {
+            },
+        ) {
             ui_state.saved_at = Some((Instant::now(), "Sent to the mouse"));
         }
     }
@@ -1793,11 +1798,15 @@ fn keyboard_page(
     }
     if pick != chosen {
         profile.part.keyboard = pick.map(|p| KeyboardPart { profile: Some(p) });
-        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-            profile: Box::new(profile),
-            apply: true,
-        });
-        ui_state.saved_at = Some((Instant::now(), "Saved"));
+        if ui_state.send(
+            cmd_tx,
+            ControlCmd::SaveProfile {
+                profile: Box::new(profile),
+                apply: true,
+            },
+        ) {
+            ui_state.saved_at = Some((Instant::now(), "Saved"));
+        }
     }
 
     // ── Energy, for every profile: the service puts it back after each of
@@ -1907,10 +1916,7 @@ fn keyboard_page(
         }
     }
     if let Some((id, settings)) = send {
-        if cmd_tx
-            .try_send(ControlCmd::SetKeyboard { id, settings })
-            .is_ok()
-        {
+        if ui_state.send(cmd_tx, ControlCmd::SetKeyboard { id, settings }) {
             ui_state.saved_at = Some((Instant::now(), "Sent to the keyboard"));
         }
     }
@@ -2343,8 +2349,7 @@ fn hue_card(
     control: &ControlState,
     hue: &HueCaps,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
-    typed_ip: &mut String,
-    saved_at: &mut Option<(Instant, &'static str)>,
+    ui_state: &mut ControlUi,
 ) {
     let busy = control.hue_busy;
     let paired = matches!((&hue.bridge, hue.paired), (Some(_), true));
@@ -2367,7 +2372,7 @@ fn hue_card(
                 g.row(&bridge.name, Some(&format!("{model}{}", bridge.ip)), |ui| {
                     ui.add_enabled_ui(!busy, |ui| {
                         if theme::dialog_btn_secondary(ui, "Unpair", dc).clicked() {
-                            let _ = cmd_tx.try_send(ControlCmd::HueUnpair);
+                            ui_state.send(cmd_tx, ControlCmd::HueUnpair);
                         }
                         if theme::dialog_btn_secondary(ui, "Refresh rooms", dc).clicked() {
                             let _ = cmd_tx.try_send(ControlCmd::HueRefresh);
@@ -2409,9 +2414,8 @@ fn hue_card(
                         },
                     );
                 }
-                if changed {
-                    let _ = cmd_tx.try_send(ControlCmd::HueChoose(chosen));
-                    *saved_at = Some((Instant::now(), "Saved"));
+                if changed && ui_state.send(cmd_tx, ControlCmd::HueChoose(chosen)) {
+                    ui_state.saved_at = Some((Instant::now(), "Saved"));
                 }
             }
             _ => {
@@ -2427,14 +2431,14 @@ fn hue_card(
                     Some("If the search finds nothing"),
                     |ui| {
                         ui.add_enabled_ui(!busy, |ui| {
-                            let ip = typed_ip.trim().to_owned();
+                            let ip = ui_state.hue_ip.trim().to_owned();
                             if !ip.is_empty()
                                 && theme::dialog_btn_secondary(ui, "Look up", dc).clicked()
                             {
                                 let _ = cmd_tx.try_send(ControlCmd::HueDiscover(Some(ip)));
                             }
                             ui.add(
-                                egui::TextEdit::singleline(typed_ip)
+                                egui::TextEdit::singleline(&mut ui_state.hue_ip)
                                     .align(egui::Align2::LEFT_CENTER)
                                     .desired_width(130.0)
                                     .min_size(egui::vec2(0.0, ui_kit::CONTROL_H))
@@ -2450,7 +2454,7 @@ fn hue_card(
                         |ui| {
                             ui.add_enabled_ui(!busy, |ui| {
                                 if theme::dialog_btn_primary(ui, "Pair").clicked() {
-                                    let _ = cmd_tx.try_send(ControlCmd::HuePair(bridge.ip.clone()));
+                                    ui_state.send(cmd_tx, ControlCmd::HuePair(bridge.ip.clone()));
                                 }
                             });
                         },
@@ -2930,6 +2934,19 @@ pub fn show(
                     (true, None) => {}
                 }
             }
+            if ui_state.unsent
+                && ui_kit::row_problem_dismiss(
+                    ui,
+                    dc,
+                    Severity::Attention,
+                    crate::problems::CHANGE_NOT_SENT,
+                )
+            {
+                ui_state.unsent = false;
+            }
+            if ui_state.unsent {
+                ui.add_space(6.0);
+            }
             // A request the service turned down (save, delete, reset, ...) —
             // shown until dismissed; the Hue card shows its own (#219).
             if let Some(error) = control.last_error.as_ref().filter(|e| {
@@ -2961,13 +2978,15 @@ pub fn show(
                 }
                 if let Some(left) = preview_left {
                     ui.add_space(6.0);
-                    if theme::dialog_btn_primary(ui, "Keep").clicked() {
-                        let _ = cmd_tx.try_send(ControlCmd::ConfirmPreview { keep: true });
+                    if theme::dialog_btn_primary(ui, "Keep").clicked()
+                        && ui_state.send(cmd_tx, ControlCmd::ConfirmPreview { keep: true })
+                    {
                         ui_state.await_reply(control);
                     }
                     ui.add_space(6.0);
-                    if theme::dialog_btn_secondary(ui, "Undo", dc).clicked() {
-                        let _ = cmd_tx.try_send(ControlCmd::ConfirmPreview { keep: false });
+                    if theme::dialog_btn_secondary(ui, "Undo", dc).clicked()
+                        && ui_state.send(cmd_tx, ControlCmd::ConfirmPreview { keep: false })
+                    {
                         ui_state.await_reply(control);
                     }
                     ui.add_space(10.0);
@@ -3001,8 +3020,9 @@ pub fn show(
                                         apply: true,
                                     }
                                 };
-                                let _ = cmd_tx.try_send(cmd);
-                                ui_state.await_reply(control);
+                                if ui_state.send(cmd_tx, cmd) {
+                                    ui_state.await_reply(control);
+                                }
                             }
                         }
                     }
@@ -3283,7 +3303,7 @@ pub fn show(
                                 "The Windows power plan in {profile_name}. Changes are saved at once."
                             ),
                         );
-                        if power_tab(ui, dc, control, cmd_tx, look_link.open) {
+                        if power_tab(ui, dc, control, cmd_tx, ui_state, look_link.open) {
                             ui_state.saved_at = Some((Instant::now(), "Saved"));
                         }
                     }
@@ -3412,10 +3432,13 @@ fn profile_bar(
                 {
                     let mut profile = active.clone();
                     profile.name = trimmed;
-                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                        profile: Box::new(profile),
-                        apply: false,
-                    });
+                    ui_state.send(
+                        cmd_tx,
+                        ControlCmd::SaveProfile {
+                            profile: Box::new(profile),
+                            apply: false,
+                        },
+                    );
                     done = true;
                 }
                 if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
@@ -3433,7 +3456,7 @@ fn profile_bar(
                     .color(dc.title),
                 );
                 if theme::dialog_btn_primary(ui, "Delete").clicked() {
-                    let _ = cmd_tx.try_send(ControlCmd::DeleteProfile(id));
+                    ui_state.send(cmd_tx, ControlCmd::DeleteProfile(id));
                     ui_state.profile_edit = None;
                 }
                 if theme::dialog_btn_secondary(ui, "Cancel", dc).clicked() {
@@ -3456,7 +3479,7 @@ fn profile_bar(
                         resp = resp.on_hover_text(format!("{chord} switches to {}", profile.name));
                     }
                     if resp.clicked() && !is_active {
-                        let _ = cmd_tx.try_send(ControlCmd::ApplyProfile(profile.id.clone()));
+                        ui_state.send(cmd_tx, ControlCmd::ApplyProfile(profile.id.clone()));
                     }
                 }
                 let Some(active) = active.filter(|_| can_edit) else {
@@ -3472,10 +3495,13 @@ fn profile_bar(
                 .clicked()
                 {
                     let copy = duplicate_profile(active, &control.profiles);
-                    let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                        profile: Box::new(copy),
-                        apply: true,
-                    });
+                    ui_state.send(
+                        cmd_tx,
+                        ControlCmd::SaveProfile {
+                            profile: Box::new(copy),
+                            apply: true,
+                        },
+                    );
                 }
                 let more = ui_kit::icon_button(ui, dc, Icon::More, "Rename, delete or reset");
                 egui::Popup::menu(&more).show(|ui| {
@@ -3488,10 +3514,13 @@ fn profile_bar(
                     }
                     if ui.button(format!("Duplicate {}", active.name)).clicked() {
                         let copy = duplicate_profile(active, &control.profiles);
-                        let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                            profile: Box::new(copy),
-                            apply: true,
-                        });
+                        ui_state.send(
+                            cmd_tx,
+                            ControlCmd::SaveProfile {
+                                profile: Box::new(copy),
+                                apply: true,
+                            },
+                        );
                     }
                     ui.separator();
                     if active.builtin {
@@ -3500,8 +3529,8 @@ fn profile_bar(
                             .button("Reset to defaults")
                             .on_hover_text("Back to this built-in profile's hardware defaults")
                             .clicked()
+                            && ui_state.send(cmd_tx, ControlCmd::ResetProfile(active.id.clone()))
                         {
-                            let _ = cmd_tx.try_send(ControlCmd::ResetProfile(active.id.clone()));
                             ui_state.saved_at = Some((Instant::now(), "Reset to its defaults"));
                         }
                     } else if ui.button(format!("Delete {}…", active.name)).clicked() {
@@ -3822,6 +3851,7 @@ fn power_tab(
     dc: &DialogColors,
     control: &ControlState,
     cmd_tx: &tokio::sync::mpsc::Sender<ControlCmd>,
+    ui_state: &mut ControlUi,
     open: &OpenRequests,
 ) -> bool {
     let mut saved = false;
@@ -3922,13 +3952,15 @@ fn power_tab(
                 );
             });
             if chosen != current {
-                saved = true;
                 let mut profile = active.clone();
                 profile.part.power_plan = chosen;
-                let _ = cmd_tx.try_send(ControlCmd::SaveProfile {
-                    profile: Box::new(profile),
-                    apply: true,
-                });
+                saved = ui_state.send(
+                    cmd_tx,
+                    ControlCmd::SaveProfile {
+                        profile: Box::new(profile),
+                        apply: true,
+                    },
+                );
             }
             dry_run_note(ui, dc, control);
         }
@@ -4111,8 +4143,8 @@ fn fans_tab(
                 "Run this fan channel at full speed for 5 seconds so you can hear which fan it is, and see which fan speeds respond.",
             )
             .clicked()
+            && ui_state.send(cmd_tx, ControlCmd::IdentifyFan(header.id.clone()))
         {
-            let _ = cmd_tx.try_send(ControlCmd::IdentifyFan(header.id.clone()));
             ui_state.identifying = Some((header.id.clone(), Instant::now() + IDENTIFY_DURATION));
         }
     });
@@ -4844,6 +4876,23 @@ mod tests {
         assert!(identify_summary(Some(&[]), Some(&stored))
             .0
             .starts_with("No fan sped up"));
+    }
+
+    /// #677: a change the full queue can't take is reported, not dropped
+    /// silently, and the next one that goes out clears the message.
+    #[test]
+    fn a_change_the_full_queue_cannot_take_is_reported() {
+        let mut ui = ControlUi::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+
+        assert!(ui.send(&tx, ControlCmd::Refresh));
+        assert!(!ui.unsent);
+        assert!(!ui.send(&tx, ControlCmd::DeleteProfile("custom".into())));
+        assert!(ui.unsent, "the footer says it wasn't sent");
+
+        rx.try_recv().unwrap();
+        assert!(ui.send(&tx, ControlCmd::DeleteProfile("custom".into())));
+        assert!(!ui.unsent);
     }
 
     #[test]
