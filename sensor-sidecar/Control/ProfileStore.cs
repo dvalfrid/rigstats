@@ -11,6 +11,7 @@ namespace SensorSidecar.Control;
 /// wallpaper host has no control-pipe connection, so it reads it here.
 public sealed record ActiveProfileStatus(string Id, string Name);
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "A SemaphoreSlim holds a handle only through AvailableWaitHandle, which isn't used; the store lives as long as the service.")]
 public sealed class ProfileStore
 {
     private readonly string _path;

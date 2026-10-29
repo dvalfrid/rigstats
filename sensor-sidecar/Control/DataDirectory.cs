@@ -48,7 +48,14 @@ public static class DataDirectory
             if (!Directory.Exists(directory))
                 new DirectoryInfo(directory).Create(Rules(owner, usersRead: false));
             TakeOver(directory, owner, usersRead: false);
-            return IsLink(directory) ? "the dump folder was replaced by a link." : null;
+            if (IsLink(directory))
+                return "the dump folder was replaced by a link.";
+            // A dumps folder made before the service ran (or by Windows with
+            // the parent's rules) may hold files another account put there,
+            // with their own rules — a file Windows then writes a dump into
+            // would keep them (#680).
+            RemoveForeignEntries(directory, owner);
+            return null;
         }
         catch (Exception e)
         {

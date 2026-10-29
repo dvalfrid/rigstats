@@ -23,10 +23,9 @@ end_of_line = lf
 # CA1859 asks for concrete types instead of IReadOnlyList/IEnumerable for
 #   speed; the interfaces are the intended contracts, the code runs at ~1 Hz.
 dotnet_diagnostic.CA1859.severity = none
-# CA1001 wants IDisposable on types holding a SemaphoreSlim or MemoryStream;
-#   neither holds an OS handle unless AvailableWaitHandle is used (it isn't),
-#   and the owners live as long as the service.
-dotnet_diagnostic.CA1001.severity = none
+# CA1001 (a type owning a disposable field must be disposable) is on, so a
+#   new type holding a handle is caught; the three that only hold memory are
+#   excused on the type itself, with the reason (#680).
 # CA1716 flags names that are keywords in other .NET languages (a parameter
 #   called `on`); nothing here is consumed from Visual Basic.
 dotnet_diagnostic.CA1716.severity = none
@@ -35,3 +34,6 @@ dotnet_diagnostic.CA1716.severity = none
 # Test names are sentences with underscores
 # (`A_crash_turns_the_gpu_off_with_the_exit_code_and_is_remembered`).
 dotnet_diagnostic.CA1707.severity = none
+# Fakes and xunit fixtures: an IAsyncLifetime test class disposes in
+#   DisposeAsync, which CA1001 doesn't count; fakes hold only memory.
+dotnet_diagnostic.CA1001.severity = none

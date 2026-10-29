@@ -11,6 +11,7 @@ namespace SensorSidecar.Control;
 /// `EndPreviewAsync(keep: true)` arrives within the timeout, the service
 /// restores them by itself — so a UI that crashed or a limit that made the
 /// machine unusable to click "Keep" on is undone without the UI.
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001", Justification = "Its CancellationTokenSources have no timer and hold no handle; one is replaced while its task may still wait on it, so it is left to the GC.")]
 public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
 {
     // Fixed apply order from the design doc — later phases add the

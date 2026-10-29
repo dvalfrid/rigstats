@@ -319,6 +319,14 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
     [InlineData("hue_pair", """{"ip":"bridge.local\n[fake] line"}""")]
     [InlineData("hue_discover", """{"ip":"not-an-ip"}""")]
     [InlineData("identify_fan", "[]")]
+    // #680: every method that takes parameters, a missing or wrong one.
+    [InlineData("mouse_set", null)]
+    [InlineData("mouse_set", """{"id":5,"settings":{}}""")]
+    [InlineData("headset_set", """{"id":"asus-headset-1afa-1"}""")]
+    [InlineData("headset_eq_set", """{"id":"asus-headset-1afa-1","eq":"flat"}""")]
+    [InlineData("keyboard_set", """{"settings":{"idle_code":3}}""")]
+    [InlineData("aura_preview", """{"aura":"red"}""")]
+    [InlineData("hue_choose", """{"groups":"room-1"}""")]
     [InlineData("save_profile", """{"id":"","name":"Empty id","part":{}}""")]
     [InlineData("save_profile", """{"id":"long","name":"{{LONG}}","part":{}}""")]
     public async Task A_wrong_or_missing_parameter_is_a_bad_request(string method, string? parameters)

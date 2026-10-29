@@ -201,8 +201,7 @@ public sealed class HueLink : IDisposable
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             var temp = _path + $".tmp-{Guid.NewGuid():N}";
-            File.WriteAllText(temp, JsonSerializer.Serialize(file, ControlJson.Options));
-            RestrictToAdmins(temp);
+            WriteAdminsOnly(temp, JsonSerializer.Serialize(file, ControlJson.Options));
             File.Move(temp, _path, overwrite: true);
             Use(file);
         }
@@ -217,15 +216,26 @@ public sealed class HueLink : IDisposable
             _bridge = new HueBridge(file.Bridge.Ip, file.Bridge.Id, Unprotect(file.Key));
     }
 
+    /// A new file at `path` holding `text`, created with SYSTEM and
+    /// Administrators' rules — not given them after writing: the folder lets
+    /// Users read, so the key was readable between the two, and DPAPI's
+    /// machine scope lets any local user decrypt it (#680).
+    internal static void WriteAdminsOnly(string path, string text)
+    {
+        using var stream = new FileInfo(path).Create(FileMode.CreateNew, FileSystemRights.Write,
+            FileShare.None, 4096, FileOptions.None, AdminsOnly());
+        stream.Write(Encoding.UTF8.GetBytes(text));
+    }
+
     /// SYSTEM and Administrators only — unlike the profiles beside it, which
     /// users may read.
-    private static void RestrictToAdmins(string path)
+    private static FileSecurity AdminsOnly()
     {
         var security = new FileSecurity();
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         foreach (var sid in new[] { WellKnownSidType.LocalSystemSid, WellKnownSidType.BuiltinAdministratorsSid })
             security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(sid, null), FileSystemRights.FullControl, AccessControlType.Allow));
-        new FileInfo(path).SetAccessControl(security);
+        return security;
     }
 
     // ── DPAPI, machine scope ───────────────────────────────────────────
