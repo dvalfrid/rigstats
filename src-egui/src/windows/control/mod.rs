@@ -528,7 +528,6 @@ fn device_tabs<'a>(
     *picked
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,
     main_ctx: &egui::Context,

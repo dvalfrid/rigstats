@@ -34,7 +34,6 @@ fn power_color(
     tempcolor::temp_color(Some(w), power_warn, power_crit)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

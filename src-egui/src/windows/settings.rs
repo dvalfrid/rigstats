@@ -205,7 +205,6 @@ fn live_preview(draft: &settings::Settings, live: &settings::Settings) -> settin
 
 // ── show() ────────────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,
     main_ctx: &egui::Context,
@@ -630,7 +629,6 @@ fn layer_label(layer: &str) -> &'static str {
     }
 }
 
-#[allow(clippy::too_many_arguments)] // the page's state, passed through
 fn display_page(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -839,7 +837,6 @@ fn anchor_label(anchor: &str) -> &'static str {
 /// Click-through bypasses the draft: it applies and is saved at once, like
 /// the tray's "Lock/Unlock Overlay" and the hotkey, so it can never be left
 /// stuck mid-edit (and Cancel doesn't touch it).
-#[allow(clippy::too_many_arguments)]
 fn overlay_page(
     ui: &mut egui::Ui,
     dc: &DialogColors,

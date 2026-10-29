@@ -875,14 +875,25 @@ pub fn spawn_collect(
         return;
     }
     std::thread::spawn(move || {
+        // Cleared when this thread ends, a panic included (the panic logger
+        // records it): the button would otherwise stay "Collecting…" until
+        // a restart (#680).
+        struct Done(Arc<AtomicBool>, egui::Context);
+        impl Drop for Done {
+            fn drop(&mut self) {
+                self.0.store(false, Ordering::Relaxed);
+                self.1.request_repaint();
+            }
+        }
+        let _done = Done(collecting, ctx);
         collect_and_open_diagnostics(&dir, &capabilities_json, &control_cmd_tx);
-        collecting.store(false, Ordering::Relaxed);
-        ctx.request_repaint();
     });
 }
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
+// 15: the window shows the app's whole state — the connections, the service,
+// the control pipe, the problems — each handed in from where it lives.
 #[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,

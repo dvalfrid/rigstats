@@ -30,7 +30,7 @@ Run `cargo xtask verify` (or at minimum `cargo xtask fmt` + `cargo xtask clippy`
 
 ## Rust
 
-Configured via `[lints]` in each crate's `Cargo.toml` (`src-egui/Cargo.toml`, `rigstats-backend/Cargo.toml`). `cargo xtask fmt`/`fmt-check`/`clippy` run against both crates.
+Configured in the root `Cargo.toml`'s `[workspace.lints]` (`unsafe_code = "deny"`, `dbg_macro`, `todo`), which `src-egui` and `xtask` take with `[lints] workspace = true`; `rigstats-backend` keeps its own, stricter `[lints]` (also `clone_on_ref_ptr`, `redundant_clone`, `needless_pass_by_value`). `cargo xtask fmt`/`fmt-check`/`clippy` run against all three crates. `src-egui/clippy.toml` raises `too-many-arguments-threshold` to 12 — an egui draw function takes its frame's inputs as arguments — so only the three functions above that carry `#[allow(clippy::too_many_arguments)]`, each with its reason (#680).
 
 ### Rust formatting
 

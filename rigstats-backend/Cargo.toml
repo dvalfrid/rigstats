@@ -24,6 +24,7 @@ winapi = { version = "0.3", features = ["winbase", "processthreadsapi", "combase
 [dev-dependencies]
 tempfile = "3"
 
+# Its own set, stricter than the workspace's (root Cargo.toml).
 [lints.rust]
 unsafe_code = "deny"
 

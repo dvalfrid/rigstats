@@ -145,6 +145,8 @@ struct BehindEnforce {
 }
 
 impl RigStatsApp {
+    // 23: everything main() sets up before the window exists, handed over once.
+    // An `AppInit` struct would only rename the list (#680, left as is).
     #[allow(clippy::too_many_arguments)]
     fn new(
         runtime: DashboardRuntime,

@@ -34,7 +34,6 @@ fn fmt_speed_parts(mb: f64) -> (String, &'static str) {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

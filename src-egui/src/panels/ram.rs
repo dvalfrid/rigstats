@@ -6,7 +6,6 @@ use crate::PollStats;
 
 const GIB: f64 = 1_073_741_824.0;
 
-#[allow(clippy::too_many_arguments)] // like the other panels: the frame's inputs
 pub fn draw(
     ui: &mut egui::Ui,
     stats: &PollStats,
@@ -137,7 +136,6 @@ pub fn draw(
 
 /// The compact RAM panel's body (#596): memory in use as a ring, then USED
 /// and FREE, and TEMP only on boards that read it.
-#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 fn compact_body(
     ui: &mut egui::Ui,
     stats: &PollStats,

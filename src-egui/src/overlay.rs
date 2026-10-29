@@ -344,7 +344,6 @@ fn metric_color(
 
 /// One cell: label flush left, value flush right within a fixed `width`, so
 /// each column's left and right edges stay straight.
-#[allow(clippy::too_many_arguments)] // per-metric render inputs plus the cell size
 fn draw_chip_row(
     ui: &mut egui::Ui,
     th: &theme::AppTheme,
@@ -450,7 +449,6 @@ pub struct OverlayResponse {
 /// without it, a content-hugging frame drawn top-left inside a stably-sized
 /// but larger-than-content window would appear to float/resize independently
 /// of the window's actual (fixed) position.
-#[allow(clippy::too_many_arguments)]
 pub fn draw_overlay(
     ui: &mut egui::Ui,
     th: &theme::AppTheme,

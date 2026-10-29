@@ -84,7 +84,11 @@ fn task_test() -> Result<(), String> {
 }
 
 fn task_clippy() -> Result<(), String> {
-    for manifest in ["rigstats-backend/Cargo.toml", "src-egui/Cargo.toml"] {
+    for manifest in [
+        "rigstats-backend/Cargo.toml",
+        "src-egui/Cargo.toml",
+        "xtask/Cargo.toml",
+    ] {
         run(Command::new("cargo").args([
             "clippy",
             "--manifest-path",
@@ -98,7 +102,11 @@ fn task_clippy() -> Result<(), String> {
 }
 
 fn task_fmt(check: bool) -> Result<(), String> {
-    for manifest in ["rigstats-backend/Cargo.toml", "src-egui/Cargo.toml"] {
+    for manifest in [
+        "rigstats-backend/Cargo.toml",
+        "src-egui/Cargo.toml",
+        "xtask/Cargo.toml",
+    ] {
         let mut cmd = Command::new("cargo");
         cmd.args(["fmt", "--manifest-path", manifest]);
         if check {

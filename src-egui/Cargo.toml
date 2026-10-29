@@ -21,8 +21,8 @@ path = "src/bin/wallpaper.rs"
 rigstats-backend = { path = "../rigstats-backend" }
 eframe = "0.37"
 egui = "0.37"
-# egui_plot's own version numbering trails egui's by one minor — 0.35 is the
-# release that depends on egui ^0.34, matching the eframe/egui pin above.
+# egui_plot's version is one minor ahead of egui's: 0.38 is the release that
+# depends on egui 0.37, matching the eframe/egui pin above.
 egui_plot = "0.38"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "net", "io-util", "macros"] }
 # No `multithread` (rayon): a pool of one thread per core woken every
@@ -60,9 +60,5 @@ winit = "=0.30.13"
 pollster = "=1.0.1"
 raw-window-handle = "=0.6.2"
 
-[lints.rust]
-unsafe_code = "deny"
-
-[lints.clippy]
-dbg_macro = "warn"
-todo = "warn"
+[lints]
+workspace = true

@@ -4,6 +4,17 @@ default-members = ["src-egui", "rigstats-backend"]
 exclude = ["third_party"]
 resolver = "2"
 
+# The lints every crate has (#680); a crate opts in with
+# `[lints] workspace = true`. rigstats-backend keeps its own, stricter set
+# (also clone_on_ref_ptr, redundant_clone, needless_pass_by_value) — on
+# src-egui those three find ~100 places, a change of its own.
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
 # Smaller, faster release binaries (#467). Not panic = "abort": the tray
 # thread and debug::supervise rely on catch_unwind.
 [profile.release]

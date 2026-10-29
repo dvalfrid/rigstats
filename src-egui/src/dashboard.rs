@@ -127,7 +127,6 @@ impl DashboardView<'_> {
     /// the window level via `SetLayeredWindowAttributes` instead (see
     /// `win_opacity` module), which is unavailable once the window is
     /// reparented into WorkerW.
-    #[allow(clippy::too_many_arguments)]
     pub fn draw_one_panel(
         &self,
         ui: &mut egui::Ui,
@@ -348,7 +347,6 @@ impl DashboardView<'_> {
     /// taller cell). `false` (the default) keeps cells at their natural height,
     /// so the grid — and the window fit to it — shrinks or grows with the panel
     /// count instead of leaving a gap below a partial grid.
-    #[allow(clippy::too_many_arguments)]
     pub fn render_landscape_grid(
         &self,
         ui: &mut egui::Ui,

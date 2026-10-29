@@ -19,7 +19,6 @@ pub fn show(ui: &mut Ui, size: f32, frac: f32, color: Color32, label: &str) -> e
 }
 
 /// Draw a ring gauge (no allocation — caller provides center + radius).
-#[allow(clippy::too_many_arguments)]
 pub fn draw(
     painter: &Painter,
     center: Pos2,

@@ -1,0 +1,4 @@
+# egui draws its UI anew every frame from what a function is given, so a
+# panel or dialog function takes its data, theme, scale and state as
+# arguments; clippy's default limit of 7 flagged ~28 of them (#680).
+too-many-arguments-threshold = 12

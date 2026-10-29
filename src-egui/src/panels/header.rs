@@ -35,7 +35,6 @@ fn brand_subtitle(brand: &str) -> &'static str {
 /// height (`dashboard::tests::the_ring_panels_set_the_compact_height`).
 const COMPACT_LOGO_H: f32 = 90.0;
 
-#[allow(clippy::too_many_arguments)] // the panel's own values, passed through
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,

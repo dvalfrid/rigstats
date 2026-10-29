@@ -303,7 +303,6 @@ fn detail_header(
 
 // ── Detail pane (charts) ─────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 /// One metric chart: title/unit for display, plus one `(name, color, points)`
 /// series per line. `points` are `[elapsed_seconds, value]` pairs.
 struct ChartSpec {
@@ -617,7 +616,6 @@ fn render_detail(ui: &mut egui::Ui, dc: &DialogColors, meta: &SessionMeta, rows:
 
 // ── Window ────────────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
 pub fn show(
     ui: &mut egui::Ui,
     main_ctx: &egui::Context,
