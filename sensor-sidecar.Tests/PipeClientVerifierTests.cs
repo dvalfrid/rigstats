@@ -7,10 +7,10 @@ namespace SensorSidecar.Tests;
 /// <see cref="PipeClientVerifier.CheckImageAndSigner"/> is the pure
 /// comparison logic behind steps 2–3 of client verification (image path +
 /// Authenticode signer match) — see that method's doc for why the
-/// P/Invoke-dependent parts (steps 1, and resolving the two thumbprints) are
-/// exercised by the manual pipe smoke test instead. The signer reader itself
-/// (<see cref="PipeClientVerifier.SignerThumbprint"/>) runs against real
-/// files below — a reader that couldn't read signed executables shipped in
+/// pipe's client PID (step 1) is exercised by the manual pipe smoke test
+/// instead. The image-path lookup and the signer reader
+/// (<see cref="PipeClientVerifier.SignerThumbprint"/>) run against the real
+/// test process and real files below — a reader that couldn't read signed executables shipped in
 /// 1.42.0 and refused every Control Center client.
 /// </summary>
 public class PipeClientVerifierTests
@@ -41,6 +41,17 @@ public class PipeClientVerifierTests
         }
         Assert.Null(PipeClientVerifier.SignerThumbprint(@"C:\does\not\exist.exe"));
         Assert.Null(PipeClientVerifier.SignerThumbprint(null));
+    }
+
+    [Fact]
+    public void Reads_a_process_image_path_from_the_kernel()
+    {
+        Assert.Equal(
+            Path.GetFullPath(Environment.ProcessPath!),
+            PipeClientVerifier.ImagePath((uint)Environment.ProcessId),
+            StringComparer.OrdinalIgnoreCase);
+        // No process has id 0xFFFFFFFC (ids are multiples of 4 below that).
+        Assert.Null(PipeClientVerifier.ImagePath(0xFFFF_FFFC));
     }
 
     private const string Expected = @"C:\Program Files\RIGStats\rigstats.exe";

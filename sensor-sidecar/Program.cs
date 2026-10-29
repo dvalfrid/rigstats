@@ -7,6 +7,9 @@ using SensorSidecar.Control.Lighting;
 using SensorSidecar.Control.Providers;
 using SensorSidecar.Control.Workers;
 
+// Before anything loads a library — in the service and in both workers.
+DllSearchPath.Restrict();
+
 // A crash anywhere — a worker thread, a timer — is logged before the process
 // ends. The service manager restarts the service; without this the reason
 // would only be in the Windows event log (#219).
