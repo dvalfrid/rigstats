@@ -40,7 +40,7 @@ pub fn draw(
                 th,
                 sc,
             );
-            update_badge(ui, update_version, sc);
+            update_badge(ui, update_version, sc, true);
             return;
         }
         ui.set_min_height(theme::PANEL_HEADER_H * sc);
@@ -83,33 +83,85 @@ pub fn draw(
                 .color(theme::C_GRN),
         );
 
-        update_badge(ui, update_version, sc);
+        update_badge(ui, update_version, sc, false);
     })
 }
 
 /// "UPDATE vX AVAILABLE" under the time while an update is ready; a click
-/// sets the `"open_updater"` temp flag.
-fn update_badge(ui: &mut Ui, update_version: Option<&str>, sc: f32) {
-    if let Some(ver) = update_version {
-        let label = format!("⬆  UPDATE v{ver} AVAILABLE");
-        let badge_color = egui::Color32::from_rgb(0x39, 0xff, 0x88);
-        let border_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 115);
-        let bg_color = egui::Color32::from_rgba_unmultiplied(0x39, 0xff, 0x88, 26);
+/// sets the `"open_updater"` temp flag. Painted, arrow included: the `⬆`
+/// character came from the emoji font as a blue tile. `centered` under the
+/// compact layout's centred columns, else at the left edge like the rest of
+/// the full panel.
+fn update_badge(ui: &mut Ui, update_version: Option<&str>, sc: f32, centered: bool) {
+    let Some(ver) = update_version else {
+        return;
+    };
+    let green = egui::Color32::from_rgb(0x39, 0xff, 0x88);
+    let galley = ui.painter().layout_no_wrap(
+        format!("UPDATE v{ver} AVAILABLE"),
+        egui::FontId::proportional(11.0 * sc),
+        green,
+    );
+    let arrow = 8.0 * sc;
+    let gap = 6.0 * sc;
+    let pad = egui::vec2(8.0 * sc, 4.0 * sc);
+    let size = egui::vec2(
+        pad.x * 2.0 + arrow + gap + galley.size().x,
+        pad.y * 2.0 + galley.size().y.max(arrow),
+    );
 
-        ui.add_space(4.0 * sc);
-        let resp = ui.add(
-            egui::Button::new(RichText::new(&label).size(11.0 * sc).color(badge_color))
-                .fill(bg_color)
-                .stroke(egui::Stroke::new(1.0_f32, border_color))
-                .corner_radius(egui::CornerRadius::same(2)),
-        );
-        if resp.hovered() {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        }
-        if resp.clicked() {
-            ui.ctx()
-                .data_mut(|d| d.insert_temp(egui::Id::unique("open_updater"), true));
-        }
+    ui.add_space(if centered { 8.0 } else { 6.0 } * sc);
+    let align = if centered {
+        egui::Align::Center
+    } else {
+        egui::Align::Min
+    };
+    let resp = ui
+        .with_layout(egui::Layout::top_down(align), |ui| {
+            ui.allocate_exact_size(size, egui::Sense::click()).1
+        })
+        .inner;
+    let rect = resp.rect;
+    let hot = resp.hovered();
+    let painter = ui.painter();
+    painter.rect(
+        rect,
+        egui::CornerRadius::same(2),
+        green.gamma_multiply(if hot { 0.18 } else { 0.10 }),
+        egui::Stroke::new(1.0, green.gamma_multiply(if hot { 0.75 } else { 0.45 })),
+        egui::StrokeKind::Inside,
+    );
+    // An up arrow: a head over a short stem, as tall as the capitals.
+    let c = egui::pos2(rect.left() + pad.x + arrow / 2.0, rect.center().y);
+    let half = arrow / 2.0;
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            egui::pos2(c.x, c.y - half),
+            egui::pos2(c.x + half, c.y),
+            egui::pos2(c.x - half, c.y),
+        ],
+        green,
+        egui::Stroke::NONE,
+    ));
+    painter.line_segment(
+        [egui::pos2(c.x, c.y - 0.5), egui::pos2(c.x, c.y + half)],
+        egui::Stroke::new(2.0 * sc, green),
+    );
+    painter.galley(
+        egui::pos2(
+            rect.left() + pad.x + arrow + gap,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        green,
+    );
+
+    if hot {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    if resp.clicked() {
+        ui.ctx()
+            .data_mut(|d| d.insert_temp(egui::Id::unique("open_updater"), true));
     }
 }
 
