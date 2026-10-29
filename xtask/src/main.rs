@@ -56,7 +56,8 @@ fn run(cmd: &mut Command) -> Result<(), String> {
 }
 
 fn task_build() -> Result<(), String> {
-    run(Command::new("dotnet").args([
+    let mut publish = Command::new("dotnet");
+    publish.args([
         "publish",
         "sensor-sidecar/sensor-sidecar.csproj",
         "-c",
@@ -66,7 +67,15 @@ fn task_build() -> Result<(), String> {
         "--self-contained",
         "true",
         "-p:PublishSingleFile=true",
-    ]))?;
+    ]);
+    // The release workflow sets the tag's version (1.53.0-rc.3); the app
+    // takes it through `update_check::APP_VERSION`, the service as its
+    // version here — the csproj's only moves with real releases, so a
+    // release candidate's service said 1.52.0 in its log.
+    if let Ok(version) = std::env::var("RIGSTATS_VERSION") {
+        publish.arg(format!("-p:Version={version}"));
+    }
+    run(&mut publish)?;
     run(Command::new("cargo").args([
         "build",
         "--release",

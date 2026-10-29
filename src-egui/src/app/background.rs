@@ -61,7 +61,9 @@ pub(crate) fn spawn_control_task(
                 control_cmd_rx.clone(),
                 control_event_tx.clone(),
                 control_dir.clone(),
-                env!("CARGO_PKG_VERSION").to_string(),
+                // The tag's version in a release build (1.53.0-rc.3), as About
+                // shows it — not Cargo.toml's, which only moves with releases.
+                rigstats_egui::update_check::APP_VERSION.to_string(),
             )
         },
     ));
