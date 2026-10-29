@@ -3,7 +3,6 @@ using System.Reflection;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using SensorSidecar.Control.Providers;
@@ -15,7 +14,7 @@ namespace SensorSidecar.Control;
 /// pushed `event` lines. See `docs/control-architecture.md`, "Control pipe
 /// protocol". Every connection is verified by `IPipeClientVerifier` before
 /// any request is processed.
-public sealed class ControlPipeWorker(
+public sealed partial class ControlPipeWorker(
     ControlBroker broker,
     ProfileStore profiles,
     SafetyGuard safetyGuard,
@@ -465,25 +464,11 @@ public sealed class ControlPipeWorker(
 
     private static T ObjectParam<T>(ControlRequest request, string name) => ObjectParam<T>(Param(request, name), name);
 
-    // The device pages' answers, built here for the pipe and for the shared
-    // contract examples the app's reader checks too (#679).
-    internal static JsonObject HeadsetsReply(Lighting.LightingProvider lighting) => new() { ["headsets"] = lighting.Headsets() };
-    internal static JsonObject KeyboardsReply(Lighting.LightingProvider lighting) => new() { ["keyboards"] = lighting.KeyboardSettingsList() };
-    internal static JsonObject MiceReply(Mice.MouseProvider mice) => new() { ["mice"] = mice.List() };
-
     /// The whole `params` object as `T` (save_profile sends the profile itself).
     private static T ParamsAs<T>(ControlRequest request, string what) =>
         request.Params is { ValueKind: JsonValueKind.Object } p
             ? ObjectParam<T>(p, what)
             : throw new BadRequestException($"missing {what}.");
-
-    /// An IP address from the client (#378): parsed, so nothing but an address
-    /// becomes the host of an HTTPS request or goes into the log.
-    private static string IpParam(string text) =>
-        System.Net.IPAddress.TryParse(text.Trim(), out var address)
-            && address.AddressFamily is System.Net.Sockets.AddressFamily.InterNetwork or System.Net.Sockets.AddressFamily.InterNetworkV6
-            ? address.ToString()
-            : throw new BadRequestException($"'{Printable(text)}' is not an IP address.");
 
     /// One domain's capability; a provider that throws is reported as
     /// unavailable instead of failing the whole list (and with it every tab
@@ -507,18 +492,6 @@ public sealed class ControlPipeWorker(
         }
     }
 
-    private async Task<ControlResponse> HandleGetStateAsync(ControlRequest request, CancellationToken ct)
-    {
-        var activeId = await profiles.GetActiveIdAsync(ct);
-        return ControlResponse.Ok(request.Id, new
-        {
-            active_profile = activeId,
-            dry_run = safetyGuard.DryRun,
-            crash_guard_notice = crashGuard.Notice,
-            profiles_notice = profiles.Notice,
-        });
-    }
-
     /// `{"protocol": 1, "app_version": "1.53.0"}` — answered with the
     /// service's own; both are logged, so an app and service that don't match
     /// show in a diagnostics ZIP (#679). The app decides what a mismatch
@@ -538,122 +511,6 @@ public sealed class ControlPipeWorker(
         return ControlResponse.Ok(request.Id, new { protocol = ProtocolVersion, service_version = AppVersion });
     }
 
-    private async Task<ControlResponse> HandleSaveProfileAsync(ControlRequest request, CancellationToken ct)
-    {
-        var profile = ParamsAs<Profile>(request, "profile");
-        if (string.IsNullOrWhiteSpace(profile.Id) || profile.Id.Length > ProfileStore.MaxTextLength
-            || profile.Name.Length > ProfileStore.MaxTextLength)
-            throw new BadRequestException($"a profile id must be 1–{ProfileStore.MaxTextLength} characters and its name at most {ProfileStore.MaxTextLength}.");
-        if (!await profiles.SaveProfileAsync(profile, ct))
-            return ControlResponse.Fail(request.Id, "too_many_profiles", $"There are already {ProfileStore.MaxProfiles} profiles. Delete one to add another.");
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    private async Task<ControlResponse> HandleDeleteProfileAsync(ControlRequest request, CancellationToken ct)
-    {
-        var id = StringParam(request, "id");
-        var wasActive = await profiles.GetActiveIdAsync(ct) == id;
-        if (!await profiles.DeleteProfileAsync(id, ct))
-            return ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
-        // The store falls back to another profile as active; apply it, so the
-        // hardware follows what the UI now shows as active.
-        if (wasActive)
-            await ApplyActiveAsync(ct);
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    /// `{"id": "gaming"}` — a built-in back to its defaults, re-applied when
-    /// it is the active profile.
-    private async Task<ControlResponse> HandleResetProfileAsync(ControlRequest request, CancellationToken ct)
-    {
-        var id = StringParam(request, "id");
-        if (await profiles.ResetBuiltinAsync(id, ct) is null)
-            return ControlResponse.Fail(request.Id, "not_builtin", $"profile '{id}' is not a built-in profile.");
-        var result = await profiles.GetActiveIdAsync(ct) == id
-            ? await ApplyActiveAsync(ct)
-            : ApplyResult.Success(id);
-        return ControlResponse.Ok(request.Id, result);
-    }
-
-    private async Task<ApplyResult> ApplyActiveAsync(CancellationToken ct)
-    {
-        var activeId = await profiles.GetActiveIdAsync(ct);
-        if (activeId is null || await profiles.GetAsync(activeId, ct) is not { } active)
-            return ApplyResult.Failure(activeId ?? "", "No active profile.");
-        return await broker.ApplyProfileAsync(active, ct);
-    }
-
-    private async Task<ControlResponse> HandleApplyProfileAsync(ControlRequest request, CancellationToken ct)
-    {
-        var id = StringParam(request, "id");
-        var profile = await profiles.GetAsync(id, ct);
-        if (profile is null)
-            return ControlResponse.Fail(request.Id, "not_found", $"profile '{id}' not found.");
-
-        var result = await broker.ApplyProfileAsync(profile, ct);
-        if (result.Ok)
-        {
-            await profiles.SetActiveAsync(id, ct);
-            crashGuard.AcknowledgeNotice();
-        }
-        return ControlResponse.Ok(request.Id, result);
-    }
-
-    /// `{"profile": {...}, "seconds": 15}` — applies an unsaved (edited)
-    /// profile; `confirm` stores it and makes it active, otherwise the broker
-    /// reverts it when the time is up.
-    private async Task<ControlResponse> HandlePreviewAsync(ControlRequest request, CancellationToken ct)
-    {
-        var profile = ObjectParam<Profile>(request, "profile");
-        var duration = DefaultPreviewDuration;
-        if (request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("seconds", out var seconds)
-            && seconds.ValueKind == JsonValueKind.Number && seconds.TryGetInt32(out var s) && s > 0)
-            duration = TimeSpan.FromSeconds(Math.Min(s, MaxPreviewDuration.TotalSeconds));
-
-        var result = await broker.PreviewAsync(profile, duration, ct);
-        return ControlResponse.Ok(request.Id, new
-        {
-            ok = result.Ok,
-            message = result.Message,
-            profile_id = result.ProfileId,
-            revert_in_s = result.Ok ? (int?)duration.TotalSeconds : null,
-        });
-    }
-
-    /// `{"keep": true}` (default) or `{"keep": false}` to revert now.
-    private async Task<ControlResponse> HandleConfirmAsync(ControlRequest request, CancellationToken ct)
-    {
-        var keep = request.Params is not { ValueKind: JsonValueKind.Object } p || !p.TryGetProperty("keep", out var k)
-            || k.ValueKind switch
-            {
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                _ => throw new BadRequestException("'keep' must be true or false."),
-            };
-        var profile = await broker.EndPreviewAsync(keep, ct);
-        if (profile is null)
-            return ControlResponse.Fail(request.Id, "no_preview", "The preview already ended and was reverted.");
-        if (keep)
-        {
-            await profiles.SaveProfileAsync(profile, ct);
-            await profiles.SetActiveAsync(profile.Id, ct);
-            crashGuard.AcknowledgeNotice();
-        }
-        return ControlResponse.Ok(request.Id, new { ok = true, kept = keep, profile_id = profile.Id });
-    }
-
-    /// `{"aura": {...}}` — sets the lights at once without saving anything:
-    /// the Lighting tab's live preview while a colour is being picked.
-    /// Harmless, so it skips the broker transaction.
-    private ControlResponse HandleAuraPreview(ControlRequest request)
-    {
-        var aura = ObjectParam<AuraPart>(request, "aura");
-        lighting.Preview(aura);
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    /// Switches the desk lamp(s) off or back on (the tray). Like the
-    /// preview, harmless and unsaved, so it skips the broker transaction.
     /// The sensor tree as read now (#557) — `sensor-tree.txt` is only written
     /// at start, so it can't show a sensor that went missing later.
     private ControlResponse HandleSensorTree(ControlRequest request) =>
@@ -661,180 +518,9 @@ public sealed class ControlPipeWorker(
             ? ControlResponse.Fail(request.Id, "unavailable", "The sensors aren't read by this service.")
             : ControlResponse.Ok(request.Id, new { tree = hardware.SensorTree() });
 
-    private ControlResponse HandleLampToggle(ControlRequest request) =>
-        lighting.ToggleLamp() is { } on
-            ? ControlResponse.Ok(request.Id, new { ok = true, on })
-            : ControlResponse.Fail(request.Id, "no_lamp", "No lighting device with a lamp is connected.");
-
-    /// `{"id": "lamparray-0b05-1ace-2"}` — lets the device follow lighting
-    /// writes (#236). Changes a setting saved in the device, so only on the
-    /// user's request from the Lighting tab.
-    /// `{id, settings}`: change a mouse's settings in its active onboard
-    /// profile (#431) — answered with the mouse as read back.
-    private ControlResponse HandleMouseSet(ControlRequest request)
-    {
-        var id = StringParam(request, "id");
-        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
-            ? ObjectParam<Mice.MouseSettings>(value, "settings")
-            : throw new BadRequestException("'settings' must be an object.");
-        return ControlResponse.Ok(request.Id, new { mouse = mice.Set(id, settings) });
-    }
-
-    /// `{id, settings}`: change a headset's sidetone and noise reduction
-    /// (#428) — answered with the headset as read back.
-    private ControlResponse HandleHeadsetSet(ControlRequest request)
-    {
-        var id = StringParam(request, "id");
-        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
-            ? ObjectParam<Lighting.HeadsetSettings>(value, "settings")
-            : throw new BadRequestException("'settings' must be an object.");
-        return ControlResponse.Ok(request.Id, new { headset = lighting.SetHeadset(id, settings) });
-    }
-
-    private ControlResponse HandleKeyboardSet(ControlRequest request)
-    {
-        var id = StringParam(request, "id");
-        var settings = Param(request, "settings") is { ValueKind: JsonValueKind.Object } value
-            ? ObjectParam<Lighting.KeyboardSettings>(value, "settings")
-            : throw new BadRequestException("'settings' must be an object.");
-        return ControlResponse.Ok(request.Id, new { keyboard = lighting.SetKeyboard(id, settings) });
-    }
-
-    /// `{"id": …, "eq": {"on": true, "gains": [10 × gain]}}` — one headset's
-    /// equalizer (#483); answers the headset as `headset_settings` lists it.
-    private ControlResponse HandleHeadsetEqSet(ControlRequest request)
-    {
-        var id = StringParam(request, "id");
-        var eq = Param(request, "eq") is { ValueKind: JsonValueKind.Object } value
-            ? ObjectParam<Lighting.HeadsetEq>(value, "eq")
-            : throw new BadRequestException("'eq' must be an object.");
-        if (eq.Gains is null || eq.Gains.Length != Lighting.HeadsetEqCommands.Bands)
-            throw new BadRequestException($"'eq.gains' must have {Lighting.HeadsetEqCommands.Bands} values.");
-        return ControlResponse.Ok(request.Id, new { headset = lighting.SetHeadsetEq(id, eq) });
-    }
-
-    private ControlResponse HandleAuraEnableWdl(ControlRequest request)
-    {
-        var id = StringParam(request, "id");
-        lighting.EnableWdl(id);
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    /// `{"ip": "192.168.1.20"}` (optional) — the Hue Bridges on the network
-    /// (mDNS), or only the one at `ip`.
-    private static async Task<ControlResponse> HandleHueDiscoverAsync(ControlRequest request, CancellationToken ct)
-    {
-        string? ip = null;
-        if (request.Params is { ValueKind: JsonValueKind.Object } p && p.TryGetProperty("ip", out var value)
-            && value.ValueKind != JsonValueKind.Null)
-        {
-            var text = value.ValueKind == JsonValueKind.String
-                ? value.GetString()!
-                : throw new BadRequestException("'ip' must be a string.");
-            if (!string.IsNullOrWhiteSpace(text))
-                ip = IpParam(text);
-        }
-        var bridges = await Lighting.HueLink.DiscoverAsync(ip, ct);
-        SidecarLog.Log($"[rigstats-control] Hue: search{(ip is null ? "" : $" at {ip}")} found " +
-            (bridges.Count == 0 ? "no bridge." : string.Join(", ", bridges.Select(b => $"{b.Name} ({b.Model}, {b.Ip})")) + "."));
-        return ControlResponse.Ok(request.Id, new
-        {
-            bridges = bridges.Select(b => new { id = b.Id, name = b.Name, model = b.Model, ip = b.Ip }),
-        });
-    }
-
-    /// `{"ip": "..."}` — pairs once the bridge's link button was pressed.
-    private async Task<ControlResponse> HandleHuePairAsync(ControlRequest request, CancellationToken ct)
-    {
-        var ip = IpParam(StringParam(request, "ip"));
-        if (!await hue.PairAsync(ip, ct))
-            return ControlResponse.Fail(request.Id, "link_button", "Press the round link button on the Hue Bridge, then Pair again.");
-        lighting.Rediscover();
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    private async Task<ControlResponse> HandleHueRefreshAsync(ControlRequest request, CancellationToken ct)
-    {
-        await hue.RefreshGroupsAsync(ct);
-        lighting.Rediscover();
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    /// `{"groups": ["<room or zone id>", ...]}` — what follows the rig.
-    private ControlResponse HandleHueChoose(ControlRequest request)
-    {
-        var groups = ObjectParam<List<string>>(request, "groups");
-        hue.Choose(groups);
-        lighting.Rediscover();
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    private ControlResponse HandleHueUnpair(ControlRequest request)
-    {
-        hue.Unpair();
-        lighting.Rediscover();
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
-    private ControlResponse HandleReleaseToFirmware(ControlRequest request)
-    {
-        safetyGuard.ReleaseAllToFirmware(SafetyGuard.AskedFromControlCenter);
-        return ControlResponse.Ok(request.Id, new { ok = true });
-    }
-
     private static ControlResponse HandleSubscribe(ControlRequest request, Connection connection)
     {
         connection.Subscribed = true;
         return ControlResponse.Ok(request.Id, new { subscribed = true });
     }
-
-    /// Answers at once and runs the 3 s spin in the background — the control
-    /// pipe serves one request at a time, so awaiting it would stall the UI.
-    private ControlResponse HandleIdentifyFan(ControlRequest request, Connection connection)
-    {
-        var header = StringParam(request, "header");
-        if (!fanProvider.HasHeader(header))
-            return ControlResponse.Fail(request.Id, "not_found", $"fan header '{header}' not found.");
-
-        _ = IdentifyInBackgroundAsync(header, connection);
-        return ControlResponse.Ok(request.Id, new { ok = true, duration_ms = (int)FanProvider.IdentifyDuration.TotalMilliseconds });
-    }
-
-    /// The measured channel→fan mapping goes to the service log (and so the
-    /// diagnostics ZIP, #207) and back to the requesting client. If that
-    /// client has gone, the event just lands in its abandoned queue.
-    private async Task IdentifyInBackgroundAsync(string header, Connection connection)
-    {
-        try
-        {
-            var result = await fanProvider.IdentifyAsync(header, FanProvider.IdentifyDuration, CancellationToken.None);
-            if (result is null)
-                return; // superseded or released before it finished.
-            SidecarLog.Log($"[rigstats-control] Identify {DescribeIdentify(result)}");
-            if (connection.Subscribed)
-                connection.Events.Writer.TryWrite(ToIdentifiedMessage(result));
-        }
-        catch (Exception e)
-        {
-            SidecarLog.Log($"[rigstats-control] identify_fan {header} failed: {e}");
-        }
-    }
-
-    internal static string DescribeIdentify(FanIdentifyResult result) =>
-        result.Responders.Count == 0
-            ? $"{result.Header} -> no RPM change (nothing connected, already at full speed, or not this channel)"
-            : $"{result.Header} -> " + string.Join(", ", result.Responders.Select(r =>
-                $"{r.Label} ({r.BeforeRpm:F0} -> {r.PeakRpm:F0} rpm)"));
-
-    internal static ControlEventMessage ToIdentifiedMessage(FanIdentifyResult result) => new()
-    {
-        Event = "fan_identified",
-        Data = new
-        {
-            header = result.Header,
-            responders = result.Responders
-                .Select(r => new { label = r.Label, before_rpm = r.BeforeRpm, peak_rpm = r.PeakRpm })
-                .ToList(),
-        },
-    };
 }
