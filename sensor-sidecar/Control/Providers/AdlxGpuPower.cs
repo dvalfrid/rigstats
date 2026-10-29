@@ -128,7 +128,7 @@ public sealed class AdlxGpuPower : IGpuPowerApi, IDisposable
     /// Null when the AMD driver (ADLX) isn't installed.
     public static AdlxGpuPower? TryLoad()
     {
-        if (!NativeLibrary.TryLoad("amdadlx64.dll", out var library))
+        if (!DllSearchPath.TryLoadSystem("amdadlx64.dll", out var library))
             return null;
         try
         {

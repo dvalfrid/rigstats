@@ -12,7 +12,8 @@ namespace SensorSidecar.Control;
 /// `docs/control-architecture.md`, "Security"):
 ///
 /// 1. PID of the connected client (`GetNamedPipeClientProcessId`).
-/// 2. That process's own image path must equal the installed `rigstats.exe`
+/// 2. That process's image path, as the kernel has it
+///    (`QueryFullProcessImageNameW`), must equal the installed `rigstats.exe`
 ///    sitting next to this service's own exe.
 /// 3. Both exes' Authenticode signer must match — works for dev (self-signed)
 ///    and release (real cert) builds without hardcoding a specific cert.
@@ -47,17 +48,8 @@ public sealed class PipeClientVerifier : IPipeClientVerifier
         if (!GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var pid))
             return VerifyResult.Deny("could not determine client process id.");
 
-        string clientImagePath;
-        try
-        {
-            using var process = System.Diagnostics.Process.GetProcessById((int)pid);
-            clientImagePath = process.MainModule?.FileName
-                ?? throw new InvalidOperationException("no main module.");
-        }
-        catch (Exception e)
-        {
-            return VerifyResult.Deny($"could not resolve client image path: {e.Message}");
-        }
+        if (ImagePath(pid) is not { } clientImagePath)
+            return VerifyResult.Deny($"could not resolve client image path (error {Marshal.GetLastPInvokeError()}).");
 
         var expectedImagePath = Path.Combine(AppContext.BaseDirectory, "rigstats.exe");
         var ownSignerThumbprint = SignerThumbprint(Environment.ProcessPath);
@@ -66,6 +58,33 @@ public sealed class PipeClientVerifier : IPipeClientVerifier
         return CheckImageAndSigner(clientImagePath, expectedImagePath, ownSignerThumbprint, clientSignerThumbprint);
 #endif
     }
+
+    /// The image the process was started from, as the kernel recorded it
+    /// (#675). `Process.MainModule` reads the module list in the client's
+    /// own memory, which the client can rewrite to name the installed
+    /// rigstats.exe. Null when the process is gone or can't be opened.
+    /// Built in every configuration so the tests run it.
+    internal static string? ImagePath(uint pid)
+    {
+        using var process = OpenProcess(ProcessQueryLimitedInformation, false, pid);
+        if (process.IsInvalid)
+            return null;
+        var buffer = new char[32768];
+        var length = buffer.Length;
+        return QueryFullProcessImageName(process, 0, buffer, ref length)
+            ? new string(buffer, 0, length)
+            : null;
+    }
+
+    private const uint ProcessQueryLimitedInformation = 0x1000;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcess(
+        uint desiredAccess, bool inheritHandle, uint processId);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "QueryFullProcessImageNameW")]
+    private static extern bool QueryFullProcessImageName(
+        Microsoft.Win32.SafeHandles.SafeProcessHandle process, uint flags, char[] exeName, ref int size);
 
     /// The pure comparison logic (steps 2–3 of the class doc), split out from
     /// <see cref="Verify"/> so it's unit-testable without real P/Invoke calls,

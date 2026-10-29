@@ -92,7 +92,7 @@ public sealed class NvmlGpuPower : IGpuPowerApi, IDisposable
     public static NvmlGpuPower? TryLoad()
     {
         // System32 on current drivers; NVSMI on old ones.
-        if (!NativeLibrary.TryLoad("nvml.dll", out var library)
+        if (!DllSearchPath.TryLoadSystem("nvml.dll", out var library)
             && !NativeLibrary.TryLoad(Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
                 @"NVIDIA Corporation\NVSMI\nvml.dll"), out library))

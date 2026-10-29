@@ -412,7 +412,9 @@ write path into a LocalSystem service and must not become a privilege
 escalation vector:
 
 - Pipe ACL: SYSTEM full control; **interactive user** read/write only.
-- Client verification: `GetNamedPipeClientProcessId` → image path must be the
+- Client verification: `GetNamedPipeClientProcessId` → image path (the
+  kernel's, `QueryFullProcessImageNameW` — not `Process.MainModule`, which
+  reads the module list in the client's own memory, #675) must be the
   installed `rigstats.exe`, Authenticode signature must match the service's
   own signer (skipped in debug builds only). The path is the real gate — only
   an administrator can put a file there; the signer comparison catches a
@@ -450,6 +452,13 @@ escalation vector:
 - The Hue Bridge's certificate check returns each TLS handshake's own verdict
   (`HueBridge.Accept`); one client can run two handshakes at once, and a
   verdict read back from shared state could be the other one's (#378).
+- No DLL planting: the first thing `Program.cs` does (service and both
+  workers) is `DllSearchPath.Restrict()` — a library named without a path is
+  looked for only in the app folder and System32, never the current directory
+  or PATH, where a standard user may be able to write (#675). Load a driver
+  library with `DllSearchPath.TryLoadSystem`, not `NativeLibrary.TryLoad(name)`:
+  that overload no longer finds a bare name at all once the search is
+  restricted. `[DllImport]` by bare name keeps working.
 - All numeric values clamped against probed limits in the service.
 - State writable only by the service: `DataDirectory.EnsureSecure` runs first
   thing at start-up and gives `%ProgramData%\se.codeby.rigstats` protected
