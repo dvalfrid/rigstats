@@ -135,14 +135,16 @@ public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
     private readonly IPawnIoModule _module;
     private readonly SmuLimitCommands _commands;
     private readonly PmTableLayout _layout;
-    private readonly Mutex _pciMutex = new(false, PciMutexName);
+    private readonly Mutex _pciMutex;
 
     public string Generation { get; }
     public uint PmTableVersion { get; }
 
-    private RyzenSmu(IPawnIoModule module, string generation, SmuLimitCommands commands, uint tableVersion, PmTableLayout layout)
+    private RyzenSmu(IPawnIoModule module, string generation, SmuLimitCommands commands, uint tableVersion,
+        PmTableLayout layout, string pciMutexName)
     {
         _module = module;
+        _pciMutex = new Mutex(false, pciMutexName);
         Generation = generation;
         _commands = commands;
         PmTableVersion = tableVersion;
@@ -189,7 +191,17 @@ public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
             return null;
         }
 
-        using var pciMutex = new Mutex(false, PciMutexName);
+        return Open(module, generation.Name, generation.Commands, cpu, out reason);
+    }
+
+    /// The PM table check behind `TryOpen`, on an already loaded module — a
+    /// seam so tests can drive it with a fake module. Takes ownership of
+    /// `module`: disposed when null is returned. Tests pass a mutex name of
+    /// their own: the service's `Global\Access_PCI` is closed to a normal user.
+    internal static RyzenSmu? Open(IPawnIoModule module, string generation, SmuLimitCommands commands, string cpu,
+        out string reason, string pciMutexName = PciMutexName)
+    {
+        using var pciMutex = new Mutex(false, pciMutexName);
         var locked = Acquire(pciMutex);
         try
         {
@@ -197,8 +209,8 @@ public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
             if (AmdSmuMap.Layout(tableVersion) is { } layout)
             {
                 reason = "";
-                SidecarLog.Log($"[rigstats-control] CPU limits: {generation.Name} ({cpu}), PM table 0x{tableVersion:X}.");
-                return new RyzenSmu(module, generation.Name, generation.Commands, tableVersion, layout);
+                SidecarLog.Log($"[rigstats-control] CPU limits: {generation} ({cpu}), PM table 0x{tableVersion:X}.");
+                return new RyzenSmu(module, generation, commands, tableVersion, layout, pciMutexName);
             }
 
             // Unknown layout: record the head of the table so a diagnostics
@@ -206,7 +218,7 @@ public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
             module.Execute("ioctl_update_pm_table", [], 0);
             var head = module.Execute("ioctl_read_pm_table", [], 64);
             var floats = Enumerable.Range(0, 128).Select(i => $"[{i}]={AmdSmuMap.PmFloat(head, i):F1}");
-            SidecarLog.Log($"[rigstats-control] CPU limits: {generation.Name} ({cpu}) PM table 0x{tableVersion:X} " +
+            SidecarLog.Log($"[rigstats-control] CPU limits: {generation} ({cpu}) PM table 0x{tableVersion:X} " +
                 $"not verified yet; head: {string.Join(" ", floats)}");
             reason = $"CPU power limits are not verified for this CPU yet (PM table 0x{tableVersion:X}).";
         }
