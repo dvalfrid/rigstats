@@ -440,7 +440,12 @@ user-agnostic; with the app closed, no rules run.
 `%APPDATA%\se.codeby.rigstats\rigstats-settings.json`.
 
 All fields use `#[serde(default)]` for backwards-compatible schema evolution —
-new fields deserialise cleanly from older settings files. `last_seen_version`
+new fields deserialise cleanly from older settings files. The other way round
+— a value this build doesn't know, e.g. an enum variant a newer build added —
+fails the whole parse; `load_settings` then keeps the file as
+`rigstats-settings.json.corrupt` and takes every top-level field that still
+parses on its own, so only that one setting falls back to its default (#676).
+`last_seen_version`
 is compared against `CARGO_PKG_VERSION` at startup to detect the first launch
 after an upgrade.
 

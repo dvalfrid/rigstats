@@ -684,11 +684,18 @@ pub fn load_settings(dir: &Path) -> Settings {
         Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
             Ok(s) => s,
             Err(e) => {
+                // The next save overwrites the file: keep it as it was (#676).
+                let _ = fs::write(path.with_extension("json.corrupt"), &raw);
+                let (s, dropped) = parse_field_by_field(&raw);
+                let note = match dropped {
+                    None => "not JSON, using defaults".to_string(),
+                    Some(d) => format!("using defaults for {}", d.join(", ")),
+                };
                 crate::debug::log_error(
                     dir,
-                    &format!("settings: parse error — {e}, using defaults"),
+                    &format!("settings: parse error — {e}, {note}; the file is kept as rigstats-settings.json.corrupt"),
                 );
-                Settings::default()
+                s
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Settings::default(),
@@ -724,6 +731,30 @@ pub fn load_settings(dir: &Path) -> Settings {
     }
 
     settings
+}
+
+/// The settings from a file that doesn't parse as a whole: each top-level
+/// field is taken when the defaults with that one field from the file still
+/// parse, so one value this build doesn't know — e.g. an update channel a
+/// newer build added — costs only that setting (#676). Also returns the
+/// fields left at their defaults; `None` when the file isn't a JSON object.
+fn parse_field_by_field(raw: &str) -> (Settings, Option<Vec<String>>) {
+    let Ok(serde_json::Value::Object(file)) = serde_json::from_str(raw) else {
+        return (Settings::default(), None);
+    };
+    let mut merged = serde_json::to_value(Settings::default()).unwrap_or_default();
+    let mut dropped = Vec::new();
+    for (key, value) in file {
+        let mut candidate = merged.clone();
+        candidate[&key] = value.clone();
+        if serde_json::from_value::<Settings>(candidate).is_ok() {
+            merged[&key] = value;
+        } else {
+            dropped.push(key);
+        }
+    }
+    let settings = serde_json::from_value(merged).unwrap_or_default();
+    (settings, Some(dropped))
 }
 
 /// Copies schema-version-0 flat threshold fields into the `thresholds` map.
@@ -886,6 +917,54 @@ mod tests {
             "unconfigured v0 install must inherit default cpu thresholds"
         );
         assert_eq!(s.thresholds.get("battery"), defaults.get("battery"));
+    }
+
+    /// #676: a value this build doesn't know (here an update channel added
+    /// by a newer build) used to fail the whole file, and the next save
+    /// overwrote every setting with defaults.
+    #[test]
+    fn load_settings_keeps_the_other_fields_when_one_does_not_parse() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        let raw =
+            r#"{"settingsVersion":1,"modelName":"My rig","opacity":0.5,"updateChannel":"nightly"}"#;
+        std::fs::write(&path, raw).unwrap();
+
+        let s = super::load_settings(dir.path());
+
+        assert_eq!(s.model_name, "My rig");
+        assert_eq!(s.opacity, 0.5);
+        assert_eq!(s.update_channel, super::UpdateChannel::Stable);
+        assert_eq!(
+            std::fs::read_to_string(path.with_extension("json.corrupt")).unwrap(),
+            raw,
+            "the file as it was is kept"
+        );
+    }
+
+    #[test]
+    fn load_settings_keeps_a_copy_of_a_file_that_is_not_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        std::fs::write(&path, "{\"modelName\": \"My rig\"").unwrap();
+
+        let s = super::load_settings(dir.path());
+
+        assert_eq!(s.model_name, super::Settings::default().model_name);
+        assert_eq!(
+            std::fs::read_to_string(path.with_extension("json.corrupt")).unwrap(),
+            "{\"modelName\": \"My rig\""
+        );
+    }
+
+    #[test]
+    fn load_settings_writes_no_copy_of_a_file_that_parses() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = super::settings_path(dir.path());
+        std::fs::write(&path, r#"{"settingsVersion":1,"modelName":"My rig"}"#).unwrap();
+
+        assert_eq!(super::load_settings(dir.path()).model_name, "My rig");
+        assert!(!path.with_extension("json.corrupt").exists());
     }
 
     #[test]
