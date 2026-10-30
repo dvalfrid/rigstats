@@ -372,7 +372,7 @@ Works chip-agnostically across Nuvoton NCT, ITE IT87xx, Winbond W836xx, and othe
 | Panel | Metric | Source |
 | --- | --- | --- |
 | Clock | Time, day, date | system time |
-| System Identity | Hostname | `hostname` crate — truncated with ellipsis if too long |
+| System Identity | Hostname | `sysinfo` crate — truncated with ellipsis if too long |
 | System Identity | CPU model string | sysinfo |
 | System Identity | GPU model string | WMI `Win32_VideoController`, falls back to LHM tree |
 | System Identity | System brand / logo | WMI `Win32_ComputerSystem`, `Win32_ComputerSystemProduct`, `Win32_BaseBoard` |

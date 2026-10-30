@@ -34,7 +34,7 @@ public static class LogitechReceiver
     private const byte ReadRegister = 0x81;
     private const byte ReadLongRegister = 0x83;
     private const byte ErrorReply = 0x8F;
-    private const byte Connections = 0x02;
+    public const byte Connections = 0x02;
     private const byte Info = 0xB5;
 
     /// Bolt: 6 slots (Solaar's `_bolt_receiver`); Unifying: 6.
@@ -267,7 +267,7 @@ public sealed class LogitechReceivers
             try
             {
                 using var hid = new ReceiverHid(Hid.Open(receiver.ShortReports), Hid.Open(receiver.LongReports));
-                var count = LogitechReceiver.Ask(hid, LogitechReceiver.RegisterRequest(0x02)) is { } answer
+                var count = LogitechReceiver.Ask(hid, LogitechReceiver.RegisterRequest(LogitechReceiver.Connections)) is { } answer
                     ? LogitechReceiver.ConnectionCount(answer)
                     : -1;
                 if (!_known.TryGetValue(receiver.Key, out var known) || known.Count != count)

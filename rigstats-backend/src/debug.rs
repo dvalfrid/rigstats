@@ -359,14 +359,6 @@ async fn supervise_after<F, Fut>(
     }
 }
 
-pub fn read_debug_log_tail(dir: &Path, line_limit: usize) -> String {
-    let path = debug_log_path(dir);
-    let content = std::fs::read_to_string(path).unwrap_or_default();
-    let lines = content.lines().collect::<Vec<_>>();
-    let start = lines.len().saturating_sub(line_limit);
-    lines[start..].join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,7 +386,7 @@ mod tests {
         )
         .await;
         assert_eq!(runs.load(Ordering::SeqCst), 2);
-        let log = read_debug_log_tail(&dir, 20);
+        let log = std::fs::read_to_string(debug_log_path(&dir)).unwrap_or_default();
         assert!(log.contains("Test task stopped by a panic"), "{log}");
         let _ = std::fs::remove_dir_all(dir);
     }
