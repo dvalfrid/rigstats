@@ -171,3 +171,65 @@ pub fn apply_titlebar_theme(hwnd: isize, dark: bool) {
         );
     }
 }
+#[cfg(all(test, windows))]
+mod tests {
+    //! #702: checked through other bindings — `winreg` for the registry,
+    //! the windows crate for DWM.
+    use super::*;
+    use crate::test_win::TestWindow;
+    use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_USE_IMMERSIVE_DARK_MODE};
+
+    fn registry_value() -> Option<u32> {
+        winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+            .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+            .ok()?
+            .get_value::<u32, _>("AppsUseLightTheme")
+            .ok()
+    }
+
+    #[test]
+    fn the_theme_is_read_from_the_users_registry_value() {
+        let oracle = registry_value();
+        assert_eq!(read_apps_use_light_theme_hkcu(), oracle);
+        // Without the value the answer comes from uxtheme; nothing to compare.
+        if let Some(light) = oracle {
+            assert_eq!(is_system_dark_mode(), light == 0);
+        }
+    }
+
+    #[test]
+    fn the_title_bar_takes_the_theme_asked_for() {
+        let w = TestWindow::visible("titlebar");
+        let read = || {
+            let mut value = 0i32;
+            // SAFETY: `value` is a BOOL-sized out-param and its size is passed.
+            unsafe {
+                DwmGetWindowAttribute(
+                    w.hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE,
+                    (&mut value as *mut i32).cast(),
+                    4,
+                )
+            }
+            .ok()
+            .map(|()| value)
+        };
+        apply_titlebar_theme(w.raw(), true);
+        let dark = read();
+        apply_titlebar_theme(w.raw(), false);
+        let light = read();
+        // Windows before 11 may not answer; when it does, it is what was set.
+        if dark.is_some() || light.is_some() {
+            assert_eq!((dark, light), (Some(1), Some(0)));
+        }
+        apply_titlebar_theme(0, true);
+    }
+
+    #[test]
+    fn enabling_dark_menus_does_not_fail() {
+        // Undocumented uxtheme ordinals: nothing to read back. It must find
+        // them (or skip them) without crashing; the tray menu's look is on
+        // the manual checklist.
+        enable();
+    }
+}

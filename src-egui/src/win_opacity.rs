@@ -281,3 +281,170 @@ pub fn bring_to_foreground(hwnd: isize) {
         SetForegroundWindow(hwnd as HWND);
     }
 }
+#[cfg(all(test, windows))]
+mod tests {
+    //! #702: each helper against a real window, checked through the windows
+    //! crate (`test_win`), not through the code under test.
+    use super::*;
+    use crate::test_win::{pump, TestWindow};
+    use ::windows::Win32::Foundation::{COLORREF, POINT, RECT};
+    use ::windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
+    use ::windows::Win32::Graphics::Gdi::GetUpdateRect;
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        CloseWindow, GetCursorPos, GetLayeredWindowAttributes, IsIconic,
+        LAYERED_WINDOW_ATTRIBUTES_FLAGS, WS_EX_LAYERED as LAYERED,
+        WS_EX_NOREDIRECTIONBITMAP as NOREDIR,
+    };
+
+    fn alpha(w: &TestWindow) -> u8 {
+        let mut key = COLORREF(0);
+        let mut alpha = 0u8;
+        let mut flags = LAYERED_WINDOW_ATTRIBUTES_FLAGS(0);
+        // SAFETY: valid out-params; the test's own window.
+        unsafe {
+            GetLayeredWindowAttributes(w.hwnd, Some(&mut key), Some(&mut alpha), Some(&mut flags))
+        }
+        .expect("a layered window");
+        alpha
+    }
+
+    #[test]
+    fn find_hwnd_finds_only_this_processs_window() {
+        let w = TestWindow::hidden("find");
+        assert_eq!(find_hwnd(&w.title), w.raw());
+        // The title match ignores case (#366) — still ours.
+        assert_eq!(find_hwnd(&w.title.to_uppercase()), w.raw());
+        assert_eq!(find_hwnd("rigstats-test-702-no-such-window"), 0);
+        // Explorer's desktop window is another process's.
+        assert_eq!(find_hwnd("Program Manager"), 0);
+    }
+
+    #[test]
+    fn opacity_makes_the_window_layered_with_that_alpha() {
+        let w = TestWindow::visible("opacity");
+        assert!(!w.has_ex_style(LAYERED));
+        set_opacity(w.raw(), 0.5);
+        assert!(w.has_ex_style(LAYERED));
+        assert_eq!(alpha(&w), 127);
+        set_opacity(w.raw(), 1.5);
+        assert_eq!(alpha(&w), 255);
+        set_opacity(w.raw(), -1.0);
+        assert_eq!(alpha(&w), 0);
+    }
+
+    #[test]
+    fn no_redirection_bitmap_is_set_and_other_styles_kept() {
+        // On this test window the flag doesn't read back after creation, so
+        // what is checked is what the window was asked to take: its styles
+        // so far plus the flag.
+        let w = TestWindow::hidden("noredir");
+        let before = w.ex_style() as u32;
+        w.record_ex_style_requests();
+        set_no_redirection_bitmap(w.raw());
+        assert_eq!(w.ex_style_requests(), [before | NOREDIR.0]);
+    }
+
+    #[test]
+    fn dwm_transitions_are_turned_off() {
+        let w = TestWindow::visible("dwm");
+        disable_dwm_transitions(w.raw());
+        let mut value = 0i32;
+        // SAFETY: `value` is a BOOL-sized out-param and its size is passed.
+        let read = unsafe {
+            DwmGetWindowAttribute(
+                w.hwnd,
+                DWMWA_TRANSITIONS_FORCEDISABLED,
+                (&mut value as *mut i32).cast(),
+                4,
+            )
+        };
+        // DWM may not answer for this attribute; when it does, it is on.
+        if read.is_ok() {
+            assert_eq!(value, 1);
+        }
+    }
+
+    #[test]
+    fn move_window_moves_without_resizing() {
+        let w = TestWindow::hidden("move");
+        let before = w.rect();
+        move_window(w.raw(), -31000, -31500);
+        let after = w.rect();
+        assert_eq!((after.left, after.top), (-31000, -31500));
+        assert_eq!(
+            (after.right - after.left, after.bottom - after.top),
+            (before.right - before.left, before.bottom - before.top)
+        );
+    }
+
+    #[test]
+    fn window_size_is_the_outer_rect() {
+        let w = TestWindow::hidden("size");
+        let RECT {
+            left,
+            top,
+            right,
+            bottom,
+        } = w.rect();
+        assert_eq!(window_size(w.raw()), Some([right - left, bottom - top]));
+        assert_eq!(window_size(0), None);
+    }
+
+    #[test]
+    fn visibility_and_async_hide() {
+        let w = TestWindow::visible("hide");
+        assert!(is_window_visible(w.raw()));
+        hide_window_async(w.raw());
+        pump();
+        assert!(!w.is_visible());
+        assert!(!is_window_visible(w.raw()));
+        assert!(!is_window_visible(0));
+    }
+
+    #[test]
+    fn cursor_position_is_windows_own() {
+        let mut p = POINT::default();
+        // SAFETY: `p` is a valid, writable POINT.
+        let oracle = unsafe { GetCursorPos(&mut p) }.ok().map(|()| [p.x, p.y]);
+        // The pointer may move between the two reads; it rarely does.
+        assert_eq!(cursor_position(), oracle);
+    }
+
+    #[test]
+    fn force_repaint_invalidates_the_window() {
+        let w = TestWindow::visible("repaint");
+        pump();
+        force_repaint(w.raw());
+        // SAFETY: no rect: only asks whether there is an update region.
+        assert!(unsafe { GetUpdateRect(w.hwnd, None, false) }.as_bool());
+    }
+
+    #[test]
+    fn bring_to_foreground_restores_a_minimized_window() {
+        let w = TestWindow::visible("restore");
+        // SAFETY: the test's own window.
+        unsafe { CloseWindow(w.hwnd) }.expect("minimize");
+        // SAFETY: a read-only query.
+        assert!(unsafe { IsIconic(w.hwnd) }.as_bool());
+        bring_to_foreground(w.raw());
+        // SAFETY: a read-only query.
+        assert!(!unsafe { IsIconic(w.hwnd) }.as_bool());
+        // Whether Windows lets a test take the foreground is up to Windows.
+    }
+
+    #[test]
+    fn no_popup_menu_of_ours_is_open() {
+        assert!(!own_popup_menu_open());
+    }
+
+    #[test]
+    fn a_zero_handle_is_a_no_op() {
+        move_window(0, 1, 1);
+        hide_window_async(0);
+        force_repaint(0);
+        set_opacity(0, 0.5);
+        set_no_redirection_bitmap(0);
+        disable_dwm_transitions(0);
+        bring_to_foreground(0);
+    }
+}

@@ -527,6 +527,160 @@ mod win {
         }
         out
     }
+
+    #[cfg(test)]
+    mod tests {
+        //! #702: DXGI and PDH read through the windows crate, to compare with.
+        use super::*;
+        use ::windows::core::w;
+        use ::windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
+        use ::windows::Win32::System::Performance::{
+            PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData,
+            PdhGetFormattedCounterArrayW, PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W,
+            PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY,
+        };
+        use std::collections::BTreeSet;
+
+        fn oracle_adapters() -> Vec<AdapterDesc> {
+            // SAFETY: plain factory creation.
+            let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.expect("a DXGI factory");
+            let mut out = Vec::new();
+            // SAFETY: COM calls on a live factory; errors end the loop.
+            while let Ok(adapter) = unsafe { factory.EnumAdapters1(out.len() as u32) } {
+                // SAFETY: a live adapter.
+                let desc = unsafe { adapter.GetDesc1() }.expect("a description");
+                let end = desc.Description.iter().position(|&c| c == 0).unwrap_or(128);
+                out.push(AdapterDesc {
+                    luid: (desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart),
+                    description: String::from_utf16_lossy(&desc.Description[..end])
+                        .trim()
+                        .to_string(),
+                    dedicated_vram: desc.DedicatedVideoMemory as u64,
+                    flags: desc.Flags,
+                });
+            }
+            out
+        }
+
+        fn key(a: &AdapterDesc) -> (i32, u32, String, u64, u32) {
+            (
+                a.luid.0,
+                a.luid.1,
+                a.description.clone(),
+                a.dedicated_vram,
+                a.flags,
+            )
+        }
+
+        #[test]
+        fn adapters_are_the_ones_dxgi_lists() {
+            let ours: Vec<_> = enumerate_adapters().iter().map(key).collect();
+            let oracle: Vec<_> = oracle_adapters().iter().map(key).collect();
+            assert_eq!(ours, oracle);
+            assert!(!ours.is_empty(), "at least the software adapter");
+
+            // The map leaves the software adapter (flag 2) out.
+            let map = adapter_luid_map();
+            let hardware: AdapterMap = oracle_adapters()
+                .into_iter()
+                .filter(|a| a.flags & 2 == 0)
+                .map(|a| (a.luid, a.description))
+                .collect();
+            assert_eq!(map, hardware);
+        }
+
+        /// The GPU Engine instance names, from a query of the windows crate.
+        struct OracleQuery(PDH_HQUERY, PDH_HCOUNTER);
+
+        impl OracleQuery {
+            fn open() -> Self {
+                let mut query = PDH_HQUERY::default();
+                let mut counter = PDH_HCOUNTER::default();
+                // SAFETY: out-params written on success; the path is static.
+                unsafe {
+                    assert_eq!(PdhOpenQueryW(None, 0, &mut query), 0);
+                    assert_eq!(
+                        PdhAddEnglishCounterW(
+                            query,
+                            w!(r"\GPU Engine(*)\Utilization Percentage"),
+                            0,
+                            &mut counter
+                        ),
+                        0
+                    );
+                    PdhCollectQueryData(query);
+                }
+                Self(query, counter)
+            }
+
+            fn names(&self) -> BTreeSet<String> {
+                // SAFETY: a size probe, then a buffer of that many bytes as items
+                // (aligned); only the `count` items PDH wrote are read.
+                unsafe {
+                    if PdhCollectQueryData(self.0) != 0 {
+                        return BTreeSet::new();
+                    }
+                    let (mut size, mut count) = (0u32, 0u32);
+                    PdhGetFormattedCounterArrayW(
+                        self.1,
+                        PDH_FMT_DOUBLE,
+                        &mut size,
+                        &mut count,
+                        None,
+                    );
+                    let item = std::mem::size_of::<PDH_FMT_COUNTERVALUE_ITEM_W>();
+                    let mut buf: Vec<PDH_FMT_COUNTERVALUE_ITEM_W> =
+                        Vec::with_capacity((size as usize).div_ceil(item).max(count as usize));
+                    if PdhGetFormattedCounterArrayW(
+                        self.1,
+                        PDH_FMT_DOUBLE,
+                        &mut size,
+                        &mut count,
+                        Some(buf.as_mut_ptr()),
+                    ) != 0
+                    {
+                        return BTreeSet::new();
+                    }
+                    std::slice::from_raw_parts(buf.as_ptr(), count as usize)
+                        .iter()
+                        .filter_map(|i| i.szName.to_string().ok())
+                        .collect()
+                }
+            }
+        }
+
+        impl Drop for OracleQuery {
+            fn drop(&mut self) {
+                // SAFETY: the query this value opened.
+                unsafe { PdhCloseQuery(self.0) };
+            }
+        }
+
+        #[test]
+        fn gpu_engine_instances_are_the_ones_pdh_lists() {
+            let q = GpuEngineQuery::new(&std::env::temp_dir()).expect("the GPU Engine query opens");
+            let oracle = OracleQuery::open();
+            // Instances come and go with processes; three tries to catch both
+            // queries at a quiet moment.
+            let mut last = None;
+            for _ in 0..3 {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let items = collect_once(q.query, q.counter);
+                let theirs = oracle.names();
+                assert!(
+                    items.iter().all(|(_, v)| v.is_finite() && *v >= 0.0),
+                    "{items:?}"
+                );
+                let ours: BTreeSet<String> = items.into_iter().map(|(n, _)| n).collect();
+                if ours == theirs {
+                    last = None;
+                    break;
+                }
+                last = Some((ours, theirs));
+            }
+            assert_eq!(last, None, "the instance names differ");
+        }
+    }
 }
 
 #[cfg(windows)]

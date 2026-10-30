@@ -101,3 +101,69 @@ pub fn keep_behind(title: &str) {
         );
     }
 }
+#[cfg(all(test, windows))]
+mod tests {
+    //! #702: against real windows, checked through the windows crate.
+    use super::*;
+    use crate::test_win::TestWindow;
+    use ::windows::Win32::Foundation::HWND;
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        GetWindow, GW_HWNDNEXT, WS_EX_NOACTIVATE as NOACTIVATE,
+    };
+
+    /// Whether `lower` comes after `upper` in the Z order.
+    fn is_below(lower: &TestWindow, upper: &TestWindow) -> bool {
+        let mut next: HWND = upper.hwnd;
+        loop {
+            // SAFETY: a read-only query; a window this thread made or one
+            // the previous call returned.
+            match unsafe { GetWindow(next, GW_HWNDNEXT) } {
+                Ok(h) if h == lower.hwnd => return true,
+                Ok(h) if !h.is_invalid() => next = h,
+                _ => return false,
+            }
+        }
+    }
+
+    /// Two windows, the first on top of the second (the newer is on top).
+    fn pair(name: &str) -> (TestWindow, TestWindow) {
+        let other = TestWindow::visible(&format!("{name}-other"));
+        let w = TestWindow::visible(name);
+        assert!(is_below(&other, &w), "a new window starts on top");
+        (w, other)
+    }
+
+    #[test]
+    fn apply_behind_sends_it_down_and_makes_it_not_activate() {
+        let (w, other) = pair("behind");
+        apply_behind(&w.title);
+        assert!(is_below(&w, &other));
+        assert!(w.has_ex_style(NOACTIVATE));
+    }
+
+    #[test]
+    fn prepare_for_drag_lets_it_activate_again() {
+        let (w, _other) = pair("drag");
+        apply_behind(&w.title);
+        assert!(w.has_ex_style(NOACTIVATE));
+        let before = w.ex_style();
+        prepare_for_drag(&w.title);
+        assert_eq!(w.ex_style(), before & !(NOACTIVATE.0 as isize));
+    }
+
+    #[test]
+    fn keep_behind_sends_it_down_without_touching_its_style() {
+        let (w, other) = pair("keep");
+        let before = w.ex_style();
+        keep_behind(&w.title);
+        assert!(is_below(&w, &other));
+        assert_eq!(w.ex_style(), before);
+    }
+
+    #[test]
+    fn a_title_with_no_window_of_ours_is_a_no_op() {
+        apply_behind("rigstats-test-702-no-such-window");
+        prepare_for_drag("rigstats-test-702-no-such-window");
+        keep_behind("rigstats-test-702-no-such-window");
+    }
+}
