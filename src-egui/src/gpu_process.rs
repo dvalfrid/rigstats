@@ -231,6 +231,8 @@ mod win {
         logged_parse_failure: Cell<bool>,
     }
 
+    // SAFETY: see the struct's doc: PDH handles carry no thread affinity, and
+    // this one is only touched from the single `poll_loop` task.
     unsafe impl Send for GpuEngineQuery {}
 
     impl GpuEngineQuery {

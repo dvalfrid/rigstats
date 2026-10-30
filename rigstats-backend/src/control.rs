@@ -2451,9 +2451,237 @@ fn log_pipe_trouble_throttled(dir: &Path, msg: &str) {
     }
 }
 
+/// The fan curve editor's rules (#680): pure, and what the service stores.
+pub mod fan_curve {
+    use super::FanHeaderConfig;
+    use std::collections::BTreeMap;
+
+    /// Curve editor axes: temperature range shown, duty is always 0–100 %.
+    pub const T_MIN: f64 = 20.0;
+    pub const T_MAX: f64 = 100.0;
+
+    /// Moves point `i` to (`t`, `d`), rounded to whole degrees/percent and kept
+    /// strictly between its neighbours so the curve stays ascending.
+    pub fn move_point(curve: &mut [[f64; 2]], i: usize, t: f64, d: f64) {
+        let lo = if i == 0 { T_MIN } else { curve[i - 1][0] + 1.0 };
+        let hi = if i + 1 == curve.len() {
+            T_MAX
+        } else {
+            curve[i + 1][0] - 1.0
+        };
+        // Neighbours closer than 2 °C (hand-edited data): don't move sideways.
+        let (lo, hi) = if lo > hi {
+            (curve[i][0], curve[i][0])
+        } else {
+            (lo, hi)
+        };
+        curve[i] = [t.round().clamp(lo, hi), d.round().clamp(0.0, 100.0)];
+    }
+
+    /// Inserts a point at its sorted position, unless one already sits within
+    /// 1 °C of it.
+    pub fn add_point(curve: &mut Vec<[f64; 2]>, [t, d]: [f64; 2]) {
+        let t = t.round().clamp(T_MIN, T_MAX);
+        if curve.iter().any(|p| (p[0] - t).abs() < 1.0) {
+            return;
+        }
+        let at = curve.partition_point(|p| p[0] < t);
+        curve.insert(at, [t, d.round().clamp(0.0, 100.0)]);
+    }
+
+    /// Removes point `i`, keeping at least two so a curve always has a slope.
+    pub fn remove_point(curve: &mut Vec<[f64; 2]>, i: usize) {
+        if curve.len() > 2 && i < curve.len() {
+            curve.remove(i);
+        }
+    }
+
+    /// Two headers share a curve when everything but their label matches.
+    pub fn same_curve(a: &FanHeaderConfig, b: &FanHeaderConfig) -> bool {
+        a.source == b.source && a.curve == b.curve && a.hysteresis_c == b.hysteresis_c
+    }
+
+    /// The other headers running exactly `id`'s curve. Groups aren't stored —
+    /// the service keeps one curve per header — they are whatever matches.
+    pub fn curve_group(headers: &BTreeMap<String, FanHeaderConfig>, id: &str) -> Vec<String> {
+        let Some(this) = headers.get(id) else {
+            return Vec::new();
+        };
+        headers
+            .iter()
+            .filter(|(other, config)| other.as_str() != id && same_curve(config, this))
+            .map(|(other, _)| other.clone())
+            .collect()
+    }
+
+    /// Gives each header in `ids` `config`'s curve and source, keeping its own
+    /// label (a header on BIOS control is switched to the curve).
+    pub fn share_curve(
+        headers: &mut BTreeMap<String, FanHeaderConfig>,
+        ids: &[String],
+        config: &FanHeaderConfig,
+    ) {
+        for id in ids {
+            let label = headers.get(id).and_then(|c| c.label.clone());
+            headers.insert(
+                id.clone(),
+                FanHeaderConfig {
+                    label,
+                    ..config.clone()
+                },
+            );
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn curve() -> Vec<[f64; 2]> {
+            vec![[30.0, 25.0], [50.0, 40.0], [70.0, 80.0]]
+        }
+
+        #[test]
+        fn move_point_rounds_and_stays_between_neighbours() {
+            let mut c = curve();
+            move_point(&mut c, 1, 75.4, 55.6);
+            assert_eq!(c[1], [69.0, 56.0]);
+            move_point(&mut c, 1, 10.0, -5.0);
+            assert_eq!(c[1], [31.0, 0.0]);
+        }
+
+        #[test]
+        fn move_point_clamps_the_ends_to_the_axis_range() {
+            let mut c = curve();
+            move_point(&mut c, 0, 5.0, 120.0);
+            assert_eq!(c[0], [T_MIN, 100.0]);
+            move_point(&mut c, 2, 140.0, 50.0);
+            assert_eq!(c[2], [T_MAX, 50.0]);
+        }
+
+        #[test]
+        fn move_point_does_not_panic_on_crowded_neighbours() {
+            let mut c = vec![[50.0, 30.0], [50.5, 40.0], [51.0, 50.0]];
+            move_point(&mut c, 1, 80.0, 45.0);
+            assert_eq!(c[1], [50.5, 45.0]);
+        }
+
+        #[test]
+        fn add_point_inserts_sorted_and_skips_duplicates() {
+            let mut c = curve();
+            add_point(&mut c, [60.2, 61.0]);
+            assert_eq!(c[2], [60.0, 61.0]);
+            assert_eq!(c.len(), 4);
+            add_point(&mut c, [60.4, 10.0]);
+            assert_eq!(c.len(), 4);
+        }
+
+        #[test]
+        fn remove_point_keeps_at_least_two() {
+            let mut c = curve();
+            remove_point(&mut c, 0);
+            remove_point(&mut c, 0);
+            assert_eq!(c.len(), 2);
+        }
+
+        fn header(label: Option<&str>, source: &str, curve: Vec<[f64; 2]>) -> FanHeaderConfig {
+            FanHeaderConfig {
+                label: label.map(str::to_owned),
+                source: source.into(),
+                curve,
+                hysteresis_c: 3.0,
+            }
+        }
+
+        #[test]
+        fn curve_group_matches_curve_and_source_but_ignores_labels() {
+            let mut headers = BTreeMap::new();
+            headers.insert("a".to_owned(), header(Some("CPU"), "cpu_package", curve()));
+            headers.insert(
+                "b".to_owned(),
+                header(Some("Front"), "cpu_package", curve()),
+            );
+            headers.insert("c".to_owned(), header(None, "gpu", curve()));
+            headers.insert(
+                "d".to_owned(),
+                header(None, "cpu_package", vec![[40.0, 50.0], [80.0, 100.0]]),
+            );
+
+            assert_eq!(curve_group(&headers, "a"), vec!["b".to_owned()]);
+            assert!(curve_group(&headers, "c").is_empty());
+            assert!(curve_group(&headers, "missing").is_empty());
+        }
+
+        #[test]
+        fn share_curve_copies_the_curve_but_keeps_each_label() {
+            let mut headers = BTreeMap::new();
+            headers.insert("b".to_owned(), header(Some("Front"), "gpu", curve()));
+            let shared = header(
+                Some("CPU"),
+                "cpu_package",
+                vec![[30.0, 30.0], [80.0, 100.0]],
+            );
+
+            share_curve(&mut headers, &["b".to_owned(), "c".to_owned()], &shared);
+
+            assert_eq!(headers["b"].label.as_deref(), Some("Front"));
+            assert!(same_curve(&headers["b"], &shared));
+            assert_eq!(headers["c"].label, None); // a BIOS header joins with no label
+            assert!(same_curve(&headers["c"], &shared));
+        }
+    }
+}
+
+/// The active profile's saved fan headers, or none.
+pub fn saved_fan_headers(profile: Option<&Profile>) -> BTreeMap<String, FanHeaderConfig> {
+    profile
+        .and_then(|p| p.part.fan.as_ref())
+        .and_then(|f| f.headers.clone())
+        .unwrap_or_default()
+}
+
+/// The active profile's saved AMD CPU limits, or none.
+pub fn saved_cpu_limits(profile: Option<&Profile>) -> AmdCpuLimit {
+    profile
+        .and_then(|p| p.part.cpu_limit.as_ref())
+        .and_then(|c| c.amd)
+        .unwrap_or_default()
+}
+
+/// An empty per-core map means the same as none.
+pub fn normalized_co(part: &CurveOptPart) -> CurveOptPart {
+    CurveOptPart {
+        all_core: part.all_core,
+        per_core: part.per_core.clone().filter(|m| !m.is_empty()),
+    }
+}
+
+/// The active profile's saved Curve Optimizer part, normalized, or none.
+pub fn saved_curve_opt(profile: Option<&Profile>) -> CurveOptPart {
+    profile
+        .and_then(|p| p.part.curve_opt.as_ref())
+        .map(normalized_co)
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_per_core_map_is_the_same_as_none() {
+        let with_empty = CurveOptPart {
+            all_core: Some(-10),
+            per_core: Some(BTreeMap::new()),
+        };
+        assert_eq!(
+            normalized_co(&with_empty),
+            CurveOptPart {
+                all_core: Some(-10),
+                per_core: None
+            }
+        );
+    }
 
     /// `mouse_settings`' answer as `MouseProvider.List` writes it, and the
     /// settings `mouse_set` sends as `MouseProtocolTests` reads them (#431).

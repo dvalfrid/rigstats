@@ -37,6 +37,7 @@ unsafe_code = "deny"
 [lints.clippy]
 dbg_macro = "warn"
 todo = "warn"
+undocumented_unsafe_blocks = "warn"
 clone_on_ref_ptr = "warn"
 redundant_clone = "warn"
 needless_pass_by_value = "warn"

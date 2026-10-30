@@ -28,7 +28,7 @@ use crate::theme::{self, DialogColors};
 use crate::windows::profile_look::{self, LookEditor, LookLink};
 use crate::windows::ui_kit::{self, Icon};
 use crate::windows::OpenRequests;
-use cpu::{cpu_tab, curve_opt_card, normalized_co, saved_curve_opt};
+use cpu::{cpu_tab, curve_opt_card};
 use fans::fans_tab;
 use gpu::{gpu_tab, saved_gpu_limits};
 use headset::headset_page;
@@ -39,9 +39,10 @@ use overview::overview_page;
 use power::power_tab;
 use profile_bar::profile_bar;
 use rigstats_backend::control::{
-    AmdCpuLimit, ApplyResult, AuraPart, ControlCmd, ControlState, CpuLimitPart, CurveOptPart,
-    FanHeaderConfig, FanPart, GpuAdapterConfig, GpuPart, HeadsetEq, HeadsetSettings,
-    KeyboardSettings, MouseSettings, Problem, Profile, Severity,
+    normalized_co, saved_cpu_limits, saved_curve_opt, saved_fan_headers, AmdCpuLimit, ApplyResult,
+    AuraPart, ControlCmd, ControlState, CpuLimitPart, CurveOptPart, FanHeaderConfig, FanPart,
+    GpuAdapterConfig, GpuPart, HeadsetEq, HeadsetSettings, KeyboardSettings, MouseSettings,
+    Problem, Profile, Severity,
 };
 use rigstats_backend::lhm::Peripheral;
 use std::collections::BTreeMap;
@@ -364,20 +365,6 @@ fn section_label(ui: &mut egui::Ui, dc: &DialogColors, text: &str) {
             .strong()
             .color(dc.label),
     );
-}
-
-fn saved_fan_headers(profile: Option<&Profile>) -> BTreeMap<String, FanHeaderConfig> {
-    profile
-        .and_then(|p| p.part.fan.as_ref())
-        .and_then(|f| f.headers.clone())
-        .unwrap_or_default()
-}
-
-fn saved_cpu_limits(profile: Option<&Profile>) -> AmdCpuLimit {
-    profile
-        .and_then(|p| p.part.cpu_limit.as_ref())
-        .and_then(|c| c.amd)
-        .unwrap_or_default()
 }
 
 /// The active profile with every unsaved draft folded in.

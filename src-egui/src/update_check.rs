@@ -427,6 +427,8 @@ pub fn launch_installer(installer: &VerifiedInstaller) -> Result<(), String> {
         .collect();
     // ShellExecuteW's result is an HINSTANCE only for history's sake: above
     // 32 means it started, 32 and below is the error code.
+    // SAFETY: `path_wide` is NUL-terminated and outlives the call, the other
+    // strings are static; no window.
     let result = unsafe {
         windows::Win32::UI::Shell::ShellExecuteW(
             None,

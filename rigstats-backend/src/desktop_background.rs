@@ -312,6 +312,7 @@ mod win {
                     // SAFETY: `w` is live; `id_w` is NUL-terminated; the
                     // path it returns is ours to free (`take`).
                     let path = match unsafe { w.GetWallpaper(PCWSTR(id_w.as_ptr())) } {
+                        // SAFETY: the path just returned, freed here once.
                         Ok(p) => unsafe { take(p) },
                         Err(_) => String::new(),
                     };
@@ -337,9 +338,11 @@ mod win {
         }
         with_wallpaper(|w| {
             let ids: Vec<String> = connected(w).into_iter().map(|s| s.id).collect();
-            // SAFETY: `w` is live for the closure.
             if let Err(e) =
-                unsafe { w.SetPosition(DESKTOP_WALLPAPER_POSITION(bg.fit.position() as i32)) }
+                // SAFETY: `w` is live for the closure.
+                unsafe {
+                    w.SetPosition(DESKTOP_WALLPAPER_POSITION(bg.fit.position() as i32))
+                }
             {
                 return Err(format!("couldn't set the fit (0x{:08x})", e.code().0));
             }
