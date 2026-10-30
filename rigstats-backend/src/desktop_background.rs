@@ -209,61 +209,58 @@ impl Screen {
 #[cfg(windows)]
 mod win {
     use super::{DesktopBackground, Fit, Screen, ScreenPicture};
-    use std::ptr::NonNull;
-    use winapi::shared::windef::RECT;
-    use winapi::shared::winerror::S_OK;
-    use winapi::um::combaseapi::{
+    use windows::core::{PCWSTR, PWSTR};
+    use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_ALL,
+        COINIT_APARTMENTTHREADED,
     };
-    use winapi::um::objbase::COINIT_APARTMENTTHREADED;
-    use winapi::um::shobjidl_core::{CLSID_DesktopWallpaper, IDesktopWallpaper};
-    use winapi::Interface;
+    use windows::Win32::UI::Shell::{
+        DesktopWallpaper, IDesktopWallpaper, DESKTOP_WALLPAPER_POSITION,
+    };
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
     /// A COM-allocated string, freed.
-    unsafe fn take(p: *mut u16) -> String {
+    ///
+    /// # Safety
+    /// `p` is null or a NUL-terminated string the caller owns, allocated
+    /// with CoTaskMemAlloc.
+    unsafe fn take(p: PWSTR) -> String {
         if p.is_null() {
             return String::new();
         }
-        let mut len = 0;
-        while *p.add(len) != 0 {
-            len += 1;
-        }
-        let s = String::from_utf16_lossy(std::slice::from_raw_parts(p, len));
-        CoTaskMemFree(p.cast());
+        // SAFETY: per this function's contract.
+        let s = unsafe { p.to_string() }.unwrap_or_default();
+        // SAFETY: the caller owns `p`, from CoTaskMemAlloc.
+        unsafe { CoTaskMemFree(Some(p.0.cast())) };
         s
     }
 
     /// Runs `f` with Windows' desktop wallpaper object, setting COM up on
     /// this thread for the call if it isn't already.
     fn with_wallpaper<T>(f: impl FnOnce(&IDesktopWallpaper) -> T) -> Result<T, String> {
+        // SAFETY: COM is set up and torn down on this thread around the
+        // call; the wallpaper object is released (dropped) before
+        // CoUninitialize.
         unsafe {
-            let init = CoInitializeEx(std::ptr::null_mut(), COINIT_APARTMENTTHREADED);
-            let mut raw: *mut IDesktopWallpaper = std::ptr::null_mut();
-            let hr = CoCreateInstance(
-                &CLSID_DesktopWallpaper,
-                std::ptr::null_mut(),
-                CLSCTX_ALL,
-                &IDesktopWallpaper::uuidof(),
-                (&mut raw as *mut *mut IDesktopWallpaper).cast(),
-            );
-            // Only a non-null pointer from a successful call is used.
-            let out = match NonNull::new(raw) {
-                Some(w) if hr >= 0 => {
-                    // SAFETY: a live COM object; we hold the one reference
-                    // CoCreateInstance gave us until the Release below.
-                    let w = w.as_ref();
-                    let r = f(w);
-                    w.Release();
-                    Ok(r)
-                }
-                _ => Err(format!("no desktop wallpaper object (0x{hr:08x})")),
-            };
+            let init = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+            let out =
+                match CoCreateInstance::<_, IDesktopWallpaper>(&DesktopWallpaper, None, CLSCTX_ALL)
+                {
+                    Ok(w) => {
+                        let r = f(&w);
+                        drop(w);
+                        Ok(r)
+                    }
+                    Err(e) => Err(format!(
+                        "no desktop wallpaper object (0x{:08x})",
+                        e.code().0
+                    )),
+                };
             // S_OK / S_FALSE: this call initialized (or re-counted) COM.
-            if init >= 0 {
+            if init.is_ok() {
                 CoUninitialize();
             }
             out
@@ -271,20 +268,20 @@ mod win {
     }
 
     fn connected(w: &IDesktopWallpaper) -> Vec<Screen> {
-        let mut count = 0;
-        if unsafe { w.GetMonitorDevicePathCount(&mut count) } != S_OK {
+        // SAFETY: `w` is a live COM object for the whole call.
+        let Ok(count) = (unsafe { w.GetMonitorDevicePathCount() }) else {
             return Vec::new();
-        }
+        };
         (0..count)
-            .filter_map(|i| unsafe {
-                let mut id = std::ptr::null_mut();
-                if w.GetMonitorDevicePathAt(i, &mut id) != S_OK {
-                    return None;
-                }
-                let id = take(id);
-                let mut r: RECT = std::mem::zeroed();
+            .filter_map(|i| {
+                // SAFETY: `w` is live; `i` < the count it reported; the path
+                // it returns is ours to free (`take`).
+                let id = unsafe { take(w.GetMonitorDevicePathAt(i).ok()?) };
+                let id_w = wide(&id);
                 // Fails for a monitor Windows remembers but isn't attached.
-                if w.GetMonitorRECT(wide(&id).as_ptr(), &mut r) != S_OK || r.right <= r.left {
+                // SAFETY: `w` is live; `id_w` is NUL-terminated.
+                let r = unsafe { w.GetMonitorRECT(PCWSTR(id_w.as_ptr())) }.ok()?;
+                if r.right <= r.left {
                     return None;
                 }
                 Some(Screen {
@@ -303,20 +300,20 @@ mod win {
 
     pub fn current() -> Option<DesktopBackground> {
         with_wallpaper(|w| {
-            let mut pos = 0;
-            let fit = if unsafe { w.GetPosition(&mut pos) } == S_OK {
-                Fit::from_position(pos)
-            } else {
-                Fit::Fill
+            // SAFETY: `w` is live for the closure.
+            let fit = match unsafe { w.GetPosition() } {
+                Ok(pos) => Fit::from_position(pos.0 as u32),
+                Err(_) => Fit::Fill,
             };
             let screens: Vec<ScreenPicture> = connected(w)
                 .into_iter()
                 .map(|s| {
-                    let mut p = std::ptr::null_mut();
-                    let path = if unsafe { w.GetWallpaper(wide(&s.id).as_ptr(), &mut p) } == S_OK {
-                        unsafe { take(p) }
-                    } else {
-                        String::new()
+                    let id_w = wide(&s.id);
+                    // SAFETY: `w` is live; `id_w` is NUL-terminated; the
+                    // path it returns is ours to free (`take`).
+                    let path = match unsafe { w.GetWallpaper(PCWSTR(id_w.as_ptr())) } {
+                        Ok(p) => unsafe { take(p) },
+                        Err(_) => String::new(),
                     };
                     ScreenPicture { screen: s.id, path }
                 })
@@ -340,20 +337,27 @@ mod win {
         }
         with_wallpaper(|w| {
             let ids: Vec<String> = connected(w).into_iter().map(|s| s.id).collect();
-            let hr = unsafe { w.SetPosition(bg.fit.position()) };
-            if hr < 0 {
-                return Err(format!("couldn't set the fit (0x{hr:08x})"));
+            // SAFETY: `w` is live for the closure.
+            if let Err(e) =
+                unsafe { w.SetPosition(DESKTOP_WALLPAPER_POSITION(bg.fit.position() as i32)) }
+            {
+                return Err(format!("couldn't set the fit (0x{:08x})", e.code().0));
             }
             for (screen, path) in bg.assignments(&ids) {
                 let screen = screen.map(wide);
-                let hr = unsafe {
+                let path_w = wide(path);
+                // SAFETY: `w` is live; both strings are NUL-terminated or the
+                // screen is null (every screen).
+                let set = unsafe {
                     w.SetWallpaper(
-                        screen.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
-                        wide(path).as_ptr(),
+                        screen
+                            .as_ref()
+                            .map_or(PCWSTR::null(), |s| PCWSTR(s.as_ptr())),
+                        PCWSTR(path_w.as_ptr()),
                     )
                 };
-                if hr < 0 {
-                    return Err(format!("couldn't set {path} (0x{hr:08x})"));
+                if let Err(e) = set {
+                    return Err(format!("couldn't set {path} (0x{:08x})", e.code().0));
                 }
             }
             Ok(())

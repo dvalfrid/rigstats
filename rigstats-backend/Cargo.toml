@@ -19,9 +19,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 [target.'cfg(windows)'.dependencies]
 wmi = "0.18"
 winreg = "0.56"
-# The Win32 calls move here from winapi, one module at a time (#702).
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Pipes", "Win32_System_Power"] }
-winapi = { version = "0.3", features = ["combaseapi", "objbase", "shobjidl_core", "winerror", "windef", "wtypes", "wtypesbase", "mmdeviceapi", "endpointvolume", "functiondiscoverykeys_devpkey", "propsys", "propidl", "audioclient", "audiosessiontypes", "mmreg"] }
+# Win32 (#702; winapi 0.3 is no longer used here).
+windows = { version = "0.62", features = ["Win32_Devices_FunctionDiscovery", "Win32_Foundation", "Win32_Media_Audio", "Win32_Media_Audio_Endpoints", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Diagnostics_ToolHelp", "Win32_System_Pipes", "Win32_System_Power", "Win32_System_Variant", "Win32_UI_Shell", "Win32_UI_Shell_PropertiesSystem"] }
 
 [dev-dependencies]
 tempfile = "3"

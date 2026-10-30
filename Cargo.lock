@@ -3492,7 +3492,6 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "tokio",
- "winapi",
  "windows",
  "winreg",
  "wmi",
