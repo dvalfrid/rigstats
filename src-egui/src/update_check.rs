@@ -651,6 +651,36 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// `lock_and_verify` on a copy of `source` with its right checksum. The
+    /// test binary is unsigned, so any valid signature is accepted
+    /// (`signer_accepted(None, …)`); the signature itself still has to hold.
+    fn verify_copy(name: &str, source: &Path) -> Result<(), String> {
+        let dir = test_dir(name);
+        let path = dir.join("rigstats-setup.exe");
+        std::fs::copy(source, &path).unwrap();
+        let bytes = std::fs::read(&path).unwrap();
+        let sha = hex(ring::digest::digest(&ring::digest::SHA256, &bytes).as_ref());
+        let result = lock_and_verify(path, &sha).map(drop);
+        let _ = std::fs::remove_dir_all(&dir);
+        result
+    }
+
+    #[test]
+    fn a_validly_signed_download_is_verified() {
+        let pawnio = Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/pawnio/PawnIO_setup.exe");
+        assert_eq!(verify_copy("signed", &pawnio), Ok(()));
+    }
+
+    #[test]
+    fn a_download_signed_by_an_untrusted_root_is_refused() {
+        let untrusted = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/authenticode/untrusted-signed.dll");
+        assert_eq!(
+            verify_copy("untrusted", &untrusted),
+            Err("Update refused: no valid signature (WinVerifyTrust 0x800B0109)".to_string())
+        );
+    }
+
     #[test]
     fn a_locked_download_cannot_be_replaced() {
         let dir = test_dir("lock");
