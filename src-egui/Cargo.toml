@@ -44,13 +44,12 @@ zip = { version = "9", default-features = false, features = ["deflate"] }
 ring = "0.17"
 
 [target.'cfg(windows)'.dependencies]
-# Toasts sent as RIGStats (#447). 0.62 is already in the tree (wgpu,
-# accesskit); only these features are added.
-windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_WinRT", "Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Security_Cryptography", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_Security_WinTrust", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Every Win32 call the app makes (#702 moved them all off winapi 0.3,
+# unmaintained since 2019); 0.62 is the version wgpu and accesskit already
+# pull in.
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_System_WinRT", "Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_Gdi", "Win32_Security", "Win32_Security_Cryptography", "Win32_Security_Cryptography_Catalog", "Win32_Security_Cryptography_Sip", "Win32_Security_WinTrust", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_Performance", "Win32_System_Registry", "Win32_System_Threading", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 # The notification app id's registry key; the version rigstats-backend uses.
 winreg = "0.56"
-winapi = { version = "0.3", features = ["winuser", "windef", "libloaderapi", "dwmapi", "winreg", "winerror", "processthreadsapi", "synchapi", "handleapi", "winnt", "pdh", "dxgi", "unknwnbase", "guiddef"] }
-
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 

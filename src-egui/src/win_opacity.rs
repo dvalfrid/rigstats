@@ -14,14 +14,22 @@
 #![allow(unsafe_code)]
 #![warn(clippy::undocumented_unsafe_blocks)]
 
-use winapi::{
-    shared::windef::HWND,
-    um::winuser::{
-        GetWindowLongW, IsIconic, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowLongW,
-        SetWindowPos, ShowWindow, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_RESTORE, WS_EX_LAYERED, WS_EX_NOREDIRECTIONBITMAP,
-    },
+use windows::core::{w, PCWSTR};
+use windows::Win32::Foundation::{COLORREF, HWND, POINT, RECT};
+use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_TRANSITIONS_FORCEDISABLED};
+use windows::Win32::Graphics::Gdi::InvalidateRect;
+use windows::Win32::System::Threading::GetCurrentProcessId;
+use windows::Win32::UI::WindowsAndMessaging::{
+    FindWindowExW, GetCursorPos, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, SetForegroundWindow, SetLayeredWindowAttributes, SetWindowLongW, SetWindowPos,
+    ShowWindow, ShowWindowAsync, GWL_EXSTYLE, LWA_ALPHA, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_HIDE, SW_RESTORE, WS_EX_LAYERED,
+    WS_EX_NOREDIRECTIONBITMAP,
 };
+
+fn as_hwnd(hwnd: isize) -> HWND {
+    HWND(hwnd as *mut _)
+}
 
 /// Move a window to physical screen coordinates — no resize, no Z-order
 /// change, no activation. For placing a window exactly (the tray hover card)
@@ -32,11 +40,11 @@ pub fn move_window(hwnd: isize, x: i32, y: i32) {
         return;
     }
     // SAFETY: plain-value arguments; user32 validates `hwnd` (see the module
-    // doc); the null insert-after is ignored with SWP_NOZORDER.
+    // doc); no insert-after with SWP_NOZORDER.
     unsafe {
-        SetWindowPos(
-            hwnd as HWND,
-            std::ptr::null_mut(),
+        let _ = SetWindowPos(
+            as_hwnd(hwnd),
+            None,
             x,
             y,
             0,
@@ -56,58 +64,58 @@ pub fn hide_window_async(hwnd: isize) {
     // SAFETY: plain-value arguments; user32 validates `hwnd` (module doc).
     // ShowWindowAsync only posts, so it can't block on the window's thread.
     unsafe {
-        winapi::um::winuser::ShowWindowAsync(hwnd as HWND, winapi::um::winuser::SW_HIDE);
+        let _ = ShowWindowAsync(as_hwnd(hwnd), SW_HIDE);
     }
 }
 
 /// Whether the window exists and is visible. False if hwnd is 0.
 pub fn is_window_visible(hwnd: isize) -> bool {
     // SAFETY: a read-only query; user32 validates `hwnd` (module doc).
-    hwnd != 0 && unsafe { winapi::um::winuser::IsWindowVisible(hwnd as HWND) } != 0
+    hwnd != 0 && unsafe { IsWindowVisible(as_hwnd(hwnd)) }.as_bool()
+}
+
+/// The next top-level window after `after` (or the first) with this class
+/// and title (`None` = any); `None` when there is no more.
+fn next_window(after: Option<HWND>, class: PCWSTR, title: PCWSTR) -> Option<HWND> {
+    // SAFETY: `class` and `title` are null or NUL-terminated strings the
+    // caller keeps alive across the call; `after` is None or a window the
+    // previous call returned (validated by user32).
+    unsafe { FindWindowExW(None, after, class, title) }.ok()
+}
+
+/// The id of the process that owns `hwnd`.
+fn owner_pid(hwnd: HWND) -> u32 {
+    let mut pid = 0u32;
+    // SAFETY: `hwnd` came from FindWindowExW (validated by user32); `pid` is
+    // a valid out-param.
+    unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+    pid
 }
 
 /// Whether one of this process's popup menus is open — the tray context
 /// menu (`TrackPopupMenu` windows have the system class `#32768`). Other
 /// apps' menus don't count.
 pub fn own_popup_menu_open() -> bool {
-    let class: Vec<u16> = "#32768\0".encode_utf16().collect();
     // SAFETY: no arguments; cannot fail.
-    let own = unsafe { winapi::um::processthreadsapi::GetCurrentProcessId() };
-    let mut after: HWND = std::ptr::null_mut();
-    loop {
-        // SAFETY: `class` is NUL-terminated and outlives the call; a null
-        // parent/title are allowed; `after` is null or a window the previous
-        // call returned (validated by user32).
-        let hwnd = unsafe {
-            winapi::um::winuser::FindWindowExW(
-                std::ptr::null_mut(),
-                after,
-                class.as_ptr(),
-                std::ptr::null(),
-            )
-        };
-        if hwnd.is_null() {
-            return false;
-        }
-        let mut pid = 0u32;
-        // SAFETY: `hwnd` is non-null from FindWindowExW (validated by
-        // user32); `pid` is a valid out-param.
-        unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid) };
-        // SAFETY: a read-only query on the same validated `hwnd`.
-        if pid == own && unsafe { winapi::um::winuser::IsWindowVisible(hwnd) } != 0 {
+    let own = unsafe { GetCurrentProcessId() };
+    let mut after = None;
+    while let Some(hwnd) = next_window(after, w!("#32768"), PCWSTR::null()) {
+        // SAFETY: a read-only query on a window FindWindowExW returned.
+        if owner_pid(hwnd) == own && unsafe { IsWindowVisible(hwnd) }.as_bool() {
             return true;
         }
-        after = hwnd;
+        after = Some(hwnd);
     }
+    false
 }
 
 /// The mouse pointer's position in physical screen pixels (the process is
 /// per-monitor DPI aware), or None if the call failed.
 pub fn cursor_position() -> Option<[i32; 2]> {
-    let mut point = winapi::shared::windef::POINT { x: 0, y: 0 };
+    let mut point = POINT::default();
     // SAFETY: `point` is a valid, writable POINT for the call.
-    let ok = unsafe { winapi::um::winuser::GetCursorPos(&mut point) };
-    (ok != 0).then_some([point.x, point.y])
+    let ok = unsafe { GetCursorPos(&mut point) }.is_ok();
+    ok.then_some([point.x, point.y])
 }
 
 /// A window's outer size in physical pixels, or None (hwnd 0 or the call
@@ -116,15 +124,10 @@ pub fn window_size(hwnd: isize) -> Option<[i32; 2]> {
     if hwnd == 0 {
         return None;
     }
-    let mut rect = winapi::shared::windef::RECT {
-        left: 0,
-        top: 0,
-        right: 0,
-        bottom: 0,
-    };
+    let mut rect = RECT::default();
     // SAFETY: `rect` is a valid, writable RECT; user32 validates `hwnd`.
-    let ok = unsafe { winapi::um::winuser::GetWindowRect(hwnd as HWND, &mut rect) };
-    (ok != 0).then_some([rect.right - rect.left, rect.bottom - rect.top])
+    let ok = unsafe { GetWindowRect(as_hwnd(hwnd), &mut rect) }.is_ok();
+    ok.then_some([rect.right - rect.left, rect.bottom - rect.top])
 }
 
 /// Find the HWND of this process's top-level window with the given title.
@@ -135,32 +138,15 @@ pub fn window_size(hwnd: isize) -> Option<[i32; 2]> {
 pub fn find_hwnd(title: &str) -> isize {
     let wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     // SAFETY: no arguments; cannot fail.
-    let own = unsafe { winapi::um::processthreadsapi::GetCurrentProcessId() };
-    let mut after: HWND = std::ptr::null_mut();
-    loop {
-        // SAFETY: `wide` is NUL-terminated and outlives the call; a null
-        // parent/class are allowed; `after` is null or a window the previous
-        // call returned (validated by user32).
-        let hwnd = unsafe {
-            winapi::um::winuser::FindWindowExW(
-                std::ptr::null_mut(),
-                after,
-                std::ptr::null(),
-                wide.as_ptr(),
-            )
-        };
-        if hwnd.is_null() {
-            return 0;
+    let own = unsafe { GetCurrentProcessId() };
+    let mut after = None;
+    while let Some(hwnd) = next_window(after, PCWSTR::null(), PCWSTR(wide.as_ptr())) {
+        if owner_pid(hwnd) == own {
+            return hwnd.0 as isize;
         }
-        let mut pid = 0u32;
-        // SAFETY: `hwnd` is non-null from FindWindowExW (validated by
-        // user32); `pid` is a valid out-param.
-        unsafe { winapi::um::winuser::GetWindowThreadProcessId(hwnd, &mut pid) };
-        if pid == own {
-            return hwnd as isize;
-        }
-        after = hwnd;
+        after = Some(hwnd);
     }
+    0
 }
 
 /// Post WM_PAINT to the window so its render loop runs on the next event loop tick,
@@ -176,10 +162,10 @@ pub fn force_repaint(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
-    // SAFETY: a null rect means the whole client area; user32 validates
-    // `hwnd` (module doc).
+    // SAFETY: no rect means the whole client area; user32 validates `hwnd`
+    // (module doc).
     unsafe {
-        winapi::um::winuser::InvalidateRect(hwnd as HWND, std::ptr::null(), 0);
+        let _ = InvalidateRect(Some(as_hwnd(hwnd)), None, false);
     }
 }
 
@@ -189,16 +175,16 @@ pub fn set_opacity(hwnd: isize, opacity: f32) {
     if hwnd == 0 {
         return;
     }
-    let hwnd = hwnd as HWND;
+    let hwnd = as_hwnd(hwnd);
     let alpha = (opacity.clamp(0.0, 1.0) * 255.0) as u8;
     // SAFETY: plain-value arguments only; user32 validates `hwnd` (module
     // doc). Setting WS_EX_LAYERED on our own window changes no memory we own.
     unsafe {
         let style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        if style & WS_EX_LAYERED as i32 == 0 {
-            SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED as i32);
+        if style & WS_EX_LAYERED.0 as i32 == 0 {
+            SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_LAYERED.0 as i32);
         }
-        SetLayeredWindowAttributes(hwnd, 0, alpha, LWA_ALPHA);
+        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), alpha, LWA_ALPHA);
     }
 }
 
@@ -215,15 +201,19 @@ pub fn set_no_redirection_bitmap(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
-    let hwnd = hwnd as HWND;
+    let hwnd = as_hwnd(hwnd);
     // SAFETY: plain-value arguments only; user32 validates `hwnd` (module
-    // doc); the null insert-after is ignored with SWP_NOZORDER.
+    // doc); no insert-after with SWP_NOZORDER.
     unsafe {
         let style = GetWindowLongW(hwnd, GWL_EXSTYLE);
-        SetWindowLongW(hwnd, GWL_EXSTYLE, style | WS_EX_NOREDIRECTIONBITMAP as i32);
-        SetWindowPos(
+        SetWindowLongW(
             hwnd,
-            std::ptr::null_mut(),
+            GWL_EXSTYLE,
+            style | WS_EX_NOREDIRECTIONBITMAP.0 as i32,
+        );
+        let _ = SetWindowPos(
+            hwnd,
+            None,
             0,
             0,
             0,
@@ -243,15 +233,13 @@ pub fn disable_dwm_transitions(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
-    use winapi::um::dwmapi::DwmSetWindowAttribute;
-    const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
     let disabled: i32 = 1; // BOOL TRUE
                            // SAFETY: `disabled` is a BOOL (i32) that lives across the call and its
                            // exact size is passed, as DWMWA_TRANSITIONS_FORCEDISABLED expects; DWM
                            // validates `hwnd` (module doc).
     unsafe {
-        DwmSetWindowAttribute(
-            hwnd as HWND,
+        let _ = DwmSetWindowAttribute(
+            as_hwnd(hwnd),
             DWMWA_TRANSITIONS_FORCEDISABLED,
             &disabled as *const i32 as *const _,
             std::mem::size_of::<i32>() as u32,
@@ -272,15 +260,17 @@ pub fn bring_to_foreground(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
+    let hwnd = as_hwnd(hwnd);
     // SAFETY: plain-value arguments only; user32 validates `hwnd` (module
     // doc).
     unsafe {
-        if IsIconic(hwnd as HWND) != 0 {
-            ShowWindow(hwnd as HWND, SW_RESTORE);
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
         }
-        SetForegroundWindow(hwnd as HWND);
+        let _ = SetForegroundWindow(hwnd);
     }
 }
+
 #[cfg(all(test, windows))]
 mod tests {
     //! #702: each helper against a real window, checked through the windows

@@ -16,14 +16,18 @@
 
 #![allow(unsafe_code)]
 
-use winapi::um::winuser::{
+use windows::Win32::Foundation::HWND;
+use windows::Win32::UI::WindowsAndMessaging::{
     GetWindowLongPtrW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, GWL_EXSTYLE,
     HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WS_EX_NOACTIVATE,
 };
 
 /// This process's window with the title — never another program's (#366).
-fn find_hwnd(title: &str) -> winapi::shared::windef::HWND {
-    crate::win_opacity::find_hwnd(title) as winapi::shared::windef::HWND
+fn find_hwnd(title: &str) -> Option<HWND> {
+    match crate::win_opacity::find_hwnd(title) {
+        0 => None,
+        hwnd => Some(HWND(hwnd as *mut _)),
+    }
 }
 
 /// Enforce "always behind" on the window whose title matches `title`.
@@ -35,19 +39,18 @@ fn find_hwnd(title: &str) -> winapi::shared::windef::HWND {
 /// **Only use for floating panels** — for the main non-floating window use
 /// `keep_behind` instead, which omits `WS_EX_NOACTIVATE` so dragging works.
 pub fn apply_behind(title: &str) {
-    let hwnd = find_hwnd(title);
-    if hwnd.is_null() {
+    let Some(hwnd) = find_hwnd(title) else {
         return;
-    }
+    };
     unsafe {
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let desired = ex_style | WS_EX_NOACTIVATE as isize;
+        let desired = ex_style | WS_EX_NOACTIVATE.0 as isize;
         if ex_style != desired {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
-        SetWindowPos(
+        let _ = SetWindowPos(
             hwnd,
-            HWND_BOTTOM,
+            Some(HWND_BOTTOM),
             0,
             0,
             0,
@@ -67,17 +70,16 @@ pub fn apply_behind(title: &str) {
 /// `apply_behind` will re-add `WS_EX_NOACTIVATE` and push to `HWND_BOTTOM`
 /// once the drag finishes (primary button released).
 pub fn prepare_for_drag(title: &str) {
-    let hwnd = find_hwnd(title);
-    if hwnd.is_null() {
+    let Some(hwnd) = find_hwnd(title) else {
         return;
-    }
+    };
     unsafe {
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let desired = ex_style & !(WS_EX_NOACTIVATE as isize);
+        let desired = ex_style & !(WS_EX_NOACTIVATE.0 as isize);
         if ex_style != desired {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, desired);
         }
-        SetForegroundWindow(hwnd);
+        let _ = SetForegroundWindow(hwnd);
     }
 }
 
@@ -85,14 +87,13 @@ pub fn prepare_for_drag(title: &str) {
 /// `WS_EX_NOACTIVATE`.  Unlike `apply_behind`, this preserves the window's
 /// ability to be activated — which is required for `SC_MOVE` (StartDrag) to work.
 pub fn keep_behind(title: &str) {
-    let hwnd = find_hwnd(title);
-    if hwnd.is_null() {
+    let Some(hwnd) = find_hwnd(title) else {
         return;
-    }
+    };
     unsafe {
-        SetWindowPos(
+        let _ = SetWindowPos(
             hwnd,
-            HWND_BOTTOM,
+            Some(HWND_BOTTOM),
             0,
             0,
             0,
@@ -101,6 +102,7 @@ pub fn keep_behind(title: &str) {
         );
     }
 }
+
 #[cfg(all(test, windows))]
 mod tests {
     //! #702: against real windows, checked through the windows crate.

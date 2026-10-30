@@ -204,17 +204,17 @@ mod win {
     use super::*;
     use rigstats_backend::debug;
     use std::cell::Cell;
-    use std::os::windows::ffi::OsStrExt;
     use std::path::PathBuf;
-    use std::ptr::{null, null_mut};
-    use winapi::shared::winerror::{ERROR_SUCCESS, SUCCEEDED};
-    use winapi::um::pdh::{
+    use windows::core::{w, PCWSTR};
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Performance::{
         PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW,
         PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT_DOUBLE, PDH_HCOUNTER, PDH_HQUERY,
+        PDH_MORE_DATA,
     };
 
-    // pdhmsg.h — not re-exported by the `winapi` crate.
-    const PDH_MORE_DATA: i32 = 0x800007D2u32 as i32;
+    /// PDH's success status.
+    const OK: u32 = ERROR_SUCCESS.0;
 
     /// Live handle to the wildcard `\GPU Engine(*)\Utilization Percentage` query.
     ///
@@ -291,21 +291,25 @@ mod win {
     /// time — the first always yields zero deltas). Shared by the persistent
     /// per-tick [`GpuEngineQuery`] and the one-shot [`dump_diagnostics`].
     fn open_query() -> Option<(PDH_HQUERY, PDH_HCOUNTER)> {
-        let mut query: PDH_HQUERY = null_mut();
+        let mut query = PDH_HQUERY::default();
         // SAFETY: out-param written on success; checked before use.
-        let rc = unsafe { PdhOpenQueryW(null(), 0, &mut query) };
-        if rc != ERROR_SUCCESS as i32 {
+        let rc = unsafe { PdhOpenQueryW(PCWSTR::null(), 0, &mut query) };
+        if rc != OK {
             return None;
         }
-        let path: Vec<u16> = std::ffi::OsStr::new(r"\GPU Engine(*)\Utilization Percentage")
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        let mut counter: PDH_HCOUNTER = null_mut();
-        // SAFETY: `query` is a valid handle from PdhOpenQueryW; `path` is
-        // NUL-terminated. English counter name -> works on localised Windows.
-        let rc = unsafe { PdhAddEnglishCounterW(query, path.as_ptr(), 0, &mut counter) };
-        if rc != ERROR_SUCCESS as i32 {
+        let mut counter = PDH_HCOUNTER::default();
+        // SAFETY: `query` is a valid handle from PdhOpenQueryW; the path is a
+        // static NUL-terminated string. English counter name -> works on
+        // localised Windows.
+        let rc = unsafe {
+            PdhAddEnglishCounterW(
+                query,
+                w!(r"\GPU Engine(*)\Utilization Percentage"),
+                0,
+                &mut counter,
+            )
+        };
+        if rc != OK {
             // SAFETY: `query` is a valid handle we own.
             unsafe { PdhCloseQuery(query) };
             return None;
@@ -321,20 +325,20 @@ mod win {
     /// empty vec on any PDH error or when no GPU engine is currently active.
     fn collect_once(query: PDH_HQUERY, counter: PDH_HCOUNTER) -> Vec<(String, f64)> {
         // SAFETY: `query` is a valid, open handle.
-        if unsafe { PdhCollectQueryData(query) } != ERROR_SUCCESS as i32 {
+        if unsafe { PdhCollectQueryData(query) } != OK {
             return Vec::new();
         }
 
         let mut buf_size: u32 = 0;
         let mut item_count: u32 = 0;
-        // SAFETY: size-probe call — null buffer, PDH writes the two out sizes.
+        // SAFETY: size-probe call — no buffer, PDH writes the two out sizes.
         let rc = unsafe {
             PdhGetFormattedCounterArrayW(
                 counter,
                 PDH_FMT_DOUBLE,
                 &mut buf_size,
                 &mut item_count,
-                null_mut(),
+                None,
             )
         };
         if rc != PDH_MORE_DATA || buf_size == 0 || item_count == 0 {
@@ -359,10 +363,10 @@ mod win {
                 PDH_FMT_DOUBLE,
                 &mut buf_size,
                 &mut item_count,
-                buf.as_mut_ptr(),
+                Some(buf.as_mut_ptr()),
             )
         };
-        if rc != ERROR_SUCCESS as i32 {
+        if rc != OK {
             return Vec::new();
         }
 
@@ -375,59 +379,33 @@ mod win {
             }
             // SAFETY: szName points into `buf`'s trailing string region and
             // is NUL-terminated by PDH.
-            let name = unsafe { wide_to_string(item.szName) };
+            let name = String::from_utf16_lossy(unsafe { item.szName.as_wide() });
             // SAFETY: union read — we requested PDH_FMT_DOUBLE, so the
             // `doubleValue` arm is the populated one.
-            let value = unsafe { *item.FmtValue.u.doubleValue() };
+            let value = unsafe { item.FmtValue.Anonymous.doubleValue };
             samples.push((name, value));
         }
         samples
     }
 
-    /// Walk a NUL-terminated UTF-16 string into a `String`.
-    ///
-    /// # Safety
-    /// `ptr` must be non-null and point to a NUL-terminated UTF-16 sequence.
-    unsafe fn wide_to_string(ptr: *const u16) -> String {
-        let mut len = 0usize;
-        while *ptr.add(len) != 0 {
-            len += 1;
-        }
-        String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len))
-    }
-
     /// Enumerate every DXGI adapter (physical *and* software/WARP — callers that
     /// only want real GPUs filter on `flags`).
     fn enumerate_adapters_impl() -> Vec<AdapterDesc> {
-        use winapi::shared::dxgi::{
-            CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, IID_IDXGIFactory1, DXGI_ADAPTER_DESC1,
-        };
+        use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 
         let mut adapters = Vec::new();
-        let mut factory: *mut IDXGIFactory1 = null_mut();
-        // SAFETY: standard DXGI factory creation; out-param checked via HRESULT.
-        let hr = unsafe {
-            CreateDXGIFactory1(
-                &IID_IDXGIFactory1,
-                &mut factory as *mut *mut IDXGIFactory1 as *mut *mut winapi::ctypes::c_void,
-            )
-        };
-        if !SUCCEEDED(hr) || factory.is_null() {
+        // SAFETY: standard DXGI factory creation; the interface releases
+        // itself when dropped.
+        let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else {
             return adapters;
-        }
+        };
 
         let mut i = 0u32;
-        loop {
-            let mut adapter: *mut IDXGIAdapter1 = null_mut();
-            // SAFETY: `factory` is a live COM pointer; `adapter` out-param.
-            let hr = unsafe { (*factory).EnumAdapters1(i, &mut adapter) };
-            if !SUCCEEDED(hr) || adapter.is_null() {
-                break;
-            }
-            let mut desc: DXGI_ADAPTER_DESC1 = unsafe { std::mem::zeroed() };
-            // SAFETY: `adapter` is a live COM pointer; `desc` is adapter-owned out.
-            let hr = unsafe { (*adapter).GetDesc1(&mut desc) };
-            if SUCCEEDED(hr) {
+        // SAFETY: `factory` is a live COM interface; each adapter releases
+        // itself at the end of its iteration.
+        while let Ok(adapter) = unsafe { factory.EnumAdapters1(i) } {
+            // SAFETY: `adapter` is a live COM interface.
+            if let Ok(desc) = unsafe { adapter.GetDesc1() } {
                 let end = desc
                     .Description
                     .iter()
@@ -443,12 +421,8 @@ mod win {
                     flags: desc.Flags,
                 });
             }
-            // SAFETY: release our reference from EnumAdapters1.
-            unsafe { (*adapter).Release() };
             i += 1;
         }
-        // SAFETY: release our factory reference from CreateDXGIFactory1.
-        unsafe { (*factory).Release() };
         adapters
     }
 
@@ -466,14 +440,13 @@ mod win {
     /// Returns an empty map on any DXGI failure — callers then leave the
     /// `adapter` field blank rather than failing the whole sample.
     pub fn adapter_luid_map() -> AdapterMap {
-        use winapi::shared::dxgi::DXGI_ADAPTER_FLAG_SOFTWARE;
+        use windows::Win32::Graphics::Dxgi::DXGI_ADAPTER_FLAG_SOFTWARE;
         enumerate_adapters_impl()
             .into_iter()
-            .filter(|a| a.flags & DXGI_ADAPTER_FLAG_SOFTWARE == 0)
+            .filter(|a| a.flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 == 0)
             .map(|a| (a.luid, a.description))
             .collect()
     }
-
     /// One-shot text dump of the raw GPU Engine PDH instances and DXGI adapter
     /// list, for the diagnostics ZIP (Status -> Collect Diagnostics). Independent
     /// of the persistent per-tick [`GpuEngineQuery`] — opens its own query.
