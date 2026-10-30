@@ -3518,7 +3518,6 @@ dependencies = [
  "tray-icon",
  "ureq",
  "wgpu",
- "winapi",
  "windows",
  "winit",
  "winreg",
