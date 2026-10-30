@@ -738,6 +738,32 @@ mod tests {
         assert!(icon.pixels.iter().any(|p| p.a() > 0), "not blank");
     }
 
+    /// #702: the program's name is the one Windows itself reads from the
+    /// file's version information, and the icon has the system's large
+    /// icon size — checked against Windows, so they hold when the COM code
+    /// moves off winapi.
+    #[test]
+    #[allow(unsafe_code)] // one FFI call, the independent size
+    fn the_name_and_icon_are_the_ones_windows_reports() {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXICON, SM_CYICON};
+        let path = notepad();
+        let out = std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("(Get-Item '{path}').VersionInfo.FileDescription"),
+            ])
+            .output()
+            .expect("powershell runs");
+        let windows_says = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        assert_eq!(file_description(&path).unwrap_or_default(), windows_says);
+
+        let icon = icon_image(&path).expect("notepad has an icon");
+        // SAFETY: GetSystemMetrics takes an index and returns an int.
+        let large = unsafe { [GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON)] };
+        assert_eq!(icon.size, [large[0] as usize, large[1] as usize]);
+    }
+
     #[test]
     fn a_missing_file_has_neither() {
         let gone = r"C:\no\such\program.exe";

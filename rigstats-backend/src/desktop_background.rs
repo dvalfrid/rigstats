@@ -511,6 +511,49 @@ mod tests {
         assert_eq!(s.size(), (2560, 1440));
     }
 
+    /// #702: the screens IDesktopWallpaper reports, against Windows' own
+    /// count — read only, before and after the COM code moves off winapi.
+    #[cfg(windows)]
+    #[test]
+    #[allow(unsafe_code)] // one FFI call, the independent count
+    fn the_screens_are_windows_own_and_one_is_the_main_one() {
+        use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CMONITORS};
+        let list = screens();
+        // SAFETY: GetSystemMetrics takes an index and returns an int.
+        let count = unsafe { GetSystemMetrics(SM_CMONITORS) } as usize;
+        assert_eq!(list.len(), count);
+        let mut ids: Vec<&str> = list.iter().map(|s| s.id.as_str()).collect();
+        assert!(ids.iter().all(|id| !id.is_empty()));
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), count, "each screen once");
+        assert_eq!(list.iter().filter(|s| s.is_main()).count(), 1);
+    }
+
+    /// #702: the fit IDesktopWallpaper reads is the one Windows keeps in
+    /// `HKCU\Control Panel\Desktop` — read only.
+    #[cfg(windows)]
+    #[test]
+    fn the_fit_is_the_one_windows_keeps_in_the_registry() {
+        use winreg::{enums::HKEY_CURRENT_USER, RegKey};
+        let Ok(desktop) = RegKey::predef(HKEY_CURRENT_USER).open_subkey(r"Control Panel\Desktop")
+        else {
+            return;
+        };
+        let style: String = desktop.get_value("WallpaperStyle").unwrap_or_default();
+        let tile: String = desktop.get_value("TileWallpaper").unwrap_or_default();
+        let expected = match (style.trim(), tile.trim()) {
+            ("0", "1") => Fit::Tile,
+            ("0", _) => Fit::Center,
+            ("2", _) => Fit::Stretch,
+            ("6", _) => Fit::Fit,
+            ("10", _) => Fit::Fill,
+            ("22", _) => Fit::Span,
+            _ => return, // not set: nothing to compare with
+        };
+        assert_eq!(current().expect("the background reads").fit, expected);
+    }
+
     #[cfg(windows)]
     #[test]
     fn windows_reports_its_screens_and_background() {

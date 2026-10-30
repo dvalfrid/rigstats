@@ -29,7 +29,7 @@ tempfile = "3"
 # The Win32 tests' own checks, on the windows crate already, so they don't
 # change when the code under test moves off winapi (#702).
 [target.'cfg(windows)'.dev-dependencies]
-windows = { version = "0.62", features = ["Win32_System_RemoteDesktop"] }
+windows = { version = "0.62", features = ["Win32_System_RemoteDesktop", "Win32_UI_WindowsAndMessaging"] }
 
 # Its own set, stricter than the workspace's (root Cargo.toml).
 [lints.rust]
