@@ -31,6 +31,8 @@ pub mod ring;
 pub mod single_instance;
 pub mod spark;
 pub mod tempcolor;
+#[cfg(all(test, windows))]
+mod test_win;
 pub mod theme;
 pub mod tray;
 pub mod update_check;

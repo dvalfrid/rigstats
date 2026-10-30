@@ -620,7 +620,8 @@ mod tests {
             .find(|b| b.event == HotkeyEvent::SwitchProfile(0))
             .unwrap();
         assert_eq!(first.chord.to_string(), "Alt+Shift+F1");
-        assert_eq!(mod_flags(first.chord), (MOD_ALT | MOD_SHIFT) as u32);
+        // MOD_ALT | MOD_SHIFT
+        assert_eq!(mod_flags(first.chord), 0x0001 | 0x0004);
     }
 
     #[test]
@@ -647,5 +648,160 @@ mod tests {
         let f5 = Shortcut::parse("Ctrl+Alt+F5").unwrap();
         assert_eq!(alt_gr_char(f5), None);
         assert_eq!(alt_gr_char(Shortcut::parse("Ctrl+Shift+2").unwrap()), None);
+    }
+}
+#[cfg(all(test, windows))]
+mod win32_tests {
+    //! #702: the Win32 side, checked through the windows crate.
+    use super::*;
+    use ::windows::Win32::Foundation::{LPARAM, WPARAM};
+    use ::windows::Win32::UI::Input::KeyboardAndMouse::{
+        GetKeyboardLayoutList as layout_list, MapVirtualKeyExW as map_key, RegisterHotKey as hold,
+        ToUnicodeEx as to_unicode, UnregisterHotKey as release, HKL as Layout, HOT_KEY_MODIFIERS,
+        MAP_VIRTUAL_KEY_TYPE,
+    };
+    use ::windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_HOTKEY as HOTKEY};
+    use rigstats_backend::shortcut::{Action, Mods, SINGLE_ACTIONS};
+    use std::time::{Duration, Instant};
+
+    fn layouts() -> Vec<Layout> {
+        let mut list = [Layout::default(); 32];
+        // SAFETY: `list` is writable and its length is passed.
+        let n = unsafe { layout_list(Some(&mut list)) };
+        list[..n.max(0) as usize].to_vec()
+    }
+
+    /// What AltGr (+ Shift) with `vk` types on `layout`, from Windows.
+    fn typed(layout: Layout, vk: u32, shift: bool) -> Option<char> {
+        let mut state = [0u8; 256];
+        for k in [0x11, 0xA2, 0x12, 0xA5] {
+            state[k] = 0x80;
+        }
+        if shift {
+            state[0x10] = 0x80;
+            state[0xA0] = 0x80;
+        }
+        // SAFETY: plain values; `layout` is one Windows listed.
+        let scan = unsafe { map_key(vk, MAP_VIRTUAL_KEY_TYPE(0), Some(layout)) };
+        let mut buf = [0u16; 8];
+        // SAFETY: `state` is the 256-byte key state; `buf` is writable and
+        // its length is passed; flag 0x4 leaves the keyboard state alone.
+        let n = unsafe { to_unicode(vk, scan, &state, &mut buf, 0x4, Some(layout)) };
+        (n != 0)
+            .then(|| char::decode_utf16(buf.iter().copied()).next()?.ok())
+            .flatten()
+            .filter(|c| !c.is_control())
+    }
+
+    #[test]
+    fn alt_gr_characters_are_what_windows_types() {
+        let layouts = layouts();
+        let keys = (0x30..=0x39)
+            .chain(0x41..=0x5A)
+            .chain([0xBA, 0xBB, 0xBC, 0xDB, 0xDD, 0xE2]);
+        for vk in keys {
+            for shift in [false, true] {
+                let mods = if shift {
+                    Mods::CTRL_ALT_SHIFT
+                } else {
+                    Mods::CTRL_ALT
+                };
+                let chord = Shortcut::new(mods, vk);
+                let oracle = layouts.iter().find_map(|&l| typed(l, vk, shift));
+                assert_eq!(alt_gr_char(chord), oracle, "{chord}");
+            }
+        }
+        // On a PC with the Swedish layout, AltGr+2 is @.
+        if layouts
+            .iter()
+            .any(|l| (l.0 as usize >> 16) & 0xFFFF == 0x041D)
+        {
+            assert_eq!(
+                alt_gr_char(Shortcut::parse("Ctrl+Alt+2").unwrap()),
+                Some('@')
+            );
+        }
+    }
+
+    /// Whether another thread could take `chord` now — it can't while the
+    /// hotkey thread holds it.
+    fn free(chord: Shortcut) -> bool {
+        let flags = HOT_KEY_MODIFIERS(mod_flags(chord));
+        // SAFETY: plain values; registered to this thread and released at once.
+        let ok = unsafe { hold(None, 0x7000, flags, chord.vk) }.is_ok();
+        if ok {
+            // SAFETY: the id registered just above on this thread.
+            let _ = unsafe { release(None, 0x7000) };
+        }
+        ok
+    }
+
+    fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
+        let start = Instant::now();
+        while !done() {
+            assert!(
+                start.elapsed() < Duration::from_secs(5),
+                "timed out: {what}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// The whole thread: registering, a chord firing, a chord another
+    /// program holds, pausing. Chords no one uses (F21–F23) keep it off the
+    /// user's own; the thread lives on for the rest of the test run, holding
+    /// nothing.
+    #[test]
+    fn the_hotkey_thread_holds_fires_reports_and_pauses() {
+        let overlay = Shortcut::parse("Ctrl+Alt+Shift+F23").unwrap();
+        let next = Shortcut::parse("Ctrl+Alt+Shift+F22").unwrap();
+        let mut shortcuts = Shortcuts::default();
+        for a in SINGLE_ACTIONS {
+            shortcuts.set(a, None);
+        }
+        shortcuts.profiles = None;
+        shortcuts.set(Action::Overlay, Some(overlay));
+        assert!(free(overlay), "the test chord is free to begin with");
+
+        let dir = std::env::temp_dir().join(format!("rigstats-hotkey-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _thread = spawn(dir.clone(), shortcuts.clone(), tx, egui::Context::default());
+        wait_until("the chord is held", || !free(overlay));
+
+        // A WM_HOTKEY with the overlay's id raises its event.
+        let thread = THREAD_ID.load(Ordering::SeqCst);
+        // SAFETY: plain values; the hotkey thread's id.
+        unsafe { PostThreadMessageW(thread, HOTKEY, WPARAM(1), LPARAM(0)) }.unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)),
+            Ok(HotkeyEvent::ToggleOverlay)
+        );
+
+        // A chord this thread holds is "taken" for the hotkey thread.
+        // SAFETY: plain values; released below on this thread.
+        unsafe { hold(None, 0x7001, HOT_KEY_MODIFIERS(mod_flags(next)), next.vk) }.unwrap();
+        shortcuts.set(Action::NextProfile, Some(next));
+        apply(&shortcuts);
+        let want = vec![(next.to_string(), "switch to the next profile".to_owned())];
+        wait_until("the taken chord is listed", || taken() == want);
+        assert!(!free(overlay));
+        // SAFETY: the id registered above on this thread.
+        unsafe { release(None, 0x7001) }.unwrap();
+
+        // Paused: nothing held. Resumed: held again.
+        set_paused(true);
+        wait_until("paused frees the chord", || free(overlay));
+        set_paused(false);
+        wait_until("resumed holds it again", || !free(overlay));
+
+        // Hold nothing for the rest of the run.
+        shortcuts.set(Action::Overlay, None);
+        shortcuts.set(Action::NextProfile, None);
+        apply(&shortcuts);
+        wait_until("nothing held at the end", || {
+            free(overlay) && taken().is_empty()
+        });
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

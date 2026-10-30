@@ -272,3 +272,94 @@ pub fn process_alive(pid: u32) -> bool {
         r == WAIT_TIMEOUT
     }
 }
+#[cfg(all(test, windows))]
+mod tests {
+    //! #702: against a real (hidden) window, checked through the windows
+    //! crate.
+    use super::*;
+    use crate::test_win::TestWindow;
+    use ::windows::Win32::UI::WindowsAndMessaging::{
+        GetAncestor, GetClassNameW, GetDesktopWindow, GA_PARENT as PARENT,
+    };
+
+    /// The window's real parent and its class.
+    fn parent_of(w: &TestWindow) -> (isize, String) {
+        // SAFETY: a read-only query on the test's own window.
+        let parent = unsafe { GetAncestor(w.hwnd, PARENT) };
+        let mut buf = [0u16; 256];
+        // SAFETY: `buf` is a writable buffer; its length is passed.
+        let n = unsafe { GetClassNameW(parent, &mut buf) };
+        (
+            parent.0 as isize,
+            String::from_utf16_lossy(&buf[..n.max(0) as usize]),
+        )
+    }
+
+    #[test]
+    fn a_window_goes_into_the_wallpaper_and_back_out_where_it_was() {
+        let w = TestWindow::hidden("workerw");
+        let before = w.rect();
+        assert!(!is_attached(w.raw()));
+        if !attach(w.raw()) {
+            // No desktop wallpaper window (a session without Explorer).
+            eprintln!("no WorkerW here: attach not tested");
+            return;
+        }
+        assert_eq!(parent_of(&w).1, "WorkerW");
+        assert!(is_attached(w.raw()));
+        // Same place on the screen as before.
+        assert_eq!(w.rect(), before);
+        assert_eq!(
+            screen_pos(w.raw()),
+            Some([before.left as f32, before.top as f32])
+        );
+
+        // Moved to a screen position, from inside the WorkerW.
+        assert!(move_to_screen(w.raw(), [-31000.6, -31500.4]));
+        let moved = w.rect();
+        assert_eq!((moved.left, moved.top), (-31001, -31500));
+        assert_eq!(
+            (moved.right - moved.left, moved.bottom - moved.top),
+            (before.right - before.left, before.bottom - before.top)
+        );
+        assert_eq!(screen_pos(w.raw()), Some([-31001.0, -31500.0]));
+
+        detach(w.raw());
+        // SAFETY: no arguments.
+        let desktop = unsafe { GetDesktopWindow() }.0 as isize;
+        assert_eq!(parent_of(&w).0, desktop);
+        assert!(!is_attached(w.raw()));
+    }
+
+    #[test]
+    fn a_zero_handle_is_never_attached() {
+        assert!(!attach(0));
+        assert!(!is_attached(0));
+        assert_eq!(screen_pos(0), None);
+        assert!(!move_to_screen(0, [0.0, 0.0]));
+        detach(0);
+    }
+
+    #[test]
+    fn screen_pos_of_a_top_level_window() {
+        let w = TestWindow::hidden("pos");
+        let r = w.rect();
+        assert_eq!(screen_pos(w.raw()), Some([r.left as f32, r.top as f32]));
+    }
+
+    #[test]
+    fn a_process_is_alive_until_it_has_exited() {
+        assert!(process_alive(std::process::id()));
+        let mut child = std::process::Command::new("cmd")
+            .args(["/C", "exit 0"])
+            .spawn()
+            .expect("cmd starts");
+        let pid = child.id();
+        child.wait().unwrap();
+        // The handle `child` holds keeps the pid from being reused yet.
+        assert!(!process_alive(pid));
+        drop(child);
+        // The idle process can't be opened: counted as gone.
+        assert!(!process_alive(0));
+    }
+}
