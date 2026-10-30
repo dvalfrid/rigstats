@@ -270,7 +270,8 @@ public sealed class RyzenSmu : IRyzenSmu, ICurveOptimizerSmu, IDisposable
             try
             {
                 _module.Execute("ioctl_update_pm_table", [], 0);
-                if (attempt > 1)
+                // Two is the usual case on the 9800X3D (#711); only more says anything.
+                if (attempt > 2)
                     SidecarLog.Log($"[rigstats-control] CPU limits: PM table transfer needed {attempt} attempts.");
                 return;
             }
