@@ -157,4 +157,92 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert!(result.is_err());
     }
+
+    fn pawnio_setup() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../build/pawnio/PawnIO_setup.exe")
+    }
+
+    /// The signer's subject as Windows' own `Get-AuthenticodeSignature`
+    /// reads it — an oracle that shares no code with this module. `Decode`
+    /// without flags keeps the certificate's order (`Subject` reverses it).
+    fn powershell_subject(path: &Path) -> String {
+        let script = format!(
+            "(Get-AuthenticodeSignature -LiteralPath '{}').SignerCertificate.SubjectName.Decode('None')",
+            path.canonicalize().unwrap().display()
+        );
+        let out = std::process::Command::new("powershell")
+            // Inherited from a PowerShell 7 shell, it keeps Windows
+            // PowerShell from loading its own modules.
+            .env_remove("PSModulePath")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+            .output()
+            .expect("powershell runs");
+        String::from_utf8(out.stdout).unwrap().trim().to_owned()
+    }
+
+    #[test]
+    fn subject_is_the_one_windows_reports() {
+        // The updater compares the installer's subject with the running
+        // app's for equality, so the whole string is pinned, not a part.
+        let mut files = vec![pawnio_setup()];
+        // The installed app, on a machine that has it (not CI).
+        let installed = Path::new(r"C:\Program Files\RIGStats\rigstats.exe");
+        if installed.exists() {
+            files.push(installed.to_path_buf());
+        }
+        for file in files {
+            let ours = verified_signer_subject(&file).expect("signed");
+            assert_eq!(ours, powershell_subject(&file), "{}", file.display());
+        }
+    }
+
+    #[test]
+    fn a_changed_signed_file_is_rejected() {
+        // One byte in the code, outside the signature: the digest no longer
+        // matches (TRUST_E_BAD_DIGEST).
+        let mut bytes = std::fs::read(pawnio_setup()).unwrap();
+        let middle = bytes.len() / 2;
+        bytes[middle] ^= 0xFF;
+        let path =
+            std::env::temp_dir().join(format!("rigstats-changed-{}.exe", std::process::id()));
+        std::fs::write(&path, &bytes).unwrap();
+        let result = verified_signer_subject(&path);
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(
+            result,
+            Err("no valid signature (WinVerifyTrust 0x80096010)".to_string())
+        );
+    }
+
+    #[test]
+    fn a_signature_from_an_untrusted_root_is_rejected() {
+        // Signed with a self-signed certificate made for this fixture and
+        // deleted afterwards (CERT_E_UNTRUSTEDROOT): anyone can sign a file,
+        // only a trusted chain counts.
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("fixtures/authenticode/untrusted-signed.dll");
+        assert_eq!(
+            verified_signer_subject(&path),
+            Err("no valid signature (WinVerifyTrust 0x800B0109)".to_string())
+        );
+    }
+
+    #[test]
+    fn a_catalog_signed_file_is_rejected() {
+        // Only a signature inside the file counts; Windows' own files are
+        // signed through catalogs, which are not consulted
+        // (TRUST_E_NOSIGNATURE). The installer always carries its own.
+        let path = Path::new(r"C:\Windows\System32\notepad.exe");
+        assert_eq!(
+            verified_signer_subject(path),
+            Err("no valid signature (WinVerifyTrust 0x800B0100)".to_string())
+        );
+    }
+
+    #[test]
+    fn a_missing_file_is_rejected() {
+        let path =
+            std::env::temp_dir().join(format!("rigstats-missing-{}.exe", std::process::id()));
+        assert!(verified_signer_subject(&path).is_err());
+    }
 }
