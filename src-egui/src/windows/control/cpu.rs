@@ -4,7 +4,8 @@ use super::{dry_run_note, CoDraft, ControlUi, CpuDraft};
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit::{self};
 use rigstats_backend::control::{
-    AmdCpuLimit, AmdLimitValues, ControlState, CpuLimitCaps, CurveOptCaps, CurveOptPart, Profile,
+    normalized_co, AmdCpuLimit, AmdLimitValues, ControlState, CpuLimitCaps, CurveOptCaps,
+    CurveOptPart,
 };
 use std::collections::BTreeMap;
 
@@ -150,21 +151,6 @@ fn limit_slider(
     if ui.add(slider).changed() {
         *value = below_stock(f64::from(v), stock);
     }
-}
-
-/// An empty per-core map means the same as none.
-pub(super) fn normalized_co(part: &CurveOptPart) -> CurveOptPart {
-    CurveOptPart {
-        all_core: part.all_core,
-        per_core: part.per_core.clone().filter(|m| !m.is_empty()),
-    }
-}
-
-pub(super) fn saved_curve_opt(profile: Option<&Profile>) -> CurveOptPart {
-    profile
-        .and_then(|p| p.part.curve_opt.as_ref())
-        .map(normalized_co)
-        .unwrap_or_default()
 }
 
 /// "−15", "0".
@@ -380,21 +366,6 @@ mod tests {
         assert_eq!(co_summary(&[0; 8]), "all cores 0");
         assert_eq!(co_summary(&[-10, -15]), "-10 · -15");
         assert_eq!(co_summary(&[]), "—");
-    }
-
-    #[test]
-    fn an_empty_per_core_map_is_the_same_as_none() {
-        let with_empty = CurveOptPart {
-            all_core: Some(-10),
-            per_core: Some(BTreeMap::new()),
-        };
-        assert_eq!(
-            normalized_co(&with_empty),
-            CurveOptPart {
-                all_core: Some(-10),
-                per_core: None
-            }
-        );
     }
 
     #[test]

@@ -23,7 +23,6 @@
 //! reaches the window instead of firing.
 
 #![allow(unsafe_code)]
-#![warn(clippy::undocumented_unsafe_blocks)]
 
 use crate::lock_ext::LockSafe;
 use eframe::egui;

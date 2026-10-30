@@ -4,7 +4,6 @@
 //! moves off `winapi`.
 
 #![allow(unsafe_code)]
-#![warn(clippy::undocumented_unsafe_blocks)]
 
 use ::windows::core::{w, PCWSTR};
 use ::windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};

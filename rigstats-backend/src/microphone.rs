@@ -10,7 +10,6 @@
 //! when) lives in the app.
 
 #![allow(unsafe_code)]
-#![warn(clippy::undocumented_unsafe_blocks)]
 
 /// One microphone Windows has right now, for the Settings dropdown.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -59,6 +59,7 @@ pub fn send(title: &str, message: &str) -> Result<(), String> {
     use ::windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
 
     // WinRT needs an apartment on this thread; "already initialised" is fine.
+    // SAFETY: plain values, no pointers.
     let _ = unsafe {
         ::windows::Win32::System::WinRT::RoInitialize(
             ::windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
@@ -115,6 +116,7 @@ pub fn watch_setting() {
 fn read_setting() -> Option<NotificationsOff> {
     use ::windows::core::HSTRING;
     use ::windows::UI::Notifications::ToastNotificationManager;
+    // SAFETY: plain values, no pointers; "already initialised" is fine.
     let _ = unsafe {
         ::windows::Win32::System::WinRT::RoInitialize(
             ::windows::Win32::System::WinRT::RO_INIT_MULTITHREADED,
@@ -139,6 +141,7 @@ fn off_for(setting: ::windows::UI::Notifications::NotificationSetting) -> Option
 /// Opens Windows' notification settings, where RIGStats is listed.
 pub fn open_windows_settings() {
     use windows::core::w;
+    // SAFETY: static NUL-terminated strings; no window.
     unsafe {
         windows::Win32::UI::Shell::ShellExecuteW(
             None,

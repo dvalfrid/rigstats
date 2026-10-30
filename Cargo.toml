@@ -18,6 +18,7 @@ unsafe_code = "deny"
 [workspace.lints.clippy]
 dbg_macro = "warn"
 todo = "warn"
+undocumented_unsafe_blocks = "warn"
 
 # Smaller, faster release binaries (#467). Not panic = "abort": the tray
 # thread and debug::supervise rely on catch_unwind.

@@ -42,6 +42,7 @@ pub fn apply_behind(title: &str) {
     let Some(hwnd) = find_hwnd(title) else {
         return;
     };
+    // SAFETY: plain values; user32 validates `hwnd` (a stale one just fails).
     unsafe {
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let desired = ex_style | WS_EX_NOACTIVATE.0 as isize;
@@ -73,6 +74,7 @@ pub fn prepare_for_drag(title: &str) {
     let Some(hwnd) = find_hwnd(title) else {
         return;
     };
+    // SAFETY: plain values; user32 validates `hwnd` (a stale one just fails).
     unsafe {
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
         let desired = ex_style & !(WS_EX_NOACTIVATE.0 as isize);
@@ -90,6 +92,7 @@ pub fn keep_behind(title: &str) {
     let Some(hwnd) = find_hwnd(title) else {
         return;
     };
+    // SAFETY: plain values; user32 validates `hwnd` (a stale one just fails).
     unsafe {
         let _ = SetWindowPos(
             hwnd,

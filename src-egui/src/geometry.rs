@@ -176,6 +176,7 @@ pub mod win_monitor {
 
         let mut data = MonitorData { rects: Vec::new() };
         #[allow(unsafe_code)]
+        // SAFETY: `data` outlives the call, and the callback only runs during it.
         unsafe {
             let _ = EnumDisplayMonitors(
                 None,

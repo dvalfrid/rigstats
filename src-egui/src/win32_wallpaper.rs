@@ -104,6 +104,7 @@ unsafe extern "system" fn enum_workerw(top: HWND, lparam: LPARAM) -> BOOL {
 /// 3. The legacy layout: the `WorkerW` sibling of the top-level window that owns
 ///    `SHELLDLL_DefView`.
 fn find_wallpaper_workerw() -> Option<HWND> {
+    // SAFETY: static NUL-terminated class name; no title.
     let progman = unsafe { FindWindowW(w!("Progman"), PCWSTR::null()) }.ok()?;
 
     // 1. Windows 11: the wallpaper WorkerW is a child of Progman.
@@ -119,6 +120,8 @@ fn find_wallpaper_workerw() -> Option<HWND> {
 
     // 3. Legacy: WorkerW sibling of the SHELLDLL_DefView owner.
     let mut result: Option<HWND> = None;
+    // SAFETY: `result` outlives the enumeration, and `enum_workerw` reads the
+    // lparam as what it is.
     unsafe {
         let _ = EnumWindows(
             Some(enum_workerw),
@@ -181,6 +184,7 @@ pub fn is_attached(hwnd: isize) -> bool {
     };
     // GA_PARENT (unlike GetParent) returns the real parent, not the owner — which
     // matters because we don't set WS_CHILD on the reparented window.
+    // SAFETY: a read-only query; user32 validates `hwnd`.
     let parent = unsafe { GetAncestor(hwnd, GA_PARENT) };
     !parent.is_invalid() && window_class(parent) == "WorkerW"
 }

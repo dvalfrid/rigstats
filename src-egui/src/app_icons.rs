@@ -4,7 +4,6 @@
 //! `cs2.exe`), the dialog is Windows' Open dialog (through rfd) on its own thread
 //! (also used to choose a profile's desktop background picture, #306).
 #![allow(unsafe_code)] // Win32 FFI below.
-#![warn(clippy::undocumented_unsafe_blocks)]
 
 use crate::lock_ext::LockSafe;
 use std::collections::HashMap;

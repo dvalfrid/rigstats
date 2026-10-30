@@ -3,6 +3,9 @@
 use super::{card_frame, dry_run_note, section_label, ControlUi};
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit::{self};
+use rigstats_backend::control::fan_curve::{
+    add_point, curve_group, move_point, remove_point, same_curve, share_curve, T_MAX, T_MIN,
+};
 use rigstats_backend::control::{
     ControlCmd, ControlState, FanCaps, FanHeaderCap, FanHeaderConfig, FanResponder, Profile,
     Severity,
@@ -10,9 +13,6 @@ use rigstats_backend::control::{
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
-/// Curve editor axes: temperature range shown, duty is always 0–100 %.
-const T_MIN: f64 = 20.0;
-const T_MAX: f64 = 100.0;
 /// How close (px) the pointer must be to grab/remove a curve point.
 const GRAB_RADIUS: f32 = 12.0;
 const CURVE_COLOR: egui::Color32 = egui::Color32::from_rgb(0x3a, 0x9b, 0xff);
@@ -479,42 +479,6 @@ fn curve_editor(
     }
 }
 
-/// Moves point `i` to (`t`, `d`), rounded to whole degrees/percent and kept
-/// strictly between its neighbours so the curve stays ascending.
-fn move_point(curve: &mut [[f64; 2]], i: usize, t: f64, d: f64) {
-    let lo = if i == 0 { T_MIN } else { curve[i - 1][0] + 1.0 };
-    let hi = if i + 1 == curve.len() {
-        T_MAX
-    } else {
-        curve[i + 1][0] - 1.0
-    };
-    // Neighbours closer than 2 °C (hand-edited data): don't move sideways.
-    let (lo, hi) = if lo > hi {
-        (curve[i][0], curve[i][0])
-    } else {
-        (lo, hi)
-    };
-    curve[i] = [t.round().clamp(lo, hi), d.round().clamp(0.0, 100.0)];
-}
-
-/// Inserts a point at its sorted position, unless one already sits within
-/// 1 °C of it.
-fn add_point(curve: &mut Vec<[f64; 2]>, [t, d]: [f64; 2]) {
-    let t = t.round().clamp(T_MIN, T_MAX);
-    if curve.iter().any(|p| (p[0] - t).abs() < 1.0) {
-        return;
-    }
-    let at = curve.partition_point(|p| p[0] < t);
-    curve.insert(at, [t, d.round().clamp(0.0, 100.0)]);
-}
-
-/// Removes point `i`, keeping at least two so a curve always has a slope.
-fn remove_point(curve: &mut Vec<[f64; 2]>, i: usize) {
-    if curve.len() > 2 && i < curve.len() {
-        curve.remove(i);
-    }
-}
-
 /// The line under the header picker, plus an RPM breakdown for its tooltip.
 /// Channel numbers and RPM sensor numbers don't always match (one channel
 /// can drive several fans), so the measured result is what to trust.
@@ -550,43 +514,6 @@ fn identify_summary(
             };
             (format!("Drives: {}", ls.join(", ")), Some(detail))
         }
-    }
-}
-
-/// Two headers share a curve when everything but their label matches.
-fn same_curve(a: &FanHeaderConfig, b: &FanHeaderConfig) -> bool {
-    a.source == b.source && a.curve == b.curve && a.hysteresis_c == b.hysteresis_c
-}
-
-/// The other headers running exactly `id`'s curve. Groups aren't stored —
-/// the service keeps one curve per header — they are whatever matches.
-fn curve_group(headers: &BTreeMap<String, FanHeaderConfig>, id: &str) -> Vec<String> {
-    let Some(this) = headers.get(id) else {
-        return Vec::new();
-    };
-    headers
-        .iter()
-        .filter(|(other, config)| other.as_str() != id && same_curve(config, this))
-        .map(|(other, _)| other.clone())
-        .collect()
-}
-
-/// Gives each header in `ids` `config`'s curve and source, keeping its own
-/// label (a header on BIOS control is switched to the curve).
-fn share_curve(
-    headers: &mut BTreeMap<String, FanHeaderConfig>,
-    ids: &[String],
-    config: &FanHeaderConfig,
-) {
-    for id in ids {
-        let label = headers.get(id).and_then(|c| c.label.clone());
-        headers.insert(
-            id.clone(),
-            FanHeaderConfig {
-                label,
-                ..config.clone()
-            },
-        );
     }
 }
 
@@ -634,49 +561,6 @@ mod tests {
     }
 
     #[test]
-    fn move_point_rounds_and_stays_between_neighbours() {
-        let mut c = curve();
-        move_point(&mut c, 1, 75.4, 55.6);
-        assert_eq!(c[1], [69.0, 56.0]);
-        move_point(&mut c, 1, 10.0, -5.0);
-        assert_eq!(c[1], [31.0, 0.0]);
-    }
-
-    #[test]
-    fn move_point_clamps_the_ends_to_the_axis_range() {
-        let mut c = curve();
-        move_point(&mut c, 0, 5.0, 120.0);
-        assert_eq!(c[0], [T_MIN, 100.0]);
-        move_point(&mut c, 2, 140.0, 50.0);
-        assert_eq!(c[2], [T_MAX, 50.0]);
-    }
-
-    #[test]
-    fn move_point_does_not_panic_on_crowded_neighbours() {
-        let mut c = vec![[50.0, 30.0], [50.5, 40.0], [51.0, 50.0]];
-        move_point(&mut c, 1, 80.0, 45.0);
-        assert_eq!(c[1], [50.5, 45.0]);
-    }
-
-    #[test]
-    fn add_point_inserts_sorted_and_skips_duplicates() {
-        let mut c = curve();
-        add_point(&mut c, [60.2, 61.0]);
-        assert_eq!(c[2], [60.0, 61.0]);
-        assert_eq!(c.len(), 4);
-        add_point(&mut c, [60.4, 10.0]);
-        assert_eq!(c.len(), 4);
-    }
-
-    #[test]
-    fn remove_point_keeps_at_least_two() {
-        let mut c = curve();
-        remove_point(&mut c, 0);
-        remove_point(&mut c, 0);
-        assert_eq!(c.len(), 2);
-    }
-
-    #[test]
     fn presets_are_valid_ascending_curves() {
         for (_, points) in PRESETS {
             assert!(points.windows(2).all(|w| w[0][0] < w[1][0]));
@@ -705,52 +589,6 @@ mod tests {
         assert_eq!(source_name("cpu_package"), "CPU temperature");
         assert_eq!(source_name("mb:System"), "Motherboard: System");
         assert_eq!(source_name("other"), "other");
-    }
-
-    fn header(label: Option<&str>, source: &str, curve: Vec<[f64; 2]>) -> FanHeaderConfig {
-        FanHeaderConfig {
-            label: label.map(str::to_owned),
-            source: source.into(),
-            curve,
-            hysteresis_c: 3.0,
-        }
-    }
-
-    #[test]
-    fn curve_group_matches_curve_and_source_but_ignores_labels() {
-        let mut headers = BTreeMap::new();
-        headers.insert("a".to_owned(), header(Some("CPU"), "cpu_package", curve()));
-        headers.insert(
-            "b".to_owned(),
-            header(Some("Front"), "cpu_package", curve()),
-        );
-        headers.insert("c".to_owned(), header(None, "gpu", curve()));
-        headers.insert(
-            "d".to_owned(),
-            header(None, "cpu_package", vec![[40.0, 50.0], [80.0, 100.0]]),
-        );
-
-        assert_eq!(curve_group(&headers, "a"), vec!["b".to_owned()]);
-        assert!(curve_group(&headers, "c").is_empty());
-        assert!(curve_group(&headers, "missing").is_empty());
-    }
-
-    #[test]
-    fn share_curve_copies_the_curve_but_keeps_each_label() {
-        let mut headers = BTreeMap::new();
-        headers.insert("b".to_owned(), header(Some("Front"), "gpu", curve()));
-        let shared = header(
-            Some("CPU"),
-            "cpu_package",
-            vec![[30.0, 30.0], [80.0, 100.0]],
-        );
-
-        share_curve(&mut headers, &["b".to_owned(), "c".to_owned()], &shared);
-
-        assert_eq!(headers["b"].label.as_deref(), Some("Front"));
-        assert!(same_curve(&headers["b"], &shared));
-        assert_eq!(headers["c"].label, None); // a BIOS header joins with no label
-        assert!(same_curve(&headers["c"], &shared));
     }
 
     #[test]

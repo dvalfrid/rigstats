@@ -248,6 +248,7 @@ pub(crate) fn spawn_tray_event_thread(
                 // as a background window and SetForegroundWindow would be refused.
                 #[cfg(windows)]
                 #[allow(unsafe_code)]
+                // SAFETY: plain values; user32 validates the window handle.
                 unsafe {
                     let _ = ::windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow(
                         ::windows::Win32::UI::WindowsAndMessaging::ASFW_ANY,

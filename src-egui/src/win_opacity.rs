@@ -12,7 +12,6 @@
 //! foreign handle is harmless to these calls.
 
 #![allow(unsafe_code)]
-#![warn(clippy::undocumented_unsafe_blocks)]
 
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, POINT, RECT};
@@ -233,10 +232,11 @@ pub fn disable_dwm_transitions(hwnd: isize) {
     if hwnd == 0 {
         return;
     }
-    let disabled: i32 = 1; // BOOL TRUE
-                           // SAFETY: `disabled` is a BOOL (i32) that lives across the call and its
-                           // exact size is passed, as DWMWA_TRANSITIONS_FORCEDISABLED expects; DWM
-                           // validates `hwnd` (module doc).
+    // BOOL TRUE
+    let disabled: i32 = 1;
+    // SAFETY: `disabled` is a BOOL (i32) that lives across the call and its
+    // exact size is passed, as DWMWA_TRANSITIONS_FORCEDISABLED expects; DWM
+    // validates `hwnd` (module doc).
     unsafe {
         let _ = DwmSetWindowAttribute(
             as_hwnd(hwnd),
