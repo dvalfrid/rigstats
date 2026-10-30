@@ -271,7 +271,7 @@ rig-dashboard/
 | `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
 | `win_opacity.rs` | Raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores a minimized window first), `force_repaint`, `find_hwnd` |
 | `win32_dark_mode.rs` | Dark-mode tray context menu via `uxtheme.dll` ordinals; `apply_titlebar_theme` (dark DWM title bar per dialog) |
-| `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, attach/detach/`is_attached`, parent-process liveness |
+| `win32_wallpaper.rs` | Progman/WorkerW discovery, `SetParent` reparenting, `attach`/`is_attached`, parent-process liveness |
 | `win32_behind.rs` | Always-Behind window layer: `apply_behind`, `prepare_for_drag` (called before a floating-panel drag so `SC_MOVE` works under `WS_EX_NOACTIVATE`), `keep_behind` |
 | `single_instance.rs` | `ensure_single_instance` — named kernel mutex (`CreateMutexW`) acquired first thing in `main()`; if already held, `FindWindowW` + `SetForegroundWindow` focuses the running instance's window and this process exits |
 | `panels/` | One file per panel — each exports `draw(ui, stats, opacity, th, sc, ...)` returning `egui::Rect`. Panels: `cpu`, `gpu`, `ram`, `net`, `disk`, `motherboard`, `process`, `gpu_processes`, `power`, `battery`, `clock`, `header` |

@@ -13,7 +13,6 @@ tokio = { version = "1", features = ["sync", "time", "net", "io-util", "rt", "ma
 # second for the process refresh cost ~1.2 % of a core, the work itself next
 # to nothing (#463). Off in both crates — Cargo unifies features.
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk", "network"] }
-hostname = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [target.'cfg(windows)'.dependencies]

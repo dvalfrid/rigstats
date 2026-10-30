@@ -268,14 +268,6 @@ impl Config {
             .find(|(m, _)| *m == id)
             .map(|(_, n)| *n)
     }
-
-    /// The Windows monitor id with number `n`, as it was written in the map.
-    pub fn screen_of(&self, n: u32) -> Option<&str> {
-        self.monitors
-            .iter()
-            .find(|(_, m)| *m == n)
-            .map(|(id, _)| id.as_str())
-    }
 }
 
 /// Monitor ids compared without regard to `/` vs `\` or case:
@@ -795,7 +787,10 @@ mod tests {
             Some(2)
         );
         assert_eq!(c.monitor_of(r"\\?\DISPLAY#OTHER"), None);
-        assert!(c.screen_of(0).is_some_and(|id| id.contains("uid256")));
+        assert!(c
+            .monitors
+            .iter()
+            .any(|(id, n)| *n == 0 && id.contains("uid256")));
     }
 
     #[test]

@@ -165,17 +165,6 @@ pub fn attach(hwnd: isize) -> bool {
     true
 }
 
-/// Detach the window from WorkerW, restoring it to a normal top-level window.
-pub fn detach(hwnd: isize) {
-    let Some(hwnd) = as_hwnd(hwnd) else {
-        return;
-    };
-    // SAFETY: hwnd is valid; no parent re-parents to the desktop.
-    unsafe {
-        let _ = SetParent(hwnd, None);
-    }
-}
-
 /// True when the window is currently a child of a `WorkerW`. The host polls this
 /// each tick and re-[`attach`]es if Explorer rebuilt the hierarchy underneath it.
 pub fn is_attached(hwnd: isize) -> bool {
@@ -255,24 +244,21 @@ mod tests {
     use super::*;
     use crate::test_win::TestWindow;
     use ::windows::Win32::UI::WindowsAndMessaging::{
-        GetAncestor, GetClassNameW, GetDesktopWindow, GA_PARENT as PARENT,
+        GetAncestor, GetClassNameW, GA_PARENT as PARENT,
     };
 
-    /// The window's real parent and its class.
-    fn parent_of(w: &TestWindow) -> (isize, String) {
+    /// The class of the window's real parent.
+    fn parent_class(w: &TestWindow) -> String {
         // SAFETY: a read-only query on the test's own window.
         let parent = unsafe { GetAncestor(w.hwnd, PARENT) };
         let mut buf = [0u16; 256];
         // SAFETY: `buf` is a writable buffer; its length is passed.
         let n = unsafe { GetClassNameW(parent, &mut buf) };
-        (
-            parent.0 as isize,
-            String::from_utf16_lossy(&buf[..n.max(0) as usize]),
-        )
+        String::from_utf16_lossy(&buf[..n.max(0) as usize])
     }
 
     #[test]
-    fn a_window_goes_into_the_wallpaper_and_back_out_where_it_was() {
+    fn a_window_goes_into_the_wallpaper_where_it_was_and_moves_there() {
         let w = TestWindow::hidden("workerw");
         let before = w.rect();
         assert!(!is_attached(w.raw()));
@@ -281,7 +267,7 @@ mod tests {
             eprintln!("no WorkerW here: attach not tested");
             return;
         }
-        assert_eq!(parent_of(&w).1, "WorkerW");
+        assert_eq!(parent_class(&w), "WorkerW");
         assert!(is_attached(w.raw()));
         // Same place on the screen as before.
         assert_eq!(w.rect(), before);
@@ -299,12 +285,6 @@ mod tests {
             (before.right - before.left, before.bottom - before.top)
         );
         assert_eq!(screen_pos(w.raw()), Some([-31001.0, -31500.0]));
-
-        detach(w.raw());
-        // SAFETY: no arguments.
-        let desktop = unsafe { GetDesktopWindow() }.0 as isize;
-        assert_eq!(parent_of(&w).0, desktop);
-        assert!(!is_attached(w.raw()));
     }
 
     #[test]
@@ -313,7 +293,6 @@ mod tests {
         assert!(!is_attached(0));
         assert_eq!(screen_pos(0), None);
         assert!(!move_to_screen(0, [0.0, 0.0]));
-        detach(0);
     }
 
     #[test]
