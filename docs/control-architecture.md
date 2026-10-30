@@ -694,9 +694,11 @@ What phase 2 (#189) shipped — AMD only; Intel is #209:
   built-ins' empty `cpu_limit: {}` — means the BIOS value. Raising limits
   above the BIOS (PBO territory) is out of scope.
 - **Verify** re-reads the PM table (±1 W/A). On the 9800X3D,
-  TransferTableToDram is sometimes rejected with 0xFD (prerequisite) after
-  LHM opens its own module instance; `RyzenSmu` resolves the table again and
-  retries.
+  TransferTableToDram is usually rejected once with 0xFD (prerequisite): 21 of
+  30 applies in one log, always succeeding on the second attempt.
+  `RyzenSmu` resolves the table again and retries, and logs only above two
+  attempts (#711). Why it goes stale is a hypothesis: LHM opening its own module
+  instance, or its ongoing reads, since it also happens long after start.
 - **Unsupported is not an error.** On a CPU without a verified layout the
   capability is unsupported (CPU tab hidden) and a stored `cpu_limit` is
   skipped with a log line, so a BIOS update that changes the table version

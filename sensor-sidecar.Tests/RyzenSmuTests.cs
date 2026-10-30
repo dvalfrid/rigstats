@@ -209,6 +209,31 @@ public class RyzenSmuTests
         Assert.Equal("update_pm_table resolve_pm_table update_pm_table resolve_pm_table update_pm_table read_pm_table", Fns(module));
     }
 
+    [Theory]
+    [InlineData(1, false)] // Two attempts: the usual case on the 9800X3D.
+    [InlineData(2, true)]
+    public void A_retried_transfer_is_logged_only_above_two_attempts(int rejections, bool logged)
+    {
+        var module = new FakeModule();
+        var smu = Open(module);
+        for (var i = 0; i < rejections; i++)
+            module.UpdateErrors.Enqueue(StatusInternalError);
+
+        var before = Console.Error;
+        var captured = new StringWriter();
+        Console.SetError(captured);
+        try
+        {
+            smu.ReadLimits();
+        }
+        finally
+        {
+            Console.SetError(before);
+        }
+
+        Assert.Equal(logged, captured.ToString().Contains("PM table transfer needed"));
+    }
+
     [Fact]
     public void ReadLimits_gives_up_after_five_rejected_transfers()
     {
