@@ -8,37 +8,17 @@
 
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use winapi::ctypes::c_void;
-use winapi::shared::minwindef::{BOOL, DWORD};
-use winapi::shared::windef::HWND;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::softpub::WINTRUST_ACTION_GENERIC_VERIFY_V2;
-use winapi::um::wincrypt::{CertNameToStrW, CERT_X500_NAME_STR, PCCERT_CONTEXT, X509_ASN_ENCODING};
-use winapi::um::winnt::HANDLE;
-use winapi::um::wintrust::{
-    WinVerifyTrust, WINTRUST_DATA, WINTRUST_FILE_INFO, WTD_CHOICE_FILE, WTD_REVOCATION_CHECK_NONE,
-    WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE, WTD_STATEACTION_VERIFY, WTD_UI_NONE,
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{HANDLE, HWND, INVALID_HANDLE_VALUE};
+use windows::Win32::Security::Cryptography::{
+    CertNameToStrW, CERT_X500_NAME_STR, X509_ASN_ENCODING,
 };
-
-/// The head of `CRYPT_PROVIDER_CERT` — only the certificate is read.
-#[repr(C)]
-struct ProviderCert {
-    cb_struct: DWORD,
-    cert: PCCERT_CONTEXT,
-}
-
-// Not in the `winapi` crate.
-#[link(name = "wintrust")]
-extern "system" {
-    fn WTHelperProvDataFromStateData(state: HANDLE) -> *mut c_void;
-    fn WTHelperGetProvSignerFromChain(
-        prov_data: *mut c_void,
-        signer_index: DWORD,
-        counter_signer: BOOL,
-        counter_signer_index: DWORD,
-    ) -> *mut c_void;
-    fn WTHelperGetProvCertFromChain(signer: *mut c_void, cert_index: DWORD) -> *mut ProviderCert;
-}
+use windows::Win32::Security::WinTrust::{
+    WTHelperGetProvCertFromChain, WTHelperGetProvSignerFromChain, WTHelperProvDataFromStateData,
+    WinVerifyTrust, WINTRUST_ACTION_GENERIC_VERIFY_V2, WINTRUST_DATA, WINTRUST_FILE_INFO,
+    WTD_CHOICE_FILE, WTD_REVOCATION_CHECK_NONE, WTD_REVOKE_NONE, WTD_STATEACTION_CLOSE,
+    WTD_STATEACTION_VERIFY, WTD_UI_NONE,
+};
 
 /// The subject (X.500 string, e.g. `CN=…, O=…, C=…`) of the certificate that
 /// signed `path`, when the file carries a valid, trusted Authenticode
@@ -54,23 +34,31 @@ pub fn verified_signer_subject(path: &Path) -> Result<String, String> {
         .chain(std::iter::once(0))
         .collect();
 
+    let mut file = WINTRUST_FILE_INFO {
+        cbStruct: std::mem::size_of::<WINTRUST_FILE_INFO>() as u32,
+        pcwszFilePath: PCWSTR(wide.as_ptr()),
+        ..Default::default()
+    };
+    let mut data = WINTRUST_DATA {
+        cbStruct: std::mem::size_of::<WINTRUST_DATA>() as u32,
+        dwUIChoice: WTD_UI_NONE,
+        fdwRevocationChecks: WTD_REVOKE_NONE,
+        dwUnionChoice: WTD_CHOICE_FILE,
+        dwStateAction: WTD_STATEACTION_VERIFY,
+        dwProvFlags: WTD_REVOCATION_CHECK_NONE,
+        ..Default::default()
+    };
+    data.Anonymous.pFile = &mut file;
+    let mut action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+    let data_ptr = std::ptr::addr_of_mut!(data);
+    // No window: WTD_UI_NONE, and INVALID_HANDLE_VALUE asks for no UI either.
+    let hwnd = HWND(INVALID_HANDLE_VALUE.0);
+
+    // SAFETY: `data` and `file` (and `wide`, the path they point at) outlive
+    // both calls; the verify call's state data is read only before the
+    // close call releases it.
     unsafe {
-        let mut file: WINTRUST_FILE_INFO = std::mem::zeroed();
-        file.cbStruct = std::mem::size_of::<WINTRUST_FILE_INFO>() as DWORD;
-        file.pcwszFilePath = wide.as_ptr();
-
-        let mut data: WINTRUST_DATA = std::mem::zeroed();
-        data.cbStruct = std::mem::size_of::<WINTRUST_DATA>() as DWORD;
-        data.dwUIChoice = WTD_UI_NONE;
-        data.fdwRevocationChecks = WTD_REVOKE_NONE;
-        data.dwUnionChoice = WTD_CHOICE_FILE;
-        *data.u.pFile_mut() = &mut file;
-        data.dwStateAction = WTD_STATEACTION_VERIFY;
-        data.dwProvFlags = WTD_REVOCATION_CHECK_NONE;
-
-        let mut action = WINTRUST_ACTION_GENERIC_VERIFY_V2;
-        let data_ptr = std::ptr::addr_of_mut!(data);
-        let status = WinVerifyTrust(INVALID_HANDLE_VALUE as HWND, &mut action, data_ptr.cast());
+        let status = WinVerifyTrust(hwnd, &mut action, data_ptr.cast());
         let subject = if status == 0 {
             signer_subject((*data_ptr).hWVTStateData)
         } else {
@@ -79,7 +67,7 @@ pub fn verified_signer_subject(path: &Path) -> Result<String, String> {
 
         // The state data is allocated whatever the verdict.
         (*data_ptr).dwStateAction = WTD_STATEACTION_CLOSE;
-        WinVerifyTrust(INVALID_HANDLE_VALUE as HWND, &mut action, data_ptr.cast());
+        WinVerifyTrust(hwnd, &mut action, data_ptr.cast());
 
         if status != 0 {
             return Err(format!(
@@ -94,46 +82,38 @@ pub fn verified_signer_subject(path: &Path) -> Result<String, String> {
 /// # Safety
 /// `state` must be the `hWVTStateData` of a verify call not yet closed.
 unsafe fn signer_subject(state: HANDLE) -> Option<String> {
-    let prov_data = WTHelperProvDataFromStateData(state);
-    if prov_data.is_null() {
-        return None;
+    // SAFETY: every pointer is checked for null before it is read; all of
+    // them belong to `state`, which the caller keeps open.
+    unsafe {
+        let prov_data = WTHelperProvDataFromStateData(state);
+        if prov_data.is_null() {
+            return None;
+        }
+        let signer = WTHelperGetProvSignerFromChain(prov_data, 0, false, 0);
+        if signer.is_null() {
+            return None;
+        }
+        // Index 0 is the signing certificate; the rest is its chain.
+        let provider_cert = WTHelperGetProvCertFromChain(signer, 0);
+        if provider_cert.is_null() || (*provider_cert).pCert.is_null() {
+            return None;
+        }
+        let info = (*(*provider_cert).pCert).pCertInfo;
+        if info.is_null() {
+            return None;
+        }
+        let name = std::ptr::addr_of!((*info).Subject);
+        let len = CertNameToStrW(X509_ASN_ENCODING, name, CERT_X500_NAME_STR, None);
+        if len <= 1 {
+            return None;
+        }
+        let mut buf = vec![0u16; len as usize];
+        let written = CertNameToStrW(X509_ASN_ENCODING, name, CERT_X500_NAME_STR, Some(&mut buf));
+        if written <= 1 {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&buf[..written as usize - 1]))
     }
-    let signer = WTHelperGetProvSignerFromChain(prov_data, 0, 0, 0);
-    if signer.is_null() {
-        return None;
-    }
-    // Index 0 is the signing certificate; the rest is its chain.
-    let provider_cert = WTHelperGetProvCertFromChain(signer, 0);
-    if provider_cert.is_null() || (*provider_cert).cert.is_null() {
-        return None;
-    }
-    let info = (*(*provider_cert).cert).pCertInfo;
-    if info.is_null() {
-        return None;
-    }
-    let name = std::ptr::addr_of_mut!((*info).Subject);
-    let len = CertNameToStrW(
-        X509_ASN_ENCODING,
-        name,
-        CERT_X500_NAME_STR,
-        std::ptr::null_mut(),
-        0,
-    );
-    if len <= 1 {
-        return None;
-    }
-    let mut buf = vec![0u16; len as usize];
-    let written = CertNameToStrW(
-        X509_ASN_ENCODING,
-        name,
-        CERT_X500_NAME_STR,
-        buf.as_mut_ptr(),
-        len,
-    );
-    if written <= 1 {
-        return None;
-    }
-    Some(String::from_utf16_lossy(&buf[..written as usize - 1]))
 }
 
 #[cfg(test)]
