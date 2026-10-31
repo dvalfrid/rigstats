@@ -25,9 +25,9 @@
 
 	<Program_Info>
 		<Program_Name>RIGStats</Program_Name>
-		<Program_Version>1.52.0</Program_Version>
+		<Program_Version>1.53.0</Program_Version>
 		<Program_Release_Month>10</Program_Release_Month>
-		<Program_Release_Day>27</Program_Release_Day>
+		<Program_Release_Day>31</Program_Release_Day>
 		<Program_Release_Year>2026</Program_Release_Year>
 		<Program_Cost_Dollars>0</Program_Cost_Dollars>
 		<Program_Cost_Other_Code>US$</Program_Cost_Other_Code>
@@ -53,7 +53,7 @@
 		<Character_Set>Unicode</Character_Set>
 		<Program_Categories>System Utilities::System Information</Program_Categories>
 		<Program_Specific_Category>System Info</Program_Specific_Category>
-		<Program_Change_Info>dashboard: a compact layout for every panel; dashboard: a compact style for the CPU, GPU, RAM and Network panels; dashboard: floating panels, their size and positions per Control Center profile; settings: change or turn off the global shortcuts; settings: choose the space between panels; settings: shortcuts for the tray menu's actions; settings: turn off the profile-switch notifications; dashboard: panel text can no longer be selected; dashboard: white, larger values in the compact panels; gpu: Intel GPUs show their load; lighting: only the user at the screen's Dynamic Lighting setting counts; log: bound rigstats-debug.log while running and limit the gpu change line; motherboard: compact panel drops VCORE on boards without a Vcore rail; sidecar: SATA and USB drive temperatures are read; wallpaper: floating panels no longer leave a dark empty window; wallpaper: log a WorkerW retry instead of a false attach failure</Program_Change_Info>
+		<Program_Change_Info>about: a small coffee-cup icon by the Support link; about: a Support link to Buy Me a Coffee; lighting: Corsair M65 RGB Ultra and MM700 (V2 protocol), not yet verified; peripherals: battery of the SteelSeries Arctis Nova Pro Wireless; wallpaper: floating panels in the desktop background; app: window titles say RIGStats; build: a release candidate's app and service name the RC, not the last release; clock: centre the update badge in the compact layout and draw its arrow; control: a preview ends the retry before it;  cap and check saved profiles; control: say so when a change can't be sent to the service; display: the dashboard follows its screen when a game changes the resolution; lighting: say on the device's row when an effect shows as a steady colour; lighting: write the profile's lighting again after sleep; net: skip adapter filter bindings when picking the interface; roadmap: read gh output as UTF-8 in the sync script; security: load vendor DLLs from System32 only, and check the pipe client's kernel image path; service: key file born restricted, dump folder cleaned, HID handle not leaked; sessions: an OS lock on the sessions index, never taken over; settings: keep a settings file that doesn't parse, and every field that does; wallpaper: the dashboard in the same place in every window layer</Program_Change_Info>
 		<File_Size_Bytes>37497168</File_Size_Bytes>
 		<File_Size_K>36618</File_Size_K>
 		<File_Size_MB>36</File_Size_MB>
@@ -84,7 +84,7 @@
 			<Application_XML_File_URL>https://rigstats.app/pad.xml</Application_XML_File_URL>
 		</Application_URLs>
 		<Download_URLs>
-			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.52.0/RIGStats_1.52.0_x64-setup.exe</Primary_Download_URL>
+			<Primary_Download_URL>https://github.com/dvalfrid/rigstats/releases/download/v1.53.0/RIGStats_1.53.0_x64-setup.exe</Primary_Download_URL>
 		</Download_URLs>
 	</Web_Info>
 
