@@ -937,7 +937,10 @@ controller, not one board:
   a laptop keyboard) otherwise shows its own effect until the next apply.
   Only the lighting — the onboard profiles are saved on the devices; a
   device not awake yet gets it through the 5-minute retry (#489); skipped
-  while a preview is pending.
+  while a preview is pending. Not enough on the G14 (Modern Standby, seen on
+  1.53.0-rc.5): the write is accepted and logged 3 s after display-on, and the
+  keyboard still doesn't show the colour; a profile switch 24 s later did.
+  The cause is open (#720).
 - **A profile without a lighting part leaves the lights alone**, so the
   built-ins change nobody's lighting. The controller can't report its
   effect: `Verify` trusts a successful write, `Capture` returns what the
