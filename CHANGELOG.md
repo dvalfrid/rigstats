@@ -8,6 +8,36 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.53.0](https://github.com/dvalfrid/rigstats/compare/v1.52.0...v1.53.0) (2026-10-31)
+
+
+### Features
+
+* **about:** a small coffee-cup icon by the Support link ([#651](https://github.com/dvalfrid/rigstats/issues/651)) ([fb3be0d](https://github.com/dvalfrid/rigstats/commit/fb3be0d0a69f39bbf14cac64d9fd7e3006a6b1a2)), closes [#650](https://github.com/dvalfrid/rigstats/issues/650)
+* **about:** a Support link to Buy Me a Coffee ([#642](https://github.com/dvalfrid/rigstats/issues/642)) ([78cfd8d](https://github.com/dvalfrid/rigstats/commit/78cfd8d72b3bb1ce01c4ac8a7af4d75acc204cfc)), closes [#631](https://github.com/dvalfrid/rigstats/issues/631)
+* **lighting:** Corsair M65 RGB Ultra and MM700 (V2 protocol), not yet verified ([#634](https://github.com/dvalfrid/rigstats/issues/634)) ([77063f5](https://github.com/dvalfrid/rigstats/commit/77063f53546e67985dcf18be7770d24f159c7bef))
+* **peripherals:** battery of the SteelSeries Arctis Nova Pro Wireless ([#623](https://github.com/dvalfrid/rigstats/issues/623)) ([239df3f](https://github.com/dvalfrid/rigstats/commit/239df3f2c0a55363616ce59568abc5fd5eb729d8)), closes [#621](https://github.com/dvalfrid/rigstats/issues/621)
+* **wallpaper:** floating panels in the desktop background ([#662](https://github.com/dvalfrid/rigstats/issues/662)) ([12a1791](https://github.com/dvalfrid/rigstats/commit/12a179106c32bdf2a05a50244a0a41213b77a4d7)), closes [#170](https://github.com/dvalfrid/rigstats/issues/170)
+
+
+### Bug Fixes
+
+* **app:** window titles say RIGStats ([#644](https://github.com/dvalfrid/rigstats/issues/644)) ([55f739f](https://github.com/dvalfrid/rigstats/commit/55f739fe70a98afb6f1611a5b09fd30f8a6e7841)), closes [#643](https://github.com/dvalfrid/rigstats/issues/643)
+* **build:** a release candidate's app and service name the RC, not the last release ([#694](https://github.com/dvalfrid/rigstats/issues/694)) ([ed967c4](https://github.com/dvalfrid/rigstats/commit/ed967c41611d72027d26af259387771179c8d47c))
+* **clock:** centre the update badge in the compact layout and draw its arrow ([#686](https://github.com/dvalfrid/rigstats/issues/686)) ([70e10c1](https://github.com/dvalfrid/rigstats/commit/70e10c1a84d0b70047c10f46a51617f62641eaf2)), closes [#685](https://github.com/dvalfrid/rigstats/issues/685)
+* **control:** a preview ends the retry before it; cap and check saved profiles ([#684](https://github.com/dvalfrid/rigstats/issues/684)) ([62312ed](https://github.com/dvalfrid/rigstats/commit/62312eda81d396901f2b05bd658ea00105a2fbac)), closes [#678](https://github.com/dvalfrid/rigstats/issues/678)
+* **control:** say so when a change can't be sent to the service ([#683](https://github.com/dvalfrid/rigstats/issues/683)) ([bd32a23](https://github.com/dvalfrid/rigstats/commit/bd32a233952f5ed7d84a9724ef17f2e032eecea6)), closes [#677](https://github.com/dvalfrid/rigstats/issues/677)
+* **display:** the dashboard follows its screen when a game changes the resolution ([#691](https://github.com/dvalfrid/rigstats/issues/691)) ([7891f41](https://github.com/dvalfrid/rigstats/commit/7891f417c1f168faa3c5610577ba6eb87b4fddf9)), closes [#690](https://github.com/dvalfrid/rigstats/issues/690)
+* **lighting:** say on the device's row when an effect shows as a steady colour ([#660](https://github.com/dvalfrid/rigstats/issues/660)) ([4362494](https://github.com/dvalfrid/rigstats/commit/4362494ec5081296ab1d138c1af1107922b35103)), closes [#659](https://github.com/dvalfrid/rigstats/issues/659)
+* **lighting:** write the profile's lighting again after sleep ([#672](https://github.com/dvalfrid/rigstats/issues/672)) ([78b9198](https://github.com/dvalfrid/rigstats/commit/78b919876cd44b8541caa9cce3479a3bb681e10b)), closes [#670](https://github.com/dvalfrid/rigstats/issues/670)
+* **net:** skip adapter filter bindings when picking the interface ([#669](https://github.com/dvalfrid/rigstats/issues/669)) ([981f479](https://github.com/dvalfrid/rigstats/commit/981f479a8573aecae739dbdf0867731653bf09c8)), closes [#668](https://github.com/dvalfrid/rigstats/issues/668)
+* **roadmap:** read gh output as UTF-8 in the sync script ([#654](https://github.com/dvalfrid/rigstats/issues/654)) ([f2a4827](https://github.com/dvalfrid/rigstats/commit/f2a48279b09d8843a9cdda26547e299c7155702e)), closes [#653](https://github.com/dvalfrid/rigstats/issues/653)
+* **security:** load vendor DLLs from System32 only, and check the pipe client's kernel image path ([#681](https://github.com/dvalfrid/rigstats/issues/681)) ([bb18d84](https://github.com/dvalfrid/rigstats/commit/bb18d8408a93a41e95f83b36f7b8531120ee3d8e)), closes [#675](https://github.com/dvalfrid/rigstats/issues/675)
+* **service:** key file born restricted, dump folder cleaned, HID handle not leaked ([#692](https://github.com/dvalfrid/rigstats/issues/692)) ([e17274b](https://github.com/dvalfrid/rigstats/commit/e17274b2170c5df0bac36e30f310051fa0ca4d31))
+* **sessions:** an OS lock on the sessions index, never taken over ([#699](https://github.com/dvalfrid/rigstats/issues/699)) ([5a20a21](https://github.com/dvalfrid/rigstats/commit/5a20a21023cea6f5c9d7d4f1f1ae0ebf28ca9a84))
+* **settings:** keep a settings file that doesn't parse, and every field that does ([#682](https://github.com/dvalfrid/rigstats/issues/682)) ([d7bf6c2](https://github.com/dvalfrid/rigstats/commit/d7bf6c20ea167aed04d8199de82ff506bc4703eb)), closes [#676](https://github.com/dvalfrid/rigstats/issues/676)
+* **wallpaper:** the dashboard in the same place in every window layer ([#667](https://github.com/dvalfrid/rigstats/issues/667)) ([d26f0ee](https://github.com/dvalfrid/rigstats/commit/d26f0eea1cbcaf0db92d88274ef9ca16abaaf272))
+
 ## [1.52.0](https://github.com/dvalfrid/rigstats/compare/v1.51.0...v1.52.0) (2026-10-27)
 
 
