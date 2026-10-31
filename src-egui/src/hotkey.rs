@@ -714,7 +714,9 @@ mod win32_tests {
     }
 
     /// Whether another thread could take `chord` now — it can't while the
-    /// hotkey thread holds it.
+    /// hotkey thread holds it. It takes the chord for a moment when it's free,
+    /// so never ask while the thread may be registering: the thread would find
+    /// the chord taken. `fires` says when registering is over.
     fn free(chord: Shortcut) -> bool {
         let flags = HOT_KEY_MODIFIERS(mod_flags(chord));
         // SAFETY: plain values; registered to this thread and released at once.
@@ -737,6 +739,19 @@ mod win32_tests {
         }
     }
 
+    /// Posts a WM_HOTKEY with the overlay's id and waits for its event. The
+    /// thread handles messages in order, so the event also says that what was
+    /// asked of it before this has been done.
+    fn fires(rx: &std::sync::mpsc::Receiver<HotkeyEvent>) {
+        let thread = THREAD_ID.load(Ordering::SeqCst);
+        // SAFETY: plain values; the hotkey thread's id.
+        unsafe { PostThreadMessageW(thread, HOTKEY, WPARAM(1), LPARAM(0)) }.unwrap();
+        assert_eq!(
+            rx.recv_timeout(Duration::from_secs(5)),
+            Ok(HotkeyEvent::ToggleOverlay)
+        );
+    }
+
     /// The whole thread: registering, a chord firing, a chord another
     /// program holds, pausing. Chords no one uses (F21–F23) keep it off the
     /// user's own; the thread lives on for the rest of the test run, holding
@@ -757,16 +772,13 @@ mod win32_tests {
         std::fs::create_dir_all(&dir).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
         let _thread = spawn(dir.clone(), shortcuts.clone(), tx, egui::Context::default());
-        wait_until("the chord is held", || !free(overlay));
+        wait_until("the thread has a queue", || {
+            THREAD_ID.load(Ordering::SeqCst) != 0
+        });
 
-        // A WM_HOTKEY with the overlay's id raises its event.
-        let thread = THREAD_ID.load(Ordering::SeqCst);
-        // SAFETY: plain values; the hotkey thread's id.
-        unsafe { PostThreadMessageW(thread, HOTKEY, WPARAM(1), LPARAM(0)) }.unwrap();
-        assert_eq!(
-            rx.recv_timeout(Duration::from_secs(5)),
-            Ok(HotkeyEvent::ToggleOverlay)
-        );
+        // A WM_HOTKEY with the overlay's id raises its event, and it holds it.
+        fires(&rx);
+        assert!(!free(overlay));
 
         // A chord this thread holds is "taken" for the hotkey thread.
         // SAFETY: plain values; released below on this thread.
@@ -783,7 +795,8 @@ mod win32_tests {
         set_paused(true);
         wait_until("paused frees the chord", || free(overlay));
         set_paused(false);
-        wait_until("resumed holds it again", || !free(overlay));
+        fires(&rx);
+        assert!(!free(overlay));
 
         // Hold nothing for the rest of the run.
         shortcuts.set(Action::Overlay, None);

@@ -131,9 +131,11 @@ mod tests {
     }
 
     /// Two windows, the first on top of the second (the newer is on top).
+    /// Hidden, because a visible one Windows may activate when another test's
+    /// window closes or takes the foreground, which lifts it back to the top.
     fn pair(name: &str) -> (TestWindow, TestWindow) {
-        let other = TestWindow::visible(&format!("{name}-other"));
-        let w = TestWindow::visible(name);
+        let other = TestWindow::hidden(&format!("{name}-other"));
+        let w = TestWindow::hidden(name);
         assert!(is_below(&other, &w), "a new window starts on top");
         (w, other)
     }
