@@ -25,3 +25,5 @@
 [rigstats-control] ASUS ACPI: DSTS 0x00110032 arg 1 failed: error 1
 [rigstats-control] ASUS ACPI: DSTS 0x00110032 arg 2 failed: error 1
 [rigstats-control] ASUS ACPI curve 0x00110032 (arg 0 Balanced, 1 Silent, 2 Turbo): [0] fail [1] fail [2] fail
+# Mode 3 reported, from the log of 1.53.0-rc.5
+[rigstats-control] ASUS ACPI DSTS: 0x00120075=0x00010003 0x00110019=fail 0x00110013=0x00010000 0x00110014=0x00010000 0x00110031=fail 0x001200A3=0x00010000 0x001200A0=0x00010000 0x001200C1=0x00010000 0x001200B0=fail 0x001200B1=fail 0x001200C0=0x00010000 0x001200C2=0x00010000 0x00120099=0x00010050 0x00120098=0x00010000
