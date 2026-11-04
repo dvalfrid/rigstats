@@ -11,23 +11,33 @@ param([switch]$Json, [switch]$UpdateBaseline)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $baselinePath = Join-Path $PSScriptRoot 'openrgb-asus-baseline.json'
-$rawBase = 'https://gitlab.com/CalcProgrammer1/OpenRGB/-/raw/master/Controllers/'
-$files = @(
-    'AsusAuraUSBController/AsusAuraUSBControllerDetect.cpp'
-    'AsusMonitorController/AsusMonitorControllerDetect.cpp'
-    'AsusAuraCoreController/AsusAuraCoreController/AsusAuraCoreControllerDetect.cpp'
-    'AsusAuraCoreController/AsusAuraCoreLaptopController/AsusAuraCoreLaptopControllerDetect.cpp'
-    'AsusLegacyUSBController/AsusLegacyUSBControllerDetect.cpp'
+$rawBase = 'https://gitlab.com/CalcProgrammer1/OpenRGB/-/raw/master/'
+$treeApi = 'https://gitlab.com/api/v4/projects/CalcProgrammer1%2FOpenRGB/repository/tree'
+# OpenRGB's USB ASUS controller folders. The files inside are listed from
+# GitLab rather than named here: OpenRGB moves and splits them (#722).
+$folders = @(
+    'Controllers/AsusAuraUSBController'
+    'Controllers/AsusMonitorController'
+    'Controllers/AsusAuraCoreController'
+    'Controllers/AsusLegacyUSBController'
 )
+$paths = foreach ($folder in $folders) {
+    for ($page = 1; ; $page++) {
+        # Assigned first: @(Invoke-RestMethod ...) wraps the whole JSON array as one item.
+        $items = Invoke-RestMethod "${treeApi}?path=$folder&recursive=true&per_page=100&page=$page"
+        $items = @($items)
+        $items | Where-Object type -eq 'blob' | ForEach-Object path
+        if ($items.Count -lt 100) { break }
+    }
+}
+$files = @($paths | Where-Object { $_ -like '*Detect.cpp' })
 # Headers that define product ids the detectors use (mouse ids live here).
-$headers = @(
-    'AsusAuraUSBController/AsusAuraMouseController/AsusAuraMouseDevices.h'
-    'AsusAuraCoreController/AsusAuraCoreLaptopController/AsusAuraCoreLaptopDevices.h'
-)
+$headers = @($paths | Where-Object { $_ -like '*Devices.h' })
+if ($files.Count -eq 0) { throw "No *Detect.cpp found under $($folders -join ', ') - did OpenRGB move them?" }
 
 # OpenRGB detector -> the RIGStats driver for that protocol family, if any.
 $drivers = @{
-    'DetectAsusAuraTUFUSBKeyboard'  = 'AsusKeyboardDevice.Model (keyboard table)'
+    'DetectAsusAuraUSBKeyboard'     = 'AsusKeyboardDevice.Model (keyboard table)'
     'DetectAsusMonitorControllers'  = 'AsusMonitorDevice.Model (monitor table)'
     'DetectAsusAuraUSBMotherboards' = 'AuraUsb.Family (Aura USB controller)'
     'DetectAsusAuraUSBAddressable'  = 'AuraUsb.Family (Aura USB controller)'
