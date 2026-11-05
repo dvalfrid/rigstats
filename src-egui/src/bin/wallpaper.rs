@@ -74,6 +74,10 @@ struct WallpaperHost {
     /// Shared with `poll_loop`; refreshed from settings so a GPU picked in the
     /// main app applies here without a relaunch.
     preferred_gpu: Arc<Mutex<Option<String>>>,
+    /// The settings `poll_loop` reads, refreshed with the host's own, so a
+    /// panel shown after start gets its data (NOW PLAYING is read only while
+    /// shown, #718) and a ping change applies without a relaunch.
+    settings: Arc<Mutex<settings::Settings>>,
     /// The windows the host shows in WorkerW: the one dashboard, or each
     /// visible floating panel (#170). The host's own window is a transparent
     /// 1x1 px anchor either way.
@@ -426,6 +430,7 @@ impl WallpaperHost {
         // Picked from the main app's tray "GPU" submenu or Settings — the
         // only ways to change it while the dashboard is click-through.
         *self.preferred_gpu.lock_safe() = s.preferred_gpu.clone();
+        *self.settings.lock_safe() = s.clone();
         // The dashboard window fits its height to the content each frame.
         self.runtime.apply_settings(&s);
         // Read by every window each frame.
@@ -792,6 +797,7 @@ fn main() {
                 last_parent_check: Instant::now(),
                 gpu_lost,
                 preferred_gpu: preferred_gpu_arc,
+                settings: settings_shared,
                 floating,
                 panel_scale,
                 windows,
