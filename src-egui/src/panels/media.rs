@@ -141,10 +141,12 @@ fn cover_box(
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(side), Sense::hover());
     let radius = CornerRadius::same((side * 0.06).round() as u8);
     match texture {
+        // Opaque whatever the panels' opacity: in the desktop wallpaper the
+        // panels are often almost see-through, and a picture at that opacity
+        // is all but gone. The quiet square in its place follows it.
         Some(tex) => {
             egui::Image::new(tex)
                 .corner_radius(radius)
-                .tint(Color32::WHITE.gamma_multiply(opacity))
                 .paint_at(ui, rect);
         }
         None => {
