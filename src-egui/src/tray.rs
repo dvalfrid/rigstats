@@ -506,6 +506,7 @@ pub fn panel_label(key: &str) -> &'static str {
         "power" => "System Power",
         "battery" => "Battery",
         "peripherals" => "Peripherals",
+        "media" => "Now Playing",
         _ => "Panel",
     }
 }

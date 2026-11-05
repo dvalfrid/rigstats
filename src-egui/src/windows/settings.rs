@@ -35,6 +35,7 @@ pub(crate) const ALL_PANELS: &[(&str, &str)] = &[
     ("power", "System Power"),
     ("battery", "Battery"),
     ("peripherals", "Peripherals"),
+    ("media", "Now Playing"),
 ];
 
 pub(crate) const ALL_PROFILES: &[(&str, &str)] = &[

@@ -420,6 +420,14 @@ impl RigStatsApp {
                                         self.runtime.thresholds.battery_power.1,
                                         self.runtime.is_compact("battery"),
                                     ),
+                                    "media" => panels::media::draw(
+                                        ui,
+                                        stats,
+                                        content_opacity,
+                                        &app_theme,
+                                        scale,
+                                        self.runtime.is_compact("media"),
+                                    ),
                                     _ => egui::Rect::NOTHING,
                                 },
                             );

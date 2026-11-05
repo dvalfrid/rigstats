@@ -5,6 +5,7 @@ pub mod disk;
 pub mod gpu;
 pub mod gpu_processes;
 pub mod header;
+pub mod media;
 pub mod motherboard;
 pub mod net;
 pub mod peripherals;
@@ -14,7 +15,7 @@ pub mod ram;
 
 /// The panels with a compact layout (#596, every panel since #604), offered
 /// Full / Compact in the Control Center's Dashboard page.
-pub const COMPACT_PANELS: [&str; 13] = [
+pub const COMPACT_PANELS: [&str; 14] = [
     "header",
     "clock",
     "cpu",
@@ -28,6 +29,7 @@ pub const COMPACT_PANELS: [&str; 13] = [
     "power",
     "battery",
     "peripherals",
+    "media",
 ];
 
 /// Compact panels are one height (#604): the tallest compact panel's own
@@ -549,6 +551,13 @@ mod tests {
                 "peripherals",
                 draw_at(&ctx, w, |ui| {
                     super::peripherals::draw(ui, &s, 1.0, &th, sc, 20, 10, compact)
+                }),
+                w,
+            ),
+            (
+                "media",
+                draw_at(&ctx, w, |ui| {
+                    super::media::draw(ui, &s, 1.0, &th, sc, compact)
                 }),
                 w,
             ),

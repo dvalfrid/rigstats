@@ -13,10 +13,5 @@ never shows up again; replace it for the next one. Everything inside this
 comment is ignored. See "Release routine" in docs/release.md.
 -->
 
-# 1.53.0
-- **Floating panels in the desktop background** — choose the Desktop wallpaper layer with floating panels on, and every panel sits in the desktop background where you placed it: see-through like the panels, behind every window, and still there after Win+D.
-- **The dashboard stays put in the desktop background** — place it in the Normal layer and switch to Desktop wallpaper: it now covers exactly the same spot, where its panels used to sit a little higher.
-- **Corsair lighting, first devices** — the Corsair M65 RGB Ultra (by cable) and the MM700 mousepad can follow your Control Center lighting: one colour or off (breathing and colour cycle show as that colour, and the Lighting tab says so on such devices), back on their own lighting when RIGStats stops, and left alone while iCUE runs. Tested by a beta tester on both devices.
-- **SteelSeries Arctis Nova Pro Wireless battery** — the headset's battery level and charging, read from its base station, now show in the Peripherals panel and the tray card. Tested by a beta tester: the level matches SteelSeries GG.
-- **The dashboard stays on its screen while you game** — a game in fullscreen at a lower resolution than your main screen (like Spore) moves a screen beside it, and RIGStats used to vanish from that screen until the game ended. It now follows the screen, in every layer including the desktop background.
-- **Lighting comes back after sleep** — when the PC wakes and the screen comes on, your profile's lighting is written again, so a keyboard that lost its colour in sleep (like the ROG Azoth X on the Omni receiver, or a laptop keyboard) no longer needs a profile switch.
+# 1.54.0
+- **Now Playing panel** — a new optional panel shows what's playing: the cover, title, artist and album, and whether it plays or is paused, from Spotify, your browser or any player that tells Windows what it plays. No account or setup; turn it on in the Control Center's Dashboard page. What you listen to stays on screen: it isn't logged, recorded or put in a diagnostics file.
