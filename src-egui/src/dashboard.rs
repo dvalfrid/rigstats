@@ -318,6 +318,16 @@ impl DashboardView<'_> {
                     self.compact("battery"),
                 );
             }
+            "media" => {
+                let _ = panels::media::draw(
+                    ui,
+                    self.latest,
+                    opacity,
+                    self.app_theme,
+                    sc,
+                    self.compact("media"),
+                );
+            }
             _ => {}
         }
         new_pref
@@ -869,7 +879,11 @@ mod tests {
     fn every_compact_panel_is_one_height_at_every_scale() {
         for sc in [0.4, 0.7, 1.0, 1.2, 1.7, 2.0] {
             let frames = portrait_compact_frames(sc);
-            assert_eq!(frames.len(), 13, "at {sc}: {frames:?}");
+            assert_eq!(
+                frames.len(),
+                panels::COMPACT_PANELS.len(),
+                "at {sc}: {frames:?}"
+            );
             let h = frames.iter().map(|f| f.height()).fold(0.0, f32::max);
             for f in &frames {
                 assert!(

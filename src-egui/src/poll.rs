@@ -139,6 +139,9 @@ pub struct PollStats {
     // microphone, `Some(muted)` — the header's glyph and the tray's row,
     // polled here so the wallpaper host shows it too
     pub microphone: Option<bool>,
+    // What is playing (NOW PLAYING panel, #718): read only while that panel
+    // shows, never in Light mode, never logged or recorded
+    pub media: Option<rigstats_backend::media::NowPlaying>,
     // System
     pub uptime_secs: u64,
     pub hostname: String,
@@ -451,6 +454,7 @@ pub async fn poll_loop(
     let mut gpu_shown: Option<lhm::GpuShown> = None;
     // ...at most 10 times an hour, in case a reading flaps (#563).
     let mut gpu_shown_limit = debug::LineLimit::new(10, 3600);
+    let media_watcher = rigstats_backend::media::Watcher::new();
 
     loop {
         let light = mode.get() == PollMode::Light;
@@ -728,18 +732,29 @@ pub async fn poll_loop(
             }
         }
 
-        let (display_model_name, microphone_device) = {
+        let (display_model_name, microphone_device, media_shown) = {
             let s = settings_arc.lock_safe();
             let name = if s.model_name.is_empty() {
                 model_name.clone()
             } else {
                 s.model_name.clone()
             };
-            (name, s.microphone_device.clone())
+            (
+                name,
+                s.microphone_device.clone(),
+                s.visible_panels.iter().any(|p| p == "media"),
+            )
         };
         // One cheap COM read per tick, so a mute made anywhere shows within
         // a second (#425).
         let microphone = microphone::current(microphone_device.as_deref()).map(|m| m.muted);
+        // Its own thread reads; this only takes the latest. Not reading lets
+        // that thread end, so nothing runs while the panel is hidden.
+        let media = if media_shown && !light {
+            media_watcher.latest()
+        } else {
+            None
+        };
 
         let stats = PollStats {
             cpu_load,
@@ -803,6 +818,7 @@ pub async fn poll_loop(
                 .unwrap_or_default(),
             service_profile: lhm_data.as_ref().and_then(|l| l.active_profile.clone()),
             microphone,
+            media,
             uptime_secs,
             hostname: hostname.clone(),
             cpu_model: cpu_model.clone(),
