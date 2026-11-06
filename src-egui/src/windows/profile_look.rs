@@ -439,6 +439,36 @@ pub fn dashboard_page(
                         look.spectrum_fps = fps;
                     }
                 });
+                if look.spectrum_fps > 0 {
+                    g.row("Style", None, |ui| {
+                        let mut style = look.spectrum_style;
+                        ui_kit::dropdown(ui, "spectrum_style", style.label(), |ui| {
+                            for s in rigstats_backend::settings::SpectrumStyle::ALL {
+                                ui.selectable_value(&mut style, s, s.label());
+                            }
+                        });
+                        look.spectrum_style = style;
+                    });
+                    g.row(
+                        "Colour",
+                        Some("LED segments are always green, yellow and red"),
+                        |ui| {
+                            use rigstats_backend::settings::SpectrumColor;
+                            let mut color = look.spectrum_color;
+                            if ui_kit::segmented(
+                                ui,
+                                dc,
+                                &mut color,
+                                &[
+                                    (SpectrumColor::Accent, "Accent"),
+                                    (SpectrumColor::Gradient, "Gradient"),
+                                ],
+                            ) {
+                                look.spectrum_color = color;
+                            }
+                        },
+                    );
+                }
             },
         );
     }
