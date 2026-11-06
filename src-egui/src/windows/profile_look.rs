@@ -419,6 +419,29 @@ pub fn dashboard_page(
             );
         },
     );
+    if look.visible_panels.iter().any(|k| k == "media") {
+        ui_kit::group(
+            ui,
+            dc,
+            Some("Now Playing"),
+            Some(
+                "The spectrum shows the sound the PC plays: music, but also a game, a call or a notification. It draws only while something plays and the panel is shown in full. Smooth costs the most; leave it off in a profile for gaming.",
+            ),
+            |g| {
+                g.row("Spectrum", None, |ui| {
+                    let mut fps = look.spectrum_fps;
+                    if ui_kit::segmented(
+                        ui,
+                        dc,
+                        &mut fps,
+                        &[(0, "Off"), (10, "Calm"), (30, "Smooth")],
+                    ) {
+                        look.spectrum_fps = fps;
+                    }
+                });
+            },
+        );
+    }
     editor.preview(link);
 }
 

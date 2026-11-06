@@ -1,6 +1,7 @@
 //! NOW PLAYING (#718): the cover picture, title, artist, album and whether it
 //! plays, from `PollStats::media` (Windows' current media session, read in
-//! `rigstats_backend::media`).
+//! `rigstats_backend::media`). Below them, when the profile turns it on, a
+//! spectrum of what the PC plays (#719, `rigstats_backend::spectrum`).
 
 use egui::{Color32, CornerRadius, RichText, Sense, TextureHandle, Ui, Vec2};
 
@@ -23,6 +24,9 @@ pub fn draw(
     // The compact layout: a smaller cover beside the title and artist, no
     // album or state row.
     compact: bool,
+    // The spectrum's frames a second (#719, the profile's look); 0 = none.
+    // Not in the compact layout, which has no room for it.
+    spectrum_fps: u8,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         if !compact {
@@ -71,7 +75,59 @@ pub fn draw(
                 }
             });
         });
+        if !compact && spectrum_fps > 0 {
+            spectrum(ui, now.playing, spectrum_fps, th, sc);
+        }
     })
+}
+
+/// The spectrum's height and the space between its bars, at scale 1.
+const SPECTRUM_H: f32 = 44.0;
+const BAR_GAP: f32 = 3.0;
+
+/// The bars, listening only while something plays: when it doesn't, they
+/// rest at the bottom and nothing asks for audio or extra frames, so the
+/// capture thread ends. While it plays, the next frame is asked for after
+/// `1 / fps`.
+fn spectrum(ui: &mut Ui, playing: bool, fps: u8, th: &theme::AppTheme, sc: f32) {
+    let bars = if playing {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f32(1.0 / f32::from(fps)));
+        rigstats_backend::spectrum::bars()
+    } else {
+        [0.0; rigstats_backend::spectrum::BANDS]
+    };
+    ui.add_space(10.0 * sc);
+    let (rect, _) = ui.allocate_exact_size(
+        Vec2::new(ui.available_width(), SPECTRUM_H * sc),
+        Sense::hover(),
+    );
+    let painter = ui.painter();
+    for (x0, x1, h) in bar_rects(rect.left(), rect.width(), BAR_GAP * sc, &bars) {
+        let top = rect.bottom() - (h * rect.height()).max(2.0 * sc);
+        painter.rect_filled(
+            egui::Rect::from_min_max(egui::pos2(x0, top), egui::pos2(x1, rect.bottom())),
+            1.0,
+            th.accent,
+        );
+    }
+}
+
+/// Each bar's left and right edge and height (0–1), side by side across
+/// `width` from `left` with `gap` between them.
+fn bar_rects(left: f32, width: f32, gap: f32, bars: &[f32]) -> Vec<(f32, f32, f32)> {
+    let n = bars.len() as f32;
+    if n == 0.0 {
+        return Vec::new();
+    }
+    let w = ((width - gap * (n - 1.0)) / n).max(1.0);
+    bars.iter()
+        .enumerate()
+        .map(|(i, h)| {
+            let x0 = left + i as f32 * (w + gap);
+            (x0, x0 + w, h.clamp(0.0, 1.0))
+        })
+        .collect()
 }
 
 fn side(compact: bool, sc: f32) -> f32 {
@@ -225,6 +281,25 @@ mod tests {
     fn a_wide_thumbnail_is_cut_to_a_square() {
         let image = decode(&png(320, 180)).unwrap();
         assert_eq!(image.size, [180, 180]);
+    }
+
+    #[test]
+    fn the_bars_fill_the_width_with_their_gaps() {
+        let bars = [0.5; 24];
+        let rects = bar_rects(10.0, 380.0, 3.0, &bars);
+        assert_eq!(rects.len(), 24);
+        assert!((rects[0].0 - 10.0).abs() < 0.01);
+        assert!((rects[23].1 - 390.0).abs() < 0.01, "{:?}", rects[23]);
+        assert!((rects[1].0 - rects[0].1 - 3.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn a_bar_height_stays_within_the_area() {
+        let rects = bar_rects(0.0, 100.0, 2.0, &[-1.0, 0.5, 2.0]);
+        assert_eq!(
+            rects.iter().map(|r| r.2).collect::<Vec<_>>(),
+            [0.0, 0.5, 1.0]
+        );
     }
 
     #[test]

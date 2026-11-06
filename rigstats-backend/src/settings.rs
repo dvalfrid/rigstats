@@ -157,6 +157,11 @@ pub struct Settings {
     /// or per-core bars (#596). Empty = every panel full.
     #[serde(default)]
     pub compact_panels: Vec<String>,
+    /// The Now Playing panel's spectrum (#719): frames a second, one of
+    /// [`SPECTRUM_RATES`]; 0 = off. Part of the profile's look, so a profile
+    /// for gaming can leave it off.
+    #[serde(default)]
+    pub spectrum_fps: u8,
     /// The space between panels, in px (#606): in portrait × the content
     /// scale, between landscape grid cells as is. 6 = the layout from before;
     /// Settings offers 0–30. Not used by floating panels.
@@ -459,6 +464,7 @@ impl Default for Settings {
             always_on_top: false,
             visible_panels: default_visible_panels(),
             compact_panels: Vec::new(),
+            spectrum_fps: 0,
             panel_spacing: default_panel_spacing(),
             autostart_enabled: false,
             last_seen_version: String::new(),
@@ -517,6 +523,18 @@ impl Default for Settings {
     }
 }
 
+/// The spectrum's choices (#719), frames a second: off, calm, smooth.
+pub const SPECTRUM_RATES: [u8; 3] = [0, 10, 30];
+
+/// `fps` if it is one of [`SPECTRUM_RATES`], else off.
+pub fn spectrum_rate(fps: u8) -> u8 {
+    if SPECTRUM_RATES.contains(&fps) {
+        fps
+    } else {
+        0
+    }
+}
+
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
@@ -537,6 +555,9 @@ pub struct ProfileLook {
     pub visible_panels: Vec<String>,
     #[serde(default)]
     pub compact_panels: Vec<String>,
+    /// `Settings::spectrum_fps`; 0 in a look saved before it existed.
+    #[serde(default)]
+    pub spectrum_fps: u8,
     #[serde(default)]
     pub overlay_enabled: bool,
     #[serde(default = "default_overlay_metrics")]
@@ -567,6 +588,7 @@ impl ProfileLook {
             opacity: s.opacity,
             visible_panels: s.visible_panels.clone(),
             compact_panels: s.compact_panels.clone(),
+            spectrum_fps: s.spectrum_fps,
             overlay_enabled: s.overlay_enabled,
             overlay_metrics: s.overlay_metrics.clone(),
             overlay_columns: s.overlay_columns,
@@ -585,6 +607,7 @@ impl ProfileLook {
         s.opacity = self.opacity.clamp(0.1, 1.0);
         s.visible_panels = self.visible_panels.clone();
         s.compact_panels = self.compact_panels.clone();
+        s.spectrum_fps = spectrum_rate(self.spectrum_fps);
         s.overlay_enabled = self.overlay_enabled;
         s.overlay_metrics = self.overlay_metrics.clone();
         s.overlay_columns = self.overlay_columns.min(6);
@@ -1266,6 +1289,27 @@ mod profile_look_tests {
 
     /// The compact panels (#596) belong to the profile's look: switching
     /// profiles switches them, and a profile without the field stays full.
+    #[test]
+    fn the_spectrum_follows_the_profile_and_only_known_rates() {
+        let mut s = Settings::default();
+        assert_eq!(s.spectrum_fps, 0, "off by default");
+        s.spectrum_fps = 30;
+        let balanced = ProfileLook::capture(&s);
+        s.spectrum_fps = 0;
+        assert!(balanced.apply_to(&mut s));
+        assert_eq!(s.spectrum_fps, 30);
+
+        let odd = ProfileLook {
+            spectrum_fps: 17,
+            ..balanced.clone()
+        };
+        odd.apply_to(&mut s);
+        assert_eq!(s.spectrum_fps, 0, "an unknown rate is off");
+
+        let old: ProfileLook = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.spectrum_fps, 0, "a look from before is off");
+    }
+
     #[test]
     fn compact_panels_follow_the_profile() {
         let mut s = Settings::default();

@@ -557,7 +557,7 @@ mod tests {
             (
                 "media",
                 draw_at(&ctx, w, |ui| {
-                    super::media::draw(ui, &s, 1.0, &th, sc, compact)
+                    super::media::draw(ui, &s, 1.0, &th, sc, compact, 0)
                 }),
                 w,
             ),

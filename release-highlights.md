@@ -15,3 +15,4 @@ comment is ignored. See "Release routine" in docs/release.md.
 
 # 1.54.0
 - **Now Playing panel** — a new optional panel shows what's playing: the cover, title, artist and album, and whether it plays or is paused, from Spotify, your browser or any player that tells Windows what it plays. No account or setup; turn it on in the Control Center's Dashboard page. What you listen to stays on screen: it isn't logged, recorded or put in a diagnostics file.
+- **A spectrum in Now Playing** — bars that move with the sound below the cover, chosen per Control Center profile: Off, Calm or Smooth (Dashboard page). Off by default; it listens and draws only while something plays and the panel is shown, so a profile for gaming can leave it off and it costs nothing there.

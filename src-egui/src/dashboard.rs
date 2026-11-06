@@ -102,6 +102,8 @@ pub struct DashboardView<'a> {
     pub control: &'a ControlState,
     /// Panels drawn in their compact layout (#596).
     pub compact_panels: &'a [String],
+    /// The Now Playing panel's spectrum, frames a second; 0 = off (#719).
+    pub spectrum_fps: u8,
     /// The space between panels in px (#606, `Settings.panel_spacing`).
     pub panel_spacing: f32,
 }
@@ -326,6 +328,7 @@ impl DashboardView<'_> {
                     self.app_theme,
                     sc,
                     self.compact("media"),
+                    self.spectrum_fps,
                 );
             }
             _ => {}
@@ -485,6 +488,8 @@ pub struct DashboardRuntime {
     pub visible_panels: Vec<String>,
     /// Panels drawn compact (#596), from the profile's look.
     pub compact_panels: Vec<String>,
+    /// The Now Playing spectrum's rate (#719), from the profile's look.
+    pub spectrum_fps: u8,
     /// The space between panels in px (#606).
     pub panel_spacing: f32,
     /// Control Center state (#187) — see `DashboardView::control`'s doc.
@@ -505,6 +510,7 @@ impl DashboardRuntime {
             psu_watts: s.psu_watts,
             visible_panels: s.visible_panels.clone(),
             compact_panels: s.compact_panels.clone(),
+            spectrum_fps: s.spectrum_fps,
             panel_spacing: f32::from(s.panel_spacing),
             control: ControlState::default(),
         }
@@ -553,11 +559,13 @@ impl DashboardRuntime {
         let spacing = f32::from(s.panel_spacing);
         let panels_changed = self.visible_panels != s.visible_panels
             || self.compact_panels != s.compact_panels
+            || self.spectrum_fps != s.spectrum_fps
             || self.panel_spacing != spacing;
         self.panel_spacing = spacing;
         if panels_changed {
             self.visible_panels = s.visible_panels.clone();
             self.compact_panels = s.compact_panels.clone();
+            self.spectrum_fps = s.spectrum_fps;
         }
         panels_changed
     }
@@ -576,6 +584,7 @@ impl DashboardRuntime {
             psu_watts: self.psu_watts,
             control: &self.control,
             compact_panels: &self.compact_panels,
+            spectrum_fps: self.spectrum_fps,
             panel_spacing: self.panel_spacing,
         }
     }
@@ -621,6 +630,7 @@ mod tests {
             psu_watts: None,
             control: &control,
             compact_panels: &compact,
+            spectrum_fps: 0,
             panel_spacing: spacing,
         };
         let panels: Vec<String> = ["cpu", "gpu", "ram", "net"].map(String::from).to_vec();
@@ -776,6 +786,7 @@ mod tests {
             psu_watts: None,
             control: &control,
             compact_panels: &keys,
+            spectrum_fps: 0,
             panel_spacing: 6.0,
         };
         let input = || egui::RawInput {
