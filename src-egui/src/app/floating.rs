@@ -427,6 +427,7 @@ impl RigStatsApp {
                                         &app_theme,
                                         scale,
                                         self.runtime.is_compact("media"),
+                                        self.runtime.spectrum_fps,
                                     ),
                                     _ => egui::Rect::NOTHING,
                                 },

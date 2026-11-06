@@ -13,5 +13,6 @@ pub mod process_list;
 pub mod profile_rules;
 pub mod settings;
 pub mod shortcut;
+pub mod spectrum;
 pub mod stats;
 pub mod wallpaper_engine;

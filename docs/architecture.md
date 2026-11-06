@@ -240,6 +240,7 @@ rig-dashboard/
 | `profile_rules.rs` | App rules (#307): `AppRule` (program → profile, optional foreground-only, in `Settings.app_rules`) and the pure `RuleEngine::tick` — a program counts after `SETTLE_SECS`; of several, one in front beats one that only runs, otherwise the last started decides; when the deciding program stops counting, `RELEASE_SECS` later the next one's profile takes over, or — when none is left — the profile from before the first rule (not a fixed default); a profile picked by hand sets aside the rule programs running at that moment until they close (a program started later still switches, and its close brings the hand-picked profile back); an unconfirmed switch is not repeated. Fed by `src-egui/src/app_rules.rs` |
 | `microphone.rs` | The microphone's mute through Windows (#425): `current` / `set_muted` / `toggle` on the default *communications* capture endpoint via `IAudioEndpointVolume` (COM through the windows crate, #702 — the same `with_*` shape as `desktop_background`). Vendor-neutral, nothing written to a device: a headset's HID protocol has no microphone command (GearLink mutes through Windows too). The poll loop reads it each tick (`PollStats::microphone`) for the header, tray row and hover card. `level` / `set_level` (#427): Windows' input level, the Settings slider. `Meter` (#427): Windows meters a capture endpoint only while something records from it (verified: 0 without a stream, 0.04 silent / 0.5 talking with one), so reading a `Meter` opens a shared capture stream on its own thread — samples never read — and closes it a second after the last read, since Windows shows RIGStats as using the microphone meanwhile |
 | `media.rs` | What is playing (#718): the title, artist, album, state and cover of the media session Windows considers current (the one its own media flyout shows), through `GlobalSystemMediaTransportControlsSessionManager` (WinRT through the windows crate; windows-core joins the MTA itself, so no `unsafe`). `Watcher` reads on a thread of its own once a second, started by the first `latest()` and ended 5 s after the last, so nothing runs while the panel is hidden or in `PollMode::Light`; the cover is read once per track and asked for again up to `COVER_TRIES` times while a player hasn't published it yet. Pure parts (`track`, `is_playing`, `read_cover`) are unit-tested. Nothing is logged, recorded or put in the diagnostics ZIP: what someone listens to is personal |
+| `spectrum.rs` | The Now Playing spectrum (#719): the default output's mix caught by WASAPI loopback (`AUDCLNT_STREAMFLAGS_LOOPBACK` on the default render endpoint; only a 32-bit float mix, which a shared-mode mix is in practice), mixed to mono in a 4096-sample `Ring` (85 ms at 48 kHz, 11.7 Hz a bin), Hann window and an FFT of its own (no crate), 24 log bands from 60 Hz to 16 kHz, the loudest bin of each in dB between −70 and −10, bars that jump up and fall at 2.5 heights a second (`smooth`). `bars()` starts the capture thread on first use; it ends 1 s after the last call, and a failed device (headset unplugged) ends a run and the next opens the new default. Silence delivers no packets: the window empties after 120 ms and the bars fall. It hears all sound on the output, not only music; an exclusive-mode app isn't heard. The audio stays in memory for one window, never written anywhere. Pure parts unit-tested with synthetic tones |
 | `autostart.rs` | Windows startup registry management (HKCU run key) |
 | `logging.rs` | Session-based CSV stats logging — `start_session`/`end_session`/`append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`/`prune_old_sessions`, `reconcile_sessions_on_startup`; `ActiveSession` (the poll loop's active-session lookup, parsed again only when the index's modified time or size changed, #466); `sessions.json` index guarded by `SessionsLock` (cross-process file lock) and a `.bak` for corruption recovery |
 | `debug.rs` | Debug log helpers — no deps on other modules. `install_panic_logger`: every panic (any thread) is written with thread, file:line and backtrace before the default hook; `supervise`: restarts a long-lived tokio task (poll loop, control pipe) after a panic, 2 s doubling to 60 s (#219) |
@@ -1045,6 +1046,32 @@ with the PC in use for builds and tests meanwhile:
 The working set dropped to 84 MB at one point and came back: Windows trimming
 it, not the app. No drift.
 
+**The Now Playing spectrum (#719, 2026-11-06, verified).** The owner's PC
+(RX 9070 XT, 16 logical cores), release builds, the dashboard showing Clock,
+Now Playing and CPU with music playing; each variant 3 minutes, sampled every
+10 s, after 150 s (AMD's start-up burst, #515). CPU in % of one core, for the
+process that draws: the app in the Normal layer, `rigstats-wallpaper` in the
+desktop wallpaper.
+
+| | Off | Calm (10 fps) | Smooth (30 fps) |
+| --- | --- | --- | --- |
+| Normal layer | 1.69 % | 5.60 % (peaks 10.4) | 8.97 % |
+| Desktop wallpaper | 1.20 % | 2.64 % | 4.15 % |
+
+- Drawing is most of it. A throwaway build with fake bars and no audio cost
+  6.56 % at 20 fps and 8.60 % at 30 fps in the Normal layer, and 4.13 % at
+  30 fps in the wallpaper. Capturing and the FFT add about a point at most.
+- The Normal layer costs more than the wallpaper for the same frames.
+  Hypothesis: there the whole window is redrawn, not only the panel. Not
+  tested.
+- GPU engine use in the Normal layer: 0.02 % off, 0.42 % at 30 fps. The script
+  doesn't read the wallpaper host's GPU.
+- Not measured: a laptop on battery (the G14).
+
+That is well over the ~1 % target, so the spectrum is off by default and set
+per profile. It runs only while something plays and the panel is shown in
+full; otherwise there are no extra frames and no capture, and the cost is the
+Off column.
 ---
 
 ## Design Decisions
