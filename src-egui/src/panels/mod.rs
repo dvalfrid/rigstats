@@ -581,6 +581,80 @@ mod tests {
         }
     }
 
+    /// Now Playing with the spectrum around the cover (#732 round 3), drawn
+    /// as a floating card `450 × sc` wide; `budget` is the landscape grid's
+    /// cell height (`theme::panel_budget_id`), `None` elsewhere.
+    fn ring_panel(
+        style: rigstats_backend::settings::SpectrumStyle,
+        media: Option<rigstats_backend::media::NowPlaying>,
+        sc: f32,
+        budget: Option<f32>,
+    ) -> egui::Rect {
+        let ctx = ctx_with_fonts();
+        if let Some(b) = budget {
+            ctx.data_mut(|d| d.insert_temp(theme::panel_budget_id(), b));
+        }
+        let th = theme::AppTheme::default();
+        let s = PollStats { media, ..stats() };
+        let choice = super::spectrum::SpectrumChoice {
+            fps: 30,
+            style,
+            color: Default::default(),
+        };
+        draw_at(&ctx, floating_panel_w(false, sc), |ui| {
+            super::media::draw(ui, &s, 1.0, &th, sc, false, choice)
+        })
+        .0
+    }
+
+    fn playing(artist: &str) -> Option<rigstats_backend::media::NowPlaying> {
+        Some(rigstats_backend::media::NowPlaying {
+            track: rigstats_backend::media::Track {
+                title: "A very long title that has to be cut somewhere".into(),
+                artist: artist.into(),
+                album: "Album".into(),
+            },
+            playing: true,
+            cover: None,
+        })
+    }
+
+    #[test]
+    fn the_ring_layout_fits_a_landscape_cell_at_every_scale() {
+        use rigstats_backend::settings::SpectrumStyle;
+        for style in [SpectrumStyle::Ring, SpectrumStyle::Pulse] {
+            for sc in [0.4, 0.7, 1.0, 1.3, 1.6] {
+                let cell = 224.0 * sc;
+                let rect = ring_panel(style, playing("Artist"), sc, Some(cell));
+                assert!(
+                    rect.height() <= cell + 0.5,
+                    "{style:?} at {sc}: {} px in a {cell} px cell",
+                    rect.height()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_ring_layout_is_taller_where_it_can_grow_and_fits_its_card() {
+        use rigstats_backend::settings::SpectrumStyle;
+        for sc in [0.4, 1.0, 1.2, 1.7, 2.0] {
+            let w = floating_panel_w(false, sc);
+            let rect = ring_panel(SpectrumStyle::Ring, playing("Artist"), sc, None);
+            assert!(rect.right() <= w + 0.5, "at {sc}: {rect:?} in {w}");
+            assert!(rect.height() > 224.0 * sc, "at {sc}: {}", rect.height());
+        }
+    }
+
+    #[test]
+    fn the_ring_layout_keeps_its_height_whatever_plays() {
+        use rigstats_backend::settings::SpectrumStyle;
+        let h = |m| ring_panel(SpectrumStyle::Pulse, m, 1.0, None).height();
+        let full = h(playing("Artist"));
+        assert!((h(playing("")) - full).abs() < 0.5, "no artist");
+        assert!((h(None) - full).abs() < 0.5, "nothing playing");
+    }
+
     #[test]
     fn a_compact_panel_is_shorter_than_the_full_one() {
         let full = draw_all(false, 1.0);
