@@ -162,6 +162,12 @@ pub struct Settings {
     /// for gaming can leave it off.
     #[serde(default)]
     pub spectrum_fps: u8,
+    /// How the spectrum is drawn (#732), part of the profile's look.
+    #[serde(default)]
+    pub spectrum_style: SpectrumStyle,
+    /// The spectrum's colour (#732), part of the profile's look.
+    #[serde(default)]
+    pub spectrum_color: SpectrumColor,
     /// The space between panels, in px (#606): in portrait × the content
     /// scale, between landscape grid cells as is. 6 = the layout from before;
     /// Settings offers 0–30. Not used by floating panels.
@@ -465,6 +471,8 @@ impl Default for Settings {
             visible_panels: default_visible_panels(),
             compact_panels: Vec::new(),
             spectrum_fps: 0,
+            spectrum_style: SpectrumStyle::default(),
+            spectrum_color: SpectrumColor::default(),
             panel_spacing: default_panel_spacing(),
             autostart_enabled: false,
             last_seen_version: String::new(),
@@ -535,6 +543,88 @@ pub fn spectrum_rate(fps: u8) -> u8 {
     }
 }
 
+/// How the Now Playing spectrum is drawn (#732). An unknown name (a newer
+/// version's style) reads as plain bars.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SpectrumStyle {
+    #[default]
+    Bars,
+    Peaks,
+    Mirror,
+    Neon,
+    Mountain,
+    Led,
+    Dots,
+}
+
+impl SpectrumStyle {
+    /// Every style, in the order the Control Center lists them.
+    pub const ALL: [Self; 7] = [
+        Self::Bars,
+        Self::Peaks,
+        Self::Mirror,
+        Self::Neon,
+        Self::Mountain,
+        Self::Led,
+        Self::Dots,
+    ];
+
+    /// The name shown in the Control Center.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Bars => "Bars",
+            Self::Peaks => "Bars with falling peaks",
+            Self::Mirror => "Mirrored bars",
+            Self::Neon => "Neon lines",
+            Self::Mountain => "Mountain",
+            Self::Led => "LED segments",
+            Self::Dots => "Dots",
+        }
+    }
+}
+
+/// The spectrum's colour (#732): the theme's accent, or a cyan–violet–pink
+/// gradient from low to high notes. An unknown name reads as the accent.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SpectrumColor {
+    #[default]
+    Accent,
+    Gradient,
+}
+
+/// Reads an enum by its lower-case name, the default for any other.
+fn lenient_enum<'de, D, T>(d: D, all: &[T]) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Copy + Default + Serialize,
+{
+    let name = String::deserialize(d).unwrap_or_default();
+    Ok(all
+        .iter()
+        .copied()
+        .find(|v| {
+            serde_json::to_value(v)
+                .ok()
+                .and_then(|j| j.as_str().map(str::to_owned))
+                == Some(name.clone())
+        })
+        .unwrap_or_default())
+}
+
+impl<'de> Deserialize<'de> for SpectrumStyle {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        lenient_enum(d, &Self::ALL)
+    }
+}
+
+impl<'de> Deserialize<'de> for SpectrumColor {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        lenient_enum(d, &[Self::Accent, Self::Gradient])
+    }
+}
+
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
@@ -558,6 +648,10 @@ pub struct ProfileLook {
     /// `Settings::spectrum_fps`; 0 in a look saved before it existed.
     #[serde(default)]
     pub spectrum_fps: u8,
+    #[serde(default)]
+    pub spectrum_style: SpectrumStyle,
+    #[serde(default)]
+    pub spectrum_color: SpectrumColor,
     #[serde(default)]
     pub overlay_enabled: bool,
     #[serde(default = "default_overlay_metrics")]
@@ -589,6 +683,8 @@ impl ProfileLook {
             visible_panels: s.visible_panels.clone(),
             compact_panels: s.compact_panels.clone(),
             spectrum_fps: s.spectrum_fps,
+            spectrum_style: s.spectrum_style,
+            spectrum_color: s.spectrum_color,
             overlay_enabled: s.overlay_enabled,
             overlay_metrics: s.overlay_metrics.clone(),
             overlay_columns: s.overlay_columns,
@@ -608,6 +704,8 @@ impl ProfileLook {
         s.visible_panels = self.visible_panels.clone();
         s.compact_panels = self.compact_panels.clone();
         s.spectrum_fps = spectrum_rate(self.spectrum_fps);
+        s.spectrum_style = self.spectrum_style;
+        s.spectrum_color = self.spectrum_color;
         s.overlay_enabled = self.overlay_enabled;
         s.overlay_metrics = self.overlay_metrics.clone();
         s.overlay_columns = self.overlay_columns.min(6);
@@ -1289,6 +1387,27 @@ mod profile_look_tests {
 
     /// The compact panels (#596) belong to the profile's look: switching
     /// profiles switches them, and a profile without the field stays full.
+    #[test]
+    fn the_spectrum_style_and_colour_follow_the_profile() {
+        let mut s = Settings::default();
+        assert_eq!(s.spectrum_style, SpectrumStyle::Bars);
+        assert_eq!(s.spectrum_color, SpectrumColor::Accent);
+        s.spectrum_style = SpectrumStyle::Mountain;
+        s.spectrum_color = SpectrumColor::Gradient;
+        let look = ProfileLook::capture(&s);
+        let mut other = Settings::default();
+        assert!(look.apply_to(&mut other));
+        assert_eq!(other.spectrum_style, SpectrumStyle::Mountain);
+        assert_eq!(other.spectrum_color, SpectrumColor::Gradient);
+
+        let json = serde_json::to_string(&look).unwrap();
+        assert!(json.contains(r#""spectrumStyle":"mountain""#), "{json}");
+        let unknown: ProfileLook =
+            serde_json::from_str(r#"{"spectrumStyle":"lasers","spectrumColor":"plaid"}"#).unwrap();
+        assert_eq!(unknown.spectrum_style, SpectrumStyle::Bars);
+        assert_eq!(unknown.spectrum_color, SpectrumColor::Accent);
+    }
+
     #[test]
     fn the_spectrum_follows_the_profile_and_only_known_rates() {
         let mut s = Settings::default();

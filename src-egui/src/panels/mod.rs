@@ -12,6 +12,7 @@ pub mod peripherals;
 pub mod power;
 pub mod process;
 pub mod ram;
+pub mod spectrum;
 
 /// The panels with a compact layout (#596, every panel since #604), offered
 /// Full / Compact in the Control Center's Dashboard page.
@@ -557,7 +558,7 @@ mod tests {
             (
                 "media",
                 draw_at(&ctx, w, |ui| {
-                    super::media::draw(ui, &s, 1.0, &th, sc, compact, 0)
+                    super::media::draw(ui, &s, 1.0, &th, sc, compact, Default::default())
                 }),
                 w,
             ),
