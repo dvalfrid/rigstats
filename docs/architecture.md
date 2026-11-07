@@ -1073,6 +1073,8 @@ desktop wallpaper.
   use, which suggests fewer frames were drawn. Hypothesis: the window was
   partly covered while the owner used the PC. Undetermined; measure again on
   an idle PC.
+  Round 2, the same way (2026-11-07): star field 8.97 %, oscilloscope 8.94 %,
+  both with normal GPU use (0.43 / 0.46 %): no more than bars.
 - Star field and oscilloscope (#732 round 2): not measured yet. The star
   field draws ~150 circles a frame (the most shapes of any style); the
   oscilloscope one line of 256 points twice.
