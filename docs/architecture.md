@@ -1075,8 +1075,7 @@ desktop wallpaper.
   an idle PC.
   Round 2, the same way (2026-11-07): star field 8.97 %, oscilloscope 8.94 %,
   both with normal GPU use (0.43 / 0.46 %): no more than bars.
-- Ring around the cover and pulse ring (#732 round 3): not measured yet. They
-  draw 64 lines or 40 dots and the cover, fewer shapes than mountain.
+  Round 3 (2026-11-07): the ring around the cover 9.01 %, the same as bars.
 
 That is well over the ~1 % target, so the spectrum is off by default and set
 per profile. It runs only while something plays and the panel is shown in
