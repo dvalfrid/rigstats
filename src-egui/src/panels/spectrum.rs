@@ -1,9 +1,14 @@
 //! The Now Playing spectrum's styles (#732): each draws the same band
 //! heights (`rigstats_backend::spectrum::bars`) its own way into the panel's
-//! spectrum area. Only "falling peaks" keeps state between frames (in egui's
-//! memory); every other style is a pure drawing of this frame's bars.
+//! spectrum area, except the oscilloscope, which draws the wave itself
+//! (`rigstats_backend::spectrum::wave`). Only "falling peaks" keeps state
+//! between frames (in egui's memory). The star field's stars are placed by a
+//! fixed hash of their number and twinkle with the clock, so they stay put
+//! and twinkle on without any state; every other style is a pure drawing of
+//! this frame's bars.
 
-use egui::{pos2, Color32, Mesh, Pos2, Rect, Stroke, Ui};
+use egui::epaint::PathStroke;
+use egui::{pos2, Color32, Mesh, Pos2, Rect, Shape, Stroke, Ui};
 use rigstats_backend::settings::{SpectrumColor, SpectrumStyle};
 
 use crate::theme;
@@ -54,11 +59,13 @@ fn lerp(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()))
 }
 
-/// Draws `bars` (0–1 each) into `rect` in `choice`'s style.
+/// Draws `bars` (0–1 each) into `rect` in `choice`'s style; the
+/// oscilloscope draws `wave` (−1 to 1 each) instead.
 pub fn paint(
     ui: &Ui,
     rect: Rect,
     bars: &[f32],
+    wave: &[f32],
     choice: SpectrumChoice,
     th: &theme::AppTheme,
     sc: f32,
@@ -205,7 +212,136 @@ pub fn paint(
                 }
             }
         }
+        SpectrumStyle::Stars => {
+            // Seconds, kept small so f32 keeps its precision.
+            let time = (ui.input(|i| i.time) % 3600.0) as f32;
+            let bass = bars[..BASS_BANDS.min(n)].iter().sum::<f32>() / BASS_BANDS.min(n) as f32;
+            let margin = 3.0 * sc;
+            let area = rect.shrink(margin);
+            for j in 0..n * STARS_PER_BAND {
+                let star = star(j, n);
+                let level = bars[star.band];
+                let lit = star_lit(level, star.threshold);
+                let a = (lit * twinkle(time, star.speed, star.phase)).max(0.1);
+                let centre = pos2(
+                    area.left() + star.x * area.width(),
+                    area.top() + star.y * area.height(),
+                );
+                let c = color_at(choice.color, th, t(star.band, n));
+                let mut r = star.size * sc;
+                if star.big {
+                    // Bass makes the big ones flare: larger, with a halo.
+                    let flare = bass * lit;
+                    r *= 1.0 + flare;
+                    if flare > 0.05 {
+                        p.circle_filled(centre, r * 2.2, c.gamma_multiply(0.2 * flare));
+                    }
+                }
+                p.circle_filled(
+                    centre,
+                    r,
+                    lerp(c, Color32::WHITE, 0.45 * lit).gamma_multiply(a),
+                );
+            }
+        }
+        SpectrumStyle::Scope => {
+            if wave.len() < 2 {
+                return;
+            }
+            let mid = rect.center().y;
+            let half = rect.height() / 2.0 - 2.0 * sc;
+            let pts: Vec<Pos2> = wave
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    pos2(
+                        rect.left() + t(i, wave.len()) * rect.width(),
+                        mid - v.clamp(-1.0, 1.0) * half,
+                    )
+                })
+                .collect();
+            // A soft glow under a thin line.
+            for (width, alpha) in [(5.0 * sc, 0.22), (1.6 * sc, 1.0)] {
+                let stroke = match choice.color {
+                    SpectrumColor::Accent => {
+                        PathStroke::new(width, th.accent.gamma_multiply(alpha))
+                    }
+                    SpectrumColor::Gradient => {
+                        let (left, w) = (rect.left(), rect.width().max(1.0));
+                        PathStroke::new_uv(width, move |_, pos| {
+                            gradient((pos.x - left) / w).gamma_multiply(alpha)
+                        })
+                    }
+                };
+                p.add(Shape::line(pts.clone(), stroke));
+            }
+        }
     }
+}
+
+/// How many stars each band has; louder bands light more of them.
+pub const STARS_PER_BAND: usize = 6;
+
+/// The lowest bands, whose mean makes the big stars flare.
+const BASS_BANDS: usize = 4;
+
+/// One star of the star field, fixed by its number: where it is (0–1 in
+/// the area, inside its band's column), how loud its band must be to light
+/// it, how it twinkles, and whether it is one of the big ones.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Star {
+    pub band: usize,
+    pub x: f32,
+    pub y: f32,
+    pub threshold: f32,
+    pub size: f32,
+    pub speed: f32,
+    pub phase: f32,
+    pub big: bool,
+}
+
+/// Star `j` of a field over `bands` bands.
+pub fn star(j: usize, bands: usize) -> Star {
+    let bands = bands.max(1);
+    let band = (j / STARS_PER_BAND).min(bands - 1);
+    let k = j % STARS_PER_BAND;
+    let big = hash01(j, 6) < 0.08;
+    Star {
+        band,
+        x: (band as f32 + hash01(j, 1)) / bands as f32,
+        y: hash01(j, 2),
+        // Spread over 0–0.85, star k of a band in its own slice, so a band
+        // at height h lights about h of its stars.
+        threshold: (k as f32 + hash01(j, 3)) / STARS_PER_BAND as f32 * 0.85,
+        size: if big { 1.8 } else { 0.8 + 0.6 * hash01(j, 7) },
+        speed: 1.5 + 2.5 * hash01(j, 4),
+        phase: std::f32::consts::TAU * hash01(j, 5),
+        big,
+    }
+}
+
+/// How lit a star is (0–1) at its band's `level`: off below its threshold,
+/// fully lit a little above it.
+pub fn star_lit(level: f32, threshold: f32) -> f32 {
+    ((level - threshold) / 0.12).clamp(0.0, 1.0)
+}
+
+/// A star's brightness factor at `time`: 0.55–1.0, never off.
+fn twinkle(time: f32, speed: f32, phase: f32) -> f32 {
+    0.775 + 0.225 * (time * speed + phase).sin()
+}
+
+/// A fixed number 0–1 for `(i, salt)`.
+fn hash01(i: usize, salt: u32) -> f32 {
+    let mut x = (i as u32)
+        .wrapping_mul(0x9E37_79B1)
+        .wrapping_add(salt.wrapping_mul(0x85EB_CA6B));
+    x ^= x >> 15;
+    x = x.wrapping_mul(0x2C1B_3C6D);
+    x ^= x >> 12;
+    x = x.wrapping_mul(0x297A_2D39);
+    x ^= x >> 15;
+    (x % 10_000) as f32 / 9_999.0
 }
 
 /// LED colours from the bottom: green, then yellow, then red at the top.
@@ -366,6 +502,51 @@ mod tests {
         assert_eq!(gradient(0.0), CYAN);
         assert_eq!(gradient(0.5), VIOLET);
         assert_eq!(gradient(1.0), PINK);
+    }
+
+    #[test]
+    fn every_star_sits_in_its_bands_column_and_stays_there() {
+        let n = 24;
+        for j in 0..n * STARS_PER_BAND {
+            let s = star(j, n);
+            assert_eq!(s.band, j / STARS_PER_BAND);
+            let (lo, hi) = (s.band as f32 / n as f32, (s.band + 1) as f32 / n as f32);
+            assert!(s.x >= lo && s.x <= hi, "{j}: {s:?}");
+            assert!((0.0..=1.0).contains(&s.y));
+            assert!((0.0..0.86).contains(&s.threshold));
+            assert_eq!(star(j, n), s, "the same star every frame");
+        }
+        let big = (0..n * STARS_PER_BAND).filter(|&j| star(j, n).big).count();
+        assert!((4..=25).contains(&big), "{big} big stars");
+    }
+
+    #[test]
+    fn louder_lights_more_stars_and_silence_none() {
+        let lit_at = |level: f32| {
+            (0..STARS_PER_BAND * 24)
+                .filter(|&j| star_lit(level, star(j, 24).threshold) > 0.5)
+                .count()
+        };
+        assert_eq!(lit_at(0.0), 0);
+        assert!(
+            lit_at(0.3) < lit_at(0.8),
+            "{} vs {}",
+            lit_at(0.3),
+            lit_at(0.8)
+        );
+        assert_eq!(lit_at(1.0), STARS_PER_BAND * 24);
+    }
+
+    #[test]
+    fn a_star_twinkles_but_never_goes_out() {
+        let v: Vec<f32> = (0..200)
+            .map(|i| twinkle(i as f32 * 0.05, 2.0, 1.0))
+            .collect();
+        assert!(v.iter().all(|x| (0.54..=1.0).contains(x)));
+        let (min, max) = v
+            .iter()
+            .fold((1.0f32, 0.0f32), |(a, b), x| (a.min(*x), b.max(*x)));
+        assert!(max - min > 0.3, "it twinkles: {min}–{max}");
     }
 
     #[test]
