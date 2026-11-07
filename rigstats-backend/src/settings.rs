@@ -556,11 +556,13 @@ pub enum SpectrumStyle {
     Mountain,
     Led,
     Dots,
+    Stars,
+    Scope,
 }
 
 impl SpectrumStyle {
     /// Every style, in the order the Control Center lists them.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 9] = [
         Self::Bars,
         Self::Peaks,
         Self::Mirror,
@@ -568,6 +570,8 @@ impl SpectrumStyle {
         Self::Mountain,
         Self::Led,
         Self::Dots,
+        Self::Stars,
+        Self::Scope,
     ];
 
     /// The name shown in the Control Center.
@@ -580,6 +584,8 @@ impl SpectrumStyle {
             Self::Mountain => "Mountain",
             Self::Led => "LED segments",
             Self::Dots => "Dots",
+            Self::Stars => "Star field",
+            Self::Scope => "Oscilloscope",
         }
     }
 }
@@ -1406,6 +1412,16 @@ mod profile_look_tests {
             serde_json::from_str(r#"{"spectrumStyle":"lasers","spectrumColor":"plaid"}"#).unwrap();
         assert_eq!(unknown.spectrum_style, SpectrumStyle::Bars);
         assert_eq!(unknown.spectrum_color, SpectrumColor::Accent);
+
+        // Round 2's styles (#732) by name.
+        for (style, name) in [
+            (SpectrumStyle::Stars, "stars"),
+            (SpectrumStyle::Scope, "scope"),
+        ] {
+            assert_eq!(serde_json::to_value(style).unwrap(), name);
+            let back: SpectrumStyle = serde_json::from_value(name.into()).unwrap();
+            assert_eq!(back, style);
+        }
     }
 
     #[test]

@@ -95,21 +95,27 @@ fn draw_spectrum(
     th: &theme::AppTheme,
     sc: f32,
 ) {
-    let bars = if playing {
+    use rigstats_backend::spectrum::{BANDS, WAVE_POINTS};
+    let mut bars = [0.0; BANDS];
+    let mut wave = [0.0; WAVE_POINTS];
+    if playing {
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_secs_f32(
                 1.0 / f32::from(choice.fps),
             ));
-        rigstats_backend::spectrum::bars()
-    } else {
-        [0.0; rigstats_backend::spectrum::BANDS]
-    };
+        // The oscilloscope draws the wave, every other style the bands.
+        if choice.style == rigstats_backend::settings::SpectrumStyle::Scope {
+            wave = rigstats_backend::spectrum::wave();
+        } else {
+            bars = rigstats_backend::spectrum::bars();
+        }
+    }
     ui.add_space(10.0 * sc);
     let (rect, _) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), SPECTRUM_H * sc),
         Sense::hover(),
     );
-    super::spectrum::paint(ui, rect, &bars, choice, th, sc);
+    super::spectrum::paint(ui, rect, &bars, &wave, choice, th, sc);
 }
 fn side(compact: bool, sc: f32) -> f32 {
     (if compact { COVER_COMPACT } else { COVER }) * sc

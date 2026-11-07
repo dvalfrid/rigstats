@@ -1,10 +1,13 @@
 //! The sound playing on the PC as a spectrum (#719): the default output's
-//! mix, caught with WASAPI loopback, turned into [`BANDS`] bar heights.
+//! mix, caught with WASAPI loopback, turned into [`BANDS`] bar heights, and
+//! (for the oscilloscope, #732) the newest few milliseconds of the wave
+//! itself as [`WAVE_POINTS`] points.
 //!
-//! [`bars`] starts a capture thread on first use; the thread ends a second
-//! after the last call, so nothing runs while no panel draws a spectrum.
-//! The audio stays in memory for one FFT window and is never written
-//! anywhere: only the bar heights leave this module.
+//! [`bars`] or [`wave`] starts a capture thread on first use; the thread
+//! ends a second after the last call, so nothing runs while no panel draws a
+//! spectrum. The audio stays in memory for one FFT window and is never
+//! written anywhere: only the bar heights and a few hundred scaled points
+//! leave this module.
 //!
 //! What it hears is everything on the output — a game, a call, a
 //! notification — not only the music. An app in exclusive mode bypasses the
@@ -42,9 +45,35 @@ const IDLE: Duration = Duration::from_secs(1);
 /// How often a new spectrum is computed (the panel draws at most 30 fps).
 const STEP: Duration = Duration::from_millis(30);
 
+/// How many samples the oscilloscope shows: ~21 ms at 48 kHz, a full cycle
+/// of a 50 Hz bass note.
+pub const WAVE_SPAN: usize = 1024;
+
+/// How many points of it are handed out (one per ~1.5 px of the panel).
+pub const WAVE_POINTS: usize = 256;
+
+/// The peak at which the scope stops making a wave louder: a quieter one is
+/// drawn smaller, so hiss or a fade-out doesn't fill the panel.
+const WAVE_MIN_PEAK: f32 = 0.1;
+
+/// The latest bars and wave, written by the capture thread.
+struct Latest {
+    bars: [f32; BANDS],
+    wave: [f32; WAVE_POINTS],
+}
+
+impl Default for Latest {
+    fn default() -> Self {
+        Self {
+            bars: [0.0; BANDS],
+            wave: [0.0; WAVE_POINTS],
+        }
+    }
+}
+
 #[derive(Default)]
 struct Shared {
-    bars: Mutex<[f32; BANDS]>,
+    latest: Mutex<Latest>,
     last_read: Mutex<Option<Instant>>,
     running: AtomicBool,
 }
@@ -57,6 +86,26 @@ fn shared() -> &'static Arc<Shared> {
 /// The latest bar heights, 0–1, low to high frequency. Starts the capture
 /// thread when it isn't running; all zero until it has heard something.
 pub fn bars() -> [f32; BANDS] {
+    keep_listening()
+        .latest
+        .lock()
+        .map(|l| l.bars)
+        .unwrap_or([0.0; BANDS])
+}
+
+/// The latest wave, −1 to 1, oldest point first, starting where the sound
+/// rises through zero so it stands still on screen (see [`waveform`]).
+/// Starts the capture thread like [`bars`]; flat until it has heard something.
+pub fn wave() -> [f32; WAVE_POINTS] {
+    keep_listening()
+        .latest
+        .lock()
+        .map(|l| l.wave)
+        .unwrap_or([0.0; WAVE_POINTS])
+}
+
+/// Notes a read and starts the capture thread when it isn't running.
+fn keep_listening() -> &'static Arc<Shared> {
     let shared = shared();
     if let Ok(mut t) = shared.last_read.lock() {
         *t = Some(Instant::now());
@@ -73,9 +122,9 @@ pub fn bars() -> [f32; BANDS] {
                         .and_then(|t| *t)
                         .is_some_and(|t| t.elapsed() < IDLE)
                 };
-                let publish = |b: [f32; BANDS]| {
-                    if let Ok(mut bars) = s.bars.lock() {
-                        *bars = b;
+                let publish = |bars: [f32; BANDS], wave: [f32; WAVE_POINTS]| {
+                    if let Ok(mut l) = s.latest.lock() {
+                        *l = Latest { bars, wave };
                     }
                 };
                 // A device that went away (headset unplugged) ends a run;
@@ -86,14 +135,14 @@ pub fn bars() -> [f32; BANDS] {
                         std::thread::sleep(Duration::from_millis(500));
                     }
                 }
-                publish([0.0; BANDS]);
+                publish([0.0; BANDS], [0.0; WAVE_POINTS]);
                 s.running.store(false, Ordering::Release);
             });
         if spawned.is_err() {
             shared.running.store(false, Ordering::Release);
         }
     }
-    shared.bars.lock().map(|b| *b).unwrap_or([0.0; BANDS])
+    shared
 }
 
 /// The newest [`WINDOW`] mono samples, filled as audio arrives.
@@ -134,6 +183,38 @@ impl Ring {
         out.extend_from_slice(&self.samples[..self.next]);
         out
     }
+}
+
+/// The oscilloscope's wave from a window (oldest sample first): the newest
+/// [`WAVE_SPAN`] samples that start where the signal rises through zero —
+/// searched in the [`WAVE_SPAN`] before them, so a steady tone is drawn at
+/// the same phase every frame instead of running across the panel — then
+/// cut to [`WAVE_POINTS`] points and scaled so its peak reaches 0.9 (a peak
+/// below [`WAVE_MIN_PEAK`] gets that one's gain, and stays smaller).
+pub fn waveform(window: &[f32]) -> [f32; WAVE_POINTS] {
+    let mut out = [0.0; WAVE_POINTS];
+    if window.len() < WAVE_SPAN {
+        return out;
+    }
+    let latest = window.len() - WAVE_SPAN;
+    let earliest = latest.saturating_sub(WAVE_SPAN).max(1);
+    // The newest rising zero crossing; with none (silence, pure noise
+    // floor), the newest samples as they are.
+    let start = (earliest..=latest)
+        .rev()
+        .find(|&i| window[i - 1] < 0.0 && window[i] >= 0.0)
+        .unwrap_or(latest);
+    let span = &window[start..start + WAVE_SPAN];
+    let peak = span.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+    let gain = 0.9 / peak.max(WAVE_MIN_PEAK);
+    let step = WAVE_SPAN / WAVE_POINTS;
+    for (p, o) in out.iter_mut().enumerate() {
+        // The mean of each step's samples, so a high note between points
+        // doesn't alias into a slow wobble.
+        let chunk = &span[p * step..(p + 1) * step];
+        *o = (chunk.iter().sum::<f32>() / step as f32 * gain).clamp(-1.0, 1.0);
+    }
+    out
 }
 
 /// Bar heights, 0–1, of a [`WINDOW`]-sample mono signal at `rate` Hz:
@@ -242,7 +323,7 @@ pub fn is_float32(tag: u16, bits: u16, subformat: Option<u128>) -> bool {
 
 #[cfg(windows)]
 mod win {
-    use super::{analyze, is_float32, smooth, Ring, BANDS, STEP};
+    use super::{analyze, is_float32, smooth, waveform, Ring, BANDS, STEP, WAVE_POINTS};
     use std::time::Instant;
     use windows::Win32::Media::Audio::{
         eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
@@ -256,7 +337,7 @@ mod win {
 
     /// One capture run on the default output, until `keep()` ends or the
     /// device fails. Publishes new bars every [`STEP`].
-    pub fn run(keep: &dyn Fn() -> bool, publish: &dyn Fn([f32; BANDS])) {
+    pub fn run(keep: &dyn Fn() -> bool, publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS])) {
         // SAFETY: no reserved argument; balanced below on this thread.
         let init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
         capture(keep, publish);
@@ -267,7 +348,7 @@ mod win {
         }
     }
 
-    fn capture(keep: &dyn Fn() -> bool, publish: &dyn Fn([f32; BANDS])) {
+    fn capture(keep: &dyn Fn() -> bool, publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS])) {
         // SAFETY: the CLSID and the interface match (MMDeviceEnumerator).
         let Ok(enumerator) = (unsafe {
             CoCreateInstance::<_, IMMDeviceEnumerator>(&MMDeviceEnumerator, None, CLSCTX_ALL)
@@ -321,7 +402,7 @@ mod win {
         channels: usize,
         rate: u32,
         keep: &dyn Fn() -> bool,
-        publish: &dyn Fn([f32; BANDS]),
+        publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS]),
     ) {
         // SAFETY: `client` is live and not yet initialized; `format` is its
         // own mix format, live for the call. 200 ms buffer, in 100 ns units.
@@ -388,9 +469,10 @@ mod win {
                 }
             }
             let now = Instant::now();
-            shown = smooth(shown, analyze(&ring.window(), rate), now - last);
+            let window = ring.window();
+            shown = smooth(shown, analyze(&window, rate), now - last);
             last = now;
-            publish(shown);
+            publish(shown, waveform(&window));
             std::thread::sleep(STEP);
             // No packets while nothing plays: let the window empty out so
             // the bars fall.
@@ -405,8 +487,8 @@ mod win {
 
 #[cfg(not(windows))]
 mod win {
-    use super::BANDS;
-    pub fn run(_keep: &dyn Fn() -> bool, _publish: &dyn Fn([f32; BANDS])) {}
+    use super::{BANDS, WAVE_POINTS};
+    pub fn run(_keep: &dyn Fn() -> bool, _publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS])) {}
 }
 
 #[cfg(test)]
@@ -485,6 +567,35 @@ mod tests {
         assert_eq!(&w[WINDOW - 2..], &[2.0, 6.0]);
         ring.push_frames(&[1.0], 0);
         assert_eq!(ring.window(), w);
+    }
+
+    /// A window holding `hz` with its phase at the window's end chosen so
+    /// that the newest samples would start mid-cycle.
+    fn tone_window(hz: f32, amp: f32, phase: f32) -> Vec<f32> {
+        (0..WINDOW)
+            .map(|i| amp * (2.0 * std::f32::consts::PI * hz * i as f32 / RATE as f32 + phase).sin())
+            .collect()
+    }
+
+    #[test]
+    fn the_wave_starts_rising_through_zero_at_any_phase() {
+        for phase in [0.0, 1.0, 2.5, 4.0] {
+            let w = waveform(&tone_window(200.0, 0.5, phase));
+            assert!(w[0].abs() < 0.1, "phase {phase}: starts at {}", w[0]);
+            assert!(w[1] > w[0], "phase {phase}: rises: {:?}", &w[..3]);
+        }
+    }
+
+    #[test]
+    fn the_wave_is_scaled_to_its_peak_but_hiss_stays_small() {
+        let loud = waveform(&tone_window(200.0, 0.3, 0.0));
+        let peak = loud.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!((peak - 0.9).abs() < 0.05, "{peak}");
+        let quiet = waveform(&tone_window(200.0, 0.01, 0.0));
+        let peak = quiet.iter().fold(0.0f32, |m, v| m.max(v.abs()));
+        assert!(peak < 0.12, "{peak}");
+        assert_eq!(waveform(&vec![0.0; WINDOW]), [0.0; WAVE_POINTS]);
+        assert_eq!(waveform(&[0.5; 10]), [0.0; WAVE_POINTS], "too short");
     }
 
     #[test]
