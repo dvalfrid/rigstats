@@ -1,11 +1,12 @@
 //! The Now Playing spectrum's styles (#732): each draws the same band
 //! heights (`rigstats_backend::spectrum::bars`) its own way into the panel's
 //! spectrum area, except the oscilloscope, which draws the wave itself
-//! (`rigstats_backend::spectrum::wave`). Only "falling peaks" keeps state
-//! between frames (in egui's memory). The star field's stars are placed by a
-//! fixed hash of their number and twinkle with the clock, so they stay put
-//! and twinkle on without any state; every other style is a pure drawing of
-//! this frame's bars.
+//! (`rigstats_backend::spectrum::wave`), and the ring and the pulse ring
+//! (round 3), which are drawn around the cover by [`paint_around`]. Only
+//! "falling peaks" keeps state between frames (in egui's memory). The star
+//! field's stars are placed by a fixed hash of their number and twinkle with
+//! the clock, so they stay put and twinkle on without any state; every other
+//! style is a pure drawing of this frame's bars.
 
 use egui::epaint::PathStroke;
 use egui::{pos2, Color32, Mesh, Pos2, Rect, Shape, Stroke, Ui};
@@ -83,7 +84,9 @@ pub fn paint(
         }
     };
     match choice.style {
-        SpectrumStyle::Bars | SpectrumStyle::Peaks => {
+        // The ring styles are drawn around the cover (`paint_around`); a
+        // strip only gets one if a caller forgets, and then shows bars.
+        SpectrumStyle::Bars | SpectrumStyle::Peaks | SpectrumStyle::Ring | SpectrumStyle::Pulse => {
             let peaks = (choice.style == SpectrumStyle::Peaks).then(|| falling_peaks(ui, bars));
             for (i, (x0, x1)) in columns(rect.left(), rect.width(), 3.0 * sc, n)
                 .into_iter()
@@ -282,7 +285,8 @@ pub fn paint(
 /// How many stars each band has; louder bands light more of them.
 pub const STARS_PER_BAND: usize = 6;
 
-/// The lowest bands, whose mean makes the big stars flare.
+/// The lowest bands, whose mean makes the big stars flare and the pulse
+/// ring breathe.
 const BASS_BANDS: usize = 4;
 
 /// One star of the star field, fixed by its number: where it is (0–1 in
@@ -342,6 +346,112 @@ fn hash01(i: usize, salt: u32) -> f32 {
     x = x.wrapping_mul(0x297A_2D39);
     x ^= x >> 15;
     (x % 10_000) as f32 / 9_999.0
+}
+
+/// How many bars or dots go around the cover: half of them on each side,
+/// mirrored, so the low notes meet at the top and the high ones at the bottom.
+const RING_BARS: usize = 64;
+const PULSE_DOTS: usize = 40;
+
+/// Draws `bars` around a round cover at `centre`: from radius `r_in` (just
+/// outside the cover) out to at most `r_out`, in `choice`'s ring style.
+pub fn paint_around(
+    ui: &Ui,
+    centre: Pos2,
+    r_in: f32,
+    r_out: f32,
+    bars: &[f32],
+    choice: SpectrumChoice,
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    let p = ui.painter();
+    let room = (r_out - r_in).max(1.0);
+    match choice.style {
+        SpectrumStyle::Pulse => {
+            let v = around(bars, PULSE_DOTS / 2);
+            let radius = pulse_radius(r_in, r_out, bass(bars));
+            // min/max, not clamp: at a small scale the cap is below the floor.
+            let dot_max = (room * 0.18).min(3.6 * sc).max(1.0);
+            p.circle_stroke(
+                centre,
+                radius,
+                Stroke::new(
+                    1.0 * sc,
+                    color_at(choice.color, th, 0.0).gamma_multiply(0.15),
+                ),
+            );
+            for (i, h) in v.iter().enumerate() {
+                let (sin, cos) = ring_angle(i, v.len()).sin_cos();
+                let at = pos2(centre.x + cos * radius, centre.y + sin * radius);
+                let c = color_at(choice.color, th, mirror_t(i, v.len()));
+                p.circle_filled(
+                    at,
+                    dot_max * (0.35 + 0.65 * h),
+                    c.gamma_multiply(0.35 + 0.65 * h),
+                );
+            }
+        }
+        // Ring, and any other style a caller hands over by mistake.
+        _ => {
+            let v = around(bars, RING_BARS / 2);
+            let width = (std::f32::consts::TAU * r_in / v.len() as f32 * 0.55)
+                .min(4.0 * sc)
+                .max(1.0);
+            for (i, h) in v.iter().enumerate() {
+                let (sin, cos) = ring_angle(i, v.len()).sin_cos();
+                let len = (h * room).max(2.0 * sc).min(room);
+                let from = pos2(centre.x + cos * r_in, centre.y + sin * r_in);
+                let to = pos2(centre.x + cos * (r_in + len), centre.y + sin * (r_in + len));
+                p.line_segment(
+                    [from, to],
+                    Stroke::new(width, color_at(choice.color, th, mirror_t(i, v.len()))),
+                );
+            }
+        }
+    }
+}
+
+/// `bars` spread over `per_half` points and mirrored into a full circle of
+/// `2 × per_half`: point `i` and point `2 × per_half − 1 − i` are the same
+/// band, lowest first.
+pub fn around(bars: &[f32], per_half: usize) -> Vec<f32> {
+    let half = resample(bars, per_half);
+    half.iter().chain(half.iter().rev()).copied().collect()
+}
+
+/// Point `i` of `n` around the circle, in radians: clockwise from the top,
+/// each in the middle of its slice, so the two halves mirror each other
+/// about the vertical.
+pub fn ring_angle(i: usize, n: usize) -> f32 {
+    -std::f32::consts::FRAC_PI_2 + (i as f32 + 0.5) / n.max(1) as f32 * std::f32::consts::TAU
+}
+
+/// The colour position (0 = lowest note) of point `i` of a mirrored circle.
+fn mirror_t(i: usize, n: usize) -> f32 {
+    let half = (n / 2).max(1);
+    let k = if i < half { i } else { n - 1 - i };
+    if half > 1 {
+        k as f32 / (half - 1) as f32
+    } else {
+        0.0
+    }
+}
+
+/// The mean of the lowest [`BASS_BANDS`] bands, 0–1.
+fn bass(bars: &[f32]) -> f32 {
+    let n = BASS_BANDS.min(bars.len());
+    if n == 0 {
+        return 0.0;
+    }
+    bars[..n].iter().sum::<f32>() / n as f32
+}
+
+/// The pulse ring's radius: a quarter of the way out from the cover in
+/// silence, breathing out to four fifths with the bass, so its dots stay
+/// inside `r_out`.
+pub fn pulse_radius(r_in: f32, r_out: f32, bass: f32) -> f32 {
+    r_in + (r_out - r_in).max(0.0) * (0.25 + 0.55 * bass.clamp(0.0, 1.0))
 }
 
 /// LED colours from the bottom: green, then yellow, then red at the top.
@@ -547,6 +657,35 @@ mod tests {
             .iter()
             .fold((1.0f32, 0.0f32), |(a, b), x| (a.min(*x), b.max(*x)));
         assert!(max - min > 0.3, "it twinkles: {min}–{max}");
+    }
+
+    #[test]
+    fn the_ring_is_mirrored_with_the_low_notes_at_the_top() {
+        let bars: Vec<f32> = (0..24).map(|i| i as f32 / 23.0).collect();
+        let v = around(&bars, 32);
+        assert_eq!(v.len(), 64);
+        for i in 0..32 {
+            assert_eq!(v[i], v[63 - i], "point {i}");
+        }
+        assert!(v[0] < 0.01 && v[31] > 0.99, "{v:?}");
+        // The first and last points sit either side of the top, mirrored.
+        let (a, b) = (ring_angle(0, 64), ring_angle(63, 64));
+        assert!((a.cos() + b.cos()).abs() < 1e-5 && (a.sin() - b.sin()).abs() < 1e-5);
+        assert!(a.sin() < -0.99, "at the top: {a}");
+        assert_eq!(mirror_t(0, 64), 0.0);
+        assert_eq!(mirror_t(63, 64), 0.0);
+        assert_eq!(mirror_t(31, 64), 1.0);
+    }
+
+    #[test]
+    fn the_pulse_ring_breathes_with_the_bass_and_stays_inside() {
+        let quiet = pulse_radius(50.0, 90.0, 0.0);
+        let loud = pulse_radius(50.0, 90.0, 1.0);
+        assert!(quiet > 50.0 && quiet < loud, "{quiet} {loud}");
+        assert!(loud <= 90.0 * 0.95, "{loud}");
+        assert_eq!(pulse_radius(50.0, 90.0, 7.0), loud, "clamped");
+        assert_eq!(bass(&[1.0, 1.0, 0.0, 0.0, 1.0]), 0.5);
+        assert_eq!(bass(&[]), 0.0);
     }
 
     #[test]

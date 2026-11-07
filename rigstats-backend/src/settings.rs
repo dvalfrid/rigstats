@@ -558,11 +558,13 @@ pub enum SpectrumStyle {
     Dots,
     Stars,
     Scope,
+    Ring,
+    Pulse,
 }
 
 impl SpectrumStyle {
     /// Every style, in the order the Control Center lists them.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 11] = [
         Self::Bars,
         Self::Peaks,
         Self::Mirror,
@@ -572,6 +574,8 @@ impl SpectrumStyle {
         Self::Dots,
         Self::Stars,
         Self::Scope,
+        Self::Ring,
+        Self::Pulse,
     ];
 
     /// The name shown in the Control Center.
@@ -586,7 +590,16 @@ impl SpectrumStyle {
             Self::Dots => "Dots",
             Self::Stars => "Star field",
             Self::Scope => "Oscilloscope",
+            Self::Ring => "Ring around the cover",
+            Self::Pulse => "Pulse ring of dots",
         }
+    }
+
+    /// Whether the style is drawn around the cover, which then sits in the
+    /// middle of the panel with the title below it (#732 round 3), instead
+    /// of in a strip below the cover and title.
+    pub fn around_cover(self) -> bool {
+        matches!(self, Self::Ring | Self::Pulse)
     }
 }
 
@@ -1413,15 +1426,20 @@ mod profile_look_tests {
         assert_eq!(unknown.spectrum_style, SpectrumStyle::Bars);
         assert_eq!(unknown.spectrum_color, SpectrumColor::Accent);
 
-        // Round 2's styles (#732) by name.
+        // Rounds 2 and 3's styles (#732) by name; only round 3's are drawn
+        // around the cover.
         for (style, name) in [
             (SpectrumStyle::Stars, "stars"),
             (SpectrumStyle::Scope, "scope"),
+            (SpectrumStyle::Ring, "ring"),
+            (SpectrumStyle::Pulse, "pulse"),
         ] {
             assert_eq!(serde_json::to_value(style).unwrap(), name);
             let back: SpectrumStyle = serde_json::from_value(name.into()).unwrap();
             assert_eq!(back, style);
+            assert_eq!(style.around_cover(), matches!(name, "ring" | "pulse"));
         }
+        assert!(!SpectrumStyle::ALL[..9].iter().any(|s| s.around_cover()));
     }
 
     #[test]

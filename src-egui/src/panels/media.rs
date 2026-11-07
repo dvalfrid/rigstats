@@ -1,7 +1,9 @@
 //! NOW PLAYING (#718): the cover picture, title, artist, album and whether it
 //! plays, from `PollStats::media` (Windows' current media session, read in
 //! `rigstats_backend::media`). Below them, when the profile turns it on, a
-//! spectrum of what the PC plays (#719, `rigstats_backend::spectrum`).
+//! spectrum of what the PC plays (#719, `rigstats_backend::spectrum`). The
+//! ring styles (#732 round 3) change the layout instead: a round cover in
+//! the middle with the spectrum around it, and the title below.
 
 use egui::{Color32, CornerRadius, RichText, Sense, TextureHandle, Ui, Vec2};
 
@@ -41,6 +43,10 @@ pub fn draw(
         ui.add_space(4.0 * sc);
         if compact {
             super::body_pad(ui);
+        }
+        if !compact && spectrum.fps > 0 && spectrum.style.around_cover() {
+            ring_layout(ui, stats.media.as_ref(), spectrum, th, sc, opacity);
+            return;
         }
 
         let Some(now) = &stats.media else {
@@ -117,6 +123,91 @@ fn draw_spectrum(
     );
     super::spectrum::paint(ui, rect, &bars, &wave, choice, th, sc);
 }
+/// This frame's bars while something plays, asking for the next frame after
+/// `1 / fps`; at rest (all zero) otherwise, with no capture and no extra
+/// frames.
+fn spectrum_bars(ui: &Ui, playing: bool, fps: u8) -> [f32; rigstats_backend::spectrum::BANDS] {
+    if playing && fps > 0 {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f32(1.0 / f32::from(fps)));
+        rigstats_backend::spectrum::bars()
+    } else {
+        [0.0; rigstats_backend::spectrum::BANDS]
+    }
+}
+
+/// The ring layout's square at scale 1 (cover and spectrum around it), and
+/// the smallest it shrinks to in a landscape cell.
+const RING_AREA: f32 = 210.0;
+const RING_AREA_MIN: f32 = 80.0;
+
+/// The cover's radius as a share of the ring area's.
+const RING_COVER: f32 = 0.58;
+
+/// The spectrum around a round cover in the middle, the title and artist
+/// centred below (#732 round 3). Taller than the other panels where the
+/// window or card grows with it; in the landscape grid's fixed cell the
+/// ring shrinks so the text still fits (`theme::panel_room`).
+fn ring_layout(
+    ui: &mut Ui,
+    now: Option<&rigstats_backend::media::NowPlaying>,
+    choice: super::spectrum::SpectrumChoice,
+    th: &theme::AppTheme,
+    sc: f32,
+    opacity: f32,
+) {
+    let gap = 6.0 * sc;
+    let title_h = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(16.0 * sc)));
+    let artist_h = ui.fonts_mut(|f| f.row_height(&egui::FontId::proportional(13.0 * sc)));
+    let text_h = title_h + 2.0 * sc + artist_h;
+    let mut side = RING_AREA * sc;
+    if let Some(room) = theme::panel_room(ui, sc) {
+        // egui's own spacing comes after the ring and after the gap.
+        let spacing = 2.0 * ui.spacing().item_spacing.y;
+        side = side.min(room - gap - spacing - text_h);
+    }
+    let side = side.max(RING_AREA_MIN * sc).min(ui.available_width());
+
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), side), Sense::hover());
+    let centre = rect.center();
+    let r_out = side / 2.0;
+    let r_cover = r_out * RING_COVER;
+    let bars = spectrum_bars(ui, now.is_some_and(|n| n.playing), choice.fps);
+    super::spectrum::paint_around(ui, centre, r_cover + 4.0 * sc, r_out, &bars, choice, th, sc);
+    let texture = now.and_then(|n| cover_texture(ui.ctx(), n.cover.as_ref()));
+    paint_cover(
+        ui,
+        egui::Rect::from_center_size(centre, Vec2::splat(2.0 * r_cover)),
+        texture.as_ref(),
+        r_cover,
+        th,
+        opacity,
+    );
+
+    ui.add_space(gap);
+    ui.vertical_centered(|ui| {
+        ui.spacing_mut().item_spacing.y = 2.0 * sc;
+        match now {
+            Some(now) => {
+                one_line(ui, &now.track.title, 16.0 * sc, theme::C_VALUE, true);
+                // An empty artist still takes its line, so the panel's height
+                // doesn't change with the track.
+                let artist = if now.track.artist.is_empty() {
+                    " "
+                } else {
+                    &now.track.artist
+                };
+                one_line(ui, artist, 13.0 * sc, th.text_muted, false);
+            }
+            None => {
+                // The title's size, so the panel keeps its height.
+                one_line(ui, "NOTHING PLAYING", 16.0 * sc, th.text_muted, false);
+                one_line(ui, " ", 13.0 * sc, th.text_muted, false);
+            }
+        }
+    });
+}
+
 fn side(compact: bool, sc: f32) -> f32 {
     (if compact { COVER_COMPACT } else { COVER }) * sc
 }
@@ -182,7 +273,20 @@ fn cover_box(
     opacity: f32,
 ) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(side), Sense::hover());
-    let radius = CornerRadius::same((side * 0.06).round() as u8);
+    paint_cover(ui, rect, texture, side * 0.06, th, opacity);
+}
+
+/// The cover in `rect` with corners of `radius` (half the side makes it
+/// round), or a quiet shape in its place.
+fn paint_cover(
+    ui: &Ui,
+    rect: egui::Rect,
+    texture: Option<&TextureHandle>,
+    radius: f32,
+    th: &theme::AppTheme,
+    opacity: f32,
+) {
+    let radius = CornerRadius::same(radius.round().clamp(0.0, 255.0) as u8);
     match texture {
         // Opaque whatever the panels' opacity: in the desktop wallpaper the
         // panels are often almost see-through, and a picture at that opacity

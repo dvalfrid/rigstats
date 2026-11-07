@@ -442,6 +442,10 @@ impl DashboardView<'_> {
                 child.set_clip_rect(cell_rect.intersect(child.clip_rect()));
                 if compact_row {
                     ctx.data_mut(|d| d.insert_temp(theme::panel_stretch_id(), content_h));
+                } else {
+                    // A full row is fixed and clips: a panel that chooses its
+                    // own height fits itself to it (#732).
+                    ctx.data_mut(|d| d.insert_temp(theme::panel_budget_id(), content_h));
                 }
                 ctx.data_mut(|d| d.remove::<f32>(theme::panel_natural_id()));
                 if let Some(p) =
@@ -449,7 +453,10 @@ impl DashboardView<'_> {
                 {
                     new_pref = Some(p);
                 }
-                ctx.data_mut(|d| d.remove::<f32>(theme::panel_stretch_id()));
+                ctx.data_mut(|d| {
+                    d.remove::<f32>(theme::panel_stretch_id());
+                    d.remove::<f32>(theme::panel_budget_id());
+                });
                 // Remember the panel's own height for the next frame; a change
                 // (a panel switched to compact, a new scale) settles in a frame.
                 if let Some(h) = ctx.data(|d| d.get_temp::<f32>(theme::panel_natural_id())) {

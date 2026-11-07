@@ -267,6 +267,27 @@ pub fn panel_stretch_id() -> egui::Id {
     egui::Id::unique("panel_frame_stretch")
 }
 
+/// Where the landscape grid tells the next `panel_frame` the outer height
+/// its cell has: a row of full panels is a fixed height and clips what
+/// doesn't fit, so a panel that chooses its own height (Now Playing with the
+/// spectrum around the cover, #732) fits itself to it (`panel_room`). Set
+/// before a panel is drawn and removed after; absent everywhere else, where
+/// the window or card grows with the panel.
+pub fn panel_budget_id() -> egui::Id {
+    egui::Id::unique("panel_frame_budget")
+}
+
+/// The height left below `ui`'s cursor inside a panel the landscape grid
+/// gave a budget (`panel_budget_id`): the budget less the frame's top and
+/// bottom margin (8 px × scale rounded, like the frame, and its stroke) and
+/// what the panel has drawn so far. `None` outside the grid. `ui` is the
+/// frame's own content ui.
+pub fn panel_room(ui: &Ui, sc: f32) -> Option<f32> {
+    let budget = ui.ctx().data(|d| d.get_temp::<f32>(panel_budget_id()))?;
+    let margin = 2.0 * ((8.0 * sc).round() + PANEL_STROKE_W);
+    Some(budget - margin - (ui.cursor().top() - ui.max_rect().top()))
+}
+
 /// Where `panel_frame` leaves the outer height the panel just drawn has on
 /// its own, before a stretch.
 pub fn panel_natural_id() -> egui::Id {
