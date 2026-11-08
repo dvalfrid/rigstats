@@ -8,12 +8,26 @@ namespace SensorSidecar.Tests;
 /// After sleep the active profile's lighting is written again when the
 /// display comes back on — only the lighting, never during a preview (#670).
 /// </summary>
-public class LightingAfterWakeTests
+public sealed class LightingAfterWakeTests : IDisposable
 {
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), "rigstats-wake-tests-" + Guid.NewGuid());
+    private readonly ProfileStore _store;
+
+    public LightingAfterWakeTests()
+    {
+        Directory.CreateDirectory(_dir);
+        _store = new ProfileStore(Path.Combine(_dir, "profiles.json"));
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_dir, recursive: true); } catch { }
+    }
+
     private static readonly Profile Balanced = new()
     {
-        Id = "balanced",
-        Name = "Balanced",
+        Id = "wake-test",
+        Name = "Wake test",
         Part = new ProfilePart
         {
             PowerPlan = "balanced",
@@ -99,5 +113,71 @@ public class LightingAfterWakeTests
         Assert.Null(result);
         aura.DidNotReceive().Apply(Arg.Any<ProfilePart>());
         await broker.EndPreviewAsync(keep: false, CancellationToken.None);
+    }
+
+    // Three writes a few milliseconds apart stand in for 3, 10 and 30 s.
+    private LightingAfterWake Wake(ControlBroker broker) => new(_store, broker)
+    {
+        WriteAt = [TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(20), TimeSpan.FromMilliseconds(30)],
+    };
+
+    private async Task MakeActiveAsync()
+    {
+        Assert.True(await _store.SaveProfileAsync(Balanced, CancellationToken.None));
+        await _store.SetActiveAsync(Balanced.Id, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task The_lighting_is_written_at_each_time_after_display_on()
+    {
+        await MakeActiveAsync();
+        var aura = Provider("aura");
+        var broker = new ControlBroker([aura]);
+
+        await Wake(broker).WriteAfterWakeAsync(CancellationToken.None);
+
+        aura.Received(3).Apply(Arg.Any<ProfilePart>());
+    }
+
+    [Fact]
+    public async Task A_profile_applied_in_between_ends_the_writes()
+    {
+        await MakeActiveAsync();
+        var aura = Provider("aura");
+        var broker = new ControlBroker([aura]);
+        var firstWrite = new TaskCompletionSource();
+        aura.When(a => a.Apply(Arg.Any<ProfilePart>())).Do(_ => firstWrite.TrySetResult());
+        // Wide gaps after the first write, so the switch is surely in between.
+        var wake = new LightingAfterWake(_store, broker)
+        {
+            WriteAt = [TimeSpan.FromMilliseconds(10), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2)],
+        };
+
+        var writes = wake.WriteAfterWakeAsync(CancellationToken.None);
+        await firstWrite.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await broker.ApplyProfileAsync(Balanced, CancellationToken.None);
+        await broker.Settled;
+        await writes;
+
+        // The wake's first write and the switch's own; not the wake's later two.
+        aura.Received(2).Apply(Arg.Any<ProfilePart>());
+    }
+
+    [Fact]
+    public async Task Nothing_is_written_without_lighting_in_the_active_profile()
+    {
+        var noLighting = new Profile
+        {
+            Id = "wake-test",
+            Name = "Wake test",
+            Part = new ProfilePart { PowerPlan = "balanced" },
+        };
+        Assert.True(await _store.SaveProfileAsync(noLighting, CancellationToken.None));
+        await _store.SetActiveAsync(noLighting.Id, CancellationToken.None);
+        var aura = Provider("aura");
+
+        await Wake(new ControlBroker([aura])).WriteAfterWakeAsync(CancellationToken.None);
+
+        aura.DidNotReceive().Apply(Arg.Any<ProfilePart>());
     }
 }
