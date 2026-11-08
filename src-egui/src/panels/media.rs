@@ -27,19 +27,23 @@ pub fn draw(
     // album or state row.
     compact: bool,
     // The spectrum (#719, #732, the profile's look): rate (0 = none), style
-    // and colour. Not in the compact layout, which has no room for it.
+    // and colour. The compact layout shows a small one on its title row.
     spectrum: super::spectrum::SpectrumChoice,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
         if !compact {
             ui.set_min_height(theme::PANEL_DATA_H * sc);
         }
-        ui.label(
-            RichText::new("NOW PLAYING")
-                .strong()
-                .color(theme::C_PANEL_TITLE)
-                .size(theme::FONT_PANEL_TITLE * sc),
-        );
+        let title = RichText::new("NOW PLAYING")
+            .strong()
+            .color(theme::C_PANEL_TITLE)
+            .size(theme::FONT_PANEL_TITLE * sc);
+        if compact && spectrum.fps > 0 {
+            let playing = stats.media.as_ref().is_some_and(|m| m.playing);
+            title_with_mini_spectrum(ui, title, playing, spectrum, th, sc);
+        } else {
+            ui.label(title);
+        }
         ui.add_space(4.0 * sc);
         if compact {
             super::body_pad(ui);
@@ -101,21 +105,7 @@ fn draw_spectrum(
     th: &theme::AppTheme,
     sc: f32,
 ) {
-    use rigstats_backend::spectrum::{BANDS, WAVE_POINTS};
-    let mut bars = [0.0; BANDS];
-    let mut wave = [0.0; WAVE_POINTS];
-    if playing {
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_secs_f32(
-                1.0 / f32::from(choice.fps),
-            ));
-        // The oscilloscope draws the wave, every other style the bands.
-        if choice.style == rigstats_backend::settings::SpectrumStyle::Scope {
-            wave = rigstats_backend::spectrum::wave();
-        } else {
-            bars = rigstats_backend::spectrum::bars();
-        }
-    }
+    let (bars, wave) = spectrum_data(ui, playing, choice);
     ui.add_space(10.0 * sc);
     let (rect, _) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), SPECTRUM_H * sc),
@@ -123,6 +113,80 @@ fn draw_spectrum(
     );
     super::spectrum::paint(ui, rect, &bars, &wave, choice, th, sc);
 }
+
+/// This frame's bands and wave while something plays (the oscilloscope gets
+/// the wave, every other style the bands), asking for the next frame after
+/// `1 / fps`; at rest (all zero) otherwise, with no capture and no extra
+/// frames.
+fn spectrum_data(
+    ui: &Ui,
+    playing: bool,
+    choice: super::spectrum::SpectrumChoice,
+) -> (
+    [f32; rigstats_backend::spectrum::BANDS],
+    [f32; rigstats_backend::spectrum::WAVE_POINTS],
+) {
+    use rigstats_backend::spectrum::{BANDS, WAVE_POINTS};
+    let mut bars = [0.0; BANDS];
+    let mut wave = [0.0; WAVE_POINTS];
+    if playing && choice.fps > 0 {
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f32(
+                1.0 / f32::from(choice.fps),
+            ));
+        if choice.style == rigstats_backend::settings::SpectrumStyle::Scope {
+            wave = rigstats_backend::spectrum::wave();
+        } else {
+            bars = rigstats_backend::spectrum::bars();
+        }
+    }
+    (bars, wave)
+}
+
+/// The space between NOW PLAYING and the compact layout's spectrum, which
+/// takes the rest of the title row, and how far it reaches down into the
+/// space between the title row and the cover (drawn there, not laid out, so
+/// the row and the panel keep their height); at scale 1.
+const MINI_GAP: f32 = 20.0;
+const MINI_DROP: f32 = 6.0;
+
+/// The compact layout's title row: NOW PLAYING on the left and, filling the
+/// rest of the row, a small spectrum a little taller than the title, so the
+/// panel stays at the shared compact height (#604).
+fn title_with_mini_spectrum(
+    ui: &mut Ui,
+    title: RichText,
+    playing: bool,
+    choice: super::spectrum::SpectrumChoice,
+    th: &theme::AppTheme,
+    sc: f32,
+) {
+    ui.scope(|ui| {
+        // A horizontal row is otherwise a button high; keep it the title's.
+        ui.spacing_mut().interact_size.y = 0.0;
+        ui.horizontal(|ui| {
+            let h = ui.label(title).rect.height();
+            let w = (ui.available_width() - MINI_GAP * sc).max(0.0);
+            if w < 24.0 * sc {
+                return;
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (row, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+                let rect = egui::Rect::from_min_max(
+                    egui::pos2(row.left(), row.top() + 1.0 * sc),
+                    egui::pos2(row.right(), row.bottom() + MINI_DROP * sc),
+                );
+                let (bars, wave) = spectrum_data(ui, playing, choice);
+                let mini = super::spectrum::SpectrumChoice {
+                    style: super::spectrum::compact_style(choice.style),
+                    ..choice
+                };
+                super::spectrum::paint(ui, rect, &bars, &wave, mini, th, sc);
+            });
+        });
+    });
+}
+
 /// This frame's bars while something plays, asking for the next frame after
 /// `1 / fps`; at rest (all zero) otherwise, with no capture and no extra
 /// frames.

@@ -179,16 +179,18 @@ pub fn paint(
             }
         }
         SpectrumStyle::Led => {
-            const SEGMENTS: usize = 10;
             let gap = 2.0 * sc;
-            let seg_h = (rect.height() - gap * (SEGMENTS - 1) as f32) / SEGMENTS as f32;
+            // Up to 10 blocks, fewer where they wouldn't fit (the compact
+            // layout's title row is ~13 px tall).
+            let segments = led_segments(rect.height(), gap, 2.4 * sc);
+            let seg_h = (rect.height() - gap * (segments - 1) as f32) / segments as f32;
             for (i, (x0, x1)) in columns(rect.left(), rect.width(), 3.0 * sc, n)
                 .into_iter()
                 .enumerate()
             {
-                let lit = lit_segments(bars[i], SEGMENTS);
-                for k in 0..SEGMENTS {
-                    let mut c = led_color(k, SEGMENTS);
+                let lit = lit_segments(bars[i], segments);
+                for k in 0..segments {
+                    let mut c = led_color(k, segments);
                     if k >= lit {
                         c = c.gamma_multiply(0.12);
                     }
@@ -454,6 +456,23 @@ pub fn pulse_radius(r_in: f32, r_out: f32, bass: f32) -> f32 {
     r_in + (r_out - r_in).max(0.0) * (0.25 + 0.55 * bass.clamp(0.0, 1.0))
 }
 
+/// The style drawn in the compact layout's small spectrum on the title row:
+/// the profile's own, except the two drawn around the cover, which need the
+/// centred cover the compact layout doesn't have — the ring becomes bars,
+/// the pulse ring dots.
+pub fn compact_style(style: SpectrumStyle) -> SpectrumStyle {
+    match style {
+        SpectrumStyle::Ring => SpectrumStyle::Bars,
+        SpectrumStyle::Pulse => SpectrumStyle::Dots,
+        other => other,
+    }
+}
+/// How many LED blocks fit in `height` with `gap` between them, each at least
+/// `min_block` tall: 10 at most, 3 at least.
+pub fn led_segments(height: f32, gap: f32, min_block: f32) -> usize {
+    (((height + gap) / (min_block + gap)).floor() as usize).clamp(3, 10)
+}
+
 /// LED colours from the bottom: green, then yellow, then red at the top.
 fn led_color(k: usize, of: usize) -> Color32 {
     let f = k as f32 / of as f32;
@@ -686,6 +705,34 @@ mod tests {
         assert_eq!(pulse_radius(50.0, 90.0, 7.0), loud, "clamped");
         assert_eq!(bass(&[1.0, 1.0, 0.0, 0.0, 1.0]), 0.5);
         assert_eq!(bass(&[]), 0.0);
+    }
+
+    #[test]
+    fn the_compact_spectrum_keeps_the_style_unless_it_needs_the_cover() {
+        for style in SpectrumStyle::ALL {
+            let mini = compact_style(style);
+            assert!(!mini.around_cover(), "{style:?} -> {mini:?}");
+            if !style.around_cover() {
+                assert_eq!(mini, style);
+            }
+        }
+    }
+
+    #[test]
+    fn led_blocks_fit_the_height() {
+        assert_eq!(
+            led_segments(44.0, 2.0, 2.4),
+            10,
+            "the full panel's spectrum keeps 10"
+        );
+        assert_eq!(led_segments(100.0, 2.0, 2.4), 10, "never more than 10");
+        assert_eq!(led_segments(13.0, 2.0, 2.4), 3, "the compact title row");
+        assert_eq!(led_segments(4.0, 2.0, 2.4), 3, "never fewer than 3");
+        // Every block keeps a positive height where it gets to choose.
+        for h in [13.0f32, 20.0, 44.0, 88.0] {
+            let n = led_segments(h, 2.0, 2.4);
+            assert!((h - 2.0 * (n - 1) as f32) / n as f32 > 0.0, "{h}: {n}");
+        }
     }
 
     #[test]
