@@ -143,16 +143,15 @@ fn spectrum_data(
     (bars, wave)
 }
 
-/// The share of the title row the compact layout's spectrum may take, its
-/// widest at scale 1, and how far it reaches down into the space between the
-/// title row and the cover (drawn there, not laid out, so the row and the
-/// panel keep their height).
-const MINI_SHARE: f32 = 0.62;
-const MINI_MAX_W: f32 = 230.0;
+/// The space between NOW PLAYING and the compact layout's spectrum, which
+/// takes the rest of the title row, and how far it reaches down into the
+/// space between the title row and the cover (drawn there, not laid out, so
+/// the row and the panel keep their height); at scale 1.
+const MINI_GAP: f32 = 20.0;
 const MINI_DROP: f32 = 6.0;
 
-/// The compact layout's title row: NOW PLAYING on the left and, in the room
-/// to its right, a small spectrum a little taller than the title, so the
+/// The compact layout's title row: NOW PLAYING on the left and, filling the
+/// rest of the row, a small spectrum a little taller than the title, so the
 /// panel stays at the shared compact height (#604).
 fn title_with_mini_spectrum(
     ui: &mut Ui,
@@ -167,10 +166,7 @@ fn title_with_mini_spectrum(
         ui.spacing_mut().interact_size.y = 0.0;
         ui.horizontal(|ui| {
             let h = ui.label(title).rect.height();
-            let gap = 12.0 * sc;
-            let w = ((ui.available_width() - gap) * MINI_SHARE)
-                .min(MINI_MAX_W * sc)
-                .max(0.0);
+            let w = (ui.available_width() - MINI_GAP * sc).max(0.0);
             if w < 24.0 * sc {
                 return;
             }
