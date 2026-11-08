@@ -558,7 +558,18 @@ mod tests {
             (
                 "media",
                 draw_at(&ctx, w, |ui| {
-                    super::media::draw(ui, &s, 1.0, &th, sc, compact, Default::default())
+                    super::media::draw(
+                        ui,
+                        &s,
+                        1.0,
+                        &th,
+                        sc,
+                        compact,
+                        super::spectrum::SpectrumChoice {
+                            fps: 30,
+                            ..Default::default()
+                        },
+                    )
                 }),
                 w,
             ),
