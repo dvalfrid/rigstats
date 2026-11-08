@@ -143,14 +143,17 @@ fn spectrum_data(
     (bars, wave)
 }
 
-/// The share of the title row the compact layout's spectrum may take, and
-/// its widest at scale 1.
-const MINI_SHARE: f32 = 0.5;
-const MINI_MAX_W: f32 = 170.0;
+/// The share of the title row the compact layout's spectrum may take, its
+/// widest at scale 1, and how far it reaches down into the space between the
+/// title row and the cover (drawn there, not laid out, so the row and the
+/// panel keep their height).
+const MINI_SHARE: f32 = 0.62;
+const MINI_MAX_W: f32 = 230.0;
+const MINI_DROP: f32 = 6.0;
 
 /// The compact layout's title row: NOW PLAYING on the left and, in the room
-/// to its right, a small spectrum as tall as the title, so the panel stays
-/// at the shared compact height (#604).
+/// to its right, a small spectrum a little taller than the title, so the
+/// panel stays at the shared compact height (#604).
 fn title_with_mini_spectrum(
     ui: &mut Ui,
     title: RichText,
@@ -172,7 +175,11 @@ fn title_with_mini_spectrum(
                 return;
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let (rect, _) = ui.allocate_exact_size(Vec2::new(w, h * 0.78), Sense::hover());
+                let (row, _) = ui.allocate_exact_size(Vec2::new(w, h), Sense::hover());
+                let rect = egui::Rect::from_min_max(
+                    egui::pos2(row.left(), row.top() + 1.0 * sc),
+                    egui::pos2(row.right(), row.bottom() + MINI_DROP * sc),
+                );
                 let (bars, wave) = spectrum_data(ui, playing, choice);
                 let mini = super::spectrum::SpectrumChoice {
                     style: super::spectrum::compact_style(choice.style),
