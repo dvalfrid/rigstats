@@ -126,6 +126,31 @@ doesn't expose charging for Bluetooth devices. Seen on the owner's rig: the
 Bluetooth mice dropped constantly until the board's Wi-Fi/Bluetooth antenna
 was connected.
 
+## Now Playing And Spectrum Details
+
+The user-facing part is "Now Playing and the spectrum" in
+[troubleshooting](troubleshooting.md#now-playing-and-the-spectrum).
+
+- **Nothing is logged about what plays, by design** (#718). The diagnostics ZIP
+  doesn't say what was playing either. To see what Windows reports, list the
+  sessions from a scratch test: `GlobalSystemMediaTransportControlsSessionManager::RequestAsync`
+  → `GetCurrentSession` / `GetSessions` (needs the windows crate's
+  `Foundation_Collections`), and print only `SourceAppUserModelId` and the
+  playback status. That is how Apple Music was confirmed as the current,
+  playing session on 2026-11-05.
+- **The panel is empty in the desktop wallpaper after turning it on** — fixed
+  in #729: before it, `rigstats-wallpaper` handed its poll loop the settings
+  from its start, and the loop reads Now Playing only while `media` is a
+  visible panel. A host restart showed it. Test the fix the same way: turn the
+  panel on while the host runs, and its PID mustn't change.
+- **The spectrum's capture** (`rigstats-backend/src/spectrum.rs`) is WASAPI
+  loopback on the default render endpoint, 32-bit float mixes only (any other
+  mix format draws nothing, silently). A failed device ends a run; the next
+  run (500 ms later) opens the new default. Silence sends no packets, and the
+  window empties after 120 ms so the bars fall.
+- **Cost** is in the Resource Budget in [architecture](architecture.md#resource-budget):
+  the frame rate costs, not the style (8.9–9.1 % of one core at 30 fps in the
+  Normal layer, every measured style).
 ## Desktop Wallpaper Mode Details
 
 The wallpaper is drawn by a separate process (`rigstats-wallpaper.exe`), a
