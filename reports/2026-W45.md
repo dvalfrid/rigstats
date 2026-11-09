@@ -6,8 +6,8 @@ Snapshot 2026-11-09 (UTC). Newest release: **v1.53.0** (2026-10-31).
 
 - **Update checks per day:** 227 (+3 % from 2026-W44)
 - **Active installations (estimate):** 45–113
-- **Installer downloads since 2026-11-02:** 637 (update checks: 1635)
-- **All time (releases, not RCs):** 7438 installer downloads, 16470 update checks
+- **Installer downloads since 2026-11-02:** 639 (update checks: 1642)
+- **All time (releases, not RCs):** 7438 installer downloads, 16475 update checks
 
 An installation checks for updates 2–5 times a day (at start, then every 6 h), so "active" is a range, the owner's own PCs included. Installer downloads are new installs, winget, the app's own updates and scanners — not people.
 
@@ -15,11 +15,11 @@ An installation checks for updates 2–5 times a day (at start, then every 6 h),
 
 | Release | Published | Installer | Checks |
 |---|---|---|---|
-| v1.54.0-rc.4 (RC) (new) | 2026-11-08 | +1 | +1 |
+| v1.54.0-rc.4 (RC) (new) | 2026-11-08 | +3 | +3 |
 | v1.54.0-rc.3 (RC) (new) | 2026-11-07 | +6 | +15 |
 | v1.54.0-rc.2 (RC) (new) | 2026-11-06 | +20 | +31 |
 | v1.54.0-rc.1 (RC) (new) | 2026-11-05 | +6 | +10 |
-| v1.53.0 | 2026-10-31 | +362 | +1548 |
+| v1.53.0 | 2026-10-31 | +362 | +1553 |
 | v1.53.0-rc.5 (RC) | 2026-10-31 | +1 | +29 |
 | v1.52.0 | 2026-10-27 | +16 | +0 |
 | v1.51.0 | 2026-10-23 | +12 | +0 |
@@ -64,8 +64,8 @@ Every week since the start: `pwsh -File tools\download-stats.ps1 -Trend`.
 
 | Version | Releases | Installer | Checks | First |
 |---|---|---|---|---|
-| 1.54 (RC) | 4 | 33 | 57 | 2026-11-05 |
-| 1.53 | 1 | 618 | 2002 | 2026-10-31 |
+| 1.54 (RC) | 4 | 35 | 59 | 2026-11-05 |
+| 1.53 | 1 | 618 | 2007 | 2026-10-31 |
 | 1.52 | 1 | 405 | 989 | 2026-10-27 |
 | 1.53 (RC) | 5 | 84 | 150 | 2026-10-27 |
 | 1.52 (RC) | 6 | 23 | 46 | 2026-10-24 |
