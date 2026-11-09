@@ -200,12 +200,17 @@ fn spectrum_bars(ui: &Ui, playing: bool, fps: u8) -> [f32; rigstats_backend::spe
     }
 }
 
-/// The ring layout's square at scale 1 (cover and spectrum around it), and
-/// the smallest it shrinks to in a landscape cell.
-const RING_AREA: f32 = 210.0;
+/// The ring layout's square at scale 1 (cover and spectrum around it): as
+/// wide as the panel up to this, and the smallest it shrinks to in a
+/// landscape cell.
+const RING_AREA: f32 = 300.0;
 const RING_AREA_MIN: f32 = 80.0;
 
-/// The cover's radius as a share of the ring area's.
+/// The cover's radius at scale 1, and at most this share of the ring area's
+/// radius (a ring shrunk into a landscape cell keeps room for its bars).
+/// The cover keeps its size as the area grows, so the room for the spectrum
+/// around it grows instead.
+const RING_COVER_R: f32 = 61.0;
 const RING_COVER: f32 = 0.58;
 
 /// The spectrum around a round cover in the middle, the title and artist
@@ -235,7 +240,7 @@ fn ring_layout(
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), side), Sense::hover());
     let centre = rect.center();
     let r_out = side / 2.0;
-    let r_cover = r_out * RING_COVER;
+    let r_cover = (RING_COVER_R * sc).min(r_out * RING_COVER);
     let bars = spectrum_bars(ui, now.is_some_and(|n| n.playing), choice.fps);
     super::spectrum::paint_around(ui, centre, r_cover + 4.0 * sc, r_out, &bars, choice, th, sc);
     let texture = now.and_then(|n| cover_texture(ui.ctx(), n.cover.as_ref()));
