@@ -337,11 +337,14 @@ fn twinkle(time: f32, speed: f32, phase: f32) -> f32 {
     0.775 + 0.225 * (time * speed + phase).sin()
 }
 
-/// A fixed number 0–1 for `(i, salt)`.
-fn hash01(i: usize, salt: u32) -> f32 {
+/// A fixed number 0–1 for `(i, stream)`: the star field's own stable
+/// pseudo-random layout, not cryptography. `stream` picks one of several
+/// independent numbers per star (its x, y, size, …), so they don't repeat
+/// each other.
+fn hash01(i: usize, stream: u32) -> f32 {
     let mut x = (i as u32)
         .wrapping_mul(0x9E37_79B1)
-        .wrapping_add(salt.wrapping_mul(0x85EB_CA6B));
+        .wrapping_add(stream.wrapping_mul(0x85EB_CA6B));
     x ^= x >> 15;
     x = x.wrapping_mul(0x2C1B_3C6D);
     x ^= x >> 12;
