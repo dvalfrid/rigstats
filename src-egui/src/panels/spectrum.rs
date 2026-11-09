@@ -374,7 +374,7 @@ pub fn paint_around(
             let v = around(bars, PULSE_DOTS / 2);
             let radius = pulse_radius(r_in, r_out, bass(bars));
             // min/max, not clamp: at a small scale the cap is below the floor.
-            let dot_max = (room * 0.18).min(3.6 * sc).max(1.0);
+            let dot_max = (room * 0.18).min(5.0 * sc).max(1.0);
             p.circle_stroke(
                 centre,
                 radius,
