@@ -18,6 +18,7 @@ step by step.
 [Graphics card values missing](#graphics-card-values-missing-or-the-service-keeps-stopping) ·
 [Control Center](#control-center) ·
 [Wireless batteries](#peripherals-wireless-batteries) ·
+[Now Playing and the spectrum](#now-playing-and-the-spectrum) ·
 [A shortcut doesn't work](#a-shortcut-doesnt-work) ·
 [Notifications](#notifications-dont-show) ·
 [Wrong screen or size](#the-dashboard-is-on-the-wrong-screen-or-the-wrong-size) ·
@@ -211,6 +212,40 @@ Panels**) and the card over the tray icon show the battery of wireless devices
   isn't listed" under [Control Center](#control-center); its battery is read
   the same way.
 
+## Now Playing And The Spectrum
+
+The NOW PLAYING panel (turn it on under **Control Center → Dashboard →
+Panels**) shows what Windows' own media controls show: the player Windows
+considers current. Its spectrum is set per profile on the same page, under
+**Now Playing → Spectrum** (Off, Calm or Smooth), with its style and colour.
+
+- **"NOTHING PLAYING" while music plays** — the player doesn't tell Windows
+  what it plays. Check Windows' volume or media flyout (the volume icon in the
+  taskbar): if it shows no track either, RIGStats can't see one. Spotify,
+  Apple Music and browsers (YouTube and most web players) do tell Windows;
+  some players need a "media controls" or "system media transport" option
+  turned on.
+- **It shows a different player than the one you listen to** — with several
+  players open, Windows picks one as current; RIGStats follows Windows' choice.
+  Pause or close the other one.
+- **The artist line also holds the album** — some players (Apple Music) send
+  "artist — album" as the artist. RIGStats shows what the player sends.
+- **No cover picture** — the player sent none, or sent it a moment after the
+  title; RIGStats asks again a few times per track.
+- **The spectrum doesn't move** — it draws only while something plays and
+  Spectrum isn't set to Off in the profile in use (in the compact layout it is
+  the small one on the panel's title row). It listens to Windows' default playback device: if your music plays
+  on another device (a second headset, HDMI audio), make that the default in
+  Windows' sound settings. A program that takes the sound card for itself
+  ("exclusive mode", some music players and games) isn't heard at all.
+- **The spectrum moves without music** — it hears everything on the playback
+  device, not only the music: a game, a call or a notification moves it too.
+- **Is my audio recorded?** — no. The sound is turned into bar heights in
+  memory, about a tenth of a second at a time, and never written anywhere.
+  What you listen to isn't logged or put in a diagnostics file either.
+- **It costs CPU** — Smooth (30 frames a second) uses about 9 % of one CPU
+  core, Calm about 5 %, and Off nothing. Use a profile with it off while you
+  game.
 ## A Shortcut Doesn't Work
 
 RIGStats' shortcuts are, unless you changed them, **Ctrl+Alt+O** (overlay),

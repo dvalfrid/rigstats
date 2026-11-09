@@ -22,7 +22,7 @@ RIGStats started as a replacement for ROG Armoury Crate: a lightweight, simple p
 
 It's a free hardware monitor and control center for Windows gaming PCs, built as a native Rust/egui app — no WebView.
 
-- **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper — plus what's playing, with its cover, from any player that tells Windows.
+- **Monitor** — live CPU, GPU, RAM, storage, network and motherboard sensors on a dedicated secondary display (portrait or landscape), as freely placed floating panels, or drawn into the desktop wallpaper — plus what's playing, with its cover, from any player that tells Windows, and a spectrum of the sound in eleven styles (per profile, off by default).
 - **Game overlay** — a compact, click-through metric strip on top of your game, toggled with **Ctrl+Alt+O** (every shortcut can be changed or turned off under **Settings → Shortcuts**).
 - **Microphone mute** — **Ctrl+Alt+M** or the tray row mutes/unmutes your microphone (the one Windows uses for calls, or one you pick in Settings) with a toast saying which way it went (optional).
 - **Control Center** — profiles (Silent, Balanced, Gaming, Eco and your own) with fan curves, Windows power plans, AMD Ryzen, Radeon and GeForce power tuning, RGB lighting (Aura Sync, Dynamic Lighting, Philips Hue), and the settings of ROG headsets (sidetone, noise reduction) and ROG mice (DPI, polling rate, button bindings, energy — and which of the mouse's own profiles each profile uses), run by a background service so it keeps working with the app closed.
