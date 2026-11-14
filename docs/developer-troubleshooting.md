@@ -145,8 +145,9 @@ The user-facing part is "Now Playing and the spectrum" in
   panel on while the host runs, and its PID mustn't change.
 - **The spectrum's capture** (`rigstats-backend/src/spectrum.rs`) is WASAPI
   loopback on the default render endpoint, 32-bit float mixes only (any other
-  mix format draws nothing, silently). A failed device ends a run; the next
-  run (500 ms later) opens the new default. Silence sends no packets, and the
+  mix format draws nothing, silently). A failed device ends a run, and so does
+  another output becoming the default (its endpoint id compared once a
+  second, #747); the next run (500 ms later) opens the new default. Silence sends no packets, and the
   window empties after 120 ms so the bars fall.
 - **Cost** is in the Resource Budget in [architecture](architecture.md#resource-budget):
   the frame rate costs, not the style (8.9–9.1 % of one core at 30 fps in the
