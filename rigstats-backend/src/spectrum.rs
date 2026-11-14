@@ -324,9 +324,9 @@ pub fn is_float32(tag: u16, bits: u16, subformat: Option<u128>) -> bool {
 #[cfg(windows)]
 mod win {
     use super::{analyze, is_float32, smooth, waveform, Ring, BANDS, STEP, WAVE_POINTS};
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
     use windows::Win32::Media::Audio::{
-        eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDeviceEnumerator,
+        eConsole, eRender, IAudioCaptureClient, IAudioClient, IMMDevice, IMMDeviceEnumerator,
         MMDeviceEnumerator, AUDCLNT_BUFFERFLAGS_SILENT, AUDCLNT_SHAREMODE_SHARED,
         AUDCLNT_STREAMFLAGS_LOOPBACK, WAVEFORMATEX, WAVEFORMATEXTENSIBLE,
     };
@@ -335,8 +335,12 @@ mod win {
         COINIT_MULTITHREADED,
     };
 
-    /// One capture run on the default output, until `keep()` ends or the
-    /// device fails. Publishes new bars every [`STEP`].
+    /// How often a run checks that its output is still the default (#747).
+    const DEFAULT_CHECK: Duration = Duration::from_secs(1);
+
+    /// One capture run on the default output, until `keep()` ends, the
+    /// device fails or another output becomes the default. Publishes new
+    /// bars every [`STEP`].
     pub fn run(keep: &dyn Fn() -> bool, publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS])) {
         // SAFETY: no reserved argument; balanced below on this thread.
         let init = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
@@ -389,11 +393,38 @@ mod win {
             sub.to_u128()
         });
         if is_float32(tag, bits, subformat) && channels > 0 {
-            stream(&client, format, channels, rate, keep, publish);
+            let opened = id(&device);
+            // A default output that is another device ends the run; the
+            // next one opens it (#747); so does no default output at all.
+            let still_default = || {
+                // SAFETY: `enumerator` is live.
+                let now = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) };
+                now.ok().and_then(|d| id(&d)) == opened
+            };
+            stream(
+                &client,
+                format,
+                channels,
+                rate,
+                keep,
+                &still_default,
+                publish,
+            );
         }
         // SAFETY: from GetMixFormat (CoTaskMemAlloc), ours, freed once;
         // nothing reads it afterwards.
         unsafe { CoTaskMemFree(Some(format.cast())) };
+    }
+
+    /// The device's endpoint id, `None` when it can't be read.
+    fn id(device: &IMMDevice) -> Option<String> {
+        // SAFETY: `device` is live; on success the string is CoTaskMem ours.
+        let raw = unsafe { device.GetId() }.ok()?;
+        // SAFETY: `raw` is a NUL-terminated wide string from GetId.
+        let text = unsafe { raw.to_string() }.ok();
+        // SAFETY: from GetId (CoTaskMemAlloc), freed once, not read after.
+        unsafe { CoTaskMemFree(Some(raw.0.cast())) };
+        text
     }
 
     fn stream(
@@ -402,6 +433,7 @@ mod win {
         channels: usize,
         rate: u32,
         keep: &dyn Fn() -> bool,
+        still_default: &dyn Fn() -> bool,
         publish: &dyn Fn([f32; BANDS], [f32; WAVE_POINTS]),
     ) {
         // SAFETY: `client` is live and not yet initialized; `format` is its
@@ -432,7 +464,14 @@ mod win {
         let mut shown = [0.0f32; BANDS];
         let mut last = Instant::now();
         let mut last_packet = Instant::now();
+        let mut checked = Instant::now();
         'outer: while keep() {
+            if checked.elapsed() >= DEFAULT_CHECK {
+                checked = Instant::now();
+                if !still_default() {
+                    break;
+                }
+            }
             loop {
                 // SAFETY: `capture` is live and its stream started.
                 let Ok(frames) = (unsafe { capture.GetNextPacketSize() }) else {
