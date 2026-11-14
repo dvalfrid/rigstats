@@ -57,6 +57,12 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
     // The last switch's lighting and devices, applied after its answer.
     private CancellationTokenSource? _afterwards;
 
+    private int _transactions;
+
+    /// Counts applies and previews, so a caller can tell one happened since
+    /// it looked (the writes after a wake stop then, #720).
+    public int Transactions => Volatile.Read(ref _transactions);
+
     /// The last switch's lighting and devices are done (tests, start-up).
     public Task Settled { get; private set; } = Task.CompletedTask;
 
@@ -72,6 +78,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
             // A new apply supersedes a pending preview: undo it first, so
             // domains the new profile doesn't touch don't keep previewed
             // values nobody confirmed.
+            Interlocked.Increment(ref _transactions);
             RevertPreviewLocked();
             _retry?.Cancel();
             _retry = null;
@@ -228,6 +235,7 @@ public sealed class ControlBroker(IEnumerable<IControlProvider> providers)
         await _transactionLock.WaitAsync(ct);
         try
         {
+            Interlocked.Increment(ref _transactions);
             RevertPreviewLocked();
             // The preview writes every part itself: a retry of sleeping
             // devices, or the lighting still to follow a switch, would

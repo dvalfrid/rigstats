@@ -940,7 +940,16 @@ controller, not one board:
   while a preview is pending. Not enough on the G14 (Modern Standby, seen on
   1.53.0-rc.5): the write is accepted and logged 3 s after display-on, and the
   keyboard still doesn't show the colour; a profile switch 24 s later did.
-  The cause is open (#720).
+  The cause is open (#720). The lighting is therefore written at 3, 10 and
+  30 s after display-on, each with its own log line
+  (`written again (2/3, 10 s after display on)`); a profile applied or
+  previewed in between ends the sequence (`ControlBroker.Transactions`).
+  Seen on the G14 with 1.54.0-rc.5 (2026-11-14): all three writes logged
+  as written, and the keyboard showed the profile's colour about 5 s after
+  the wake, on its own. Probably the first write; the log says when a write
+  was sent, not when the keyboard showed it, and the same 3 s write once
+  failed, so all three stay. The keyboard's own colour shows for the first
+  seconds after a wake, before any write.
 - **A profile without a lighting part leaves the lights alone**, so the
   built-ins change nobody's lighting. The controller can't report its
   effect: `Verify` trusts a successful write, `Capture` returns what the
