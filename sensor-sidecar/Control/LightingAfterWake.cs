@@ -17,8 +17,10 @@ public sealed class LightingAfterWake(ProfileStore profiles, ControlBroker broke
     // USB devices are still coming back right after the display does; a
     // device not there yet is tried again by the broker (#489). Written
     // more than once (#720): on the G14 the write 3 s after a wake was
-    // accepted but the keyboard didn't show it, one 24 s later did. Each
-    // write has its own log line so a test can tell which one took.
+    // accepted but the keyboard didn't show it, one 24 s later did. With
+    // three writes it showed the colour about 5 s after a wake (1.54.0-rc.5);
+    // the later two cover a first write that doesn't take. Each has its own
+    // log line.
     internal IReadOnlyList<TimeSpan> WriteAt { get; init; } =
         [TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
 
