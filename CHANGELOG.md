@@ -8,6 +8,28 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.54.0](https://github.com/dvalfrid/rigstats/compare/v1.53.0...v1.54.0) (2026-11-14)
+
+
+### Features
+
+* **dashboard:** a Now Playing panel with the cover, title, artist and album ([#727](https://github.com/dvalfrid/rigstats/issues/727)) ([80919d2](https://github.com/dvalfrid/rigstats/commit/80919d2e407c9e91260810782df48a382c91ca1a)), closes [#718](https://github.com/dvalfrid/rigstats/issues/718)
+* **dashboard:** a ring and a pulse ring around the Now Playing cover ([#736](https://github.com/dvalfrid/rigstats/issues/736)) ([ab6110e](https://github.com/dvalfrid/rigstats/commit/ab6110e7bf8b0e08ddd9217a0b5b2b067e2e15bf))
+* **dashboard:** a small spectrum on the compact Now Playing panel's title row ([#739](https://github.com/dvalfrid/rigstats/issues/739)) ([7b4b700](https://github.com/dvalfrid/rigstats/commit/7b4b700ec762e875288a70eb87b177674ad87c74))
+* **dashboard:** a spectrum in the Now Playing panel, per profile ([a28e4e5](https://github.com/dvalfrid/rigstats/commit/a28e4e58d530ffc1d251c64f7b1eb2cc9045dd9c)), closes [#719](https://github.com/dvalfrid/rigstats/issues/719)
+* **dashboard:** a star field and an oscilloscope for the spectrum ([#735](https://github.com/dvalfrid/rigstats/issues/735)) ([cbebe78](https://github.com/dvalfrid/rigstats/commit/cbebe78d26334fd89f4122732c136f0d2369ca49))
+* **dashboard:** more room for the ring and pulse ring around the cover ([#740](https://github.com/dvalfrid/rigstats/issues/740)) ([ce67b8b](https://github.com/dvalfrid/rigstats/commit/ce67b8b561fbc8d40805517c5230e987ff5d394c)), closes [#732](https://github.com/dvalfrid/rigstats/issues/732)
+* **dashboard:** seven spectrum styles and a gradient, per profile ([#734](https://github.com/dvalfrid/rigstats/issues/734)) ([f53f71f](https://github.com/dvalfrid/rigstats/commit/f53f71f277bc8214805581f51af71c4563f8f6e8))
+
+
+### Bug Fixes
+
+* **control:** write the lighting again at 3, 10 and 30 s after a wake ([#726](https://github.com/dvalfrid/rigstats/issues/726)) ([408304e](https://github.com/dvalfrid/rigstats/commit/408304eba1992d4a88e983ee6caf7731daebba7f))
+* **dashboard:** the Now Playing cover stays opaque at a low panel opacity ([#731](https://github.com/dvalfrid/rigstats/issues/731)) ([48abdba](https://github.com/dvalfrid/rigstats/commit/48abdba5bbff2307b9ccd1d4c58a37d7cc95cd34)), closes [#730](https://github.com/dvalfrid/rigstats/issues/730)
+* **dashboard:** the star field's layout hash is no salt ([#741](https://github.com/dvalfrid/rigstats/issues/741)) ([bdde54f](https://github.com/dvalfrid/rigstats/commit/bdde54feac3ba9fe32ed57556c2ee086938605ee)), closes [#732](https://github.com/dvalfrid/rigstats/issues/732)
+* **tools:** find OpenRGB's ASUS detector files after their reorganisation ([#723](https://github.com/dvalfrid/rigstats/issues/723)) ([cb43edd](https://github.com/dvalfrid/rigstats/commit/cb43edd5b83a050db2a9148c3454b00d91172db0)), closes [#722](https://github.com/dvalfrid/rigstats/issues/722)
+* **wallpaper:** a panel turned on while running gets its data ([#729](https://github.com/dvalfrid/rigstats/issues/729)) ([f739b7f](https://github.com/dvalfrid/rigstats/commit/f739b7f21e5f00217c7abcd910830657316dcd4b)), closes [#728](https://github.com/dvalfrid/rigstats/issues/728)
+
 ## [1.53.0](https://github.com/dvalfrid/rigstats/compare/v1.52.0...v1.53.0) (2026-10-31)
 
 
