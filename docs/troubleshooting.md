@@ -236,7 +236,7 @@ considers current. Its spectrum is set per profile on the same page, under
   Spectrum isn't set to Off in the profile in use (in the compact layout it is
   the small one on the panel's title row). It listens to Windows' default playback device: if your music plays
   on another device (a second headset, HDMI audio), make that the default in
-  Windows' sound settings. A program that takes the sound card for itself
+  Windows' sound settings; the spectrum follows within a second or so. A program that takes the sound card for itself
   ("exclusive mode", some music players and games) isn't heard at all.
 - **The spectrum moves without music** — it hears everything on the playback
   device, not only the music: a game, a call or a notification moves it too.
