@@ -6,6 +6,8 @@ on:
     paths:
       - 'website/**'
       - 'assets/*.png'
+      - 'assets/*.mp4'
+      - 'assets/*.webm'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -35,7 +37,7 @@ jobs:
       - name: Copy assets into website
         run: |
           mkdir -p website/images
-          cp assets/*.png website/images/
+          cp assets/*.png assets/*.mp4 assets/*.webm website/images/
           # Tell search engines when the site last changed.
           sed -i "s#<lastmod>.*</lastmod>#<lastmod>$(date -u +%Y-%m-%d)</lastmod>#" website/sitemap.xml
 

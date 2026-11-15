@@ -360,10 +360,19 @@ code {
   min-height: 160px;
   border-bottom: 1px solid var(--border);
 }
-.panel-img-wrap img {
+.panel-img-wrap img,
+.panel-img-wrap video {
   max-height: 220px;
   width: auto;
+  max-width: 100%;
   object-fit: contain;
+}
+/* A short looping clip in a panel card's body (Now Playing's ring). */
+.panel-video {
+  display: block;
+  max-width: 100%;
+  margin: 10px 0 6px;
+  border-radius: 6px;
 }
 
 .panel-body {
