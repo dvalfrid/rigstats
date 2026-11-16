@@ -338,6 +338,35 @@ impl LayoutWatch {
     }
 }
 
+/// Every screen's rect in physical pixels and, in the same order, in the
+/// logical pixels egui places windows in (each screen divided by its own
+/// scale), `[left, top, right, bottom]`.
+pub fn screen_rects() -> Vec<([f32; 4], [f32; 4])> {
+    #[cfg(windows)]
+    {
+        let physical = win_monitor::screens(true);
+        let logical = win_monitor::screens(false);
+        physical
+            .into_iter()
+            .zip(logical)
+            .map(|(p, l)| (p.rect, l.rect))
+            .collect()
+    }
+    #[cfg(not(windows))]
+    Vec::new()
+}
+
+/// Where a window covering the screen at `physical` (`[left, top, right,
+/// bottom]`, e.g. `desktop_background::Screen::rect`) goes, as egui's
+/// position and size in logical pixels; `None` when no screen is there.
+pub fn screen_window(physical: [i32; 4], screens: &[([f32; 4], [f32; 4])]) -> Option<egui::Rect> {
+    let p = physical.map(|v| v as f32);
+    screens
+        .iter()
+        .find(|(rect, _)| *rect == p)
+        .map(|(_, [l, t, r, b])| egui::Rect::from_min_max(egui::pos2(*l, *t), egui::pos2(*r, *b)))
+}
+
 /// The layout in a log line: `\\.\DISPLAY1 0,0 2560x1440; …`.
 pub fn layout_line(screens: &[Screen]) -> String {
     screens

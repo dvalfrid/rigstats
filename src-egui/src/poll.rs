@@ -732,7 +732,7 @@ pub async fn poll_loop(
             }
         }
 
-        let (display_model_name, microphone_device, media_shown) = {
+        let (display_model_name, microphone_device, media_shown, media_on_screen) = {
             let s = settings_arc.lock_safe();
             let name = if s.model_name.is_empty() {
                 model_name.clone()
@@ -743,6 +743,9 @@ pub async fn poll_loop(
                 name,
                 s.microphone_device.clone(),
                 s.visible_panels.iter().any(|p| p == "media"),
+                // A screen panel (#737) is drawn by the main app, also in
+                // wallpaper mode (light).
+                s.screen_panels.iter().any(|p| p.panel == "media"),
             )
         };
         // One cheap COM read per tick, so a mute made anywhere shows within
@@ -750,7 +753,7 @@ pub async fn poll_loop(
         let microphone = microphone::current(microphone_device.as_deref()).map(|m| m.muted);
         // Its own thread reads; this only takes the latest. Not reading lets
         // that thread end, so nothing runs while the panel is hidden.
-        let media = if media_shown && !light {
+        let media = if (media_shown && !light) || media_on_screen {
             media_watcher.latest()
         } else {
             None

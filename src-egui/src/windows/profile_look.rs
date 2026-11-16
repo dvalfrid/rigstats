@@ -40,6 +40,9 @@ pub struct LookLink<'a> {
     pub rules: &'a crate::app_rules::RulesHandle,
     /// Wallpaper Engine's state and the Start/Stop buttons' requests (#306).
     pub we: &'a crate::we_link::WeLink,
+    /// The screen the fixed dashboard is on (#737), which a screen panel
+    /// can't use; `None` with floating panels.
+    pub dashboard_screen: &'a Arc<Mutex<Option<String>>>,
 }
 
 /// Theme keys with their colour and a readable name.
@@ -100,6 +103,10 @@ pub struct LookEditor {
     before: Option<ProfileLook>,
     /// The desktop background group's state.
     background: BackgroundPicker,
+    /// The connected screens for the Screen panels group (#737), looked up
+    /// again every few seconds.
+    screens: Vec<Screen>,
+    screens_at: Option<Instant>,
 }
 
 /// The desktop background group's state (#306): the "Choose a picture"
@@ -472,7 +479,140 @@ pub fn dashboard_page(
             },
         );
     }
+    if editor
+        .screens_at
+        .is_none_or(|t| t.elapsed() > Duration::from_secs(3))
+    {
+        editor.screens = desktop_background::screens();
+        editor.screens_at = Some(Instant::now());
+    }
+    let dashboard = link.dashboard_screen.lock_safe().clone();
+    screen_panels_group(ui, dc, look, &editor.screens, dashboard.as_deref());
     editor.preview(link);
+}
+
+/// The panel names a screen can show (#737), "None" first.
+fn screen_panel_label(panel: Option<&str>) -> &'static str {
+    match panel {
+        Some("media") => "Now Playing",
+        _ => "None",
+    }
+}
+
+/// Screen panels (#737): a panel filling a screen of its own, per screen,
+/// and whether it shows always or only while something plays. The
+/// dashboard's own screen is listed but can't be picked; a screen that
+/// isn't connected keeps its panel until it is back or removed.
+fn screen_panels_group(
+    ui: &mut egui::Ui,
+    dc: &DialogColors,
+    look: &mut ProfileLook,
+    screens: &[Screen],
+    dashboard: Option<&str>,
+) {
+    use rigstats_backend::settings::{ScreenPanel, ScreenWhen};
+    if screens.is_empty() {
+        return;
+    }
+    let mut removed: Option<String> = None;
+    ui_kit::group(
+        ui,
+        dc,
+        Some("Screen panels"),
+        Some(
+            "A panel can fill a whole screen of its own, such as an extra monitor or a TV. Now Playing shows the cover large, with the profile's spectrum across the bottom.",
+        ),
+        |g| {
+            for (i, screen) in screens.iter().enumerate() {
+                let (w, h) = screen.size();
+                let title = if screen.is_main() {
+                    format!("Screen {} (main)", i + 1)
+                } else {
+                    format!("Screen {}", i + 1)
+                };
+                let taken = dashboard == Some(screen.id.as_str());
+                let size = format!("{w} × {h}");
+                let sub = if taken {
+                    format!("{size} · The dashboard is on this screen")
+                } else {
+                    size
+                };
+                let current = look
+                    .screen_panels
+                    .iter()
+                    .position(|p| p.screen == screen.id);
+                let mut chosen: Option<String> =
+                    current.map(|i| look.screen_panels[i].panel.clone());
+                g.row(&title, Some(&sub), |ui| {
+                    ui.add_enabled_ui(!taken, |ui| {
+                        ui_kit::dropdown(
+                            ui,
+                            ("screen_panel", i),
+                            screen_panel_label(chosen.as_deref()),
+                            |ui| {
+                                ui.selectable_value(&mut chosen, None, "None");
+                                for key in settings::SCREEN_PANELS {
+                                    ui.selectable_value(
+                                        &mut chosen,
+                                        Some(key.to_string()),
+                                        screen_panel_label(Some(key)),
+                                    );
+                                }
+                            },
+                        );
+                    });
+                });
+                match (current, chosen) {
+                    (Some(i), None) => {
+                        look.screen_panels.remove(i);
+                    }
+                    (Some(i), Some(panel)) => look.screen_panels[i].panel = panel,
+                    (None, Some(panel)) => look.screen_panels.push(ScreenPanel {
+                        screen: screen.id.clone(),
+                        panel,
+                        when: ScreenWhen::Always,
+                    }),
+                    (None, None) => {}
+                }
+                if let Some(p) = look.screen_panels.iter_mut().find(|p| p.screen == screen.id) {
+                    g.row(
+                        "Show",
+                        Some("Only while something plays shows the desktop background otherwise"),
+                        |ui| {
+                            ui_kit::segmented(
+                                ui,
+                                dc,
+                                &mut p.when,
+                                &[
+                                    (ScreenWhen::Always, "Always"),
+                                    (ScreenWhen::Playing, "While playing"),
+                                ],
+                            );
+                        },
+                    );
+                }
+            }
+            // Screens not connected now keep their panel.
+            for p in look
+                .screen_panels
+                .iter()
+                .filter(|p| !screens.iter().any(|s| s.id == p.screen))
+            {
+                let sub = format!(
+                    "{} shows when it is connected again",
+                    screen_panel_label(Some(&p.panel))
+                );
+                g.row("A screen not connected now", Some(&sub), |ui| {
+                    if theme::dialog_btn_secondary(ui, "Remove", dc).clicked() {
+                        removed = Some(p.screen.clone());
+                    }
+                });
+            }
+        },
+    );
+    if let Some(screen) = removed {
+        look.screen_panels.retain(|p| p.screen != screen);
+    }
 }
 
 /// A panel's Full / Compact choice (#596), kept in `compact_panels`.
@@ -1130,6 +1270,7 @@ mod tests {
         battery: Arc<AtomicBool>,
         rules: crate::app_rules::RulesHandle,
         we: crate::we_link::WeLink,
+        dashboard_screen: Arc<Mutex<Option<String>>>,
     }
 
     impl Env {
@@ -1148,6 +1289,7 @@ mod tests {
                 battery: Arc::new(AtomicBool::new(false)),
                 rules: crate::app_rules::RulesHandle::default(),
                 we: crate::we_link::WeLink::default(),
+                dashboard_screen: Arc::default(),
             }
         }
 
@@ -1160,6 +1302,7 @@ mod tests {
                 battery_present: &self.battery,
                 rules: &self.rules,
                 we: &self.we,
+                dashboard_screen: &self.dashboard_screen,
             }
         }
 
