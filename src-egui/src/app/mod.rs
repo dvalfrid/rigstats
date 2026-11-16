@@ -6,6 +6,7 @@ mod dialogs;
 mod floating;
 mod main_window;
 mod overlay_window;
+pub(crate) mod screen_panels;
 mod settings_reload;
 pub(crate) mod startup;
 pub(crate) mod state;

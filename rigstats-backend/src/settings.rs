@@ -168,6 +168,10 @@ pub struct Settings {
     /// The spectrum's colour (#732), part of the profile's look.
     #[serde(default)]
     pub spectrum_color: SpectrumColor,
+    /// Panels that fill a screen of their own (#737), part of the profile's
+    /// look. Empty = none.
+    #[serde(default)]
+    pub screen_panels: Vec<ScreenPanel>,
     /// The space between panels, in px (#606): in portrait × the content
     /// scale, between landscape grid cells as is. 6 = the layout from before;
     /// Settings offers 0–30. Not used by floating panels.
@@ -473,6 +477,7 @@ impl Default for Settings {
             spectrum_fps: 0,
             spectrum_style: SpectrumStyle::default(),
             spectrum_color: SpectrumColor::default(),
+            screen_panels: Vec::new(),
             panel_spacing: default_panel_spacing(),
             autostart_enabled: false,
             last_seen_version: String::new(),
@@ -644,6 +649,49 @@ impl<'de> Deserialize<'de> for SpectrumColor {
     }
 }
 
+/// The panels that have a layout for a whole screen (#737).
+pub const SCREEN_PANELS: [&str; 1] = ["media"];
+
+/// A panel filling a screen of its own (#737): Now Playing on an extra
+/// monitor or a TV.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenPanel {
+    /// The screen: Windows' monitor device path
+    /// (`desktop_background::Screen::id`), which stays the same across
+    /// restarts and is what the per-screen desktop background stores.
+    pub screen: String,
+    /// The panel's key. One not in [`SCREEN_PANELS`] (a newer version's)
+    /// shows nothing.
+    pub panel: String,
+    #[serde(default)]
+    pub when: ScreenWhen,
+}
+
+impl ScreenPanel {
+    /// Whether this version draws the panel.
+    pub fn known(&self) -> bool {
+        SCREEN_PANELS.contains(&self.panel.as_str())
+    }
+}
+
+/// When a screen panel shows (#737): always, or only while something plays
+/// (the screen shows its desktop background otherwise). An unknown name
+/// reads as always.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScreenWhen {
+    #[default]
+    Always,
+    Playing,
+}
+
+impl<'de> Deserialize<'de> for ScreenWhen {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        lenient_enum(d, &[Self::Always, Self::Playing])
+    }
+}
+
 // --- Dashboard look per Control Center profile (#305) ---------------------
 
 /// What a Control Center profile holds of the app's own settings: how the
@@ -671,6 +719,9 @@ pub struct ProfileLook {
     pub spectrum_style: SpectrumStyle,
     #[serde(default)]
     pub spectrum_color: SpectrumColor,
+    /// `Settings::screen_panels`; none in a look saved before it existed.
+    #[serde(default)]
+    pub screen_panels: Vec<ScreenPanel>,
     #[serde(default)]
     pub overlay_enabled: bool,
     #[serde(default = "default_overlay_metrics")]
@@ -704,6 +755,7 @@ impl ProfileLook {
             spectrum_fps: s.spectrum_fps,
             spectrum_style: s.spectrum_style,
             spectrum_color: s.spectrum_color,
+            screen_panels: s.screen_panels.clone(),
             overlay_enabled: s.overlay_enabled,
             overlay_metrics: s.overlay_metrics.clone(),
             overlay_columns: s.overlay_columns,
@@ -725,6 +777,7 @@ impl ProfileLook {
         s.spectrum_fps = spectrum_rate(self.spectrum_fps);
         s.spectrum_style = self.spectrum_style;
         s.spectrum_color = self.spectrum_color;
+        s.screen_panels = self.screen_panels.clone();
         s.overlay_enabled = self.overlay_enabled;
         s.overlay_metrics = self.overlay_metrics.clone();
         s.overlay_columns = self.overlay_columns.min(6);
@@ -1406,6 +1459,36 @@ mod profile_look_tests {
 
     /// The compact panels (#596) belong to the profile's look: switching
     /// profiles switches them, and a profile without the field stays full.
+    #[test]
+    fn screen_panels_follow_the_profile_and_read_leniently() {
+        let mut s = Settings::default();
+        assert!(s.screen_panels.is_empty());
+        s.screen_panels = vec![ScreenPanel {
+            screen: r"\\?\DISPLAY#TV#4&1".into(),
+            panel: "media".into(),
+            when: ScreenWhen::Playing,
+        }];
+        let look = ProfileLook::capture(&s);
+        let mut other = Settings::default();
+        assert!(look.apply_to(&mut other));
+        assert_eq!(other.screen_panels, s.screen_panels);
+
+        let json = serde_json::to_string(&look).unwrap();
+        assert!(json.contains(r#""screenPanels":[{"#), "{json}");
+        assert!(json.contains(r#""when":"playing""#), "{json}");
+
+        // A look from before #737 has none, so a switch to it clears them.
+        let old: ProfileLook = serde_json::from_str("{}").unwrap();
+        assert!(old.screen_panels.is_empty());
+        // A newer version's panel or "when" doesn't break the rest.
+        let newer: ProfileLook = serde_json::from_str(
+            r#"{"screenPanels":[{"screen":"a","panel":"clock","when":"evenings"}]}"#,
+        )
+        .unwrap();
+        assert!(!newer.screen_panels[0].known());
+        assert_eq!(newer.screen_panels[0].when, ScreenWhen::Always);
+    }
+
     #[test]
     fn the_spectrum_style_and_colour_follow_the_profile() {
         let mut s = Settings::default();

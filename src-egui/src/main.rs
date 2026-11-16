@@ -102,6 +102,8 @@ struct RigStatsApp {
     screen_watch: rigstats_egui::geometry::LayoutWatch,
     /// Floating mode's panels and their windows.
     floating: FloatingState,
+    /// Panels filling a screen of their own (#737).
+    screen_panels: app::screen_panels::ScreenPanels,
     /// Colour palette for dialog windows — switches between dark/light based on OS theme.
     dialog_colors: theme::DialogColors,
     /// Cached OS dark-mode flag; checked each frame to detect live theme switches.
@@ -235,6 +237,7 @@ impl RigStatsApp {
             dcomp_available,
             window: WindowFit::new(&init_settings),
             screen_watch: rigstats_egui::geometry::LayoutWatch::new(false),
+            screen_panels: app::screen_panels::ScreenPanels::default(),
             floating: FloatingState {
                 mode: init_settings.floating_mode,
                 panels_locked: init_settings.floating_panels_locked,
@@ -840,6 +843,7 @@ impl eframe::App for RigStatsApp {
         // window below is doing.
         self.render_overlay_viewport(ui.ctx());
         self.render_tray_card(ui.ctx());
+        self.render_screen_panels(ui.ctx());
 
         // Re-apply WindowLevel for a few frames after a floating→non-floating
         // transition, because winit may reset the window level when it processes the move.

@@ -246,6 +246,12 @@ considers current. Its spectrum is set per profile on the same page, under
 - **It costs CPU** — Smooth (30 frames a second) uses about 9 % of one CPU
   core, Calm about 5 %, and Off nothing. Use a profile with it off while you
   game.
+- **A screen panel doesn't show** — under **Control Center → Dashboard →
+  Screen panels** each screen can show Now Playing filling it. It doesn't
+  show on the screen the dashboard itself is on, on a screen that isn't
+  connected (it comes back when the screen does), or — with **Show: While
+  playing** — while nothing plays. It is an ordinary window: another window
+  on that screen can cover it.
 ## A Shortcut Doesn't Work
 
 RIGStats' shortcuts are, unless you changed them, **Ctrl+Alt+O** (overlay),

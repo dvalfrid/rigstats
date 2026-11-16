@@ -238,6 +238,7 @@ impl RigStatsApp {
                 battery_present: &self.battery_present,
                 rules: &self.rules,
                 we: &self.desktop_background.link,
+                dashboard_screen: &self.screen_panels.dashboard_screen,
             };
             ui.ctx().show_viewport_immediate(
                 egui::ViewportId::from_hash_of("control"),

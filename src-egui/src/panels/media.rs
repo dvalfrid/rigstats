@@ -17,6 +17,14 @@ const COVER_COMPACT: f32 = 44.0;
 /// floating scale (200 %), so more is wasted memory.
 const COVER_MAX_PX: u32 = 256;
 
+/// The largest side of a screen panel's cover (#737): it is drawn across
+/// half a screen, so up to the player's own size (often 300–600 px).
+const SCREEN_COVER_MAX_PX: u32 = 1024;
+
+/// The side of the blurred cover behind a screen panel: tiny, blurred once
+/// per track and stretched across the screen.
+const BACKDROP_PX: u32 = 48;
+
 pub fn draw(
     ui: &mut Ui,
     stats: &PollStats,
@@ -372,44 +380,319 @@ fn paint_cover(
     }
 }
 
-/// The cover's texture, decoded and uploaded once per picture and kept in
-/// egui's memory with the id it was made from. A picture that won't decode
-/// is remembered as none, so it isn't tried every frame.
+/// The cover's texture, decoded and uploaded once per picture.
 fn cover_texture(
     ctx: &egui::Context,
     cover: Option<&rigstats_backend::media::Cover>,
 ) -> Option<TextureHandle> {
+    cached_texture(ctx, cover, "now-playing-cover", |b| decode(b, COVER_MAX_PX))
+}
+
+/// A texture made from the cover by `make`, once per picture, kept in
+/// egui's memory under `name` with the id it was made from. A picture that
+/// won't decode is remembered as none, so it isn't tried every frame.
+fn cached_texture(
+    ctx: &egui::Context,
+    cover: Option<&rigstats_backend::media::Cover>,
+    name: &'static str,
+    make: impl FnOnce(&[u8]) -> Option<egui::ColorImage>,
+) -> Option<TextureHandle> {
     let cover = cover?;
-    let key = egui::Id::unique("now_playing_cover");
+    let key = egui::Id::unique(name);
     if let Some((id, tex)) = ctx.data(|d| d.get_temp::<(u64, Option<TextureHandle>)>(key)) {
         if id == cover.id {
             return tex;
         }
     }
-    let tex = decode(&cover.bytes)
-        .map(|image| ctx.load_texture("now-playing-cover", image, egui::TextureOptions::LINEAR));
+    let tex =
+        make(&cover.bytes).map(|image| ctx.load_texture(name, image, egui::TextureOptions::LINEAR));
     ctx.data_mut(|d| d.insert_temp(key, (cover.id, tex.clone())));
     tex
 }
 
-/// The picture as an egui image, scaled down to `COVER_MAX_PX` on its longer
-/// side and cut to a square from its centre (video thumbnails are wide).
-fn decode(bytes: &[u8]) -> Option<egui::ColorImage> {
+/// The picture cut to a square from its centre (video thumbnails are wide).
+fn square(bytes: &[u8]) -> Option<image::DynamicImage> {
     let image = image::load_from_memory(bytes).ok()?;
     let (w, h) = (image.width(), image.height());
     if w == 0 || h == 0 {
         return None;
     }
     let side = w.min(h);
-    let square = image.crop_imm((w - side) / 2, (h - side) / 2, side, side);
-    let px = side.min(COVER_MAX_PX);
-    let rgba = square
-        .resize_exact(px, px, image::imageops::FilterType::Triangle)
-        .to_rgba8();
-    Some(egui::ColorImage::from_rgba_unmultiplied(
-        [px as usize, px as usize],
+    Some(image.crop_imm((w - side) / 2, (h - side) / 2, side, side))
+}
+
+fn to_color_image(image: &image::DynamicImage) -> egui::ColorImage {
+    let rgba = image.to_rgba8();
+    egui::ColorImage::from_rgba_unmultiplied(
+        [rgba.width() as usize, rgba.height() as usize],
         rgba.as_raw(),
-    ))
+    )
+}
+
+/// The picture as an egui image: a square, scaled down to `max_px` at most.
+fn decode(bytes: &[u8], max_px: u32) -> Option<egui::ColorImage> {
+    let square = square(bytes)?;
+    let px = square.width().min(max_px);
+    Some(to_color_image(&square.resize_exact(
+        px,
+        px,
+        image::imageops::FilterType::Triangle,
+    )))
+}
+
+/// The cover shrunk to `BACKDROP_PX` and blurred: stretched behind a screen
+/// panel, it is a soft wash of the cover's colours. Made once per track.
+fn backdrop(bytes: &[u8]) -> Option<egui::ColorImage> {
+    let small = square(bytes)?.resize_exact(
+        BACKDROP_PX,
+        BACKDROP_PX,
+        image::imageops::FilterType::Triangle,
+    );
+    Some(to_color_image(&small.blur(3.0)))
+}
+
+// ── A whole screen (#737) ────────────────────────────────────────────────
+
+/// Now Playing filling a screen of its own (#737), drawn into `rect`: the
+/// blurred cover as the background; the cover large with the title, artist
+/// and album beside it (below it on a portrait screen) and the profile's
+/// spectrum across the bottom, or, for the ring styles, a round cover in the
+/// middle with the spectrum around it. Laid out at the screen's own size,
+/// not the panel scaled up.
+pub fn draw_screen(
+    ui: &mut Ui,
+    rect: egui::Rect,
+    now: Option<&rigstats_backend::media::NowPlaying>,
+    spectrum: super::spectrum::SpectrumChoice,
+    th: &theme::AppTheme,
+) {
+    // One unit per pixel of a 1080-pixel screen (the shorter side).
+    let u = rect.height().min(rect.width()) / 1080.0;
+    let p = ui.painter().clone();
+    p.rect_filled(rect, 0.0, Color32::from_gray(8));
+    let cover = now.and_then(|n| n.cover.as_ref());
+    if let Some(tex) = cached_texture(ui.ctx(), cover, "now-playing-backdrop", backdrop) {
+        // Darkened, so the title stays readable on a light cover.
+        p.image(tex.id(), rect, fill_uv(rect), Color32::from_gray(90));
+    }
+    let Some(now) = now else {
+        p.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "NOTHING PLAYING",
+            egui::FontId::proportional(48.0 * u),
+            th.text_muted,
+        );
+        return;
+    };
+    let big = cached_texture(ui.ctx(), now.cover.as_ref(), "now-playing-cover-big", |b| {
+        decode(b, SCREEN_COVER_MAX_PX)
+    });
+    // The spectrum's own scale (bar gaps, line widths): the panel's is 1.
+    let sc = 2.4 * u;
+    let title = 72.0 * u;
+    let artist = 44.0 * u;
+
+    if spectrum.fps > 0 && spectrum.style.around_cover() {
+        let centre = egui::pos2(rect.center().x, rect.top() + rect.height() * 0.42);
+        let r_out = rect.height().min(rect.width()) * 0.34;
+        let r_cover = r_out * 0.55;
+        let bars = spectrum_bars(ui, now.playing, spectrum.fps);
+        super::spectrum::paint_around(
+            ui,
+            centre,
+            r_cover + 10.0 * u,
+            r_out,
+            &bars,
+            spectrum,
+            th,
+            sc,
+        );
+        let cover_rect = egui::Rect::from_center_size(centre, Vec2::splat(2.0 * r_cover));
+        paint_cover(ui, cover_rect, big.as_ref(), r_cover, th, 1.0);
+        let w = rect.width() * 0.8;
+        let x = rect.center().x;
+        let mut y = centre.y + r_out + 40.0 * u;
+        y += text_line(
+            &p,
+            egui::pos2(x, y),
+            &now.track.title,
+            title,
+            theme::C_VALUE,
+            w,
+            egui::Align2::CENTER_TOP,
+        );
+        text_line(
+            &p,
+            egui::pos2(x, y + 8.0 * u),
+            &now.track.artist,
+            artist,
+            th.text_muted,
+            w,
+            egui::Align2::CENTER_TOP,
+        );
+        return;
+    }
+
+    let margin = 72.0 * u;
+    let strip_h = if spectrum.fps > 0 {
+        rect.height() * 0.16
+    } else {
+        0.0
+    };
+    let below = if spectrum.fps > 0 {
+        strip_h + 40.0 * u
+    } else {
+        0.0
+    };
+    let body = egui::Rect::from_min_max(
+        rect.min + Vec2::splat(margin),
+        egui::pos2(rect.right() - margin, rect.bottom() - margin - below),
+    );
+    let (cover_rect, x, y, w, align) = if rect.width() >= rect.height() {
+        // Beside each other.
+        let side = body.height().min(body.width() * 0.45);
+        let cover_rect = egui::Rect::from_min_size(
+            egui::pos2(
+                body.left() + body.width() * 0.04,
+                body.center().y - side / 2.0,
+            ),
+            Vec2::splat(side),
+        );
+        let x = cover_rect.right() + margin;
+        let text_h = title + artist + 30.0 * u + 26.0 * u + 60.0 * u;
+        (
+            cover_rect,
+            x,
+            body.center().y - text_h / 2.0,
+            body.right() - x,
+            egui::Align2::LEFT_TOP,
+        )
+    } else {
+        // Above each other, on a portrait screen.
+        let side = body.width() * 0.8;
+        let cover_rect = egui::Rect::from_min_size(
+            egui::pos2(
+                body.center().x - side / 2.0,
+                body.top() + body.height() * 0.08,
+            ),
+            Vec2::splat(side),
+        );
+        (
+            cover_rect,
+            body.center().x,
+            cover_rect.bottom() + 60.0 * u,
+            body.width(),
+            egui::Align2::CENTER_TOP,
+        )
+    };
+    paint_cover(
+        ui,
+        cover_rect,
+        big.as_ref(),
+        cover_rect.width() * 0.03,
+        th,
+        1.0,
+    );
+    let mut y = y;
+    y += text_line(
+        &p,
+        egui::pos2(x, y),
+        &now.track.title,
+        title,
+        theme::C_VALUE,
+        w,
+        align,
+    ) + 12.0 * u;
+    if !now.track.artist.is_empty() {
+        y += text_line(
+            &p,
+            egui::pos2(x, y),
+            &now.track.artist,
+            artist,
+            th.text_muted,
+            w,
+            align,
+        ) + 8.0 * u;
+    }
+    if !now.track.album.is_empty() {
+        y += text_line(
+            &p,
+            egui::pos2(x, y),
+            &now.track.album,
+            30.0 * u,
+            th.stat_label,
+            w,
+            align,
+        );
+    }
+    let (state, color) = if now.playing {
+        ("PLAYING", th.accent)
+    } else {
+        ("PAUSED", th.text_muted)
+    };
+    text_line(
+        &p,
+        egui::pos2(x, y + 28.0 * u),
+        state,
+        26.0 * u,
+        color,
+        w,
+        align,
+    );
+    if spectrum.fps > 0 {
+        let (bars, wave) = spectrum_data(ui, now.playing, spectrum);
+        let strip = egui::Rect::from_min_max(
+            egui::pos2(rect.left() + margin, rect.bottom() - margin - strip_h),
+            egui::pos2(rect.right() - margin, rect.bottom() - margin),
+        );
+        super::spectrum::paint(ui, strip, &bars, &wave, spectrum, th, sc);
+    }
+}
+
+/// The part of a square picture that fills `rect` without stretching it:
+/// the middle, cut to the rect's shape.
+fn fill_uv(rect: egui::Rect) -> egui::Rect {
+    let aspect = rect.width() / rect.height().max(1.0);
+    if aspect >= 1.0 {
+        let h = 1.0 / aspect;
+        egui::Rect::from_min_max(
+            egui::pos2(0.0, 0.5 - h / 2.0),
+            egui::pos2(1.0, 0.5 + h / 2.0),
+        )
+    } else {
+        egui::Rect::from_min_max(
+            egui::pos2(0.5 - aspect / 2.0, 0.0),
+            egui::pos2(0.5 + aspect / 2.0, 1.0),
+        )
+    }
+}
+
+/// One line of text anchored at `pos`, cut with an ellipsis at `max_w`;
+/// returns its height.
+fn text_line(
+    p: &egui::Painter,
+    pos: egui::Pos2,
+    text: &str,
+    size: f32,
+    color: Color32,
+    max_w: f32,
+    align: egui::Align2,
+) -> f32 {
+    let mut job = egui::text::LayoutJob::single_section(
+        text.to_owned(),
+        egui::TextFormat::simple(egui::FontId::proportional(size), color),
+    );
+    job.wrap = egui::text::TextWrapping {
+        max_width: max_w.max(1.0),
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('\u{2026}'),
+    };
+    let galley = p.layout_job(job);
+    let size = galley.size();
+    p.galley(align.anchor_size(pos, size).min, galley, color);
+    size.y
 }
 
 #[cfg(test)]
@@ -427,25 +710,47 @@ mod tests {
 
     #[test]
     fn a_large_cover_is_scaled_down() {
-        let image = decode(&png(600, 600)).unwrap();
+        let image = decode(&png(600, 600), COVER_MAX_PX).unwrap();
         assert_eq!(image.size, [COVER_MAX_PX as usize; 2]);
+        // A screen panel keeps the player's own size (#737).
+        let image = decode(&png(600, 600), SCREEN_COVER_MAX_PX).unwrap();
+        assert_eq!(image.size, [600, 600]);
     }
 
     #[test]
     fn a_small_cover_keeps_its_size() {
-        let image = decode(&png(64, 64)).unwrap();
+        let image = decode(&png(64, 64), COVER_MAX_PX).unwrap();
         assert_eq!(image.size, [64, 64]);
     }
 
     #[test]
     fn a_wide_thumbnail_is_cut_to_a_square() {
-        let image = decode(&png(320, 180)).unwrap();
+        let image = decode(&png(320, 180), COVER_MAX_PX).unwrap();
         assert_eq!(image.size, [180, 180]);
     }
 
     #[test]
     fn bytes_that_are_no_picture_give_none() {
-        assert!(decode(b"not a picture").is_none());
-        assert!(decode(&[]).is_none());
+        assert!(decode(b"not a picture", COVER_MAX_PX).is_none());
+        assert!(decode(&[], COVER_MAX_PX).is_none());
+        assert!(backdrop(b"not a picture").is_none());
+    }
+
+    #[test]
+    fn the_backdrop_is_small_whatever_the_cover() {
+        let image = backdrop(&png(600, 400)).unwrap();
+        assert_eq!(image.size, [BACKDROP_PX as usize; 2]);
+    }
+
+    #[test]
+    fn the_backdrop_fills_a_screen_from_its_middle() {
+        let r = |w, h| egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w, h));
+        let wide = fill_uv(r(1920.0, 1080.0));
+        assert_eq!(wide.width(), 1.0);
+        assert!((wide.height() - 1080.0 / 1920.0).abs() < 1e-4);
+        assert!((wide.center().y - 0.5).abs() < 1e-4);
+        let tall = fill_uv(r(450.0, 1920.0));
+        assert_eq!(tall.height(), 1.0);
+        assert!((tall.width() - 450.0 / 1920.0).abs() < 1e-4);
     }
 }
