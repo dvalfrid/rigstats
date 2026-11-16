@@ -72,10 +72,14 @@ pub struct WallpaperSupervisor {
     last_spawn: Option<Instant>,
     /// Consecutive fast spawn failures — drives the exponential backoff.
     spawn_fails: u32,
-    /// Set when leaving the mode while the host is alive: it exits by itself
-    /// (the layer change is already on disk), and `kill()` only follows
+    /// Set when the host is no longer wanted while it is alive: it exits by
+    /// itself (the change is already on disk), and `kill()` only follows
     /// after [`TEARDOWN_GRACE`].
     teardown_at: Option<Instant>,
+    /// Whether the host was wanted at the last [`WallpaperSupervisor::supervise`]:
+    /// for the dashboard (the mode) or for a screen panel in the desktop
+    /// background (#737).
+    host_wanted: bool,
 }
 
 impl WallpaperSupervisor {
@@ -104,7 +108,6 @@ impl WallpaperSupervisor {
         want: bool,
         host_missing: impl FnOnce() -> bool,
         host: &mut dyn Host,
-        now: Instant,
     ) -> Vec<Effect> {
         let mut effects = Vec::new();
         if want && !self.active {
@@ -123,24 +126,25 @@ impl WallpaperSupervisor {
             }
             self.active = true;
             // A fresh session: reset the throttle, and reap a host still
-            // draining from a just-left session so two never run at once.
+            // draining from a just-left session so two never run at once. A
+            // host running for screen panels (#737) is left alone: it reads
+            // the new layer and closes to be started again with the
+            // dashboard.
             self.spawn_fails = 0;
             self.last_spawn = None;
-            self.teardown_at = None;
-            host.kill();
+            if !self.host_wanted {
+                self.teardown_at = None;
+                host.kill();
+            }
             effects.push(Effect::Enter);
             effects.push(Effect::Log(
                 LogLevel::Debug,
                 "wallpaper: entering — parking main window".into(),
             ));
         } else if !want && self.active {
+            // `supervise` lets the host exit by itself, unless a screen panel
+            // still wants it.
             self.active = false;
-            // Graceful teardown: never TerminateProcess the host right away —
-            // repeatedly killing the GPU host leaked graphics/desktop-heap
-            // resources until a later spawn failed at DLL-init (0xC0000142).
-            if host.status() != HostStatus::None {
-                self.teardown_at = Some(now);
-            }
             effects.push(Effect::Leave);
             effects.push(Effect::Log(
                 LogLevel::Debug,
@@ -151,15 +155,30 @@ impl WallpaperSupervisor {
         effects
     }
 
-    /// Looks after the host: (re)spawns it while active, reaps or kills it
-    /// after leaving. Returns only [`Effect::Log`]s.
-    pub fn supervise(&mut self, host: &mut dyn Host, now: Instant) -> Vec<Effect> {
+    /// Looks after the host: (re)spawns it while it is wanted — in the mode,
+    /// or for a screen panel in the desktop background (`panels`, #737) —
+    /// reaps or kills it once it is not. Returns only [`Effect::Log`]s.
+    pub fn supervise(&mut self, host: &mut dyn Host, now: Instant, panels: bool) -> Vec<Effect> {
         let mut effects = Vec::new();
-        if self.active {
+        let wanted = self.active || panels;
+        if wanted {
+            if !self.host_wanted {
+                // Wanted again while the last one drains: it stays (it reads
+                // the settings and closes if it has to), a fresh throttle.
+                self.teardown_at = None;
+                self.spawn_fails = 0;
+            }
             self.supervise_host(host, now, &mut effects);
         } else {
+            // Graceful teardown: never TerminateProcess the host right away —
+            // repeatedly killing the GPU host leaked graphics/desktop-heap
+            // resources until a later spawn failed at DLL-init (0xC0000142).
+            if self.host_wanted && host.status() != HostStatus::None {
+                self.teardown_at = Some(now);
+            }
             self.drain_host(host, now, &mut effects);
         }
+        self.host_wanted = wanted;
         effects
     }
 
@@ -375,8 +394,8 @@ mod tests {
             host: &mut dyn Host,
             now: Instant,
         ) -> Vec<Effect> {
-            let mut effects = self.transition(want, host_missing, host, now);
-            effects.extend(self.supervise(host, now));
+            let mut effects = self.transition(want, host_missing, host);
+            effects.extend(self.supervise(host, now, false));
             effects
         }
     }
@@ -421,10 +440,10 @@ mod tests {
             FakeHost::default(),
             Instant::now(),
         );
-        let fx = sup.transition(true, || false, &mut host, t0);
+        let fx = sup.transition(true, || false, &mut host);
         assert!(has(&fx, &Effect::Enter));
         assert_eq!(host.spawns, 0);
-        sup.supervise(&mut host, t0);
+        sup.supervise(&mut host, t0, false);
         assert_eq!(host.spawns, 1);
     }
 
@@ -630,6 +649,58 @@ mod tests {
         sup.step(true, || false, &mut host, t0);
         let fx = sup.step(false, || false, &mut host, secs(t0, 1));
         assert_eq!(fx.len(), 2, "{fx:?}"); // Leave + its log, no drain log
+    }
+
+    #[test]
+    fn a_screen_panel_in_the_desktop_keeps_a_host_without_the_mode() {
+        // #737: the host runs for the panel; the dashboard stays in the main
+        // app, which keeps polling fully.
+        let (mut sup, mut host, t0) = (
+            WallpaperSupervisor::default(),
+            FakeHost::default(),
+            Instant::now(),
+        );
+        let fx = sup.supervise(&mut host, t0, true);
+        assert_eq!(host.spawns, 1);
+        assert!(!sup.is_active());
+        assert_eq!(sup.poll_mode(), PollMode::Full);
+        assert_eq!(
+            logs(&fx, LogLevel::Debug),
+            ["wallpaper: spawned host process"]
+        );
+        // Respawned after an Explorer restart like the mode's.
+        host.exit(Some(1));
+        sup.supervise(&mut host, secs(t0, 60), true);
+        assert_eq!(host.spawns, 2);
+        // The panel removed: the host exits by itself, killed only late.
+        sup.supervise(&mut host, secs(t0, 61), false);
+        assert_eq!(host.kills, 0);
+        sup.supervise(&mut host, secs(t0, 64), false);
+        assert_eq!(host.kills, 1);
+    }
+
+    #[test]
+    fn entering_the_mode_keeps_a_panels_host_running() {
+        // It closes by itself on reading the layer and is started again.
+        let (mut sup, mut host, t0) = (
+            WallpaperSupervisor::default(),
+            FakeHost::default(),
+            Instant::now(),
+        );
+        sup.supervise(&mut host, t0, true);
+        let fx = sup.transition(true, || false, &mut host);
+        assert!(has(&fx, &Effect::Enter));
+        sup.supervise(&mut host, secs(t0, 10), true);
+        assert_eq!(host.kills, 0);
+        assert_eq!(host.spawns, 1);
+        host.exit(Some(0));
+        sup.supervise(&mut host, secs(t0, 11), true);
+        assert_eq!(host.spawns, 2);
+        // Leaving with the panel still set: no teardown, no Leave-kill.
+        let fx = sup.transition(false, || false, &mut host);
+        assert!(has(&fx, &Effect::Leave));
+        sup.supervise(&mut host, secs(t0, 30), true);
+        assert_eq!(host.kills, 0);
     }
 
     #[test]

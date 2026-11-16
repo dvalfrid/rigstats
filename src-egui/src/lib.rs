@@ -27,6 +27,7 @@ pub mod panels;
 pub mod poll;
 pub mod problems;
 pub mod ring;
+pub mod screen_panels;
 #[cfg(windows)]
 pub mod single_instance;
 pub mod spark;

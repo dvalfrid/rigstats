@@ -250,8 +250,11 @@ considers current. Its spectrum is set per profile on the same page, under
   Screen panels** each screen can show Now Playing filling it. It doesn't
   show on the screen the dashboard itself is on, on a screen that isn't
   connected (it comes back when the screen does), or — with **Show: While
-  playing** — while nothing plays. It is an ordinary window: another window
-  on that screen can cover it.
+  playing** — while nothing plays. With **Where: Window** it is an ordinary
+  window: another window on that screen can cover it. With **Where: Desktop
+  background** it sits behind every window and the desktop icons, like a
+  wallpaper; there it can also be **Transparent**, showing the desktop picture
+  behind it.
 ## A Shortcut Doesn't Work
 
 RIGStats' shortcuts are, unless you changed them, **Ctrl+Alt+O** (overlay),

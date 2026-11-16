@@ -12,6 +12,11 @@
 //! active the host is the telemetry owner: it runs `poll_loop`, owns the sensor
 //! pipe, and does CSV logging (the main app stops polling in wallpaper mode, or
 //! only polls in light mode to feed the game overlay). See `docs/architecture.md`.
+//!
+//! It also runs for a screen panel in the desktop background (#737), with or
+//! without the dashboard: each such panel is a window covering its screen,
+//! in WorkerW like the dashboard. Without the dashboard the main app keeps
+//! polling fully and the host polls lightly, for Now Playing.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use eframe::egui;
@@ -26,6 +31,7 @@ use rigstats_egui::gpu_guard::{
 };
 use rigstats_egui::lock_ext::LockSafe;
 use rigstats_egui::poll::{poll_loop, PollMode, PollModeHandle};
+use rigstats_egui::screen_panels::{self, Screens};
 use rigstats_egui::tray::panel_initial_h;
 use rigstats_egui::{theme, PollStats};
 #[cfg(windows)]
@@ -98,6 +104,15 @@ struct WallpaperHost {
     /// The screens' layout (physical pixels), to move the windows along with
     /// their screen when a game changes the main screen's resolution (#690).
     screen_watch: rigstats_egui::geometry::LayoutWatch,
+    /// The host shows the dashboard (the window layer is the desktop
+    /// wallpaper) — fixed for its life; a change restarts it. Without it the
+    /// host runs only for screen panels (#737).
+    hosts_dashboard: bool,
+    /// The screen panels (#737); those in the desktop background are drawn
+    /// here.
+    screen_list: Vec<settings::ScreenPanel>,
+    screens: Screens,
+    spectrum: rigstats_egui::panels::spectrum::SpectrumChoice,
 }
 
 /// What one of the host's windows draws.
@@ -107,6 +122,13 @@ enum WindowContent {
     Dashboard { size: [f32; 2] },
     /// One floating panel (#170), by its panel key.
     Panel(String),
+    /// A screen panel (#737) covering its screen; `name` holds the screen's
+    /// rect, so a screen that moved or changed size gets a new window.
+    Screen {
+        panel: settings::ScreenPanel,
+        rect: egui::Rect,
+        name: String,
+    },
 }
 
 impl WindowContent {
@@ -115,6 +137,7 @@ impl WindowContent {
         match self {
             Self::Dashboard { .. } => "dashboard",
             Self::Panel(key) => key,
+            Self::Screen { name, .. } => name,
         }
     }
 }
@@ -202,6 +225,10 @@ impl WallpaperHost {
                 WindowContent::Dashboard { size } => {
                     (*size, theme::premul(theme::PANEL_FILL, opacity))
                 }
+                // Covers its screen and paints its own background (or none).
+                WindowContent::Screen { rect, .. } => {
+                    ([rect.width(), rect.height()], egui::Color32::TRANSPARENT)
+                }
                 // A floating panel paints its own frame.
                 WindowContent::Panel(key) => (
                     [
@@ -213,9 +240,13 @@ impl WallpaperHost {
             };
             let profile = &self.profile;
             let shown = &self.runtime.visible_panels;
+            let screen = matches!(p.content, WindowContent::Screen { .. });
+            // A screen panel starts a pixel short, so its resize on creation
+            // (below) is a genuine one.
+            let start_h = if screen { h - 1.0 } else { h };
             let builder = egui::ViewportBuilder::default()
                 .with_title(title.clone())
-                .with_inner_size([w, h])
+                .with_inner_size([w, start_h])
                 .with_position(p.pos)
                 .with_decorations(false)
                 // No DWM frame behind a transparent window (third_party/egui-winit).
@@ -226,6 +257,9 @@ impl WallpaperHost {
                 .with_visible(!p.dcomp.pending_reveal());
             let view = self.runtime.view();
             let dir = &self.dir;
+            let media = self.runtime.latest.media.as_ref();
+            let spectrum = self.spectrum;
+            let th = self.runtime.app_theme;
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(&title),
                 builder,
@@ -245,7 +279,21 @@ impl WallpaperHost {
                                 WindowContent::Panel(key) => {
                                     view.draw_one_panel(ui, key, sc, opacity, None);
                                 }
+                                WindowContent::Screen { panel, .. } => {
+                                    let rect = ui.max_rect();
+                                    rigstats_egui::panels::media::draw_screen(
+                                        ui,
+                                        rect,
+                                        media,
+                                        spectrum,
+                                        &th,
+                                        !panel.transparent(),
+                                    );
+                                }
                             });
+                            if screen {
+                                return;
+                            }
                             // Fit the height to the content, only when it changed.
                             let used_h = content.response.rect.height().round();
                             let current_h = cctx
@@ -261,10 +309,12 @@ impl WallpaperHost {
                     if tick.just_started {
                         p.hwnd = p.dcomp.hwnd();
                         // A genuine resize on creation, as floating mode does.
-                        cctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::Vec2::new(
-                            w + 2.0,
-                            h,
-                        )));
+                        let size = if screen {
+                            egui::Vec2::new(w, h)
+                        } else {
+                            egui::Vec2::new(w + 2.0, h)
+                        };
+                        cctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
                     }
                     if tick.reapply_style {
                         win_opacity::set_no_redirection_bitmap(p.dcomp.hwnd());
@@ -305,6 +355,73 @@ impl WallpaperHost {
 
 #[cfg(windows)]
 impl WallpaperHost {
+    /// The screen panels in the desktop background (#737), each a window
+    /// covering its screen: one is added when it is to show, left out (so
+    /// destroyed) when not, and made again when its screen moved or changed
+    /// size.
+    fn sync_screen_windows(&mut self) {
+        if self.screen_list.is_empty() && !self.windows.iter().any(is_screen) {
+            return;
+        }
+        self.screens.refresh();
+        // Not on the fixed dashboard's screen (where its middle is).
+        let dashboard = self.windows.iter().find_map(|w| match w.content {
+            WindowContent::Dashboard { size } => self.screens.at(egui::pos2(
+                w.pos[0] + size[0] / 2.0,
+                w.pos[1] + size[1] / 2.0,
+            )),
+            _ => None,
+        });
+        let playing = self
+            .runtime
+            .latest
+            .media
+            .as_ref()
+            .is_some_and(|m| m.playing);
+        let wanted = self
+            .screens
+            .to_show(&self.screen_list, true, dashboard.as_deref(), playing);
+        let (mut old, mut windows): (Vec<HostWindow>, Vec<HostWindow>) =
+            std::mem::take(&mut self.windows)
+                .into_iter()
+                .partition(is_screen);
+        for (panel, rect) in wanted {
+            let name = format!(
+                "Now Playing {:.0},{:.0} {:.0}x{:.0}",
+                rect.min.x,
+                rect.min.y,
+                rect.width(),
+                rect.height()
+            );
+            let content = WindowContent::Screen {
+                panel,
+                rect,
+                name: name.clone(),
+            };
+            if let Some(i) = old.iter().position(|w| w.content.name() == name) {
+                let mut w = old.swap_remove(i);
+                w.content = content;
+                windows.push(w);
+            } else {
+                debug::log_debug(
+                    &self.dir,
+                    &format!("rigstats-wallpaper: screen panel {name} shown"),
+                );
+                windows.push(HostWindow::new(content, [rect.min.x, rect.min.y]));
+            }
+        }
+        for w in &old {
+            debug::log_debug(
+                &self.dir,
+                &format!(
+                    "rigstats-wallpaper: screen panel {} hidden",
+                    w.content.name()
+                ),
+            );
+        }
+        self.windows = windows;
+    }
+
     /// When the screens' layout changes (#690) — a game in exclusive
     /// fullscreen at a lower resolution narrows the main screen and Windows
     /// moves a screen to its right — each window moves as far as its screen
@@ -324,7 +441,8 @@ impl WallpaperHost {
             }
             LayoutPoll::Changed(old, new) => {
                 let mut moved = Vec::new();
-                for w in &mut self.windows {
+                // A screen panel gets a new window for its screen's new rect.
+                for w in self.windows.iter_mut().filter(|w| !is_screen(w)) {
                     let Some(to) = w
                         .screen_pos
                         .filter(|_| w.attached)
@@ -353,6 +471,10 @@ impl WallpaperHost {
             }
         }
     }
+}
+
+fn is_screen(w: &HostWindow) -> bool {
+    matches!(w.content, WindowContent::Screen { .. })
 }
 
 /// The whole dashboard: the landscape grid at natural cell sizes (there is no
@@ -394,13 +516,35 @@ impl WallpaperHost {
     fn refresh_settings(&mut self) -> bool {
         let s = settings::load_settings(&self.dir);
         // Left wallpaper mode (another window layer): the supervisor expects
-        // us to exit so it can take the dashboard back.
-        if s.window_layer != "wallpaper" {
+        // us to exit so it can take the dashboard back — and start a host
+        // again if a screen panel is in the desktop background (#737). Or
+        // entered it: a fresh host shows the dashboard too.
+        let wallpaper = s.window_layer == "wallpaper";
+        if wallpaper != self.hosts_dashboard {
             debug::append_debug_log(
                 &self.dir,
-                "rigstats-wallpaper: wallpaper mode left, closing",
+                if wallpaper {
+                    "rigstats-wallpaper: wallpaper mode entered, closing for relaunch"
+                } else {
+                    "rigstats-wallpaper: wallpaper mode left, closing"
+                },
             );
             return true;
+        }
+        self.screen_list = s.screen_panels.clone();
+        self.spectrum = rigstats_egui::panels::spectrum::SpectrumChoice::from_settings(&s);
+        if !self.hosts_dashboard {
+            if !screen_panels::any_in_desktop(&s.screen_panels) {
+                debug::append_debug_log(
+                    &self.dir,
+                    "rigstats-wallpaper: no screen panel in the desktop background, closing",
+                );
+                return true;
+            }
+            // The dashboard is the main app's: only what Now Playing reads.
+            *self.settings.lock_safe() = s.clone();
+            self.runtime.apply_settings(&s);
+            return false;
         }
         // Floating panels switched on or off (the profile's choice, #599), or
         // the panels moved, shown, hidden or resized (#170): a fresh host
@@ -554,10 +698,21 @@ impl eframe::App for WallpaperHost {
         // to create, reveal, attach and fit a window (#664).
         #[cfg(windows)]
         {
+            self.sync_screen_windows();
             let ctx = ui.ctx().clone();
             self.render_windows(&ctx);
         }
-        ui.ctx().request_repaint_after(Duration::from_secs(1));
+        // A screen panel's spectrum moves at its frame rate (#737).
+        let fps = if self.windows.iter().any(is_screen) {
+            self.spectrum.fps
+        } else {
+            0
+        };
+        ui.ctx().request_repaint_after(if fps > 0 {
+            Duration::from_secs_f32(1.0 / f32::from(fps))
+        } else {
+            Duration::from_secs(1)
+        });
     }
 }
 
@@ -628,9 +783,13 @@ fn main() {
         None => centered,
     };
     // The host's own window is a 1x1 anchor; the dashboard or the floating
-    // panels (#170) get their own windows.
+    // panels (#170) get their own windows — none when the host runs only for
+    // screen panels in the desktop background (#737).
+    let hosts_dashboard = s.window_layer == "wallpaper";
     let floating = s.floating_mode;
-    let windows = if floating {
+    let windows = if !hosts_dashboard {
+        Vec::new()
+    } else if floating {
         panel_windows(&s)
     } else {
         vec![HostWindow::new(WindowContent::Dashboard { size }, pos)]
@@ -678,7 +837,13 @@ fn main() {
     // by the on-disk session index (see `poll_loop`), so a tray-started
     // recording in the main app is picked up here too even though this is a
     // separate process.
-    let full = PollModeHandle::new(PollMode::Full);
+    // Without the dashboard the main app polls fully (and records); the host
+    // only needs Now Playing for its screen panels (#737).
+    let full = PollModeHandle::new(if hosts_dashboard {
+        PollMode::Full
+    } else {
+        PollMode::Light
+    });
     // The wallpaper host never connects to the control pipe (#187 is a
     // main-app concept — no dialogs/tray here), so this stays `None` forever;
     // the session-recording CSV column is simply empty for rows it logs.
@@ -804,6 +969,10 @@ fn main() {
                 closing: false,
                 panels_layout: layout,
                 screen_watch: rigstats_egui::geometry::LayoutWatch::new(true),
+                hosts_dashboard,
+                screen_list: s.screen_panels.clone(),
+                screens: Screens::default(),
+                spectrum: rigstats_egui::panels::spectrum::SpectrumChoice::from_settings(&s),
             };
             Ok(Box::new(host))
         }),

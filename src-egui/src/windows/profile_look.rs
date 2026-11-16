@@ -510,7 +510,7 @@ fn screen_panels_group(
     screens: &[Screen],
     dashboard: Option<&str>,
 ) {
-    use rigstats_backend::settings::{ScreenPanel, ScreenWhen};
+    use rigstats_backend::settings::{ScreenBackground, ScreenPanel, ScreenPlace, ScreenWhen};
     if screens.is_empty() {
         return;
     }
@@ -571,6 +571,8 @@ fn screen_panels_group(
                         screen: screen.id.clone(),
                         panel,
                         when: ScreenWhen::Always,
+                        place: ScreenPlace::Window,
+                        background: ScreenBackground::Cover,
                     }),
                     (None, None) => {}
                 }
@@ -590,6 +592,42 @@ fn screen_panels_group(
                             );
                         },
                     );
+                    g.row(
+                        "Where",
+                        Some(if p.in_desktop() {
+                            "Behind every window and the desktop icons, like a wallpaper"
+                        } else {
+                            "A window over the desktop: another window can cover it"
+                        }),
+                        |ui| {
+                            ui_kit::segmented(
+                                ui,
+                                dc,
+                                &mut p.place,
+                                &[
+                                    (ScreenPlace::Window, "Window"),
+                                    (ScreenPlace::Desktop, "Desktop background"),
+                                ],
+                            );
+                        },
+                    );
+                    if p.in_desktop() {
+                        g.row(
+                            "Background",
+                            Some("Transparent shows the desktop picture behind the panel"),
+                            |ui| {
+                                ui_kit::segmented(
+                                    ui,
+                                    dc,
+                                    &mut p.background,
+                                    &[
+                                        (ScreenBackground::Cover, "Blurred cover"),
+                                        (ScreenBackground::Transparent, "Transparent"),
+                                    ],
+                                );
+                            },
+                        );
+                    }
                 }
             }
             // Screens not connected now keep their panel.

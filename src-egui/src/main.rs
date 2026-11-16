@@ -432,7 +432,9 @@ impl RigStatsApp {
     /// Drive wallpaper mode each frame — the decisions are in
     /// `wallpaper_supervisor`; this carries out the window side. Wallpaper
     /// mode is on when `window_layer == "wallpaper"` — with floating panels
-    /// too: the host then draws each panel in its own window (#170).
+    /// too: the host then draws each panel in its own window (#170). The
+    /// host also runs, without the dashboard, for a screen panel in the
+    /// desktop background (#737).
     fn update_wallpaper_mode(&mut self, ctx: &egui::Context) {
         let want = self.window_layer == "wallpaper";
         let now = Instant::now();
@@ -440,7 +442,6 @@ impl RigStatsApp {
             want,
             || wallpaper_supervisor::host_path().is_none_or(|p| !p.exists()),
             &mut self.wallpaper_host,
-            now,
         );
         // Before `supervise`: on entering, this saves the position the host
         // reads when it starts.
@@ -452,7 +453,14 @@ impl RigStatsApp {
             // alerts — so keep one a second.
             ctx.request_repaint_after(Duration::from_secs(1));
         }
-        let effects = self.wallpaper.supervise(&mut self.wallpaper_host, now);
+        // A screen panel in the desktop background (#737) needs the host
+        // too; the dashboard stays here then.
+        let panels = rigstats_egui::screen_panels::any_in_desktop(
+            &self.current_settings.lock_safe().screen_panels,
+        );
+        let effects = self
+            .wallpaper
+            .supervise(&mut self.wallpaper_host, now, panels);
         self.apply_wallpaper_effects(ctx, effects);
     }
 

@@ -666,9 +666,28 @@ pub struct ScreenPanel {
     pub panel: String,
     #[serde(default)]
     pub when: ScreenWhen,
+    /// A window of the main app, or the desktop background — drawn by
+    /// `rigstats-wallpaper` in WorkerW, behind every window and the icons.
+    #[serde(default)]
+    pub place: ScreenPlace,
+    /// Only in the desktop background: the blurred cover behind the panel,
+    /// or nothing (the picture behind it shows through).
+    #[serde(default)]
+    pub background: ScreenBackground,
 }
 
 impl ScreenPanel {
+    /// Shown by the wallpaper host, in the desktop background.
+    pub fn in_desktop(&self) -> bool {
+        self.place == ScreenPlace::Desktop
+    }
+
+    /// Nothing behind the panel: only in the desktop background, where the
+    /// host's windows have real transparency.
+    pub fn transparent(&self) -> bool {
+        self.in_desktop() && self.background == ScreenBackground::Transparent
+    }
+
     /// Whether this version draws the panel.
     pub fn known(&self) -> bool {
         SCREEN_PANELS.contains(&self.panel.as_str())
@@ -689,6 +708,38 @@ pub enum ScreenWhen {
 impl<'de> Deserialize<'de> for ScreenWhen {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         lenient_enum(d, &[Self::Always, Self::Playing])
+    }
+}
+
+/// Where a screen panel shows (#737): a borderless window, or the desktop
+/// background. An unknown name reads as a window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScreenPlace {
+    #[default]
+    Window,
+    Desktop,
+}
+
+impl<'de> Deserialize<'de> for ScreenPlace {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        lenient_enum(d, &[Self::Window, Self::Desktop])
+    }
+}
+
+/// What is behind a screen panel in the desktop background (#737): the
+/// cover, blurred, or nothing. An unknown name reads as the cover.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ScreenBackground {
+    #[default]
+    Cover,
+    Transparent,
+}
+
+impl<'de> Deserialize<'de> for ScreenBackground {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        lenient_enum(d, &[Self::Cover, Self::Transparent])
     }
 }
 
@@ -1467,6 +1518,8 @@ mod profile_look_tests {
             screen: r"\\?\DISPLAY#TV#4&1".into(),
             panel: "media".into(),
             when: ScreenWhen::Playing,
+            place: ScreenPlace::Desktop,
+            background: ScreenBackground::Transparent,
         }];
         let look = ProfileLook::capture(&s);
         let mut other = Settings::default();
@@ -1476,17 +1529,28 @@ mod profile_look_tests {
         let json = serde_json::to_string(&look).unwrap();
         assert!(json.contains(r#""screenPanels":[{"#), "{json}");
         assert!(json.contains(r#""when":"playing""#), "{json}");
+        assert!(json.contains(r#""place":"desktop""#), "{json}");
+        assert!(json.contains(r#""background":"transparent""#), "{json}");
+        assert!(other.screen_panels[0].transparent());
 
         // A look from before #737 has none, so a switch to it clears them.
         let old: ProfileLook = serde_json::from_str("{}").unwrap();
         assert!(old.screen_panels.is_empty());
         // A newer version's panel or "when" doesn't break the rest.
         let newer: ProfileLook = serde_json::from_str(
-            r#"{"screenPanels":[{"screen":"a","panel":"clock","when":"evenings"}]}"#,
+            r#"{"screenPanels":[{"screen":"a","panel":"clock","when":"evenings","place":"tv","background":"video"}]}"#,
         )
         .unwrap();
         assert!(!newer.screen_panels[0].known());
         assert_eq!(newer.screen_panels[0].when, ScreenWhen::Always);
+        assert_eq!(newer.screen_panels[0].place, ScreenPlace::Window);
+        assert_eq!(newer.screen_panels[0].background, ScreenBackground::Cover);
+        // A window never is transparent, whatever is stored.
+        let window = ScreenPanel {
+            place: ScreenPlace::Window,
+            ..s.screen_panels[0].clone()
+        };
+        assert!(!window.transparent());
     }
 
     #[test]
