@@ -465,23 +465,30 @@ pub fn draw_screen(
     now: Option<&rigstats_backend::media::NowPlaying>,
     spectrum: super::spectrum::SpectrumChoice,
     th: &theme::AppTheme,
+    with_backdrop: bool,
 ) {
     // One unit per pixel of a 1080-pixel screen (the shorter side).
     let u = rect.height().min(rect.width()) / 1080.0;
     let p = ui.painter().clone();
-    p.rect_filled(rect, 0.0, Color32::from_gray(8));
-    let cover = now.and_then(|n| n.cover.as_ref());
-    if let Some(tex) = cached_texture(ui.ctx(), cover, "now-playing-backdrop", backdrop) {
-        // Darkened, so the title stays readable on a light cover.
-        p.image(tex.id(), rect, fill_uv(rect), Color32::from_gray(90));
+    // Without it (transparent, in the desktop background) the desktop
+    // picture shows through; the text's shadow keeps it readable there.
+    if with_backdrop {
+        p.rect_filled(rect, 0.0, Color32::from_gray(8));
+        let cover = now.and_then(|n| n.cover.as_ref());
+        if let Some(tex) = cached_texture(ui.ctx(), cover, "now-playing-backdrop", backdrop) {
+            // Darkened, so the title stays readable on a light cover.
+            p.image(tex.id(), rect, fill_uv(rect), Color32::from_gray(90));
+        }
     }
     let Some(now) = now else {
-        p.text(
+        text_line(
+            &p,
             rect.center(),
-            egui::Align2::CENTER_CENTER,
             "NOTHING PLAYING",
-            egui::FontId::proportional(48.0 * u),
+            48.0 * u,
             th.text_muted,
+            rect.width(),
+            egui::Align2::CENTER_CENTER,
         );
         return;
     };
@@ -668,8 +675,9 @@ fn fill_uv(rect: egui::Rect) -> egui::Rect {
     }
 }
 
-/// One line of text anchored at `pos`, cut with an ellipsis at `max_w`;
-/// returns its height.
+/// One line of text anchored at `pos`, cut with an ellipsis at `max_w`,
+/// over a soft shadow (readable on a light desktop picture too); returns its
+/// height.
 fn text_line(
     p: &egui::Painter,
     pos: egui::Pos2,
@@ -691,7 +699,11 @@ fn text_line(
     };
     let galley = p.layout_job(job);
     let size = galley.size();
-    p.galley(align.anchor_size(pos, size).min, galley, color);
+    let at = align.anchor_size(pos, size).min;
+    let shadow = Color32::from_black_alpha(170);
+    let off = (size.y * 0.04).max(1.0);
+    p.galley_with_override_text_color(at + Vec2::splat(off), galley.clone(), shadow);
+    p.galley(at, galley, color);
     size.y
 }
 
