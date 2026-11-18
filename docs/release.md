@@ -73,7 +73,9 @@ CI. Bumping the pin is a deliberate, standalone commit with two parts:
   `Directory.Build.props` turns on `NuGetAudit` for both .NET projects,
   transitive packages included, and a moderate-or-worse vulnerability fails
   the build. `.github/workflows/audit.yml` runs both checks every Monday, so
-  a new advisory shows up without a push.
+  a new advisory shows up without a push. A new advisory also stops the
+  release build itself, before signing (`v1.55.0-rc.1`, #752): fix or ignore
+  it on `main`, then cut the next RC.
 - Locally, verify skips the Rust audit with a hint when cargo-deny is missing:
   `cargo install cargo-deny --locked`. In CI it is required.
 - **Third-party notices** (#649): the installer ships
