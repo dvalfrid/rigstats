@@ -500,8 +500,14 @@ several quick changes. The Desktop page (its own sidebar section, "Windows") sho
 (`app_icons::PictureCache`: one decode thread with a queue — newest request first, so the rows in view load first, at most 64 waiting — rows up to 384 × 216, list lines 128 × 72, at most 150 kept, the least recently used dropped first; decoded with the `image` crate — format read from the
 content, as Windows' `TranscodedWallpaper` has no extension — on a thread of its
 own), Windows' own background included (the kept one, else what Windows
-shows now), and lists the connected screens left to right. The wallpaper host doesn't
-touch it.
+shows now), and lists the connected screens left to right. The page is laid
+out per screen (#737): on top what every screen shares (the picture or one per
+screen, Fit, Windows' own; Wallpaper Engine's state and what it does in the
+profile), then a tab per connected screen (`ui_kit::tabs`, none with one
+screen) with only that screen's picture, Wallpaper Engine wallpaper and screen
+panel with its spectrum — so the page doesn't grow with the number of screens.
+A tab names the dashboard's screen or the screen's panel; the page opens on
+the first screen the dashboard isn't on. The wallpaper host doesn't touch it.
 
 Wallpaper Engine per profile (#306, step 2): RIGStats doesn't draw live
 wallpapers itself — that would mean a video player, a web renderer and a scene
@@ -527,7 +533,7 @@ The main app's `sync_wallpaper_engine` checks every 5 s whether it is installed
 and running and applies the profile's choice again when it starts (after
 RIGStats at boot, or restarted); the commands run on the same worker thread as
 the Windows background. The Desktop page's "Wallpaper Engine" group (only when
-it is installed): As it is / Wallpapers / Paused, and per screen the wallpaper
+it is installed): As it is / Wallpapers / Paused, and on each screen's tab the wallpaper
 from the library with its preview (jpg or gif). The library is read on a thread
 of its own — never on the UI thread, a large Workshop library takes a while —
 when the Desktop page is opened and again when a wallpaper list is opened, so a

@@ -29,7 +29,13 @@ impl RigStatsApp {
                 s.wallpaper_position,
             )
         };
-        if list.is_empty() {
+        // The Control Center's Desktop page needs the dashboard's screen
+        // (its tab, the screen it opens on) before any panel is set.
+        let control_open = self
+            .dialogs
+            .control_open
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if list.is_empty() && !control_open {
             return;
         }
         self.screen_panels.screens.refresh();

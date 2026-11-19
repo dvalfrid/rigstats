@@ -491,30 +491,6 @@ fn battery_levels(ui_state: &ControlUi) -> (u8, u8) {
         .map_or((20, 10), |t| (t.warn.unwrap_or(20), t.crit.unwrap_or(10)))
 }
 
-/// A row of tabs, one per device, when a page has more than one (#296):
-/// the page then shows the picked one only, not every device in one long
-/// list. Returns the picked index, kept inside the list.
-fn device_tabs<'a>(
-    ui: &mut egui::Ui,
-    dc: &DialogColors,
-    names: impl Iterator<Item = &'a str>,
-    picked: &mut usize,
-) -> usize {
-    let names: Vec<&str> = names.collect();
-    *picked = (*picked).min(names.len().saturating_sub(1));
-    if names.len() > 1 {
-        ui.horizontal_wrapped(|ui| {
-            for (i, name) in names.iter().enumerate() {
-                if ui_kit::chip(ui, dc, name, i == *picked).clicked() {
-                    *picked = i;
-                }
-            }
-        });
-        ui.add_space(12.0);
-    }
-    *picked
-}
-
 pub fn show(
     ui: &mut egui::Ui,
     main_ctx: &egui::Context,

@@ -1032,6 +1032,31 @@ pub fn list_item(
 }
 
 /// A pill-shaped choice (a profile). Filled while selected.
+/// A row of tabs when a page has more than one of a thing — devices
+/// (#296), screens (#737): the page then shows the picked one only, not
+/// every one in one long list. Nothing is drawn for one. Returns the picked
+/// index, kept inside the list.
+pub fn tabs<'a>(
+    ui: &mut Ui,
+    dc: &DialogColors,
+    names: impl Iterator<Item = &'a str>,
+    picked: &mut usize,
+) -> usize {
+    let names: Vec<&str> = names.collect();
+    *picked = (*picked).min(names.len().saturating_sub(1));
+    if names.len() > 1 {
+        ui.horizontal_wrapped(|ui| {
+            for (i, name) in names.iter().enumerate() {
+                if chip(ui, dc, name, i == *picked).clicked() {
+                    *picked = i;
+                }
+            }
+        });
+        ui.add_space(12.0);
+    }
+    *picked
+}
+
 pub fn chip(ui: &mut Ui, dc: &DialogColors, label: &str, selected: bool) -> Response {
     let font = FontId::proportional(13.0);
     let w = ui
