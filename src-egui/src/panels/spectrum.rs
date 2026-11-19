@@ -31,6 +31,15 @@ impl SpectrumChoice {
             color: s.spectrum_color,
         }
     }
+
+    /// A screen panel's own choice (#737), apart from the dashboard's.
+    pub fn of_screen(p: &rigstats_backend::settings::ScreenPanel) -> Self {
+        Self {
+            fps: rigstats_backend::settings::spectrum_rate(p.spectrum_fps),
+            style: p.spectrum_style,
+            color: p.spectrum_color,
+        }
+    }
 }
 
 const CYAN: Color32 = Color32::from_rgb(0, 200, 255);

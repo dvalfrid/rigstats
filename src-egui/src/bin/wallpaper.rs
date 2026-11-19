@@ -112,7 +112,6 @@ struct WallpaperHost {
     /// here.
     screen_list: Vec<settings::ScreenPanel>,
     screens: Screens,
-    spectrum: rigstats_egui::panels::spectrum::SpectrumChoice,
 }
 
 /// What one of the host's windows draws.
@@ -258,7 +257,6 @@ impl WallpaperHost {
             let view = self.runtime.view();
             let dir = &self.dir;
             let media = self.runtime.latest.media.as_ref();
-            let spectrum = self.spectrum;
             let th = self.runtime.app_theme;
             ctx.show_viewport_immediate(
                 egui::ViewportId::from_hash_of(&title),
@@ -285,7 +283,9 @@ impl WallpaperHost {
                                         ui,
                                         rect,
                                         media,
-                                        spectrum,
+                                        rigstats_egui::panels::spectrum::SpectrumChoice::of_screen(
+                                            panel,
+                                        ),
                                         &th,
                                         !panel.transparent(),
                                     );
@@ -532,7 +532,6 @@ impl WallpaperHost {
             return true;
         }
         self.screen_list = s.screen_panels.clone();
-        self.spectrum = rigstats_egui::panels::spectrum::SpectrumChoice::from_settings(&s);
         if !self.hosts_dashboard {
             if !screen_panels::any_in_desktop(&s.screen_panels) {
                 debug::append_debug_log(
@@ -703,11 +702,17 @@ impl eframe::App for WallpaperHost {
             self.render_windows(&ctx);
         }
         // A screen panel's spectrum moves at its frame rate (#737).
-        let fps = if self.windows.iter().any(is_screen) {
-            self.spectrum.fps
-        } else {
-            0
-        };
+        let fps = self
+            .windows
+            .iter()
+            .filter_map(|w| match &w.content {
+                WindowContent::Screen { panel, .. } => {
+                    Some(rigstats_egui::panels::spectrum::SpectrumChoice::of_screen(panel).fps)
+                }
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
         ui.ctx().request_repaint_after(if fps > 0 {
             Duration::from_secs_f32(1.0 / f32::from(fps))
         } else {
@@ -972,7 +977,6 @@ fn main() {
                 hosts_dashboard,
                 screen_list: s.screen_panels.clone(),
                 screens: Screens::default(),
-                spectrum: rigstats_egui::panels::spectrum::SpectrumChoice::from_settings(&s),
             };
             Ok(Box::new(host))
         }),

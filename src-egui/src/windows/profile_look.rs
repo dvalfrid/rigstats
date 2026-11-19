@@ -435,60 +435,59 @@ pub fn dashboard_page(
                 "The spectrum shows the sound the PC plays: music, but also a game, a call or a notification. It draws only while something plays and the panel is shown in full. Smooth costs the most; leave it off in a profile for gaming.",
             ),
             |g| {
-                g.row("Spectrum", None, |ui| {
-                    let mut fps = look.spectrum_fps;
-                    if ui_kit::segmented(
-                        ui,
-                        dc,
-                        &mut fps,
-                        &[(0, "Off"), (10, "Calm"), (30, "Smooth")],
-                    ) {
-                        look.spectrum_fps = fps;
-                    }
-                });
-                if look.spectrum_fps > 0 {
-                    g.row("Style", None, |ui| {
-                        let mut style = look.spectrum_style;
-                        ui_kit::dropdown(ui, "spectrum_style", style.label(), |ui| {
-                            for s in rigstats_backend::settings::SpectrumStyle::ALL {
-                                ui.selectable_value(&mut style, s, s.label());
-                            }
-                        });
-                        look.spectrum_style = style;
-                    });
-                    g.row(
-                        "Colour",
-                        Some("LED segments are always green, yellow and red"),
-                        |ui| {
-                            use rigstats_backend::settings::SpectrumColor;
-                            let mut color = look.spectrum_color;
-                            if ui_kit::segmented(
-                                ui,
-                                dc,
-                                &mut color,
-                                &[
-                                    (SpectrumColor::Accent, "Accent"),
-                                    (SpectrumColor::Gradient, "Gradient"),
-                                ],
-                            ) {
-                                look.spectrum_color = color;
-                            }
-                        },
-                    );
-                }
+                spectrum_rows(
+                    g,
+                    dc,
+                    ("dashboard", 0),
+                    &mut look.spectrum_fps,
+                    &mut look.spectrum_style,
+                    &mut look.spectrum_color,
+                );
             },
         );
     }
-    if editor
-        .screens_at
-        .is_none_or(|t| t.elapsed() > Duration::from_secs(3))
-    {
-        editor.screens = desktop_background::screens();
-        editor.screens_at = Some(Instant::now());
-    }
-    let dashboard = link.dashboard_screen.lock_safe().clone();
-    screen_panels_group(ui, dc, look, &editor.screens, dashboard.as_deref());
     editor.preview(link);
+}
+
+/// The spectrum's rate, style and colour (#719, #732): the dashboard's Now
+/// Playing panel and each screen panel (#737) have their own.
+fn spectrum_rows(
+    g: &mut ui_kit::Group<'_>,
+    dc: &DialogColors,
+    id: (&str, usize),
+    fps: &mut u8,
+    style: &mut rigstats_backend::settings::SpectrumStyle,
+    color: &mut rigstats_backend::settings::SpectrumColor,
+) {
+    use rigstats_backend::settings::{SpectrumColor, SpectrumStyle};
+    g.row("Spectrum", None, |ui| {
+        ui_kit::segmented(ui, dc, fps, &[(0, "Off"), (10, "Calm"), (30, "Smooth")]);
+    });
+    if *fps == 0 {
+        return;
+    }
+    g.row("Style", None, |ui| {
+        ui_kit::dropdown(ui, ("spectrum_style", id), style.label(), |ui| {
+            for s in SpectrumStyle::ALL {
+                ui.selectable_value(style, s, s.label());
+            }
+        });
+    });
+    g.row(
+        "Colour",
+        Some("LED segments are always green, yellow and red"),
+        |ui| {
+            ui_kit::segmented(
+                ui,
+                dc,
+                color,
+                &[
+                    (SpectrumColor::Accent, "Accent"),
+                    (SpectrumColor::Gradient, "Gradient"),
+                ],
+            );
+        },
+    );
 }
 
 /// The panel names a screen can show (#737), "None" first.
@@ -520,7 +519,7 @@ fn screen_panels_group(
         dc,
         Some("Screen panels"),
         Some(
-            "A panel can fill a whole screen of its own, such as an extra monitor or a TV. Now Playing shows the cover large, with the profile's spectrum across the bottom.",
+            "A panel can fill a whole screen of its own, such as an extra monitor or a TV. Now Playing shows the cover large, with a spectrum of its own across the bottom or around the cover.",
         ),
         |g| {
             for (i, screen) in screens.iter().enumerate() {
@@ -567,13 +566,9 @@ fn screen_panels_group(
                         look.screen_panels.remove(i);
                     }
                     (Some(i), Some(panel)) => look.screen_panels[i].panel = panel,
-                    (None, Some(panel)) => look.screen_panels.push(ScreenPanel {
-                        screen: screen.id.clone(),
-                        panel,
-                        when: ScreenWhen::Always,
-                        place: ScreenPlace::Window,
-                        background: ScreenBackground::Cover,
-                    }),
+                    (None, Some(panel)) => look
+                        .screen_panels
+                        .push(ScreenPanel::new(screen.id.clone(), panel)),
                     (None, None) => {}
                 }
                 if let Some(p) = look.screen_panels.iter_mut().find(|p| p.screen == screen.id) {
@@ -628,6 +623,7 @@ fn screen_panels_group(
                             },
                         );
                     }
+                    spectrum_rows(g, dc, ("screen", i), &mut p.spectrum_fps, &mut p.spectrum_style, &mut p.spectrum_color);
                 }
             }
             // Screens not connected now keep their panel.
@@ -664,7 +660,8 @@ fn compact_choice(ui: &mut egui::Ui, dc: &DialogColors, compact: &mut Vec<String
     }
 }
 
-/// The Desktop page (#306): the profile's desktop background.
+/// The Desktop page (#306): the profile's desktop background, Wallpaper
+/// Engine and the screen panels (#737) — what each screen shows.
 pub fn desktop_page(
     ui: &mut egui::Ui,
     dc: &DialogColors,
@@ -676,7 +673,7 @@ pub fn desktop_page(
         ui,
         dc,
         "Desktop",
-        &format!("The desktop background in {profile}."),
+        &format!("What each screen shows in {profile}: its background and any screen panel."),
     );
     let Some(look) = editor.look.as_mut() else {
         return;
@@ -699,6 +696,16 @@ pub fn desktop_page(
     } else if editor.background.we_missing {
         wallpaper_engine_missing(ui, dc);
     }
+    // After the backgrounds: a screen panel covers its screen's (#737).
+    if editor
+        .screens_at
+        .is_none_or(|t| t.elapsed() > Duration::from_secs(3))
+    {
+        editor.screens = desktop_background::screens();
+        editor.screens_at = Some(Instant::now());
+    }
+    let dashboard = link.dashboard_screen.lock_safe().clone();
+    screen_panels_group(ui, dc, look, &editor.screens, dashboard.as_deref());
     editor.preview(link);
 }
 
