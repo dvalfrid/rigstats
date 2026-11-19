@@ -1,7 +1,8 @@
 //! Screen panels (#737): a panel filling a screen of its own — Now Playing
 //! on an extra monitor or a TV. Which screen shows which panel is part of the
 //! profile's look (`Settings::screen_panels`), set on the Control Center's
-//! Dashboard page. A panel in a window is drawn by the main app
+//! Desktop page, each with a spectrum of its own
+//! (`SpectrumChoice::of_screen`). A panel in a window is drawn by the main app
 //! (`app/screen_panels.rs`), one in the desktop background by
 //! `rigstats-wallpaper` in WorkerW (`bin/wallpaper.rs`); both pick theirs
 //! with [`to_show`].
@@ -106,7 +107,7 @@ fn screen_at(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rigstats_backend::settings::{ScreenBackground, ScreenPlace};
+    use rigstats_backend::settings::ScreenPlace;
 
     fn screen(id: &str, rect: [i32; 4]) -> Screen {
         Screen {
@@ -117,11 +118,8 @@ mod tests {
 
     fn panel(screen: &str, when: ScreenWhen) -> ScreenPanel {
         ScreenPanel {
-            screen: screen.into(),
-            panel: "media".into(),
             when,
-            place: ScreenPlace::Window,
-            background: ScreenBackground::Cover,
+            ..ScreenPanel::new(screen, "media")
         }
     }
 

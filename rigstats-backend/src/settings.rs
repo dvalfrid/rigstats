@@ -674,9 +674,38 @@ pub struct ScreenPanel {
     /// or nothing (the picture behind it shows through).
     #[serde(default)]
     pub background: ScreenBackground,
+    /// This screen's own spectrum, apart from the dashboard's Now Playing
+    /// panel, so a TV can show Smooth rings while the dashboard has it off:
+    /// frames a second, one of [`SPECTRUM_RATES`] (0 = off; anything else
+    /// reads as off). Smooth for a panel saved before it existed.
+    #[serde(default = "default_screen_spectrum_fps")]
+    pub spectrum_fps: u8,
+    #[serde(default)]
+    pub spectrum_style: SpectrumStyle,
+    #[serde(default)]
+    pub spectrum_color: SpectrumColor,
+}
+
+fn default_screen_spectrum_fps() -> u8 {
+    30
 }
 
 impl ScreenPanel {
+    /// `panel` on `screen`: always, in a window, over the blurred cover,
+    /// with a Smooth spectrum in bars of the accent colour.
+    pub fn new(screen: impl Into<String>, panel: impl Into<String>) -> Self {
+        Self {
+            screen: screen.into(),
+            panel: panel.into(),
+            when: ScreenWhen::default(),
+            place: ScreenPlace::default(),
+            background: ScreenBackground::default(),
+            spectrum_fps: default_screen_spectrum_fps(),
+            spectrum_style: SpectrumStyle::default(),
+            spectrum_color: SpectrumColor::default(),
+        }
+    }
+
     /// Shown by the wallpaper host, in the desktop background.
     pub fn in_desktop(&self) -> bool {
         self.place == ScreenPlace::Desktop
@@ -1515,11 +1544,13 @@ mod profile_look_tests {
         let mut s = Settings::default();
         assert!(s.screen_panels.is_empty());
         s.screen_panels = vec![ScreenPanel {
-            screen: r"\\?\DISPLAY#TV#4&1".into(),
-            panel: "media".into(),
             when: ScreenWhen::Playing,
             place: ScreenPlace::Desktop,
             background: ScreenBackground::Transparent,
+            spectrum_fps: 10,
+            spectrum_style: SpectrumStyle::Ring,
+            spectrum_color: SpectrumColor::Gradient,
+            ..ScreenPanel::new(r"\\?\DISPLAY#TV#4&1", "media")
         }];
         let look = ProfileLook::capture(&s);
         let mut other = Settings::default();
@@ -1531,6 +1562,9 @@ mod profile_look_tests {
         assert!(json.contains(r#""when":"playing""#), "{json}");
         assert!(json.contains(r#""place":"desktop""#), "{json}");
         assert!(json.contains(r#""background":"transparent""#), "{json}");
+        assert!(json.contains(r#""spectrumFps":10"#), "{json}");
+        assert!(json.contains(r#""spectrumStyle":"ring""#), "{json}");
+        assert!(json.contains(r#""spectrumColor":"gradient""#), "{json}");
         assert!(other.screen_panels[0].transparent());
 
         // A look from before #737 has none, so a switch to it clears them.
@@ -1545,6 +1579,10 @@ mod profile_look_tests {
         assert_eq!(newer.screen_panels[0].when, ScreenWhen::Always);
         assert_eq!(newer.screen_panels[0].place, ScreenPlace::Window);
         assert_eq!(newer.screen_panels[0].background, ScreenBackground::Cover);
+        // A panel saved before it had a spectrum of its own gets Smooth bars.
+        assert_eq!(newer.screen_panels[0].spectrum_fps, 30);
+        assert_eq!(newer.screen_panels[0].spectrum_style, SpectrumStyle::Bars);
+        assert_eq!(newer.screen_panels[0].spectrum_color, SpectrumColor::Accent);
         // A window never is transparent, whatever is stored.
         let window = ScreenPanel {
             place: ScreenPlace::Window,
