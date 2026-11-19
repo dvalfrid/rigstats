@@ -7,6 +7,7 @@ use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit;
 use eframe::egui;
 use egui_plot::{Legend, Line, Plot, PlotPoints};
+use rigstats_backend::local_time;
 use rigstats_backend::logging::{self, SessionMeta, SessionRow, SessionSummary};
 use std::path::PathBuf;
 use std::process::Command;
@@ -83,13 +84,7 @@ pub fn spawn_load_rows(
 // ── Formatting helpers ───────────────────────────────────────────────────────
 
 fn fmt_local(unix: u64) -> String {
-    chrono::DateTime::from_timestamp(unix as i64, 0)
-        .map(|dt| {
-            dt.with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default()
+    local_time::format_unix(unix, local_time::MINUTES)
 }
 
 fn fmt_duration(secs: u64) -> String {

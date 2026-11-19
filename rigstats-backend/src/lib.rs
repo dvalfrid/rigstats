@@ -5,6 +5,7 @@ pub mod desktop_background;
 pub mod hardware;
 pub mod lhm;
 pub mod lhm_process;
+pub mod local_time;
 pub mod logging;
 pub mod media;
 pub mod microphone;

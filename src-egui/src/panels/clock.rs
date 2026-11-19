@@ -1,6 +1,19 @@
 use egui::{RichText, Ui};
+use rigstats_backend::local_time;
+use time::format_description::BorrowedFormatItem;
+use time::macros::format_description;
 
 use crate::theme;
+
+/// `14:32:05`
+const TIME: &[BorrowedFormatItem<'_>] = format_description!("[hour]:[minute]:[second]");
+/// `Sat 22 Aug` (compact layout)
+const SHORT_DATE: &[BorrowedFormatItem<'_>] =
+    format_description!("[weekday repr:short] [day padding:none] [month repr:short]");
+/// `2026·08·22`
+const DOTTED_DATE: &[BorrowedFormatItem<'_>] = format_description!("[year]·[month]·[day]");
+/// `Saturday`
+const WEEKDAY: &[BorrowedFormatItem<'_>] = format_description!("[weekday]");
 
 pub fn format_uptime(secs: u64) -> String {
     let h = secs / 3600;
@@ -20,7 +33,8 @@ pub fn draw(
     compact: bool,
 ) -> egui::Rect {
     theme::panel_frame(ui, opacity, th, sc, |ui| {
-        let now = chrono::Local::now();
+        let now = local_time::now();
+        let fmt = |f: &[BorrowedFormatItem<'_>]| local_time::format(now, f);
         if compact {
             use super::CompactCell;
             let stat = |label: &'static str, value: String| CompactCell::Stat {
@@ -33,8 +47,8 @@ pub fn draw(
             super::compact_row(
                 ui,
                 &[
-                    stat("TIME", now.format("%H:%M:%S").to_string()),
-                    stat("DATE", now.format("%a %-d %b").to_string()),
+                    stat("TIME", fmt(TIME)),
+                    stat("DATE", fmt(SHORT_DATE)),
                     stat("UPTIME", format_uptime(uptime_secs).replace("UP ", "")),
                 ],
                 th,
@@ -49,7 +63,7 @@ pub fn draw(
         ui.horizontal(|ui| {
             // Big time
             ui.label(
-                RichText::new(now.format("%H:%M:%S").to_string())
+                RichText::new(fmt(TIME))
                     .size(40.0 * sc)
                     .color(egui::Color32::WHITE),
             );
@@ -60,7 +74,7 @@ pub fn draw(
                     ui.add_space(4.0 * sc);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                         ui.label(
-                            RichText::new(now.format("%Y·%m·%d").to_string())
+                            RichText::new(fmt(DOTTED_DATE))
                                 .size(11.0 * sc)
                                 .color(th.text_muted),
                         );
@@ -78,7 +92,7 @@ pub fn draw(
 
         // ── Day name ─────────────────────────────────────────────────────────
         ui.label(
-            RichText::new(now.format("%A").to_string().to_uppercase())
+            RichText::new(fmt(WEEKDAY).to_uppercase())
                 .size(15.0 * sc)
                 .color(theme::C_GRN),
         );

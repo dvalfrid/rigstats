@@ -2,9 +2,8 @@ use crate::gpu_process;
 use crate::lock_ext::LockSafe;
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit;
-use chrono::Local;
 use rigstats_backend::control::{ControlCmd, ControlState};
-use rigstats_backend::{debug, hardware};
+use rigstats_backend::{debug, hardware, local_time};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -53,7 +52,7 @@ impl StatusState {
             wallpaper_active,
             wmi_ok: hardware::probe_wmi_status().is_ok(),
             log_path: log_path.display().to_string(),
-            last_refresh: Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            last_refresh: local_time::format(local_time::now(), local_time::SECONDS),
             gpu_drivers: hardware::detect_gpu_drivers(),
             wallpaper_engine: rigstats_backend::wallpaper_engine::find().map(|i| {
                 (

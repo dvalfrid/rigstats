@@ -183,10 +183,9 @@ impl LogLevel {
 /// Formats a Unix timestamp as local `YYYY-MM-DD HH:MM:SS`, falling back to the
 /// raw seconds if the conversion ever fails (it should not).
 pub fn fmt_local_timestamp(secs: u64) -> String {
-    use chrono::{Local, TimeZone};
-    match Local.timestamp_opt(secs as i64, 0) {
-        chrono::offset::LocalResult::Single(dt) => dt.format("%Y-%m-%d %H:%M:%S").to_string(),
-        _ => secs.to_string(),
+    match crate::local_time::from_unix(secs) {
+        Some(dt) => crate::local_time::format(dt, crate::local_time::SECONDS),
+        None => secs.to_string(),
     }
 }
 
