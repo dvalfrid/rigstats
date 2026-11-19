@@ -23,7 +23,7 @@ public class AuraFixtureTests
     [MemberData(nameof(Fixtures))]
     public void Config_table_yields_the_boards_zones(string file)
     {
-        var fixture = JsonDocument.Parse(File.ReadAllText(Path.Combine(Root, file))).RootElement;
+        var fixture = JsonElement.Parse(File.ReadAllText(Path.Combine(Root, file)));
         var productId = Convert.ToUInt16(fixture.GetProperty("product_id").GetString(), 16);
         var table = Convert.FromHexString(fixture.GetProperty("config_table").GetString()!);
         Assert.Equal(60, table.Length);

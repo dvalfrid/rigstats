@@ -212,8 +212,7 @@ public class SensorWorkerTests
             Assert.NotNull(await live.ReadLineAsync());
 
         var stop = Task.Run(() => StopAsync(worker));
-        Assert.Same(stop, await Task.WhenAny(stop, Task.Delay(TimeSpan.FromSeconds(5))));
-        await stop;
+        await stop.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]
