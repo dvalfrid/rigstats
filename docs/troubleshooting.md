@@ -215,8 +215,9 @@ Panels**) and the card over the tray icon show the battery of wireless devices
 ## Now Playing And The Spectrum
 
 The NOW PLAYING panel (turn it on under **Control Center → Dashboard →
-Panels**) shows what Windows' own media controls show: the player Windows
-considers current. Its spectrum is set per profile on the same page, under
+Panels**) shows what a player tells Windows it plays — the one it showed
+keeps its place while it plays, otherwise the one Windows' own media controls
+show. Its spectrum is set per profile on the same page, under
 **Now Playing → Spectrum** (Off, Calm or Smooth), with its style and colour.
 
 - **"NOTHING PLAYING" while music plays** — the player doesn't tell Windows
@@ -226,8 +227,10 @@ considers current. Its spectrum is set per profile on the same page, under
   some players need a "media controls" or "system media transport" option
   turned on.
 - **It shows a different player than the one you listen to** — with several
-  players open, Windows picks one as current; RIGStats follows Windows' choice.
-  Pause or close the other one.
+  players playing, RIGStats stays on the one it showed first, so a video
+  started in a browser doesn't push aside music playing in the background.
+  To show the other one, pause the first: RIGStats then takes the one that
+  plays (or, with nothing playing, the one Windows' media controls show).
 - **The artist line also holds the album** — some players (Apple Music) send
   "artist — album" as the artist. RIGStats shows what the player sends.
 - **No cover picture** — the player sent none, or sent it a moment after the

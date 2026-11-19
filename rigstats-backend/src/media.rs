@@ -1,6 +1,8 @@
 //! What is playing (#718): the title, artist, album, state and cover picture
-//! of the media session Windows considers current — the one its own media
-//! flyout shows. Read through Windows' media sessions
+//! of a media session — the one shown keeps its place while it plays, so a
+//! video started in a browser doesn't take over from music playing in the
+//! background; otherwise the one Windows considers current, the one its own
+//! media flyout shows ([`pick_session`]). Read through Windows' media sessions
 //! (`GlobalSystemMediaTransportControlsSessionManager`), so it works for any
 //! player that tells Windows what it plays (Spotify, browsers, …) with no
 //! account and nothing per player.
@@ -70,6 +72,30 @@ pub fn track(title: &str, artist: &str, album: &str) -> Option<Track> {
         artist: artist.trim().to_string(),
         album: album.trim().to_string(),
     })
+}
+
+/// Which player's session to show, by its app id, from every session and
+/// whether it plays: the one shown so far while it still plays — Windows
+/// makes the newest session current, so a Twitch stream started in a
+/// browser would otherwise push aside music that goes on playing — then
+/// Windows' current one if it plays, then any that plays, and with nothing
+/// playing Windows' current one (paused or stopped), as its flyout does.
+pub fn pick_session(
+    shown: Option<&str>,
+    current: Option<&str>,
+    sessions: &[(String, bool)],
+) -> Option<String> {
+    let plays = |id: &str| sessions.iter().any(|(s, p)| s == id && *p);
+    if let Some(id) = shown.filter(|id| plays(id)) {
+        return Some(id.to_owned());
+    }
+    if let Some(id) = current.filter(|id| plays(id)) {
+        return Some(id.to_owned());
+    }
+    if let Some((id, _)) = sessions.iter().find(|(_, p)| *p) {
+        return Some(id.clone());
+    }
+    current.map(str::to_owned)
 }
 
 /// How many times a track's missing picture is asked for: players often
@@ -187,7 +213,7 @@ fn next_cover_id() -> u64 {
 
 #[cfg(windows)]
 mod win {
-    use super::{is_playing, track, Track, MAX_COVER_BYTES};
+    use super::{is_playing, pick_session, track, Track, MAX_COVER_BYTES};
     use std::sync::Arc;
     use windows::Media::Control::{
         GlobalSystemMediaTransportControlsSession as Session,
@@ -196,10 +222,12 @@ mod win {
     use windows::Storage::Streams::DataReader;
 
     /// Keeps the session manager between reads; asked for again after an
-    /// error (Windows' media service restarted, say).
+    /// error (Windows' media service restarted, say). `shown` is the app id
+    /// of the session read last, kept while it plays ([`super::pick_session`]).
     #[derive(Default)]
     pub struct Reader {
         manager: Option<Manager>,
+        shown: Option<String>,
     }
 
     impl Reader {
@@ -210,11 +238,35 @@ mod win {
                 self.manager = Manager::RequestAsync().and_then(|op| op.join()).ok();
             }
             let manager = self.manager.as_ref()?;
+            let app = |s: &Session| {
+                s.SourceAppUserModelId()
+                    .map(|id| id.to_string_lossy())
+                    .unwrap_or_default()
+            };
+            let sessions: Vec<Session> = manager
+                .GetSessions()
+                .map(|list| list.into_iter().collect())
+                .unwrap_or_default();
+            let list: Vec<(String, bool)> = sessions
+                .iter()
+                .map(|s| {
+                    let playing = s
+                        .GetPlaybackInfo()
+                        .and_then(|i| i.PlaybackStatus())
+                        .is_ok_and(|st| is_playing(st.0));
+                    (app(s), playing)
+                })
+                .collect();
             // No current session is an error here too ("not found"), not a
             // reason to ask for the manager again.
-            let Ok(session) = manager.GetCurrentSession() else {
-                return None;
+            let current = manager.GetCurrentSession().ok();
+            let current_app = current.as_ref().map(app);
+            let chosen = pick_session(self.shown.as_deref(), current_app.as_deref(), &list)?;
+            let session = match sessions.into_iter().find(|s| app(s) == chosen) {
+                Some(s) => s,
+                None => current?,
             };
+            self.shown = Some(chosen);
             let read = || -> windows::core::Result<Option<(Track, bool)>> {
                 let props = session.TryGetMediaPropertiesAsync()?.join()?;
                 let status = session.GetPlaybackInfo()?.PlaybackStatus()?;
@@ -292,6 +344,59 @@ mod tests {
         assert_eq!(got.title, "Song");
         assert_eq!(got.artist, "Artist");
         assert_eq!(got.album, "");
+    }
+
+    fn list(sessions: &[(&str, bool)]) -> Vec<(String, bool)> {
+        sessions
+            .iter()
+            .map(|(s, p)| ((*s).to_owned(), *p))
+            .collect()
+    }
+
+    /// Music goes on playing when a browser video starts (seen 2026-11-19:
+    /// Windows made Brave current over Apple Music).
+    #[test]
+    fn a_new_player_doesnt_take_over_from_one_that_plays() {
+        let both = list(&[("music", true), ("brave", true)]);
+        assert_eq!(
+            pick_session(Some("music"), Some("brave"), &both).as_deref(),
+            Some("music")
+        );
+    }
+
+    #[test]
+    fn a_paused_player_gives_way_to_one_that_plays() {
+        let s = list(&[("music", false), ("brave", true)]);
+        assert_eq!(
+            pick_session(Some("music"), Some("brave"), &s).as_deref(),
+            Some("brave")
+        );
+        // Windows' current one paused, another playing: the playing one.
+        let s = list(&[("music", true), ("brave", false)]);
+        assert_eq!(
+            pick_session(None, Some("brave"), &s).as_deref(),
+            Some("music")
+        );
+    }
+
+    #[test]
+    fn with_nothing_playing_windows_choice_shows() {
+        let s = list(&[("music", false), ("brave", false)]);
+        assert_eq!(
+            pick_session(Some("music"), Some("brave"), &s).as_deref(),
+            Some("brave")
+        );
+        assert_eq!(pick_session(None, None, &s), None);
+        assert_eq!(pick_session(None, None, &[]), None);
+    }
+
+    #[test]
+    fn a_closed_player_is_let_go() {
+        let s = list(&[("brave", true)]);
+        assert_eq!(
+            pick_session(Some("music"), Some("brave"), &s).as_deref(),
+            Some("brave")
+        );
     }
 
     #[test]
