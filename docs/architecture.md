@@ -245,7 +245,8 @@ rig-dashboard/
 | `spectrum.rs` | The Now Playing spectrum (#719): the default output's mix caught by WASAPI loopback (`AUDCLNT_STREAMFLAGS_LOOPBACK` on the default render endpoint; only a 32-bit float mix, which a shared-mode mix is in practice), mixed to mono in a 4096-sample `Ring` (85 ms at 48 kHz, 11.7 Hz a bin), Hann window and an FFT of its own (no crate), 24 log bands from 60 Hz to 16 kHz, the loudest bin of each in dB between −70 and −10, bars that jump up and fall at 2.5 heights a second (`smooth`). For the oscilloscope (#732), `wave()` hands out the newest 1024 samples (~21 ms) as 256 points (`waveform`: started at the newest rising zero crossing in the 1024 samples before them, so a steady tone stands still; scaled so its peak reaches 0.9, with no more gain than a 0.1 peak gets, so hiss stays small). `bars()` or `wave()` starts the capture thread on first use; it ends 1 s after the last call, and a failed device (headset unplugged) ends a run and the next opens the new default; so does another output becoming the default, checked once a second (#747). Silence delivers no packets: the window empties after 120 ms and the bars fall. It hears all sound on the output, not only music; an exclusive-mode app isn't heard. The audio stays in memory for one window, never written anywhere. Pure parts unit-tested with synthetic tones |
 | `autostart.rs` | Windows startup registry management (HKCU run key) |
 | `logging.rs` | Session-based CSV stats logging — `start_session`/`end_session`/`append_stats_row`, `load_sessions`/`rename_session`/`set_session_pinned`/`delete_session`/`prune_old_sessions`, `reconcile_sessions_on_startup`; `ActiveSession` (the poll loop's active-session lookup, parsed again only when the index's modified time or size changed, #466); `sessions.json` index guarded by `SessionsLock` (cross-process file lock) and a `.bak` for corruption recovery |
-| `debug.rs` | Debug log helpers — no deps on other modules. `install_panic_logger`: every panic (any thread) is written with thread, file:line and backtrace before the default hook; `supervise`: restarts a long-lived tokio task (poll loop, control pipe) after a panic, 2 s doubling to 60 s (#219) |
+| `local_time.rs` | Local time for everything shown or logged (#753, on `time` in place of the unmaintained chrono): `now`, `from_unix`, `format`/`format_unix` with the `SECONDS`/`MINUTES`/`DATE` formats, `today`, `parse_date`. The offset comes from Windows for each instant, so DST follows the timestamp |
+| `debug.rs` | Debug log helpers — no deps on other modules except `local_time`. `install_panic_logger`: every panic (any thread) is written with thread, file:line and backtrace before the default hook; `supervise`: restarts a long-lived tokio task (poll loop, control pipe) after a panic, 2 s doubling to 60 s (#219) |
 
 **`src-egui/src/`** — egui library + binaries:
 
@@ -741,7 +742,7 @@ in sync with Windows Settings → Apps → Startup.
 `append_debug_log` (INFO) and the `log_debug` / `log_warn` / `log_error` level
 variants (all via `append_debug_log_lvl` + the `LogLevel` enum), `reset_debug_log`,
 `run_hidden_command`, `unix_now_secs`. Log lines are formatted as
-`[YYYY-MM-DD HH:MM:SS] [LEVEL] message` using local time (`chrono`).
+`[YYYY-MM-DD HH:MM:SS] [LEVEL] message` using local time (`local_time`, on the `time` crate — #753).
 
 `rigstats-debug.log` is rotated to `-prev` only at start, and the app can run
 for days, so it is also bounded while running (#563): after each line the

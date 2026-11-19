@@ -287,13 +287,7 @@ pub fn default_session_name(start_unix: u64) -> String {
 
 /// `start_unix` as "2026-08-22 14:32" in local time.
 fn local_minutes(unix: u64) -> String {
-    chrono::DateTime::from_timestamp(unix as i64, 0)
-        .map(|t| {
-            t.with_timezone(&chrono::Local)
-                .format("%Y-%m-%d %H:%M")
-                .to_string()
-        })
-        .unwrap_or_default()
+    crate::local_time::format_unix(unix, crate::local_time::MINUTES)
 }
 
 /// Starts a new recording session: creates its CSV file (with header) and adds

@@ -334,7 +334,7 @@ struct VideoControllerDriver {
     #[serde(rename = "DriverVersion")]
     driver_version: Option<String>,
     #[serde(rename = "DriverDate")]
-    driver_date: Option<wmi::WMIDateTime>,
+    driver_date: Option<wmi::WMIOffsetDateTime>,
 }
 
 #[cfg(windows)]
@@ -349,9 +349,8 @@ struct GpuDriverShellRow {
 /// Returns `None` for unparseable dates or future dates (clock skew).
 #[cfg(windows)]
 fn driver_age_days(date: &str) -> Option<i64> {
-    let d = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
-    let today = chrono::Local::now().date_naive();
-    let days = (today - d).num_days();
+    let d = crate::local_time::parse_date(date)?;
+    let days = (crate::local_time::today() - d).whole_days();
     if days >= 0 {
         Some(days)
     } else {
@@ -421,7 +420,9 @@ pub fn detect_gpu_drivers() -> Vec<GpuDriverInfo> {
                         if is_ignored_adapter_name(&name) {
                             return None;
                         }
-                        let date = r.driver_date.map(|d| d.0.format("%Y-%m-%d").to_string());
+                        let date = r
+                            .driver_date
+                            .map(|d| crate::local_time::format(d.0, crate::local_time::DATE));
                         let age_days = date.as_deref().and_then(driver_age_days);
                         Some(GpuDriverInfo {
                             name,

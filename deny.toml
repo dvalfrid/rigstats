@@ -11,8 +11,4 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "warn"
 # Each entry needs the advisory id and why it doesn't apply / can't be fixed yet.
 ignore = [
-    # chrono is unmaintained (#752): a notice, not a known vulnerability, and no
-    # replacement version exists. wmi 0.18 depends on it too, so it stays in the
-    # lock file whatever our code does. Moving our own code off it: #753.
-    { id = "RUSTSEC-2026-0543", reason = "chrono unmaintained; also a wmi dependency; migration tracked in #753" },
 ]
