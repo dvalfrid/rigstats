@@ -21,7 +21,7 @@ public class HardwareHostTests
         var until = DateTime.UtcNow + TimeSpan.FromSeconds(10);
         while (true)
         {
-            var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+            var line = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
             if (wanted(line) || DateTime.UtcNow > until)
                 return line;
             await Task.Delay(20);
@@ -172,19 +172,19 @@ public class HardwareHostTests
         long now = 10_000;
         var hardware = new FakeHardware();
         var host = new HardwareHost(hardware, clock: () => now);
-        var live = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var live = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.False(live.TryGetProperty("sample_age_ms", out _));
 
         hardware.SampleFails = () => new InvalidOperationException("The hardware worker is restarting.");
         now += 6_000;
 
-        var stale = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var stale = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.Equal(6_000, stale.GetProperty("sample_age_ms").GetInt64());
         Assert.Equal(50, stale.GetProperty("cpu_temp").GetDouble());
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.GetSampleAsync(CancellationToken.None));
 
         hardware.SampleFails = () => null;
-        var back = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var back = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.False(back.TryGetProperty("sample_age_ms", out _));
     }
 
@@ -207,7 +207,7 @@ public class HardwareHostTests
         now += 2_000;
 
         var started = DateTime.UtcNow;
-        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var line = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
 
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(2), "telemetry waited for the hung call");
         Assert.Equal(2_000, line.GetProperty("sample_age_ms").GetInt64());
@@ -232,8 +232,8 @@ public class HardwareHostTests
         // The gate stays shut, so a request that waited for the sample would
         // never return; the generous bound only keeps a busy CI runner (a
         // starved thread pool) from failing it on timing.
-        var line = JsonDocument.Parse(
-            await host.GetTelemetryLineAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10))).RootElement;
+        var line = JsonElement.Parse(
+            await host.GetTelemetryLineAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)));
 
         Assert.Equal(1_500, line.GetProperty("sample_age_ms").GetInt64());
 
@@ -254,13 +254,13 @@ public class HardwareHostTests
         long now = 10_000;
         var hardware = new FakeHardware();
         var host = new HardwareHost(hardware, clock: () => now);
-        var clean = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var clean = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.False(clean.TryGetProperty("hardware_problems", out _));
 
         hardware.Problems = [Control.Workers.HardwareProblems.Off("/gpu-nvidia/0", "RTX", "crashed 3 times")];
         hardware.SampleFails = () => new InvalidOperationException("restarting");
         now += 2_000;
-        var aged = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var aged = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         Assert.Equal("hardware_off", aged.GetProperty("hardware_problems")[0].GetProperty("id").GetString());
 
         hardware.SampleFails = () => null;
@@ -276,14 +276,14 @@ public class HardwareHostTests
         var start = PawnIoProblems.For(driverAvailable: false, windowsBuild: 16299)!;
         var host = new HardwareHost(hardware, startProblem: start);
 
-        var line = JsonDocument.Parse(await host.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var line = JsonElement.Parse(await host.GetTelemetryLineAsync(CancellationToken.None));
         var problems = line.GetProperty("hardware_problems");
         Assert.Equal(1, problems.GetArrayLength());
         Assert.Equal("pawnio_windows_too_old", problems[0].GetProperty("id").GetString());
 
         hardware.Problems = [Control.Workers.HardwareProblems.Off("/gpu-nvidia/0", "RTX", "exit")];
         var both = new HardwareHost(hardware, startProblem: start);
-        var two = JsonDocument.Parse(await both.GetTelemetryLineAsync(CancellationToken.None)).RootElement;
+        var two = JsonElement.Parse(await both.GetTelemetryLineAsync(CancellationToken.None));
         Assert.Equal(2, two.GetProperty("hardware_problems").GetArrayLength());
     }
 
