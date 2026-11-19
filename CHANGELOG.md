@@ -8,6 +8,14 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.55.0](https://github.com/dvalfrid/rigstats/compare/v1.54.0...v1.55.0) (2026-11-19)
+
+
+### Features
+
+* **dashboard:** Now Playing in the desktop background, transparent if you like ([#751](https://github.com/dvalfrid/rigstats/issues/751)) ([afcafcc](https://github.com/dvalfrid/rigstats/commit/afcafcc28d97703e89cbc5c705313076888bf642))
+* **dashboard:** Now Playing on a screen of its own ([#749](https://github.com/dvalfrid/rigstats/issues/749)) ([c31f467](https://github.com/dvalfrid/rigstats/commit/c31f4677c04281f396a90338e4c4157e7f5d09e3)), closes [#737](https://github.com/dvalfrid/rigstats/issues/737)
+
 ## [1.54.0](https://github.com/dvalfrid/rigstats/compare/v1.53.0...v1.54.0) (2026-11-14)
 
 
