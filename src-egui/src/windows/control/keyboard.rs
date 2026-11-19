@@ -1,7 +1,7 @@
 //! Control Center: the Keyboard page — onboard profile and energy settings (#458, #460).
 
 use super::mouse::MOUSE_POWER_OFF;
-use super::{device_tabs, ControlUi};
+use super::ControlUi;
 use crate::theme::DialogColors;
 use crate::windows::ui_kit::{self};
 use rigstats_backend::control::{ControlCmd, ControlState, KeyboardPart, KeyboardSettings};
@@ -36,7 +36,7 @@ pub(super) fn keyboard_page(
             all.push((k.id.as_str(), k.name.as_str()));
         }
     }
-    let tab = device_tabs(
+    let tab = ui_kit::tabs(
         ui,
         dc,
         all.iter().map(|(_, name)| *name),
