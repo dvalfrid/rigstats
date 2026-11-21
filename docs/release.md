@@ -52,6 +52,29 @@ CI. Bumping the pin is a deliberate, standalone commit with two parts:
   comment naming that branch;
 - `rust-toolchain.toml`.
 
+### Pinned .NET SDK
+
+`global.json` at the repo root pins the .NET SDK (`10.0.404`,
+`rollForward: latestPatch`), and `verify.yml`, `build.yml`, `release.yml`
+(build job) and `audit.yml` install it with `actions/setup-dotnet`
+(`global-json-file`) instead of using the runner's own SDK. The runner's
+SDK floated: an image update brought new analyzer rules (CA2026, CA2027),
+errors through `TreatWarningsAsErrors`, and every open PR went red with no
+change to blame (#767). The shipped sidecar was also built with whatever SDK
+the image had (#769).
+
+- **`latestPatch`, not `latestFeature`:** setup-dotnet turns
+  `latestFeature` into "the newest `10.0`" (`getVersionFromGlobalJson` in its
+  `setup-dotnet.ts`), which is exactly the float this pin removes.
+  `latestPatch` installs the newest `10.0.4xx`: servicing patches only, while
+  new rules come with feature bands.
+- **Locally** the same file applies. `dotnet` takes any installed `10.0.4xx`
+  from the one named, and says "A compatible .NET SDK was not found" when
+  there is none. winget installs SDKs side by side, so upgrading doesn't
+  remove the pinned one.
+- **A new SDK** comes as a Dependabot PR (`dotnet-sdk`), where any new rules
+  show up in that PR alone. Install the new SDK locally before merging it.
+
 ### Supply chain
 
 `release.yml`'s sign job holds the signing credentials, so what CI runs is pinned (#224):

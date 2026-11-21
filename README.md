@@ -73,7 +73,7 @@ Contributions are welcome with or without AI tools.
 
 - **Windows 10/11 x64** — the app and sensor sidecar are Windows-only
 - **Rust** — install [rustup.rs](https://rustup.rs); the toolchain version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml), so `rustup` auto-installs the exact version CI uses the first time you run `cargo` in this repo
-- **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` (required for the sensor sidecar)
+- **.NET 10 SDK** — `winget install Microsoft.DotNet.SDK.10` (required for the sensor sidecar). The version is pinned in `global.json` (10.0.4xx, any patch from the one named); `dotnet` stops with "A compatible .NET SDK was not found" when it's missing, and winget installs SDKs side by side, so a newer one doesn't remove it. CI installs exactly that version too.
 - **Visual Studio 2022 Build Tools** with "Desktop development with C++" workload (for linking)
 - **NSIS** (installer builds only) — `choco install nsis -y`
 

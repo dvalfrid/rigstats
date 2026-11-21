@@ -58,3 +58,20 @@ updates:
     commit-message:
       prefix: build
       include: scope
+
+  # The .NET SDK in global.json (#769): CI installs it with setup-dotnet
+  # instead of using the runner's, whose updates brought new analyzer rules
+  # that failed every PR (#767). A new SDK comes as its own PR, where new
+  # rules show; install it locally before merging (winget keeps the old
+  # ones side by side). Majors (.NET 11) are moved by hand.
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    assignees: ["dvalfrid"]
+    commit-message:
+      prefix: build
+      include: scope
