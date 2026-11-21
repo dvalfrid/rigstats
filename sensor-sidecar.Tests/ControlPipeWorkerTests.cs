@@ -90,7 +90,7 @@ public sealed class ControlPipeWorkerTests : IAsyncLifetime
         public async Task<JsonElement> ReadJsonAsync(TimeSpan? timeout = null)
         {
             var line = await ReadLineAsync(timeout) ?? throw new EndOfStreamException("pipe closed");
-            return JsonDocument.Parse(line).RootElement.Clone();
+            return JsonElement.Parse(line);
         }
 
         /// Sends a request and reads lines until its response (events on the
