@@ -1,0 +1,85 @@
+{
+  "slug": "asus-b1403cva-i5-1335u-uhd",
+  "rigstats_version": "1.55.0-rc.2",
+  "collected_at_unix": 1795198248,
+  "hid_scan": [
+    {
+      "vendor_id": "093A",
+      "product_id": "200A",
+      "interface": null,
+      "usage_page": "0001",
+      "usage": "0002",
+      "input_len": 5,
+      "output_len": 0,
+      "feature_len": 0,
+      "output_report_id": null,
+      "product": "HIDI2C Device",
+      "known_as": null
+    },
+    {
+      "vendor_id": "093A",
+      "product_id": "200A",
+      "interface": null,
+      "usage_page": "000D",
+      "usage": "0005",
+      "input_len": 16,
+      "output_len": 0,
+      "feature_len": 257,
+      "output_report_id": null,
+      "product": "HIDI2C Device",
+      "known_as": null
+    },
+    {
+      "vendor_id": "093A",
+      "product_id": "200A",
+      "interface": null,
+      "usage_page": "000D",
+      "usage": "000E",
+      "input_len": 0,
+      "output_len": 0,
+      "feature_len": 2,
+      "output_report_id": null,
+      "product": "HIDI2C Device",
+      "known_as": null
+    },
+    {
+      "vendor_id": "093A",
+      "product_id": "200A",
+      "interface": null,
+      "usage_page": "FF00",
+      "usage": "0001",
+      "input_len": 0,
+      "output_len": 0,
+      "feature_len": 257,
+      "output_report_id": null,
+      "product": "HIDI2C Device",
+      "known_as": null
+    },
+    {
+      "vendor_id": "8087",
+      "product_id": "0A1E",
+      "interface": null,
+      "usage_page": "FFB3",
+      "usage": "0010",
+      "input_len": 2,
+      "output_len": 0,
+      "feature_len": 0,
+      "output_report_id": null,
+      "product": null,
+      "known_as": null
+    },
+    {
+      "vendor_id": "8087",
+      "product_id": "0A1E",
+      "interface": null,
+      "usage_page": "FFB3",
+      "usage": "0010",
+      "input_len": 2,
+      "output_len": 0,
+      "feature_len": 0,
+      "output_report_id": null,
+      "product": null,
+      "known_as": null
+    }
+  ]
+}
