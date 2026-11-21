@@ -425,13 +425,14 @@ The header panel logo follows a three-step fallback chain:
 2. **CPU architecture logo** — Intel or AMD, derived from the CPU model string.
 3. **Nothing** — the logo area is hidden silently.
 
-Brand is detected from WMI fields `Win32_ComputerSystem.Manufacturer`, `Win32_ComputerSystem.Model`, `Win32_ComputerSystemProduct.Name/Version`, and `Win32_BaseBoard.Manufacturer/Product`. Product-line names (Alienware, Legion, OMEN, Predator, AORUS) take priority over generic OEM names.
+Brand is detected from WMI fields `Win32_ComputerSystem.Manufacturer`, `Win32_ComputerSystem.Model`, `Win32_ComputerSystemProduct.Name/Version`, and `Win32_BaseBoard.Manufacturer/Product`. Product-line names (Alienware, Legion, OMEN, Predator, AORUS, ROG) take priority over generic OEM names.
 
 ### Brand logos
 
 | Logo | Brand | Detected when |
 | --- | --- | --- |
-| <img src="src-egui/assets/ROG_logo_red.png" width="48"> | **ROG (ASUS)** | Manufacturer contains `ASUS`, `ROG`, or `Republic of Gamers` |
+| <img src="src-egui/assets/ROG_logo_red.png" width="48"> | **ROG (ASUS)** | Model or board contains the word `ROG`, `Strix` or `Republic of Gamers` |
+| <img src="src-egui/assets/asus.png" width="48"> | **ASUS** | Manufacturer contains `ASUS` but nothing says ROG (ExpertBook, Vivobook, Zenbook, TUF, PRIME boards in an ASUS PC) |
 | <img src="src-egui/assets/msi.png" width="48"> | **MSI** | Manufacturer contains `MSI`, `Micro-Star`, or `Micro Star` |
 | <img src="src-egui/assets/Alienware.png" width="48"> | **Alienware** | System name / model contains `Alienware` |
 | <img src="src-egui/assets/Razer.png" width="48"> | **Razer** | Manufacturer contains `Razer` |

@@ -271,7 +271,7 @@ rig-dashboard/
 | `menu_icons.rs` | Procedurally-rasterized glyph icons (circle/ring/triangle/rect/line primitives, supersampled) for each tray context-menu row — no external image assets |
 | `lock_ext.rs` | `LockSafe` trait — `.lock_safe()` recovers a poisoned `Mutex` instead of panicking; used throughout `windows/*.rs` |
 | `theme.rs` | `AppTheme`, colour constants, `panel_frame()`, sparkline/bar helpers, dialog button API, `apply_dashboard_fonts` |
-| `brand.rs` | Brand logo PNG loading (13 logos embedded at compile time) |
+| `brand.rs` | Brand logo PNG loading (14 logos embedded at compile time) |
 | `tempcolor.rs` | `temp_color(value, warn, crit)` → green/yellow/red |
 | `update_check.rs` | Update detection (`check()`), download with progress, `launch_installer()` |
 | `win_opacity.rs` | Raw Win32 window helpers: `SetLayeredWindowAttributes` opacity, `set_no_redirection_bitmap` (DComp), `disable_dwm_transitions`, `bring_to_foreground` (restores a minimized window first), `force_repaint`, `find_hwnd` |
@@ -335,8 +335,8 @@ startup background thread in `main.rs`) and keep the results.
 | `detect_gpu_names` | All physical adapter names (virtual/basic adapters filtered, deduped by normalized name) — the choices for the tray "GPU ▸" submenu and Settings → Display → Graphics card shown |
 | `detect_battery_present` | Whether a battery exists (gates the Battery panel / `battery_pct` overlay metric in Settings); a WMI failure counts as "present" |
 | `detect_gpu_drivers` | Installed GPU driver name/version/date per adapter (`Vec<GpuDriverInfo>`); `driver_age_days` derives age from `DriverDate` |
-| `detect_system_brand` | Brand key: `rog`, `msi`, `alienware`, etc. |
-| `classify_system_brand` | Brand classification logic |
+| `detect_system_brand` | Brand key: `rog`, `asus`, `msi`, `alienware`, etc. |
+| `classify_system_brand` | Brand classification logic: product lines first; `rog` only for a model or board that says ROG / Strix / Republic of Gamers, any other ASUS machine is `asus` |
 | `detect_model_name` | System model name |
 | `detect_motherboard_name` | Board manufacturer + product (normalised) |
 | `detect_ram_spec` | Type + speed string, e.g. "DDR5 6000 MT/s" |

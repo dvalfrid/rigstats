@@ -3,6 +3,7 @@ use egui::{Context, TextureHandle, TextureOptions};
 #[derive(Clone)]
 pub struct Textures {
     pub rog: TextureHandle,
+    pub asus: TextureHandle,
     pub amd: TextureHandle,
     pub nvidia: TextureHandle,
     pub intel: TextureHandle,
@@ -21,6 +22,9 @@ impl Textures {
     pub fn load(ctx: &Context) -> Self {
         Self {
             rog: load_png(ctx, "rog", include_bytes!("../assets/ROG_logo_red.png")),
+            // ASUS press kit's light grey wordmark, cropped and centred on a
+            // 640x400 canvas so it fits the header like the other logos.
+            asus: load_png(ctx, "asus", include_bytes!("../assets/asus.png")),
             amd: load_png(
                 ctx,
                 "amd",
@@ -48,6 +52,7 @@ impl Textures {
     pub fn rig_logo(&self, brand: &str) -> Option<&TextureHandle> {
         match brand {
             "rog" | "asus-rog" => Some(&self.rog),
+            "asus" => Some(&self.asus),
             "msi" => Some(&self.msi),
             "alienware" => Some(&self.alienware),
             "razer" => Some(&self.razer),
