@@ -5,7 +5,7 @@ captured from contributors' machines. Each fixture is the exact input that
 `SensorReader.Extract` consumes in production, so the corpus lets us:
 
 - catch sensors we silently drop on hardware we've never seen (the #110 goal),
-- validate the filtering thresholds (`< 5 °C`, `> 0.1 V`, storage prefixes, …)
+- validate the filtering thresholds (`< 5 °C`, `> 0.1 V`, Warning/Critical drive thresholds, …)
   against real chips,
 - grow coverage across boards / GPUs / Super I/O chips / RAM types with **zero new
   test code** — `FixtureTests` auto-discovers every folder here.

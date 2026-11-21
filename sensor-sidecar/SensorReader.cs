@@ -195,18 +195,13 @@ public static class SensorReader
                              power, fan, vramUsed, vramTotal, d3d3d, d3dVdec);
     }
 
-    private static readonly string[] StoragePrefixes =
-        ["/nvme/", "/ahci/", "/ata/", "/hdd/", "/ssd/", "/scsi/", "/usb/"];
-
+    // Every HardwareType.Storage item counts, whatever LibreHardwareMonitor
+    // names it: its id follows the drive's bus (/nvme/, /ahci/, /usb/, /raid/
+    // behind Intel RST/VMD, …), and a list of those dropped drives twice —
+    // SATA and USB on SirBlacky21's PC (#610), an NVMe behind VMD on an
+    // ExpertBook (/raid/0).
     private static void ExtractDisk(IHardware hw, Dictionary<string, float> diskTemps)
     {
-        var id = hw.Identifier.ToString();
-        // LibreHardwareMonitor 0.9.x names SATA drives /ahci/… and USB-attached
-        // ones /usb/…; without them their temperatures were dropped (seen on
-        // SirBlacky21's PC, four SATA and two USB drives).
-        if (!StoragePrefixes.Any(p => id.StartsWith(p, StringComparison.Ordinal)))
-            return;
-
         float? highest = null;
         foreach (var s in hw.Sensors)
         {

@@ -1,0 +1,41 @@
+{
+    "cpu":  [
+                {
+                    "threads":  12,
+                    "name":  "13th Gen Intel(R) Core(TM) i5-1335U",
+                    "cores":  10
+                }
+            ],
+    "board":  {
+                  "bbProd":  "B1403CVA",
+                  "csModel":  "ASUS EXPERTBOOK B1403CVA",
+                  "bbMfr":  "ASUSTeK COMPUTER INC.",
+                  "csMfr":  "ASUSTeK COMPUTER INC."
+              },
+    "disk":  [
+                 {
+                     "sizeBytes":  512105932800,
+                     "mediaType":  "Fixed hard disk media",
+                     "model":  "NVMe MTFDKBA512QGN-1BN1AABGA"
+                 }
+             ],
+    "gpu":  [
+                {
+                    "name":  "Intel(R) UHD Graphics",
+                    "driver":  "32.0.101.7085",
+                    "ramBytes":  2147479552
+                }
+            ],
+    "ram":  [
+                {
+                    "configured":  5200,
+                    "capBytes":  17179869184,
+                    "speed":  5600
+                }
+            ],
+    "os":  {
+               "caption":  "Microsoft Windows 11 Pro Education",
+               "build":  "26100",
+               "version":  "10.0.26100"
+           }
+}

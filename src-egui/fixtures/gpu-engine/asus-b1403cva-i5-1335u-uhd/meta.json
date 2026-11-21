@@ -1,0 +1,18 @@
+{
+  "slug": "asus-b1403cva-i5-1335u-uhd",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1795198248,
+  "rigstats_version": "1.55.0-rc.2",
+  "os": "Windows 11 Pro Education (build 26100)",
+  "gpu_driver": "32.0.101.7085",
+  "adapters": [
+    "Intel(R) UHD Graphics (iGPU)",
+    "Microsoft Basic Render Driver (software, Flags=2)"
+  ],
+  "gpu_state": "igpu-only",
+  "notes": "ASUS ExpertBook B1403CVA, i5-1335U, beta tester's diagnostics. The only fixture whose sole hardware adapter is an Intel iGPU (13th gen, driver 32.x). Engine types as on the Razer Blade's UHD 630, incl. the unnamed ones (\"..._engtype_\").",
+  "confirmed_by": 1,
+  "variant_of": null,
+  "differs": null
+}

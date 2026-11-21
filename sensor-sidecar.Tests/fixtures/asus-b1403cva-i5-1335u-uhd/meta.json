@@ -1,0 +1,13 @@
+{
+  "slug": "asus-b1403cva-i5-1335u-uhd",
+  "synthetic": false,
+  "contributor": "anonymous",
+  "collected_at_unix": 1795198248,
+  "rigstats_version": "1.55.0-rc.2",
+  "os": "Microsoft Windows 11 Pro Education (build 26100)",
+  "notes": "ASUS ExpertBook B1403CVA business laptop (BIOS B1403CVA.317). Intel Core i5-1335U (2P+8E, 12T), Intel UHD Graphics only (no dGPU; LHM gives no GPU temperature). 1x16GB DDR5-5200 SODIMM (Samsung). The NVMe drive (Micron MTFDKBA512QGN) sits behind Intel RST/VMD, so LHM names it /raid/0 — its temperature was dropped before the storage-prefix filter went. No Super I/O, no fan headers; the ASUS ACPI fan/mode ids all fail on this model.",
+  "anonymized": true,
+  "gpu_driver": "32.0.101.7085",
+  "bios": "B1403CVA.317",
+  "gpu_state": "igpu-only"
+}

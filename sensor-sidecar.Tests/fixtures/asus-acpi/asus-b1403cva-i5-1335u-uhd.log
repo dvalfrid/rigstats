@@ -1,0 +1,28 @@
+# ASUS ExpertBook B1403CVA (business laptop), BIOS B1403CVA.317, MyASUS services running, no Armoury Crate.
+# Read-only start-up log, 1.55.0-rc.2 (2026-11-20). Every fan/mode id fails or is absent: not a ROG/TUF firmware.
+# Balanced (Windows power plan), idle
+[rigstats-control] ASUS ACPI (board B1403CVA, BIOS B1403CVA.317), read-only; ASUS software running: AsusAppService, AsusNumPadService, AsusOptimization, AsusOptimizationStartupTask, AsusPTPService
+[rigstats-control] ASUS ACPI: DSTS 0x00120075 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110031 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200A3 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200A0 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200C1 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200B0 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200B1 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200C0 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x001200C2 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00120099 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00120098 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI DSTS: 0x00120075=fail 0x00110019=0x12030000 0x00110013=0x00010000 0x00110014=0x00000000(absent) 0x00110031=fail 0x001200A3=fail 0x001200A0=fail 0x001200C1=fail 0x001200B0=fail 0x001200B1=fail 0x001200C0=fail 0x001200C2=fail 0x00120099=fail 0x00120098=fail
+[rigstats-control] ASUS ACPI: DSTS 0x00110024 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110024 arg 1 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110024 arg 2 failed: error 1
+[rigstats-control] ASUS ACPI curve 0x00110024 (arg 0 Balanced, 1 Silent, 2 Turbo): [0] fail [1] fail [2] fail
+[rigstats-control] ASUS ACPI: DSTS 0x00110025 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110025 arg 1 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110025 arg 2 failed: error 1
+[rigstats-control] ASUS ACPI curve 0x00110025 (arg 0 Balanced, 1 Silent, 2 Turbo): [0] fail [1] fail [2] fail
+[rigstats-control] ASUS ACPI: DSTS 0x00110032 arg 0 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110032 arg 1 failed: error 1
+[rigstats-control] ASUS ACPI: DSTS 0x00110032 arg 2 failed: error 1
+[rigstats-control] ASUS ACPI curve 0x00110032 (arg 0 Balanced, 1 Silent, 2 Turbo): [0] fail [1] fail [2] fail
