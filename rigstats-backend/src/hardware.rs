@@ -461,6 +461,13 @@ pub fn classify_system_brand(fields: &[&str]) -> &'static str {
             .iter()
             .any(|v| needles.iter().any(|needle| v.contains(needle)))
     };
+    // A whole word, so "rog" doesn't match inside another word.
+    let has_word = |word: &str| {
+        normalized.iter().any(|v| {
+            v.split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|w| w == word)
+        })
+    };
 
     if has_any(&["alienware"]) {
         "alienware"
@@ -474,8 +481,12 @@ pub fn classify_system_brand(fields: &[&str]) -> &'static str {
         "predator"
     } else if has_any(&["aorus"]) {
         "aorus"
-    } else if has_any(&["asus", "rog", "republic of gamers"]) {
+    } else if has_any(&["republic of gamers", "strix"]) || has_word("rog") {
+        // ROG only where the model or board says so (Zephyrus, Strix, a ROG
+        // desktop): an ExpertBook or a Vivobook is ASUS, not ROG.
         "rog"
+    } else if has_any(&["asus"]) {
+        "asus"
     } else if has_any(&["msi", "micro-star", "micro star"]) {
         "msi"
     } else if has_any(&["gigabyte"]) {
@@ -1736,8 +1747,29 @@ mod tests {
 
     #[test]
     fn classify_system_brand_recognizes_rog_aliases() {
-        assert_eq!(classify_system_brand(&["ASUSTeK COMPUTER INC."]), "rog");
+        assert_eq!(
+            classify_system_brand(&["ASUSTeK COMPUTER INC.", "ROG Zephyrus G14 GA403WR"]),
+            "rog"
+        );
+        assert_eq!(
+            classify_system_brand(&["ASUS", "ROG STRIX Z790-F GAMING WIFI"]),
+            "rog"
+        );
         assert_eq!(classify_system_brand(&["Republic of Gamers"]), "rog");
+    }
+
+    #[test]
+    fn classify_system_brand_keeps_other_asus_machines_out_of_rog() {
+        assert_eq!(
+            classify_system_brand(&["ASUSTeK COMPUTER INC.", "ASUS EXPERTBOOK B1403CVA"]),
+            "asus"
+        );
+        assert_eq!(classify_system_brand(&["ASUSTeK COMPUTER INC."]), "asus");
+        // "rog" inside another word is not ROG.
+        assert_eq!(
+            classify_system_brand(&["ASUSTeK COMPUTER INC.", "Progressive X1"]),
+            "asus"
+        );
     }
 
     #[test]
