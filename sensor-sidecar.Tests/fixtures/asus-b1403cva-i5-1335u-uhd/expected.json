@@ -1,0 +1,30 @@
+{
+  "cpu_temp": 52,
+  "cpu_power": 5.696873,
+  "gpu_devices": [
+    {
+      "name": "Intel(R) UHD Graphics",
+      "sensor_family": "gpu-intel-integrated",
+      "load": 0,
+      "temp": null,
+      "hotspot_temp": null,
+      "mem_temp": null,
+      "core_clock": 100,
+      "mem_clock": null,
+      "power": 0.0005874842,
+      "fan": null,
+      "vram_used_mb": null,
+      "vram_total_mb": null,
+      "d3d_3d": 0,
+      "d3d_vdec": 0
+    }
+  ],
+  "disk_temps": {
+    "MTFDKBA512QGN-1BN1AABGA": 29
+  },
+  "ram_temp": 36,
+  "mb_fans": [],
+  "mb_temps": [],
+  "mb_voltages": [],
+  "mb_chip": null
+}

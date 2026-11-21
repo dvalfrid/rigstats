@@ -409,7 +409,8 @@ memory clock (`gpu_mem_freq`), power, fan, VRAM used/total, D3D 3D load
 **Disk temperatures**, **RAM temperature**, **CPU temperature**, and
 **Motherboard Super I/O** sensor extraction are all performed inside the sidecar
 (`SensorReader.cs`) using the same filtering rules previously in `lhm.rs`
-(SensorId prefixes `/nvme/`, `/hdd/`, `/memory/dimm/`, `/lpc/`, etc.). The
+(every `HardwareType.Storage` item for disks, SensorId prefixes `/memory/dimm/`,
+`/lpc/`, etc.). The
 `LhmData` fields for these are populated directly from the sidecar payload.
 
 `SensorReader.Extract` and the `SensorPayload` JSON contract are covered by the
@@ -1126,10 +1127,11 @@ Off column.
 - **Disk temperatures** are matched to drive letters by physical disk model name
   (startup WMI query) rather than by index. Index-based matching silently assigns
   temperatures to the wrong drives when a USB device is inserted.
-- **LHM disk sensors** use the `SensorId` field (`/nvme/`, `/hdd/`, `/ata/`,
-  `/scsi/`, `/ssd/` prefixes) instead of sensor text. Text-based filtering picks
-  up motherboard chip sensors and RAM DIMM sensors that share the same
-  parent-category name.
+- **LHM disk sensors** come from every `HardwareType.Storage` item, whatever its
+  id: LHM names it after the drive's bus (`/nvme/`, `/ahci/`, `/usb/`, `/raid/`
+  for an NVMe behind Intel RST/VMD, …), and a list of those prefixes dropped
+  drives twice (#610, and `/raid/` on an ASUS ExpertBook). The Warning/Critical
+  threshold sensors are left out and the hottest of the rest is kept.
 - **RAM DIMM temperature** uses `SensorId` prefix `/memory/dimm/` with suffix
   `/temperature/0`. Each DIMM slot exposes 6 temperature-category sensors;
   index 0 is the actual reading, indices 1–5 are resolution and threshold limits.

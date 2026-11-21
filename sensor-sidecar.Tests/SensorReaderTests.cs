@@ -222,7 +222,7 @@ public class SensorReaderTests
     // ---- Disk ---------------------------------------------------------------
 
     [Fact]
-    public void ExtractDisk_includes_only_storage_identifiers_and_highest_temp()
+    public void ExtractDisk_takes_every_storage_bus_and_the_highest_temp()
     {
         var nvme = Hw(HardwareType.Storage, "Samsung 990", "/nvme/0",
         [
@@ -231,15 +231,17 @@ public class SensorReaderTests
             Sensor(SensorType.Temperature, "Temperature 3 (Warning)", 80.0f), // excluded
             Sensor(SensorType.Temperature, "Critical Composite", 90.0f), // excluded
         ]);
-        var weird = Hw(HardwareType.Storage, "Ghost", "/unknownbus/0",
+        // An NVMe drive behind Intel RST/VMD: LHM names it after the RAID bus
+        // (seen on an ASUS ExpertBook, fixture asus-b1403cva-i5-1335u-uhd).
+        var vmd = Hw(HardwareType.Storage, "MTFDKBA512QGN", "/raid/0",
         [
-            Sensor(SensorType.Temperature, "Temperature", 50.0f),
+            Sensor(SensorType.Temperature, "Temperature", 35.0f),
         ]);
 
-        var p = SensorReader.Extract(Computer(nvme, weird));
+        var p = SensorReader.Extract(Computer(nvme, vmd));
 
         Assert.Equal(45.0f, p.DiskTemps["Samsung 990"]);
-        Assert.False(p.DiskTemps.ContainsKey("Ghost"));
+        Assert.Equal(35.0f, p.DiskTemps["MTFDKBA512QGN"]);
     }
 
     // ---- RAM ----------------------------------------------------------------
