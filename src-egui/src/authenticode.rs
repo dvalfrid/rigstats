@@ -146,8 +146,12 @@ mod tests {
     /// reads it — an oracle that shares no code with this module. `Decode`
     /// without flags keeps the certificate's order (`Subject` reverses it).
     fn powershell_subject(path: &Path) -> String {
+        // Windows PowerShell writes redirected output in the console's OEM
+        // code page (850 here: "Vendelsö" came back as byte 0x94), so ask
+        // for UTF-8, which is what is decoded below.
         let script = format!(
-            "(Get-AuthenticodeSignature -LiteralPath '{}').SignerCertificate.SubjectName.Decode('None')",
+            "[Console]::OutputEncoding = [Text.Encoding]::UTF8; \
+             (Get-AuthenticodeSignature -LiteralPath '{}').SignerCertificate.SubjectName.Decode('None')",
             path.canonicalize().unwrap().display()
         );
         let out = std::process::Command::new("powershell")
