@@ -60,7 +60,7 @@ winres = "0.1"
 # the workspace's dependency resolution.
 wgpu = "30"
 winit = "=0.30.13"
-pollster = "=1.0.1"
+pollster = "=1.0.2"
 raw-window-handle = "=0.6.2"
 # The Win32 tests' own checks (an independent source to compare with): on the
 # windows crate already, so they don't change when the code under test moves
