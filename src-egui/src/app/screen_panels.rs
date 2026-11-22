@@ -21,16 +21,21 @@ pub(crate) struct ScreenPanels {
 
 impl RigStatsApp {
     pub(crate) fn render_screen_panels(&mut self, ctx: &egui::Context) {
-        let (list, spectrum, floating, wallpaper_pos) = {
+        let (list, floating, wallpaper_pos) = {
             let s = self.current_settings.lock_safe();
             (
                 s.screen_panels.clone(),
-                panels::spectrum::SpectrumChoice::from_settings(&s),
                 s.floating_mode,
                 s.wallpaper_position,
             )
         };
-        if list.is_empty() {
+        // The Control Center's Desktop page needs the dashboard's screen
+        // (its tab, the screen it opens on) before any panel is set.
+        let control_open = self
+            .dialogs
+            .control_open
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if list.is_empty() && !control_open {
             return;
         }
         self.screen_panels.screens.refresh();
@@ -55,6 +60,7 @@ impl RigStatsApp {
             .screens
             .to_show(&list, false, dashboard.as_deref(), playing)
         {
+            let spectrum = panels::spectrum::SpectrumChoice::of_screen(&panel);
             let builder = egui::ViewportBuilder::default()
                 .with_title("RIGStats \u{2014} Now Playing")
                 .with_position(rect.min)

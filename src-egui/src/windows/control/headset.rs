@@ -1,6 +1,6 @@
 //! Control Center: the Headset page — sidetone, noise reduction, equalizer (#428, #483).
 
-use super::{battery_and_link, device_tabs, ControlUi};
+use super::{battery_and_link, ControlUi};
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit::{self};
 use rigstats_backend::control::{
@@ -76,7 +76,7 @@ pub(super) fn headset_page(
         return;
     }
     let mut send: Option<(String, HeadsetSettings)> = None;
-    let tab = device_tabs(
+    let tab = ui_kit::tabs(
         ui,
         dc,
         control.headsets.iter().map(|h| h.name.as_str()),

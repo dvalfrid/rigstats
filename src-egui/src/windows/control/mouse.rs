@@ -1,6 +1,6 @@
 //! Control Center: the Mouse page — onboard profile, DPI, performance, buttons, energy (#431).
 
-use super::{battery_and_link, device_tabs, ControlUi, Page};
+use super::{battery_and_link, ControlUi, Page};
 use crate::theme::{self, DialogColors};
 use crate::windows::ui_kit::{self};
 use rigstats_backend::control::{
@@ -104,7 +104,7 @@ pub(super) fn mouse_page(
     let profile = control.active().cloned();
     let mut send: Option<(String, MouseSettings)> = None;
     let mut save_profile: Option<Option<u8>> = None;
-    let tab = device_tabs(
+    let tab = ui_kit::tabs(
         ui,
         dc,
         control.mice.iter().map(|m| m.name.as_str()),
