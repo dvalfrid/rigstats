@@ -8,6 +8,22 @@ The format is based on Keep a Changelog:
 This project follows Semantic Versioning:
 <https://semver.org/>
 
+## [1.55.0](https://github.com/dvalfrid/rigstats/compare/v1.54.0...v1.55.0) (2026-11-27)
+
+
+### Features
+
+* **dashboard:** Now Playing in the desktop background, transparent if you like ([#751](https://github.com/dvalfrid/rigstats/issues/751)) ([afcafcc](https://github.com/dvalfrid/rigstats/commit/afcafcc28d97703e89cbc5c705313076888bf642))
+* **dashboard:** Now Playing on a screen of its own ([#749](https://github.com/dvalfrid/rigstats/issues/749)) ([c31f467](https://github.com/dvalfrid/rigstats/commit/c31f4677c04281f396a90338e4c4157e7f5d09e3)), closes [#737](https://github.com/dvalfrid/rigstats/issues/737)
+* **dashboard:** screen panels on the Desktop page, each with its own spectrum ([#758](https://github.com/dvalfrid/rigstats/issues/758)) ([e3c814a](https://github.com/dvalfrid/rigstats/commit/e3c814a302878d697f21378dedcb93b943bccdd6))
+
+
+### Bug Fixes
+
+* **disk:** read the temperature of a drive behind Intel RST/VMD ([#762](https://github.com/dvalfrid/rigstats/issues/762)) ([20997c7](https://github.com/dvalfrid/rigstats/commit/20997c7ad7841745c1cb381414268fda859d036e))
+* **header:** show the ASUS logo on an ASUS PC that isn't ROG ([#764](https://github.com/dvalfrid/rigstats/issues/764)) ([5570e7d](https://github.com/dvalfrid/rigstats/commit/5570e7d0ecda94bb1897a207ca51d41480948093))
+* **media:** a browser video no longer takes over from music that plays ([#760](https://github.com/dvalfrid/rigstats/issues/760)) ([4044d55](https://github.com/dvalfrid/rigstats/commit/4044d55b2e45735b67b3cf45128cb716cbb27547))
+
 ## [1.54.0](https://github.com/dvalfrid/rigstats/compare/v1.53.0...v1.54.0) (2026-11-14)
 
 
